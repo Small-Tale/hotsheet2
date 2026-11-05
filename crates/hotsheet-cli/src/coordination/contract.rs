@@ -64,6 +64,14 @@ pub struct Session {
         skip_serializing_if = "super::strategy::IntegrationStrategy::is_serial"
     )]
     pub strategy: super::strategy::IntegrationStrategy,
+    /// A worker session's stated ticket preferences and request (HS2-6WFCZR). Skipped when
+    /// empty, so sessions without preferences serialize exactly as before; any stated
+    /// preference requires schema nine.
+    #[serde(
+        default,
+        skip_serializing_if = "super::preferences::WorkerPreferences::is_empty"
+    )]
+    pub preferences: super::preferences::WorkerPreferences,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -400,6 +408,14 @@ pub struct Snapshot {
     /// dispatcher reads it here. Default permits reading older snapshots.
     #[serde(default)]
     pub integration_strategy: Option<super::strategy::IntegrationStrategy>,
+    /// Each preference-stating worker's candidates, idle reason and request check
+    /// (HS2-6WFCZR). Default permits reading older snapshots.
+    #[serde(default)]
+    pub worker_matches: BTreeMap<String, super::preferences::WorkerMatch>,
+    /// Ready tickets that no live idle worker's strict filters admit: the starvation signal
+    /// (HS2-6WFCZR). Empty without a live idle worker.
+    #[serde(default)]
+    pub unmatched_tickets: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -460,6 +476,8 @@ mod snapshot_compatibility_tests {
             "planned",
             "finished_assignments",
             "integration_strategy",
+            "worker_matches",
+            "unmatched_tickets",
         ] {
             encoded.as_object_mut().unwrap().remove(field);
         }
@@ -490,4 +508,7 @@ pub struct WaitRequest {
     /// Integrator strategy selection; the default keeps a renewal's recorded strategy or
     /// registers `serial` (HS2-NEY1QH).
     pub strategy: super::strategy::StrategyRequest,
+    /// Worker preference statement; the default keeps a renewal's recorded preferences
+    /// (HS2-6WFCZR).
+    pub preferences: super::preferences::PreferenceRequest,
 }

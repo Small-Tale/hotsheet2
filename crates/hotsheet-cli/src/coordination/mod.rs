@@ -10,6 +10,9 @@ mod findings_review_return_tests;
 mod next_plan;
 #[cfg(test)]
 mod next_plan_tests;
+pub mod preferences;
+#[cfg(test)]
+mod preferences_tests;
 mod retire;
 #[cfg(test)]
 mod retire_tests;
@@ -45,6 +48,9 @@ pub use contract::{
     IntegrationSuspension, NextPlanEntry, Phase, PlanEvent, PlanEventKind, PlannedTicket,
     PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State, TransitionActor, TransitionKind,
     WaitRequest,
+};
+pub use preferences::{
+    PreferenceRequest, RefusalReason, RequestRefusal, TicketFilter, WorkerMatch, WorkerPreferences,
 };
 pub use retire::{RetiredAssignment, RetirementReport, SkippedRetirement};
 pub use strategy::{IntegrationStrategy, StrategyPolicy, StrategyRequest};
@@ -148,9 +154,10 @@ impl Coordinator {
         // explicitly enabled dispatcher authority; schema five only once it has published
         // reviewed shared documents (HS2-YHYNJ6); schema six only after the live
         // integrator suspends a gate-blocked integration (HS2-2D3099); schema eight only once
-        // an integrator records a non-serial strategy (HS2-NEY1QH). Newer is refused.
+        // an integrator records a non-serial strategy (HS2-NEY1QH); schema nine only once a
+        // worker states ticket preferences (HS2-6WFCZR). Newer is refused.
         ensure!(
-            matches!(state.version, 1..=8) && state.project_id == self.project_id,
+            matches!(state.version, 1..=9) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -221,6 +228,32 @@ impl Coordinator {
         return_route: ReturnRoute,
         strategy: StrategyRequest,
     ) -> Result<()> {
+        self.register_full(
+            role,
+            id,
+            generation,
+            now,
+            lease,
+            return_route,
+            strategy,
+            PreferenceRequest::keep(),
+        )
+    }
+
+    /// Register with an integrator strategy and a worker preference statement
+    /// (HS2-NEY1QH, HS2-6WFCZR). Each role passes the defaults for the other's fields.
+    #[allow(clippy::too_many_arguments)] // HS2-6WFCZR: one atomic registration, every field explicit.
+    pub fn register_full(
+        &self,
+        role: Role,
+        id: &str,
+        generation: &str,
+        now: i64,
+        lease: i64,
+        return_route: ReturnRoute,
+        strategy: StrategyRequest,
+        preferences: PreferenceRequest,
+    ) -> Result<()> {
         Self::valid_registration(id, generation, lease)?;
         self.change(|state| {
             if role == Role::Dispatcher {
@@ -235,6 +268,7 @@ impl Coordinator {
                 lease,
                 return_route,
                 strategy,
+                preferences,
             )
         })
     }
@@ -273,6 +307,30 @@ impl Coordinator {
         return_route: ReturnRoute,
         strategy: StrategyRequest,
     ) -> Result<bool> {
+        self.try_register_full(
+            role,
+            id,
+            generation,
+            now,
+            lease,
+            return_route,
+            strategy,
+            PreferenceRequest::keep(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)] // HS2-6WFCZR: one atomic registration, every field explicit.
+    pub fn try_register_full(
+        &self,
+        role: Role,
+        id: &str,
+        generation: &str,
+        now: i64,
+        lease: i64,
+        return_route: ReturnRoute,
+        strategy: StrategyRequest,
+        preferences: PreferenceRequest,
+    ) -> Result<bool> {
         Self::valid_registration(id, generation, lease)?;
         self.change(|state| {
             if role == Role::Dispatcher && Self::require_dispatcher_authority(state).is_err() {
@@ -287,6 +345,7 @@ impl Coordinator {
                 lease,
                 return_route,
                 strategy,
+                preferences,
             )?;
             Ok(true)
         })
@@ -318,6 +377,7 @@ impl Coordinator {
         lease: i64,
         return_route: ReturnRoute,
         strategy: StrategyRequest,
+        preferences: PreferenceRequest,
     ) -> Result<()> {
         if role == Role::Worker
             && let Some(a) = state.active_assignment(id)
@@ -344,16 +404,18 @@ impl Coordinator {
                 );
             }
         }
-        let kept = previous
-            .filter(|p| p.id == id && p.generation == generation)
-            .map(|p| p.strategy);
+        let same = previous.filter(|p| p.id == id && p.generation == generation);
+        let kept = same.map(|p| p.strategy);
+        let kept_preferences = same.map(|p| p.preferences.clone());
         let strategy = Self::registered_strategy(state, role, kept, strategy)?;
+        let preferences = Self::registered_preferences(state, role, kept_preferences, preferences)?;
         let session = Session {
             id: id.to_string(),
             generation: generation.to_string(),
             expires_at: now + lease,
             return_route,
             strategy,
+            preferences,
         };
         match role {
             Role::Integrator => state.integrator = Some(session),
@@ -401,6 +463,108 @@ impl Coordinator {
             state.version = 8;
         }
         Ok(strategy)
+    }
+
+    /// The preferences a registration records (HS2-6WFCZR). A statement replaces the whole
+    /// set; none keeps a same-generation session's set, so renewals and every wait replay
+    /// it; a new generation without one starts empty. A refusal survives only while the
+    /// same request is restated. The first non-empty set persists schema nine, which every
+    /// older artifact refuses, so the caller asserts all participants upgraded.
+    fn registered_preferences(
+        state: &mut State,
+        role: Role,
+        kept: Option<WorkerPreferences>,
+        request: PreferenceRequest,
+    ) -> Result<WorkerPreferences> {
+        if role != Role::Worker {
+            ensure!(
+                request.set.as_ref().is_none_or(WorkerPreferences::is_empty),
+                "only a worker states ticket preferences or requests"
+            );
+            return Ok(WorkerPreferences::default());
+        }
+        let preferences = match (request.set, kept) {
+            (Some(mut stated), kept) => {
+                stated.refusal = kept
+                    .and_then(|kept| kept.refusal)
+                    .filter(|refusal| stated.requests(&refusal.slug));
+                stated
+            }
+            (None, Some(kept)) => kept,
+            (None, None) => WorkerPreferences::default(),
+        };
+        if !preferences.is_empty() && state.version < preferences::PREFERENCES_SCHEMA {
+            ensure!(
+                request.all_participants_upgraded,
+                "stop old participants and switch every participant to a schema-nine artifact, then pass --all-participants-upgraded to record worker preferences"
+            );
+            state.version = preferences::PREFERENCES_SCHEMA;
+        }
+        Ok(preferences)
+    }
+
+    /// Record why the assignment authority did not honor a worker's exact pending request
+    /// (HS2-6WFCZR). The worker's next wait reports it. Idempotent for the same refusal.
+    #[allow(clippy::too_many_arguments)] // HS2-6WFCZR: one exact, authority-checked transition.
+    pub fn refuse_request(
+        &self,
+        authority: &str,
+        generation: &str,
+        now: i64,
+        worker: &str,
+        worker_generation: &str,
+        slug: &str,
+        reason: RefusalReason,
+        detail: Option<String>,
+    ) -> Result<RequestRefusal> {
+        let detail = detail
+            .map(|detail| detail.trim().to_owned())
+            .filter(|detail| !detail.is_empty());
+        if let Some(detail) = &detail {
+            ensure!(
+                detail.chars().count() <= preferences::MAX_DETAIL_CHARS
+                    && !detail.chars().any(char::is_control),
+                "refusal detail must be one line of at most {} characters",
+                preferences::MAX_DETAIL_CHARS
+            );
+        }
+        self.change(|state| {
+            Self::assignment_authority(state, authority, generation, now)?;
+            let by = TransitionActor {
+                role: match state.authority {
+                    Authority::Integrator => Role::Integrator,
+                    Authority::Dispatcher => Role::Dispatcher,
+                },
+                id: authority.to_owned(),
+            };
+            let session = state
+                .workers
+                .get_mut(worker)
+                .filter(|session| session.generation == worker_generation)
+                .ok_or_else(|| anyhow::anyhow!("worker session is not registered"))?;
+            ensure!(
+                session.preferences.requests(slug),
+                "worker {worker} does not currently request {slug}"
+            );
+            if let Some(existing) = session
+                .preferences
+                .refusal
+                .as_ref()
+                .filter(|existing| existing.reason == reason && existing.detail == detail)
+            {
+                return Ok(existing.clone());
+            }
+            let refusal = RequestRefusal {
+                slug: session.preferences.request.clone().unwrap_or_default(),
+                reason,
+                detail,
+                at: time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)?,
+                by,
+            };
+            session.preferences.refusal = Some(refusal.clone());
+            Ok(refusal)
+        })
     }
 
     /// The registered integrator session's strategy; serial without one (HS2-NEY1QH).
@@ -479,6 +643,15 @@ impl Coordinator {
             scope,
             ..assignment
         };
+        let local_store = if self
+            .source
+            .join(hotsheet_ticketing::STORE_METADATA_FILE)
+            .exists()
+        {
+            Some(FsStore::open_without_maintenance(&self.source)?)
+        } else {
+            None
+        };
         let reserve = || {
             self.change(|state| {
                 let now = clock();
@@ -506,6 +679,7 @@ impl Coordinator {
                     return Ok(existing.clone());
                 }
                 Self::dispatch_rules(state, &assignment)?;
+                Self::preference_rules(state, local_store.as_ref(), &assignment)?;
                 ensure!(
                     state
                         .workers
@@ -540,18 +714,54 @@ impl Coordinator {
                     .assignments
                     .insert(offered.id.clone(), offered.clone());
                 Self::consume_planned_assignment(state, &offered);
+                // HS2-6WFCZR: an honored request is consumed with its refusal.
+                if let Some(session) = state.workers.get_mut(&offered.worker)
+                    && session.preferences.requests(&offered.slug)
+                {
+                    session.preferences.request = None;
+                    session.preferences.refusal = None;
+                }
                 Ok(offered)
             })
         };
-        if self
-            .source
-            .join(hotsheet_ticketing::STORE_METADATA_FILE)
-            .exists()
-        {
-            FsStore::open_without_maintenance(&self.source)?.with_ticket_transaction(reserve)
-        } else {
-            reserve()
+        match &local_store {
+            Some(store) => store.with_ticket_transaction(reserve),
+            None => reserve(),
         }
+    }
+
+    /// A worker's strict filters are enforced at the reservation boundary from a fresh
+    /// ticket read (HS2-6WFCZR); preferences never widen what any other rule allows.
+    fn preference_rules(
+        state: &State,
+        store: Option<&FsStore>,
+        assignment: &Assignment,
+    ) -> Result<()> {
+        let Some(preferences) = state
+            .workers
+            .get(&assignment.worker)
+            .map(|session| &session.preferences)
+            .filter(|preferences| preferences.is_strict())
+        else {
+            return Ok(());
+        };
+        let store = store
+            .filter(|store| assignment.ticket.connection_id == git_connection_id(store))
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "worker {} states strict ticket preferences, which cannot be checked for this ticket source",
+                    assignment.worker
+                )
+            })?;
+        let ticket = store.read_ticket(&assignment.ticket.native_id.parse()?)?;
+        ensure!(
+            preferences.admits(&ticket),
+            "{} does not match worker {}'s strict preferences ({}); the dispatcher must not override them",
+            assignment.slug,
+            assignment.worker,
+            preferences.strict_summary()
+        );
+        Ok(())
     }
 
     pub fn worker_transition(

@@ -159,6 +159,21 @@ impl Coordinator {
             selected_connection.as_deref(),
             selected_tickets.as_deref(),
         );
+        // HS2-6WFCZR: preference matches read ticket tags, category and priority, which
+        // the queue entries omit, so they are part of the semantic cursor too.
+        let claim_now = hotsheet_model::Timestamp::from_datetime(
+            time::OffsetDateTime::from_unix_timestamp(now)?,
+        );
+        let facts = selected_connection
+            .as_deref()
+            .zip(selected_tickets.as_deref())
+            .map(|(connection_id, tickets)| super::preferences::QueueFacts {
+                connection_id,
+                tickets,
+                now: &claim_now,
+            });
+        let (worker_matches, unmatched_tickets) =
+            super::preferences::project(&state, facts.as_ref(), &live_workers);
         // A closing ticket changes the Workers view without changing the pool, so the
         // finished set is part of the semantic cursor (HS2-V9BXWF).
         let cursor = format!(
@@ -169,7 +184,9 @@ impl Coordinator {
                 &uncovered_sources,
                 &live_claims,
                 &source_support,
-                &finished_assignments
+                &finished_assignments,
+                &worker_matches,
+                &unmatched_tickets
             ))?)
         );
         let integration_strategy = state
@@ -192,6 +209,8 @@ impl Coordinator {
             planned,
             finished_assignments,
             integration_strategy,
+            worker_matches,
+            unmatched_tickets,
         })
     }
 

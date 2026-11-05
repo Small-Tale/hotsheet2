@@ -15678,6 +15678,153 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkerPlannedTicket'
+        integration_strategy:
+          description: The recorded strategy of an integrator session; null for other rows (HS2-NEY1QH).
+          oneOf:
+            - $ref: '#/components/schemas/IntegrationStrategyName'
+            - type: 'null'
+        preferences:
+          description: A worker session's stated preferences, request and refusal; null when it states none (HS2-6WFCZR).
+          oneOf:
+            - $ref: '#/components/schemas/WorkerPreferences'
+            - type: 'null'
+        matching:
+          description: That worker's candidates, idle reason and request check (HS2-6WFCZR).
+          oneOf:
+            - $ref: '#/components/schemas/WorkerMatch'
+            - type: 'null'
+      additionalProperties: false
+    WorkerTicketFilter:
+      description: A preference filter; matching ignores ASCII case (HS2-6WFCZR).
+      type: string
+      pattern: '^(tag:.+|category:.+|priority:(highest|high|default|low|lowest)|tier:T[0-9])$'
+    WorkerRefusalReason:
+      type: string
+      enum:
+        - blocked
+        - claimed
+        - overlap
+        - unsupported_source
+        - not_ready
+        - assigned
+        - filtered
+    WorkerRequestRefusal:
+      type: object
+      required:
+        - slug
+        - reason
+        - at
+        - by
+      properties:
+        slug:
+          type: string
+        reason:
+          $ref: '#/components/schemas/WorkerRefusalReason'
+        detail:
+          type: string
+        at:
+          type: string
+        by:
+          type: object
+          required:
+            - role
+            - id
+          properties:
+            role:
+              type: string
+              enum:
+                - integrator
+                - worker
+                - dispatcher
+            id:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+    WorkerPreferences:
+      type: object
+      properties:
+        prefer:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerTicketFilter'
+        only:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerTicketFilter'
+        avoid:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerTicketFilter'
+        request:
+          type: string
+        refusal:
+          $ref: '#/components/schemas/WorkerRequestRefusal'
+      additionalProperties: false
+    WorkerMatch:
+      type: object
+      required:
+        - worker
+        - candidates
+        - idle_reason
+        - request
+      properties:
+        worker:
+          type: string
+        candidates:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required:
+              - ticket
+              - slug
+              - priority
+              - preferred
+            properties:
+              ticket:
+                $ref: '#/components/schemas/WorkerTicketRef'
+              slug:
+                type: string
+              priority:
+                type: string
+                enum:
+                  - highest
+                  - high
+                  - default
+                  - low
+                  - lowest
+              preferred:
+                type: boolean
+            additionalProperties: false
+        idle_reason:
+          type:
+            - string
+            - 'null'
+        request:
+          oneOf:
+            - type: object
+              required:
+                - slug
+                - ticket
+                - reasons
+                - refusal
+              properties:
+                slug:
+                  type: string
+                ticket:
+                  oneOf:
+                    - $ref: '#/components/schemas/WorkerTicketRef'
+                    - type: 'null'
+                reasons:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/WorkerRefusalReason'
+                refusal:
+                  oneOf:
+                    - $ref: '#/components/schemas/WorkerRequestRefusal'
+                    - type: 'null'
+              additionalProperties: false
+            - type: 'null'
       additionalProperties: false
     WorkerPlanEntry:
       type: object
@@ -15893,6 +16040,20 @@ components:
             $ref: '#/components/schemas/WorkerSourceSupport'
         connection_coverage:
           type: boolean
+        past_workers:
+          description: Count of expired sessions holding no non-terminal work, omitted from workers by default (HS2-V9BXWF).
+          type: integer
+          minimum: 0
+        integration_strategy:
+          description: The live integrator's strategy; null without a live integrator (HS2-NEY1QH).
+          oneOf:
+            - $ref: '#/components/schemas/IntegrationStrategyName'
+            - type: 'null'
+        unmatched_tickets:
+          description: Ready tickets no live idle worker's strict preferences admit (HS2-6WFCZR).
+          type: array
+          items:
+            type: string
       additionalProperties: false
     ProviderConnections:
       type: array

@@ -15,6 +15,8 @@ import {
   mergeWorkerViews,
   qualifiedWorkerTicket,
   workerGroups,
+  workerPreferenceChips,
+  workerRequestStatus,
   type WorkerTicketDetails,
   workerTicketOperationKey,
   type WorkerView,
@@ -44,7 +46,9 @@ function workerAvailability(worker: ReturnType<typeof mergeWorkerViews>[number])
 
 function WorkerCard({ worker }: { worker: ReturnType<typeof mergeWorkerViews>[number] }) {
   const availability = workerAvailability(worker),
-    kind = worker.role ?? worker.connection_kind ?? 'worker';
+    kind = worker.role ?? worker.connection_kind ?? 'worker',
+    requestStatus = workerRequestStatus(worker),
+    idleReason = worker.availability === 'live' ? (worker.matching?.idle_reason ?? null) : null;
   return (
     <header class="worker-columns__card" data-worker-id={worker.id}>
       <div class="worker-columns__card-title">
@@ -73,7 +77,27 @@ function WorkerCard({ worker }: { worker: ReturnType<typeof mergeWorkerViews>[nu
             {integrationStrategyLabel(worker.integration_strategy)}
           </Badge>
         )}
+        {workerPreferenceChips(worker.preferences).map((chip) => (
+          <Badge
+            size="compact"
+            appearance="outline"
+            tone={chip.kind === 'prefer' ? 'neutral' : 'info'}
+            rootAttributes={{ 'data-worker-preference': chip.kind, 'data-worker-filter': chip.filter }}
+          >
+            {chip.label}
+          </Badge>
+        ))}
       </div>
+      {requestStatus && (
+        <Text variant="p" tone={worker.preferences?.refusal ? 'danger' : 'quiet'} size="compact">
+          {requestStatus}
+        </Text>
+      )}
+      {idleReason && (
+        <Text variant="p" tone="quiet" size="compact">
+          Idle: {idleReason}
+        </Text>
+      )}
       {worker.parent && (
         <Text variant="p" tone="quiet" size="compact">
           Background agent of {worker.parent}

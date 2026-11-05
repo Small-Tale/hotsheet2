@@ -10,7 +10,7 @@ use hotsheet_ticketing::FileLock;
 use notify::{Event, RecursiveMode, Watcher};
 use sha2::{Digest, Sha256};
 
-use super::{Coordinator, Role, Snapshot, WaitRequest};
+use super::{Coordinator, RequestRefusal, Role, Snapshot, WaitRequest};
 
 fn now() -> i64 {
     time::OffsetDateTime::now_utc().unix_timestamp()
@@ -53,7 +53,9 @@ impl Coordinator {
         // HS2-TWZW7X: a dispatcher may start before dispatcher authority exists. It then
         // waits on genuine state events without registering, and says why.
         // HS2-NEY1QH: the first registration records the strategy; renewals below keep it.
-        let mut registered = self.try_register_with_strategy(
+        // HS2-6WFCZR: the first registration records the stated preferences; renewals
+        // below keep them, so every wait replays them like the route and lease.
+        let mut registered = self.try_register_full(
             request.role,
             &request.id,
             &request.generation,
@@ -61,16 +63,40 @@ impl Coordinator {
             request.lease_seconds,
             request.return_route.clone(),
             request.strategy,
+            request.preferences.clone(),
         )?;
         let mut snapshot_checked_at = now();
         let mut snapshot = self.snapshot(snapshot_checked_at)?;
         let mut state_cursor = Self::state_cursor(&snapshot.state, snapshot_checked_at)?;
+        // A refusal recorded before this wait is reported now; only a new one wakes it.
+        let initial_refusal = refusal(request, &snapshot);
         // A stopped run reaches every waiter, registered or not.
-        if (registered || snapshot.state.stopped.is_some()) && ready(request, &snapshot) {
+        if (registered || snapshot.state.stopped.is_some())
+            && ready(request, &snapshot, initial_refusal.as_ref())
+        {
             return Ok(snapshot);
         }
         if registered {
             eprintln!("Waiting on local assignment/ticket events; availability registered.");
+            if let Some(reason) = snapshot
+                .worker_matches
+                .get(&request.id)
+                .and_then(|m| m.idle_reason.as_ref())
+            {
+                eprintln!("Idle: {reason}.");
+            }
+            if let Some(refused) = &initial_refusal {
+                eprintln!(
+                    "Request {} refused: {}{}.",
+                    refused.slug,
+                    refused.reason,
+                    refused
+                        .detail
+                        .as_ref()
+                        .map(|detail| format!(" ({detail})"))
+                        .unwrap_or_default()
+                );
+            }
         } else {
             eprintln!(
                 "Waiting on local assignment/ticket events; dispatcher not registered: assignment authority is the integrator (schema {}).",
@@ -203,7 +229,9 @@ impl Coordinator {
                 snapshot = self.snapshot(current)?;
                 snapshot_checked_at = current;
                 state_cursor = next_cursor;
-                if (registered || snapshot.state.stopped.is_some()) && ready(request, &snapshot) {
+                if (registered || snapshot.state.stopped.is_some())
+                    && ready(request, &snapshot, initial_refusal.as_ref())
+                {
                     return Ok(snapshot);
                 }
             } else {
@@ -229,15 +257,36 @@ pub(super) fn claim_deadline(role: Role, snapshot: &Snapshot, checked_at: i64) -
         .min()
 }
 
-fn ready(request: &WaitRequest, snapshot: &Snapshot) -> bool {
+/// The authority's refusal of this exact worker session's pending request (HS2-6WFCZR).
+fn refusal(request: &WaitRequest, snapshot: &Snapshot) -> Option<RequestRefusal> {
+    if request.role != Role::Worker {
+        return None;
+    }
+    snapshot
+        .state
+        .workers
+        .get(&request.id)
+        .filter(|session| session.generation == request.generation)
+        .and_then(|session| session.preferences.refusal.clone())
+}
+
+pub(super) fn ready(
+    request: &WaitRequest,
+    snapshot: &Snapshot,
+    initial: Option<&RequestRefusal>,
+) -> bool {
     if snapshot.state.stopped.is_some() {
         return true;
     }
     match request.role {
-        Role::Worker => snapshot
-            .state
-            .active_assignment(&request.id)
-            .is_some_and(|a| a.generation == request.generation),
+        Role::Worker => {
+            snapshot
+                .state
+                .active_assignment(&request.id)
+                .is_some_and(|a| a.generation == request.generation)
+                // A newly recorded refusal wakes the worker once (HS2-6WFCZR).
+                || refusal(request, snapshot).is_some_and(|current| Some(&current) != initial)
+        }
         Role::Integrator | Role::Dispatcher => request
             .after
             .as_ref()

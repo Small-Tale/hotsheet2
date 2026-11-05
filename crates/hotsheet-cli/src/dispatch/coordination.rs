@@ -6,8 +6,9 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::{
     Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, IntegrationStrategy,
-    IntegrationSuspension, NextPlanEntry, Phase, PrerequisiteGate, ReservationCheck, ReturnRoute,
-    Role, StrategyPolicy, StrategyRequest, WaitRequest,
+    IntegrationSuspension, NextPlanEntry, Phase, PreferenceRequest, PrerequisiteGate,
+    RefusalReason, ReservationCheck, ReturnRoute, Role, StrategyPolicy, StrategyRequest,
+    TicketFilter, WaitRequest, WorkerPreferences,
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
@@ -57,19 +58,74 @@ struct Registration {
     /// project and implemented; omit to use the project default (HS2-NEY1QH).
     #[arg(long, value_enum)]
     strategy: Option<IntegrationStrategy>,
-    /// Integrator only: confirms every participant runs a schema-eight executable before
-    /// the first non-serial strategy is recorded.
+    /// Integrator: confirms every participant runs a schema-eight executable before the
+    /// first non-serial strategy is recorded. Worker: confirms every participant runs a
+    /// schema-nine executable before the first ticket preferences are recorded.
     #[arg(long)]
     all_participants_upgraded: bool,
+    /// Worker only: rank tickets matching this filter first within the normal priority
+    /// order; any eligible ticket remains possible. `tag:<name>`, `category:<name>`,
+    /// `priority:<level>` or `tier:<Tn>`; repeatable (HS2-6WFCZR).
+    #[arg(long)]
+    prefer: Vec<TicketFilter>,
+    /// Worker only: receive only tickets matching at least one of these filters; strict,
+    /// and an idle worker reports why nothing matches. Repeatable.
+    #[arg(long)]
+    only: Vec<TicketFilter>,
+    /// Worker only: never receive tickets matching any of these filters; strict. Repeatable.
+    #[arg(long)]
+    avoid: Vec<TicketFilter>,
+    /// Worker only: ask the assignment authority for this exact ticket slug. It is honored
+    /// only when the ticket passes every assignment check; otherwise a refusal is recorded.
+    #[arg(long)]
+    request: Option<String>,
+    /// Worker only: drop this session's stated preferences and request.
+    #[arg(long, conflicts_with_all = ["prefer", "only", "avoid", "request"])]
+    clear_preferences: bool,
 }
 
 impl Registration {
+    /// Flags given replace the session's whole preference set; none keeps it (HS2-6WFCZR).
+    fn preference_request(&self) -> Result<PreferenceRequest> {
+        let stated = !self.prefer.is_empty()
+            || !self.only.is_empty()
+            || !self.avoid.is_empty()
+            || self.request.is_some()
+            || self.clear_preferences;
+        if self.role != Role::Worker {
+            anyhow::ensure!(
+                !stated,
+                "only a worker states ticket preferences or requests"
+            );
+            return Ok(PreferenceRequest::keep());
+        }
+        if !stated {
+            return Ok(PreferenceRequest {
+                set: None,
+                all_participants_upgraded: self.all_participants_upgraded,
+            });
+        }
+        Ok(PreferenceRequest::replace(
+            WorkerPreferences::stated(
+                self.prefer.clone(),
+                self.only.clone(),
+                self.avoid.clone(),
+                self.request.clone(),
+            )?,
+            self.all_participants_upgraded,
+        ))
+    }
+
     /// Resolve the strategy against the committed project policy before any state lock.
     fn strategy_request(&self, project: &std::path::Path) -> Result<StrategyRequest> {
         if self.role != Role::Integrator {
             anyhow::ensure!(
-                self.strategy.is_none() && !self.all_participants_upgraded,
+                self.strategy.is_none(),
                 "only the integrator selects an integration strategy"
+            );
+            anyhow::ensure!(
+                self.role == Role::Worker || !self.all_participants_upgraded,
+                "--all-participants-upgraded on registration is for an integrator strategy or worker preferences"
             );
             return Ok(StrategyRequest::default());
         }
@@ -174,6 +230,24 @@ enum CoordinationCmd {
     StrategyDefault {
         #[arg(long, value_enum)]
         strategy: IntegrationStrategy,
+    },
+    /// Record why the assignment authority did not honor a worker's pending `--request`
+    /// (HS2-6WFCZR). The worker's next wait reports it; the request stays until restated.
+    RefuseRequest {
+        #[command(flatten)]
+        authority: Identity,
+        #[arg(long)]
+        worker: String,
+        #[arg(long)]
+        worker_session: String,
+        /// The exact requested slug being refused.
+        #[arg(long)]
+        slug: String,
+        #[arg(long, value_enum)]
+        reason: RefusalReason,
+        /// One-line explanation the worker sees, for example the overlapping scope.
+        #[arg(long)]
+        detail: Option<String>,
     },
     /// Check an exact worker handoff before writing its durable ticket note.
     Preflight {
@@ -659,7 +733,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         } => coordinator.set_authority(&i.id, &i.session, now, mode, all_participants_upgraded)?,
         CoordinationCmd::Register(r) => {
             let strategy = r.strategy_request(&args.project)?;
-            coordinator.register_with_strategy(
+            let preferences = r.preference_request()?;
+            coordinator.register_full(
                 r.role,
                 &r.identity.id,
                 &r.identity.session,
@@ -667,6 +742,26 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 r.lease_seconds,
                 r.route,
                 strategy,
+                preferences,
+            )?;
+        }
+        CoordinationCmd::RefuseRequest {
+            authority,
+            worker,
+            worker_session,
+            slug,
+            reason,
+            detail,
+        } => {
+            coordinator.refuse_request(
+                &authority.id,
+                &authority.session,
+                now,
+                &worker,
+                &worker_session,
+                &slug,
+                reason,
+                detail,
             )?;
         }
         CoordinationCmd::Next {
@@ -674,6 +769,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             after,
         } => {
             let strategy = r.strategy_request(&args.project)?;
+            let preferences = r.preference_request()?;
             let snapshot = coordinator.next(&WaitRequest {
                 role: r.role,
                 id: r.identity.id,
@@ -682,6 +778,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 return_route: r.route,
                 after,
                 strategy,
+                preferences,
             })?;
             println!("{}", serde_json::to_string_pretty(&snapshot)?);
             return Ok(());

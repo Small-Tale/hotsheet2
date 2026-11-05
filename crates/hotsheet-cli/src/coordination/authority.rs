@@ -24,21 +24,36 @@ pub struct Capabilities {
     pub schema_written_with_next_plan: u32,
     /// A non-serial integrator strategy on the integrator session (HS2-NEY1QH).
     pub schema_written_with_integration_strategy: u32,
+    /// Worker ticket preferences and requests on worker sessions (HS2-6WFCZR).
+    pub schema_written_with_worker_preferences: u32,
     pub integration_strategies: &'static [super::strategy::StrategyDescriptor],
+    pub preference_filter_kinds: &'static [&'static str],
+    pub request_refusal_reasons: &'static [&'static str],
     pub scope_section_kinds: &'static [&'static str],
     pub assignment_authorities: &'static [&'static str],
     pub roles: &'static [&'static str],
 }
 
 pub const CAPABILITIES: Capabilities = Capabilities {
-    schemas_read: &[1, 2, 3, 4, 5, 6, 7, 8],
+    schemas_read: &[1, 2, 3, 4, 5, 6, 7, 8, 9],
     schema_written_with_integrator_authority: 3,
     schema_written_with_dispatcher_authority: 4,
     schema_written_with_shared_sections: 5,
     schema_written_with_suspended_integration: 6,
     schema_written_with_next_plan: 7,
     schema_written_with_integration_strategy: 8,
+    schema_written_with_worker_preferences: super::preferences::PREFERENCES_SCHEMA,
     integration_strategies: &super::strategy::REGISTRY,
+    preference_filter_kinds: super::preferences::FILTER_KINDS,
+    request_refusal_reasons: &[
+        "blocked",
+        "claimed",
+        "overlap",
+        "unsupported_source",
+        "not_ready",
+        "assigned",
+        "filtered",
+    ],
     scope_section_kinds: scope::SECTION_KINDS,
     assignment_authorities: &["integrator", "dispatcher"],
     roles: &["integrator", "worker", "dispatcher"],
@@ -48,6 +63,17 @@ impl Coordinator {
     /// Schema three must stay exactly what a schema-three artifact writes, and schema four
     /// exactly what a schema-four artifact can read without dropping shared sections.
     pub(super) fn schema_fence(state: &State) -> Result<()> {
+        if state.version < super::preferences::PREFERENCES_SCHEMA {
+            ensure!(
+                state
+                    .integrator
+                    .iter()
+                    .chain(state.dispatcher.iter())
+                    .chain(state.workers.values())
+                    .all(|session| session.preferences.is_empty()),
+                "worker ticket preferences require schema nine; upgrade every participant first"
+            );
+        }
         if state.version < 8 {
             ensure!(
                 state

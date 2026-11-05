@@ -15,7 +15,10 @@ use sha2::{Digest, Sha256};
 use super::contract::{
     HandoffEvidence, IntegrationSuspension, PlanEvent, PlannedTicket, SourceSupport,
 };
-use super::{Authority, Coordinator, IntegrationStrategy, Phase, ReturnRoute, Role, Snapshot};
+use super::{
+    Authority, Coordinator, IntegrationStrategy, Phase, ReturnRoute, Role, Snapshot, WorkerMatch,
+    WorkerPreferences,
+};
 
 /// A host-observed connection explicitly bound to a coordination session. The host must
 /// resolve this from a registered connection/terminal id, never a process scan or name.
@@ -74,6 +77,13 @@ pub struct WorkerRow {
     /// The recorded strategy of an integrator session; None for other rows (HS2-NEY1QH).
     #[serde(default)]
     pub integration_strategy: Option<IntegrationStrategy>,
+    /// A worker session's stated preferences, request and refusal; None when it states
+    /// none (HS2-6WFCZR).
+    #[serde(default)]
+    pub preferences: Option<WorkerPreferences>,
+    /// That worker's candidates, idle reason and request check (HS2-6WFCZR).
+    #[serde(default)]
+    pub matching: Option<WorkerMatch>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +107,9 @@ pub struct WorkerView {
     /// The live integrator's strategy, None without a live integrator (HS2-NEY1QH).
     #[serde(default)]
     pub integration_strategy: Option<IntegrationStrategy>,
+    /// Ready tickets no live idle worker's strict preferences admit (HS2-6WFCZR).
+    #[serde(default)]
+    pub unmatched_tickets: Vec<String>,
 }
 
 impl WorkerView {
@@ -203,6 +216,9 @@ impl WorkerView {
                     tickets: Vec::new(),
                     planned: Vec::new(),
                     integration_strategy: (role == Role::Integrator).then_some(session.strategy),
+                    preferences: (!session.preferences.is_empty())
+                        .then(|| session.preferences.clone()),
+                    matching: snapshot.worker_matches.get(&session.id).cloned(),
                 },
             );
         }
@@ -281,6 +297,8 @@ impl WorkerView {
                 tickets: Vec::new(),
                 planned: Vec::new(),
                 integration_strategy: None,
+                preferences: None,
+                matching: None,
             });
             held.sort_by_key(|ticket| (ticket.ticket.qualified(), ticket.assignment_id.clone()));
             row.tickets = held;
@@ -317,6 +335,8 @@ impl WorkerView {
                     tickets: Vec::new(),
                     planned: Vec::new(),
                     integration_strategy: None,
+                    preferences: None,
+                    matching: None,
                 },
             );
         }
@@ -341,6 +361,8 @@ impl WorkerView {
                     tickets: Vec::new(),
                     planned: Vec::new(),
                     integration_strategy: None,
+                    preferences: None,
+                    matching: None,
                 });
             row.planned.push(planned.clone());
         }
@@ -402,6 +424,7 @@ impl WorkerView {
             connection_coverage,
             past_workers,
             integration_strategy: snapshot.integration_strategy,
+            unmatched_tickets: snapshot.unmatched_tickets.clone(),
         }
     }
 }
@@ -562,6 +585,8 @@ mod tests {
             planned: Vec::new(),
             finished_assignments: Vec::new(),
             integration_strategy: None,
+            worker_matches: Default::default(),
+            unmatched_tickets: Vec::new(),
         }
     }
 
@@ -572,6 +597,7 @@ mod tests {
             expires_at,
             return_route: route,
             strategy: Default::default(),
+            preferences: Default::default(),
         }
     }
 

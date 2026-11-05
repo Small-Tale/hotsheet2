@@ -497,7 +497,7 @@ fn hs2_twzw7x_capabilities_never_open_and_legacy_pools_stay_schema_three() {
     let reported: serde_json::Value = serde_json::from_str(&capabilities).unwrap();
     assert_eq!(
         reported["schemas_read"],
-        serde_json::json!([1, 2, 3, 4, 5, 6, 7, 8])
+        serde_json::json!([1, 2, 3, 4, 5, 6, 7, 8, 9])
     );
     assert_eq!(reported["schema_written_with_integrator_authority"], 3);
     // HS2-YHYNJ6: reviewed shared sections are schema five, reported without opening.
@@ -506,6 +506,8 @@ fn hs2_twzw7x_capabilities_never_open_and_legacy_pools_stay_schema_three() {
     assert_eq!(reported["schema_written_with_next_plan"], 7);
     // HS2-NEY1QH: a non-serial integrator strategy is schema eight.
     assert_eq!(reported["schema_written_with_integration_strategy"], 8);
+    // HS2-6WFCZR: worker ticket preferences are schema nine.
+    assert_eq!(reported["schema_written_with_worker_preferences"], 9);
     assert_eq!(
         reported["scope_section_kinds"],
         serde_json::json!(["row", "heading"])

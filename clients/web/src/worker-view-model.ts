@@ -31,6 +31,35 @@ export interface PlannedWorkerTicket {
   reasons: string[];
 }
 
+/** HS2-6WFCZR: a dispatcher-recorded refusal of one exact worker request. */
+export interface WorkerRequestRefusal {
+  slug: string;
+  reason: string;
+  detail: string | null;
+}
+
+/** HS2-6WFCZR: a worker session's stated preferences; empty lists when none are stated. */
+export interface WorkerPreferences {
+  prefer: string[];
+  only: string[];
+  avoid: string[];
+  request: string | null;
+  refusal: WorkerRequestRefusal | null;
+}
+
+/** HS2-6WFCZR: the dispatcher-facing match of one worker's preferences against the queue. */
+export interface WorkerMatching {
+  candidates: Array<{ slug: string; preferred: boolean }>;
+  idle_reason: string | null;
+  request: { slug: string; reasons: string[] } | null;
+}
+
+export interface WorkerPreferenceChip {
+  kind: 'only' | 'prefer' | 'avoid';
+  filter: string;
+  label: string;
+}
+
 export interface WorkerRow {
   id: string;
   role: 'integrator' | 'dispatcher' | 'worker' | null;
@@ -49,6 +78,9 @@ export interface WorkerRow {
   planned: PlannedWorkerTicket[];
   /** HS2-NEY1QH: the recorded strategy of an integrator session; absent from older servers. */
   integration_strategy?: string | null;
+  /** HS2-6WFCZR: absent from older servers and for workers that state none. */
+  preferences?: WorkerPreferences | null;
+  matching?: WorkerMatching | null;
 }
 
 export interface WorkerView {
@@ -130,6 +162,39 @@ function plannedTicket(value: unknown): PlannedWorkerTicket {
     reasons: array(item.reasons, string),
   };
 }
+function optionalStrings(value: unknown): string[] {
+  return value === undefined ? [] : array(value, string);
+}
+function preferences(value: unknown): WorkerPreferences | null {
+  if (value === undefined || value === null) return null;
+  const item = record(value),
+    refusal = item.refusal === undefined || item.refusal === null ? null : record(item.refusal);
+  return {
+    prefer: optionalStrings(item.prefer),
+    only: optionalStrings(item.only),
+    avoid: optionalStrings(item.avoid),
+    request: item.request === undefined ? null : nullableString(item.request),
+    refusal: refusal && {
+      slug: string(refusal.slug),
+      reason: string(refusal.reason),
+      detail: refusal.detail === undefined ? null : nullableString(refusal.detail),
+    },
+  };
+}
+function matching(value: unknown): WorkerMatching | null {
+  if (value === undefined || value === null) return null;
+  const item = record(value),
+    request = item.request === undefined || item.request === null ? null : record(item.request);
+  return {
+    candidates: array(item.candidates, (candidate) => {
+      const entry = record(candidate);
+      if (typeof entry.preferred !== 'boolean') throw new ServerResponseShapeError('worker view');
+      return { slug: string(entry.slug), preferred: entry.preferred };
+    }),
+    idle_reason: item.idle_reason === undefined ? null : nullableString(item.idle_reason),
+    request: request && { slug: string(request.slug), reasons: array(request.reasons, string) },
+  };
+}
 function worker(value: unknown): WorkerRow {
   const item = record(value),
     role = nullableString(item.role),
@@ -155,7 +220,31 @@ function worker(value: unknown): WorkerRow {
     tickets: array(item.tickets, workerTicket),
     planned: array(item.planned, plannedTicket),
     integration_strategy: item.integration_strategy === undefined ? null : nullableString(item.integration_strategy),
+    preferences: preferences(item.preferences),
+    matching: matching(item.matching),
   };
+}
+
+/** HS2-6WFCZR: one chip per stated filter, strict filters first, e.g. `only: glance`. */
+export function workerPreferenceChips(preferences: WorkerPreferences | null | undefined): WorkerPreferenceChip[] {
+  if (!preferences) return [];
+  const chips = (kind: WorkerPreferenceChip['kind'], filters: readonly string[]) =>
+    filters.map((filter) => ({ kind, filter, label: `${kind}: ${filter.slice(filter.indexOf(':') + 1)}` }));
+  return [
+    ...chips('only', preferences.only),
+    ...chips('avoid', preferences.avoid),
+    ...chips('prefer', preferences.prefer),
+  ];
+}
+
+/** HS2-6WFCZR: the pending request line, including a recorded refusal and its detail. */
+export function workerRequestStatus(worker: WorkerRow): string | null {
+  const request = worker.preferences?.request;
+  if (!request) return null;
+  const refusal = worker.preferences?.refusal;
+  if (refusal && refusal.slug.toLowerCase() === request.toLowerCase())
+    return `Request ${request} refused: ${refusal.reason.replace(/_/g, ' ')}${refusal.detail ? ` (${refusal.detail})` : ''}`;
+  return `Requested ${request}`;
 }
 
 /** HS2-NEY1QH: display name for a registered integration strategy, e.g. `Serial integration`. */

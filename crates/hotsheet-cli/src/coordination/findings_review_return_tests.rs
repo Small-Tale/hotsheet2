@@ -378,9 +378,10 @@ fn hs2_aebjyn_schema_two_migration_preserves_findings_code_ci_and_returned_evide
     // reject this pool's new version instead of applying their old Blocked→Done semantics.
     // Schema four is dispatcher authority (HS2-TWZW7X) and five reviewed shared sections
     // (HS2-YHYNJ6), six is suspended integration (HS2-2D3099), seven next plans
-    // (HS2-XCMAVT) and eight integration strategies (HS2-NEY1QH), so nine is unknown.
+    // (HS2-XCMAVT), eight integration strategies (HS2-NEY1QH) and nine worker
+    // preferences (HS2-6WFCZR), so ten is unknown.
     let mut future = migrated;
-    future.version = 9;
+    future.version = 10;
     let bytes = serde_json::to_vec(&future).unwrap();
     fs::write(&path, &bytes).unwrap();
     assert!(Coordinator::open(&root.path().join("project"), &c.source).is_err());

@@ -4,7 +4,7 @@ description: Keep a local worker session receiving exact dispatcher or legacy as
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 47 -->
+<!-- hotsheet-skill-version: 48 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -38,8 +38,10 @@ authorities and schemas without opening the pool. A linked worktree shares the
 live Git common directory and cannot serve as a disposable upgrade test.
 
 Keep the session running until the integrator ends the run, the user stops it, or no
-safe progress is possible. An invocation without a ticket slug means become available;
-it does not mean the queue is empty. Either the worker or integrator may start first.
+safe progress is possible. An invocation without an argument means become available
+for anything; it does not mean the queue is empty. An argument states preferences or
+a request for the dispatcher to weigh (see "State preferences and requests"); it
+never selects or claims a ticket. Either the worker or integrator may start first.
 
 1. Keep one worker id, a fresh session-generation token, the assigned
    `<return-route>`, and one availability `<lease-seconds>` (10 to 3600; long gates
@@ -55,7 +57,8 @@ setup`, then `status`.
    ask the integrator to publish its exact structured assignment; remain available.
    Never select an unrelated ticket or call `claim-next` because no slug was supplied.
 3. Run `coordination --project <main> next --role worker --id <worker>
---session <generation> --route <return-route> --lease-seconds <lease-seconds>`
+--session <generation> --route <return-route> --lease-seconds <lease-seconds>
+[<preference flags>]`
    with the same `-C` source, on the first wait and on every later wait or
    reconnect. `next` re-registers the session from its own flags; it does not
    inherit the registered route or lease, and omitted flags fall back to the CLI
@@ -107,6 +110,47 @@ overwriting an old worktree. A replacement generation requires explicit integrat
 recovery with a durable inspection note. On final exit, `coordination leave --role worker`
 withdraws availability; also release every ticket claim. An ended independent app turn
 does not resume automatically; report the human relay needed (HS2-4H7D8D).
+
+## State preferences and requests
+
+The dispatcher (or legacy integrator) stays the only assignment authority
+(HS2-6WFCZR). A worker states what it would like and waits for an exact
+assignment; it never picks, claims or starts a ticket on its own. Map the
+invocation argument to flags on `next` and `register`:
+
+| Argument | Flags |
+| --- | --- |
+| (none) | none: anything eligible |
+| `glance tickets` | `--prefer tag:glance` |
+| `only glance tickets` | `--only tag:glance` |
+| `bugs, nothing T2` | `--prefer category:bug --avoid tier:T2` |
+| `HS2-EQVZTZ` (a slug) | `--request HS2-EQVZTZ` |
+
+Filters are `tag:<name>`, `category:<name>`, `priority:<highest|high|default|low|lowest>`
+and `tier:<T0|T1|T2>`; repeat a flag for more. `--prefer` is soft: preferred tickets
+come first within the normal priority order, then anything eligible. `--only`
+(any of) and `--avoid` (none of) are strict: you stay idle with an `idle_reason`
+rather than receive other work. If the argument is ambiguous, ask the user rather
+than guess a strict filter.
+
+The flags given on a call replace the session's whole preference set; a call with
+none keeps it, so lease renewals and plain `register` renewals replay it. Restate
+the same flags on every `next` while they apply. The first preferences in a pool
+need schema nine: pass `--all-participants-upgraded` only after the integrator
+confirms every participant runs a schema-nine executable (`coordination
+capabilities` reports `schema_written_with_worker_preferences`); otherwise run
+without preferences. For a mid-run change ("switch to bugs"), finish or keep the
+current assignment and pass the new flags on the next wait; `--clear-preferences`
+drops them. Preferences never change or release an assignment you already hold.
+
+A request is honored only when the ticket passes every check an assignment makes.
+An honored request is consumed: do not restate it after that assignment. Otherwise
+the dispatcher records a refusal (blocked, claimed, overlap, unsupported_source,
+not_ready, assigned or filtered), and your wait returns once with no assignment.
+Read `state.workers.<worker>.preferences.refusal` and
+`worker_matches.<worker>`, report the reason to the user, and wait again: restate
+the request to keep waiting for it, or drop it to become available for other work.
+Never claim the requested ticket yourself.
 
 ## For each assignment
 

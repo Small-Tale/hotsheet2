@@ -171,7 +171,7 @@ fn hs2_ney1qh_schema_fence_refuses_a_strategy_recorded_below_schema_eight() {
     let refused = c.state().unwrap_err().to_string();
     assert!(refused.contains("schema eight"), "{refused}");
     // Newer than this executable is refused too, as every older executable refuses eight.
-    raw["version"] = 9.into();
+    raw["version"] = 10.into();
     fs::write(
         c.directory.join("state.json"),
         serde_json::to_vec_pretty(&raw).unwrap(),

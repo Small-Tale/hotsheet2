@@ -7096,6 +7096,50 @@ async fn hs2_ney1qh_integration_strategy_policy_and_active_strategy_round_trip_o
     assert_eq!(workers["integration_strategy"], "serial");
     assert_eq!(workers["workers"][0]["role"], "integrator");
     assert_eq!(workers["workers"][0]["integration_strategy"], "serial");
+    // HS2-6WFCZR: a worker's stated preferences and idle reason reach REST /workers.
+    coordinator
+        .register_full(
+            hotsheet_cli::coordination::Role::Worker,
+            "worker",
+            "generation-one",
+            time::OffsetDateTime::now_utc().unix_timestamp(),
+            120,
+            hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+            Default::default(),
+            hotsheet_cli::coordination::PreferenceRequest::replace(
+                hotsheet_cli::coordination::WorkerPreferences::stated(
+                    vec!["category:bug".parse().unwrap()],
+                    vec!["tag:glance".parse().unwrap()],
+                    Vec::new(),
+                    None,
+                )
+                .unwrap(),
+                true,
+            ),
+        )
+        .unwrap();
+    let workers = app
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}/workers"), None))
+        .await
+        .unwrap();
+    assert_eq!(workers.status(), StatusCode::OK);
+    let workers = body_json(workers).await;
+    let row = workers["workers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "worker")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        row["preferences"],
+        serde_json::json!({"prefer": ["category:bug"], "only": ["tag:glance"]})
+    );
+    assert_eq!(
+        row["matching"]["idle_reason"],
+        "no ready tickets match only tag:glance"
+    );
 }
 
 #[tokio::test]

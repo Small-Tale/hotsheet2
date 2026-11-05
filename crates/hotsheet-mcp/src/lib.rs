@@ -6569,6 +6569,50 @@ mod tests {
                 .unwrap()["integration_strategy"],
             "serial"
         );
+        // HS2-6WFCZR: a worker's stated preferences, candidates and idle reason reach MCP.
+        coordinator
+            .register_full(
+                hotsheet_cli::coordination::Role::Worker,
+                "worker-b",
+                "generation-b",
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+                120,
+                hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+                Default::default(),
+                hotsheet_cli::coordination::PreferenceRequest::replace(
+                    hotsheet_cli::coordination::WorkerPreferences::stated(
+                        Vec::new(),
+                        vec!["tag:glance".parse().unwrap()],
+                        Vec::new(),
+                        Some(created.slug.clone()),
+                    )
+                    .unwrap(),
+                    true,
+                ),
+            )
+            .unwrap();
+        let preferring = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        let row = preferring["workers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == "worker-b")
+            .unwrap()
+            .clone();
+        assert_eq!(row["preferences"]["only"], json!(["tag:glance"]), "{row}");
+        assert_eq!(row["preferences"]["request"], created.slug);
+        assert_eq!(
+            row["matching"]["request"]["reasons"],
+            json!(["filtered"]),
+            "{row}"
+        );
+        assert!(
+            row["matching"]["idle_reason"]
+                .as_str()
+                .unwrap()
+                .contains("only tag:glance"),
+            "{row}"
+        );
         let events = call(
             &backend,
             "hotsheet_worker_plan_events",

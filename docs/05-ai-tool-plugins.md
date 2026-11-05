@@ -2646,6 +2646,88 @@ its rules unchanged. The `$hotsheet-integrator` skill accepts the strategy as it
 argument; `$hotsheet-dispatcher` documents that a project's allowance alone never
 relaxes assignment.
 
+#### Worker preferences and requests (HS2-6WFCZR)
+
+A worker states what it would like on its availability session; the assignment
+authority (the dispatcher, or the integrator in legacy mode) remains the only role
+that reserves work. Preferences are inputs to its decision and never bypass the
+overlap, dependency, blocked, claim, source or safe-base checks. The model lives in
+`crates/hotsheet-cli/src/coordination/preferences.rs`.
+
+**Flags.** `coordination register|next --role worker` accepts repeatable
+`--prefer <filter>`, `--only <filter>` and `--avoid <filter>`, plus `--request <slug>`
+and `--clear-preferences`. A filter is `tag:<name>`, `category:<name>`,
+`priority:<highest|high|default|low|lowest>` or `tier:<Tn>` (matching the `tier:<Tn>`
+tag); matching ignores ASCII case. Repeated `--only` filters mean any of them,
+`--avoid` none of them, and `--prefer` any of them. A filter cannot be both `--only`
+and `--avoid`. Other roles are refused.
+
+**Replay.** The flags given on a call replace the whole preference set. A call with
+none keeps a same-generation session's set, so the lease renewals inside `next` and a
+plain `register` renewal replay it, as with the route and lease (HS2-CP6GWA) and the
+integrator strategy. `--clear-preferences` empties it, and a new session generation
+starts empty unless it states flags. Re-registering while assigned changes only the
+preferences, never the assignment.
+
+**Matching.**
+
+- `--only` and `--avoid` are strict. `assign` and `plan-dispatch` read the ticket
+  under the reservation transaction and refuse a ticket outside a worker's strict set,
+  whoever holds assignment authority. A strict set on a ticket source this executable
+  cannot read is refused rather than ignored.
+- `--prefer` is soft. The snapshot's `worker_matches.<worker>.candidates` lists ready
+  tickets the strict set admits, ordered by priority, then preferred, then queue
+  order (at most ten). A preference never outranks a higher-priority ticket, so a
+  soft preference cannot starve a ticket.
+- An idle live worker whose strict set admits no ready ticket gets an `idle_reason`,
+  for example `no ready tickets match only tag:glance; 2 matching not ready (blocked,
+claimed or assigned): HS-4, HS-7`. It never falls back silently.
+- `unmatched_tickets` lists ready tickets that no live idle worker's strict set
+  admits: the starvation signal. It is empty without a live idle worker.
+
+"Ready" means in Up Next, open, without a `blocked_reason`, without a live claim, not
+already reserved, and, under dispatcher authority, with closed dependencies and not
+blocked by the integrator's published report.
+
+**Requests.** `--request <slug>` asks for one ticket. The snapshot's
+`worker_matches.<worker>.request` names the reasons it can see: `not_ready`,
+`blocked`, `claimed`, `assigned` (reserved for another worker), `filtered` (outside the
+worker's own strict set) or `unsupported_source`. Overlap depends on the scopes the
+authority chooses, so only the authority judges it. Assigning the requested ticket to
+that worker consumes the request. Otherwise the authority records a refusal:
+`coordination refuse-request --id <authority> --session <generation> --worker <worker>
+--worker-session <worker-generation> --slug <slug> --reason
+<blocked|claimed|overlap|unsupported_source|not_ready|assigned|filtered> [--detail
+<one line>]`. Only the current assignment authority may refuse, only the worker's
+exact pending request, and an identical refusal is a no-op. A newly recorded refusal
+wakes that worker's `next` once with no assignment; a refusal that already existed
+when the wait started does not, so restating the same request keeps waiting. The
+refusal is kept while the same request is restated and dropped when the request
+changes. When two workers request one ticket, the authority picks by its normal
+rules and the other sees `assigned`.
+
+**Schema nine.** Preferences live on the worker session and are skipped when empty,
+so pools without them stay byte-identical on schemas three through eight and older
+participants keep operating them. The first non-empty set requires
+`--all-participants-upgraded` on the worker's `register` or `next` and persists
+schema nine, which every older executable refuses. A refused upgrade changes
+nothing. The schema fence rejects preferences below schema nine, and the version is
+never lowered. `coordination capabilities` reports `schemas_read` through 9,
+`schema_written_with_worker_preferences: 9`, `preference_filter_kinds` and
+`request_refusal_reasons`.
+
+**Visibility.** `status` and `next` print the session's `preferences` (with any
+`refusal`), `worker_matches` and `unmatched_tickets`. The worker view (`coordination
+workers`, `GET /checkouts/{reference}/workers`, MCP `hotsheet_workers`) adds a
+per-row `preferences` and `matching` and a top-level `unmatched_tickets`. The web
+Workers card shows preference chips (`only: glance`, `prefer: bug`), the pending or
+refused request, and the idle reason. `$hotsheet-worker` maps a short natural-language
+argument to the flags; `$hotsheet-dispatcher` documents the matching and refusal
+rules.
+
+Deferred: a configurable delay that promotes soft-preference workers to starving
+tickets, and starvation notifications (HS2-JXQJKR).
+
 #### Three-role guidance and setup (HS2-7E5R4A)
 
 `plugins/shared/role-skills/` is the authored source for dispatcher, integrator and

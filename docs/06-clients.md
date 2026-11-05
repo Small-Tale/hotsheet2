@@ -261,6 +261,12 @@ preview/download, server directory browser) are separate design work.
   one; older servers omit it (HS2-NEY1QH). The policy itself is edited headlessly
   or through `PUT /checkouts/{id}/integration-strategies`; a settings editor is
   HS2-SVD5WA.
+  A worker card that states ticket preferences adds outline chips for each filter,
+  strict filters first (`only: glance`, `avoid: T2`, `prefer: bug`), a line for its
+  pending request (`Requested HS2-…`) or the authority's refusal with its reason and
+  detail, and, for a live idle worker whose strict filters match nothing, its
+  `Idle: …` reason. Older servers and workers that state none show none of these
+  (HS2-6WFCZR; real-app visual review is HS2-3PXPP7).
   Use the shared column ticket summary and Kerf's column track: horizontally
   reachable columns on desktop and paged columns with a next-column peek on phones.
   Preserve column identity, order, focus, and scroll across updates and size changes.

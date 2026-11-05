@@ -121,6 +121,60 @@ describe('HS2-E9SR7R Workers composition', () => {
     expect(older).not.toContain('data-integration-strategy');
   });
 
+  it('HS2-6WFCZR shows preference chips, the pending or refused request and the idle reason', () => {
+    const picky = {
+      ...worker('Picky', rows[0]),
+      tickets: [],
+      preferences: {
+        prefer: ['category:bug'],
+        only: ['tag:glance'],
+        avoid: ['tier:T2'],
+        request: 'HS2-WANT',
+        refusal: null,
+      },
+      matching: {
+        candidates: [],
+        idle_reason: 'no ready tickets match only tag:glance',
+        request: { slug: 'HS2-WANT', reasons: [] },
+      },
+    };
+    const render = (workers: WorkerView['workers']) =>
+      String(
+        WorkerColumns({
+          views: [{ ...view, workers }],
+          details: {},
+          ticketRow: row,
+          loading: false,
+          sourceErrors: [],
+          unsupportedSources: [],
+          layout: 'grid',
+        }),
+      );
+    const markup = render([picky, worker('B', rows[1])]);
+    expect(markup.match(/data-worker-preference=/g)).toHaveLength(3);
+    expect(markup).toContain('data-worker-filter="tag:glance"');
+    expect(markup).toContain('only: glance');
+    expect(markup).toContain('avoid: T2');
+    expect(markup).toContain('prefer: bug');
+    expect(markup).toContain('Requested HS2-WANT');
+    expect(markup).toContain('Idle: no ready tickets match only tag:glance');
+    const refused = render([
+      {
+        ...picky,
+        preferences: {
+          ...picky.preferences,
+          refusal: { slug: 'HS2-WANT', reason: 'not_ready', detail: 'not in Up Next' },
+        },
+      },
+    ]);
+    expect(refused).toContain('Request HS2-WANT refused: not ready (not in Up Next)');
+    expect(refused).not.toContain('Requested HS2-WANT');
+    // A disconnected worker shows no idle reason; a worker stating nothing shows no chips.
+    const quiet = render([{ ...picky, availability: 'disconnected' }, worker('B', rows[1])]);
+    expect(quiet).not.toContain('Idle:');
+    expect(render([worker('B', rows[1])])).not.toContain('data-worker-preference');
+  });
+
   it('pages the phone layout and keeps unknown separate from a genuine zero-worker state', () => {
     const base = { details: {}, ticketRow: row, sourceErrors: [], unsupportedSources: [], layout: 'paged' as const };
     const loading = String(WorkerColumns({ ...base, views: [], loading: true }));

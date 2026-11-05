@@ -329,7 +329,7 @@ fn hs2_76vmyg_role_skills_keep_local_sessions_running_between_tickets() {
     ] {
         let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
         for phrase in [
-            "An invocation without a ticket slug means become available",
+            "An invocation without an argument means become available", // HS2-6WFCZR
             "it does not mean the queue is empty",
             "genuine `## Worker assignment` notes addressed to this worker/session",
             "--role worker --id <worker>",
@@ -438,7 +438,7 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 47 -->")); // HS2-EJ8JTG
+    assert!(worker.contains("<!-- hotsheet-skill-version: 48 -->")); // HS2-6WFCZR
     assert!(integrator.contains("<!-- hotsheet-skill-version: 22 -->")); // HS2-NEY1QH
     assert!(flatten(integrator).contains("release the claim and `review-return` the handoff")); // HS2-KBK83M
     assert!(flatten(integrator).contains("A `blocked_reason` does not refuse the claim")); // HS2-BAK4BC
@@ -504,7 +504,47 @@ fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy_without_unbui
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
     }
-    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 4 -->"));
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 5 -->")); // HS2-6WFCZR
+}
+
+#[test]
+fn hs2_6wfczr_role_skills_state_preferences_while_the_dispatcher_decides() {
+    // Workers state preferences and requests; they never self-select. The dispatcher
+    // applies strict and soft matching, records refusals and reports starving tickets.
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let worker = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-worker/SKILL.md"
+    ));
+    let dispatcher = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-dispatcher/SKILL.md"
+    ));
+    for phrase in [
+        "## State preferences and requests",
+        "it never selects or claims a ticket",
+        "| `glance tickets` | `--prefer tag:glance` |",
+        "| `only glance tickets` | `--only tag:glance` |",
+        "| `bugs, nothing T2` | `--prefer category:bug --avoid tier:T2` |",
+        "| `HS2-EQVZTZ` (a slug) | `--request HS2-EQVZTZ` |",
+        "a call with none keeps it",
+        "Preferences never change or release an assignment you already hold.",
+        "An honored request is consumed",
+        "Never claim the requested ticket yourself.",
+        "`--all-participants-upgraded` only after the integrator confirms",
+    ] {
+        assert!(worker.contains(phrase), "worker missing {phrase}");
+    }
+    for phrase in [
+        "## Honor worker preferences and requests",
+        "you remain the only assignment authority",
+        "`only` and `avoid` are strict. `assign` refuses a ticket outside them",
+        "`prefer` is soft",
+        "A preference never outranks a higher-priority ticket.",
+        "`refuse-request --id <dispatcher>",
+        "`unmatched_tickets`",
+        "refuse the other with `assigned`",
+    ] {
+        assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
+    }
 }
 
 #[test]

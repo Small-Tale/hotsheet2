@@ -3,7 +3,7 @@ name: hotsheet-dispatcher
 description: Keep a local dispatcher assigning independent Hot Sheet tickets while an integrator reviews and ships handoffs.
 ---
 
-<!-- hotsheet-skill-version: 4 -->
+<!-- hotsheet-skill-version: 5 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -49,6 +49,35 @@ without a live integrator), and `coordination strategies` prints the project pol
 (HS2-NEY1QH). Under `serial`, the only strategy implemented now, apply every rule
 below unchanged. Never assign more freely because a project allows another strategy;
 batch-specific assignment rules arrive with HS2-9G0M3V.
+
+## Honor worker preferences and requests
+
+Workers may state preferences on their availability (HS2-6WFCZR); they never select
+or claim a ticket themselves, and you remain the only assignment authority. `status`
+shows each worker's `preferences` (`prefer`, `only`, `avoid`, `request`, `refusal`)
+on its session and, under `worker_matches`, its ordered `candidates`, an
+`idle_reason` and a `request` check. Filters are `tag:`, `category:`, `priority:` and
+`tier:`. Apply them as follows:
+
+- `only` and `avoid` are strict. `assign` refuses a ticket outside them, so never
+  try to override them. A strict worker with no matching ready ticket stays idle with
+  its `idle_reason`; do not fall back to other work for it.
+- `prefer` is soft: within the normal priority order, give a worker the ticket it
+  prefers first, then any eligible ticket. `candidates` already lists that order. A
+  preference never outranks a higher-priority ticket.
+- A `request` is honored only when the ticket passes every check an `assign` makes,
+  including overlap. Assigning the requested ticket to that worker consumes the
+  request. Otherwise record the refusal with `refuse-request --id <dispatcher>
+  --session <generation> --worker <worker> --worker-session <worker-generation>
+  --slug <slug> --reason <blocked|claimed|overlap|unsupported_source|not_ready|assigned|filtered>
+  --detail "<one line>"`. The `request.reasons` list names the reasons the snapshot can
+  see; overlap is yours to judge from the scopes. The worker's wait wakes on a new
+  refusal.
+- When two workers request the same ticket, pick one by your normal rules and refuse
+  the other with `assigned` once the first is reserved.
+- `unmatched_tickets` lists ready tickets that no live idle worker's strict filters
+  admit. Report them to the integrator as starving work; do not reassign a strict
+  worker to clear them.
 
 ## Refill independent workers
 

@@ -1109,6 +1109,13 @@ shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
 `routes/checkout_workers.rs`). The integrator session records a non-serial strategy
 only under the schema-eight fence (HS2-NEY1QH); `strategy_tests.rs` and
 `tests/coordination_strategy.rs` pin its transitions.
+`preferences.rs` owns worker ticket preferences and requests (HS2-6WFCZR): the
+`tag:`/`category:`/`priority:`/`tier:` filter grammar, strict `only`/`avoid` and soft
+`prefer` matching, request checks and refusal reasons, and the snapshot projection
+(`worker_matches`, `unmatched_tickets`). Worker sessions record them only under the
+schema-nine fence; `assign_verified` enforces strict filters and consumes an honored
+request, and `refuse_request` records the authority's refusal. `preferences_tests.rs`
+and `tests/coordination_preferences.rs` pin the transitions.
 `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,

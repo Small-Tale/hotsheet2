@@ -6,6 +6,8 @@ import {
   parseWorkerView,
   qualifiedWorkerTicket,
   workerGroups,
+  workerPreferenceChips,
+  workerRequestStatus,
   type WorkerRow,
   type WorkerTicket,
   workerTicketOperationKey,
@@ -72,6 +74,57 @@ describe('HS2-E9SR7R worker view projection', () => {
     ).toThrow('invalid worker view');
     expect(integrationStrategyLabel('serial')).toBe('Serial integration');
     expect(integrationStrategyLabel('ci-staged')).toBe('CI-staged integration');
+  });
+
+  it('HS2-6WFCZR parses sparse preferences and matching and tolerates servers without them', () => {
+    const raw = {
+      ...worker('picky'),
+      // The server skips empty filter lists and absent requests.
+      preferences: {
+        only: ['tag:glance'],
+        request: 'HS2-A',
+        refusal: { slug: 'HS2-A', reason: 'claimed', at: 't', by: {} },
+      },
+      matching: {
+        worker: 'picky',
+        candidates: [{ slug: 'HS2-B', preferred: true, priority: 'high', ticket: ref('B') }],
+        idle_reason: null,
+        request: { slug: 'HS2-A', ticket: null, reasons: ['claimed'], refusal: null },
+      },
+    } as unknown as WorkerRow;
+    const [picky, plain] = parseWorkerView(view('s', [raw, worker('plain')])).workers;
+    expect(picky.preferences).toEqual({
+      prefer: [],
+      only: ['tag:glance'],
+      avoid: [],
+      request: 'HS2-A',
+      refusal: { slug: 'HS2-A', reason: 'claimed', detail: null },
+    });
+    expect(picky.matching).toEqual({
+      candidates: [{ slug: 'HS2-B', preferred: true }],
+      idle_reason: null,
+      request: { slug: 'HS2-A', reasons: ['claimed'] },
+    });
+    expect([plain.preferences, plain.matching]).toEqual([null, null]);
+    expect(() =>
+      parseWorkerView(view('s', [{ ...worker('x'), preferences: { only: 'tag:x' } } as unknown as WorkerRow])),
+    ).toThrow('invalid worker view');
+    expect(() =>
+      parseWorkerView(
+        view('s', [{ ...worker('x'), matching: { candidates: [{ slug: 'a' }] } } as unknown as WorkerRow]),
+      ),
+    ).toThrow('invalid worker view');
+    expect(workerPreferenceChips(picky.preferences).map((chip) => chip.label)).toEqual(['only: glance']);
+    expect(workerPreferenceChips(null)).toEqual([]);
+    expect(workerRequestStatus(picky)).toBe('Request HS2-A refused: claimed');
+    expect(workerRequestStatus({ ...picky, preferences: { ...picky.preferences!, refusal: null } })).toBe(
+      'Requested HS2-A',
+    );
+    // A refusal of an earlier request never labels a newer one.
+    expect(workerRequestStatus({ ...picky, preferences: { ...picky.preferences!, request: 'HS2-NEW' } })).toBe(
+      'Requested HS2-NEW',
+    );
+    expect(workerRequestStatus(plain)).toBeNull();
   });
 
   it('deduplicates one worker across sources, keeps the integrator first and its background child adjacent', () => {

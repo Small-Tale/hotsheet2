@@ -88,6 +88,22 @@ export function DemoWorkerColumns({ layout = 'grid' }: { layout?: 'grid' | 'page
     workers: [
       worker('Integrator', 'integrator', rows[0] ? [assignment(rows[0], 'integrating', true)] : [], []),
       worker('Codex B', 'worker', rows[1] ? [assignment(rows[1], 'accepted', true)] : [], planned),
+      {
+        // HS2-6WFCZR: a strict worker idling with its reason and a refused request.
+        ...worker('Claude C', 'worker', [], []),
+        preferences: {
+          prefer: ['category:bug'],
+          only: ['tag:glance'],
+          avoid: ['tier:T2'],
+          request: 'HS2-DEMO1',
+          refusal: { slug: 'HS2-DEMO1', reason: 'overlap', detail: 'scope docs/README.md is in flight' },
+        },
+        matching: {
+          candidates: [],
+          idle_reason: 'no ready tickets match only tag:glance, avoiding tier:T2',
+          request: { slug: 'HS2-DEMO1', reasons: [] },
+        },
+      },
     ],
   };
   return (
