@@ -301,6 +301,31 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   not under reduced motion. Kerf has no gauge (KF-Y0XT2R), so this is an app-owned visualization.
   Data wiring belongs to the glance surfaces (HS2-JTTQMY and its consumers).
 
+- `GlanceSparkline` — **demo built** (`components/glance-sparkline.tsx`, HS2-ERTNJ7): a small trend
+  line over a soft area, scaled to its own maximum, with its values in the hover title and
+  accessible name and no text on its face. Tones: `neutral` (calm default), `brand`, `success`
+  (tickets updated), and `warning`. An all-zero series draws a flat baseline. Kerf has no sparkline,
+  so this is an app-owned visualization like `GlanceGauge`.
+
+- `StatsRightNow` — **demo built** (`components/stats-right-now.tsx`, HS2-ERTNJ7,
+  docs/34-glance-surfaces.md §34.8): the Stats page's **Right now** section above Ticket flow and
+  usage. A scope and freshness line ("All projects · live over the change stream · data as of …"),
+  then a Kerf `Grid` of framed `ContentItem` tiles: the full tokens/min `GlanceGauge`, tickets
+  updated in the last 60 minutes with a `GlanceSparkline`, completed since today's UTC midnight
+  (shown once analytics load), Needs you (the only tile that tints, `appearance="warning"`, and only
+  when non-zero), and workers live versus expected. Then the **Projects** table. No `main` CI tile
+  until the live state carries CI (HS2-M8HHEA). The demo's settings choose the scope and a mixed,
+  all-normal, or empty scenario.
+
+- `StatsProjectsTable` — **demo built** (`components/stats-projects-table.tsx`, HS2-ERTNJ7): one row
+  per live store, sorted by need (Halted, Stalled, May be stuck, Waiting on you, Active, Stopped,
+  then longest without progress). Columns: state glyph (`LIVE_STATE_ICONS`) and word, project,
+  current work (ticket and phase; `final_testing` reads "final testing (CI)"), last progress, ETA
+  overrun, runway, and tokens/min, then the one unstick action: **Answer** opens the first waiting
+  ticket through `open-linked-ticket`, and **Open Terminal** opens the project's halted (else first)
+  terminal through `open-terminal-project`. A row with no open project or terminal has no action. A
+  native table (Kerf has no tabular-data component) that scrolls sideways inside its own container.
+
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain

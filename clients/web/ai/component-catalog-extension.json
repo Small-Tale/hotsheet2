@@ -853,6 +853,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "glance-sparkline",
+      "name": "GlanceSparkline",
+      "kind": "component",
+      "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
+      "useWhen": [
+        "A glance surface shows a short recent trend beside a raw number."
+      ],
+      "avoidWhen": [
+        "The value is task progress; use Kerf ProgressBar."
+      ],
+      "publicClasses": [
+        "glance-sparkline"
+      ],
+      "publicTokens": [],
+      "source": "src/components/glance-sparkline.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "none"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
@@ -1892,6 +1915,52 @@
       ],
       "publicTokens": [],
       "source": "src/components/stats-dashboard.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "stats-projects-table",
+      "name": "StatsProjectsTable",
+      "kind": "component",
+      "purpose": "Projects sorted by need: state glyph and word, current work, last progress, ETA overrun, runway, tokens/min, and the one unstick action (HS2-ERTNJ7).",
+      "useWhen": [
+        "Comparing live expectation versus reality across projects with one action per row."
+      ],
+      "avoidWhen": [
+        "Read-only label/value facts; use Kerf ValueTable."
+      ],
+      "publicClasses": [
+        "stats-projects-table"
+      ],
+      "publicTokens": [],
+      "source": "src/components/stats-projects-table.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "stats-right-now",
+      "name": "StatsRightNow",
+      "kind": "component",
+      "purpose": "The Stats page Right now section: live glance tiles and the per-project table, scoped to one project or all, with a data-as-of line (HS2-ERTNJ7).",
+      "useWhen": [
+        "Showing the live state of one or all projects at full size on the Stats page."
+      ],
+      "avoidWhen": [
+        "A compact glance surface; use the gauge and glyph components directly."
+      ],
+      "publicClasses": [
+        "stats-right-now"
+      ],
+      "publicTokens": [],
+      "source": "src/components/stats-right-now.tsx",
       "geometry": {
         "margin": "parent",
         "border": "child",

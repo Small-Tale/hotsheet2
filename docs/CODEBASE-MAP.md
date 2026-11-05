@@ -259,6 +259,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/advisory-claim-resource.ts # Selected external ticket advisory status, stale-response guard, and action resource (HS2-2MZWZT)
     src/live-state.ts        # Per-store live state store for glance surfaces: `live_state` events + resync-only `GET /live-state`, (epoch, revision) ordering, local rate/age/gauge/aggregate helpers; wired by features/project-change-streams.ts (HS2-JTTQMY)
+    src/stats-right-now.ts   # Stats Right now derivations (HS2-ERTNJ7): tiles per scope, update sparkline buckets, rows sorted by need with the one unstick action, UTC-day completions; features/stats-glance.ts owns the display clock (Stats only, no requests) and data-as-of; components/stats-right-now.tsx, stats-projects-table.tsx, glance-sparkline.tsx render it
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry

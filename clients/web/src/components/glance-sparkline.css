@@ -1,0 +1,36 @@
+/* The glance sparkline is an app-owned domain data visualization (Kerf has no sparkline). Its palette
+   resolves from Kerf's semantic ramps, so it follows the light and dark themes (HS2-ERTNJ7). */
+.glance-sparkline {
+  --_glance-sparkline-stroke: var(--kui-color-neutral-border-loud);
+  --_glance-sparkline-area: var(--kui-color-neutral-fill-quiet);
+  display: block;
+  flex: none;
+  inline-size: remify(120px);
+  block-size: remify(24px);
+  overflow: visible;
+}
+.glance-sparkline[data-tone='brand'] {
+  --_glance-sparkline-stroke: var(--kui-color-brand-border-loud);
+  --_glance-sparkline-area: var(--kui-color-brand-fill-quiet);
+}
+.glance-sparkline[data-tone='success'] {
+  --_glance-sparkline-stroke: var(--kui-color-success-border-loud);
+  --_glance-sparkline-area: var(--kui-color-success-fill-quiet);
+}
+.glance-sparkline[data-tone='warning'] {
+  --_glance-sparkline-stroke: var(--kui-color-warning-border-loud);
+  --_glance-sparkline-area: var(--kui-color-warning-fill-quiet);
+}
+.glance-sparkline__area {
+  fill: var(--_glance-sparkline-area);
+  stroke: none;
+}
+/* The stroke keeps its width when the box stretches horizontally. */
+.glance-sparkline__line {
+  fill: none;
+  stroke: var(--_glance-sparkline-stroke);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}

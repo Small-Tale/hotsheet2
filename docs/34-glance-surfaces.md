@@ -148,7 +148,7 @@ dots float **fixed at the bottom of the sidebar** above scrolling content (appro
 `r3-grid-sidebar-page1`). The selected page persists per viewer; Completion is the default. Paging uses
 Kerf `PagedView` (`KF-0QJ2K3`).
 
-## 34.8 Stats Right now (HS2-ERTNJ7, HS2-9AN4DN, HS2-NS0AYR, HS2-DTAVQA, design only)
+## 34.8 Stats Right now (HS2-ERTNJ7 shipped; HS2-9AN4DN, HS2-NS0AYR design only; HS2-DTAVQA partial)
 
 A **Right now** section above the existing "Ticket flow and usage" on the Stats page, approved as
 `m3-stats-right-now-{light,dark}`. Scope follows §34.3.
@@ -159,6 +159,12 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   final-testing tickets waiting on CI), last progress, ETA overrun, queue runway, a 12-hour token sparkline,
   and the one action that unsticks it (Open terminal, Answer). Sorted by need, with a "data as of"
   freshness line.
+- **Shipped (HS2-ERTNJ7).** `StatsRightNow` and `StatsProjectsTable` render from the pushed live
+  state; a 30-second local display clock ages values only while Stats is shown and never requests.
+  "Data as of" is when the client last applied a snapshot. Completed counts today's UTC calendar day
+  from the analytics the page already loads, labelled with that midnight's local time. Two parts wait
+  on the live state: the `main` CI tile is omitted until HS2-M8HHEA adds CI, and the table shows
+  current tokens/min until the live state carries 12 hours of hourly token buckets (HS2-TRZGT3).
 - **Overnight timeline (HS2-9AN4DN):** one swimlane per project over a selectable window (default: since
   standby was entered, or the last 12 hours), segments coloured by state (Active, Waiting on CI, May be
   stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket. Hover shows state,

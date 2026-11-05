@@ -20,6 +20,7 @@ import { demoModule as corruptTicketInspector } from './corrupt-ticket-inspector
 import type { DemoEntry, DemoModule } from './demo-module';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
+import { demoModule as glanceSparkline } from './glance-sparkline-demo';
 import { demoModule as haltedSession } from './halted-session-demo';
 import { demoModule as inputDialogs } from './input-dialogs-demo';
 import { demoModule as list } from './list-demo';
@@ -38,6 +39,8 @@ import { demoModule as searchScopeToolbar } from './search-scope-toolbar-demo';
 import { demoModule as select } from './select-demo';
 import { demoModule as setupSettings } from './setup-settings-demo';
 import { demoModule as statsDashboard } from './stats-dashboard-demo';
+import { demoModule as statsProjectsTable } from './stats-projects-table-demo';
+import { demoModule as statsRightNow } from './stats-right-now-demo';
 import { demoModule as statusBadge } from './status-badge-demo';
 import { demoModule as tagChip } from './tag-chip-demo';
 import { demoModule as terminalComponents } from './terminal-components-demo';
@@ -105,6 +108,9 @@ export const demoModules: readonly DemoModule[] = [
   listHeader,
   choiceCard,
   glanceGauge,
+  glanceSparkline,
+  statsRightNow,
+  statsProjectsTable,
 ];
 
 const entries = new Map<string, DemoEntry>();

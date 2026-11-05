@@ -2548,6 +2548,74 @@
       }
     },
     {
+      "key": "hotsheet-web:glance-sparkline",
+      "package": "hotsheet-web",
+      "id": "glance-sparkline",
+      "name": "GlanceSparkline",
+      "kind": "component",
+      "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
+      "publicExports": [
+        {
+          "name": "GlanceSparkline"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/glance-sparkline.tsx"
+      ],
+      "source": "src/components/glance-sparkline.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "feedback"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "none",
+          "padding": "none"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "glance-sparkline"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "glance-sparkline"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/glance-sparkline.tsx",
+        "composition": "src/components/glance-sparkline.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:guidance-settings",
       "package": "hotsheet-web",
       "id": "guidance-settings",
@@ -5743,6 +5811,143 @@
       "provenance": {
         "selection": "src/components/stats-dashboard.tsx",
         "composition": "src/components/stats-dashboard.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:stats-projects-table",
+      "package": "hotsheet-web",
+      "id": "stats-projects-table",
+      "name": "StatsProjectsTable",
+      "kind": "component",
+      "purpose": "Projects sorted by need: state glyph and word, current work, last progress, ETA overrun, runway, tokens/min, and the one unstick action (HS2-ERTNJ7).",
+      "publicExports": [
+        {
+          "name": "StatsProjectsTable"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/stats-projects-table.tsx"
+      ],
+      "source": "src/components/stats-projects-table.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "stats-projects-table"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "stats-projects-table"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-projects-table.tsx",
+        "composition": "src/components/stats-projects-table.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:stats-right-now",
+      "package": "hotsheet-web",
+      "id": "stats-right-now",
+      "name": "StatsRightNow",
+      "kind": "component",
+      "purpose": "The Stats page Right now section: live glance tiles and the per-project table, scoped to one project or all, with a data-as-of line (HS2-ERTNJ7).",
+      "publicExports": [
+        {
+          "name": "StatsRightNow"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/stats-right-now.tsx",
+        "src/stats-right-now.ts"
+      ],
+      "source": "src/components/stats-right-now.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "stats-right-now"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "stats-right-now"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-right-now.tsx",
+        "composition": "src/components/stats-right-now.tsx"
       }
     },
     {

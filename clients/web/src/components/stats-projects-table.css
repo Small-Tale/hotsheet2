@@ -1,0 +1,65 @@
+/* The Stats Right now Projects table (HS2-ERTNJ7). Kerf Text, LucideIcon, and Button own the copy,
+   glyphs, and actions; these rules cover the native table, which no Kerf component expresses. */
+
+/* The wide table scrolls inside its own container instead of widening a narrow page: inline-size
+   containment keeps the table's width out of the parents' intrinsic sizing. */
+.stats-projects-table {
+  min-width: 0;
+  overflow-x: auto;
+  contain: inline-size;
+}
+.stats-projects-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+/* The caption and the action column heading name things for assistive technology only. */
+.stats-projects-table__caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Rows separated by rules, cells aligned to the first line. */
+.stats-projects-table__table th,
+.stats-projects-table__table td {
+  padding: var(--kui-space-s) var(--kui-space-s);
+  border-bottom: 1px solid var(--kui-color-neutral-border-quiet);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.stats-projects-table__table tbody tr:last-child > * {
+  border-bottom: none;
+}
+/* Uppercase column headings, as in the approved mock; Text sets their size and tone. */
+.stats-projects-table__table thead th {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* Row headers (the project name) keep the body weight; Text sets the emphasis. */
+.stats-projects-table__table th[scope='row'] {
+  font-weight: inherit;
+}
+/* The state glyph sits beside its word on one line. */
+.stats-projects-table__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-xs);
+}
+/* Several live claims stack; the work column is the one that may wrap. */
+.stats-projects-table__work {
+  display: grid;
+  gap: var(--kui-space-2xs);
+  min-width: remify(192px);
+  white-space: normal;
+}
+.stats-projects-table__table td[data-column='action'] {
+  text-align: right;
+}
+/* Dark cockpit (§34.1): a project stopped as expected recedes. */
+.stats-projects-table__table tr[data-state='stopped'] > * {
+  opacity: 0.72;
+}

@@ -136,6 +136,7 @@ import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createSettingsSurface } from '../features/settings-surface';
 import { createSidebarSurface } from '../features/sidebar-surface';
+import { createStatsGlanceController } from '../features/stats-glance';
 import { createTerminalDashboardController } from '../features/terminal-dashboard';
 import { createTerminalDrawerController } from '../features/terminal-drawer';
 import {
@@ -4699,6 +4700,15 @@ export async function startHotSheetWebClient() {
     capturingShortcutId,
     appleShortcutPlatform,
   });
+  // The Stats page's live glance surfaces and their local display clock (HS2-ERTNJ7).
+  const statsGlance = createStatsGlanceController({
+    projects,
+    shellMode,
+    statsProjectId,
+    liveStates,
+    analyticsByProject,
+    terminalGroups,
+  });
   const { workspaceTerminalGroups, globalWorkspaceSurfaceProps, projectTerminalDrawerProps, aiConversationSurface } =
     createTerminalPresentation({
       projects,
@@ -4709,6 +4719,7 @@ export async function startHotSheetWebClient() {
       analyticsByProject,
       repositorySizeByProject,
       compactionByProject,
+      statsGlance,
       canGiveFeedback: () => Boolean(selectedTicket.value && noteCapabilities()?.ai_feedback),
       terminals: {
         terminalGroups,
@@ -6171,6 +6182,7 @@ export async function startHotSheetWebClient() {
       workerStreamStop?.();
       workerDetailRefresh?.dispose();
       disposeProjectChangeStreams();
+      statsGlance.dispose();
       liveStates.reset();
       announcerController.dispose();
       terminalDashboardController.dispose();

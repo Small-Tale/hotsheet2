@@ -27,6 +27,7 @@ import { type ServerClocks, serverClocks } from '../server-clock';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityType } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
 import type { createPermissionsController } from './permissions';
+import type { StatsGlanceController } from './stats-glance';
 
 export interface TerminalPresentationDependencies {
   projects: Signal<Project[]>;
@@ -39,6 +40,8 @@ export interface TerminalPresentationDependencies {
   /** Repository size state per project for the stats view (HS2-QF44T7). */
   repositorySizeByProject: Signal<Record<string, RepositorySizeState>>;
   compactionByProject: Signal<Record<string, CompactionPreviewState>>;
+  /** Live glance surfaces of the Stats page (HS2-ERTNJ7). */
+  statsGlance?: Pick<StatsGlanceController, 'rightNow'>;
   canGiveFeedback: () => boolean;
   terminals: {
     terminalGroups: Signal<TerminalDashboardGroup[]>;
@@ -100,6 +103,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     analyticsByProject,
     repositorySizeByProject,
     compactionByProject,
+    statsGlance,
     canGiveFeedback,
   } = dependencies;
   const {
@@ -216,6 +220,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     return {
       kind: 'stats',
       projectName: statsProject?.name,
+      rightNow: statsGlance?.rightNow(),
       analytics: statsProject
         ? [
             {

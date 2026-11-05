@@ -15,6 +15,7 @@ import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
 import { projectScopedServerPath } from '../src/project-bridge';
+import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
@@ -24649,6 +24650,127 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(
     page.getByRole('region', { name: 'Cross-Project Stats' }).locator('[data-component="stats-dashboard"]'),
   ).toBeVisible();
+});
+
+test('Stats Right now shows live tiles and projects sorted by need, scoped and routed (HS2-ERTNJ7)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  // The live state the server pushes (HS2-JTTQMY): the mock's four projects, two of them in this
+  // open project so their unstick actions route to it.
+  const states = glanceScenario(Date.now()).map((state) =>
+    state.state === 'may_be_stuck' || state.state === 'waiting_on_you'
+      ? {
+          ...state,
+          checkouts: [project.id],
+          waiting: state.waiting.count
+            ? { ...state.waiting, tickets: state.waiting.tickets.map((ticket) => ({ ...ticket, slug: row.slug })) }
+            : state.waiting,
+        }
+      : state,
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  await page.route('**/analytics', (route) =>
+    route.fulfill({
+      json: {
+        stores: [
+          {
+            store_id: 'store-demo',
+            ticket_flow: {
+              total: 12,
+              open: 3,
+              completed: 9,
+              current_by_status: { completed: 9, started: 3 },
+              current_by_category: { feature: 12 },
+              throughput_by_day: { [today]: 9 },
+              cycle_time_seconds: { samples: 0, average: 0, p50: 0, p95: 0 },
+              historical_cumulative_flow_available: false,
+            },
+            usage: { events: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0, by_model: {}, by_ticket: {}, by_day: {} },
+          },
+        ],
+        unavailable_sources: [],
+      },
+    }),
+  );
+  let liveReads = 0;
+  await page.route('**/live-state', (route) => {
+    liveReads += 1;
+    return route.fulfill({ json: { epoch_ms: 1, stores: states } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  const region = page.getByRole('region', { name: 'Cross-Project Stats' });
+  const rightNow = region.locator('[data-component="stats-right-now"]');
+  await expect(rightNow).toBeVisible();
+  expect(liveReads).toBeGreaterThan(0);
+  // Above Ticket flow and usage.
+  const nowBox = await rightNow.boundingBox();
+  const flowBox = await region.locator('[data-component="stats-dashboard"]').boundingBox();
+  expect(nowBox!.y + nowBox!.height).toBeLessThanOrEqual(flowBox!.y);
+  await expect(rightNow.locator('[data-freshness]')).toContainText(
+    /All projects · live over the change stream · data as of/u,
+  );
+  await expect(rightNow.locator('[data-tile="updated"]')).toContainText('14');
+  await expect(rightNow.locator('[data-tile="needs-you"]')).toHaveAttribute('data-attention', 'true');
+  await expect(rightNow.locator('[data-tile="workers"]')).toContainText('3 / 4');
+  await expect(rightNow.locator('[data-tile="completed"]')).toContainText(/9\s*Completed since/u);
+  await expect(rightNow.locator('[data-tile="tokens"] svg.glance-gauge')).toHaveAccessibleName(/^Token rate: /u);
+  const rows = rightNow.locator('[data-component="stats-projects-table"] tbody tr');
+  await expect(rows).toHaveCount(4);
+  expect(await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-state')))).toEqual([
+    'may_be_stuck',
+    'waiting_on_you',
+    'active',
+    'stopped',
+  ]);
+  await expect(rows.nth(2)).toContainText('HS2-TG2ZV3 · final testing (CI)');
+
+  // Visual QA captures: wide, medium, narrow, and back to wide, in both colour schemes.
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1024],
+      ['narrow', 600],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(rightNow).toBeVisible();
+      // The table scrolls inside its own container; the page never scrolls sideways.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(
+        0,
+      );
+      await rightNow.screenshot({ path: `target/visual-captures/hs2-ertnj7-right-now-${scheme}-${label}.png` });
+      expect(await rightNow.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // The project tab's Stats show only that project's stores (HS2-PZPD83).
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await page.locator('[data-component="project-summary"]').click();
+  const projectStats = page.getByRole('region', { name: 'demo Project Statistics' });
+  const projectRows = projectStats.locator('[data-component="stats-projects-table"] tbody tr');
+  await expect(projectRows).toHaveCount(2);
+  await expect(projectStats.locator('[data-freshness]')).toContainText(/^demo · live over the change stream/u);
+
+  // Answer opens the waiting ticket through the existing linked-ticket route.
+  await projectRows.nth(1).getByRole('button', { name: 'Answer' }).click();
+  const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+  await expect(reader).toContainText(row.title);
+  await page.keyboard.press('Escape');
+  await expect(reader).toHaveCount(0);
+
+  // Open Terminal leaves Stats for the project's terminal drawer.
+  await projectRows.nth(0).getByRole('button', { name: 'Open Terminal' }).click();
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mode', 'project');
+  await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
 });
 
 test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({

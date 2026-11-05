@@ -2640,6 +2640,114 @@
       }
     },
     {
+      "id": "stats-right-now",
+      "name": "StatsRightNow",
+      "kind": "component",
+      "purpose": "The Stats page Right now section: live glance tiles and the per-project table, scoped to one project or all, with a data-as-of line (HS2-ERTNJ7).",
+      "source": "src/components/stats-right-now.tsx",
+      "publicExports": [{ "name": "StatsRightNow" }],
+      "sourceLinks": ["src/components/stats-right-now.tsx", "src/stats-right-now.ts"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["stats-right-now"],
+        "publicTokens": [],
+        "placeableClasses": ["stats-right-now"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-right-now.tsx",
+        "composition": "src/components/stats-right-now.tsx"
+      },
+      "selection": {
+        "useWhen": ["Showing the live state of one or all projects at full size on the Stats page."],
+        "avoidWhen": ["A compact glance surface; use the gauge and glyph components directly."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "stats-projects-table",
+      "name": "StatsProjectsTable",
+      "kind": "component",
+      "purpose": "Projects sorted by need: state glyph and word, current work, last progress, ETA overrun, runway, tokens/min, and the one unstick action (HS2-ERTNJ7).",
+      "source": "src/components/stats-projects-table.tsx",
+      "publicExports": [{ "name": "StatsProjectsTable" }],
+      "sourceLinks": ["src/components/stats-projects-table.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["stats-projects-table"],
+        "publicTokens": [],
+        "placeableClasses": ["stats-projects-table"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-projects-table.tsx",
+        "composition": "src/components/stats-projects-table.tsx"
+      },
+      "selection": {
+        "useWhen": ["Comparing live expectation versus reality across projects with one action per row."],
+        "avoidWhen": ["Read-only label/value facts; use Kerf ValueTable."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "glance-sparkline",
+      "name": "GlanceSparkline",
+      "kind": "component",
+      "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
+      "source": "src/components/glance-sparkline.tsx",
+      "publicExports": [{ "name": "GlanceSparkline" }],
+      "sourceLinks": ["src/components/glance-sparkline.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["feedback"], "geometry": { "margin": "none", "border": "none", "padding": "none" } }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["glance-sparkline"],
+        "publicTokens": [],
+        "placeableClasses": ["glance-sparkline"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/glance-sparkline.tsx",
+        "composition": "src/components/glance-sparkline.tsx"
+      },
+      "selection": {
+        "useWhen": ["A glance surface shows a short recent trend beside a raw number."],
+        "avoidWhen": ["The value is task progress; use Kerf ProgressBar."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "stats-dashboard",
       "name": "StatsDashboard",
       "kind": "component",

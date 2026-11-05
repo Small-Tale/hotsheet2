@@ -1,0 +1,5 @@
+/* The Stats Right now section (HS2-ERTNJ7). Kerf List, Grid, ContentItem, and Text own the stack,
+   tiles, and copy; the section only keeps itself from widening the page. */
+.stats-right-now {
+  min-width: 0;
+}
