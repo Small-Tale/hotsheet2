@@ -1,0 +1,37 @@
+fmt · clippy · test	Clippy	2026-11-05T06:00:00.0000000Z     Checking demo-core v0.1.0
+fmt · clippy · test	Clippy	2026-11-05T06:01:00.0000000Z [1m[91merror[0m: unused variable: `width`
+fmt · clippy · test	Clippy	2026-11-05T06:02:00.0000000Z   --> crates/demo-core/src/lexer.rs:4:9
+fmt · clippy · test	Clippy	2026-11-05T06:03:00.0000000Z warning: field is never read
+fmt · clippy · test	Clippy	2026-11-05T06:04:00.0000000Z   --> crates/demo-core/src/other.rs:1:1
+fmt · clippy · test	Clippy	2026-11-05T06:05:00.0000000Z ##[error]Process completed with exit code 101.
+fmt · clippy · test	Test	2026-11-05T06:06:00.0000000Z         PASS [   0.010s] (  1/ 40) demo-core lexer::tests::splits_words
+fmt · clippy · test	Test	2026-11-05T06:07:00.0000000Z         FAIL [   0.120s] (  3/ 40) demo-core parser::tests::parses_header
+fmt · clippy · test	Test	2026-11-05T06:08:00.0000000Z   thread panicked at crates/demo-core/src/parser.rs:9:5
+fmt · clippy · test	Test	2026-11-05T06:09:00.0000000Z   TRY 1 FAIL [   0.300s] (  4/ 40) demo-cli::cli retries_lock
+fmt · clippy · test	Test	2026-11-05T06:10:00.0000000Z   TRY 2 PASS [   0.200s] (  4/ 40) demo-cli::cli retries_lock
+fmt · clippy · test	Test	2026-11-05T06:11:00.0000000Z      Summary [  12.000s] 40 tests run: 39 passed (1 flaky), 1 failed, 0 skipped
+fmt · clippy · test	Test	2026-11-05T06:12:00.0000000Z         FAIL [   0.120s] demo-core parser::tests::parses_header
+fmt · clippy · test	Test	2026-11-05T06:13:00.0000000Z ##[error]Process completed with exit code 100.
+fmt · clippy · test	Test the quiet test wrapper	2026-11-05T06:14:00.0000000Z ✖ failing tests:
+fmt · clippy · test	Test the quiet test wrapper	2026-11-05T06:15:00.0000000Z
+fmt · clippy · test	Test the quiet test wrapper	2026-11-05T06:16:00.0000000Z test at scripts/tool.test.mjs:5:1
+fmt · clippy · test	Test the quiet test wrapper	2026-11-05T06:17:00.0000000Z ✖ tool formats output (1.5ms)
+fmt · clippy · test	Test the quiet test wrapper	2026-11-05T06:18:00.0000000Z   AssertionError [ERR_ASSERTION]: synthetic mismatch
+fmt · clippy · test	Test the quiet test wrapper	2026-11-05T06:19:00.0000000Z ##[error]Process completed with exit code 1.
+fmt · clippy · test	Web client lint, typecheck, unit tests, and production build	2026-11-05T06:20:00.0000000Z  FAIL  src/widget.test.ts > widget > renders the label
+fmt · clippy · test	Web client lint, typecheck, unit tests, and production build	2026-11-05T06:21:00.0000000Z AssertionError: expected "a" to be "b"
+fmt · clippy · test	Web client lint, typecheck, unit tests, and production build	2026-11-05T06:22:00.0000000Z  FAIL  src/widget.test.ts > widget > renders the label
+fmt · clippy · test	Web client lint, typecheck, unit tests, and production build	2026-11-05T06:23:00.0000000Z ##[error]Process completed with exit code 1.
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:24:00.0000000Z   1) [chromium] › tests/board.spec.ts:10:3 › board › opens a card ─────────────────
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:25:00.0000000Z     Error: expect(locator).toBeVisible() failed
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:26:00.0000000Z   2) [webkit] › tests/board.spec.ts:10:3 › board › opens a card ─────────────────
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:27:00.0000000Z   3) [chromium] › tests/menu.spec.ts:4:1 › menu closes on escape ─────────────────
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:28:00.0000000Z   2 failed
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:29:00.0000000Z     [chromium] › tests/board.spec.ts:10:3 › board › opens a card
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:30:00.0000000Z     [webkit] › tests/board.spec.ts:10:3 › board › opens a card
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:31:00.0000000Z   1 flaky
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:32:00.0000000Z     [chromium] › tests/menu.spec.ts:4:1 › menu closes on escape
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:33:00.0000000Z   20 passed (1.2m)
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:34:00.0000000Z ##[error]Process completed with exit code 1.
+Migrator tests + coverage	Run migrator tests	2026-11-05T06:35:00.0000000Z Segmentation fault (core dumped)
+Migrator tests + coverage	Run migrator tests	2026-11-05T06:36:00.0000000Z ##[error]Process completed with exit code 139.

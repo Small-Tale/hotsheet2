@@ -1,0 +1,4 @@
+fmt · clippy · test	Web client lint, typecheck, unit tests, and production build	2026-11-05T06:00:00.0000000Z  FAIL  src/other.test.ts > other > settles in time
+fmt · clippy · test	Web client lint, typecheck, unit tests, and production build	2026-11-05T06:01:00.0000000Z ##[error]Process completed with exit code 1.
+fmt · clippy · test	Test	2026-11-05T06:02:00.0000000Z         FAIL [   0.120s] (  3/ 40) demo-core parser::tests::parses_header
+fmt · clippy · test	Test	2026-11-05T06:03:00.0000000Z ##[error]Process completed with exit code 100.

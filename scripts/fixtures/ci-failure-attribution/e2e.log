@@ -1,0 +1,19 @@
+fmt · clippy · test	Test	2026-11-05T06:06:00.0000000Z         PASS [   0.010s] (  1/ 40) demo-core lexer::tests::splits_words
+fmt · clippy · test	Test	2026-11-05T06:07:00.0000000Z         FAIL [   0.120s] (  3/ 40) demo-core parser::tests::parses_header
+fmt · clippy · test	Test	2026-11-05T06:08:00.0000000Z   thread panicked at crates/demo-core/src/parser.rs:9:5
+fmt · clippy · test	Test	2026-11-05T06:09:00.0000000Z   TRY 1 FAIL [   0.300s] (  4/ 40) demo-cli::cli retries_lock
+fmt · clippy · test	Test	2026-11-05T06:10:00.0000000Z   TRY 2 PASS [   0.200s] (  4/ 40) demo-cli::cli retries_lock
+fmt · clippy · test	Test	2026-11-05T06:11:00.0000000Z      Summary [  12.000s] 40 tests run: 39 passed (1 flaky), 1 failed, 0 skipped
+fmt · clippy · test	Test	2026-11-05T06:12:00.0000000Z         FAIL [   0.120s] demo-core parser::tests::parses_header
+fmt · clippy · test	Test	2026-11-05T06:13:00.0000000Z ##[error]Process completed with exit code 100.
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:24:00.0000000Z   1) [chromium] › tests/board.spec.ts:10:3 › board › opens a card ─────────────────
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:25:00.0000000Z     Error: expect(locator).toBeVisible() failed
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:26:00.0000000Z   2) [webkit] › tests/board.spec.ts:10:3 › board › opens a card ─────────────────
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:27:00.0000000Z   3) [chromium] › tests/menu.spec.ts:4:1 › menu closes on escape ─────────────────
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:28:00.0000000Z   2 failed
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:29:00.0000000Z     [chromium] › tests/board.spec.ts:10:3 › board › opens a card
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:30:00.0000000Z     [webkit] › tests/board.spec.ts:10:3 › board › opens a card
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:31:00.0000000Z   1 flaky
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:32:00.0000000Z     [chromium] › tests/menu.spec.ts:4:1 › menu closes on escape
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:33:00.0000000Z   20 passed (1.2m)
+Full Playwright suite (shard 2/4)	Run shard 2 of the full suite	2026-11-05T06:34:00.0000000Z ##[error]Process completed with exit code 1.
