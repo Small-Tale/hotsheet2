@@ -90,7 +90,10 @@ impl LaunchContext {
         let launch_id = match record {
             Ok(record) => Some(record.launch_id),
             Err(error) => {
-                eprintln!("Hot Sheet process journal unavailable: {}", error.kind());
+                eprintln!(
+                    "Hot Sheet process journal unavailable: {}",
+                    start_error_summary(&error)
+                );
                 None
             }
         };
@@ -235,15 +238,11 @@ impl ProcessJournal {
             launch_id: ulid::Ulid::new().to_string(),
             pid: meta.pid,
             supervisor_pid: meta.supervisor_pid,
-            supervisor: bounded_id(&meta.supervisor)?,
+            supervisor: bounded_id("supervisor", &meta.supervisor)?,
             purpose: meta.purpose,
-            project_id: meta.project_id.as_deref().map(bounded_id).transpose()?,
-            session_id: meta.session_id.as_deref().map(bounded_id).transpose()?,
-            binary_revision: meta
-                .binary_revision
-                .as_deref()
-                .map(bounded_id)
-                .transpose()?,
+            project_id: optional_id("project_id", meta.project_id.as_deref())?,
+            session_id: optional_id("session_id", meta.session_id.as_deref())?,
+            binary_revision: optional_id("binary_revision", meta.binary_revision.as_deref())?,
             started_ms: now_ms(),
             ended_ms: None,
             exit_reason: None,
@@ -399,7 +398,39 @@ impl ProcessJournal {
     }
 }
 
-fn bounded_id(value: &str) -> io::Result<String> {
+/// HS2-NNA91A: a refused identifier names its field with a fixed string. The refused
+/// value is never part of the error, because it may be a machine-local path or content.
+#[derive(Debug)]
+struct RefusedIdentifier {
+    field: &'static str,
+}
+
+impl std::fmt::Display for RefusedIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid diagnostic identifier: {}", self.field)
+    }
+}
+
+impl std::error::Error for RefusedIdentifier {}
+
+/// The text a caller logs when [`ProcessJournal::start`] fails: the refused field for an
+/// identifier refusal, otherwise only the error kind. Other start errors (for example a
+/// temporary-file error) can carry the machine-local journal path, so they are not echoed.
+pub fn start_error_summary(error: &io::Error) -> String {
+    match error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<RefusedIdentifier>())
+    {
+        Some(refused) => refused.to_string(),
+        None => error.kind().to_string(),
+    }
+}
+
+fn optional_id(field: &'static str, value: Option<&str>) -> io::Result<Option<String>> {
+    value.map(|value| bounded_id(field, value)).transpose()
+}
+
+fn bounded_id(field: &'static str, value: &str) -> io::Result<String> {
     if value.is_empty()
         || value.len() > 128
         || !value
@@ -408,7 +439,7 @@ fn bounded_id(value: &str) -> io::Result<String> {
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "invalid diagnostic identifier",
+            RefusedIdentifier { field },
         ));
     }
     Ok(value.to_owned())
@@ -449,7 +480,7 @@ fn read_record(path: &Path) -> io::Result<ProcessRecord> {
     .into_iter()
     .flatten()
     {
-        bounded_id(value).map_err(|_| {
+        bounded_id("identifier", value).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "invalid diagnostic identifier")
         })?;
     }
@@ -657,6 +688,39 @@ mod tests {
         }
         assert_eq!(fs::read_dir(home.path()).unwrap().count(), 1);
         assert_eq!(journal.list().unwrap().len(), 5);
+    }
+
+    /// HS2-NNA91A: a refusal names the refused field with a fixed string and never echoes
+    /// the refused value; any other start error summarizes as its kind only.
+    #[test]
+    fn hs2_nna91a_refusal_names_the_field_without_the_value() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        let refused = "/Users/someone/private store";
+        for (field, expected) in [
+            ("project", "invalid diagnostic identifier: project_id"),
+            ("session", "invalid diagnostic identifier: session_id"),
+            ("supervisor", "invalid diagnostic identifier: supervisor"),
+            ("revision", "invalid diagnostic identifier: binary_revision"),
+        ] {
+            let mut bad = meta(1);
+            match field {
+                "project" => bad.project_id = Some(refused.into()),
+                "session" => bad.session_id = Some(refused.into()),
+                "supervisor" => bad.supervisor = refused.into(),
+                _ => bad.binary_revision = Some(refused.into()),
+            }
+            let error = journal.start(bad).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+            assert_eq!(start_error_summary(&error), expected);
+            assert_eq!(error.to_string(), expected);
+            for text in [start_error_summary(&error), format!("{error:?}")] {
+                assert!(!text.contains("someone"), "{text} echoes the value");
+            }
+        }
+
+        let other = io::Error::new(io::ErrorKind::PermissionDenied, "/Users/someone/journal");
+        assert_eq!(start_error_summary(&other), "permission denied");
     }
 
     /// HS2-F0S155: a record the detached broker wrote before the fix still reads back,

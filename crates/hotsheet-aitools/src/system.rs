@@ -53,7 +53,7 @@ fn spawn(
             Err(error) => {
                 eprintln!(
                     "Hot Sheet drive process journal unavailable: {}",
-                    error.kind()
+                    hotsheet_process_journal::start_error_summary(&error)
                 );
                 None
             }

@@ -159,7 +159,7 @@ impl StreamChild {
             } else if let Err(error) = record {
                 eprintln!(
                     "Hot Sheet stream process journal unavailable: {}",
-                    error.kind()
+                    hotsheet_process_journal::start_error_summary(&error)
                 );
             }
         }

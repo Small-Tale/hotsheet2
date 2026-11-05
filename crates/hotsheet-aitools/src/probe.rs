@@ -49,7 +49,10 @@ fn record_probe(pid: u32) -> Option<(ProcessJournal, String)> {
     }) {
         Ok(record) => Some((journal, record.launch_id)),
         Err(error) => {
-            eprintln!("Hot Sheet probe journal unavailable: {}", error.kind());
+            eprintln!(
+                "Hot Sheet probe journal unavailable: {}",
+                hotsheet_process_journal::start_error_summary(&error)
+            );
             None
         }
     }

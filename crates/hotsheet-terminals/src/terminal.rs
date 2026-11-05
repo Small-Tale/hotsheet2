@@ -590,7 +590,7 @@ impl Terminal {
                 Err(error) => {
                     eprintln!(
                         "Hot Sheet terminal process journal unavailable: {}",
-                        error.kind()
+                        hotsheet_process_journal::start_error_summary(&error)
                     );
                     None
                 }

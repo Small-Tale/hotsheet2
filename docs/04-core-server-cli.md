@@ -719,7 +719,9 @@ record does not claim that the child remains alive. Identifiers are bounded reco
 content (ASCII alphanumerics and `-_.:`, at most 128 bytes), never path components:
 a record's file is named only by its launch ULID. The journal refuses a path,
 unicode, or free-text identifier rather than encoding it, so no machine-local path
-enters a record. A terminal's project identifier is the store's 16-hex project id
+enters a record. The supervisor's log line for a refusal names the refused field with
+a fixed string, for example `invalid diagnostic identifier: project_id`, and never the
+value; any other start failure logs only its error kind (HS2-NNA91A). A terminal's project identifier is the store's 16-hex project id
 in both hosting modes, the detached broker and the in-process `--no-terminal-broker`
 server (HS2-F0S155).
 
