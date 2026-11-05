@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
+import { usesAdvancedSearchExpression } from './advanced-search';
 import {
   consumeSearchToken,
   consumeSearchTokens,
@@ -9,6 +12,7 @@ import {
   orderedSearchText,
   parseSearchDate,
   sameInlineSearchState,
+  SEARCH_LIFECYCLES,
   searchDateLabel,
   tokenFromRaw,
   tokenQuery,
@@ -179,5 +183,32 @@ describe('inline advanced-search tokens', () => {
       label: 'has media annotation',
       accessibleLabel: 'has media annotation',
     });
+  });
+});
+
+describe('HS2-2GCMY1 one is: vocabulary', () => {
+  it('turns every supported is: value into a chip and marks it as an advanced expression', () => {
+    for (const value of SEARCH_LIFECYCLES) {
+      expect(tokenFromRaw(`is:${value}`), value).toEqual({
+        kind: 'is',
+        value,
+        raw: `is:${value}`,
+        label: `is:${value}`,
+      });
+      expect(tokenFromRaw(`IS:${value.toUpperCase()}`)?.raw, value).toBe(`is:${value}`);
+      expect(consumeSearchToken(`is:${value} `), value).toMatchObject({ text: '', token: { kind: 'is', value } });
+      expect(usesAdvancedSearchExpression(`is:${value}`), value).toBe(true);
+    }
+    expect(consumeSearchToken('is:blocked ')).toMatchObject({ text: '', token: { kind: 'is', value: 'blocked' } });
+    expect(tokenFromRaw('is:unknown')).toBeUndefined();
+    expect(usesAdvancedSearchExpression('is:unknown')).toBe(false);
+  });
+  it('lists the same is: values as the server saved-view parser', () => {
+    const rust = readFileSync(
+        new URL('../../../crates/hotsheet-ticketing/src/saved_views.rs', import.meta.url),
+        'utf8',
+      ),
+      list = /const LIFECYCLES: &\[&str\] = &\[([^\]]*)\];/.exec(rust)?.[1] ?? '';
+    expect([...list.matchAll(/"([^"]+)"/g)].map((match) => match[1])).toEqual([...SEARCH_LIFECYCLES]);
   });
 });

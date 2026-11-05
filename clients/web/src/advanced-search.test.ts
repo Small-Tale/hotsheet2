@@ -74,6 +74,22 @@ describe('advanced search semantics', () => {
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:blocked AND is:started'))).toEqual([blocked]);
     expect(filterAdvancedSearchResults(rows, 'is:blocked')).toEqual([blocked]);
   });
+  it('HS2-C7917F matches is:closed by a terminal status or a recorded close outcome on any status', () => {
+    const notPlanned = row('HS2-NOT-PLANNED', 'backlog', { close_reason: 'not_planned' }),
+      obsolete = row('HS2-OBSOLETE', 'backlog', { close_reason: 'obsolete' }),
+      backlog = row('HS2-BACKLOG', 'backlog'),
+      done = row('HS2-DONE', 'completed'),
+      open = row('HS2-OPEN', 'started'),
+      rows = [notPlanned, obsolete, backlog, done, open];
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:closed'))).toEqual([notPlanned, obsolete, done]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'NOT is:closed'))).toEqual([backlog, open]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:closed AND is:backlog'))).toEqual([
+      notPlanned,
+      obsolete,
+    ]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:open'))).toEqual([open]);
+    expect(filterAdvancedSearchResults(rows, 'is:closed')).toEqual([notPlanned, obsolete, done]);
+  });
   it('matches review state in Boolean expressions and clears resolved feedback', () => {
     const feedback = row('HS2-FEEDBACK', 'started', { feedback_needed: true, needs_review: true });
     const requested = row('HS2-REQUEST', 'started', { needs_review: true });

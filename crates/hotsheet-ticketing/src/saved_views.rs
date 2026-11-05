@@ -219,6 +219,9 @@ fn is_boolean(lexemes: &[Lexeme]) -> bool {
     lexemes.iter().any(|l| !matches!(l, Lexeme::Term(_)))
 }
 
+/// Every supported `is:` value. The web client's `SEARCH_LIFECYCLES`
+/// (`clients/web/src/inline-search.ts`) must list the same values in the same order; its
+/// HS2-2GCMY1 parity test reads this constant.
 const LIFECYCLES: &[&str] = &[
     "up-next",
     "active",
@@ -556,6 +559,17 @@ fn term_matches(raw: &str, at: &At<'_>) -> bool {
     }
 }
 
+/// HS2-C7917F: closed means a terminal status (completed, verified, or archive) or a
+/// recorded close outcome. [`crate::ops::close`] keeps a Backlog ticket's status and records
+/// only the outcome, so status alone misses it; the web evaluator applies the same rule.
+fn is_closed(t: &Ticket) -> bool {
+    t.close_reason.is_some()
+        || matches!(
+            t.status,
+            Status::Completed | Status::Verified | Status::Archive
+        )
+}
+
 fn is_state(state: &str, t: &Ticket, now: OffsetDateTime) -> bool {
     let statuses: &[Status] = match state {
         "up-next" => return t.up_next && t.status.is_active(),
@@ -578,7 +592,7 @@ fn is_state(state: &str, t: &Ticket, now: OffsetDateTime) -> bool {
         "backlog" | "backlogged" => &[Status::Backlog],
         "archived" => &[Status::Archive],
         "open" => &[Status::NotStarted, Status::Started],
-        "closed" => &[Status::Completed, Status::Verified, Status::Archive],
+        "closed" => return is_closed(t),
         _ => return false,
     };
     statuses.contains(&t.status)
@@ -731,6 +745,32 @@ mod tests {
         });
         assert!(matches("is:needs-review", &t));
         assert!(!matches("is:bogus", &t));
+    }
+
+    #[test]
+    fn hs2_c7917f_is_closed_includes_a_close_outcome_on_any_status() {
+        let mut t = ticket();
+        t.status = Status::Backlog;
+        assert!(!matches("is:closed", &t) && matches("NOT is:closed", &t));
+        for reason in [
+            CloseReason::NotPlanned,
+            CloseReason::Obsolete,
+            CloseReason::WorksAsDesigned,
+            CloseReason::Completed,
+            CloseReason::Duplicate,
+        ] {
+            t.close_reason = Some(reason);
+            assert!(matches("is:closed", &t), "{reason:?} on Backlog is closed");
+            assert!(matches("is:closed AND is:backlog", &t) && !matches("is:open", &t));
+        }
+        t.close_reason = None;
+        for status in [Status::Completed, Status::Verified, Status::Archive] {
+            t.status = status;
+            assert!(
+                matches("is:closed", &t),
+                "{status:?} is closed without an outcome"
+            );
+        }
     }
 
     #[test]

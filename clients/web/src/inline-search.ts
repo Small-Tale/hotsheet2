@@ -1,20 +1,32 @@
 export type SearchDateField = 'created' | 'completed' | 'started' | 'verified' | 'archived' | 'updated';
 export type SearchDateDirection = 'before' | 'after';
 export type SearchPresence = 'attachment' | 'media-annotation' | 'commit';
-export type SearchLifecycle =
-  | 'up-next'
-  | 'active'
-  | 'needs-review'
-  | 'open'
-  | 'closed'
-  | 'duplicate'
-  | 'not-started'
-  | 'started'
-  | 'completed'
-  | 'verified'
-  | 'backlog'
-  | 'backlogged'
-  | 'archived';
+/**
+ * Every supported `is:` search value, the one source the chip tokenizer, the Boolean evaluator,
+ * advanced-expression detection, and the syntax help derive from (HS2-2GCMY1). The server's
+ * `saved_views.rs` `LIFECYCLES` must list the same values; a parity test pins it.
+ */
+export const SEARCH_LIFECYCLES = [
+  'up-next',
+  'active',
+  'needs-review',
+  'blocked',
+  'open',
+  'closed',
+  'duplicate',
+  'not-started',
+  'started',
+  'completed',
+  'verified',
+  'backlog',
+  'backlogged',
+  'archived',
+] as const;
+export type SearchLifecycle = (typeof SEARCH_LIFECYCLES)[number];
+/** Alternate spellings the syntax help does not list separately (`backlogged` is `backlog`). */
+export const SEARCH_LIFECYCLE_ALIASES: ReadonlySet<SearchLifecycle> = new Set(['backlogged']);
+/** The `is:` values as a regular-expression alternation (none contain metacharacters). */
+export const SEARCH_LIFECYCLE_PATTERN = SEARCH_LIFECYCLES.join('|');
 
 type InlineSearchTokenValue =
   | { kind: 'tag'; value: string; raw: string; label: string }
@@ -210,9 +222,7 @@ export function dateTokenFromInput(
 
 export function tokenFromRaw(raw: string): InlineSearchToken | undefined {
   const source = raw.trim();
-  const lifecycle = source.match(
-    /^is:(up-next|active|needs-review|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)$/i,
-  );
+  const lifecycle = source.match(new RegExp(`^is:(${SEARCH_LIFECYCLE_PATTERN})$`, 'i'));
   if (lifecycle) {
     const value = lifecycle[1].toLowerCase() as SearchLifecycle;
     return { kind: 'is', value, raw: `is:${value}`, label: `is:${value}` };

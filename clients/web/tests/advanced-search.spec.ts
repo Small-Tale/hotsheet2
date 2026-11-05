@@ -85,6 +85,21 @@ const rows = [
     claimed_by: undefined,
     claim_lease_expires_at: undefined,
   },
+  // HS2-C7917F: closing a Backlog ticket records the outcome and keeps its status.
+  {
+    ...base,
+    native_id: '7',
+    qualified_id: 'git:7',
+    id: '7',
+    slug: 'HS2-NOT-PLANNED',
+    title: 'Not planned parser idea',
+    status: 'backlog',
+    close_reason: 'not_planned',
+    closed_at: '2026-09-09T00:00:00Z',
+    up_next: false,
+    claimed_by: undefined,
+    claim_lease_expires_at: undefined,
+  },
 ];
 
 test('evaluates is: filters and boolean expressions in the workspace search', async ({ page }) => {
@@ -376,7 +391,38 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await search.fill('is:archived OR is:backlogged');
   await expect(page.locator('[data-ticket-slug="HS2-ARCHIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
-  // HS2-2GCMY1: is:blocked follows the blocked reason, alone and composed.
+  // HS2-2GCMY1: is:blocked follows the blocked reason, alone and composed, and a typed
+  // is:blocked becomes a search chip like every other is: value.
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.pressSequentially('is:blocked ');
+  const blockedChip = page.locator('[data-component="search-field-token"][data-token-value="is:blocked"]');
+  await expect(blockedChip).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);
+  await expect(page.locator('[data-ticket-slug="HS2-NOT-PLANNED"]')).toHaveCount(0);
+  await expect(page.getByText('Searching tickets')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-2gcmy1-is-blocked-chip-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 680, height: 720 });
+  await expect(blockedChip).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  // Capture after the rail-collapse transition settles, not mid-flight.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+            ).length,
+      ),
+    )
+    .toBe(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-2gcmy1-is-blocked-chip-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await expect(blockedChip).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:blocked');
   await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);
@@ -393,8 +439,9 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await search.fill('is:closed ');
   await expect(page.locator('[data-component="search-field-token"][data-token-value="is:closed"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);
-  for (const slug of ['HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE', 'HS2-DUPLICATE'])
+  for (const slug of ['HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE', 'HS2-DUPLICATE', 'HS2-NOT-PLANNED'])
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toHaveCount(0);
   expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
   await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-closed-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Clear search' }).click();

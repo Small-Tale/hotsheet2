@@ -1,6 +1,6 @@
 import { isTicketActivelyWorkedOn } from './active-ticket-work';
 import type { TicketRow } from './api';
-import { type InlineSearchToken, tokenFromRaw } from './inline-search';
+import { type InlineSearchToken, SEARCH_LIFECYCLE_PATTERN, type SearchLifecycle, tokenFromRaw } from './inline-search';
 
 const normalized = (value: string) => value.trim().toLowerCase();
 type SearchExpression =
@@ -8,17 +8,38 @@ type SearchExpression =
   | { kind: 'not'; value: SearchExpression }
   | { kind: 'and' | 'or'; left: SearchExpression; right: SearchExpression };
 type Lexeme = { kind: 'term' | 'and' | 'or' | 'not' | 'left' | 'right'; value: string };
-const lifecycleAliases: Partial<Record<string, string[]>> = {
-  'not-started': ['not_started'],
-  started: ['started'],
-  completed: ['completed'],
-  verified: ['verified'],
-  backlog: ['backlog'],
-  backlogged: ['backlog'],
-  archived: ['archive'],
-  open: ['not_started', 'started'],
-  closed: ['completed', 'verified', 'archive'],
+const CLOSED_STATUSES: readonly string[] = ['completed', 'verified', 'archive'];
+/**
+ * HS2-C7917F: closed means a terminal status or a recorded close outcome. Closing a Backlog
+ * ticket keeps its status and records only the outcome, so status alone misses it; the server's
+ * `saved_views.rs` `is_closed` applies the same rule.
+ */
+const isClosedTicket = (ticket: TicketRow) =>
+  Boolean(ticket.close_reason) || CLOSED_STATUSES.includes(ticket.status ?? '');
+const hasStatus =
+  (...statuses: string[]) =>
+  (ticket: TicketRow) =>
+    statuses.includes(ticket.status ?? '');
+/** One predicate per supported `is:` value; the Record type keeps it exhaustive (HS2-2GCMY1). */
+const lifecyclePredicates: Record<SearchLifecycle, (ticket: TicketRow, now: number) => boolean> = {
+  'up-next': (ticket) => ticket.up_next,
+  active: (ticket, now) => isTicketActivelyWorkedOn(ticket, now),
+  'needs-review': (ticket) => ticket.needs_review ?? ticket.feedback_needed,
+  // HS2-2GCMY1: blocked means a non-empty blocked reason, as on the server.
+  blocked: (ticket) => Boolean(ticket.blocked_reason?.trim()),
+  open: hasStatus('not_started', 'started'),
+  closed: isClosedTicket,
+  duplicate: (ticket) => ticket.close_reason === 'duplicate',
+  'not-started': hasStatus('not_started'),
+  started: hasStatus('started'),
+  completed: hasStatus('completed'),
+  verified: hasStatus('verified'),
+  backlog: hasStatus('backlog'),
+  backlogged: hasStatus('backlog'),
+  archived: hasStatus('archive'),
 };
+const lifecyclePattern = new RegExp(`^is:(${SEARCH_LIFECYCLE_PATTERN})$`, 'i'),
+  advancedLifecyclePattern = new RegExp(`(?:^|\\s)is:(?:${SEARCH_LIFECYCLE_PATTERN})(?=$|\\s|\\))`, 'i');
 
 function lexSearchExpression(query: string): Lexeme[] {
   const result: Lexeme[] = [];
@@ -152,17 +173,9 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
       name = raw.startsWith('"') ? raw.slice(1, -1).replaceAll('\\"', '"') : raw;
     return ticket.tags.some((item) => normalized(item) === normalized(name));
   }
-  const match = value.match(/^is:(.+)$/i),
-    state = match?.[1].toLowerCase();
-  if (!state) return ticketContains(ticket, value);
-  if (state === 'up-next') return ticket.up_next;
-  if (state === 'active') return isTicketActivelyWorkedOn(ticket, now);
-  if (state === 'needs-review') return ticket.needs_review ?? ticket.feedback_needed;
-  // HS2-2GCMY1: blocked means a non-empty blocked reason, as on the server.
-  if (state === 'blocked') return Boolean(ticket.blocked_reason?.trim());
-  if (state === 'duplicate') return ticket.close_reason === 'duplicate';
-  const statuses = lifecycleAliases[state];
-  return statuses ? statuses.includes(ticket.status ?? '') : false;
+  if (!/^is:./i.test(value)) return ticketContains(ticket, value);
+  const state = lifecyclePattern.exec(value)?.[1].toLowerCase() as SearchLifecycle | undefined;
+  return state ? lifecyclePredicates[state](ticket, now) : false;
 }
 type StructuredTerm = Extract<InlineSearchToken, { kind: 'has' | 'attachment' | 'date' }>;
 function structuredTerm(value: string): StructuredTerm | undefined {
@@ -217,12 +230,7 @@ export function usesBooleanSearchExpression(query: string) {
   return /(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]/i.test(query);
 }
 export function usesAdvancedSearchExpression(query: string) {
-  return (
-    usesBooleanSearchExpression(query) ||
-    /(?:^|\s)is:(?:up-next|active|needs-review|blocked|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(
-      query,
-    )
-  );
+  return usesBooleanSearchExpression(query) || advancedLifecyclePattern.test(query);
 }
 export function matchesSearchExpression(
   ticket: TicketRow,

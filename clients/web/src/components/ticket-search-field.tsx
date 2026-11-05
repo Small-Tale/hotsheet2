@@ -15,7 +15,7 @@ import { computed, type ReadonlySignal } from 'kerfjs';
 import { action } from 'kerfjs/actions';
 import { CircleHelp } from 'lucide';
 
-import { activeDatePrefix } from '../inline-search';
+import { activeDatePrefix, SEARCH_LIFECYCLE_ALIASES, SEARCH_LIFECYCLES } from '../inline-search';
 
 /**
  * Delegated action specs every TicketSearchField renders (markup spreads `.attrs`; handlers
@@ -101,21 +101,8 @@ const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[
   { label: 'Content', examples: ['has:attachment', 'has:media-annotation', 'has:commit', 'attachment:*.png'] },
   {
     label: 'Workflow',
-    examples: [
-      'is:up-next',
-      'is:active',
-      'is:needs-review',
-      'is:blocked',
-      'is:open',
-      'is:closed',
-      'is:duplicate',
-      'is:not-started',
-      'is:started',
-      'is:completed',
-      'is:verified',
-      'is:backlog',
-      'is:archived',
-    ],
+    // Derived from the shared `is:` list so help, chips, and matching cannot drift (HS2-2GCMY1).
+    examples: SEARCH_LIFECYCLES.filter((value) => !SEARCH_LIFECYCLE_ALIASES.has(value)).map((value) => `is:${value}`),
   },
   {
     label: 'Dates',

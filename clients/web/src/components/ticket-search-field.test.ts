@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { effect } from 'kerfjs';
 import { describe, expect, it } from 'vitest';
 
+import { SEARCH_LIFECYCLE_ALIASES, SEARCH_LIFECYCLES } from '../inline-search';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
 import {
   TICKET_SEARCH_ACTIONS,
@@ -142,6 +143,9 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(help).toContain('aria-label="Add is:duplicate to the search"');
     expect(help).toContain('data-item-id="is:needs-review"');
     expect(help).toContain('data-item-id="is:blocked"');
+    // HS2-2GCMY1: help lists every supported is: value except spelling aliases.
+    for (const value of SEARCH_LIFECYCLES)
+      expect(help.includes(`data-item-id="is:${value}"`), value).toBe(!SEARCH_LIFECYCLE_ALIASES.has(value));
     expect(help.match(/data-item-id="/g)).toHaveLength(24);
     expect(help).toContain('data-item-id="(client OR server) AND NOT is:archived"');
     expect(help).toContain('<strong>Combine filters</strong>');

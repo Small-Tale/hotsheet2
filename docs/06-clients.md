@@ -3264,9 +3264,13 @@ lines, instead of changing to a different radius. Both workspace and global
 ticket search also accept case-insensitive
 `AND`, `OR`, and `NOT`, with parentheses and the conventional `NOT` → `AND` → `OR`
 precedence. `is:` predicates cover Up Next, an unexpired active claim, open (`not_started` or
-`started`), closed (`completed`, `verified`, or `archive`), structured duplicate close reasons,
+`started`), closed (`completed`, `verified`, or `archive`, or any recorded close outcome, so a
+Backlog ticket closed as not planned or obsolete counts; HS2-C7917F), structured duplicate close reasons,
 `is:blocked` (a non-empty blocked reason, the same rule claim-next uses; HS2-2GCMY1),
-and each named lifecycle state (including `backlogged`/`backlog` and `archived`). Expressions
+and each named lifecycle state (including `backlogged`/`backlog` and `archived`). Every
+supported `is:` value becomes a search chip; the chip tokenizer, the evaluator, the advanced-expression
+check, and the syntax help derive from one list (`SEARCH_LIFECYCLES` in `inline-search.ts`), which a
+parity test pins to the server's saved-view `LIFECYCLES` (HS2-2GCMY1). Expressions
 are evaluated against the complete checkout rather than only the currently visible queue, so
 an explicit archived or backlogged predicate can find those rows. Queue, Backlog, and Archive
 switch from a content-sized view selector in the page
