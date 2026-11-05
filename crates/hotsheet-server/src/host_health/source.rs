@@ -15,7 +15,8 @@ use super::Level;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Probe<T> {
     /// This platform has no reader for the signal.
-    #[cfg_attr(target_os = "macos", allow(dead_code))] // HS2-DTAVQA: macOS reads every signal.
+    #[cfg_attr(any(target_os = "macos", target_os = "linux"), allow(dead_code))]
+    // HS2-DTAVQA: macOS and Linux build every signal reading explicitly.
     Unsupported,
     /// The reader failed this tick.
     Unavailable,
@@ -89,7 +90,7 @@ pub(crate) struct HostReading {
 
 impl HostReading {
     /// A reading in which no signal is supported.
-    #[cfg_attr(target_os = "macos", allow(dead_code))] // HS2-DTAVQA: macOS reads every signal.
+    #[cfg_attr(any(target_os = "macos", target_os = "linux"), allow(dead_code))] // HS2-DTAVQA: macOS and Linux build every signal reading explicitly.
     pub(crate) fn unsupported() -> Self {
         Self {
             disk: Probe::Unsupported,
