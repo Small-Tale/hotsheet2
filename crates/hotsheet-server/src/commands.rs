@@ -77,6 +77,9 @@ pub struct CommandManager {
     definitions: Arc<Mutex<HashMap<String, Vec<CommandDefinition>>>>,
     write_sequences: Arc<Mutex<CommandWriteSequences>>,
     roots: Arc<Mutex<HashMap<String, PathBuf>>>,
+    /// The hosting store's project id for journal records (HS2-PZRQC9). The command map
+    /// is keyed by checkout id, which the journal's `project_id` never carries.
+    journal_project: String,
     runs: Arc<Mutex<HashMap<String, LiveRun>>>,
     order: Arc<Mutex<VecDeque<String>>>,
     on_change: Option<ChangeCallback>,
@@ -85,11 +88,13 @@ pub struct CommandManager {
 impl CommandManager {
     pub fn new(root: PathBuf, definitions: Vec<CommandDefinition>) -> Self {
         let definitions = HashMap::from([(String::new(), definitions)]);
+        let journal_project = hotsheet_tls::project_id(&root);
         let roots = HashMap::from([(String::new(), root)]);
         Self {
             definitions: Arc::new(Mutex::new(definitions)),
             write_sequences: Default::default(),
             roots: Arc::new(Mutex::new(roots)),
+            journal_project,
             runs: Default::default(),
             order: Default::default(),
             on_change: None,
@@ -225,6 +230,21 @@ impl CommandManager {
     pub fn start(&self, command_id: &str) -> Result<CommandRun, String> {
         self.start_for("", command_id)
     }
+    /// Provenance for a configured command child: the hosting store's project id for every
+    /// checkout, the same key as the server's instance registration (HS2-PZRQC9).
+    fn journal_context(
+        &self,
+        journal: hotsheet_process_journal::ProcessJournal,
+    ) -> hotsheet_process_journal::LaunchContext {
+        hotsheet_process_journal::LaunchContext {
+            journal,
+            supervisor: "hotsheet-server",
+            purpose: hotsheet_process_journal::Purpose::ServerCommand,
+            project_id: Some(self.journal_project.clone()),
+            session_id: None,
+            binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+        }
+    }
     pub fn start_for(&self, project: &str, command_id: &str) -> Result<CommandRun, String> {
         let def = self
             .definitions
@@ -251,17 +271,10 @@ impl CommandManager {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child =
-            hotsheet_process_journal::LaunchContext {
-                journal: hotsheet_process_journal::ProcessJournal::at(
-                    hotsheet_plugins::hotsheet_home(),
-                ),
-                supervisor: "hotsheet-server",
-                purpose: hotsheet_process_journal::Purpose::ServerCommand,
-                project_id: (!project.is_empty()).then(|| project.to_owned()),
-                session_id: None,
-                binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
-            }
+        let mut child = self
+            .journal_context(hotsheet_process_journal::ProcessJournal::at(
+                hotsheet_plugins::hotsheet_home(),
+            ))
             .spawn(&mut command)
             .map_err(|e| e.to_string())?;
         let stdout = child.stdout.take();
@@ -721,6 +734,32 @@ mod tests {
         assert_eq!(
             manager.cancel_for("first", &run.id).unwrap().state,
             "cancelled"
+        );
+    }
+
+    /// HS2-PZRQC9: a configured command's journal record carries the hosting store's
+    /// 16-hex project id for every checkout key, never the checkout id itself.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_pzrqc9_command_records_carry_the_store_project_id() {
+        let store = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let manager = CommandManager::new(store.path().to_path_buf(), Vec::new());
+        manager.replace_project("hotsheet2-1a2b3c4d", PathBuf::from("/tmp"), Vec::new());
+        let expected = hotsheet_tls::project_id(store.path());
+        assert_eq!(expected.len(), 16);
+        let journal = hotsheet_process_journal::ProcessJournal::at(home.path());
+        let context = manager.journal_context(journal.clone());
+        assert_eq!(context.project_id.as_deref(), Some(expected.as_str()));
+        context
+            .status(std::process::Command::new("/bin/sh").args(["-c", "exit 0"]))
+            .unwrap();
+        let records = journal.list().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].project_id.as_deref(), Some(expected.as_str()));
+        assert_eq!(
+            records[0].purpose,
+            hotsheet_process_journal::Purpose::ServerCommand
         );
     }
 }

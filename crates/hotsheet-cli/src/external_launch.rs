@@ -154,6 +154,25 @@ pub fn prepare(
     })
 }
 
+/// Journal provenance for the interactive tool child (HS2-PZRQC9). `project_id` is the
+/// project id of the store hosting the server the tool routes back to, the key of that
+/// server's instance registration, like every other journal caller; it is never the
+/// checkout id. The session id is the launch's worker id.
+pub fn tool_launch_context(
+    home: &Path,
+    server_store: &Path,
+    worker: &str,
+) -> hotsheet_process_journal::LaunchContext {
+    hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(home),
+        supervisor: "hotsheet-cli",
+        purpose: hotsheet_process_journal::Purpose::CliExternal,
+        project_id: Some(hotsheet_tls::project_id(server_store)),
+        session_id: Some(worker.to_owned()),
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+}
+
 #[cfg(unix)]
 fn process_is_alive(pid: u32) -> bool {
     pid > 0
@@ -192,6 +211,39 @@ mod tests {
         )
         .unwrap();
         (home, store)
+    }
+
+    /// HS2-PZRQC9: the external tool record carries the hosting store's 16-hex project id,
+    /// which names that server's instance registration, not the checkout id.
+    #[test]
+    fn hs2_pzrqc9_tool_launch_records_the_store_project_id() {
+        let root = tempfile::tempdir().unwrap();
+        let (home, store) = write_instance(root.path());
+        let context = tool_launch_context(&home, &store, "claude-01TEST");
+        let project_id = context.project_id.as_deref().unwrap();
+        assert_eq!(project_id.len(), 16);
+        assert!(project_id.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(
+            instance_path(&home, &store).file_stem().unwrap(),
+            project_id,
+            "the record correlates with the server's instance registration"
+        );
+        assert_eq!(
+            context.purpose,
+            hotsheet_process_journal::Purpose::CliExternal
+        );
+        assert_eq!(context.session_id.as_deref(), Some("claude-01TEST"));
+
+        #[cfg(unix)]
+        {
+            let mut command = std::process::Command::new("true");
+            context.status(&mut command).unwrap();
+            let records = hotsheet_process_journal::ProcessJournal::at(&home)
+                .list()
+                .unwrap();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].project_id.as_deref(), Some(project_id));
+        }
     }
 
     #[test]

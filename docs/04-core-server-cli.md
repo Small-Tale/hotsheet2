@@ -721,9 +721,18 @@ a record's file is named only by its launch ULID. The journal refuses a path,
 unicode, or free-text identifier rather than encoding it, so no machine-local path
 enters a record. The supervisor's log line for a refusal names the refused field with
 a fixed string, for example `invalid diagnostic identifier: project_id`, and never the
-value; any other start failure logs only its error kind (HS2-NNA91A). A terminal's project identifier is the store's 16-hex project id
-in both hosting modes, the detached broker and the in-process `--no-terminal-broker`
-server (HS2-F0S155).
+value; any other start failure logs only its error kind (HS2-NNA91A). A record's
+`project_id`, when present, always means one thing (HS2-PZRQC9): the 16-hex project
+id (`hotsheet_tls::project_id`) of the ticket store hosting the supervising Hot Sheet
+server, which is also the file name of that server's instance registration under
+`instances/`. It is never a checkout id. A terminal records it in both hosting modes,
+the detached broker and the in-process `--no-terminal-broker` server (HS2-F0S155);
+configured server commands record the hosting store's id for every checkout; and
+`hotsheet-cli launch` records the machine bootstrap store whose server the tool routes
+back to, with the launch's worker id as `session_id`. The record has no separate
+checkout field: records are read strictly, and an older supervisor's retention sweep
+removes a record it cannot read, so a new field would let older builds delete newer
+records.
 
 **Ownership-aware stop (HS2-9AWEX5).** `lifecycle::stop_decision` makes an explicit stop
 refuse a server whose registration names the pinned launcher `local-host-snapshot` (the
