@@ -7,13 +7,14 @@ import { defineConfig } from '@playwright/test';
 
 import { playwrightServerPort } from './scripts/playwright-port.mjs';
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
-import { isolateAiToolProbes } from './scripts/test-ai-tool-isolation.mjs';
+import { isolateAiToolProbes, isolateHostHealthSampler } from './scripts/test-ai-tool-isolation.mjs';
 import { playwrightRetries, quarantineGrepInvert } from './src/test-quarantine';
 
 // Before any worker, browser, or web server starts: they inherit the lowered priority (HS2-FVT34A).
 lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
 // Fixture servers and CLIs inherit this and never run installed AI tools (HS2-F6R2HQ).
 isolateAiToolProbes();
+isolateHostHealthSampler();
 
 // A free port per run unless HOTSHEET_WEB_TEST_PORT names one; workers inherit the runner's choice
 // (HS2-6WH4PQ). Readiness still proves this run's own Vite answers (HS2-BJ00D1).

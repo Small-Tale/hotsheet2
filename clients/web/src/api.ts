@@ -1,4 +1,5 @@
 import { browserRandomId } from './browser-id';
+import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import type { PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
@@ -2207,6 +2208,11 @@ export class Api {
   terminalLimits = () => this.parsed(parseTerminalLimits, '/terminal-limits');
   saveTerminalLimits = (value: TerminalLimits['configured']) =>
     this.parsed(parseTerminalLimits, '/terminal-limits', { method: 'PUT', body: JSON.stringify(value) });
+  // The server host's health and its machine-wide thresholds (HS2-DTAVQA).
+  hostHealth = () => this.parsed(parseHostHealth, '/host-health');
+  hostHealthThresholds = () => this.parsed(parseHostHealthThresholds, '/host-health/thresholds');
+  saveHostHealthThresholds = (value: HostHealthConfiguredThresholds) =>
+    this.parsed(parseHostHealthThresholds, '/host-health/thresholds', { method: 'PUT', body: JSON.stringify(value) });
   // Notifier plugins (HS2-DPBJJA): machine-wide channels, rules, and delivery log.
   notifiers = () => this.parsed(parseNotifierList, '/notifiers');
   notificationConfig = () => this.parsed(parseNotificationConfig, '/notification-config');

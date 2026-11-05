@@ -1406,13 +1406,18 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             // Terminal memory limits are machine-wide (HS2-Y5DYC0): they default to the global
             // scope, refuse a project scope, and are range-checked like the Settings UI.
             let terminal_limit = hotsheet_ticketing::terminal_limits::is_terminal_limit_key(&key);
-            let scope = match (parse_scope(&scope)?, terminal_limit) {
+            // Host health thresholds are machine-wide too (HS2-DTAVQA), with REST parity.
+            let host_health = hotsheet_ticketing::host_health::is_host_health_key(&key);
+            let scope = match (parse_scope(&scope)?, terminal_limit || host_health) {
                 (Some(Scope::Global) | None, true) => Scope::Global,
                 (Some(_), true) => bail!("{key} is machine-wide; use --scope global"),
                 (scope, false) => scope.unwrap_or(Scope::Shared),
             };
             if terminal_limit {
                 hotsheet_ticketing::terminal_limits::parse_terminal_limit(&key, &value)?;
+            }
+            if host_health {
+                hotsheet_ticketing::host_health::parse_threshold(&key, &value)?;
             }
             // Parse as JSON (numbers/bools/arrays/objects), else store the raw string.
             let parsed = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));

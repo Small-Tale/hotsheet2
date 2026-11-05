@@ -20,6 +20,7 @@ mod events;
 pub mod github_app_config;
 mod github_webhooks;
 mod health_scan;
+mod host_health;
 mod hosting;
 mod image_crop_cache;
 pub mod lifecycle;
@@ -274,6 +275,8 @@ pub struct AppState {
     presence: presence::Presence,
     /// Live `hotsheet-mcp` leases (HS2-HNXE38), separate from hook-reported AI connections.
     mcp_presence: Arc<Mutex<mcp_presence::McpPresenceRegistry>>,
+    /// The host health monitor the sampler feeds (HS2-DTAVQA).
+    host_health: Arc<host_health::HostHealth>,
     /// Stores hosted because a project opened them: the only ones unhosted again once no open
     /// checkout references them. The default and startup-configured stores stay hosted.
     project_hosted: Arc<Mutex<std::collections::HashSet<String>>>,
@@ -596,6 +599,7 @@ impl AppState {
             watchers: Arc::default(),
             presence: presence::Presence::default(),
             mcp_presence: Arc::default(),
+            host_health: Arc::default(),
             project_hosted: Arc::default(),
             unhost_sweep: Arc::default(),
             repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -2049,6 +2053,14 @@ pub fn app(state: AppState) -> Router {
         // Ephemeral store-level announcement broadcast over the WS bus (HS2-HHDNTH) — not
         // persisted, live subscribers only.
         .route("/announce", post(post_announce))
+        // The server host's health and its machine-wide thresholds (HS2-DTAVQA). Crossings
+        // push as `host_health` change events; clients re-read this on each one.
+        .route("/host-health", get(host_health::routes::get_host_health))
+        .route(
+            "/host-health/thresholds",
+            get(host_health::routes::get_host_health_thresholds)
+                .put(host_health::routes::put_host_health_thresholds),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,

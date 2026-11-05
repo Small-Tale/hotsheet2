@@ -10234,6 +10234,131 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Announce'
+  /host-health:
+    get:
+      operationId: get_host_health
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostHealthSnapshot'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /host-health/thresholds:
+    get:
+      operationId: get_host_health_thresholds
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostHealthThresholdsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_host_health_thresholds
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostHealthThresholdsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfiguredHostHealthThresholds'
   /health:
     get:
       operationId: health
@@ -17473,6 +17598,395 @@ components:
           $ref: '#/components/schemas/ConfiguredTerminalLimits'
         effective:
           $ref: '#/components/schemas/TerminalLimitValues'
+      additionalProperties: false
+    HostHealthThresholds:
+      type: object
+      description: Effective host health thresholds (HS2-DTAVQA). A 0 disables the projection and growth thresholds.
+      required:
+        - sample_seconds
+        - disk_warning_free_gib
+        - disk_critical_free_gib
+        - disk_warning_hours_to_full
+        - disk_critical_hours_to_full
+        - swap_warning_growth_mib_per_hour
+        - cpu_warning_percent
+        - cpu_sustain_minutes
+        - battery_critical_percent
+      properties:
+        sample_seconds:
+          type: integer
+          minimum: 0
+        disk_warning_free_gib:
+          type: integer
+          minimum: 0
+        disk_critical_free_gib:
+          type: integer
+          minimum: 0
+        disk_warning_hours_to_full:
+          type: integer
+          minimum: 0
+        disk_critical_hours_to_full:
+          type: integer
+          minimum: 0
+        swap_warning_growth_mib_per_hour:
+          type: integer
+          minimum: 0
+        cpu_warning_percent:
+          type: integer
+          minimum: 0
+        cpu_sustain_minutes:
+          type: integer
+          minimum: 0
+        battery_critical_percent:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    ConfiguredHostHealthThresholds:
+      type: object
+      description: Explicit machine-wide thresholds; null or missing means the default. Unknown names are rejected.
+      properties:
+        sample_seconds:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        disk_warning_free_gib:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        disk_critical_free_gib:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        disk_warning_hours_to_full:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        disk_critical_hours_to_full:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        swap_warning_growth_mib_per_hour:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        cpu_warning_percent:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        cpu_sustain_minutes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        battery_critical_percent:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      additionalProperties: false
+    HostHealthThresholdsView:
+      type: object
+      required:
+        - defaults
+        - configured
+        - effective
+      properties:
+        defaults:
+          $ref: '#/components/schemas/HostHealthThresholds'
+        configured:
+          $ref: '#/components/schemas/ConfiguredHostHealthThresholds'
+        effective:
+          $ref: '#/components/schemas/HostHealthThresholds'
+      additionalProperties: false
+    HostHealthLevel:
+      enum:
+        - normal
+        - warning
+        - critical
+    HostHealthStatus:
+      description: A signal's status; unsupported (no reader on this platform) and unavailable (the reader failed) never produce a callout.
+      enum:
+        - normal
+        - warning
+        - critical
+        - unsupported
+        - unavailable
+    HostHealthDisk:
+      type: object
+      description: Free space on the primary store's volume with a time-to-full projection fitted over the last hour.
+      required:
+        - status
+        - reason
+        - since
+        - free_bytes
+        - total_bytes
+        - consumption_bytes_per_hour
+        - hours_to_full
+      properties:
+        status:
+          $ref: '#/components/schemas/HostHealthStatus'
+        reason:
+          description: Stable code for why the signal is not normal (for example low_free_space, on_battery).
+          anyOf:
+            - type: string
+            - type: 'null'
+        since:
+          description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        free_bytes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        total_bytes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        consumption_bytes_per_hour:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        hours_to_full:
+          anyOf:
+            - type: number
+            - type: 'null'
+      additionalProperties: false
+    HostHealthMemory:
+      type: object
+      description: OS memory pressure and swap growth.
+      required:
+        - status
+        - reason
+        - since
+        - pressure
+        - swap_used_bytes
+        - swap_growth_bytes_per_hour
+      properties:
+        status:
+          $ref: '#/components/schemas/HostHealthStatus'
+        reason:
+          description: Stable code for why the signal is not normal (for example low_free_space, on_battery).
+          anyOf:
+            - type: string
+            - type: 'null'
+        since:
+          description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        pressure:
+          anyOf:
+            - $ref: '#/components/schemas/HostHealthLevel'
+            - type: 'null'
+        swap_used_bytes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        swap_growth_bytes_per_hour:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      additionalProperties: false
+    HostHealthCpu:
+      type: object
+      description: Whole-machine CPU and the busiest process's executable name.
+      required:
+        - status
+        - reason
+        - since
+        - busy_percent
+        - busy_for_seconds
+        - top_process
+        - top_process_percent
+      properties:
+        status:
+          $ref: '#/components/schemas/HostHealthStatus'
+        reason:
+          description: Stable code for why the signal is not normal (for example low_free_space, on_battery).
+          anyOf:
+            - type: string
+            - type: 'null'
+        since:
+          description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        busy_percent:
+          anyOf:
+            - type: number
+            - type: 'null'
+        busy_for_seconds:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        top_process:
+          anyOf:
+            - type: string
+            - type: 'null'
+        top_process_percent:
+          anyOf:
+            - type: number
+            - type: 'null'
+      additionalProperties: false
+    HostHealthPower:
+      type: object
+      description: Power and sleep risk (battery, lid, sleep-prevention assertion, idle system-sleep timer).
+      required:
+        - status
+        - reason
+        - since
+        - on_battery
+        - battery_percent
+        - lid_closed
+        - sleep_prevented
+        - idle_sleep_minutes
+      properties:
+        status:
+          $ref: '#/components/schemas/HostHealthStatus'
+        reason:
+          description: Stable code for why the signal is not normal (for example low_free_space, on_battery).
+          anyOf:
+            - type: string
+            - type: 'null'
+        since:
+          description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        on_battery:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        battery_percent:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        lid_closed:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        sleep_prevented:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        idle_sleep_minutes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      additionalProperties: false
+    HostHealthNetwork:
+      type: object
+      description: Whether a default route exists; no packet is sent.
+      required:
+        - status
+        - reason
+        - since
+        - reachable
+        - interface
+      properties:
+        status:
+          $ref: '#/components/schemas/HostHealthStatus'
+        reason:
+          description: Stable code for why the signal is not normal (for example low_free_space, on_battery).
+          anyOf:
+            - type: string
+            - type: 'null'
+        since:
+          description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        reachable:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        interface:
+          anyOf:
+            - type: string
+            - type: 'null'
+      additionalProperties: false
+    HostHealthThermal:
+      type: object
+      description: Whether the OS records thermal or performance throttling.
+      required:
+        - status
+        - reason
+        - since
+        - throttled
+        - cpu_speed_limit
+      properties:
+        status:
+          $ref: '#/components/schemas/HostHealthStatus'
+        reason:
+          description: Stable code for why the signal is not normal (for example low_free_space, on_battery).
+          anyOf:
+            - type: string
+            - type: 'null'
+        since:
+          description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        throttled:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        cpu_speed_limit:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      additionalProperties: false
+    HostHealthSnapshot:
+      type: object
+      description: The server host's latest evaluated health sample (HS2-DTAVQA). Crossings and coarse changes push as host_health change events, and clients re-read this on each one and on resync.
+      required:
+        - host
+        - sampled_at
+        - level
+        - signals
+      properties:
+        host:
+          type: object
+          required:
+            - name
+            - os
+            - arch
+          properties:
+            name:
+              type: string
+            os:
+              type: string
+            arch:
+              type: string
+          additionalProperties: false
+        sampled_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+        level:
+          $ref: '#/components/schemas/HostHealthLevel'
+        signals:
+          type: object
+          required:
+            - disk
+            - memory
+            - cpu
+            - power
+            - network
+            - thermal
+          properties:
+            disk:
+              $ref: '#/components/schemas/HostHealthDisk'
+            memory:
+              $ref: '#/components/schemas/HostHealthMemory'
+            cpu:
+              $ref: '#/components/schemas/HostHealthCpu'
+            power:
+              $ref: '#/components/schemas/HostHealthPower'
+            network:
+              $ref: '#/components/schemas/HostHealthNetwork'
+            thermal:
+              $ref: '#/components/schemas/HostHealthThermal'
+          additionalProperties: false
       additionalProperties: false
     OpenTerminal:
       type: object

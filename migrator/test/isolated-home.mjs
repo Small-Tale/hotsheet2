@@ -12,5 +12,7 @@ export default function setup() {
   process.env.HOTSHEET_HOME = home;
   // HS2-F6R2HQ: spawned binaries never execute the developer's installed AI tools.
   process.env.HOTSHEET_AI_TOOL_PROBES = 'off';
+  // HS2-DTAVQA: spawned servers never sample this host.
+  process.env.HOTSHEET_HOST_HEALTH_SAMPLER = 'off';
   return () => rmSync(home, { recursive: true, force: true });
 }

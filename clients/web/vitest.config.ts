@@ -4,11 +4,12 @@ import { join } from 'node:path';
 
 import { configDefaults, defineConfig } from 'vitest/config';
 
-import { isolateAiToolProbes } from './scripts/test-ai-tool-isolation.mjs';
+import { isolateAiToolProbes, isolateHostHealthSampler } from './scripts/test-ai-tool-isolation.mjs';
 import { BINARY_SUITES } from './scripts/vitest-binary-suites.mjs';
 
 // Before any worker starts: spawned servers and CLIs never run installed AI tools (HS2-F6R2HQ).
 isolateAiToolProbes();
+isolateHostHealthSampler();
 
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-vitest-vite-'));
 process.once('exit', () => {

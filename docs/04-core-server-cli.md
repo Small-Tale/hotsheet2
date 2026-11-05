@@ -353,6 +353,12 @@ new files does not migrate old objects, so use the compaction plan for existing 
   - The web project shell shows a persistent warning strip while any repository is over a
     limit (see [06](06-clients.md) "Repository size").
 
+The server also samples **its own host's health** (disk with a time-to-full projection, memory
+pressure, CPU, sleep risk, network, thermal) on a server-local cadence and publishes each
+threshold crossing as a replayable `host_health` change event (`store` empty, `id` = signal,
+`slug` = status, `message` = reason code); clients re-read `GET /host-health` on each one. See
+[host-health](host-health.md) (HS2-DTAVQA).
+
 Historical cumulative-flow data is explicitly reported unavailable because current ticket
 files do not preserve status transitions.
 The CLI exposes the same live feed through the selected `-C` store's running server:

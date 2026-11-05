@@ -24,6 +24,7 @@ pub mod distclaim;
 pub mod distwork;
 pub mod git;
 pub mod github_endpoint;
+pub mod host_health;
 pub mod identity;
 pub mod image_crop;
 pub mod merge;

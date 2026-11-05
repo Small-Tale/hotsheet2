@@ -10,3 +10,12 @@ export function isolateAiToolProbes(env = process.env) {
   env[AI_TOOL_PROBES_ENV] = 'off';
   return env;
 }
+
+// HS2-DTAVQA: real servers started by browser and Node suites must not sample this host, or
+// host-dependent `host_health` events would reach the fixtures' change streams.
+export const HOST_HEALTH_SAMPLER_ENV = 'HOTSHEET_HOST_HEALTH_SAMPLER';
+
+export function isolateHostHealthSampler(env = process.env) {
+  env[HOST_HEALTH_SAMPLER_ENV] = 'off';
+  return env;
+}

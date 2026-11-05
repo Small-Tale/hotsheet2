@@ -9793,6 +9793,48 @@ fn headless_replay_and_history_changes_notify_all_running_servers() {
 }
 
 #[test]
+fn host_health_thresholds_are_set_headlessly_as_validated_machine_wide_settings() {
+    // HS2-DTAVQA headless parity with PUT /host-health/thresholds.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "set", "host_health.disk_warning_free_gib", "40"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("global (machine-wide)"));
+    let global: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(home.path().join("settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(global["host_health.disk_warning_free_gib"], 40);
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "set",
+            "host_health.cpu_warning_percent",
+            "80",
+            "--scope",
+            "shared",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("machine-wide"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "set", "host_health.cpu_warning_percent", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("from 1 to 100"));
+    let global: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(home.path().join("settings.json")).unwrap())
+            .unwrap();
+    assert!(global.get("host_health.cpu_warning_percent").is_none());
+}
+
+#[test]
 fn terminal_limits_are_set_headlessly_as_validated_machine_wide_settings() {
     // HS2-Y5DYC0 headless parity with App Settings → Terminal memory.
     let dir = tempfile::tempdir().unwrap();

@@ -26,6 +26,10 @@ HOTSHEET_CACHE_DIR = { value = "target/test-hotsheet-cache", force = true, relat
 # with the inherited PATH. Tests keep the bundled offline catalogs; the few that exercise
 # probing against fixture tools remove this variable explicitly.
 HOTSHEET_AI_TOOL_PROBES = { value = "off", force = true }
+# HS2-DTAVQA: a spawned server would otherwise sample this host (disk, battery, network) and
+# push host-dependent `host_health` change events into every test's change stream. Tests
+# drive the sampler through an injected source instead.
+HOTSHEET_HOST_HEALTH_SAMPLER = { value = "off", force = true }
 # HS2-M269HC: a repository-local global Git config. Git otherwise starts detached
 # `git maintenance run --auto` children after fetch, push, commit and receive-pack that
 # outlive tests (788 per full suite), and tests would read each developer's global config.
