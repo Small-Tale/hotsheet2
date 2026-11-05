@@ -343,6 +343,7 @@ pub(crate) fn do_assign(
     state.changed_in(entry, "assigned", &ticket);
     let requested_by = hotsheet_ticketing::current_user_email(entry.store.root());
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: multistore::store_url_id(&entry.store),
         kind: "assignment".into(),

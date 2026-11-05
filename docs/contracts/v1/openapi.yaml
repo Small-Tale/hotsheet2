@@ -5674,6 +5674,35 @@ paths:
         required: true
         schema:
           type: string
+  /stores/{store_id}/live-state:
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: store_live_state
+      description: One hosted store's live snapshot (HS2-JTTQMY).
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveStoreState'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /stores/{store_id}/tickets:
     get:
       operationId: list_store_tickets
@@ -8278,6 +8307,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /live-state:
+    get:
+      operationId: list_live_states
+      description: Every hosted store's live snapshot for glance surfaces (HS2-JTTQMY). The same snapshot is pushed as a `live_state` change event whenever it changes.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveStateList'
+        '404':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
             application/json:
@@ -16830,6 +16882,177 @@ components:
         p95:
           type: number
       additionalProperties: false
+    LiveStateList:
+      type: object
+      required: [epoch_ms, stores]
+      properties:
+        epoch_ms:
+          type: integer
+        stores:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveStoreState'
+    LiveWord:
+      type: string
+      enum: [active, stopped, may_be_stuck, stalled, halted, waiting_on_you]
+    LiveStoreState:
+      type: object
+      description: One store's live state (HS2-JTTQMY, docs/32-notifier-plugins.md §32.8.3). Times are Unix milliseconds; clients compute ages and decaying rates locally.
+      required:
+        [store, root, name, checkouts, epoch_ms, revision, state, activity, claims, workers, waiting, runway, rates]
+      properties:
+        store:
+          type: string
+        root:
+          type: string
+        name:
+          type: string
+        checkouts:
+          type: array
+          items:
+            type: string
+        epoch_ms:
+          type: integer
+        revision:
+          type: integer
+          minimum: 0
+        state:
+          $ref: '#/components/schemas/LiveWord'
+        activity:
+          type: object
+          required: [word, active_since_ms, stopped_at_ms, last_progress_ms, idle_deadline_ms, stalled, halted]
+          properties:
+            word:
+              $ref: '#/components/schemas/LiveWord'
+            active_since_ms:
+              type: [integer, 'null']
+            stopped_at_ms:
+              type: [integer, 'null']
+            last_progress_ms:
+              type: [integer, 'null']
+            idle_deadline_ms:
+              type: [integer, 'null']
+            stalled:
+              type: array
+              items:
+                type: object
+                required: [slug, worker]
+                properties:
+                  slug:
+                    type: string
+                  worker:
+                    type: string
+            halted:
+              type: array
+              items:
+                type: object
+                required: [worker, message, at_ms]
+                properties:
+                  worker:
+                    type: string
+                  message:
+                    type: string
+                  at_ms:
+                    type: integer
+        claims:
+          type: array
+          items:
+            type: object
+            required: [ticket, slug, title, worker, phase, claimed_at_ms, lease_expires_at_ms, eta_at_ms]
+            properties:
+              ticket:
+                type: string
+              slug:
+                type: string
+              title:
+                type: string
+              worker:
+                type: string
+              phase:
+                type: [string, 'null']
+              claimed_at_ms:
+                type: [integer, 'null']
+              lease_expires_at_ms:
+                type: integer
+              eta_at_ms:
+                type: [integer, 'null']
+        workers:
+          type: object
+          required: [live, expected]
+          properties:
+            live:
+              type: integer
+              minimum: 0
+            expected:
+              type: integer
+              minimum: 0
+        waiting:
+          type: object
+          required: [count, tickets]
+          properties:
+            count:
+              type: integer
+              minimum: 0
+            tickets:
+              type: array
+              items:
+                type: object
+                required: [ticket, slug, title, reason]
+                properties:
+                  ticket:
+                    type: string
+                  slug:
+                    type: string
+                  title:
+                    type: string
+                  reason:
+                    type: string
+                    enum: [feedback, review]
+        runway:
+          type: object
+          required: [ready, estimate_ms]
+          properties:
+            ready:
+              type: integer
+              minimum: 0
+            estimate_ms:
+              type: [integer, 'null']
+        rates:
+          type: object
+          required: [tokens, tickets_updated]
+          properties:
+            tokens:
+              type: object
+              required: [window_minutes, minutes, peak_per_minute]
+              properties:
+                window_minutes:
+                  type: integer
+                minutes:
+                  type: array
+                  items:
+                    type: object
+                    required: [start_ms, tokens]
+                    properties:
+                      start_ms:
+                        type: integer
+                      tokens:
+                        type: integer
+                        minimum: 0
+                peak_per_minute:
+                  type: number
+            tickets_updated:
+              type: object
+              required: [window_minutes, at_ms, peak_per_hour]
+              properties:
+                window_minutes:
+                  type: integer
+                at_ms:
+                  type: array
+                  items:
+                    type: integer
+                peak_per_hour:
+                  type: integer
+                  minimum: 0
     TicketFlowSummary:
       type: object
       required:

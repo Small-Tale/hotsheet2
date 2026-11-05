@@ -116,6 +116,7 @@ impl AppState {
         let (notification, created) = self.notifications.publish_with_status(body);
         if created {
             self.emit(ChangeEvent {
+                live: None,
                 cursor: None,
                 store: notification.store.clone().unwrap_or_default(),
                 kind: "notification".into(),

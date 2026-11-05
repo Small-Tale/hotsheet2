@@ -110,6 +110,11 @@ pub(crate) fn sync_codex_session_watch(
         ) {
             tracing::warn!(%error, "recording Codex terminal usage failed");
         }
+        // Tokens per minute moved (HS2-JTTQMY).
+        crate::live_state::touch(
+            &signal_state,
+            &crate::multistore::store_url_id(&signal_state.store),
+        );
     });
     // No Codex home, or it cannot be watched: nothing to follow.
     let Ok(watch) = watch else { return };

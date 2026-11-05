@@ -44,6 +44,8 @@ import {
   parseGuidanceSourceUpdates,
   parseLegacyPermissionDiscardOutcome,
   parseLegacyPermissionPreview,
+  parseLiveStateList,
+  parseLiveStoreState,
   parseMessageConnectionReceipt,
   parseNotificationChannel,
   parseNotificationChannelRemoval,
@@ -1330,6 +1332,55 @@ export interface ChangeEvent {
   message?: string;
   activity?: ActivityEvent;
   turn?: TurnStreamEnvelope;
+  /** For `kind === 'live_state'`: the store's complete live snapshot (HS2-JTTQMY). */
+  live?: LiveStoreState;
+}
+/**
+ * One store's glance word (HS2-JTTQMY, docs/32-notifier-plugins.md §32.8.3): the notifier's
+ * project-activity words plus Waiting on you.
+ */
+export type LiveWord = 'active' | 'stopped' | 'may_be_stuck' | 'stalled' | 'halted' | 'waiting_on_you';
+/** A live claim; times are Unix milliseconds and `null` when unknown. */
+export interface LiveClaim {
+  ticket: string;
+  slug: string;
+  title: string;
+  worker: string;
+  phase: string | null;
+  claimed_at_ms: number | null;
+  lease_expires_at_ms: number;
+  eta_at_ms: number | null;
+}
+/** A hosted store's server-pushed live snapshot; clients derive ages and decaying rates locally. */
+export interface LiveStoreState {
+  store: string;
+  root: string;
+  name: string;
+  checkouts: string[];
+  epoch_ms: number;
+  revision: number;
+  state: LiveWord;
+  activity: {
+    word: LiveWord;
+    active_since_ms: number | null;
+    stopped_at_ms: number | null;
+    last_progress_ms: number | null;
+    idle_deadline_ms: number | null;
+    stalled: { slug: string; worker: string }[];
+    halted: { worker: string; message: string; at_ms: number }[];
+  };
+  claims: LiveClaim[];
+  workers: { live: number; expected: number };
+  waiting: { count: number; tickets: { ticket: string; slug: string; title: string; reason: 'feedback' | 'review' }[] };
+  runway: { ready: number; estimate_ms: number | null };
+  rates: {
+    tokens: { window_minutes: number; minutes: { start_ms: number; tokens: number }[]; peak_per_minute: number };
+    tickets_updated: { window_minutes: number; at_ms: number[]; peak_per_hour: number };
+  };
+}
+export interface LiveStateList {
+  epoch_ms: number;
+  stores: LiveStoreState[];
 }
 /** A notification in the local server's attention inbox (HS2-ZP869N). */
 export interface ClientNotification {
@@ -1705,6 +1756,11 @@ export class Api {
   /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
   checkoutConfidenceReport = (checkout: string) =>
     this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
+  /** Every hosted store's live snapshot (HS2-JTTQMY); read on stream resync only, never on a timer. */
+  liveStates = () => this.parsed(parseLiveStateList, '/live-state');
+  /** One hosted store's live snapshot (HS2-JTTQMY). */
+  storeLiveState = (store: string) =>
+    this.parsed(parseLiveStoreState, `/stores/${encodeURIComponent(store)}/live-state`);
   /** Ticket flow and usage for each linked Git store, with unsupported sources identified. */
   checkoutAnalytics = (checkout: string) =>
     this.parsed(parseCheckoutAnalytics, `/checkouts/${encodeURIComponent(checkout)}/analytics`);

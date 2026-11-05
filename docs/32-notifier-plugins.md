@@ -346,15 +346,17 @@ lease during long work, and releases it when it stops, whatever its tool or tran
 Each active period is reported once; its dedupe key is the store plus the period's
 start. A check runs before each new claim is recorded, so a period whose grace already
 ended is reported rather than continued. The tracker is seeded from each store's index
-when the router starts, but only if an enabled rule names `project.stopped`. Grace and
-lease deadlines are one event-driven server timer per store; no request polls. Sessions
-that never claim tickets produce no signal.
+when the router starts. It runs with or without a rule, because it also feeds the live
+state (§32.8.3); messages are sent only when an enabled rule names `project.stopped`.
+Grace and lease deadlines are one event-driven server timer per store; no request polls.
+Sessions that never claim tickets produce no signal.
 
 Two stuck signals cover sessions that still hold claims (HS2-P57XHV):
 
 - **May be stuck (idle).** Claims are held but nothing progressed for the idle window
   (default 30 minutes). Progress is an `activity` or `turn_event` for the store, or a ticket
-  write that changes its notes, status, phase, title, or details. A claim renewal is not
+  write that changes its notes, status, phase, title, or details; creating a ticket is
+  such a write (HS2-JTTQMY). A claim renewal is not
   progress, so a session that keeps renewing while doing nothing is still reported. The
   message reads "Hot Sheet project _name_ may be stuck", has severity `warning`, and names
   the held claims. Each idle episode is reported once, and progress re-arms it.
@@ -396,6 +398,73 @@ Routed messages link to their project and ticket in the client's deep-link form 
   action, the webhook `url`) carry the link there; others append an Open in Hot Sheet link
   to the body. Spoken output drops it.
 - A native `hotsheet://` scheme waits for the native app (docs/06).
+
+### 32.8.3 Live state for glance surfaces (HS2-JTTQMY)
+
+The server keeps one live snapshot per hosted store for the glance surfaces designed on
+HS2-CT5EWR: standby, the project and grid sidebars, the stats Right now section, and the
+away digest. Its state word comes from the same claim tracker as §32.8.1, so a client and a
+notification always agree. The tracker therefore runs whether or not a rule names
+`project.stopped`; only its messages wait for a rule.
+
+**State word** (`state`), most urgent first:
+
+| Word             | When                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `halted`         | A worker that holds a live claim reported a halt. It clears when that session resumes, progresses on its claim, or loses its claims. |
+| `stalled`        | No live claim remains and a lease expired unrenewed. It stays until a new claim starts the next active period.                       |
+| `may_be_stuck`   | Claims are held and nothing progressed for the idle window.                                                                          |
+| `waiting_on_you` | An open ticket waits on the user: an unanswered feedback request, a review flag, or a review request.                                |
+| `active`         | An active period is open, including the release grace.                                                                               |
+| `stopped`        | Nothing else applies.                                                                                                                |
+
+`activity.word` carries the tracker's word alone, without Waiting on you.
+
+**Values.** Times are Unix milliseconds, `null` when unknown.
+
+- `activity`: period start, stop time, last progress (the idle detector's definition, so
+  claim renewals do not count), the idle deadline, stalled claims, and halts.
+- `claims`: each live claim's ticket, worker, phase, claim time, lease expiry, and ETA. A
+  client computes the ETA overrun locally.
+- `workers`: `live` counts distinct workers with a live claim. `expected` counts the workers
+  that held a claim in the current or stalled period (a worker-plan source is HS2-BHPPAS).
+- `waiting`: the count, plus up to 20 tickets with their reason (`feedback` or `review`).
+- `runway`: `ready` counts open Up Next tickets that are unblocked, unclaimed, and not
+  waiting on feedback. `estimate_ms` is `ready` times the median planned claim duration
+  (claim to ETA) seen recently, divided by the live workers. It is `null` until a claim
+  states an ETA.
+- `rates.tokens`: tokens per minute averages tokens in plus out over the last 5 whole
+  minutes, the current one included. It reads the store's usage JSONL
+  ([14](14-metrics-interface.md)) incrementally. The snapshot carries the per-minute
+  buckets, so the gauge decays without another read.
+- `rates.tickets_updated`: one time per distinct ticket whose last progress write is within
+  60 minutes. A new ticket counts. Claim renewals do not.
+- Each rate has a rolling 30-day peak (`peak_per_minute`, `peak_per_hour`) that its gauge
+  scales to. Peaks are per-day maxima in the store's gitignored, machine-local
+  `metrics/local/live-peaks.json`. The first read backfills the token peak from up to 30
+  days of usage JSONL.
+
+Main CI status is not part of the snapshot yet (HS2-M8HHEA).
+
+**Delivery.** Each change to a snapshot is pushed as one `live_state` change event whose
+`live` member is the whole snapshot. It reaches every client on the existing WebSocket or
+long-poll stream and replays by cursor. A rebuild follows a ticket write, activity, a turn,
+a usage record, a halt or resume, or a tracker deadline (lease expiry, grace end, idle
+window). Rebuilds within 250 ms share one. An unchanged snapshot is not pushed, and a
+last-progress move under 15 seconds alone does not push. `epoch_ms` (server start) and
+`revision` order snapshots across restarts. Clients compute ages and decaying rates from
+the timestamps. A display timer may re-render, but it never requests.
+
+**Reads.** `GET /live-state` returns every hosted store, and `GET /stores/{store_id}/live-state`
+returns one. Clients read them only when a stream connects, reconnects, or overflows. The
+headless form is `hotsheet-cli live-state [--all]`, which prints the selected store's
+snapshot (or every hosted store's) from the local server. The tracker lives in the server,
+so there is no serverless form.
+
+The web client keeps the snapshots in `clients/web/src/live-state.ts`
+(`createLiveStateStore`). Its pure helpers (`tokensPerMinute`, `ticketsUpdatedPerHour`,
+`progressAgeMs`, `etaOverrunMs`, `gaugeFraction`, `aggregateLiveStates`) give glance
+surfaces their numbers. The all-projects gauges scale to the sum of the stores' peaks (HS2-Y11TFC).
 
 ## 32.9 Headless CLI and REST API
 

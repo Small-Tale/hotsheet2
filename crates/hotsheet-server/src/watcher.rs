@@ -289,6 +289,7 @@ fn resync_event(dir: &FsPath, info: &str) -> notify::Event {
 
 pub(crate) fn repository_change_event(checkout_id: &str) -> ChangeEvent {
     ChangeEvent {
+        live: None,
         cursor: None,
         store: checkout_id.to_string(),
         kind: "repository_changed".to_string(),
@@ -934,6 +935,7 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
             &target.event_log,
             &target.events,
             ChangeEvent {
+                live: None,
                 cursor: None,
                 store: target.store_id.clone(),
                 kind: kind.to_string(),

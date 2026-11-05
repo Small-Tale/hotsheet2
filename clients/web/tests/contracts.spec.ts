@@ -32,7 +32,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(211); // HS2-NEY1QH integration strategies route
+  expect(Object.keys(openapi.paths)).toHaveLength(213); // HS2-JTTQMY live-state routes
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -58,7 +58,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(211); // HS2-NEY1QH integration strategies route
+  expect(Object.keys(openapi.paths)).toHaveLength(213); // HS2-JTTQMY live-state routes
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -179,6 +179,7 @@ test('client contracts accept real ticket and replay responses', async () => {
       '/mcp-presence',
       '/analytics/tickets',
       '/analytics/usage',
+      '/live-state',
       '/notifications',
       `/checkouts/${server.checkoutId}/providers`,
       `/checkouts/${server.checkoutId}/repository/status`,

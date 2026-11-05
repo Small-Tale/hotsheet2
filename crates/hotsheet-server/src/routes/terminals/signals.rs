@@ -292,6 +292,7 @@ fn forget_terminal_question_for_session(
 
 fn emit_terminal_question(state: &AppState, id: &str) {
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: String::new(),
         kind: "terminal_question".into(),
@@ -574,6 +575,7 @@ pub(crate) async fn connect_terminal_ai(
     // Make the session reachable by `POST /connections/{id}/message` (HS2-FKM97G).
     crate::routes::session_messages::register_reported(&state, &id, agent.as_deref(), &reported);
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: String::new(),
         kind: "terminal_hook_report".into(),
@@ -713,6 +715,7 @@ fn forget_terminal_ai_connection_if(
 
 fn emit_terminal_ai_connection(state: &AppState, id: &str, message: Option<String>) {
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: String::new(),
         kind: "terminal_ai_connection".into(),
@@ -727,6 +730,7 @@ fn emit_terminal_ai_connection(state: &AppState, id: &str, message: Option<Strin
 
 fn emit_terminal_halted(state: &AppState, id: &str, message: Option<String>) {
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: String::new(),
         kind: "terminal_halted".into(),
@@ -782,6 +786,7 @@ pub(crate) async fn rename_terminal(
 
 fn emit_terminal_renamed(state: &AppState, id: &str, name: Option<String>) {
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: String::new(),
         kind: "terminal_renamed".into(),
@@ -1109,6 +1114,7 @@ pub(crate) async fn resolve_permission(
     // Resolution can happen through another client or transport. Publish a replayable
     // nudge so every notification inbox reconciles the now-absent request into history.
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: resolved.project.clone(),
         kind: "permission_resolved".to_string(),
@@ -1132,6 +1138,7 @@ pub(crate) async fn resolve_permission(
             hotsheet_aitools::PermissionDecision::Deny => "deny",
         };
         state.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: cascaded.project.clone(),
             kind: "permission_resolved".to_string(),
@@ -1227,6 +1234,7 @@ pub(crate) async fn remember_permission_after_allow(
     emit_permission_rules_changed(&state, &request.project);
     for answered in cascaded {
         state.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: answered.project,
             kind: "permission_resolved".to_string(),
@@ -1246,6 +1254,7 @@ pub(crate) async fn remember_permission_after_allow(
 /// refetches them once.
 pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: project.to_string(),
         kind: "permission_rules_changed".to_string(),

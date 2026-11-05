@@ -432,6 +432,7 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
 fn permission_requests_and_unconfigured_events_route_synchronously() {
     let mut h = harness();
     let event = |kind: &str| hotsheet_server::ChangeEvent {
+        live: None,
         cursor: None,
         store: "/work/demo.hs2".into(),
         kind: kind.into(),
@@ -578,6 +579,7 @@ async fn an_unrenewed_claim_reports_the_project_stalled() {
     )
     .await;
     let event = hotsheet_server::ChangeEvent {
+        live: None,
         cursor: None,
         store: h.store_id.clone(),
         kind: "claimed".into(),
@@ -666,6 +668,7 @@ async fn rules_match_linked_checkouts_and_use_their_alias() {
         let state = state.clone();
         let store = h.store_id.clone();
         let event = hotsheet_server::ChangeEvent {
+            live: None,
             cursor: None,
             store: store.clone(),
             kind: "claimed".into(),
@@ -721,6 +724,7 @@ async fn rules_match_linked_checkouts_and_use_their_alias() {
 
 fn claim_event(h: &Harness, kind: &str, id: &str) -> hotsheet_server::ChangeEvent {
     hotsheet_server::ChangeEvent {
+        live: None,
         cursor: None,
         store: h.store_id.clone(),
         kind: kind.into(),

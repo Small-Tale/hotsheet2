@@ -167,6 +167,7 @@ import { beginInteractionTiming } from '../interaction-performance';
 import type { DetailsFinishTask, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
 import { stringArray, tryParseJson } from '../json-value';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
+import { createLiveStateStore } from '../live-state';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
@@ -4021,6 +4022,8 @@ export async function startHotSheetWebClient() {
       } else showToast(`${current.name}: ${item.message}`);
     },
   });
+  // Server-pushed per-store live state that glance surfaces bind to (HS2-JTTQMY).
+  const liveStates = createLiveStateStore();
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
@@ -4049,6 +4052,7 @@ export async function startHotSheetWebClient() {
     removeClientNotifications: clientNotifications.removeProject,
     onActivity: announcerController.onActivity,
     loadRepositorySize,
+    liveStates,
   });
   const {
     feedbackDelivery,
@@ -6167,6 +6171,7 @@ export async function startHotSheetWebClient() {
       workerStreamStop?.();
       workerDetailRefresh?.dispose();
       disposeProjectChangeStreams();
+      liveStates.reset();
       announcerController.dispose();
       terminalDashboardController.dispose();
     },

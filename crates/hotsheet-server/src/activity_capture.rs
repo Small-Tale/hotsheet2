@@ -20,6 +20,7 @@ impl AppState {
         for event in admitted {
             hotsheet_ticketing::activity::record(store, &event)?;
             self.emit(ChangeEvent {
+                live: None,
                 cursor: None,
                 store: multistore::store_url_id(store),
                 kind: "activity".to_string(),

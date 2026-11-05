@@ -241,6 +241,7 @@ impl AppState {
             }
             let event_started = Instant::now();
             self.emit(ChangeEvent {
+                live: None,
                 cursor: None,
                 store: store_id.clone(),
                 kind: kind.to_string(),
@@ -277,6 +278,7 @@ impl AppState {
             Err(error) => self.schedule_index_repair(&store_id, ticket.id, &error),
         }
         self.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: store_id,
             kind: "deleted".into(),
@@ -336,6 +338,7 @@ impl AppState {
                 .any(|root| same_path(FsPath::new(root), store_root))
         }) {
             self.emit(ChangeEvent {
+                live: None,
                 cursor: None,
                 store: store_id.into(),
                 kind: "repository_size".into(),
@@ -356,6 +359,7 @@ impl AppState {
     pub fn announce(&self, store: String, message: String) {
         // WS-only: intentionally skip the EventLog ring (ephemeral, unlike `emit`).
         let _ = self.events.send(ChangeEvent {
+            live: None,
             cursor: None,
             store,
             kind: "announce".to_string(),
@@ -370,6 +374,7 @@ impl AppState {
 
     pub(crate) fn emit_drive_updated(&self, info: &client_drive::ClientConnectionInfo) {
         self.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: info.source.clone(),
             kind: "drive_updated".into(),
@@ -438,6 +443,7 @@ impl AppState {
         envelope: turn_stream::TurnStreamEnvelope,
     ) {
         self.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: multistore::store_url_id(store),
             kind: "turn_event".into(),
@@ -476,6 +482,9 @@ pub struct ChangeEvent {
     /// For `kind == "turn_event"`: bounded raw tool output/usage/activity/done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn: Option<turn_stream::TurnStreamEnvelope>,
+    /// For `kind == "live_state"` (HS2-JTTQMY): the store's complete live snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live: Option<Box<crate::live_state::LiveStoreState>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -546,6 +555,7 @@ mod event_log_tests {
 
     fn ev(n: usize) -> ChangeEvent {
         ChangeEvent {
+            live: None,
             cursor: None,
             store: "s".into(),
             kind: "created".into(),

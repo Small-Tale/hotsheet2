@@ -128,6 +128,7 @@ impl Cmd {
             | Terminal { .. }
             | Lifecycle { .. }
             | TicketFlow
+            | LiveState { .. }
             | Activity { .. }
             | Notifications { .. }
             | Processes
@@ -193,6 +194,7 @@ impl Cmd {
                 | Cmd::Terminal { .. }
                 | Cmd::Lifecycle { .. }
                 | Cmd::TicketFlow
+                | Cmd::LiveState { .. }
                 | Cmd::Activity { .. }
                 | Cmd::Notifications { .. }
                 | Cmd::Notify { .. }

@@ -592,7 +592,7 @@ pub fn ticket_usage(store: &FsStore, ticket: &str) -> io::Result<TicketUsage> {
 }
 
 /// Add `name` to the store's `.gitignore` if absent (raw metrics are per-device).
-fn ensure_gitignored(store: &FsStore, name: &str) -> io::Result<()> {
+pub fn ensure_gitignored(store: &FsStore, name: &str) -> io::Result<()> {
     let gi = store.root().join(".gitignore");
     let existing = fs::read_to_string(&gi).unwrap_or_default();
     if existing.lines().any(|l| l.trim() == name) {

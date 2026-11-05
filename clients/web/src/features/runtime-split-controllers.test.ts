@@ -6,6 +6,7 @@ import type { ProjectCloseDialogState } from '../components/project-close-dialog
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { InlineSearchToken } from '../inline-search';
 import type { Project } from '../interactions/types';
+import { createLiveStateStore } from '../live-state';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { replaceTicketSearch } from '../ticket-search-model';
@@ -230,6 +231,93 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     });
     await streams.onEvents.get('/api/a')!({ events: [{ kind: 'permission_asked', id: '3' }] });
     expect(refreshPermissions.mock.calls).toEqual([['a'], ['b'], ['b'], ['a']]);
+    owner.dispose();
+  });
+
+  it('change streams: live_state events apply, each resync reads live state once, idle time reads nothing (HS2-JTTQMY)', async () => {
+    const snapshot = (revision: number, state: string) => ({
+      store: 's1',
+      root: '/work/a.hs2',
+      name: 'a',
+      checkouts: ['a'],
+      epoch_ms: 1,
+      revision,
+      state,
+      activity: {
+        word: state === 'waiting_on_you' ? 'active' : state,
+        active_since_ms: 1,
+        stopped_at_ms: null,
+        last_progress_ms: 1,
+        idle_deadline_ms: null,
+        stalled: [],
+        halted: [],
+      },
+      claims: [],
+      workers: { live: 0, expected: 0 },
+      waiting: { count: 0, tickets: [] },
+      runway: { ready: 0, estimate_ms: null },
+      rates: {
+        tokens: { window_minutes: 5, minutes: [], peak_per_minute: 0 },
+        tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 0 },
+      },
+    });
+    const reads: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        reads.push(url);
+        return new Response(JSON.stringify({ epoch_ms: 1, stores: [snapshot(2, 'active')] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    const projects = signal([project('a')]),
+      noop = vi.fn(async () => undefined),
+      liveStates = createLiveStateStore(),
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        liveStates,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    expect(reads.filter((url) => url.endsWith('/live-state'))).toEqual(['/api/a/live-state']);
+    expect(liveStates.forProject('a')[0]?.revision).toBe(2);
+    await streams.onEvents.get('/api/a')!({
+      cursor: 9,
+      overflow: false,
+      events: [{ kind: 'live_state', store: 's1', id: 's1', slug: '', live: snapshot(3, 'stalled') }],
+    });
+    expect(liveStates.states.value.get('s1')?.state).toBe('stalled');
+    // An hour without events: no live-state read at all.
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(reads.filter((url) => url.endsWith('/live-state'))).toHaveLength(1);
+    // A reconnect reads once more; its older snapshot does not undo the pushed one.
+    await streams.onResync.get('/api/a')!('reconnect');
+    expect(reads.filter((url) => url.endsWith('/live-state'))).toHaveLength(2);
+    expect(liveStates.states.value.get('s1')).toMatchObject({ revision: 3, state: 'stalled' });
     owner.dispose();
   });
 

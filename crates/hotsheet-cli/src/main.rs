@@ -473,6 +473,13 @@ enum Cmd {
     },
     /// Read the selected store's current ticket-flow summary from the local server.
     TicketFlow,
+    /// Read the selected store's live state (state word, claims, waiting on you, runway,
+    /// rates, and 30-day peaks) from the local server, as glance surfaces see it
+    /// (HS2-JTTQMY). `--all` prints every store the server hosts.
+    LiveState {
+        #[arg(long)]
+        all: bool,
+    },
     /// Read the local server's recent activity timeline.
     Activity {
         #[arg(long)]

@@ -2178,6 +2178,95 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
     assert!(String::from_utf8_lossy(&offline.stderr).contains("start the web app"));
 }
 
+/// HS2-JTTQMY: `live-state` reads the local server's snapshot, selects this store by its
+/// root, prints every hosted store with `--all`, and fails clearly for an unhosted store.
+#[test]
+fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "live-test-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let hosted = serde_json::json!({
+        "epoch_ms": 1,
+        "stores": [
+            {"store": "other", "root": "/elsewhere/other.hs2", "state": "stopped"},
+            {"store": "mine", "root": store.canonicalize().unwrap(), "state": "waiting_on_you"},
+        ],
+    })
+    .to_string();
+    let unhosted = serde_json::json!({"epoch_ms": 1, "stores": []}).to_string();
+    let bodies = [hosted.clone(), hosted, unhosted];
+    let server = std::thread::spawn(move || {
+        for body in bodies {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), "GET /live-state HTTP/1.1");
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    let cli = |args: &[&str]| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .args(["-C", store.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let mine = cli(&["live-state"]);
+    assert!(
+        mine.status.success(),
+        "{}",
+        String::from_utf8_lossy(&mine.stderr)
+    );
+    let mine: serde_json::Value = serde_json::from_slice(&mine.stdout).unwrap();
+    assert_eq!(mine["store"], "mine");
+    assert_eq!(mine["state"], "waiting_on_you");
+    let all = cli(&["live-state", "--all"]);
+    assert!(all.status.success());
+    let all: serde_json::Value = serde_json::from_slice(&all.stdout).unwrap();
+    assert_eq!(all["stores"].as_array().unwrap().len(), 2);
+    let missing = cli(&["live-state"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("does not host"));
+    server.join().unwrap();
+}
+
 /// HS2-ZWBSH1: a Hot Sheet-launched terminal exports its session identity and the agent
 /// harness exports its own; a permission-hook child must see only what its fixture sets.
 const INHERITED_HOOK_SESSION_ENV: &[&str] = &[

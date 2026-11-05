@@ -8,6 +8,7 @@ import { createChangeWebSocketMultiplexers } from '../change-ws-mux';
 import { noteHostClientBuild } from '../client-update-notice';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { Project } from '../interactions/types';
+import type { LiveStateStore } from '../live-state';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { parsePermissionResolution } from '../permission-notifications';
 import {
@@ -57,6 +58,11 @@ export interface ProjectChangeStreamsDependencies {
   onActivity?: (project: Project, storeId: string, activity: ActivityEvent) => void;
   /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
   loadRepositorySize: (target: Project) => Promise<unknown>;
+  /**
+   * Per-store live state for glance surfaces (HS2-JTTQMY): `live_state` events apply to it,
+   * and each stream resync re-reads `GET /live-state` once. No timer reads it.
+   */
+  liveStates?: LiveStateStore;
   /**
    * Run every project's transport in the shared change-stream worker (HS2-SH9179). Off by default;
    * defaults to the `hotsheet.change-stream-worker` local setting. The main-thread stream remains
@@ -182,6 +188,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     removeClientNotifications,
     onActivity,
     loadRepositorySize,
+    liveStates,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
   const ticketRefresh = createProjectChangeRefresh<Project>(
@@ -281,6 +288,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             await Promise.all([
               refreshPermissions(current.id),
               ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
+              ...(liveStates ? [liveStates.resync(new Api(current.apiPath))] : []),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
@@ -298,6 +306,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               await loadAnalytics?.(current);
           },
           onEvents: async (response) => {
+            liveStates?.applyEvents(response.events);
             const acceptedTurns = new Set(turnStreamEvents(response));
             for (const event of response.events) {
               if (event.kind === 'permission_resolved') {

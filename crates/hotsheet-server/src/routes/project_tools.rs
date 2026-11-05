@@ -608,6 +608,7 @@ pub(crate) async fn save_custom_views(
     custom_views::replace(&Settings::new(state.store.root()), &views)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: String::new(),
         kind: "views_updated".into(),
@@ -642,6 +643,7 @@ pub(crate) async fn save_checkout_custom_views(
     custom_views::replace(&settings, &views)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: checkout.id,
         kind: "views_updated".into(),
@@ -850,6 +852,7 @@ pub(crate) async fn acknowledge_notification(
         .acknowledge(&id)
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown notification"))?;
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: notification.store.clone().unwrap_or_default(),
         kind: "notification_acknowledged".into(),

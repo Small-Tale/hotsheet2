@@ -242,6 +242,7 @@ pub(super) async fn queue_jira_updates(
 
 fn emit_operation_event(state: &AppState, connection_id: &str, native_id: &str) {
     state.emit(ChangeEvent {
+        live: None,
         cursor: None,
         store: connection_id.into(),
         kind: "updated".into(),

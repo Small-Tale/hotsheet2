@@ -32,6 +32,8 @@ import type {
   GuidanceRulePreview,
   GuidanceSourceReview,
   GuidanceSourceUpdate,
+  LiveStateList,
+  LiveStoreState,
   MessageConnectionReceipt,
   NotificationChannel,
   NotificationChannelRemoval,
@@ -750,6 +752,73 @@ const unavailableAnalyticsSource = shape<CheckoutAnalytics['unavailable_sources'
 export const parseCheckoutAnalytics = shape<CheckoutAnalytics>('checkout analytics', {
   stores: listOf(analyticsStore.check),
   unavailable_sources: listOf(unavailableAnalyticsSource.check),
+});
+
+/* ---- Live state (HS2-JTTQMY) ----------------------------------------------------------- */
+const liveWords = new Set(['active', 'stopped', 'may_be_stuck', 'stalled', 'halted', 'waiting_on_you']);
+const isLiveWord: Check = (field) => typeof field === 'string' && liveWords.has(field);
+const isNullableNumber: Check = (field) => field === null || isNumber(field);
+const isNullableString: Check = (field) => field === null || isString(field);
+const liveClaim = shape('live claim', {
+  ticket: isString,
+  slug: isString,
+  title: isString,
+  worker: isString,
+  phase: isNullableString,
+  claimed_at_ms: isNullableNumber,
+  lease_expires_at_ms: isNumber,
+  eta_at_ms: isNullableNumber,
+});
+const liveActivity = shape('live activity', {
+  word: isLiveWord,
+  active_since_ms: isNullableNumber,
+  stopped_at_ms: isNullableNumber,
+  last_progress_ms: isNullableNumber,
+  idle_deadline_ms: isNullableNumber,
+  stalled: listOf(shape('live stalled claim', { slug: isString, worker: isString }).check),
+  halted: listOf(shape('live halt', { worker: isString, message: isString, at_ms: isNumber }).check),
+});
+const liveWaiting = shape('live waiting', {
+  count: isNumber,
+  tickets: listOf(
+    shape('live waiting ticket', {
+      ticket: isString,
+      slug: isString,
+      title: isString,
+      reason: (field) => field === 'feedback' || field === 'review',
+    }).check,
+  ),
+});
+const liveRates = shape('live rates', {
+  tokens: shape('live token rate', {
+    window_minutes: isNumber,
+    minutes: listOf(shape('live token minute', { start_ms: isNumber, tokens: isNumber }).check),
+    peak_per_minute: isNumber,
+  }).check,
+  tickets_updated: shape('live updated rate', {
+    window_minutes: isNumber,
+    at_ms: listOf(isNumber),
+    peak_per_hour: isNumber,
+  }).check,
+});
+export const parseLiveStoreState = shape<LiveStoreState>('live state', {
+  store: isString,
+  root: isString,
+  name: isString,
+  checkouts: isStringArray,
+  epoch_ms: isNumber,
+  revision: isNumber,
+  state: isLiveWord,
+  activity: liveActivity.check,
+  claims: listOf(liveClaim.check),
+  workers: shape('live workers', { live: isNumber, expected: isNumber }).check,
+  waiting: liveWaiting.check,
+  runway: shape('live runway', { ready: isNumber, estimate_ms: isNullableNumber }).check,
+  rates: liveRates.check,
+});
+export const parseLiveStateList = shape<LiveStateList>('live state list', {
+  epoch_ms: isNumber,
+  stores: listOf(parseLiveStoreState.check),
 });
 
 export const parseCheckoutActivity: ResponseParser<CheckoutActivityEvent[]> = (value) =>

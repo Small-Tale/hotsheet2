@@ -26,6 +26,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             LifecycleCmd::Restart => print_local_server_json(path, "POST", "lifecycle/restart"),
         },
         Cmd::TicketFlow => print_local_server_json(path, "GET", "analytics/tickets"),
+        Cmd::LiveState { all } => cmd_live_state(path, all),
         Cmd::Activity {
             ticket,
             session,
@@ -702,6 +703,36 @@ pub(crate) fn filtered_route(base: &str, filters: &[(&str, String)]) -> String {
         .collect::<Vec<_>>()
         .join("&");
     format!("{base}?{query}")
+}
+
+/// Print the local server's live state (HS2-JTTQMY): the selected store's snapshot, or
+/// every hosted store's with `all`. The server owns the claim tracker, so there is no
+/// serverless form; with no server running this fails like the other server reads.
+fn cmd_live_state(store: &Path, all: bool) -> Result<()> {
+    let body = local_server_json(store, "GET", "live-state")?;
+    if all {
+        println!("{}", serde_json::to_string_pretty(&body)?);
+        return Ok(());
+    }
+    let wanted = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let found = body["stores"].as_array().and_then(|stores| {
+        stores.iter().find(|entry| {
+            entry["root"].as_str().is_some_and(|root| {
+                let root = Path::new(root);
+                root.canonicalize().unwrap_or_else(|_| root.to_path_buf()) == wanted
+            })
+        })
+    });
+    match found {
+        Some(entry) => {
+            println!("{}", serde_json::to_string_pretty(entry)?);
+            Ok(())
+        }
+        None => bail!(
+            "the local server does not host {}; open the project, or pass --all",
+            store.display()
+        ),
+    }
 }
 
 pub(crate) fn print_local_server_json(store: &Path, method: &str, route: &str) -> Result<()> {

@@ -205,6 +205,7 @@ pub(crate) async fn report_claude_turn(
             let store = state.store.clone();
             let session_id = body.session_id;
             let turn_id = start.turn_id.clone();
+            let live = state.clone();
             let result = tokio::task::spawn_blocking(move || {
                 let prices = hotsheet_ticketing::pricing::load_prices(&store);
                 // Claude can invoke Stop before its last transcript row is visible. Wait
@@ -241,6 +242,8 @@ pub(crate) async fn report_claude_turn(
                         &start.turn_id,
                         turn.categories,
                     )?;
+                    // Tokens per minute moved (HS2-JTTQMY).
+                    crate::live_state::touch(&live, &crate::multistore::store_url_id(&store));
                 }
                 Ok::<(), std::io::Error>(())
             })

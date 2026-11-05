@@ -23,6 +23,7 @@ mod health_scan;
 mod hosting;
 mod image_crop_cache;
 pub mod lifecycle;
+pub mod live_state;
 pub mod mcp_presence;
 pub mod media;
 pub mod multistore;
@@ -410,6 +411,8 @@ pub struct AppState {
     notifications: notifications::NotificationHub,
     /// Notifier plugin routing state: cooldowns, ticket snapshots, test overrides (HS2-R5HTZN).
     notification_delivery: notification_router::NotificationDelivery,
+    /// Per-store live snapshots pushed to glance surfaces (HS2-JTTQMY).
+    live_states: live_state::LiveStates,
     tts: tts::TtsProviders,
     source_revision: source_revision::SourceRevisionMonitor,
     /// Who launched this server process, reported by `/health`, `/compatibility`, and every
@@ -512,6 +515,7 @@ impl AppState {
             let log = event_log.clone();
             permissions.set_on_pending(move |req| {
                 let ev = ChangeEvent {
+                    live: None,
                     cursor: None,
                     store: req.project.clone(),
                     kind: "permission_asked".to_string(),
@@ -533,6 +537,7 @@ impl AppState {
                     &log,
                     &events,
                     ChangeEvent {
+                        live: None,
                         cursor: None,
                         store: req.project.clone(),
                         kind: "permission_resolved".into(),
@@ -557,6 +562,7 @@ impl AppState {
                     &command_event_log,
                     &command_events,
                     ChangeEvent {
+                        live: None,
                         cursor: None,
                         store: run.project.clone(),
                         kind: "command_updated".into(),
@@ -638,6 +644,7 @@ impl AppState {
             commands,
             notifications: Default::default(),
             notification_delivery: Default::default(),
+            live_states: Default::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
             launcher: Arc::new(Mutex::new(UNSPECIFIED_LAUNCHER.to_owned())),
@@ -1925,6 +1932,12 @@ pub fn app(state: AppState) -> Router {
             post(interrupt_drive_turn),
         )
         .route("/analytics/tickets", get(ticket_flow_summary))
+        // Per-store live state for glance surfaces (HS2-JTTQMY).
+        .route("/live-state", get(live_state::list_live_states))
+        .route(
+            "/stores/{store_id}/live-state",
+            get(live_state::store_live_state),
+        )
         .route("/analytics/usage", get(usage_metrics_summary))
         .route("/confidence-report", get(confidence_report))
         .route("/phase-report", get(phase_report))

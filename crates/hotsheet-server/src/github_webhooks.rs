@@ -526,6 +526,7 @@ fn receive_sync(
                 .github_deliveries
                 .mark_verified(&verification_key, secret.as_bytes());
             state.emit(ChangeEvent {
+                live: None,
                 cursor: None,
                 store: connection_id,
                 kind: "deleted".into(),
@@ -588,6 +589,7 @@ fn receive_sync(
         .mark_verified(&verification_key, secret.as_bytes());
     if fresh {
         state.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: connection_id,
             kind: "changed".into(),

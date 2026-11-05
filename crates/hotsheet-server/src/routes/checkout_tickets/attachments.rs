@@ -517,6 +517,7 @@ pub(crate) async fn delete_checkout_ticket_attachment(
                     error => provider_transfer_error(error),
                 })?;
             state.emit(ChangeEvent {
+                live: None,
                 cursor: None,
                 store: source.connection_id.clone(),
                 kind: "attachment_removed".into(),
@@ -674,6 +675,7 @@ pub(crate) async fn update_checkout_ticket_attachment_markup(
             )
             .map_err(provider_transfer_error)?;
         state.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: source.connection_id.clone(),
             kind: "attachment_markup_updated".into(),

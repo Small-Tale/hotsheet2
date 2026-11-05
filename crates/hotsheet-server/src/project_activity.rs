@@ -6,8 +6,13 @@
 //! but nothing progressed for the idle window, and a **halted** session is reported for the
 //! stores its worker holds claims in (HS2-P57XHV). Pure state; the router supplies the
 //! clock and schedules the checks this returns.
+//!
+//! [`ProjectActivity::live`] reads the same state as a continuous word for clients
+//! (HS2-JTTQMY): the one-shot reports above stay the notification path, while the tracker
+//! keeps the last period's outcome, recorded halts, per-ticket progress times, and the
+//! workers seen in the period, so glance surfaces show the states notifications use.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use time::{Duration, OffsetDateTime};
 
@@ -17,6 +22,9 @@ pub const IDLE_GRACE: Duration = Duration::seconds(120);
 
 /// How long claims may be held without progress before the store may be stuck.
 pub const IDLE_WINDOW: Duration = Duration::minutes(30);
+
+/// How far back per-ticket progress times are kept for "tickets updated per hour".
+pub const UPDATED_WINDOW: Duration = Duration::minutes(60);
 
 /// One ticket's claim state as the router observed it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +77,54 @@ pub struct StopReport {
     pub detail: Option<String>,
 }
 
+/// How the last active period ended, kept until the next period starts (HS2-JTTQMY).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Outcome {
+    reason: StopReason,
+    at: OffsetDateTime,
+    stalled: Vec<(String, String)>,
+}
+
+/// A halt a terminal reported for a worker that held claims here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HaltNote {
+    pub worker: String,
+    pub message: String,
+    pub at: OffsetDateTime,
+}
+
+/// The tracker's continuous state word for one store (HS2-JTTQMY). The words match the
+/// notification reasons; `Active` covers the release grace, as notifications do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivityWord {
+    Active,
+    Stopped,
+    MayBeStuck,
+    Stalled,
+    Halted,
+}
+
+/// What [`ProjectActivity::live`] reports for a store at a moment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveActivity {
+    pub word: ActivityWord,
+    pub active_since: Option<OffsetDateTime>,
+    /// When the last period ended (stopped or stalled); `None` while a period is open.
+    pub stopped_at: Option<OffsetDateTime>,
+    pub last_progress: Option<OffsetDateTime>,
+    /// When the store will count as may-be-stuck without further progress.
+    pub idle_deadline: Option<OffsetDateTime>,
+    /// `(slug, worker)` of claims whose lease expired without renewal (Stalled only).
+    pub stalled: Vec<(String, String)>,
+    /// Halts of workers that still hold a live claim here.
+    pub halted: Vec<HaltNote>,
+    /// Distinct workers that held a claim during the current (or stalled) period.
+    pub expected_workers: usize,
+    /// One time per ticket whose last progress write is inside [`UPDATED_WINDOW`], oldest
+    /// first. Claim renewals are not progress.
+    pub updated: Vec<OffsetDateTime>,
+}
+
 #[derive(Debug, Default)]
 struct StoreActivity {
     claims: BTreeMap<String, Claim>,
@@ -80,6 +136,26 @@ struct StoreActivity {
     stalled: Vec<(String, String)>,
     last_progress: Option<OffsetDateTime>,
     idle_reported: bool,
+    outcome: Option<Outcome>,
+    halts: BTreeMap<String, HaltNote>,
+    /// Last progress write per ticket id, pruned to [`UPDATED_WINDOW`].
+    updated: HashMap<String, OffsetDateTime>,
+    period_workers: BTreeSet<String>,
+}
+
+impl StoreActivity {
+    fn holds_live_claim(&self, worker: &str, now: OffsetDateTime) -> bool {
+        self.claims
+            .values()
+            .any(|c| c.worker == worker && c.expires > now)
+    }
+
+    /// A halt ends once its worker holds no claim here any more.
+    fn drop_orphan_halts(&mut self) {
+        let workers: BTreeSet<&str> = self.claims.values().map(|c| c.worker.as_str()).collect();
+        self.halts
+            .retain(|worker, _| workers.contains(worker.as_str()));
+    }
 }
 
 #[derive(Debug)]
@@ -159,6 +235,40 @@ impl ProjectActivity {
         reports
     }
 
+    /// Remember a reported halt for every store where `worker` holds a live claim, so the
+    /// live word reads Halted until the session resumes, progresses on its claim, or loses
+    /// its claims. Returns the stores that changed.
+    pub fn note_halt(&mut self, worker: &str, message: &str, now: OffsetDateTime) -> Vec<String> {
+        let mut changed: Vec<String> = Vec::new();
+        for (store, activity) in &mut self.stores {
+            if activity.holds_live_claim(worker, now) {
+                activity.halts.insert(
+                    worker.to_string(),
+                    HaltNote {
+                        worker: worker.to_string(),
+                        message: message.to_string(),
+                        at: now,
+                    },
+                );
+                changed.push(store.clone());
+            }
+        }
+        changed.sort();
+        changed
+    }
+
+    /// The worker's terminal reported that its session resumed: clear its halts.
+    /// Returns the stores that changed.
+    pub fn resumed(&mut self, worker: &str) -> Vec<String> {
+        let mut changed: Vec<String> = self
+            .stores
+            .iter_mut()
+            .filter_map(|(store, activity)| activity.halts.remove(worker).map(|_| store.clone()))
+            .collect();
+        changed.sort();
+        changed
+    }
+
     /// Record a ticket's claim state. Returns when the router should next call
     /// [`Self::check`] for this store (a lease expiry or the end of the idle grace).
     /// Callers run `check` first, so a period whose grace already ended is reported before
@@ -175,7 +285,13 @@ impl ProjectActivity {
         if observation.progressed {
             activity.last_progress = Some(now);
             activity.idle_reported = false;
+            activity.updated.insert(observation.ticket.clone(), now);
+            // Progress on its own claim shows a halted session is working again.
+            if let Some((worker, _)) = &observation.claim {
+                activity.halts.remove(worker);
+            }
         }
+        activity.updated.retain(|_, at| *at + UPDATED_WINDOW > now);
         if observation.completed
             && activity.active_since.is_some()
             && !activity.completed.contains(&observation.slug)
@@ -189,7 +305,10 @@ impl ProjectActivity {
                     activity.active_since = Some(now);
                     activity.last_progress = Some(now);
                     activity.idle_reported = false;
+                    activity.outcome = None;
+                    activity.period_workers.clear();
                 }
+                activity.period_workers.insert(worker.clone());
                 activity.idle_since = None;
                 activity.claims.insert(
                     observation.ticket,
@@ -204,6 +323,7 @@ impl ProjectActivity {
             _ => {
                 if was_claimed {
                     activity.claims.remove(&observation.ticket);
+                    activity.drop_orphan_halts();
                     if activity.claims.is_empty() {
                         activity.idle_since = Some(now);
                     }
@@ -237,6 +357,9 @@ impl ProjectActivity {
                 activity.stalled.push((claim.slug, claim.worker));
             }
         }
+        if stalled_now {
+            activity.drop_orphan_halts();
+        }
         if stalled_now && activity.claims.is_empty() {
             // The unrenewed lease was itself the grace period: report the stall now.
             activity.idle_since = Some(now - grace);
@@ -261,6 +384,14 @@ impl ProjectActivity {
                 };
                 activity.active_since = None;
                 activity.idle_since = None;
+                activity.outcome = Some(Outcome {
+                    reason: report.reason,
+                    at: now,
+                    stalled: report.stalled.clone(),
+                });
+                if report.reason == StopReason::Finished {
+                    activity.period_workers.clear();
+                }
                 Some(report)
             }
             _ => idle_report(activity, idle, now),
@@ -271,6 +402,110 @@ impl ProjectActivity {
     /// Live claims the tracker holds for a store.
     pub fn active_claims(&self, store: &str) -> usize {
         self.stores.get(store).map_or(0, |a| a.claims.len())
+    }
+
+    /// The idle window in force (`None` when idle detection is off).
+    pub fn idle_window(&self) -> Option<Duration> {
+        self.idle
+    }
+
+    /// The store's continuous live word at `now` (HS2-JTTQMY). Pure: it never reports or
+    /// changes state, so the caller re-reads it after each observation or check.
+    ///
+    /// Precedence: **Halted** (a worker with a live claim reported a halt) over
+    /// **Stalled** (no live claim remains and a lease expired unrenewed, until a new claim
+    /// starts a period) over **May be stuck** (claims held, no progress for the idle
+    /// window) over **Active** (a period is open, including the release grace) over
+    /// **Stopped**.
+    pub fn live(&self, store: &str, now: OffsetDateTime) -> LiveActivity {
+        let Some(activity) = self.stores.get(store) else {
+            return LiveActivity {
+                word: ActivityWord::Stopped,
+                active_since: None,
+                stopped_at: None,
+                last_progress: None,
+                idle_deadline: None,
+                stalled: Vec::new(),
+                halted: Vec::new(),
+                expected_workers: 0,
+                updated: Vec::new(),
+            };
+        };
+        let live: Vec<&Claim> = activity
+            .claims
+            .values()
+            .filter(|c| c.expires > now)
+            .collect();
+        // Leases that expired but were not checked yet count as stalled already.
+        let mut stalled: Vec<(String, String)> = activity.stalled.clone();
+        stalled.extend(
+            activity
+                .claims
+                .values()
+                .filter(|c| c.expires <= now)
+                .map(|c| (c.slug.clone(), c.worker.clone())),
+        );
+        if stalled.is_empty() && activity.active_since.is_none() {
+            if let Some(outcome) = activity
+                .outcome
+                .as_ref()
+                .filter(|o| o.reason == StopReason::Stalled)
+            {
+                stalled = outcome.stalled.clone();
+            }
+        }
+        let halted: Vec<HaltNote> = activity
+            .halts
+            .values()
+            .filter(|h| live.iter().any(|c| c.worker == h.worker))
+            .cloned()
+            .collect();
+        let idle_deadline = self.idle.filter(|_| !live.is_empty()).and_then(|idle| {
+            activity
+                .last_progress
+                .or(activity.active_since)
+                .map(|at| at + idle)
+        });
+        let word = if !halted.is_empty() {
+            ActivityWord::Halted
+        } else if live.is_empty() && !stalled.is_empty() {
+            ActivityWord::Stalled
+        } else if idle_deadline.is_some_and(|deadline| deadline <= now) {
+            ActivityWord::MayBeStuck
+        } else if activity.active_since.is_some() {
+            ActivityWord::Active
+        } else {
+            ActivityWord::Stopped
+        };
+        let mut updated: Vec<OffsetDateTime> = activity
+            .updated
+            .values()
+            .copied()
+            .filter(|at| *at + UPDATED_WINDOW > now)
+            .collect();
+        updated.sort();
+        LiveActivity {
+            word,
+            active_since: activity.active_since,
+            stopped_at: activity
+                .outcome
+                .as_ref()
+                .filter(|_| activity.active_since.is_none())
+                .map(|o| o.at),
+            last_progress: activity.last_progress,
+            idle_deadline,
+            stalled: if word == ActivityWord::Stalled {
+                stalled
+            } else {
+                Vec::new()
+            },
+            halted,
+            expected_workers: match word {
+                ActivityWord::Stopped => 0,
+                _ => activity.period_workers.len(),
+            },
+            updated,
+        }
     }
 }
 
@@ -534,5 +769,181 @@ mod tests {
         p.observe("a", release("A", false), t(10));
         assert!(p.check("a", t(130)).0.is_some());
         assert_eq!(p.check("b", t(130)).0, None);
+    }
+
+    fn word(p: &ProjectActivity, store: &str, at: i64) -> ActivityWord {
+        p.live(store, t(at)).word
+    }
+
+    fn progressed(mut observation: ClaimObservation) -> ClaimObservation {
+        observation.progressed = true;
+        observation
+    }
+
+    #[test]
+    fn hs2_jttqmy_live_walks_active_idle_progress_grace_and_stopped() {
+        let mut p = ProjectActivity::default();
+        assert_eq!(word(&p, "s", 0), ActivityWord::Stopped, "never seen");
+        p.observe("s", claim("A", "w1", 99_999), t(0));
+        let live = p.live("s", t(1));
+        assert_eq!(live.word, ActivityWord::Active);
+        assert_eq!(live.active_since, Some(t(0)));
+        assert_eq!(live.expected_workers, 1);
+        assert_eq!(live.idle_deadline, Some(t(1800)));
+        // The idle window passes without a check: the word follows the clock.
+        assert_eq!(word(&p, "s", 1799), ActivityWord::Active);
+        assert_eq!(word(&p, "s", 1800), ActivityWord::MayBeStuck);
+        // The one-shot report fires and the word stays until progress.
+        assert_eq!(p.check("s", t(1800)).0.unwrap().reason, StopReason::Idle);
+        assert_eq!(word(&p, "s", 2500), ActivityWord::MayBeStuck);
+        // A renewal is not progress.
+        p.observe("s", claim("A", "w1", 99_999), t(2600));
+        assert_eq!(word(&p, "s", 2601), ActivityWord::MayBeStuck);
+        p.observe("s", progressed(claim("A", "w1", 99_999)), t(2700));
+        assert_eq!(word(&p, "s", 2701), ActivityWord::Active);
+        assert_eq!(p.live("s", t(2701)).last_progress, Some(t(2700)));
+        // Release: the grace still reads Active, as notifications wait for it.
+        p.observe("s", release("A", true), t(3000));
+        assert_eq!(word(&p, "s", 3001), ActivityWord::Active);
+        assert_eq!(p.live("s", t(3001)).idle_deadline, None, "no claims");
+        let report = p.check("s", t(3120)).0.unwrap();
+        assert_eq!(report.reason, StopReason::Finished);
+        let live = p.live("s", t(3121));
+        assert_eq!(live.word, ActivityWord::Stopped);
+        assert_eq!(live.stopped_at, Some(t(3120)));
+        assert_eq!(live.expected_workers, 0);
+        assert!(live.stalled.is_empty());
+    }
+
+    #[test]
+    fn hs2_jttqmy_live_stalled_survives_the_report_until_a_new_period() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 600), t(0));
+        p.observe("s", claim("B", "w2", 300), t(0));
+        assert_eq!(p.live("s", t(10)).expected_workers, 2);
+        // One lease lapses while the other is live: still active.
+        assert_eq!(word(&p, "s", 300), ActivityWord::Active);
+        // Both lapse before any check ran: stalled already.
+        let live = p.live("s", t(600));
+        assert_eq!(live.word, ActivityWord::Stalled);
+        assert_eq!(live.stalled.len(), 2);
+        assert_eq!(p.check("s", t(600)).0.unwrap().reason, StopReason::Stalled);
+        let live = p.live("s", t(5000));
+        assert_eq!(
+            live.word,
+            ActivityWord::Stalled,
+            "survives the one-shot report"
+        );
+        assert_eq!(live.stopped_at, Some(t(600)));
+        assert_eq!(
+            live.expected_workers, 2,
+            "the stalled workers were expected"
+        );
+        assert_eq!(
+            live.stalled,
+            [
+                ("HS2-A".to_string(), "w1".to_string()),
+                ("HS2-B".to_string(), "w2".to_string())
+            ]
+        );
+        // A late release of an expired claim changes nothing.
+        p.observe("s", release("A", false), t(5100));
+        assert_eq!(word(&p, "s", 5101), ActivityWord::Stalled);
+        // A new claim opens a new period and clears the stall and the old workers.
+        p.observe("s", claim("C", "w3", 99_999), t(6000));
+        let live = p.live("s", t(6001));
+        assert_eq!(live.word, ActivityWord::Active);
+        assert!(live.stalled.is_empty());
+        assert_eq!(live.stopped_at, None);
+        assert_eq!(live.expected_workers, 1);
+        // That period finishes cleanly: Stopped, not Stalled.
+        p.observe("s", release("C", true), t(6100));
+        p.check("s", t(6220));
+        assert_eq!(word(&p, "s", 6221), ActivityWord::Stopped);
+    }
+
+    #[test]
+    fn hs2_jttqmy_live_halt_clears_on_resume_own_progress_or_release() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 99_999), t(0));
+        p.observe("s", claim("B", "w2", 99_999), t(0));
+        p.observe("other", claim("C", "w2", 99_999), t(0));
+        assert_eq!(p.note_halt("w1", "API overloaded", t(10)), ["s"]);
+        let live = p.live("s", t(11));
+        assert_eq!(live.word, ActivityWord::Halted);
+        assert_eq!(live.halted[0].message, "API overloaded");
+        assert_eq!(word(&p, "other", 11), ActivityWord::Active);
+        // Repeating the halt is idempotent; another worker's progress does not clear it.
+        assert_eq!(p.note_halt("w1", "API overloaded", t(20)), ["s"]);
+        p.observe("s", progressed(claim("B", "w2", 99_999)), t(30));
+        assert_eq!(word(&p, "s", 31), ActivityWord::Halted);
+        // Halted outranks may-be-stuck.
+        assert_eq!(word(&p, "s", 99_000), ActivityWord::Halted);
+        // Progress on its own claim clears it.
+        p.observe("s", progressed(claim("A", "w1", 99_999)), t(40));
+        assert_eq!(word(&p, "s", 41), ActivityWord::Active);
+        // A resume clears it.
+        p.note_halt("w1", "again", t(50));
+        assert_eq!(p.resumed("w1"), ["s"]);
+        assert!(p.resumed("w1").is_empty(), "already clear");
+        assert_eq!(word(&p, "s", 51), ActivityWord::Active);
+        // Losing its claims clears it, and a halt without a live claim records nothing.
+        p.note_halt("w1", "third", t(60));
+        p.observe("s", release("A", false), t(70));
+        assert_eq!(word(&p, "s", 71), ActivityWord::Active);
+        assert!(p.note_halt("w1", "late", t(80)).is_empty());
+        assert!(p.note_halt("w9", "unknown", t(80)).is_empty());
+        // A halted worker's lease lapsing drops the halt; the store then stalls.
+        let mut q = ProjectActivity::default();
+        q.observe("s", claim("A", "w1", 100), t(0));
+        q.note_halt("w1", "x", t(10));
+        assert_eq!(word(&q, "s", 99), ActivityWord::Halted);
+        assert_eq!(word(&q, "s", 100), ActivityWord::Stalled);
+        q.check("s", t(100));
+        assert_eq!(word(&q, "s", 101), ActivityWord::Stalled);
+        assert!(q.live("s", t(101)).halted.is_empty());
+    }
+
+    #[test]
+    fn hs2_jttqmy_updated_counts_distinct_progressed_tickets_in_the_last_hour() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", progressed(release("A", false)), t(0));
+        p.observe("s", progressed(release("B", false)), t(100));
+        // The same ticket again counts once, at its latest time.
+        p.observe("s", progressed(release("A", false)), t(200));
+        // A claim and its renewal are not progress.
+        p.observe("s", claim("C", "w1", 99_999), t(300));
+        p.observe("s", claim("C", "w1", 99_999), t(400));
+        assert_eq!(p.live("s", t(500)).updated, [t(100), t(200)]);
+        // B ages out of the 60-minute window first.
+        assert_eq!(p.live("s", t(3700)).updated, [t(200)]);
+        assert!(p.live("s", t(3800)).updated.is_empty());
+        // A later write prunes the stored map, then refills it.
+        p.observe("s", progressed(release("D", false)), t(9000));
+        assert_eq!(p.live("s", t(9001)).updated, [t(9000)]);
+    }
+
+    #[test]
+    fn hs2_jttqmy_live_without_idle_detection_never_reads_may_be_stuck() {
+        let mut p = ProjectActivity::default();
+        p.set_windows(IDLE_GRACE, None);
+        assert_eq!(p.idle_window(), None);
+        p.observe("s", claim("A", "w1", 99_999), t(0));
+        assert_eq!(word(&p, "s", 90_000), ActivityWord::Active);
+        assert_eq!(p.live("s", t(1)).idle_deadline, None);
+    }
+
+    #[test]
+    fn hs2_jttqmy_live_empty_then_refill_repeats_the_cycle() {
+        let mut p = ProjectActivity::with_grace(Duration::seconds(10));
+        for round in 0..3 {
+            let base = round * 1000;
+            p.observe("s", claim("A", "w1", base + 500), t(base));
+            assert_eq!(word(&p, "s", base + 1), ActivityWord::Active);
+            p.observe("s", release("A", true), t(base + 50));
+            p.observe("s", release("A", true), t(base + 51));
+            p.check("s", t(base + 60));
+            assert_eq!(word(&p, "s", base + 61), ActivityWord::Stopped);
+        }
     }
 }

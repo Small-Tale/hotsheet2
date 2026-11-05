@@ -116,6 +116,7 @@ pub(crate) fn emit_transitions(state: &AppState, transitions: &[Transition]) {
             Scope::Terminal(id) => id.clone(),
         };
         state.emit(ChangeEvent {
+            live: None,
             cursor: None,
             store: String::new(),
             kind: "mcp_presence".into(),

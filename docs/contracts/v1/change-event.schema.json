@@ -26,7 +26,18 @@
         "requested_by": { "type": ["string", "null"] }
       }
     },
-    "turn": { "$ref": "#/$defs/turn" }
+    "turn": { "$ref": "#/$defs/turn" },
+    "live": {
+      "type": "object",
+      "description": "For kind live_state (HS2-JTTQMY): the store's complete LiveStoreState snapshot, as GET /stores/{store_id}/live-state returns it.",
+      "required": ["store", "epoch_ms", "revision", "state"],
+      "properties": {
+        "store": { "type": "string" },
+        "epoch_ms": { "type": "integer" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "state": { "enum": ["active", "stopped", "may_be_stuck", "stalled", "halted", "waiting_on_you"] }
+      }
+    }
   },
   "$defs": {
     "activity": {

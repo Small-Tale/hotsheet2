@@ -7,6 +7,10 @@
 //! The bus carries ids, not before/after states, so status, feedback, and blocked
 //! transitions are found by comparing each changed ticket with a snapshot seeded from the
 //! index when the router starts.
+//!
+//! The claim tracker always runs, rule or not: it is also the source of each store's live
+//! state word for clients (HS2-JTTQMY, [`crate::live_state`]). Only its messages are gated
+//! on a `project.stopped` rule.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -26,7 +30,9 @@ use tokio::sync::broadcast::error::RecvError;
 
 use crate::AppState;
 use crate::events::ChangeEvent;
-use crate::project_activity::{ClaimObservation, ProjectActivity, StopReason, StopReport};
+use crate::project_activity::{
+    ClaimObservation, LiveActivity, ProjectActivity, StopReason, StopReport,
+};
 
 /// Change kinds that mean a ticket file was written.
 /// `renewed` moves a lease expiry; without it a renewed claim would read as stalled.
@@ -111,10 +117,10 @@ pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHand
         if wants(&config, is_ticket_event) {
             seed_all(&seeding);
         }
-        if wants(&config, |kind| *kind == EventKind::ProjectStopped) {
-            for (store, _) in seeding.host.locations() {
-                seed_activity(&seeding, &store);
-            }
+        // The live state needs the tracker whether or not a rule names project.stopped.
+        apply_windows(&seeding, &config);
+        for (store, _) in seeding.host.locations() {
+            seed_activity(&seeding, &store);
         }
     };
     if let Err(error) = tokio::task::spawn_blocking(seed).await {
@@ -232,8 +238,15 @@ fn seed_store(state: &AppState, store: &str) {
 /// Route one bus event to the configured channels. Returns the delivery records (empty
 /// when nothing matched). Public so tests drive the router without a runtime.
 pub fn route_change_event(state: &AppState, event: &ChangeEvent) -> Vec<DeliveryRecord> {
+    if event.kind == crate::live_state::LIVE_STATE_KIND {
+        // The router's own output; nothing feeds back.
+        return Vec::new();
+    }
     let home = state.machine_home();
-    let config = match NotificationConfig::load(home) {
+    let loaded = NotificationConfig::load(home);
+    // HS2-JTTQMY: the claim tracker runs for live state even without a rule.
+    let stop_messages = track_activity(state, loaded.as_ref().ok(), event);
+    let config = match loaded {
         Ok(config) => config,
         Err(error) => {
             tracing::warn!(%error, "notification config is unreadable; nothing was routed");
@@ -249,15 +262,52 @@ pub fn route_change_event(state: &AppState, event: &ChangeEvent) -> Vec<Delivery
             .iter()
             .any(|r| r.enabled && r.events.iter().any(|e| kinds.contains(e)))
     };
-    let messages = match event.kind.as_str() {
+    let mut messages = if wants(&[EventKind::ProjectStopped]) {
+        stop_messages
+    } else {
+        Vec::new()
+    };
+    match event.kind.as_str() {
         "permission_asked" if wants(&[EventKind::PermissionRequested]) => {
-            vec![permission_message(state, event)]
+            messages.push(permission_message(state, event));
         }
         "notification" if wants(&[EventKind::Notification]) => {
-            hub_message(state, event).into_iter().collect()
+            messages.extend(hub_message(state, event));
         }
-        "activity" | "turn_event" if wants(&[EventKind::ProjectStopped]) => {
-            apply_windows(state, &config);
+        kind if TICKET_KINDS.contains(&kind)
+            && wants(&[
+                EventKind::TicketStatusChanged,
+                EventKind::TicketFeedbackNeeded,
+                EventKind::TicketBlocked,
+            ]) =>
+        {
+            messages.extend(ticket_messages(state, &config, event));
+        }
+        _ => {}
+    }
+    deliver(state, &config, messages)
+}
+
+/// Feed one bus event to the claim tracker and refresh the live state of every store it
+/// changed. Returns the `project.stopped` messages it produced; the caller sends them only
+/// when a rule asks for them.
+fn track_activity(
+    state: &AppState,
+    config: Option<&NotificationConfig>,
+    event: &ChangeEvent,
+) -> Vec<Message> {
+    let kind = event.kind.as_str();
+    let tracked = matches!(kind, "activity" | "turn_event" | "terminal_halted")
+        || TICKET_KINDS.contains(&kind);
+    if !tracked {
+        return Vec::new();
+    }
+    match config {
+        Some(config) => apply_windows(state, config),
+        None => apply_windows(state, &NotificationConfig::default()),
+    }
+    let messages = match kind {
+        "activity" | "turn_event" => {
             let next = state
                 .notification_delivery
                 .activity
@@ -268,27 +318,28 @@ pub fn route_change_event(state: &AppState, event: &ChangeEvent) -> Vec<Delivery
             }
             Vec::new()
         }
-        "terminal_halted" if event.message.is_some() && wants(&[EventKind::ProjectStopped]) => {
-            halt_messages(state, event)
-        }
-        kind if TICKET_KINDS.contains(&kind) => {
-            let mut messages = Vec::new();
-            if wants(&[EventKind::ProjectStopped]) {
-                apply_windows(state, &config);
-                messages.extend(observe_activity(state, event));
-            }
-            if wants(&[
-                EventKind::TicketStatusChanged,
-                EventKind::TicketFeedbackNeeded,
-                EventKind::TicketBlocked,
-            ]) {
-                messages.extend(ticket_messages(state, &config, event));
-            }
-            messages
-        }
-        _ => Vec::new(),
+        "terminal_halted" => halt_messages(state, event),
+        _ => observe_activity(state, event),
     };
-    deliver(state, &config, messages)
+    crate::live_state::touch(state, &event.store);
+    messages
+}
+
+/// The tracker's live read of `store`, seeding it from the index first (HS2-JTTQMY).
+pub(crate) fn live_activity(state: &AppState, store: &str, at: OffsetDateTime) -> LiveActivity {
+    let seeded = state
+        .notification_delivery
+        .activity_seeded
+        .lock_or_recover()
+        .contains(store);
+    if !seeded {
+        seed_activity(state, store);
+    }
+    state
+        .notification_delivery
+        .activity
+        .lock_or_recover()
+        .live(store, at)
 }
 
 fn deliver(
@@ -381,7 +432,7 @@ fn linked_checkouts(state: &AppState, root: &std::path::Path) -> (Vec<String>, O
 }
 
 /// Checkout ids and display name for a hosted store.
-fn store_identity(state: &AppState, store: &str) -> (Vec<String>, String) {
+pub(crate) fn store_identity(state: &AppState, store: &str) -> (Vec<String>, String) {
     match state.host.get(store) {
         Some(entry) => {
             let root = entry.store.root().to_path_buf();
@@ -628,9 +679,9 @@ fn observe_activity(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
             ticket.status,
             hotsheet_model::Status::Completed | hotsheet_model::Status::Verified
         ),
-        // The first sighting has no baseline; a write that changes the fingerprint is
-        // progress, a claim renewal alone is not.
-        progressed: previous.is_some_and(|p| p != fingerprint),
+        // The first sighting has no baseline, except a new ticket, which is a write; a
+        // write that changes the fingerprint is progress, a claim renewal alone is not.
+        progressed: previous.map_or(event.kind == "created", |p| p != fingerprint),
     };
     let (report, next) = {
         let mut activity = state.notification_delivery.activity.lock_or_recover();
@@ -707,6 +758,8 @@ pub fn check_project_activity(
     if let Some(at) = next {
         schedule_activity_check(state, store, at);
     }
+    // A deadline (lease, grace, idle window) moves the live word even without a report.
+    crate::live_state::touch(state, store);
     let Some(report) = report else {
         return Vec::new();
     };
@@ -841,7 +894,8 @@ fn progress_fingerprint(ticket: &Ticket) -> u64 {
     hasher.finish()
 }
 
-/// A halted terminal: report every store where its worker holds a live claim.
+/// A halted terminal: remember the halt for the live state and report every store where its
+/// worker holds a live claim. A `terminal_halted` without a message is the resume.
 fn halt_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
     let Ok(runtime) = tokio::runtime::Handle::try_current() else {
         return Vec::new();
@@ -851,12 +905,26 @@ fn halt_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
     else {
         return Vec::new();
     };
-    let halt = event.message.clone().unwrap_or_default();
-    let reports = state
-        .notification_delivery
-        .activity
-        .lock_or_recover()
-        .halted(&worker, &halt, now());
+    let Some(halt) = event.message.clone() else {
+        let resumed = state
+            .notification_delivery
+            .activity
+            .lock_or_recover()
+            .resumed(&worker);
+        for store in resumed {
+            crate::live_state::touch(state, &store);
+        }
+        return Vec::new();
+    };
+    let at = now();
+    let (reports, halted) = {
+        let mut activity = state.notification_delivery.activity.lock_or_recover();
+        let reports = activity.halted(&worker, &halt, at);
+        (reports, activity.note_halt(&worker, &halt, at))
+    };
+    for store in halted {
+        crate::live_state::touch(state, &store);
+    }
     reports
         .into_iter()
         .map(|(store, report)| {
