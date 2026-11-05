@@ -899,6 +899,39 @@ mod tests {
         }
     }
 
+    /// HS2-FE0HBN: the web parser requires `host` and `managed` and refuses a `null`
+    /// `base_url` or `identity`, because this serialization always sends the first two and
+    /// omits, never nulls, the unset optional members.
+    #[test]
+    fn hs2_fe0hbn_account_wire_shape_omits_unset_optionals() {
+        let mut account = Account {
+            id: "github-app-01live".into(),
+            provider: "github".into(),
+            host: String::new(),
+            base_url: None,
+            identity: None,
+            managed: false,
+            sources: Vec::new(),
+            projects: Vec::new(),
+        };
+        assert_eq!(
+            serde_json::to_value(&account).unwrap(),
+            serde_json::json!({
+                "id": "github-app-01live",
+                "provider": "github",
+                "host": "",
+                "managed": false,
+                "sources": [],
+                "projects": [],
+            })
+        );
+        account.base_url = Some("https://ghe.test/api/v3".into());
+        account.identity = Some("dev@acme.test".into());
+        let wire = serde_json::to_value(&account).unwrap();
+        assert_eq!(wire["base_url"], "https://ghe.test/api/v3");
+        assert_eq!(wire["identity"], "dev@acme.test");
+    }
+
     #[test]
     fn hs2_0he7e4_host_extraction_recognizes_scheme_before_lowercasing_host() {
         for provider in ["github", "gitlab", "jira"] {

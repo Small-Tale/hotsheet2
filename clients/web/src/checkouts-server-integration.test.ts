@@ -4,9 +4,10 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { Checkout, ProviderAccount, ProviderConnection, SourceDetach } from './api';
+import type { Checkout, ProviderConnection, SourceDetach } from './api';
 import { createDevApp } from './dev-server';
 import { createLocalGitTicketStore, listServerCheckouts, openLocalProject } from './project-bridge';
+import { parseProviderAccount } from './server-response-parsers';
 
 /**
  * Opt-in real-server integration coverage for the cross-device remote project picker
@@ -145,11 +146,15 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     });
     expect(hijack.status).toBe(404);
     // Accounts are machine-wide and name the owning project.
-    const accounts = (await (await api(other.id, '/accounts')).json()) as ProviderAccount[];
+    // HS2-FE0HBN: the client parser accepts the real response (base_url and identity omitted).
+    const accounts = parseProviderAccount.list(await (await api(other.id, '/accounts')).json());
+    expect(accounts[0]).not.toHaveProperty('base_url');
+    expect(accounts[0]).not.toHaveProperty('identity');
     expect(accounts).toEqual([
       expect.objectContaining({
         id: 'github-app-01live',
         host: 'github.com',
+        managed: true,
         projects: [expect.objectContaining({ id: owner.id })],
       }),
     ]);
@@ -180,7 +185,7 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
         },
       }),
     );
-    const accounts = (await (await api('/accounts')).json()) as ProviderAccount[];
+    const accounts = parseProviderAccount.list(await (await api('/accounts')).json());
     expect(accounts).toEqual([
       expect.objectContaining({
         id: 'github-app-01ghe',
@@ -241,7 +246,7 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
         })
       ).status,
     ).toBe(201);
-    const accounts = (await (await api('/accounts')).json()) as ProviderAccount[];
+    const accounts = parseProviderAccount.list(await (await api('/accounts')).json());
     expect(accounts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

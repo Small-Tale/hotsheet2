@@ -37429,7 +37429,7 @@ test('dismisses a legacy implicit feedback request through failure, retry, selec
 });
 
 // HS2-WV6QCR: appended so existing focused declaration locators remain stable.
-function wvSavedAccount(id: string, base_url?: string | null, host: string | null = 'ghe.test') {
+function wvSavedAccount(id: string, base_url?: string, host = 'ghe.test') {
   return { id, provider: 'github', host, base_url, identity: id, managed: false, sources: [], projects: [] };
 }
 
@@ -37499,14 +37499,14 @@ for (const [endpoint, host] of [
   });
 }
 
+// A present `null` base_url or host is off the server contract and is refused by the account
+// parser before this picker sees it (HS2-FE0HBN, covered below).
 for (const bad of [
-  { base_url: null, host: 'github.com' },
   { base_url: '', host: 'github.com' },
   { base_url: 'https://synthetic-secret@ghe.test/api/v3', host: 'ghe.test' },
   { base_url: 'https://ghe.test/api/v3?synthetic-secret', host: 'ghe.test' },
   { base_url: 'https://ghe.test/api/v3\n', host: 'ghe.test' },
   { base_url: undefined, host: '' },
-  { base_url: undefined, host: null },
   { base_url: undefined, host: 'ghe.test' },
 ]) {
   test(`HS2-WV6QCR refuses bad metadata ${JSON.stringify(bad)} then accepts a valid selection`, async ({ page }) => {
@@ -37535,7 +37535,7 @@ for (const bad of [
     expect(requests).toEqual([]);
     expect(errors).toEqual([]);
     expect(popups).toEqual([]);
-    if (bad.base_url === null) {
+    if (bad.base_url === '') {
       for (const [width, state] of [
         [1440, 'wide'],
         [900, 'medium'],
@@ -37566,6 +37566,67 @@ for (const bad of [
     await expect(setup).not.toHaveAttribute('open');
   });
 }
+
+test('HS2-FE0HBN drifted null account metadata offers no saved account, then a valid refresh does', async ({
+  page,
+}) => {
+  const requests: string[] = [],
+    errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (
+      path.endsWith('/github-repositories') ||
+      path.endsWith('/github-auth/device') ||
+      (path.endsWith('/provider-connections') && request.method() !== 'GET')
+    )
+      requests.push(path);
+  });
+  // The Rust Account never serializes these as null; each drifted body is refused whole.
+  const drifted = [
+      [{ ...wvSavedAccount('fe-null-base', 'https://ghe.test/api/v3'), base_url: null }],
+      [{ ...wvSavedAccount('fe-null-host', 'https://ghe.test/api/v3'), host: null }],
+      [{ ...wvSavedAccount('fe-null-identity', 'https://ghe.test/api/v3'), identity: null }],
+    ],
+    valid = [wvSavedAccount('fe-valid', 'https://ghe.test:8443/Gateway/API')];
+  let reads = 0;
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+  );
+  await page.route('**/accounts', (route) =>
+    route.request().method() === 'GET' ? route.fulfill({ json: drifted[reads++] ?? valid }) : route.fallback(),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]'),
+    form = setup.locator('[data-action="save-provider-connection"]'),
+    accounts = form.locator('[data-action="use-github-account"]');
+  for (const [index, body] of drifted.entries()) {
+    if (index > 0) await form.getByRole('button', { name: 'Ticket source types', exact: true }).click();
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+    await expect.poll(() => reads).toBe(index + 1);
+    await expect(setup.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
+    await expect(accounts, JSON.stringify(body)).toHaveCount(0);
+  }
+  // A refused account list starts no repository read, sign-in, or connection write.
+  expect(requests).toEqual([]);
+  await form.getByRole('button', { name: 'Ticket source types', exact: true }).click();
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await form.locator('[data-action="use-github-account"][data-item-id="fe-valid"]').click();
+  await expect(form.getByRole('status')).toContainText('ghe.test:8443');
+  await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
+  const created = page.waitForRequest(
+    (request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'),
+  );
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  expect((await created).postDataJSON().settings).toMatchObject({
+    credential: { secret: 'fe-valid' },
+    api_base: 'https://ghe.test:8443/Gateway/API',
+  });
+  expect(errors).toEqual([]);
+});
 
 test('HS2-WV6QCR account changes, back, provider switch, fresh sign-in and edit keep endpoint ownership', async ({
   page,

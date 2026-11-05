@@ -2142,8 +2142,26 @@ discard flow remains covered by its existing real-router test.
 - Authored only: no compilation, unit/browser execution or visual pass is claimed here.
   Fresh typed sign-in (VKNA12), Rust metadata inference (0HE7E4) and legacy reconciliation
   (6H8ZY6) remain separate; this source does not claim their completion. Authoritative
-  account DTO/parser nullability consistency is separate (HS2-FE0HBN); these helper cases
-  validate the optional/null fields the current parser already admits.
+  account DTO/parser nullability consistency is HS2-FE0HBN, below. The helper still refuses
+  a present `null` from any caller; the browser loop no longer feeds off-contract `null`
+  account fixtures because the parser refuses them first. Its six invalid cases now
+  capture the empty-`base_url` refusal.
+
+### Provider account wire shape (HS2-FE0HBN)
+
+- Unit: `crates/hotsheet-ticketing/src/accounts.rs # hs2_fe0hbn_account_wire_shape_omits_unset_optionals`
+  pins that the Rust `Account` always sends `host`/`managed` and omits, never nulls, unset
+  `base_url`/`identity`. `clients/web/src/server-response-parsers.test.ts # HS2-FE0HBN`
+  covers absent/value/`null`/wrong-type for each field, a list with one drifted entry,
+  and parsed accounts handed to `githubAccountEndpoint`: missing, value, and legacy
+  empty-host refusal.
+- End to end: `clients/web/tests/providers.spec.ts # HS2-FE0HBN` serves three drifted
+  `null` lists (`base_url`, `host`, `identity`) to the real ticket-source setup dialog.
+  For each one, no saved account is offered and no repository, sign-in or connection
+  request starts. A valid refresh is then selected and saved with its endpoint. The
+  opt-in real-server cases in `clients/web/src/checkouts-server-integration.test.ts`
+  parse real `/accounts` responses with `parseProviderAccount.list`. The SM9PM8 case is
+  stale before that point (HS2-9HTTTS).
 
 ### Deferred reader return focus (HS2-FRFPA5)
 

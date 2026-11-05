@@ -23,7 +23,7 @@ export function githubAccountEndpoint(account: {
     return !hasControl(host) && asciiLower(outerSpaces(host)) === 'github.com' ? {} : { error: diagnostic };
   }
   const raw = account.base_url;
-  // The existing account response parser permits null optional fields; present null is invalid.
+  // parseProviderAccount already refuses a present null (HS2-FE0HBN); refuse it here too, for any caller.
   if (typeof raw !== 'string') return { error: diagnostic };
   // Check before URL/trim can erase C0 controls (including outer tabs/newlines).
   if (hasControl(raw)) return { error: diagnostic };

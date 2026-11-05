@@ -44,7 +44,7 @@ describe('HS2-WV6QCR saved GitHub endpoint transport', () => {
     },
   );
 
-  it.each([undefined, null])('refuses missing/null host metadata accepted by the existing account parser', (host) => {
+  it.each([undefined, null])('refuses missing/null host metadata from any caller', (host) => {
     expect(githubAccountEndpoint({ host })).toHaveProperty('error');
   });
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Api } from './api';
+import { githubAccountEndpoint } from './github-account-endpoint';
 import {
   parseAccountIdentity,
   parseAdvisoryClaimStatus,
@@ -26,6 +27,7 @@ import {
   parsePermissionDecision,
   parsePermissionRequest,
   parsePollResponse,
+  parseProviderAccount,
   parseProviderConnection,
   parseProviderDescriptor,
   parseProviderOutboxOperation,
@@ -69,6 +71,66 @@ describe('HS2-2MZWZT advisory status parser', () => {
 });
 
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
+
+describe('HS2-FE0HBN provider account parser matches the Rust Account wire shape', () => {
+  // The serialized shape of `hotsheet_ticketing::accounts::Account` for an unused github.com
+  // sign-in: `host` and `managed` always present, unset `base_url`/`identity` skipped.
+  const account = {
+    id: 'github-app-01live',
+    provider: 'github',
+    host: 'github.com',
+    managed: true,
+    sources: [{ connection_id: 'github-acme', name: 'Issues', locator: 'acme/app', disabled: false, projects: [] }],
+    projects: [],
+  };
+  const without = (key: keyof typeof account) => Object.fromEntries(Object.entries(account).filter(([k]) => k !== key));
+
+  it.each([
+    ['base_url', 'https://ghe.test/api/v3'],
+    ['identity', 'dev@acme.test'],
+  ])('accepts %s absent or a string and refuses null or another type', (key, value) => {
+    expect(parseProviderAccount(account)).toBe(account);
+    const present = { ...account, [key]: value };
+    expect(parseProviderAccount(present)).toBe(present);
+    for (const wrong of [null, 7, {}])
+      expect(() => parseProviderAccount({ ...account, [key]: wrong })).toThrow(ServerResponseShapeError);
+  });
+
+  it.each([
+    ['host', 'ghe.test', ''],
+    ['managed', false, true],
+  ] as const)('requires %s, which the server always sends', (key, value, other) => {
+    for (const present of [value, other]) {
+      const body = { ...account, [key]: present };
+      expect(parseProviderAccount(body)).toBe(body);
+    }
+    expect(() => parseProviderAccount(without(key))).toThrow(ServerResponseShapeError);
+    for (const wrong of [null, 7, 'yes'].filter((candidate) => typeof candidate !== typeof value))
+      expect(() => parseProviderAccount({ ...account, [key]: wrong })).toThrow(ServerResponseShapeError);
+  });
+
+  it('refuses a whole account list carrying one drifted entry', () => {
+    const list = [account, { ...account, id: 'github-app-02', base_url: 'https://ghe.test/api/v3' }];
+    expect(parseProviderAccount.list(list)).toBe(list);
+    expect(() => parseProviderAccount.list([...list, { ...account, id: 'github-app-03', host: null }])).toThrow(
+      ServerResponseShapeError,
+    );
+    expect(parseProviderAccount.list([])).toEqual([]);
+  });
+
+  it('hands the endpoint helper only declared values: missing, value, legacy empty host', () => {
+    // Missing base_url on a proven public host: the public default, no endpoint.
+    expect(githubAccountEndpoint(parseProviderAccount(account))).toEqual({});
+    // A present value transports unchanged.
+    expect(
+      githubAccountEndpoint(
+        parseProviderAccount({ ...account, host: 'ghe.test', base_url: 'https://ghe.test/api/v3' }),
+      ),
+    ).toEqual({ apiBase: 'https://ghe.test/api/v3', webOrigin: 'https://ghe.test' });
+    // The legacy unknown-site refusal (HS2-WV6QCR) still applies to a parsed account.
+    expect(githubAccountEndpoint(parseProviderAccount({ ...account, host: '' }))).toHaveProperty('error');
+  });
+});
 
 describe('server response parsers (HS2-34P6XY)', () => {
   it('HS2-1YXCCW validates the exact reviewed source pin set', () => {

@@ -458,7 +458,8 @@ export const parseTrashPurge: ResponseParser<{ purged: number; tickets: string[]
 /* ---- Declarative DTO shapes (HS2-E0AG5E) -------------------------------------------------
  * Each shape names the fields callers rely on. Required fields must have the stated type;
  * optional fields may be absent or `null` (the Rust DTOs serialize `Option::None` as `null`
- * unless skipped) but must otherwise have the stated type. Unlisted fields pass through. */
+ * unless skipped) but must otherwise have the stated type; omitted fields are the skipped ones,
+ * absent or the stated type but never `null`. Unlisted fields pass through. */
 
 type Check = (field: unknown) => boolean;
 
@@ -489,13 +490,21 @@ export interface Shape<T> extends ResponseParser<T> {
   list: ResponseParser<T[]>;
 }
 
-function shape<T>(what: string, required: Record<string, Check>, optional: Record<string, Check> = {}): Shape<T> {
+function shape<T>(
+  what: string,
+  required: Record<string, Check>,
+  optional: Record<string, Check> = {},
+  // HS2-FE0HBN: optional members the Rust DTO skips when unset (`skip_serializing_if`), so the
+  // server never sends them as `null`: absent, or the stated type.
+  omitted: Record<string, Check> = {},
+): Shape<T> {
   const check: Check = (value) =>
     isRecord(value) &&
     Object.entries(required).every(([key, field]) => field(value[key])) &&
     Object.entries(optional).every(
       ([key, field]) => value[key] === undefined || value[key] === null || field(value[key]),
-    );
+    ) &&
+    Object.entries(omitted).every(([key, field]) => value[key] === undefined || field(value[key]));
   const parse = (value: unknown) => (check(value) ? (value as T) : invalid(what));
   const parseList = (value: unknown) => (listOf(check)(value) ? (value as T[]) : invalid(`${what} list`));
   return Object.assign(parse, { check, list: parseList });
@@ -547,10 +556,19 @@ export const parseSourceDetach = shape<SourceDetach>(
   { unlinked: isBoolean, removed_connection: isBoolean, still_used_by: isStringArray },
 );
 
+/** `GET /accounts`: the Rust `Account` always sends `host` and `managed` and omits unset `base_url`/`identity` (HS2-FE0HBN). */
 export const parseProviderAccount = shape<ProviderAccount>(
   'account',
-  { id: isString, provider: isString, sources: listOf(isObject), projects: listOf(project.check) },
-  { host: isString, base_url: isString, identity: isString, managed: isBoolean },
+  {
+    id: isString,
+    provider: isString,
+    host: isString,
+    managed: isBoolean,
+    sources: listOf(isObject),
+    projects: listOf(project.check),
+  },
+  {},
+  { base_url: isString, identity: isString },
 );
 
 export const parseGitHubRepositoryAccess = shape<GitHubRepositoryAccess>(
