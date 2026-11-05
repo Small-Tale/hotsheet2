@@ -2616,6 +2616,75 @@
       }
     },
     {
+      "key": "hotsheet-web:grid-sidebar-gauges",
+      "package": "hotsheet-web",
+      "id": "grid-sidebar-gauges",
+      "name": "GridSidebarGauges",
+      "kind": "component",
+      "purpose": "Grid sidebar gauge page body: bare tokens/min and tickets updated/h gauges with the project's state glyph at the row end.",
+      "publicExports": [
+        {
+          "name": "GridSidebarGauges"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/grid-sidebar-gauges.tsx",
+        "src/components/grid-sidebar-gauges.css"
+      ],
+      "source": "src/components/grid-sidebar-gauges.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "grid-sidebar-gauges"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "grid-sidebar-gauges"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/grid-sidebar-gauges.tsx",
+        "composition": "src/components/grid-sidebar-gauges.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:guidance-settings",
       "package": "hotsheet-web",
       "id": "guidance-settings",
@@ -6635,14 +6704,16 @@
       "id": "terminal-operations-sidebar",
       "name": "TerminalOperationsSidebar",
       "kind": "composition",
-      "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
+      "purpose": "Per-project and aggregate glance pages beside the workspace grid: completion charts, live-rate gauges, and a triage list sharing one project group.",
       "publicExports": [
         {
           "name": "TerminalOperationsSidebar"
         }
       ],
       "sourceLinks": [
-        "src/components/terminal-operations-sidebar.tsx"
+        "src/components/terminal-operations-sidebar.tsx",
+        "src/components/grid-sidebar-group.tsx",
+        "src/components/grid-sidebar-triage-row.tsx"
       ],
       "source": "src/components/terminal-operations-sidebar.tsx",
       "parents": {

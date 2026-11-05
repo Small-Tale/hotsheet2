@@ -142,7 +142,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   with HS2-6B9S7P; the visible badge waits on the Kerf gap `KF-170258` (a badge on a `SegmentedControl`
   choice), and no app CSS positions one (§34.10).
 
-## 34.7 Workspace grid sidebar pages (HS2-E1AQE8, HS2-EZSQDF, design only)
+## 34.7 Workspace grid sidebar pages (HS2-E1AQE8 page bodies built; HS2-EZSQDF paging design only)
+
+**Status:** the shared group and all three page bodies are built (HS2-E1AQE8,
+`clients/web/src/components/terminal-operations-sidebar.tsx`, `grid-sidebar-*.tsx`,
+`clients/web/src/grid-sidebar-live.ts`) and shown in `/ux-demo?component=terminal-operations-sidebar`.
+Production shows the Completion page until paging lands (HS2-EZSQDF).
 
 The grid sidebar keeps today's completion charts and becomes swipeable pages. The maintainer chose these
 pages (option A) over a single integrated line.
@@ -153,6 +158,10 @@ pages (option A) over a single integrated line.
    bare gauges (tokens/min, tickets updated/h) with the project's state glyph at the row end.
 3. **Triage:** `m2-grid-sidebar-projects`. One row per project with state glyph and state word, current
    ticket and phase, sorted by need, stopped-as-expected rows dimmed, durations on hover only (§34.4).
+   The All projects group lists Needs you (only when non-zero) and workers live versus expected.
+
+Before a project's live state arrives, its gauges rest at zero without a glyph and its triage row
+reads "No live state". Every body opens that project's statistics, as the completion chart does.
 
 All pages share one group component (header, divider, and a per-page body slot), so project order,
 alignment, and scroll position match across pages (HS2-E1AQE8).

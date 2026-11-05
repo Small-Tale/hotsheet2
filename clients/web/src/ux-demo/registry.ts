@@ -21,6 +21,7 @@ import type { DemoEntry, DemoModule } from './demo-module';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
 import { demoModule as glanceSparkline } from './glance-sparkline-demo';
+import { demoModule as gridSidebar } from './grid-sidebar-demo';
 import { demoModule as haltedSession } from './halted-session-demo';
 import { demoModule as inputDialogs } from './input-dialogs-demo';
 import { demoModule as list } from './list-demo';
@@ -115,6 +116,7 @@ export const demoModules: readonly DemoModule[] = [
   statsProjectsTable,
   statsThisMac,
   projectLiveSection,
+  gridSidebar,
 ];
 
 const entries = new Map<string, DemoEntry>();

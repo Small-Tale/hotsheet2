@@ -2,7 +2,30 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { aggregateTerminalProjectSummaries, TerminalOperationsSidebar } from './terminal-operations-sidebar';
+import type { LiveWord } from '../api';
+import { type GridSidebarLive, LIVE_WORD_LABELS } from '../grid-sidebar-live';
+import { LIVE_STATE_ICONS } from '../live-state-icons';
+import {
+  aggregateTerminalProjectSummaries,
+  GRID_SIDEBAR_PAGES,
+  gridSidebarPageContent,
+  TerminalOperationsSidebar,
+} from './terminal-operations-sidebar';
+
+const MINUTE = 60_000;
+function reading(state: LiveWord, overrides: Partial<GridSidebarLive> = {}): GridSidebarLive {
+  return {
+    state,
+    tokensPerMinute: 1200,
+    tokensPeakPerMinute: 2400,
+    ticketsUpdatedPerHour: 6,
+    ticketsPeakPerHour: 12,
+    waiting: 0,
+    workersLive: 1,
+    workersExpected: 1,
+    ...overrides,
+  };
+}
 
 describe('TerminalOperationsSidebar', () => {
   const projects = [
@@ -71,5 +94,103 @@ describe('TerminalOperationsSidebar', () => {
     expect(summaryCss).toMatch(
       /\.project-summary\[data-size='compact'\] \{[^}]*--_project-summary-chart-height: remify\(44px\);/,
     );
+  });
+
+  describe('pages share one group structure (HS2-E1AQE8)', () => {
+    const live = [
+      { id: 'one', name: 'One', completedToday: 2, inProgress: 3, trend: [1, 0, 2], live: reading('stopped') },
+      {
+        id: 'two',
+        name: 'Two',
+        completedToday: 4,
+        inProgress: 1,
+        trend: [0, 3, 4],
+        live: reading('may_be_stuck', { progressAgeMs: 34 * MINUTE, claim: { slug: 'TWO-1', phase: 'working' } }),
+      },
+    ];
+    const allLive = reading('may_be_stuck', { waiting: 2, workersLive: 3, workersExpected: 4 });
+    const groupsOf = (markup: string) =>
+      [...markup.matchAll(/data-project-id="([^"]+)" data-grid-sidebar-group=""/g)].map((match) => match[1]);
+
+    it('renders the same header, divider, and group per project on every page', () => {
+      for (const page of GRID_SIDEBAR_PAGES) {
+        const markup = String(gridSidebarPageContent(page, { projects: live, allLive }));
+        expect(markup, page).toContain(`data-grid-sidebar-page="${page}"`);
+        expect(markup.match(/class="kui-list grid-sidebar-group"/g), page).toHaveLength(3);
+        expect(markup.match(/divider-sides="b"/g), page).toHaveLength(1);
+        expect(markup.match(/data-component="list-header"/g), page).toHaveLength(3);
+        expect(groupsOf(markup)[0], page).toBe('all');
+        expect(new Set(groupsOf(markup)), page).toEqual(new Set(['all', 'one', 'two']));
+      }
+      // Completion and gauges keep the open-project order; triage puts the most need first.
+      expect(groupsOf(String(gridSidebarPageContent('completion', { projects: live })))).toEqual(['all', 'one', 'two']);
+      expect(groupsOf(String(gridSidebarPageContent('gauges', { projects: live })))).toEqual(['all', 'one', 'two']);
+      expect(groupsOf(String(gridSidebarPageContent('triage', { projects: live })))).toEqual(['all', 'two', 'one']);
+    });
+
+    it('keeps production on the Completion page by default', () => {
+      const markup = String(TerminalOperationsSidebar({ projects: live, allLive }));
+      expect(markup).toContain('data-grid-sidebar-page="completion"');
+      expect(markup).not.toContain('data-component="grid-sidebar-gauges"');
+    });
+
+    it('gives each gauge group two bare gauges and its state glyph, the aggregate none', () => {
+      const markup = String(gridSidebarPageContent('gauges', { projects: live, allLive }));
+      expect(markup.match(/data-component="grid-sidebar-gauges"/g)).toHaveLength(3);
+      expect(markup.match(/data-variant="bare" data-tone="brand"/g)).toHaveLength(3);
+      expect(markup.match(/data-variant="bare" data-tone="success"/g)).toHaveLength(3);
+      expect(markup.match(/data-live-word="/g)).toHaveLength(2);
+      expect(markup).toContain('data-live-word="may_be_stuck"');
+      expect(markup).toContain('Two: May be stuck, no progress for 34 minutes');
+      expect(markup).toContain(
+        'aria-label="Open project statistics, 1.2k tokens/min, 6 tickets updated in the last hour, May be stuck"',
+      );
+      expect(markup).toContain('data-action="open-project-stats"');
+    });
+
+    it('rests the gauges at zero with no glyph before live state arrives', () => {
+      const markup = String(
+        gridSidebarPageContent('gauges', {
+          projects: live.map(({ id, name, completedToday, inProgress, trend }) => ({
+            id,
+            name,
+            completedToday,
+            inProgress,
+            trend,
+          })),
+        }),
+      );
+      expect(markup).toContain('data-live-state="none"');
+      expect(markup).not.toContain('data-live-word=');
+      expect(markup.match(/data-empty="true"/g)).toHaveLength(6);
+    });
+
+    it.each(Object.keys(LIVE_STATE_ICONS) as LiveWord[])(
+      'shows the %s glyph and title on gauges and triage',
+      (word) => {
+        const projects = [{ id: 'p', name: 'P', completedToday: 0, inProgress: 0, trend: [], live: reading(word) }];
+        for (const page of ['gauges', 'triage'] as const) {
+          const markup = String(gridSidebarPageContent(page, { projects }));
+          expect(markup, page).toContain(`data-lucide="${LIVE_STATE_ICONS[word].name}"`);
+          expect(markup, page).toContain(`data-live-word="${word}"`);
+          expect(markup, page).toContain(`P: ${LIVE_WORD_LABELS[word]}`);
+        }
+      },
+    );
+
+    it('lists triage rows with the state word and work, durations only in the title', () => {
+      const markup = String(gridSidebarPageContent('triage', { projects: live, allLive }));
+      expect(markup).toContain('May be stuck');
+      expect(markup).toContain('TWO-1 · working');
+      expect(markup).toContain('title="Two: May be stuck, no progress for 34 minutes');
+      expect(markup).not.toMatch(/>\s*34 ?m(inutes)?\s*</);
+      expect(markup).toContain('data-triage-summary="waiting"');
+      expect(markup).toContain('3 of 4');
+      const calm = String(gridSidebarPageContent('triage', { projects: live, allLive: reading('active') }));
+      expect(calm).not.toContain('data-triage-summary="waiting"');
+      const unknown = String(gridSidebarPageContent('triage', { projects: [{ ...live[0], live: undefined }] }));
+      expect(unknown).toContain('No live state');
+      expect(unknown).toContain('data-live-word="none"');
+    });
   });
 });

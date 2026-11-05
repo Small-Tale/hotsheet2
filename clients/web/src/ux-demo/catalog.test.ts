@@ -110,6 +110,7 @@ describe('UX demo catalog', () => {
       'stats-this-mac',
       'glance-gauge',
       'glance-sparkline',
+      'grid-sidebar-gauges',
       'repository-size',
       'tag-chip',
       'choice-card',
@@ -444,6 +445,10 @@ describe('UX demo catalog', () => {
         'Project-local color grid rendered inside the cataloged TicketSourcesSettings and provider connection editor demos.',
       'ticket-tag-editor':
         'Tag-editing helpers composed into TicketInfoPanel (demoed); TagPicker is the standalone entry.',
+      'grid-sidebar-group':
+        'Shared project group (header, divider, page body) rendered on every page of the cataloged TerminalOperationsSidebar.',
+      'grid-sidebar-triage-row':
+        'Triage page body rendered within the cataloged TerminalOperationsSidebar (Page: Triage).',
       'workspace-composition-surfaces':
         'Internal typed composition boundary whose constituent production surfaces are cataloged individually.',
       'workspace-controls':

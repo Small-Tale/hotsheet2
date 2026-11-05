@@ -181,6 +181,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('stats-this-mac', ['state-banner', 'list', 'text']),
           cataloged('glance-gauge'),
           cataloged('glance-sparkline'),
+          cataloged('grid-sidebar-gauges', ['glance-gauge']),
           cataloged('repository-size', ['state-banner', 'value-table', 'badge']),
           cataloged('tag-chip'),
           cataloged('choice-card'),
@@ -255,7 +256,14 @@ export const demoCatalog: DemoCategory[] = [
         'text',
         'row',
       ]),
-      cataloged('terminal-operations-sidebar', ['project-summary', 'list', 'list-header', 'toolbar']),
+      cataloged('terminal-operations-sidebar', [
+        'project-summary',
+        'grid-sidebar-gauges',
+        'list',
+        'list-header',
+        'list-item',
+        'toolbar',
+      ]),
       cataloged('terminal-ticket-rail', [
         'ticket-list',
         'ticket-inspector',

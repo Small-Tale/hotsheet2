@@ -346,6 +346,14 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   Host conditions past a threshold (HS2-DTAVQA) are full-width Kerf `StateBanner` callouts in both
   modes. Numbers derive in `project-live-summary.ts`; ages re-render from a local render-only clock.
 
+- `GridSidebarGauges` — **demo built** (`components/grid-sidebar-gauges.tsx`, HS2-E1AQE8; mock
+  `r4-grid-sidebar-page2`): the workspace grid sidebar's gauge-page body. Two medium bare
+  `GlanceGauge`s (blue tokens/min, green tickets updated/h, each on its own 30-day peak) and the
+  group's state glyph (`LIVE_STATE_ICONS`, HS2-CSPKQX) at the row end; the All projects group shows
+  no glyph. Values, durations, and causes are only in hover titles and the accessible name
+  (docs/34-glance-surfaces.md §34.4). Like `ProjectSummary`, it is a native button that opens the
+  group's statistics. Before live state arrives the gauges rest at zero with no glyph.
+
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain
@@ -378,6 +386,13 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   absolute scale visible at each day and project. Each summary opens statistics for
   that project; the aggregate opens cross-project statistics. The component consumes
   the already-loaded ticket rows and does not introduce polling or network requests.
+  Its pages (HS2-E1AQE8, docs/34-glance-surfaces.md §34.7) render every group through one
+  `GridSidebarGroup` (list header, divider under All projects, page body), so only the body
+  differs: **Completion** (the summaries above), **Gauges** (`GridSidebarGauges`), and **Triage**
+  (`GridSidebarTriageRow`: a Kerf `ListItem` with the state glyph, state word, and current
+  `ticket · phase`, sorted by need, Stopped quiet, durations only in the title; the All projects
+  group lists Needs you when non-zero and workers live). The catalog's Page and Live State
+  settings show each page with and without live state.
 - `RepositorySummary` — **production built**: one accessible branch/status action with
   Kerf `Row` and `Text` ahead/behind metrics and a compact `Badge` for uncommitted changes.
   The branch tail keeps app-owned truncation so long paths remain identifiable.

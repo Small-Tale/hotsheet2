@@ -1701,7 +1701,7 @@ test('represents aggregate and per-project terminal operations in the UX catalog
   await expect(hotsheet.locator('[data-background-bar="5"]')).toHaveAttribute('style', '--bar-height:100%');
   await expect(hotsheet.locator('[data-bar="4"]')).toHaveAttribute('style', '--bar-height:56%');
   await expect(kerf.locator('[data-bar="5"]')).toHaveAttribute('style', '--bar-height:56%');
-  for (const group of await sidebar.locator('.terminal-operations-sidebar__group').all()) {
+  for (const group of await sidebar.locator('.grid-sidebar-group').all()) {
     const heading = await group.getByRole('heading').evaluate((node) => {
       const range = document.createRange();
       range.selectNodeContents(node);

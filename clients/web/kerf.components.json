@@ -1178,17 +1178,42 @@
       "kind": "component",
       "purpose": "Selected external ticket's advisory claim, conflict, and pending provider state.",
       "source": "src/components/advisory-claim-notice.tsx",
-      "publicExports": [{ "name": "AdvisoryClaimNotice" }],
+      "publicExports": [
+        {
+          "name": "AdvisoryClaimNotice"
+        }
+      ],
       "sourceLinks": ["src/components/advisory-claim-notice.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "self", "padding": "self" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "self",
+            "padding": "self"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -1196,7 +1221,9 @@
         "publicTokens": [],
         "placeableClasses": []
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/advisory-claim-notice.tsx",
@@ -1730,16 +1757,34 @@
       "kind": "composition",
       "purpose": "Observed worker columns with source-qualified assigned and tentative planned tickets.",
       "source": "src/components/worker-columns.tsx",
-      "publicExports": [{ "name": "WorkerColumns" }],
+      "publicExports": [
+        {
+          "name": "WorkerColumns"
+        }
+      ],
       "sourceLinks": ["src/components/worker-columns.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
         "layout": {
           "roles": ["structure"],
           "geometry": {
@@ -1756,7 +1801,9 @@
         "publicTokens": [],
         "placeableClasses": ["worker-columns"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/worker-columns.tsx",
@@ -2674,17 +2721,42 @@
       "kind": "component",
       "purpose": "Picture-in-picture activity digest and live cross-project narration reel.",
       "source": "src/components/announcer-overlay.tsx",
-      "publicExports": [{ "name": "AnnouncerOverlay" }],
+      "publicExports": [
+        {
+          "name": "AnnouncerOverlay"
+        }
+      ],
       "sourceLinks": ["src/components/announcer-overlay.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -2692,7 +2764,9 @@
         "publicTokens": [],
         "placeableClasses": ["announcer"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/announcer-overlay.tsx",
@@ -2710,17 +2784,42 @@
       "kind": "component",
       "purpose": "The Stats page Right now section: live glance tiles and the per-project table, scoped to one project or all, with a data-as-of line (HS2-ERTNJ7).",
       "source": "src/components/stats-right-now.tsx",
-      "publicExports": [{ "name": "StatsRightNow" }],
+      "publicExports": [
+        {
+          "name": "StatsRightNow"
+        }
+      ],
       "sourceLinks": ["src/components/stats-right-now.tsx", "src/stats-right-now.ts"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -2728,7 +2827,9 @@
         "publicTokens": [],
         "placeableClasses": ["stats-right-now"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/stats-right-now.tsx",
@@ -2746,17 +2847,42 @@
       "kind": "component",
       "purpose": "Projects sorted by need: state glyph and word, current work, last progress, ETA overrun, runway, tokens/min, and the one unstick action (HS2-ERTNJ7).",
       "source": "src/components/stats-projects-table.tsx",
-      "publicExports": [{ "name": "StatsProjectsTable" }],
+      "publicExports": [
+        {
+          "name": "StatsProjectsTable"
+        }
+      ],
       "sourceLinks": ["src/components/stats-projects-table.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -2764,7 +2890,9 @@
         "publicTokens": [],
         "placeableClasses": ["stats-projects-table"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/stats-projects-table.tsx",
@@ -2782,17 +2910,42 @@
       "kind": "component",
       "purpose": "The server host's health cards on Stats: disk, memory, CPU, and power, plus network and thermal only while degraded; crossed cards tint and unsupported signals say so (HS2-NS0AYR).",
       "source": "src/components/stats-this-mac.tsx",
-      "publicExports": [{ "name": "StatsThisMac" }],
+      "publicExports": [
+        {
+          "name": "StatsThisMac"
+        }
+      ],
       "sourceLinks": ["src/components/stats-this-mac.tsx", "src/stats-this-mac.ts"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -2800,7 +2953,9 @@
         "publicTokens": [],
         "placeableClasses": ["stats-this-mac"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/stats-this-mac.tsx",
@@ -2820,17 +2975,42 @@
       "kind": "component",
       "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
       "source": "src/components/glance-sparkline.tsx",
-      "publicExports": [{ "name": "GlanceSparkline" }],
+      "publicExports": [
+        {
+          "name": "GlanceSparkline"
+        }
+      ],
       "sourceLinks": ["src/components/glance-sparkline.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["feedback"], "geometry": { "margin": "none", "border": "none", "padding": "none" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["feedback"],
+          "geometry": {
+            "margin": "none",
+            "border": "none",
+            "padding": "none"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -2838,7 +3018,9 @@
         "publicTokens": [],
         "placeableClasses": ["glance-sparkline"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/glance-sparkline.tsx",
@@ -2856,17 +3038,42 @@
       "kind": "component",
       "purpose": "Checkout ticket-flow and settled-usage dashboard with cross-project store deduplication.",
       "source": "src/components/stats-dashboard.tsx",
-      "publicExports": [{ "name": "StatsDashboard" }],
+      "publicExports": [
+        {
+          "name": "StatsDashboard"
+        }
+      ],
       "sourceLinks": ["src/components/stats-dashboard.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["content"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -2874,7 +3081,9 @@
         "publicTokens": [],
         "placeableClasses": ["stats-dashboard"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/stats-dashboard.tsx",
@@ -4326,21 +4535,40 @@
       "kind": "component",
       "purpose": "Review local project guidance recommendations and a consent-gated optional AI interview with exact outbound context and advisory answers. Show bounded evidence, changed and withdrawn suggestion notices, individual accept or dismiss actions, and unknown status. Discover pinned sources, compare a changed revision, and choose rules and skills for the selected instruction writer. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
       "source": "src/components/guidance-settings.tsx",
-      "publicExports": [{ "name": "GuidanceSettings" }],
+      "publicExports": [
+        {
+          "name": "GuidanceSettings"
+        }
+      ],
       "sourceLinks": ["src/components/guidance-settings.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [
-          { "id": "source registration and selection", "owner": "application", "required": true },
+          {
+            "id": "source registration and selection",
+            "owner": "application",
+            "required": true
+          },
           {
             "id": "source check, available revision, review, and pending install",
             "owner": "application",
             "required": false
           },
-          { "id": "current source and stale or failed check", "owner": "application", "required": false },
+          {
+            "id": "current source and stale or failed check",
+            "owner": "application",
+            "required": false
+          },
           {
             "id": "recommendation loading, unknown, changed, dismissed, selected, and withdrawn",
             "owner": "application",
@@ -4351,16 +4579,34 @@
             "owner": "application",
             "required": false
           },
-          { "id": "blocked bundled guidance notice", "owner": "application", "required": false },
+          {
+            "id": "blocked bundled guidance notice",
+            "owner": "application",
+            "required": false
+          },
           {
             "id": "standalone Rulesync current, outdated, unlocked, and unknown",
             "owner": "application",
             "required": false
           }
         ],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -4368,7 +4614,9 @@
         "publicTokens": [],
         "placeableClasses": ["guidance-settings"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/guidance-settings.tsx",
@@ -4916,14 +5164,18 @@
       "id": "terminal-operations-sidebar",
       "name": "TerminalOperationsSidebar",
       "kind": "composition",
-      "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
+      "purpose": "Per-project and aggregate glance pages beside the workspace grid: completion charts, live-rate gauges, and a triage list sharing one project group.",
       "source": "src/components/terminal-operations-sidebar.tsx",
       "publicExports": [
         {
           "name": "TerminalOperationsSidebar"
         }
       ],
-      "sourceLinks": ["src/components/terminal-operations-sidebar.tsx"],
+      "sourceLinks": [
+        "src/components/terminal-operations-sidebar.tsx",
+        "src/components/grid-sidebar-group.tsx",
+        "src/components/grid-sidebar-triage-row.tsx"
+      ],
       "composition": {
         "parents": {
           "mode": "any",
@@ -8214,6 +8466,69 @@
           "Edit an attachment filename inline with controlled recovery, blur or Enter finish, Escape cancellation, and retained failure state."
         ],
         "avoidWhen": ["The interaction does not need AttachmentFilenameEditor domain behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "grid-sidebar-gauges",
+      "name": "GridSidebarGauges",
+      "kind": "component",
+      "purpose": "Grid sidebar gauge page body: bare tokens/min and tickets updated/h gauges with the project's state glyph at the row end.",
+      "source": "src/components/grid-sidebar-gauges.tsx",
+      "publicExports": [
+        {
+          "name": "GridSidebarGauges"
+        }
+      ],
+      "sourceLinks": ["src/components/grid-sidebar-gauges.tsx", "src/components/grid-sidebar-gauges.css"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "self",
+            "padding": "self"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["grid-sidebar-gauges"],
+        "publicTokens": [],
+        "placeableClasses": ["grid-sidebar-gauges"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/grid-sidebar-gauges.tsx",
+        "composition": "src/components/grid-sidebar-gauges.tsx"
+      },
+      "selection": {
+        "useWhen": ["The workspace grid sidebar's gauge page shows one project group's live rates and state."],
+        "avoidWhen": ["A single live rate stands alone; use GlanceGauge."],
         "documentation": "../../docs/ux-components.md"
       }
     }

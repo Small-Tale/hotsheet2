@@ -28,7 +28,6 @@ import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectSummary } from '../components/project-summary';
 import { RepositorySummary } from '../components/repository-summary';
 import { SettingsNavigation } from '../components/settings-navigation';
-import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
 import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -851,26 +850,6 @@ export function NotificationNavigationDemo() {
     </>
   );
 }
-export function TerminalOperationsSidebarDemo() {
-  return (
-    <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
-      <TerminalOperationsSidebar
-        projects={[
-          { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },
-          {
-            id: 'best-in-manila',
-            name: 'Best-in-Manila',
-            completedToday: 0,
-            inProgress: 0,
-            trend: [0, 0, 0, 0, 0, 0, 0],
-          },
-          { id: 'kerf', name: 'Kerf', completedToday: 1, inProgress: 1, trend: [1, 0, 2, 0, 0, 5, 1] },
-        ]}
-      />
-    </CatalogExample>
-  );
-}
-
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireProjectSidebarDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
@@ -1003,7 +982,6 @@ export const demoModule: DemoModule = {
     'drive-options-menu': { catalogExamples: true, Demo: DriveOptionsMenuDemo },
     'ai-tool-settings': { catalogExamples: true, Demo: AiToolSettingsDemo },
     'guidance-settings': { catalogExamples: true, Demo: GuidanceSettingsDemo },
-    'terminal-operations-sidebar': { catalogExamples: true, Demo: TerminalOperationsSidebarDemo },
   },
   wire: wireProjectSidebarDemo,
 };

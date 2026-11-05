@@ -876,6 +876,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "grid-sidebar-gauges",
+      "name": "GridSidebarGauges",
+      "kind": "component",
+      "purpose": "Grid sidebar gauge page body: bare tokens/min and tickets updated/h gauges with the project's state glyph at the row end.",
+      "useWhen": [
+        "The workspace grid sidebar's gauge page shows one project group's live rates and state."
+      ],
+      "avoidWhen": [
+        "A single live rate stands alone; use GlanceGauge."
+      ],
+      "publicClasses": [
+        "grid-sidebar-gauges"
+      ],
+      "publicTokens": [],
+      "source": "src/components/grid-sidebar-gauges.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
@@ -2204,7 +2227,7 @@
       "id": "terminal-operations-sidebar",
       "name": "TerminalOperationsSidebar",
       "kind": "composition",
-      "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
+      "purpose": "Per-project and aggregate glance pages beside the workspace grid: completion charts, live-rate gauges, and a triage list sharing one project group.",
       "useWhen": [
         "Hot Sheet needs per-project and aggregate completion and in-progress summaries beside the workspace grid."
       ],

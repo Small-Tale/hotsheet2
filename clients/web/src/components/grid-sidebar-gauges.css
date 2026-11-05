@@ -1,0 +1,36 @@
+/* The gauge page's group body (HS2-E1AQE8) is a domain data-visualization tile like ProjectSummary:
+   an app-owned native button, with the same inset, radius, hover, and focus treatment so pages 1 and 2
+   align. The two gauges lead and the state glyph sits at the row end. */
+.grid-sidebar-gauges {
+  display: grid;
+  /* The native button's form-control height would clip the 88px gauges; the tile sizes to them. */
+  width: 100%;
+  height: auto;
+  min-height: remify(68px);
+  padding: var(--kui-space-xs);
+  /* Two medium (88px) gauges fit the 250px minimum rail; the free column pushes the glyph to the row end. */
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--kui-space-s);
+  border: 0;
+  border-radius: var(--wa-border-radius-m);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+/* Hover feedback for the tile's native button. */
+.grid-sidebar-gauges:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+/* An inset focus ring, so the ring stays inside the sidebar's inline inset. */
+.grid-sidebar-gauges:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: -2px;
+}
+/* The glyph takes the last column, at the row end. */
+.grid-sidebar-gauges__state {
+  display: inline-flex;
+  grid-column: 4;
+}

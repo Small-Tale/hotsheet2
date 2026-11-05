@@ -219,7 +219,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   await page.screenshot({ path: 'target/visual-captures/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const sidebar = page.locator('#app-left-rail'),
-    all = sidebar.locator('.terminal-operations-sidebar__group[data-project-id="all"]'),
+    all = sidebar.locator('.grid-sidebar-group[data-project-id="all"]'),
     summaries = sidebar.locator('[data-component="project-summary"]'),
     demoSummary = sidebar.locator('[data-project-id="demo-checkout"] [data-component="project-summary"]'),
     otherSummary = sidebar.locator('[data-project-id="other-checkout"] [data-component="project-summary"]'),
@@ -231,7 +231,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   await expect(
     dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="other-checkout"])'),
   ).toHaveCount(1);
-  await expect(sidebar.locator('.terminal-operations-sidebar__group')).toHaveCount(3);
+  await expect(sidebar.locator('.grid-sidebar-group')).toHaveCount(3);
   await expect(all).toHaveAttribute('divider-sides', 'b');
   await expect(all).not.toHaveCSS('box-shadow', 'none');
   for (const summary of await summaries.all()) await expect(summary).toHaveAttribute('data-chart-maximum', '5');

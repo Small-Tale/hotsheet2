@@ -614,8 +614,6 @@ test('restores inactive AI chats without activating their project and loads aggr
   );
   await expect(draft(page, 'alpha')).resolves.toBe('alpha preserved draft');
   await expect(
-    page
-      .locator('.terminal-operations-sidebar__group[data-project-id="alpha"]')
-      .getByRole('button', { name: /1 in progress/ }),
+    page.locator('.grid-sidebar-group[data-project-id="alpha"]').getByRole('button', { name: /1 in progress/ }),
   ).toBeVisible();
 });
