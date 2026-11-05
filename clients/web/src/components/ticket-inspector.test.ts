@@ -360,9 +360,9 @@ describe('TicketInspector', () => {
         },
       }),
     );
-    expect(markup).toContain('Follow-ups (1)');
+    expect(markup).toContain('1 follow-up');
     expect(markup).toContain('data-target-id="@project/git:native"');
-    expect(markup).toContain('HS2-NEXT · Next work');
+    expect(markup).toContain('Open follow-up HS2-NEXT: Next work');
   });
 
   it('places the ticket number in the leading toolbar slot for the sidebar and reader (HS2-9MCJ2B, HS2-FZ5HB2)', () => {

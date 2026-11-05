@@ -4,6 +4,8 @@ import { Chip } from '@kerfjs/ui/chip';
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
@@ -75,6 +77,7 @@ export function TicketCodeReview({
     hostReason = hostOnlyDisabledReason('diff-tool', hostActionsAvailable);
   const truncatedHistory = Boolean(review?.truncated && review.commits.length > 0);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
+  const followUps = review?.follow_ups ?? [];
   const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />;
   const body = (
     <List gap={embedded ? 'none' : 'xs'} className="ticket-code-review__section">
@@ -89,42 +92,48 @@ export function TicketCodeReview({
           {loadingMessage}
         </Text>
       )}
-      {!loading && review && Boolean(review.follow_ups?.length) && (
-        <section class="ticket-code-review__follow-ups" aria-label="Follow-Up Tickets">
-          <Text variant="h3" size="compact" flush>
-            Follow-ups ({review.follow_ups?.length})
-          </Text>
-          <ul>
-            {review.follow_ups?.map((item) => {
+      {!loading && review && followUps.length > 0 && (
+        // Follow-ups reuse the inspector's ticket-reference rows (the Duplicates list): a wrapping Kerf
+        // ListItem with the number as its label and the title as its description (HS2-08EPQM).
+        <section aria-label="Follow-Up Tickets">
+          <List gap="2xs" controlInsets="b">
+            <ListHeader
+              label="Follow-Ups"
+              count={followUps.length}
+              countLabel={`${followUps.length} ${followUps.length === 1 ? 'follow-up' : 'follow-ups'}`}
+            />
+            {followUps.map((item) => {
               const qualified = `@${item.target.project_id}/${item.target.connection_id}:${item.target.native_id}`;
+              const resolved = item.state === 'resolved';
+              const title = item.title ?? 'Untitled ticket';
+              const unresolved =
+                item.state === 'missing'
+                  ? 'Target missing'
+                  : item.state === 'deleted'
+                    ? 'Target deleted'
+                    : 'Target unavailable';
               return (
-                <li>
-                  {item.state === 'resolved' ? (
-                    <button
-                      type="button"
-                      {...TICKET_SELECTION_ACTIONS.openFollowUpTarget.attrs}
-                      data-target-id={qualified}
-                    >
-                      <LucideIcon size="s" icon={GitBranch} name="git-branch" />
-                      <span>
-                        {item.slug ?? qualified} · {item.title ?? 'Untitled ticket'}
-                      </span>
-                    </button>
-                  ) : (
-                    <span role="status">
-                      <LucideIcon size="s" icon={CircleHelp} name="circle-help" />
-                      {qualified} ·{' '}
-                      {item.state === 'missing'
-                        ? 'Target missing'
-                        : item.state === 'deleted'
-                          ? 'Target deleted'
-                          : 'Target unavailable'}
-                    </span>
-                  )}
-                </li>
+                <ListItem
+                  action={TICKET_SELECTION_ACTIONS.openFollowUpTarget.value}
+                  rootAttributes={{ 'data-target-id': qualified }}
+                  icon={
+                    resolved ? (
+                      <LucideIcon icon={GitBranch} name="git-branch" />
+                    ) : (
+                      <LucideIcon icon={CircleHelp} name="circle-help" />
+                    )
+                  }
+                  label={resolved ? (item.slug ?? qualified) : qualified}
+                  description={resolved ? title : unresolved}
+                  accessibleLabel={
+                    resolved ? `Open follow-up ${item.slug ?? qualified}: ${title}` : `${qualified}: ${unresolved}`
+                  }
+                  disabled={!resolved}
+                  multiline
+                />
               );
             })}
-          </ul>
+          </List>
         </section>
       )}
       {!loading && review && review.commits.length === 0 && (

@@ -63,12 +63,46 @@ describe('TicketCodeReview', () => {
         },
       }),
     );
-    expect(markup).toContain('Follow-ups (3)');
+    expect(markup).toContain('>Follow-Ups<');
+    expect(markup).toContain('3 follow-ups');
     expect(markup).toContain('data-action="open-follow-up-target"');
     expect(markup).toContain('data-target-id="@project/source:one"');
-    expect(markup).toContain('HS2-ONE · Next step');
-    expect(markup).toContain('@project/source:two · Target missing');
-    expect(markup).toContain('@project/source:three · Target deleted');
+    expect(markup).toContain('Open follow-up HS2-ONE: Next step');
+    expect(markup).toContain('@project/source:two: Target missing');
+    expect(markup).toContain('@project/source:three: Target deleted');
+  });
+  it('HS2-08EPQM renders follow-ups as wrapping ticket-reference rows, never handwritten buttons', () => {
+    const markup = String(
+      TicketCodeReview({
+        review: {
+          commits: [],
+          ranges: [],
+          truncated: false,
+          follow_ups: [
+            {
+              target: { project_id: 'project', connection_id: 'source', native_id: 'one' },
+              state: 'resolved',
+              slug: 'HS2-ONE',
+              title: 'A long follow-up title that has to wrap inside the inspector',
+            },
+            { target: { project_id: 'project', connection_id: 'source', native_id: 'two' }, state: 'missing' },
+          ],
+        },
+      }),
+    );
+    const start = markup.indexOf('aria-label="Follow-Up Tickets"');
+    const section = markup.slice(start, markup.indexOf('</section>', start));
+    // The same multiline Kerf ListItem rows as the inspector's Duplicates list: slug label, title description.
+    expect(section.match(/data-multiline="true"/g)).toHaveLength(2);
+    expect(section).toContain('>HS2-ONE<');
+    expect(section).toContain('>A long follow-up title that has to wrap inside the inspector<');
+    expect(section).not.toContain('<ul');
+    // An unresolved target is listed but cannot be opened.
+    expect(section).toMatch(
+      /<button[^>]*disabled[^>]*data-target-id="@project\/source:two"|data-target-id="@project\/source:two"[^>]*disabled/,
+    );
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
+    expect(css).not.toContain('follow-ups');
   });
   it('uses canonical review-region spacing while keeping row and action geometry explicit', () => {
     const markup = String(TicketCodeReview({ review }));

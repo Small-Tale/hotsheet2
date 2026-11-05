@@ -12313,6 +12313,99 @@ test('shows recorded shipping work separately from a stale checkout and later pe
   await assertReview();
 });
 
+test('wraps follow-up titles inside the inspector Code Review tab (HS2-08EPQM)', async ({ page }) => {
+  await mockProject(page);
+  const ref = (native_id: string) => ({ project_id: 'demo-checkout', connection_id: 'local', native_id });
+  const followUps = [
+    { slug: 'HS2-FUP001', title: 'Editor rails: rounded selected shape for the navigator rail and drawer tabs' },
+    { slug: 'HS2-FUP002', title: 'Editor Components rail: keep the filter field in view while the list scrolls' },
+    { slug: 'HS2-FUP003', title: 'Editor Components rail: use the default List ListHeader for grouped sections' },
+  ];
+  await page.route('**/tickets/*01/code-review', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: {
+            difftool: 'Glassbox',
+            truncated: false,
+            ranges: [],
+            commits: [],
+            follow_ups: [
+              ...followUps.map((item, index) => ({ target: ref(`0${index}`), state: 'resolved', ...item })),
+              { target: ref('09'), state: 'missing' },
+            ],
+          },
+        })
+      : route.fallback(),
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('tab', { name: 'Code Review' }).click();
+  const assertFollowUps = async (scope: Locator, label: string) => {
+    const section = scope.getByRole('region', { name: 'Follow-Up Tickets' });
+    await expect(section).toBeVisible();
+    const rows = section.locator('[data-action="open-follow-up-target"]');
+    await expect(rows).toHaveCount(4);
+    for (const [index, item] of followUps.entries()) {
+      const row = rows.nth(index);
+      // The slug and the whole title stay readable: neither is clipped, ellipsized, or scrolled sideways.
+      await expect(row).toContainText(item.slug);
+      await expect(row).toContainText(item.title);
+      const geometry = await row.evaluate((element) => {
+        const box = element.getBoundingClientRect(),
+          frame = element.closest('section')!.getBoundingClientRect();
+        const clipped = [element, ...element.querySelectorAll('*')].filter(
+          (node) => node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== 'visible',
+        ).length;
+        return { left: box.left - frame.left, right: frame.right - box.right, clipped };
+      });
+      expect(geometry.left, `${label} row ${index} starts inside the follow-up list`).toBeGreaterThanOrEqual(-1);
+      expect(geometry.right, `${label} row ${index} ends inside the follow-up list`).toBeGreaterThanOrEqual(-1);
+      expect(geometry.clipped, `${label} row ${index} clips no text`).toBe(0);
+    }
+    await expect(rows.nth(3)).toBeDisabled();
+    // The delegated open handler reads the qualified target from the same element that carries the action.
+    await expect(rows.first()).toHaveAttribute('data-target-id', '@demo-checkout/local:00');
+    return rows;
+  };
+  for (const [label, width] of [
+    ['wide', 1440],
+    ['medium', 1024],
+    ['wide-again', 1440],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await assertFollowUps(inspector, label);
+    await inspector.screenshot({ path: `target/visual-captures/hs2-08epqm-follow-ups-${label}.png` });
+  }
+  // The longest title wraps onto a second line at the medium inspector width instead of being cut off.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  const rows = await assertFollowUps(inspector, 'medium-wrap');
+  const [titleHeight, lineHeight] = await rows.first().evaluate((element) => {
+    const leaves = [...element.querySelectorAll('*')].filter((node) => node.children.length === 0);
+    const title = leaves.find((node) => node.textContent.startsWith('Editor rails'))!;
+    const style = getComputedStyle(title);
+    const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
+    return [title.getBoundingClientRect().height, line];
+  });
+  expect(titleHeight).toBeGreaterThanOrEqual(lineHeight * 1.9);
+  // The same shared tab in the reader at a narrow phone width, and back to wide.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await reader.getByRole('tab', { name: 'Code Review' }).click();
+  for (const [label, width, height] of [
+    ['reader-narrow', 390, 844],
+    ['reader-wide-again', 1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await assertFollowUps(reader, label);
+    await page.screenshot({ path: `target/visual-captures/hs2-08epqm-follow-ups-${label}.png` });
+  }
+});
+
 test('renders the exact shared Code Review component in the inspector and reader', async ({ page }) => {
   await page.setViewportSize({ width: 2048, height: 1000 });
   await mockProject(page);
@@ -34263,7 +34356,7 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('tab', { name: 'Code Review' }).click();
     const review = inspector.locator('[data-component="ticket-code-review"]');
-    await expect(review).toContainText('Follow-ups (1)');
+    await expect(review).toContainText('Follow-Ups');
     await expect(review).toContainText('Synthetic follow-up ticket');
     for (const [label, width, height] of [
       ['medium', 900, 800],
@@ -34285,7 +34378,7 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
       const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
       await expect(reader).toBeVisible();
       await reader.getByRole('tab', { name: 'Code Review' }).click();
-      await expect(reader.locator('[data-component="ticket-code-review"]')).toContainText('Follow-ups (1)');
+      await expect(reader.locator('[data-component="ticket-code-review"]')).toContainText('Synthetic follow-up ticket');
       expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
       await page.screenshot({ path: testInfo.outputPath(`hs2-2z11a5-review-${label}.png`) });
     }

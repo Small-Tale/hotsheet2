@@ -2500,6 +2500,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   local checkout is behind recorded remote main, a separate notice says to update it
   (HS2-39D5YS).
   It also lists explicit follow-up tickets with a count and qualified links (HS2-2Z11A5).
+  Each follow-up uses the inspector's ticket-reference row (the Duplicates list's
+  multiline Kerf `ListItem`): the number is the label and the whole title wraps
+  below it at every inspector and reader width; an unresolved target is a disabled
+  row naming its state (HS2-08EPQM).
   Broken, deleted, or unavailable targets display a diagnostic while the source stays
   readable. A ticket context action opens the shared creation composer as a follow-up;
   successful creation records the relation on its source.

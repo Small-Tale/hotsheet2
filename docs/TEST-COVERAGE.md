@@ -135,6 +135,10 @@ checkout creation plus Code Review diagnostics in the server HTTP suite,
 partial-success and idempotent link-repair regressions in server, CLI, and MCP,
 qualified CLI/MCP creation in their process tests, and the shared composer and
 Code Review parent composition in the web client.
+HS2-08EPQM adds `ticket-code-review.test.ts` row-composition checks and the
+`providers.spec.ts` browser assertion that follow-up rows stay inside the list,
+clip no text, and wrap long titles in the inspector (1440, 1024, 1440 px) and the
+reader (390 px and back to wide).
 
 HS2-R7T9XB's tiny natural-copy regression in `clients/web/scripts/stable-dev.test.mjs`
 checks exclusion of `src-tauri/target` while preserving adjacent native source and unrelated
