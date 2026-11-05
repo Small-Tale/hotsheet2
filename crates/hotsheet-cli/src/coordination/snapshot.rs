@@ -172,6 +172,11 @@ impl Coordinator {
                 &finished_assignments
             ))?)
         );
+        let integration_strategy = state
+            .integrator
+            .as_ref()
+            .filter(|s| s.live(now))
+            .map(|s| s.strategy);
         Ok(Snapshot {
             cursor,
             state,
@@ -186,6 +191,7 @@ impl Coordinator {
             source_support,
             planned,
             finished_assignments,
+            integration_strategy,
         })
     }
 

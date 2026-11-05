@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::{
-    Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, IntegrationSuspension,
-    NextPlanEntry, Phase, PrerequisiteGate, ReservationCheck, ReturnRoute, Role, WaitRequest,
+    Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, IntegrationStrategy,
+    IntegrationSuspension, NextPlanEntry, Phase, PrerequisiteGate, ReservationCheck, ReturnRoute,
+    Role, StrategyPolicy, StrategyRequest, WaitRequest,
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
@@ -52,6 +53,32 @@ struct Registration {
     /// Availability only, distinct from ticket claim leases.
     #[arg(long, default_value_t = 120)]
     lease_seconds: i64,
+    /// Integrator only: the integration strategy for this session. Must be allowed by the
+    /// project and implemented; omit to use the project default (HS2-NEY1QH).
+    #[arg(long, value_enum)]
+    strategy: Option<IntegrationStrategy>,
+    /// Integrator only: confirms every participant runs a schema-eight executable before
+    /// the first non-serial strategy is recorded.
+    #[arg(long)]
+    all_participants_upgraded: bool,
+}
+
+impl Registration {
+    /// Resolve the strategy against the committed project policy before any state lock.
+    fn strategy_request(&self, project: &std::path::Path) -> Result<StrategyRequest> {
+        if self.role != Role::Integrator {
+            anyhow::ensure!(
+                self.strategy.is_none() && !self.all_participants_upgraded,
+                "only the integrator selects an integration strategy"
+            );
+            return Ok(StrategyRequest::default());
+        }
+        StrategyRequest::from_policy(
+            &StrategyPolicy::read(&hotsheet_ticketing::Settings::for_project(project))?,
+            self.strategy,
+            self.all_participants_upgraded,
+        )
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -128,6 +155,26 @@ enum CoordinationCmd {
     /// Report the pool schemas, roles and assignment authorities this executable supports,
     /// without opening (and so without migrating) the pool.
     Capabilities,
+    /// Show the project's integration strategy policy and the strategy registry, without
+    /// opening the pool (HS2-NEY1QH).
+    Strategies,
+    /// Allow a non-default integration strategy, recording why the project deviates.
+    StrategyAllow {
+        #[arg(long, value_enum)]
+        strategy: IntegrationStrategy,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Withdraw an allowed integration strategy; the project default cannot be withdrawn.
+    StrategyDisallow {
+        #[arg(long, value_enum)]
+        strategy: IntegrationStrategy,
+    },
+    /// Set the project's default integration strategy (serial or an allowed strategy).
+    StrategyDefault {
+        #[arg(long, value_enum)]
+        strategy: IntegrationStrategy,
+    },
     /// Check an exact worker handoff before writing its durable ticket note.
     Preflight {
         #[command(flatten)]
@@ -361,6 +408,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&CAPABILITIES)?);
         return Ok(());
     }
+    // HS2-NEY1QH: the strategy policy is committed project settings, not pool state.
+    if strategy_policy(&args.project, &args.command)? {
+        return Ok(());
+    }
     let coordinator = Coordinator::open(&args.project, &ctx.path)?;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     match args.command {
@@ -457,7 +508,13 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&view)?);
             return Ok(());
         }
-        CoordinationCmd::Capabilities => unreachable!("handled before opening the pool"),
+        CoordinationCmd::Capabilities
+        | CoordinationCmd::Strategies
+        | CoordinationCmd::StrategyAllow { .. }
+        | CoordinationCmd::StrategyDisallow { .. }
+        | CoordinationCmd::StrategyDefault { .. } => {
+            unreachable!("handled before opening the pool")
+        }
         CoordinationCmd::Preflight {
             worker,
             assignment,
@@ -601,19 +658,22 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             all_participants_upgraded,
         } => coordinator.set_authority(&i.id, &i.session, now, mode, all_participants_upgraded)?,
         CoordinationCmd::Register(r) => {
-            coordinator.register(
+            let strategy = r.strategy_request(&args.project)?;
+            coordinator.register_with_strategy(
                 r.role,
                 &r.identity.id,
                 &r.identity.session,
                 now,
                 r.lease_seconds,
                 r.route,
+                strategy,
             )?;
         }
         CoordinationCmd::Next {
             registration: r,
             after,
         } => {
+            let strategy = r.strategy_request(&args.project)?;
             let snapshot = coordinator.next(&WaitRequest {
                 role: r.role,
                 id: r.identity.id,
@@ -621,6 +681,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 lease_seconds: r.lease_seconds,
                 return_route: r.route,
                 after,
+                strategy,
             })?;
             println!("{}", serde_json::to_string_pretty(&snapshot)?);
             return Ok(());
@@ -1114,6 +1175,34 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         serde_json::to_string_pretty(&coordinator.snapshot(now)?)?
     );
     Ok(())
+}
+
+/// Run a strategy policy command against the project's committed settings; false for any
+/// other command. The same validated read/write backs `PUT .../integration-strategies`.
+fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Result<bool> {
+    if !matches!(
+        command,
+        CoordinationCmd::Strategies
+            | CoordinationCmd::StrategyAllow { .. }
+            | CoordinationCmd::StrategyDisallow { .. }
+            | CoordinationCmd::StrategyDefault { .. }
+    ) {
+        return Ok(false);
+    }
+    let settings = hotsheet_ticketing::Settings::for_project(project);
+    let mut policy = StrategyPolicy::read(&settings)?;
+    match command {
+        CoordinationCmd::StrategyAllow { strategy, reason } => policy.allow(*strategy, reason)?,
+        CoordinationCmd::StrategyDisallow { strategy } => policy.disallow(*strategy)?,
+        CoordinationCmd::StrategyDefault { strategy } => policy.set_default(*strategy)?,
+        _ => {}
+    }
+    if !matches!(command, CoordinationCmd::Strategies) {
+        policy.write(&settings)?;
+        policy = StrategyPolicy::read(&settings)?;
+    }
+    println!("{}", serde_json::to_string_pretty(&policy.report())?);
+    Ok(true)
 }
 
 #[derive(Deserialize)]

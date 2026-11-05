@@ -10329,6 +10329,77 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RememberPermission'
+  /checkouts/{reference}/integration-strategies:
+    get:
+      operationId: get_integration_strategies
+      description: The checkout's committed integration strategy policy and the strategy registry (HS2-NEY1QH).
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationStrategyReport'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_integration_strategies
+      description:
+        Replace the policy through the same validated write as the coordination strategy commands. A live integrator
+        keeps its recorded strategy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationStrategyPolicy'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationStrategyReport'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
   /checkouts/{reference}/permissions/legacy:
     parameters:
       - name: reference
@@ -15072,6 +15143,59 @@ components:
           type: array
           items:
             type: string
+      additionalProperties: false
+    IntegrationStrategyName:
+      type: string
+      enum:
+        - serial
+        - batch
+        - ci-staged
+    IntegrationStrategyPolicy:
+      type: object
+      properties:
+        default:
+          $ref: '#/components/schemas/IntegrationStrategyName'
+        allowed:
+          type: array
+          items:
+            type: object
+            required:
+              - strategy
+              - reason
+            properties:
+              strategy:
+                $ref: '#/components/schemas/IntegrationStrategyName'
+              reason:
+                type: string
+            additionalProperties: false
+      additionalProperties: false
+    IntegrationStrategyReport:
+      type: object
+      required:
+        - policy
+        - registry
+      properties:
+        policy:
+          $ref: '#/components/schemas/IntegrationStrategyPolicy'
+        registry:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - implemented
+              - ticket
+              - summary
+            properties:
+              name:
+                $ref: '#/components/schemas/IntegrationStrategyName'
+              implemented:
+                type: boolean
+              ticket:
+                type: string
+              summary:
+                type: string
+            additionalProperties: false
       additionalProperties: false
     ConnectionRemoval:
       type: object

@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 use super::contract::{
     HandoffEvidence, IntegrationSuspension, PlanEvent, PlannedTicket, SourceSupport,
 };
-use super::{Authority, Coordinator, Phase, ReturnRoute, Role, Snapshot};
+use super::{Authority, Coordinator, IntegrationStrategy, Phase, ReturnRoute, Role, Snapshot};
 
 /// A host-observed connection explicitly bound to a coordination session. The host must
 /// resolve this from a registered connection/terminal id, never a process scan or name.
@@ -71,6 +71,9 @@ pub struct WorkerRow {
     pub lease_expires_at: Option<i64>,
     pub tickets: Vec<WorkerTicket>,
     pub planned: Vec<PlannedTicket>,
+    /// The recorded strategy of an integrator session; None for other rows (HS2-NEY1QH).
+    #[serde(default)]
+    pub integration_strategy: Option<IntegrationStrategy>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +94,9 @@ pub struct WorkerView {
     /// built with `include_past` lists them in `workers` as well.
     #[serde(default)]
     pub past_workers: usize,
+    /// The live integrator's strategy, None without a live integrator (HS2-NEY1QH).
+    #[serde(default)]
+    pub integration_strategy: Option<IntegrationStrategy>,
 }
 
 impl WorkerView {
@@ -196,6 +202,7 @@ impl WorkerView {
                     lease_expires_at: Some(session.expires_at),
                     tickets: Vec::new(),
                     planned: Vec::new(),
+                    integration_strategy: (role == Role::Integrator).then_some(session.strategy),
                 },
             );
         }
@@ -273,6 +280,7 @@ impl WorkerView {
                 lease_expires_at: None,
                 tickets: Vec::new(),
                 planned: Vec::new(),
+                integration_strategy: None,
             });
             held.sort_by_key(|ticket| (ticket.ticket.qualified(), ticket.assignment_id.clone()));
             row.tickets = held;
@@ -308,6 +316,7 @@ impl WorkerView {
                     lease_expires_at: None,
                     tickets: Vec::new(),
                     planned: Vec::new(),
+                    integration_strategy: None,
                 },
             );
         }
@@ -331,6 +340,7 @@ impl WorkerView {
                     lease_expires_at: None,
                     tickets: Vec::new(),
                     planned: Vec::new(),
+                    integration_strategy: None,
                 });
             row.planned.push(planned.clone());
         }
@@ -391,6 +401,7 @@ impl WorkerView {
             source_support: snapshot.source_support.clone(),
             connection_coverage,
             past_workers,
+            integration_strategy: snapshot.integration_strategy,
         }
     }
 }
@@ -550,6 +561,7 @@ mod tests {
             source_support: Vec::new(),
             planned: Vec::new(),
             finished_assignments: Vec::new(),
+            integration_strategy: None,
         }
     }
 
@@ -559,6 +571,7 @@ mod tests {
             generation: generation.into(),
             expires_at,
             return_route: route,
+            strategy: Default::default(),
         }
     }
 

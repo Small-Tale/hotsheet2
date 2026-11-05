@@ -47,6 +47,8 @@ export interface WorkerRow {
   lease_expires_at: number | null;
   tickets: WorkerTicket[];
   planned: PlannedWorkerTicket[];
+  /** HS2-NEY1QH: the recorded strategy of an integrator session; absent from older servers. */
+  integration_strategy?: string | null;
 }
 
 export interface WorkerView {
@@ -152,7 +154,14 @@ function worker(value: unknown): WorkerRow {
     lease_expires_at: nullableNumber(item.lease_expires_at),
     tickets: array(item.tickets, workerTicket),
     planned: array(item.planned, plannedTicket),
+    integration_strategy: item.integration_strategy === undefined ? null : nullableString(item.integration_strategy),
   };
+}
+
+/** HS2-NEY1QH: display name for a registered integration strategy, e.g. `Serial integration`. */
+export function integrationStrategyLabel(strategy: string): string {
+  const name = strategy === 'ci-staged' ? 'CI-staged' : strategy.charAt(0).toUpperCase() + strategy.slice(1);
+  return `${name} integration`;
 }
 
 /** A malformed 2xx response is an explicit unavailable state, never an empty worker list. */

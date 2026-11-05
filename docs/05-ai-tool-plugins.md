@@ -2585,6 +2585,67 @@ note was written reuses that note. `retirement_note` is an additive field at the
 schema, so older executables still open the pool. The findings `mark --phase done`
 check also accepts an archived or otherwise closed ticket, not only a completed one.
 
+#### Integration strategies (HS2-NEY1QH)
+
+The integrator runs under one named integration strategy per session generation.
+`serial` is the default and the behavior described throughout this section: one
+handoff at a time, its own exact-tree affected local gate, a push, and covering CI.
+The typed registry (`crates/hotsheet-cli/src/coordination/strategy.rs`) also names
+`batch` (HS2-9G0M3V) and `ci-staged` (HS2-GT57BQ). Their descriptors report
+`implemented: false`, and this executable refuses to register an integrator under
+them. Each strategy carries `StrategyRules`, which the runtime consults instead of
+matching on names. Today the only rule is `exclusive_integration`, which gates the
+one-integrating-or-verifying fence in `mark` and `resume-integration`. A strategy
+ticket adds its rule together with the code that reads it.
+
+**Project policy.** The committed shared project setting `integration_strategies`
+holds `{ "default": "serial", "allowed": [{ "strategy": "<name>", "reason": "<why>" }] }`.
+`serial` is always allowed and is never listed. Every other allowed strategy needs a
+1-500 character reason, because such strategies deviate from shared rules such as
+`push-per-ticket` and "a remote run never replaces a failing local gate". The default
+must be `serial` or an allowed strategy. Local and global settings are never
+consulted for this decision. One validated read/write workflow serves:
+
+- `coordination strategies`, which prints the policy and the registry without opening
+  (and so without migrating) the pool;
+- `coordination strategy-allow --strategy <name> --reason <why>`, `strategy-disallow`
+  (the current default cannot be withdrawn), and `strategy-default`;
+- authenticated `GET`/`PUT /checkouts/{reference}/integration-strategies`, which
+  returns the same `{ policy, registry }` report and answers `400` for an invalid
+  policy.
+
+**Per-launch selection.** `coordination register|next --role integrator
+[--strategy <name>] [--all-participants-upgraded]` resolves the strategy against the
+policy before taking the state lock. An explicit name must be allowed and
+implemented; otherwise the project default applies. A renewal of the same session
+generation keeps its recorded strategy, including the renewals `next` performs while
+it waits. An explicit different strategy for that generation is refused; switching
+strategy means `leave` and a new generation. `--strategy` with any other role is
+refused.
+
+**Schema eight.** The strategy is recorded on the integrator's session. A `serial`
+session serializes exactly as before, so serial pools stay on their current schema
+(three through seven), and older participants keep operating them. Recording the
+first non-serial strategy requires `--all-participants-upgraded` and persists schema
+eight, which every older executable refuses. A refused registration changes nothing.
+The schema fence rejects a non-serial session below schema eight, and the version
+is never lowered when a later generation returns to `serial`. `coordination
+capabilities` reports `schemas_read` through 8,
+`schema_written_with_integration_strategy: 8` and the registry. A later coordination
+schema change (for example worker preferences, HS2-6WFCZR) composes the same way: an
+additive field skipped at its default, its own fence line, and its own explicit
+upgrade flag.
+
+**Visibility.** The snapshot printed by `status` and `next` reports
+`integration_strategy`: the live integrator's strategy, or null without one. The
+worker view (`coordination workers`, `GET /checkouts/{reference}/workers` and MCP
+`hotsheet_workers`) reports the same top-level `integration_strategy` and a
+per-integrator-row `integration_strategy`. The web Workers view shows it as a badge
+on the integrator card. The dispatcher reads the field and, under `serial`, applies
+its rules unchanged. The `$hotsheet-integrator` skill accepts the strategy as its
+argument; `$hotsheet-dispatcher` documents that a project's allowance alone never
+relaxes assignment.
+
 #### Three-role guidance and setup (HS2-7E5R4A)
 
 `plugins/shared/role-skills/` is the authored source for dispatcher, integrator and

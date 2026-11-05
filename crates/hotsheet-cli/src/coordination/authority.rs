@@ -22,18 +22,23 @@ pub struct Capabilities {
     /// Suspended integration and prerequisite gate evidence (HS2-2D3099).
     pub schema_written_with_suspended_integration: u32,
     pub schema_written_with_next_plan: u32,
+    /// A non-serial integrator strategy on the integrator session (HS2-NEY1QH).
+    pub schema_written_with_integration_strategy: u32,
+    pub integration_strategies: &'static [super::strategy::StrategyDescriptor],
     pub scope_section_kinds: &'static [&'static str],
     pub assignment_authorities: &'static [&'static str],
     pub roles: &'static [&'static str],
 }
 
 pub const CAPABILITIES: Capabilities = Capabilities {
-    schemas_read: &[1, 2, 3, 4, 5, 6, 7],
+    schemas_read: &[1, 2, 3, 4, 5, 6, 7, 8],
     schema_written_with_integrator_authority: 3,
     schema_written_with_dispatcher_authority: 4,
     schema_written_with_shared_sections: 5,
     schema_written_with_suspended_integration: 6,
     schema_written_with_next_plan: 7,
+    schema_written_with_integration_strategy: 8,
+    integration_strategies: &super::strategy::REGISTRY,
     scope_section_kinds: scope::SECTION_KINDS,
     assignment_authorities: &["integrator", "dispatcher"],
     roles: &["integrator", "worker", "dispatcher"],
@@ -43,6 +48,17 @@ impl Coordinator {
     /// Schema three must stay exactly what a schema-three artifact writes, and schema four
     /// exactly what a schema-four artifact can read without dropping shared sections.
     pub(super) fn schema_fence(state: &State) -> Result<()> {
+        if state.version < 8 {
+            ensure!(
+                state
+                    .integrator
+                    .iter()
+                    .chain(state.dispatcher.iter())
+                    .chain(state.workers.values())
+                    .all(|session| session.strategy.is_serial()),
+                "a non-serial integration strategy requires schema eight; upgrade every participant first"
+            );
+        }
         if state.version < 7 {
             ensure!(
                 state.next_plan.is_empty()

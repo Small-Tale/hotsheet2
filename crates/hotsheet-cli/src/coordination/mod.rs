@@ -23,6 +23,9 @@ mod snapshot;
 mod source_support;
 #[cfg(test)]
 mod source_support_tests;
+pub mod strategy;
+#[cfg(test)]
+mod strategy_tests;
 #[cfg(test)]
 mod tests;
 mod wait;
@@ -44,6 +47,7 @@ pub use contract::{
     WaitRequest,
 };
 pub use retire::{RetiredAssignment, RetirementReport, SkippedRetirement};
+pub use strategy::{IntegrationStrategy, StrategyPolicy, StrategyRequest};
 
 pub struct Coordinator {
     pub(crate) directory: PathBuf,
@@ -143,9 +147,10 @@ impl Coordinator {
         // HS2-TWZW7X: schema four is read and written only once the live integrator has
         // explicitly enabled dispatcher authority; schema five only once it has published
         // reviewed shared documents (HS2-YHYNJ6); schema six only after the live
-        // integrator suspends a gate-blocked integration (HS2-2D3099). Newer is refused.
+        // integrator suspends a gate-blocked integration (HS2-2D3099); schema eight only once
+        // an integrator records a non-serial strategy (HS2-NEY1QH). Newer is refused.
         ensure!(
-            matches!(state.version, 1..=7) && state.project_id == self.project_id,
+            matches!(state.version, 1..=8) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -192,12 +197,45 @@ impl Coordinator {
         lease: i64,
         return_route: ReturnRoute,
     ) -> Result<()> {
+        self.register_with_strategy(
+            role,
+            id,
+            generation,
+            now,
+            lease,
+            return_route,
+            StrategyRequest::default(),
+        )
+    }
+
+    /// Register with an integrator strategy selection (HS2-NEY1QH). Any role other than
+    /// the integrator must pass the default request.
+    #[allow(clippy::too_many_arguments)] // HS2-NEY1QH: one atomic registration, every field explicit.
+    pub fn register_with_strategy(
+        &self,
+        role: Role,
+        id: &str,
+        generation: &str,
+        now: i64,
+        lease: i64,
+        return_route: ReturnRoute,
+        strategy: StrategyRequest,
+    ) -> Result<()> {
         Self::valid_registration(id, generation, lease)?;
         self.change(|state| {
             if role == Role::Dispatcher {
                 Self::require_dispatcher_authority(state)?;
             }
-            Self::register_in(state, role, id, generation, now, lease, return_route)
+            Self::register_in(
+                state,
+                role,
+                id,
+                generation,
+                now,
+                lease,
+                return_route,
+                strategy,
+            )
         })
     }
 
@@ -213,12 +251,43 @@ impl Coordinator {
         lease: i64,
         return_route: ReturnRoute,
     ) -> Result<bool> {
+        self.try_register_with_strategy(
+            role,
+            id,
+            generation,
+            now,
+            lease,
+            return_route,
+            StrategyRequest::default(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)] // HS2-NEY1QH: one atomic registration, every field explicit.
+    pub fn try_register_with_strategy(
+        &self,
+        role: Role,
+        id: &str,
+        generation: &str,
+        now: i64,
+        lease: i64,
+        return_route: ReturnRoute,
+        strategy: StrategyRequest,
+    ) -> Result<bool> {
         Self::valid_registration(id, generation, lease)?;
         self.change(|state| {
             if role == Role::Dispatcher && Self::require_dispatcher_authority(state).is_err() {
                 return Ok(false);
             }
-            Self::register_in(state, role, id, generation, now, lease, return_route)?;
+            Self::register_in(
+                state,
+                role,
+                id,
+                generation,
+                now,
+                lease,
+                return_route,
+                strategy,
+            )?;
             Ok(true)
         })
     }
@@ -239,6 +308,7 @@ impl Coordinator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)] // HS2-NEY1QH: one atomic registration, every field explicit.
     fn register_in(
         state: &mut State,
         role: Role,
@@ -247,6 +317,7 @@ impl Coordinator {
         now: i64,
         lease: i64,
         return_route: ReturnRoute,
+        strategy: StrategyRequest,
     ) -> Result<()> {
         if role == Role::Worker
             && let Some(a) = state.active_assignment(id)
@@ -273,11 +344,16 @@ impl Coordinator {
                 );
             }
         }
+        let kept = previous
+            .filter(|p| p.id == id && p.generation == generation)
+            .map(|p| p.strategy);
+        let strategy = Self::registered_strategy(state, role, kept, strategy)?;
         let session = Session {
             id: id.to_string(),
             generation: generation.to_string(),
             expires_at: now + lease,
             return_route,
+            strategy,
         };
         match role {
             Role::Integrator => state.integrator = Some(session),
@@ -287,6 +363,52 @@ impl Coordinator {
             }
         }
         Ok(())
+    }
+
+    /// The strategy a registration records (HS2-NEY1QH). A same-generation renewal keeps
+    /// its strategy and refuses a different explicit one; a new generation records the
+    /// request or the policy default. The first non-serial strategy persists schema eight,
+    /// which every older artifact refuses, so the caller asserts all participants upgraded.
+    fn registered_strategy(
+        state: &mut State,
+        role: Role,
+        kept: Option<IntegrationStrategy>,
+        request: StrategyRequest,
+    ) -> Result<IntegrationStrategy> {
+        if role != Role::Integrator {
+            ensure!(
+                request.requested.is_none() && request.default.is_serial(),
+                "only the integrator selects an integration strategy"
+            );
+            return Ok(IntegrationStrategy::Serial);
+        }
+        let strategy = match (kept, request.requested) {
+            (Some(kept), Some(requested)) => {
+                ensure!(
+                    kept == requested,
+                    "this integrator session runs the {kept} strategy; leave and register a new session to use {requested}"
+                );
+                kept
+            }
+            (Some(kept), None) => kept,
+            (None, requested) => requested.unwrap_or(request.default),
+        };
+        if !strategy.is_serial() && state.version < 8 {
+            ensure!(
+                request.all_participants_upgraded,
+                "stop old participants and switch every participant to a schema-eight artifact, then pass --all-participants-upgraded to record the {strategy} strategy"
+            );
+            state.version = 8;
+        }
+        Ok(strategy)
+    }
+
+    /// The registered integrator session's strategy; serial without one (HS2-NEY1QH).
+    pub(crate) fn active_strategy(state: &State) -> IntegrationStrategy {
+        state
+            .integrator
+            .as_ref()
+            .map_or(IntegrationStrategy::Serial, |s| s.strategy)
     }
 
     fn integrator(state: &State, id: &str, generation: &str, now: i64) -> Result<()> {
@@ -538,7 +660,9 @@ impl Coordinator {
                 phase != Phase::SuspendedIntegration,
                 "use suspend-integration with exact prerequisite and failed-gate evidence"
             );
-            if matches!(phase, Phase::Integrating | Phase::Verifying) {
+            if matches!(phase, Phase::Integrating | Phase::Verifying)
+                && Self::active_strategy(state).rules().exclusive_integration
+            {
                 ensure!(
                     !state
                         .assignments
@@ -687,9 +811,10 @@ impl Coordinator {
         self.change(|state| {
             Self::integrator(state, integrator, generation, now)?;
             ensure!(
-                !state.assignments.values().any(|a| {
-                    a.id != id && matches!(a.phase, Phase::Integrating | Phase::Verifying)
-                }),
+                !Self::active_strategy(state).rules().exclusive_integration
+                    || !state.assignments.values().any(|a| {
+                        a.id != id && matches!(a.phase, Phase::Integrating | Phase::Verifying)
+                    }),
                 "another ticket is integrating or verifying; serialize integrator work"
             );
             let a = state

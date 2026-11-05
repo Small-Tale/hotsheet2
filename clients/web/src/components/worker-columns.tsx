@@ -11,6 +11,7 @@ import { Bot, CircleHelp, UserRound } from 'lucide';
 import type { TicketRow as WireTicketRow } from '../api';
 import { VIEWS_AND_SAVED_VIEWS_TARGETS } from '../interaction-attrs/views-and-saved-views';
 import {
+  integrationStrategyLabel,
   mergeWorkerViews,
   qualifiedWorkerTicket,
   workerGroups,
@@ -63,6 +64,15 @@ function WorkerCard({ worker }: { worker: ReturnType<typeof mergeWorkerViews>[nu
         >
           {availability}
         </Badge>
+        {worker.role === 'integrator' && worker.integration_strategy && (
+          <Badge
+            size="compact"
+            appearance="outline"
+            rootAttributes={{ 'data-integration-strategy': worker.integration_strategy }}
+          >
+            {integrationStrategyLabel(worker.integration_strategy)}
+          </Badge>
+        )}
       </div>
       {worker.parent && (
         <Text variant="p" tone="quiet" size="compact">

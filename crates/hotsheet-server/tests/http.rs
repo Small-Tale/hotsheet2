@@ -6994,6 +6994,111 @@ async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_repla
 }
 
 #[tokio::test]
+async fn hs2_ney1qh_integration_strategy_policy_and_active_strategy_round_trip_over_rest() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let project = workspace.path().join("code");
+    let tickets = workspace.path().join("tickets");
+    std::fs::create_dir(&project).unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .args(["init", "-q"])
+            .arg(&project)
+            .status()
+            .unwrap()
+            .success()
+    );
+    FsStore::init_git(&tickets, &StoreMetadata::new("PLAN")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": project, "stores": [tickets]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let route = format!("/checkouts/{id}/integration-strategies");
+    let initial = app
+        .clone()
+        .oneshot(authed("GET", &route, None))
+        .await
+        .unwrap();
+    assert_eq!(initial.status(), StatusCode::OK);
+    let initial = body_json(initial).await;
+    assert_eq!(initial["policy"]["default"], "serial");
+    assert_eq!(initial["registry"][0]["name"], "serial");
+    assert_eq!(initial["registry"][0]["implemented"], true);
+    assert_eq!(initial["registry"][1]["implemented"], false);
+    for invalid in [
+        serde_json::json!({"default": "batch", "allowed": []}),
+        serde_json::json!({"default": "serial", "allowed": [{"strategy": "batch", "reason": ""}]}),
+        serde_json::json!({"default": "serial", "allowed": [{"strategy": "serial", "reason": "x"}]}),
+    ] {
+        let refused = app
+            .clone()
+            .oneshot(authed("PUT", &route, Some(&invalid.to_string())))
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST, "{invalid}");
+    }
+    let saved = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &route,
+            Some(
+                &serde_json::json!({"default": "serial", "allowed": [{"strategy": "batch", "reason": "throughput"}]})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(saved).await["policy"]["allowed"][0]["reason"],
+        "throughput"
+    );
+    // The REST write and the headless policy read are one committed project setting.
+    let settings = hotsheet_ticketing::Settings::for_project(&project);
+    let policy = hotsheet_cli::coordination::StrategyPolicy::read(&settings).unwrap();
+    assert!(policy.is_allowed(hotsheet_cli::coordination::IntegrationStrategy::Batch));
+    let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+        &project,
+        &tickets,
+        registry.path().to_path_buf(),
+    )
+    .unwrap();
+    coordinator
+        .register(
+            hotsheet_cli::coordination::Role::Integrator,
+            "integrator",
+            "generation-one",
+            time::OffsetDateTime::now_utc().unix_timestamp(),
+            120,
+            hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+        )
+        .unwrap();
+    let workers = app
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}/workers"), None))
+        .await
+        .unwrap();
+    assert_eq!(workers.status(), StatusCode::OK);
+    let workers = body_json(workers).await;
+    assert_eq!(workers["integration_strategy"], "serial");
+    assert_eq!(workers["workers"][0]["role"], "integrator");
+    assert_eq!(workers["workers"][0]["integration_strategy"], "serial");
+}
+
+#[tokio::test]
 async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

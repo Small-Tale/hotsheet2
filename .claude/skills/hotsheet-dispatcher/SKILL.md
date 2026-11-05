@@ -4,7 +4,7 @@ description: Keep a local dispatcher assigning independent Hot Sheet tickets whi
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 3 -->
+<!-- hotsheet-skill-version: 4 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -42,6 +42,14 @@ its own route and lease flags; repeat them on every wait and on
 --route <return-route> --lease-seconds <lease-seconds>` renewals (HS2-CP6GWA).
 Keep the yielded wait running. Genuine state/cursor/lease events wake it; do not
 poll the store or network on a timer. A stale or duplicate generation is refused.
+
+## Read the integration strategy
+
+`status` reports `integration_strategy`, the live integrator's strategy (null
+without a live integrator), and `coordination strategies` prints the project policy
+(HS2-NEY1QH). Under `serial`, the only strategy implemented now, apply every rule
+below unchanged. Never assign more freely because a project allows another strategy;
+batch-specific assignment rules arrive with HS2-9G0M3V.
 
 ## Refill independent workers
 

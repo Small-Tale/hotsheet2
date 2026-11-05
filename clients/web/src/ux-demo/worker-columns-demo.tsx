@@ -56,6 +56,7 @@ function worker(
     lease_expires_at: Date.now() / 1000 + 3600,
     tickets,
     planned,
+    integration_strategy: role === 'integrator' ? 'serial' : null,
   };
 }
 

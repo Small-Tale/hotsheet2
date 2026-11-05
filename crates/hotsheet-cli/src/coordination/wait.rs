@@ -52,13 +52,15 @@ impl Coordinator {
         let mut renew_at = now() + request.lease_seconds / 2;
         // HS2-TWZW7X: a dispatcher may start before dispatcher authority exists. It then
         // waits on genuine state events without registering, and says why.
-        let mut registered = self.try_register(
+        // HS2-NEY1QH: the first registration records the strategy; renewals below keep it.
+        let mut registered = self.try_register_with_strategy(
             request.role,
             &request.id,
             &request.generation,
             now(),
             request.lease_seconds,
             request.return_route.clone(),
+            request.strategy,
         )?;
         let mut snapshot_checked_at = now();
         let mut snapshot = self.snapshot(snapshot_checked_at)?;

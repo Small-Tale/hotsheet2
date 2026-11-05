@@ -57,6 +57,13 @@ pub struct Session {
     pub generation: String,
     pub expires_at: i64,
     pub return_route: ReturnRoute,
+    /// Integration strategy of an integrator session (HS2-NEY1QH). Skipped at `serial`,
+    /// so serial pools serialize exactly as before; any other value requires schema eight.
+    #[serde(
+        default,
+        skip_serializing_if = "super::strategy::IntegrationStrategy::is_serial"
+    )]
+    pub strategy: super::strategy::IntegrationStrategy,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -389,6 +396,10 @@ pub struct Snapshot {
     /// `retire-finished` retires them; the pool record itself is unchanged (HS2-V9BXWF).
     #[serde(default)]
     pub finished_assignments: Vec<String>,
+    /// The live integrator's strategy, None without a live integrator (HS2-NEY1QH). The
+    /// dispatcher reads it here. Default permits reading older snapshots.
+    #[serde(default)]
+    pub integration_strategy: Option<super::strategy::IntegrationStrategy>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -448,6 +459,7 @@ mod snapshot_compatibility_tests {
             "dispatch_blockers",
             "planned",
             "finished_assignments",
+            "integration_strategy",
         ] {
             encoded.as_object_mut().unwrap().remove(field);
         }
@@ -475,4 +487,7 @@ pub struct WaitRequest {
     pub lease_seconds: i64,
     pub return_route: ReturnRoute,
     pub after: Option<String>,
+    /// Integrator strategy selection; the default keeps a renewal's recorded strategy or
+    /// registers `serial` (HS2-NEY1QH).
+    pub strategy: super::strategy::StrategyRequest,
 }

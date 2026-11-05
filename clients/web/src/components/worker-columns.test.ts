@@ -88,6 +88,39 @@ describe('HS2-E9SR7R Workers composition', () => {
     expect(markup.match(/data-component="ticket-list-row-container"/g)).toHaveLength(2);
   });
 
+  it('HS2-NEY1QH shows the integrator session strategy only on the integrator card', () => {
+    const integrator = {
+      ...worker('Integrator', rows[0]),
+      role: 'integrator' as const,
+      integration_strategy: 'serial',
+    };
+    const markup = String(
+      WorkerColumns({
+        views: [{ ...view, workers: [integrator, worker('B', rows[1])] }],
+        details: {},
+        ticketRow: row,
+        loading: false,
+        sourceErrors: [],
+        unsupportedSources: [],
+        layout: 'grid',
+      }),
+    );
+    expect(markup.match(/data-integration-strategy="serial"/g)).toHaveLength(1);
+    expect(markup).toContain('Serial integration');
+    const older = String(
+      WorkerColumns({
+        views: [{ ...view, workers: [{ ...integrator, integration_strategy: null }] }],
+        details: {},
+        ticketRow: row,
+        loading: false,
+        sourceErrors: [],
+        unsupportedSources: [],
+        layout: 'grid',
+      }),
+    );
+    expect(older).not.toContain('data-integration-strategy');
+  });
+
   it('pages the phone layout and keeps unknown separate from a genuine zero-worker state', () => {
     const base = { details: {}, ticketRow: row, sourceErrors: [], unsupportedSources: [], layout: 'paged' as const };
     const loading = String(WorkerColumns({ ...base, views: [], loading: true }));

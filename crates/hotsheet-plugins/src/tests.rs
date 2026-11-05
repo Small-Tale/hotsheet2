@@ -439,7 +439,7 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         ))
     );
     assert!(worker.contains("<!-- hotsheet-skill-version: 47 -->")); // HS2-EJ8JTG
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 21 -->")); // HS2-KBK83M
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 22 -->")); // HS2-NEY1QH
     assert!(flatten(integrator).contains("release the claim and `review-return` the handoff")); // HS2-KBK83M
     assert!(flatten(integrator).contains("A `blocked_reason` does not refuse the claim")); // HS2-BAK4BC
     assert!(
@@ -476,6 +476,35 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
     ] {
         assert!(integrator.contains(phrase), "integrator missing {phrase}");
     }
+}
+
+#[test]
+fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy_without_unbuilt_modes() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let integrator = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-integrator/SKILL.md"
+    ));
+    let dispatcher = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-dispatcher/SKILL.md"
+    ));
+    for phrase in [
+        "`$hotsheet-integrator serial`",
+        "`coordination strategies`",
+        "`--strategy <name>`",
+        "A strategy is fixed for one generation",
+        "This executable refuses to register them; do not perform their steps.",
+        "`--all-participants-upgraded`",
+    ] {
+        assert!(integrator.contains(phrase), "integrator missing {phrase}");
+    }
+    for phrase in [
+        "`integration_strategy`",
+        "Under `serial`, the only strategy implemented now",
+        "Never assign more freely",
+    ] {
+        assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
+    }
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 4 -->"));
 }
 
 #[test]

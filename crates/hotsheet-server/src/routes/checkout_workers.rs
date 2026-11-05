@@ -8,8 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use axum::Json;
 use axum::extract::{Path as RoutePath, Query, State};
 use axum::http::StatusCode;
+use hotsheet_cli::coordination::strategy::StrategyReport;
 use hotsheet_cli::coordination::worker_view::{ConnectionObservation, WorkerView};
-use hotsheet_cli::coordination::{Assignment, Coordinator, NextPlanEntry, PlanEvent};
+use hotsheet_cli::coordination::{
+    Assignment, Coordinator, NextPlanEntry, PlanEvent, StrategyPolicy,
+};
 use hotsheet_sync::LockExt;
 use serde::Deserialize;
 use serde::Serialize;
@@ -200,6 +203,35 @@ fn revalidate(
         .verified_git_source(source_id)
         .map_err(checkout_lookup_error)?;
     Ok(())
+}
+
+/// The checkout's committed integration strategy policy and the strategy registry
+/// (HS2-NEY1QH); `coordination strategies` prints the same report.
+pub(crate) async fn get_integration_strategies(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+) -> Result<Json<StrategyReport>, ApiError> {
+    let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    let policy = StrategyPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(policy.report()))
+}
+
+/// Replace the policy through the same validated write as the `coordination strategy-*`
+/// commands. A live integrator keeps its recorded strategy; the policy applies to the next
+/// registration of a new integrator session.
+pub(crate) async fn put_integration_strategies(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    Json(policy): Json<StrategyPolicy>,
+) -> Result<Json<StrategyReport>, ApiError> {
+    let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    policy
+        .write(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let policy = StrategyPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(policy.report()))
 }
 
 fn worker_error(error: anyhow::Error) -> ApiError {

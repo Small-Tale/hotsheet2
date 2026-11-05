@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  integrationStrategyLabel,
   mergeWorkerViews,
   parseWorkerView,
   qualifiedWorkerTicket,
@@ -59,6 +60,18 @@ describe('HS2-E9SR7R worker view projection', () => {
     ).toThrow('invalid worker view');
     expect(() => parseWorkerView({ ...view('s', []), workers: [{ id: 'a' }] })).toThrow('invalid worker view');
     expect(parseWorkerView(view('s', [worker('a')])).workers[0]?.id).toBe('a');
+  });
+
+  it('HS2-NEY1QH parses the integrator strategy and tolerates servers without it', () => {
+    const parsed = parseWorkerView(
+      view('s', [worker('i', { role: 'integrator', integration_strategy: 'serial' }), worker('w')]),
+    );
+    expect(parsed.workers.map((row) => row.integration_strategy)).toEqual(['serial', null]);
+    expect(() =>
+      parseWorkerView(view('s', [{ ...worker('i'), integration_strategy: 7 } as unknown as WorkerRow])),
+    ).toThrow('invalid worker view');
+    expect(integrationStrategyLabel('serial')).toBe('Serial integration');
+    expect(integrationStrategyLabel('ci-staged')).toBe('CI-staged integration');
   });
 
   it('deduplicates one worker across sources, keeps the integrator first and its background child adjacent', () => {

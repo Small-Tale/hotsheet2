@@ -6558,6 +6558,17 @@ mod tests {
                 .unwrap()["planned"][0]["entry"]["operation"],
             "mcp-next"
         );
+        // HS2-NEY1QH: the live integrator's strategy is visible to MCP consumers.
+        assert_eq!(planned["integration_strategy"], "serial");
+        assert_eq!(
+            planned["workers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["id"] == "integrator")
+                .unwrap()["integration_strategy"],
+            "serial"
+        );
         let events = call(
             &backend,
             "hotsheet_worker_plan_events",

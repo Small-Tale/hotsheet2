@@ -256,6 +256,11 @@ preview/download, server directory browser) are separate design work.
   unknown rather than showing zero workers. Keep idle workers visible and give a
   genuine zero-worker state. Ticket activation opens the existing inspector; this
   monitoring view adds no launch, stop, or message actions.
+  The integrator card adds an outline badge naming the session's recorded
+  integration strategy (for example **Serial integration**) when the server reports
+  one; older servers omit it (HS2-NEY1QH). The policy itself is edited headlessly
+  or through `PUT /checkouts/{id}/integration-strategies`; a settings editor is
+  HS2-SVD5WA.
   Use the shared column ticket summary and Kerf's column track: horizontally
   reachable columns on desktop and paged columns with a next-column peek on phones.
   Preserve column identity, order, focus, and scroll across updates and size changes.

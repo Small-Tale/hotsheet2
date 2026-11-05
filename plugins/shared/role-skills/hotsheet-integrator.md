@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 21 -->
+<!-- hotsheet-skill-version: 22 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -11,6 +11,30 @@ owns main mutation, review, integration, push, CI follow-through and completion.
 The legacy integrator alone assigns only while the runtime reports integrator
 authority. Workers use `$hotsheet-worker` in separate Git worktrees. Follow `AGENTS.md` for the project's
 claim, phase, test, commit, push, and completion rules.
+
+## Integration strategy (HS2-NEY1QH)
+
+This skill takes an optional strategy argument, for example `$hotsheet-integrator
+serial`. Without one, the project default applies. Before registering, read
+`coordination strategies`: it prints the project's committed policy (the
+`integration_strategies` shared setting) and which registered strategies this
+executable implements. Pass the chosen name as `--strategy <name>` on the first
+`register` of a fresh session generation and on every `next`. A strategy is fixed for
+one generation; to switch, `leave` and register a new generation. The runtime refuses
+a strategy the project has not allowed or this executable does not implement. Report
+that refusal to the user instead of silently falling back.
+
+- `serial` (default, implemented): every step below. One handoff integrates at a
+  time with its own exact-tree local gate, push and covering CI.
+- `batch` (HS2-9G0M3V) and `ci-staged` (HS2-GT57BQ) are registered names only.
+  This executable refuses to register them; do not perform their steps.
+
+Only the maintainer allows a non-default strategy, with `coordination
+strategy-allow --strategy <name> --reason <why>`, because it deviates from shared
+rules such as `push-per-ticket`. Recording the first non-serial strategy persists
+schema eight and needs `--all-participants-upgraded` after every participant runs a
+schema-eight artifact; serial sessions leave the pool schema unchanged. `status`
+and `workers` report the active `integration_strategy`.
 
 ## Continuous local session
 

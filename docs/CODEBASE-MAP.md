@@ -1096,6 +1096,14 @@ scope review behind the schema-five fence (HS2-YHYNJ6); `scope_tests.rs` and
 tentative worker intent, bounded event replay, manual-assignment reconciliation and
 verified dispatch under the schema-seven fence (HS2-XCMAVT); `next_plan_tests.rs`
 and real CLI, HTTP and MCP tests pin its transitions.
+`strategy.rs` owns the typed integration strategy registry (`serial` implemented;
+`batch` and `ci-staged` registered but refused), its `StrategyRules`, and the
+committed `integration_strategies` project policy with one validated read/write
+shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
+/checkouts/{reference}/integration-strategies` (`hotsheet-server`
+`routes/checkout_workers.rs`). The integrator session records a non-serial strategy
+only under the schema-eight fence (HS2-NEY1QH); `strategy_tests.rs` and
+`tests/coordination_strategy.rs` pin its transitions.
 `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,
