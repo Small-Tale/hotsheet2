@@ -2591,12 +2591,17 @@ The integrator runs under one named integration strategy per session generation.
 `serial` is the default and the behavior described throughout this section: one
 handoff at a time, its own exact-tree affected local gate, a push, and covering CI.
 The typed registry (`crates/hotsheet-cli/src/coordination/strategy.rs`) also names
-`batch` (HS2-9G0M3V) and `ci-staged` (HS2-GT57BQ). Their descriptors report
-`implemented: false`, and this executable refuses to register an integrator under
-them. Each strategy carries `StrategyRules`, which the runtime consults instead of
-matching on names. Today the only rule is `exclusive_integration`, which gates the
-one-integrating-or-verifying fence in `mark` and `resume-integration`. A strategy
-ticket adds its rule together with the code that reads it.
+`batch` (implemented, HS2-9G0M3V; see "Batch integration" below) and `ci-staged`
+(HS2-GT57BQ). The `ci-staged` descriptor reports `implemented: false`, and this
+executable refuses to register an integrator under it. Each strategy carries
+`StrategyRules`, which the runtime consults instead of matching on names:
+
+- `exclusive_integration` gates the one-integrating-or-verifying fence in `mark` and
+  `resume-integration`. Every strategy keeps it.
+- `batch_integration` (batch only) permits `batch-open`, which moves several handoffs
+  into integration together as one integration unit.
+
+A strategy ticket adds its rule together with the code that reads it.
 
 **Project policy.** The committed shared project setting `integration_strategies`
 holds `{ "default": "serial", "allowed": [{ "strategy": "<name>", "reason": "<why>" }] }`.
@@ -2609,7 +2614,11 @@ consulted for this decision. One validated read/write workflow serves:
 - `coordination strategies`, which prints the policy and the registry without opening
   (and so without migrating) the pool;
 - `coordination strategy-allow --strategy <name> --reason <why>`, `strategy-disallow`
-  (the current default cannot be withdrawn), and `strategy-default`;
+  (the current default cannot be withdrawn), and `strategy-default`. For batch,
+  `--max-red-batches <n>` (1-100) and `--max-red-minutes <m>` (1-10080) record the
+  circuit breaker as `"circuit_breaker": {"max_red_batches": n, "max_red_minutes": m}`
+  on the batch entry. Absent thresholds mean 2 batches and 120 minutes, and
+  re-allowing without them keeps the recorded ones;
 - authenticated `GET`/`PUT /checkouts/{reference}/integration-strategies`, which
   returns the same `{ policy, registry }` report and answers `400` for an invalid
   policy.
@@ -2727,6 +2736,74 @@ rules.
 
 Deferred: a configurable delay that promotes soft-preference workers to starving
 tickets, and starvation notifications (HS2-JXQJKR).
+
+#### Batch integration (HS2-9G0M3V)
+
+A batch integrator collects several reviewed, non-overlapping code handoffs,
+integrates them onto `main`, runs one smoke gate, pushes once, and lets one covering
+CI run test them together. Failures become follow-up bugs, attributed on a best-effort
+basis back to the source tickets (HS2-HAHX20). The project must allow `batch` with a
+recorded reason (above). This is the recorded deviation from `push-per-ticket` and
+from "a remote run never replaces a failing local gate", written beside the push
+policy in `AGENTS.md`. The integrator registers with `--strategy batch`.
+
+**Lifecycle.** Every command takes the exact live integrator id and session, and is
+refused unless that session runs a strategy with `batch_integration`.
+
+| Step                | Command                                                                                                              | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collect             | `coordination batch-plan [--max <n>]`                                                                                | Read-only proposal. It lists ready code handoffs (Handoff phase, not review-returned, no live ticket claim, ticket in the selected local store) ordered by ticket priority, then handoff transition time, then assignment id. A handoff whose paths overlap an earlier selection waits for a later batch with a stated reason. Its paths are the declared scope plus the commit's changed paths since its base.                                    |
+| Open                | `batch-open --batch <id> --assignment <id>...`                                                                       | Atomically moves every member from `handoff` to `integrating`. Refused while another assignment is integrating, verifying or suspended, while another batch is open, while the circuit breaker is tripped, or when two members' paths overlap. The open batch is the one integration unit, so a single `mark --phase integrating` is refused until it is pushed or aborted.                                                                        |
+| Smoke gate and push | `scripts/push.sh ... --assignment <id>... --phase-ticket <slug>... --gate-arg --smoke`                               | One main-window reservation. The pool must show exactly these members integrating under a batch integrator. `scripts/check.sh --smoke` must pass for the exact tree, then one push, then every phase ticket moves to `final_testing`.                                                                                                                                                                                                              |
+| Abort               | `batch-abort --batch <id> --reason <text>`                                                                           | Only before push, for example after a failed smoke gate or a non-trivial conflict. Every member returns to `handoff`; nothing was pushed.                                                                                                                                                                                                                                                                                                          |
+| Pushed              | `batch-pushed --batch <id> --main-commit <sha> --shipping <assignment>=<sha>... --smoke-check <check>...`            | The CLI checks that the main commit is the checked-out HEAD, that it equals its upstream, and that it contains every shipping SHA. Every member enters `ci`.                                                                                                                                                                                                                                                                                       |
+| Record              | `node scripts/integration-batch.mjs record ...`                                                                      | Adds one `## Batch manifest` note per ticket, with `CI gate commit: <batch main SHA>`, the qualified ticket, source and shipping SHAs, members and smoke checks. Writes the ticket's `integration-record.mjs` record. Idempotent by batch id.                                                                                                                                                                                                      |
+| CI result           | `node scripts/integration-batch.mjs ci ...`, or `batch-result --batch <id> --run <id> --conclusion success\|failure` | Reads the batch commit's CI push run once, with no polling. A missing, running or cancelled run records nothing. Green records `green`. Red records `red`, writes the HS2-HAHX20 attribution manifest, runs `scripts/ci-failure-attribution.mjs`, and records its non-flaky `filed` follow-ups with `batch-follow-ups --attribution-file <json>` (or `--failure <key>=<slug>`). The CLI verifies that each follow-up exists in the selected store. |
+
+**Completion rule.** `mark --phase done` on a batch member is refused until its batch
+is `green`, or `red` with a recorded follow-up for every failure the batch caused.
+Individual `mark` moves to `integrating` or `ci`, and `suspend-integration`, are
+refused for batch members, which move only with their batch. A rerun that turns a red
+batch green is accepted. A green batch never turns red.
+
+**Circuit breaker.** A red result counts toward the breaker. It trips when the
+consecutive red batches reach `max_red_batches`, or when `main` has been red for
+`max_red_minutes` since the first red batch. The time limit is checked by the next
+result or `batch-open`, which records the trip before refusing.
+
+- The tripping `batch-result` output carries a `notify` line, which the integrator
+  relays to the user.
+- While the breaker is tripped, `batch-open` is refused and the integrator integrates
+  serially with the same session. Single `mark` calls keep the exclusive fence, and
+  `status` reports `batches.effective_strategy: serial` with the trip reason.
+- A green batch clears the breaker. So does `batch-recover --run <id> --main-commit
+<sha>` (`integration-batch.mjs recover` reads the newest green main push run). The
+  CLI requires that run's commit to contain the last red batch push.
+
+**State, without a schema bump.** Batch state lives in a ledger beside the pool,
+`<git-common-dir>/hotsheet-coordination/batches.json` (`version: 1`; any other
+version is refused). It holds each manifest (id, integrator generation, state
+`integrating|aborted|ci|green|red`, members with qualified tickets, source commit,
+paths and shipping commits, main commit, smoke checks, run, abort reason, failures
+with follow-ups) and the breaker. The ledger is read and written under the pool's
+`state.lock`.
+
+The pool schema stays at eight:
+
+- a batch integrator session already persists schema eight, which every artifact
+  without strategies refuses;
+- only batch commands create the ledger, so serial pools never have one;
+- schema nine belongs to HS2-6WFCZR's worker preferences, which compose with
+  batch state independently.
+
+Every batch transition is idempotent by batch id, so replaying a command repairs a
+write interrupted between the two files. `coordination capabilities` reports
+`integration_batches: 1`, and the integrator uses only an executable that reports
+it. `coordination batch-status` prints the ledger. `status` and `next` report
+`batches` (effective strategy, breaker, and batches whose tickets are not all done)
+once a ledger exists, and the ledger takes part in the snapshot cursor.
+`scripts/main-integration-window.mjs` reads pool schemas 3 through 9, including
+HS2-6WFCZR's schema nine (HS2-JBAD2Z).
 
 #### Three-role guidance and setup (HS2-7E5R4A)
 

@@ -3,7 +3,7 @@ name: hotsheet-dispatcher
 description: Keep a local dispatcher assigning independent Hot Sheet tickets while an integrator reviews and ships handoffs.
 ---
 
-<!-- hotsheet-skill-version: 5 -->
+<!-- hotsheet-skill-version: 6 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -46,9 +46,10 @@ poll the store or network on a timer. A stale or duplicate generation is refused
 
 `status` reports `integration_strategy`, the live integrator's strategy (null
 without a live integrator), and `coordination strategies` prints the project policy
-(HS2-NEY1QH). Under `serial`, the only strategy implemented now, apply every rule
-below unchanged. Never assign more freely because a project allows another strategy;
-batch-specific assignment rules arrive with HS2-9G0M3V.
+(HS2-NEY1QH). Under `serial` and `batch` (HS2-9G0M3V), apply every rule below
+unchanged. Batch integrates several handoffs together, but only those whose paths do
+not overlap, so precise declared scopes let more handoffs share a batch. Never assign
+more freely because a project allows another strategy.
 
 ## Honor worker preferences and requests
 

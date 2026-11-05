@@ -7036,7 +7036,10 @@ async fn hs2_ney1qh_integration_strategy_policy_and_active_strategy_round_trip_o
     assert_eq!(initial["policy"]["default"], "serial");
     assert_eq!(initial["registry"][0]["name"], "serial");
     assert_eq!(initial["registry"][0]["implemented"], true);
-    assert_eq!(initial["registry"][1]["implemented"], false);
+    // HS2-9G0M3V: batch is implemented; ci-staged is still registered only.
+    assert_eq!(initial["registry"][1]["name"], "batch");
+    assert_eq!(initial["registry"][1]["implemented"], true);
+    assert_eq!(initial["registry"][2]["implemented"], false);
     for invalid in [
         serde_json::json!({"default": "batch", "allowed": []}),
         serde_json::json!({"default": "serial", "allowed": [{"strategy": "batch", "reason": ""}]}),

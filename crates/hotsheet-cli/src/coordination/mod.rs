@@ -4,6 +4,9 @@
 mod authority;
 #[cfg(test)]
 mod authority_tests;
+pub mod batch;
+#[cfg(test)]
+mod batch_tests;
 pub mod contract;
 #[cfg(test)]
 mod findings_review_return_tests;
@@ -38,7 +41,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use hotsheet_ticketing::{FileLock, FsStore, TicketRef, checkouts, git_connection_id, ops};
 use sha2::{Digest, Sha256};
 
@@ -864,7 +867,7 @@ impl Coordinator {
         id: &str,
         phase: Phase,
     ) -> Result<()> {
-        self.change(|state| {
+        self.change_batches(|state, ledger| {
             Self::integrator(state, integrator, generation, now)?;
             ensure!(
                 phase != Phase::SuspendedIntegration,
@@ -908,6 +911,9 @@ impl Coordinator {
                 !a.returned_for_review(),
                 "review-returned handoff is preserved; integrate its correction assignment instead"
             );
+            // HS2-9G0M3V: a batch member moves with its batch and completes only once the
+            // batch is green, or red with a follow-up for every failure.
+            Self::batch_mark_rule(ledger, id, a.phase, phase)?;
             ensure!(
                 a.phase == phase
                     || matches!(
@@ -962,8 +968,14 @@ impl Coordinator {
             evidence.resumed.is_none(),
             "a new suspension cannot carry a prior resumption"
         );
-        self.change(|state| {
+        self.change_batches(|state, ledger| {
             Self::integrator(state, integrator, generation, now)?;
+            if let Some(batch) = ledger.batch_of(id) {
+                bail!(
+                    "assignment {id} belongs to batch {}; abort the batch instead of suspending one member",
+                    batch.id
+                );
+            }
             let a = state
                 .assignments
                 .get_mut(id)

@@ -280,6 +280,30 @@ fences. The retained fourteen-case matrix used different Git binaries reporting
 the same Apple Git version; it is not cross-version or ref-backend verification.
 Real-Git and interleaving regressions run against the local Apple Git 2.54 files backend.
 
+## Batch smoke profile (HS2-9G0M3V)
+
+`scripts/check.sh --smoke` is the one gate of a batch integration push. It runs
+exactly the stages declared in `scripts/gate-smoke.json`: build or compile, lint, and
+a fast sanity set. It never expands to affected suites, and the declaration refuses
+browser suites (`playwright`, `test:browser`, `test:e2e`). Each stage declares only a
+`cwd`, a `command` and a `reason`; duplicates and unknown keys are refused. Today's
+set:
+
+- `cargo fmt --all --check` and `cargo lint` (every Rust target compiled and linted);
+- `node scripts/sync-role-skills.mjs --check` and `cargo nextest run -p
+hotsheet-plugins` (skill, plugin and mirror contracts);
+- `npm run format:sources:check`, `npm run lint:web` and `npm run typecheck` in
+  `clients/web`.
+
+The profile cannot be combined with `--full`, `--ticket`, `--tier`, `--t2-stage` or
+`--budget`. Its receipt is exact for the whole tree, under its own `smoke` profile
+and tier, so it is never reused as an affected-gate receipt, nor the reverse. It never
+writes or clears the `hotsheet-root-gate/<tree>` marker that serial prerequisite
+resumption reads. `--plan` lists every other `check-full.sh` stage as deferred to the
+batch CI run. `scripts/push.sh` accepts `--gate-arg --smoke` only for a live batch
+integrator, and requires it for a multi-assignment push. See
+[05 §5.9.1 batch integration](05-ai-tool-plugins.md#batch-integration-hs2-9g0m3v).
+
 ## Timing history (HS2-TCCKRZ)
 
 `scripts/check.sh --timings` prints recent stage and test-file cost estimates as

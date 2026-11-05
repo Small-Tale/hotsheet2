@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 22 -->
+<!-- hotsheet-skill-version: 23 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -27,8 +27,12 @@ that refusal to the user instead of silently falling back.
 
 - `serial` (default, implemented): every step below. One handoff integrates at a
   time with its own exact-tree local gate, push and covering CI.
-- `batch` (HS2-9G0M3V) and `ci-staged` (HS2-GT57BQ) are registered names only.
-  This executable refuses to register them; do not perform their steps.
+- `batch` (implemented, HS2-9G0M3V): the steps in "Batch integration" below replace
+  the per-handoff gate, push and CI steps. First check that `coordination
+  capabilities` reports `integration_batches`, and use only that executable for every
+  integrator call.
+- `ci-staged` (HS2-GT57BQ) is a registered name only. This executable refuses to
+  register it; do not perform its steps.
 
 Only the maintainer allows a non-default strategy, with `coordination
 strategy-allow --strategy <name> --reason <why>`, because it deviates from shared
@@ -36,6 +40,67 @@ rules such as `push-per-ticket`. Recording the first non-serial strategy persist
 schema eight and needs `--all-participants-upgraded` after every participant runs a
 schema-eight artifact; serial sessions leave the pool schema unchanged. `status`
 and `workers` report the active `integration_strategy`.
+
+## Batch integration (HS2-9G0M3V)
+
+Follow this section only when this session registered with `--strategy batch`. Batch
+deviates from the project's push policy and from "a remote run never replaces a
+failing local gate"; the project records that deviation beside its push policy.
+Review each handoff exactly as step 1 of "Integrate one handoff at a time" requires.
+Batch changes only the gate, push and CI steps.
+
+1. **Collect.** `coordination batch-plan [--max <n>]` proposes the ready code
+   handoffs without live claims, in priority then handoff order. It defers any
+   handoff whose paths (declared scope plus the commit's changes) overlap an earlier
+   one. Leave out any handoff you would review-return. Claim each chosen ticket with
+   an ETA and the `integrating` phase.
+2. **Open.** Run `coordination batch-open --id <integrator> --session <generation>
+   --batch <stable-id> --assignment <id>...` in the planned order. Every member
+   enters `integrating` together. The open batch is the one integration unit, so no
+   other ticket integrates until it is pushed or aborted. Replaying the same open is
+   idempotent. A tripped circuit breaker refuses it (step 7).
+3. **Integrate.** Cherry-pick or fast-forward each member onto `main` in batch order,
+   and confirm every source commit is reachable. A conflict that is not trivial
+   within the members' scopes ends the batch. Restore `main` to its pre-batch SHA
+   (the worker branches keep their commits), run `batch-abort` (step 4), and batch
+   the rest without that handoff.
+4. **Smoke gate and one push.** Run `scripts/push.sh origin main --integrator-id
+   <id> --integrator-session <session> --assignment <id>... --phase-ticket
+   <slug>... --gate-arg --smoke`. `scripts/check.sh --smoke` runs only the project's
+   declared checks (`scripts/gate-smoke.json`: build, lint and a fast sanity set),
+   never affected suites or browser suites.
+   - If the smoke gate fails, nothing is pushed. Restore `main`, run `coordination
+     batch-abort --batch <id> --reason "<failed check>"` to return every member to
+     handoff, then fix or return the responsible handoff.
+   - On success the script moves every listed ticket to `final_testing`.
+5. **Record.** `coordination batch-pushed --batch <id> --main-commit <pushed HEAD>
+   --shipping <assignment>=<main sha>... --smoke-check <check>...` puts every member
+   in `ci`. Then run `node scripts/integration-batch.mjs record --project <main>
+   --store <store> --batch <id> --integrator-id <id> --integrator-session
+   <session>`. It writes a `## Batch manifest` note with `CI gate commit: <batch
+   main SHA>` on each ticket, plus the ticket's `integration-record.mjs` record.
+   Release the claims while CI runs.
+6. **CI result.** When the CI gate status flow reports that the batch commit's run
+   finished, run `node scripts/integration-batch.mjs ci ...` once; never poll.
+   - Green records the result. Reclaim and complete every batch ticket after the
+     usual review, then mark each mailbox `done`.
+   - Red records the result, runs the HS2-HAHX20 attribution
+     (`scripts/ci-failure-attribution.mjs`) and records its follow-up bugs with
+     `coordination batch-follow-ups`. `mark --phase done` refuses a red batch member
+     until every failure has a recorded follow-up. Then complete the tickets and
+     name the follow-ups.
+   - When the output carries `notify`, the circuit breaker tripped: tell the user
+     that text.
+7. **Circuit breaker.** The breaker trips after `max_red_batches` consecutive red
+   batches, or once main has stayed red for `max_red_minutes`. The maintainer sets
+   both with `strategy-allow --strategy batch --reason <why> --max-red-batches <n>
+   --max-red-minutes <m>` (defaults 2 and 120).
+   - While it is tripped, `batch-open` refuses and `status` reports
+     `batches.effective_strategy: serial`. Integrate serially with the steps below
+     until main is green.
+   - Then run `node scripts/integration-batch.mjs recover ...` (or `coordination
+     batch-recover --run <id> --main-commit <sha>`). It needs a green main run that
+     contains the last red batch push.
 
 ## Continuous local session
 

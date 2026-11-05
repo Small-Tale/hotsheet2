@@ -63,8 +63,12 @@ pub struct StrategyDescriptor {
 /// belong here; a later strategy adds the rule together with the code that reads it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct StrategyRules {
-    /// At most one assignment may be integrating or verifying at a time.
+    /// At most one assignment may be integrating or verifying at a time through `mark`
+    /// and `resume-integration`. A batch opened atomically counts as one integration unit.
     pub exclusive_integration: bool,
+    /// The integrator may open one batch of several integrating code handoffs, smoke-gate
+    /// and push it once, and let CI test it together (HS2-9G0M3V).
+    pub batch_integration: bool,
 }
 
 impl IntegrationStrategy {
@@ -80,7 +84,7 @@ impl IntegrationStrategy {
             },
             Self::Batch => StrategyDescriptor {
                 name: "batch",
-                implemented: false,
+                implemented: true,
                 ticket: "HS2-9G0M3V",
                 summary: "Integrate several handoffs, run one smoke gate, push once and let CI test the batch.",
             },
@@ -96,8 +100,13 @@ impl IntegrationStrategy {
     pub const fn rules(self) -> StrategyRules {
         match self {
             // Unimplemented strategies keep serial rules until their tickets change them.
-            Self::Serial | Self::Batch | Self::CiStaged => StrategyRules {
+            Self::Serial | Self::CiStaged => StrategyRules {
                 exclusive_integration: true,
+                batch_integration: false,
+            },
+            Self::Batch => StrategyRules {
+                exclusive_integration: true,
+                batch_integration: true,
             },
         }
     }
@@ -142,6 +151,43 @@ pub const REGISTRY: [StrategyDescriptor; 3] = [
 pub struct AllowedStrategy {
     pub strategy: IntegrationStrategy,
     pub reason: String,
+    /// Batch only: when `main` stays red this long, the integrator falls back to serial
+    /// (HS2-9G0M3V). Absent means [`CircuitBreaker::default`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circuit_breaker: Option<CircuitBreaker>,
+}
+
+/// Batch circuit breaker thresholds (HS2-9G0M3V). Either limit trips the breaker.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CircuitBreaker {
+    /// Consecutive red batches that trip the breaker (1-100).
+    pub max_red_batches: u32,
+    /// Minutes `main` may stay red after the first red batch (1-10080).
+    pub max_red_minutes: u32,
+}
+
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self {
+            max_red_batches: 2,
+            max_red_minutes: 120,
+        }
+    }
+}
+
+impl CircuitBreaker {
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            (1..=100).contains(&self.max_red_batches),
+            "circuit breaker max_red_batches must be 1-100"
+        );
+        ensure!(
+            (1..=10_080).contains(&self.max_red_minutes),
+            "circuit breaker max_red_minutes must be 1-10080"
+        );
+        Ok(())
+    }
 }
 
 /// The project's integration strategy policy. `serial` is always allowed and needs no
@@ -188,6 +234,13 @@ impl StrategyPolicy {
                 "allowing integration strategy {} requires a reason of 1-{MAX_REASON_CHARS} characters",
                 entry.strategy
             );
+            if let Some(breaker) = &entry.circuit_breaker {
+                ensure!(
+                    entry.strategy.rules().batch_integration,
+                    "only the batch strategy has a circuit breaker"
+                );
+                breaker.validate()?;
+            }
         }
         ensure!(
             self.is_allowed(self.default),
@@ -199,6 +252,15 @@ impl StrategyPolicy {
 
     pub fn is_allowed(&self, strategy: IntegrationStrategy) -> bool {
         strategy.is_serial() || self.allowed.iter().any(|entry| entry.strategy == strategy)
+    }
+
+    /// The batch circuit breaker thresholds: the allowed batch entry's, else the default.
+    pub fn circuit_breaker(&self) -> CircuitBreaker {
+        self.allowed
+            .iter()
+            .find(|entry| entry.strategy.rules().batch_integration)
+            .and_then(|entry| entry.circuit_breaker)
+            .unwrap_or_default()
     }
 
     /// The strategy a new integrator generation runs under: the explicit request, else the
@@ -252,14 +314,31 @@ impl StrategyPolicy {
 
     /// Allow (or re-justify) a non-default strategy.
     pub fn allow(&mut self, strategy: IntegrationStrategy, reason: &str) -> Result<()> {
+        self.allow_with_breaker(strategy, reason, None)
+    }
+
+    /// Allow a strategy with batch circuit breaker thresholds. Re-allowing without
+    /// thresholds keeps the ones already recorded.
+    pub fn allow_with_breaker(
+        &mut self,
+        strategy: IntegrationStrategy,
+        reason: &str,
+        circuit_breaker: Option<CircuitBreaker>,
+    ) -> Result<()> {
         ensure!(
             !strategy.is_serial(),
             "serial is always allowed; do not list it"
         );
+        let kept = self
+            .allowed
+            .iter()
+            .find(|entry| entry.strategy == strategy)
+            .and_then(|entry| entry.circuit_breaker);
         self.allowed.retain(|entry| entry.strategy != strategy);
         self.allowed.push(AllowedStrategy {
             strategy,
             reason: reason.to_owned(),
+            circuit_breaker: circuit_breaker.or(kept),
         });
         self.validate()
     }
@@ -321,12 +400,13 @@ mod tests {
             allowed: vec![AllowedStrategy {
                 strategy: IntegrationStrategy::Batch,
                 reason: "throughput".into(),
+                circuit_breaker: None,
             }],
         }
     }
 
     #[test]
-    fn hs2_ney1qh_registry_names_round_trip_and_only_serial_is_implemented() {
+    fn hs2_ney1qh_registry_names_round_trip_and_only_built_strategies_are_implemented() {
         for strategy in IntegrationStrategy::ALL {
             assert_eq!(
                 IntegrationStrategy::parse(strategy.name()).unwrap(),
@@ -337,6 +417,11 @@ mod tests {
                 serde_json::json!(strategy.name())
             );
             assert!(strategy.rules().exclusive_integration);
+            // HS2-9G0M3V: only batch may open a multi-handoff integration unit.
+            assert_eq!(
+                strategy.rules().batch_integration,
+                strategy == IntegrationStrategy::Batch
+            );
         }
         assert_eq!(
             REGISTRY
@@ -344,7 +429,7 @@ mod tests {
                 .filter(|d| d.implemented)
                 .map(|d| d.name)
                 .collect::<Vec<_>>(),
-            ["serial"]
+            ["serial", "batch"]
         );
         assert!(IntegrationStrategy::parse("merge-queue").is_err());
     }
@@ -366,12 +451,67 @@ mod tests {
 
     #[test]
     fn hs2_ney1qh_allowed_but_unimplemented_strategy_is_refused_with_its_ticket() {
-        let refused = batch_allowed()
-            .resolve(Some(IntegrationStrategy::Batch))
+        let mut policy = StrategyPolicy::default();
+        policy
+            .allow(IntegrationStrategy::CiStaged, "staging")
+            .unwrap();
+        let refused = policy
+            .resolve(Some(IntegrationStrategy::CiStaged))
             .unwrap_err()
             .to_string();
         assert!(refused.contains("not implemented"), "{refused}");
-        assert!(refused.contains("HS2-9G0M3V"), "{refused}");
+        assert!(refused.contains("HS2-GT57BQ"), "{refused}");
+    }
+
+    #[test]
+    fn hs2_9g0m3v_batch_resolves_only_when_the_project_allows_it() {
+        assert!(
+            StrategyPolicy::default()
+                .resolve(Some(IntegrationStrategy::Batch))
+                .unwrap_err()
+                .to_string()
+                .contains("not allowed by this project")
+        );
+        assert_eq!(
+            batch_allowed()
+                .resolve(Some(IntegrationStrategy::Batch))
+                .unwrap(),
+            IntegrationStrategy::Batch
+        );
+    }
+
+    #[test]
+    fn hs2_9g0m3v_circuit_breaker_thresholds_validate_default_and_survive_rejustification() {
+        let mut policy = StrategyPolicy::default();
+        assert_eq!(policy.circuit_breaker(), CircuitBreaker::default());
+        let custom = CircuitBreaker {
+            max_red_batches: 3,
+            max_red_minutes: 30,
+        };
+        policy
+            .allow_with_breaker(IntegrationStrategy::Batch, "throughput", Some(custom))
+            .unwrap();
+        assert_eq!(policy.circuit_breaker(), custom);
+        policy
+            .allow(IntegrationStrategy::Batch, "re-justified")
+            .unwrap();
+        assert_eq!(policy.circuit_breaker(), custom);
+        for invalid in [(0, 30), (2, 0), (101, 30), (2, 10_081)] {
+            let invalid = CircuitBreaker {
+                max_red_batches: invalid.0,
+                max_red_minutes: invalid.1,
+            };
+            assert!(
+                StrategyPolicy::default()
+                    .allow_with_breaker(IntegrationStrategy::Batch, "x", Some(invalid))
+                    .is_err()
+            );
+        }
+        let refused = StrategyPolicy::default()
+            .allow_with_breaker(IntegrationStrategy::CiStaged, "x", Some(custom))
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("only the batch strategy"), "{refused}");
     }
 
     #[test]

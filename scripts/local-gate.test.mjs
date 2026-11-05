@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -13,6 +13,7 @@ import {
   performanceStages,
   prepare,
   runGate,
+  smokeStages,
 } from './local-gate.mjs';
 import { demoEntryIds, exerciseIndex, exerciseIndexForRepo, ownHooks, routeHooks } from './gate-browser-exercise.mjs';
 import { profileFromTags } from './gate-ticket-profile.mjs';
@@ -948,4 +949,89 @@ test('HS2-N7EY18 HS2-R1D0S5 a shared ux-demo fixture change selects the demo tes
     'navigates, toggles, closes, and reopens TicketInspector',
   ])
     assert.ok(real.demoTitles.includes(title), title);
+});
+
+const smokeConfig = readFileSync(new URL('./gate-smoke.json', import.meta.url), 'utf8');
+
+test('HS2-9G0M3V the smoke profile runs only the declared checks and defers the affected suites to CI', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-smoke.json', smokeConfig);
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'declare smoke checks');
+  const p = prepare(f.repo, undefined, false, f.options.versions, { smoke: true });
+  assert.equal(p.mode, 'smoke');
+  assert.equal(p.tier, 'smoke');
+  assert.equal(p.budgetMs, null);
+  const declared = JSON.parse(smokeConfig).stages.map((stage) => stage.command);
+  assert.deepEqual(
+    p.checks.map((stage) => stage.command),
+    declared,
+  );
+  // No affected-suite expansion and no browser suites, whatever the change touched.
+  assert.ok(!p.checks.some((stage) => /playwright|test:unit|test:fixtures/.test(stage.command)));
+  assert.ok(p.deferred.some((stage) => stage.command === 'cargo nextest run --all-features --status-level leak'));
+  assert.ok(p.deferred.every((stage) => stage.reasons[0].includes('HS2-9G0M3V')));
+  // The ordinary plan of the same tree differs, so its receipt is never reused for smoke.
+  assert.notEqual(prepare(f.repo, undefined, false, f.options.versions).key, p.key);
+});
+
+test('HS2-9G0M3V a smoke receipt is exact, reusable, and never root-gate evidence', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-smoke.json', smokeConfig);
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'declare smoke checks');
+  const ran = [];
+  const runner = (stage) => {
+    ran.push(stage.command);
+    return { status: 0 };
+  };
+  assert.throws(() => runGate({ ...f.options, smoke: true, verify: true }), /No valid/);
+  assert.equal(runGate({ ...f.options, smoke: true, runner }), 0);
+  assert.equal(ran.length, JSON.parse(smokeConfig).stages.length);
+  assert.equal(runGate({ ...f.options, smoke: true, verify: true }), 0);
+  // The ordinary gate still has no receipt for this tree.
+  assert.throws(() => runGate({ ...f.options, verify: true }), /No valid/);
+  const tree = f.git('rev-parse', 'HEAD^{tree}');
+  const marker = join(f.repo, f.git('rev-parse', '--git-path', 'hotsheet-root-gate'), tree);
+  assert.equal(existsSync(marker), false);
+  // A tree change invalidates the receipt.
+  f.put('README.md', 'changed\n');
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'change');
+  assert.throws(() => runGate({ ...f.options, smoke: true, verify: true }), /No valid/);
+});
+
+test('HS2-9G0M3V a failed smoke check records no receipt so nothing is pushed', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-smoke.json', smokeConfig);
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'declare smoke checks');
+  const runner = (stage) => ({ status: stage.command === 'cargo lint' ? 101 : 0 });
+  assert.equal(runGate({ ...f.options, smoke: true, runner }), 101);
+  assert.throws(() => runGate({ ...f.options, smoke: true, verify: true }), /No valid/);
+});
+
+test('HS2-9G0M3V the smoke profile refuses selection flags, browser suites and malformed declarations', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-smoke.json', smokeConfig);
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'declare smoke checks');
+  for (const options of [{ tier: 'T1' }, { budgetMs: 1000 }, { ticket: 'HS2-AAA111' }, { analyzed: ['.::cargo lint'] }])
+    assert.throws(() => prepare(f.repo, undefined, false, f.options.versions, { smoke: true, ...options }), /--smoke/);
+  assert.throws(() => prepare(f.repo, undefined, true, f.options.versions, { smoke: true }), /--smoke/);
+  for (const config of [
+    { stages: [] },
+    { stages: [{ cwd: 'clients/web', command: 'npx playwright test', reason: 'browser' }] },
+    { stages: [{ cwd: '.', command: 'cargo lint' }] },
+    {
+      stages: [
+        { cwd: '.', command: 'cargo lint', reason: 'a' },
+        { cwd: '.', command: 'cargo lint', reason: 'b' },
+      ],
+    },
+    { stages: [{ cwd: '.', command: 'cargo lint', reason: 'a' }], extra: true },
+  ]) {
+    f.put('scripts/gate-smoke.json', JSON.stringify(config));
+    assert.throws(() => smokeStages(f.repo), JSON.stringify(config));
+  }
 });

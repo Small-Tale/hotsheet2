@@ -416,6 +416,10 @@ pub struct Snapshot {
     /// (HS2-6WFCZR). Empty without a live idle worker.
     #[serde(default)]
     pub unmatched_tickets: Vec<String>,
+    /// Batch ledger facts once any batch was opened (HS2-9G0M3V): effective strategy,
+    /// circuit breaker and unfinished batches. Absent for every serial-only pool.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batches: Option<super::batch::BatchStatus>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

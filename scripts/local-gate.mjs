@@ -278,7 +278,130 @@ function budgetConfig(repo) {
   return config;
 }
 
+function toolVersions(repo) {
+  return ['node --version', 'npm --version', 'rustc --version', 'cargo --version'].map((command) => {
+    const result = spawnSync('zsh', ['-ic', command], { cwd: repo, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(`Toolchain evidence unavailable: ${command}`);
+    return [command, parseToolVersion(command, result.stdout)];
+  });
+}
+
+function environmentHash() {
+  return hash(
+    Object.fromEntries(
+      [
+        'CI',
+        'NODE_OPTIONS',
+        'RUSTFLAGS',
+        'CARGO_ENCODED_RUSTFLAGS',
+        'CARGO_TARGET_DIR',
+        'PLAYWRIGHT_BROWSER',
+        'PLAYWRIGHT_BROWSERS_PATH',
+        // HS2-XW38CB: clients/web/playwright.config.ts reads these; a different worker count,
+        // retry allowance or quarantine opt-in is a different browser run, not the same evidence.
+        'HOTSHEET_PLAYWRIGHT_WORKERS',
+        'HOTSHEET_PLAYWRIGHT_RETRIES',
+        'HOTSHEET_RUN_QUARANTINED',
+      ].map((name) => [name, process.env[name] ?? null]),
+    ),
+  );
+}
+
+/**
+ * HS2-9G0M3V: the project's declared smoke checks for a batch push: build or compile, lint and a
+ * fast sanity set. They never expand to affected suites, and browser suites are refused.
+ */
+export function smokeStages(repo) {
+  const config = read(join(repo, 'scripts/gate-smoke.json'));
+  if (
+    !config ||
+    Object.keys(config).some((key) => key !== 'stages') ||
+    !Array.isArray(config.stages) ||
+    !config.stages.length
+  )
+    throw new Error('scripts/gate-smoke.json must declare a non-empty "stages" list and nothing else.');
+  const seen = new Set();
+  return config.stages.map((stage) => {
+    if (
+      !stage ||
+      Object.keys(stage).some((key) => !['cwd', 'command', 'reason'].includes(key)) ||
+      ![stage.cwd, stage.command, stage.reason].every((value) => typeof value === 'string' && value.trim())
+    )
+      throw new Error('Each smoke stage declares exactly a cwd, a command and a reason.');
+    if (/\bplaywright\b|test:browser|test:e2e/.test(stage.command))
+      throw new Error(`Smoke stages never run browser suites: ${stage.command}`);
+    const id = `${stage.cwd}::${stage.command}`;
+    if (seen.has(id)) throw new Error(`Duplicate smoke stage: ${id}`);
+    seen.add(id);
+    return {
+      cwd: stage.cwd,
+      command: stage.command,
+      group: 'always',
+      selected: true,
+      force: true,
+      budgetReason: 'smoke profile',
+      reasons: [stage.reason],
+    };
+  });
+}
+
+function prepareSmoke(repo, baseRef, versions, options) {
+  if (options.tier || options.budgetMs !== undefined || options.ticket || options.analyzed?.length)
+    throw new Error('--smoke cannot be combined with --full, --ticket, --tier, --t2-stage or --budget.');
+  const state = collect(repo, baseRef);
+  const checks = smokeStages(repo);
+  const tools = versions ?? toolVersions(repo);
+  const dependencies = verifyInstalledDependencies(
+    repo,
+    checks.map((stage) => stage.cwd),
+  );
+  const profile = { smoke: true };
+  const context = {
+    version: 2,
+    base: state.base,
+    budgetMs: null,
+    tier: 'smoke',
+    analyzed: [],
+    profile,
+    tools,
+    dependencies,
+    platform: process.platform,
+    arch: process.arch,
+    environment: environmentHash(),
+  };
+  // Every smoke check reads the whole tree: the receipt is exact for the batch commit.
+  const entries = git(repo, ['ls-files', '--stage', '-z']).split('\0').filter(Boolean);
+  const keyed = checks.map((stage) => ({
+    ...stage,
+    key: hash({ context, stage: { cwd: stage.cwd, command: stage.command, group: stage.group }, inputs: entries }),
+  }));
+  const smoke = new Set(checks.map((stage) => `${stage.cwd}::${stage.command}`));
+  const deferred = parseCheckScript(readFileSync(join(repo, 'scripts/check-full.sh'), 'utf8'))
+    .filter((stage) => !smoke.has(`${stage.cwd}::${stage.command}`))
+    .map((stage) => ({ ...stage, reasons: ['HS2-9G0M3V smoke profile: the batch CI run tests this'] }));
+  const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']));
+  return {
+    ...state,
+    mode: 'smoke',
+    smoke: true,
+    stages: [],
+    profile,
+    tier: 'smoke',
+    budgetMs: null,
+    floorOverBudget: false,
+    checks: keyed,
+    deferred,
+    key: hash({ context, tree: state.tree, checks: keyed.map((stage) => stage.key) }),
+    cache: join(common, 'hotsheet-local-gate'),
+    tools,
+  };
+}
+
 export function prepare(repo, baseRef, full = false, versions, options = {}) {
+  if (options.smoke) {
+    if (full) throw new Error('--smoke cannot be combined with --full, --ticket, --tier, --t2-stage or --budget.');
+    return prepareSmoke(repo, baseRef, versions, options);
+  }
   const state = collect(repo, baseRef);
   const edgePreview = edgePreviewForRepo(repo, state.base, state.changes);
   const profile = options.profile ?? readTicketProfile(repo, { ticket: options.ticket, dirty: state.dirty });
@@ -293,13 +416,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     changes: state.changes,
     fallback: [...state.fallback, ...(full ? ['explicit full local gate'] : [])],
   });
-  const tools =
-    versions ??
-    ['node --version', 'npm --version', 'rustc --version', 'cargo --version'].map((command) => {
-      const result = spawnSync('zsh', ['-ic', command], { cwd: repo, encoding: 'utf8' });
-      if (result.status !== 0) throw new Error(`Toolchain evidence unavailable: ${command}`);
-      return [command, parseToolVersion(command, result.stdout)];
-    });
+  const tools = versions ?? toolVersions(repo);
   const entries = git(repo, ['ls-files', '--stage', '-z']).split('\0').filter(Boolean);
   const testTitles = {};
   for (const path of state.changes.filter((path) => /^clients\/web\/tests\/.*\.spec\.ts$/.test(path))) {
@@ -382,22 +499,6 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     repo,
     chosen.map((stage) => stage.cwd),
   );
-  const environment = Object.fromEntries(
-    [
-      'CI',
-      'NODE_OPTIONS',
-      'RUSTFLAGS',
-      'CARGO_ENCODED_RUSTFLAGS',
-      'CARGO_TARGET_DIR',
-      'PLAYWRIGHT_BROWSER',
-      'PLAYWRIGHT_BROWSERS_PATH',
-      // HS2-XW38CB: clients/web/playwright.config.ts reads these; a different worker count,
-      // retry allowance or quarantine opt-in is a different browser run, not the same evidence.
-      'HOTSHEET_PLAYWRIGHT_WORKERS',
-      'HOTSHEET_PLAYWRIGHT_RETRIES',
-      'HOTSHEET_RUN_QUARANTINED',
-    ].map((name) => [name, process.env[name] ?? null]),
-  );
   // HS2-Q5XAAK: discovery explains the plan but does not change the verified inputs.
   const profileIdentity = { ...profile };
   delete profileIdentity.reason;
@@ -412,7 +513,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     dependencies,
     platform: process.platform,
     arch: process.arch,
-    environment: hash(environment),
+    environment: environmentHash(),
   };
   const checks = chosen.map((stage) => {
     const inputs = entries.filter((entry) => {
@@ -477,10 +578,11 @@ export function runGate(options = {}) {
     analyzed,
     ticket,
     profile,
+    smoke = false,
     log = console.log,
     env = withoutGitRepositoryEnv(process.env),
   } = options;
-  let selection = { budgetMs, tier, analyzed, ticket, profile };
+  let selection = { budgetMs, tier, analyzed, ticket, profile, smoke };
   let before;
   try {
     before = prepare(repo, base, full, versions, selection);
@@ -496,25 +598,34 @@ export function runGate(options = {}) {
   const budgetLabel = before.budgetMs === null ? 'none' : `${before.budgetMs}ms`;
   const receiptPath = join(before.cache, `${before.key}.json`);
   const compatibility = resolve(repo, git(repo, ['rev-parse', '--git-path', 'hotsheet-root-gate']));
-  const marker = join(compatibility, before.tree);
+  // HS2-9G0M3V: a smoke receipt is not root-gate evidence, so it never writes or clears the
+  // root-gate marker that serial prerequisite resumption reads.
+  const marker = before.smoke ? null : join(compatibility, before.tree);
+  const writeMarker = () => {
+    if (!marker) return;
+    mkdirSync(compatibility, { recursive: true });
+    writeFileSync(marker, `${before.tree}\n`);
+  };
+  const clearMarker = () => {
+    if (marker) rmSync(marker, { force: true });
+  };
   if (inspect) {
     log(JSON.stringify(before, null, 2));
     return 0;
   }
   if (before.dirty) {
-    rmSync(marker, { force: true });
+    clearMarker();
     throw new Error(
       'Local gate evidence requires a clean checkout; preserve local edits and verify the committed tree in a clean worktree.',
     );
   }
   const existing = read(receiptPath);
   if (existing?.key === before.key && existing.tree === before.tree) {
-    mkdirSync(compatibility, { recursive: true });
-    writeFileSync(marker, `${before.tree}\n`);
+    writeMarker();
     log(`Local gate already passed for tree ${before.tree}; reused exact receipt for budget ${budgetLabel}`);
     return 0;
   }
-  rmSync(marker, { force: true });
+  clearMarker();
   if (verify) throw new Error('No valid exact-input local gate receipt; run scripts/check.sh before pushing.');
   const results = [];
   const observations = [];
@@ -568,8 +679,7 @@ export function runGate(options = {}) {
     }),
   );
   // Preserve the coordination/completion contract before recording an observation.
-  mkdirSync(compatibility, { recursive: true });
-  writeFileSync(marker, `${before.tree}\n`);
+  writeMarker();
   try {
     recordCompletedGate(timingPath(repo), observations);
   } catch (error) {
@@ -598,6 +708,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       '--tier',
       '--t2-stage',
       '--ticket',
+      '--smoke',
     ]);
     for (let i = 0; i < args.length; i += 1) {
       if (!allowed.has(args[i])) throw new Error(`Unknown argument: ${args[i]}`);
@@ -620,6 +731,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         tier: args.includes('--tier') ? args[args.indexOf('--tier') + 1] : undefined,
         analyzed: args.flatMap((arg, index) => (arg === '--t2-stage' ? [args[index + 1]] : [])),
         ticket: args.includes('--ticket') ? args[args.indexOf('--ticket') + 1] : undefined,
+        smoke: args.includes('--smoke'),
       });
     }
   } catch (error) {

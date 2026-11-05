@@ -587,6 +587,7 @@ mod tests {
             integration_strategy: None,
             worker_matches: Default::default(),
             unmatched_tickets: Vec::new(),
+            batches: None,
         }
     }
 

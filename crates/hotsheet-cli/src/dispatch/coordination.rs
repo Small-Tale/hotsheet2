@@ -19,6 +19,8 @@ use crate::Cmd;
 
 #[path = "coordination_advisory.rs"]
 mod advisory;
+#[path = "coordination_batch.rs"]
+mod batch;
 #[path = "coordination_claims.rs"]
 mod claims;
 #[path = "coordination_readiness.rs"]
@@ -220,6 +222,14 @@ enum CoordinationCmd {
         strategy: IntegrationStrategy,
         #[arg(long)]
         reason: String,
+        /// Batch only: consecutive red batches that make the integrator fall back to
+        /// serial (default 2; HS2-9G0M3V).
+        #[arg(long)]
+        max_red_batches: Option<u32>,
+        /// Batch only: minutes main may stay red before falling back to serial
+        /// (default 120; HS2-9G0M3V).
+        #[arg(long)]
+        max_red_minutes: Option<u32>,
     },
     /// Withdraw an allowed integration strategy; the project default cannot be withdrawn.
     StrategyDisallow {
@@ -249,6 +259,85 @@ enum CoordinationCmd {
         #[arg(long)]
         detail: Option<String>,
     },
+    /// Propose a batch: ready code handoffs without live claims, in priority then handoff
+    /// order, excluding any whose paths overlap an earlier one (HS2-9G0M3V). Read-only.
+    BatchPlan {
+        /// Largest batch to propose.
+        #[arg(long)]
+        max: Option<usize>,
+    },
+    /// Open a batch: every listed handoff enters integration atomically (batch strategy).
+    BatchOpen {
+        #[command(flatten)]
+        integrator: Identity,
+        /// Stable batch id; replaying the same open is idempotent.
+        #[arg(long)]
+        batch: String,
+        /// Member assignment in integration order; repeat for each.
+        #[arg(long = "assignment", required = true)]
+        assignments: Vec<String>,
+    },
+    /// The smoke gate or integration failed before push: return every member to handoff.
+    BatchAbort {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Record the batch's one confirmed push; every member enters CI.
+    BatchPushed {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        /// Full pushed main SHA, equal to the checked-out HEAD and its upstream.
+        #[arg(long)]
+        main_commit: String,
+        /// `<assignment>=<full shipping SHA>`; repeat for each member and commit.
+        #[arg(long = "shipping", required = true)]
+        shipping: Vec<String>,
+        /// A smoke-gate check that passed; repeat for each.
+        #[arg(long = "smoke-check", required = true)]
+        smoke_checks: Vec<String>,
+    },
+    /// Record the covering CI run's conclusion for a pushed batch.
+    BatchResult {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        #[arg(long)]
+        run: String,
+        #[arg(long, value_enum)]
+        conclusion: hotsheet_cli::coordination::batch::BatchConclusion,
+    },
+    /// Record the follow-up bug for each failure a red batch caused.
+    BatchFollowUps {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        /// `<failure-key>=<follow-up slug>`; repeatable.
+        #[arg(long = "failure")]
+        failures: Vec<String>,
+        /// HS2-HAHX20 `ci-failure-attribution.mjs` output; its non-flaky `filed` entries.
+        #[arg(long)]
+        attribution_file: Option<PathBuf>,
+    },
+    /// Clear a tripped circuit breaker after a green main run covering the last red push.
+    BatchRecover {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        run: String,
+        /// The green run's full head SHA on main.
+        #[arg(long)]
+        main_commit: String,
+    },
+    /// Print the batch ledger: every batch and the circuit breaker.
+    BatchStatus,
     /// Check an exact worker handoff before writing its durable ticket note.
     Preflight {
         #[command(flatten)]
@@ -588,6 +677,18 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         | CoordinationCmd::StrategyDisallow { .. }
         | CoordinationCmd::StrategyDefault { .. } => {
             unreachable!("handled before opening the pool")
+        }
+        CoordinationCmd::BatchPlan { .. }
+        | CoordinationCmd::BatchOpen { .. }
+        | CoordinationCmd::BatchAbort { .. }
+        | CoordinationCmd::BatchPushed { .. }
+        | CoordinationCmd::BatchResult { .. }
+        | CoordinationCmd::BatchFollowUps { .. }
+        | CoordinationCmd::BatchRecover { .. }
+        | CoordinationCmd::BatchStatus => {
+            let report = batch::run(&coordinator, ctx, &args.project, args.command, now)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
         }
         CoordinationCmd::Preflight {
             worker,
@@ -1289,7 +1390,21 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
     let settings = hotsheet_ticketing::Settings::for_project(project);
     let mut policy = StrategyPolicy::read(&settings)?;
     match command {
-        CoordinationCmd::StrategyAllow { strategy, reason } => policy.allow(*strategy, reason)?,
+        CoordinationCmd::StrategyAllow {
+            strategy,
+            reason,
+            max_red_batches,
+            max_red_minutes,
+        } => {
+            let breaker = (max_red_batches.is_some() || max_red_minutes.is_some()).then(|| {
+                let defaults = hotsheet_cli::coordination::strategy::CircuitBreaker::default();
+                hotsheet_cli::coordination::strategy::CircuitBreaker {
+                    max_red_batches: max_red_batches.unwrap_or(defaults.max_red_batches),
+                    max_red_minutes: max_red_minutes.unwrap_or(defaults.max_red_minutes),
+                }
+            });
+            policy.allow_with_breaker(*strategy, reason, breaker)?
+        }
         CoordinationCmd::StrategyDisallow { strategy } => policy.disallow(*strategy)?,
         CoordinationCmd::StrategyDefault { strategy } => policy.set_default(*strategy)?,
         _ => {}

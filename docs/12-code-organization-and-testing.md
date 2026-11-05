@@ -860,10 +860,26 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   The pre-push hook checks the live reservation before and after exact receipt
   verification. Direct main pushes without the reservation fail; other branch pushes keep
   their previous gate behavior. A dirty tree cannot produce an exact-input receipt.
+- **Batch push (HS2-9G0M3V):** A batch integrator, allowed by the project's recorded
+  strategy policy, pushes several integrated handoffs once. Its command is
+  `scripts/push.sh origin main --integrator-id <id> --integrator-session <generation>
+--assignment <id>... --phase-ticket <slug>... --gate-arg --smoke`.
+  - The pool must show exactly those assignments integrating under a `batch` session.
+  - The gate is the declared smoke profile (`scripts/check.sh --smoke`,
+    `scripts/gate-smoke.json`), not the affected gate, and the batch CI run tests
+    everything else.
+  - Each `--phase-ticket` moves to `integrating` before the push and `final_testing`
+    after it.
+  - The wrapper reads coordination pool schemas 3 through 9 (HS2-JBAD2Z).
+
+  The policy and its deviation from `push-per-ticket` are in
+  [05 §5.9.1](05-ai-tool-plugins.md#batch-integration-hs2-9g0m3v) and
+  [29](29-affected-local-verification.md#batch-smoke-profile-hs2-9g0m3v).
   Git's fast-forward check remains the cross-machine guard. The root gate requires
   `cargo-nextest`, `git-filter-repo`, and installed npm packages.
   Permission integration tests use an in-memory vault under the test-only dependency
   feature, so the same full Rust suite runs on macOS and Linux (`HS2-R8S894`).
+
 - **Commit drafting (HS2-VA97HW):** the root `package.json` pins `gitgist` exactly
   (install with `npm ci` at the repository root). `npm run commit:msg` drafts from the
   staged diff with the signed-in `claude` CLI and retries the signed-in `codex` CLI, with

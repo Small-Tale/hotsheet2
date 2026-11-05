@@ -175,6 +175,7 @@ async function acquire(repo, options) {
           gateArgs: options.gateArgs,
           identity: options.identity,
           assignment: options.assignment,
+          assignments: options.assignments,
           standalone: options.standalone,
           sourceStore: options.sourceStore,
         });
@@ -202,12 +203,15 @@ function assertSnapshot(repo, value) {
 export function authorizeMainState(state, value, projectId, sourceId, now) {
   if (!state) {
     if (value.identity) throw new Error('No coordinator pool for integrator push');
+    if (value.gateArgs?.includes('--smoke')) throw new Error('The --smoke gate is only for a batch integrator push');
     return 'standalone';
   }
   if (
     !Number.isInteger(state.version) ||
     state.version < 3 ||
-    state.version > 6 ||
+    // HS2-9G0M3V: schema seven adds next plans and eight integrator strategies; HS2-JBAD2Z:
+    // nine adds worker preferences (HS2-6WFCZR). None changes the fields read here.
+    state.version > 9 ||
     state.project_id !== projectId ||
     state.source_id !== sourceId
   )
@@ -224,7 +228,25 @@ export function authorizeMainState(state, value, projectId, sourceId, now) {
       state.integrator.generation !== value.identity.session
     )
       throw new Error('Live integrator owns main; supply its exact id and session');
-    if (value.assignment) {
+    // HS2-9G0M3V: the smoke gate replaces the affected gate only for a project-allowed batch.
+    if (value.gateArgs?.includes('--smoke') && state.integrator.strategy !== 'batch')
+      throw new Error('The --smoke gate is only for a batch integrator push');
+    const batch = value.assignments?.length > 1 ? value.assignments : null;
+    if (batch) {
+      // HS2-9G0M3V: one push for an opened batch: its members are exactly the integrating set.
+      if (state.integrator.strategy !== 'batch') throw new Error('A multi-assignment push needs a batch integrator');
+      const members = new Set(batch);
+      if (
+        fence.length !== members.size ||
+        !fence.every(
+          (item) =>
+            members.has(item.id) &&
+            item.phase === 'integrating' &&
+            (item.handoff?.kind === 'code' || item.commit),
+        )
+      )
+        throw new Error('Assignments are not exactly the integrating code handoffs of the open batch');
+    } else if (value.assignment) {
       if (
         fence.length !== 1 ||
         fence[0].id !== value.assignment ||
@@ -236,6 +258,7 @@ export function authorizeMainState(state, value, projectId, sourceId, now) {
     return 'integrator';
   }
   if (value.identity) throw new Error('Integrator session expired or was replaced');
+  if (value.gateArgs?.includes('--smoke')) throw new Error('The --smoke gate is only for a batch integrator push');
   if (fence.length) throw new Error('An integration/review fence needs recovery before standalone push');
   if (!value.standalone) throw new Error('Existing pool requires explicit --standalone without a live integrator');
   return 'standalone';
@@ -359,13 +382,18 @@ async function preflight(repo, value, signal) {
 
 async function ticketPhase(repo, options, phase, signal) {
   const index = options.gateArgs.indexOf('--ticket');
-  if (index < 0) return;
+  // HS2-9G0M3V: a batch push moves every listed ticket; a serial push its gated ticket.
+  const tickets = options.phaseTickets?.length ? options.phaseTickets : index < 0 ? [] : [options.gateArgs[index + 1]];
+  for (const ticket of tickets) await editPhase(repo, options, ticket, phase, signal);
+}
+
+async function editPhase(repo, options, ticket, phase, signal) {
   await child(
     repo,
     process.env.HOTSHEET_MAIN_WINDOW_CLI ?? 'hotsheet-cli',
     [
       'edit',
-      options.gateArgs[index + 1],
+      ticket,
       '-C',
       options.sourceStore,
       '--started-phase',

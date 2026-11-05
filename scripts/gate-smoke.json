@@ -1,0 +1,31 @@
+{
+  "stages": [
+    { "cwd": ".", "command": "cargo fmt --all --check", "reason": "repository Rust formatting" },
+    {
+      "cwd": ".",
+      "command": "cargo lint",
+      "reason": "compile every Rust target and lint it with clippy -D warnings"
+    },
+    {
+      "cwd": ".",
+      "command": "node scripts/sync-role-skills.mjs --check",
+      "reason": "shared role skills and their provider mirrors stay byte-identical"
+    },
+    {
+      "cwd": ".",
+      "command": "cargo nextest run -p hotsheet-plugins",
+      "reason": "fast sanity: embedded plugin, skill and mirror contracts"
+    },
+    {
+      "cwd": "clients/web",
+      "command": "npm run format:sources:check",
+      "reason": "repository Prettier formatting"
+    },
+    {
+      "cwd": "clients/web",
+      "command": "npm run lint:web",
+      "reason": "web lint, component catalog and Kerf doctor"
+    },
+    { "cwd": "clients/web", "command": "npm run typecheck", "reason": "web client compiles" }
+  ]
+}

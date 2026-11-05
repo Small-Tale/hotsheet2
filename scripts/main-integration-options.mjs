@@ -13,6 +13,9 @@ export function parseMainPushArgs(args) {
     sourceStore: null,
     identity: null,
     assignment: null,
+    // HS2-9G0M3V: a batch push names every integrating member and the tickets it moves.
+    assignments: [],
+    phaseTickets: [],
     standalone: false,
   };
   const identity = {};
@@ -32,7 +35,8 @@ export function parseMainPushArgs(args) {
     } else if (value === '--source-store') result.sourceStore = next(index++, value);
     else if (value === '--integrator-id') identity.id = next(index++, value);
     else if (value === '--integrator-session') identity.session = next(index++, value);
-    else if (value === '--assignment') result.assignment = next(index++, value);
+    else if (value === '--assignment') result.assignments.push(next(index++, value));
+    else if (value === '--phase-ticket') result.phaseTickets.push(next(index++, value));
     else if (value === '--standalone') result.standalone = true;
     else if (value === '--gate-arg' || value.startsWith('--gate-arg=')) {
       const gateArg = value === '--gate-arg' ? args[++index] : value.slice(11);
@@ -60,10 +64,13 @@ export function parseMainPushArgs(args) {
   result.target = 'refs/heads/main';
   if (Boolean(identity.id) !== Boolean(identity.session))
     throw new Error('Integrator id and session must be supplied together');
+  if (new Set(result.assignments).size !== result.assignments.length) throw new Error('Duplicate --assignment');
+  result.assignment = result.assignments[0] ?? null;
   if (result.assignment && !identity.id) throw new Error('Assignment requires integrator identity');
+  if (result.phaseTickets.length && !result.assignment) throw new Error('--phase-ticket requires --assignment');
   if (result.standalone && identity.id) throw new Error('Standalone conflicts with integrator identity');
   if (identity.id) result.identity = identity;
-  const singleGateFlags = new Set(['--full', '--ticket', '--base', '--budget', '--tier']);
+  const singleGateFlags = new Set(['--full', '--smoke', '--ticket', '--base', '--budget', '--tier']);
   const seenGateFlags = new Set();
   for (let index = 0; index < result.gateArgs.length; index++) {
     const arg = result.gateArgs[index];
@@ -71,10 +78,18 @@ export function parseMainPushArgs(args) {
       if (seenGateFlags.has(arg)) throw new Error(`Duplicate gate option: ${arg}`);
       seenGateFlags.add(arg);
     }
-    if (arg === '--full') continue;
+    if (arg === '--full' || arg === '--smoke') continue;
     if (!valuedGateFlags.has(arg)) throw new Error(`Unsupported gate option: ${arg}`);
     if (!result.gateArgs[++index] || result.gateArgs[index].startsWith('--'))
       throw new Error(`${arg} requires a value`);
   }
+  // HS2-9G0M3V: the smoke profile is one declared check set, never combined with selection flags.
+  if (
+    seenGateFlags.has('--smoke') &&
+    result.gateArgs.some((arg) => ['--full', '--ticket', '--tier', '--t2-stage', '--budget'].includes(arg))
+  )
+    throw new Error('--smoke cannot be combined with --full, --ticket, --tier, --t2-stage or --budget');
+  if (result.assignments.length > 1 && !seenGateFlags.has('--smoke'))
+    throw new Error('A batch push of several assignments runs the --smoke gate');
   return result;
 }

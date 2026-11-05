@@ -70,6 +70,7 @@ export const ROOT_TOOLING_TESTS = [
   'main-integration-options',
   'main-integration-authority',
   'main-integration-window',
+  'integration-batch',
   'macos-dev-signing',
   'platform-matrix',
 ];

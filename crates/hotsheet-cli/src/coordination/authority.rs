@@ -29,6 +29,9 @@ pub struct Capabilities {
     pub integration_strategies: &'static [super::strategy::StrategyDescriptor],
     pub preference_filter_kinds: &'static [&'static str],
     pub request_refusal_reasons: &'static [&'static str],
+    /// Batch ledger version read and written beside the pool (HS2-9G0M3V); a batch
+    /// integrator needs an executable that reports it.
+    pub integration_batches: u32,
     pub scope_section_kinds: &'static [&'static str],
     pub assignment_authorities: &'static [&'static str],
     pub roles: &'static [&'static str],
@@ -54,6 +57,7 @@ pub const CAPABILITIES: Capabilities = Capabilities {
         "assigned",
         "filtered",
     ],
+    integration_batches: super::batch::LEDGER_VERSION,
     scope_section_kinds: scope::SECTION_KINDS,
     assignment_authorities: &["integrator", "dispatcher"],
     roles: &["integrator", "worker", "dispatcher"],

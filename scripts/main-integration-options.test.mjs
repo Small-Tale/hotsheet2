@@ -52,3 +52,35 @@ test('HS2-BND42N rejects force, deletion, URL, arbitrary ref and receipt bypass'
   ])
     assert.throws(() => parseMainPushArgs(args), args.join(' '));
 });
+
+test('HS2-9G0M3V a batch push names every member, its phase tickets and only the smoke gate', () => {
+  const identity = ['--integrator-id', 'owner', '--integrator-session', 'generation'];
+  const parsed = parseMainPushArgs([
+    ...identity,
+    '--assignment',
+    'op-1',
+    '--assignment',
+    'op-2',
+    '--phase-ticket',
+    'HS2-AAA111',
+    '--phase-ticket',
+    'HS2-BBB222',
+    '--gate-arg',
+    '--smoke',
+  ]);
+  assert.deepEqual(parsed.assignments, ['op-1', 'op-2']);
+  assert.equal(parsed.assignment, 'op-1');
+  assert.deepEqual(parsed.phaseTickets, ['HS2-AAA111', 'HS2-BBB222']);
+  assert.deepEqual(parsed.gateArgs, ['--smoke']);
+  assert.deepEqual(parseMainPushArgs([...identity, '--assignment', 'op-1']).assignments, ['op-1']);
+  for (const args of [
+    [...identity, '--assignment', 'op-1', '--assignment', 'op-2'],
+    [...identity, '--assignment', 'op-1', '--assignment', 'op-1', '--gate-arg', '--smoke'],
+    ['--phase-ticket', 'HS2-AAA111'],
+    ['--gate-arg', '--smoke', '--gate-arg', '--full'],
+    ['--gate-arg', '--smoke', '--gate-arg', '--ticket', '--gate-arg', 'HS2-AAA111'],
+    ['--gate-arg', '--smoke', '--gate-arg', '--t2-stage', '--gate-arg', '.::cargo lint'],
+    ['--gate-arg', '--smoke', '--gate-arg', '--smoke'],
+  ])
+    assert.throws(() => parseMainPushArgs(args), args.join(' '));
+});

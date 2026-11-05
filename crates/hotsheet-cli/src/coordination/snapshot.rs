@@ -4,7 +4,14 @@ use super::*;
 
 impl Coordinator {
     pub fn snapshot(&self, now: i64) -> Result<Snapshot> {
-        let state = self.state()?;
+        let (state, ledger) =
+            self.change_batches(|state, ledger| Ok((state.clone(), ledger.clone())))?;
+        // HS2-9G0M3V: a pool that never opened a batch reports no batch facts.
+        let batches = self
+            .directory
+            .join(super::batch::LEDGER_FILE)
+            .exists()
+            .then(|| Self::batch_status(&state, &ledger));
         let mut live_workers: Vec<String> = state
             .workers
             .values()
@@ -176,19 +183,22 @@ impl Coordinator {
             super::preferences::project(&state, facts.as_ref(), &live_workers);
         // A closing ticket changes the Workers view without changing the pool, so the
         // finished set is part of the semantic cursor (HS2-V9BXWF).
-        let cursor = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(&(
-                Self::state_cursor(&state, now)?,
-                &local_queue,
-                &uncovered_sources,
-                &live_claims,
-                &source_support,
-                &finished_assignments,
-                &worker_matches,
-                &unmatched_tickets
-            ))?)
-        );
+        let mut digest = Sha256::new();
+        digest.update(serde_json::to_vec(&(
+            Self::state_cursor(&state, now)?,
+            &local_queue,
+            &uncovered_sources,
+            &live_claims,
+            &source_support,
+            &finished_assignments,
+            &worker_matches,
+            &unmatched_tickets,
+        ))?);
+        // HS2-9G0M3V: batch facts wake waiters too; a pool without a ledger keeps its cursor.
+        if let Some(batches) = &batches {
+            digest.update(serde_json::to_vec(batches)?);
+        }
+        let cursor = format!("{:x}", digest.finalize());
         let integration_strategy = state
             .integrator
             .as_ref()
@@ -211,6 +221,7 @@ impl Coordinator {
             integration_strategy,
             worker_matches,
             unmatched_tickets,
+            batches,
         })
     }
 

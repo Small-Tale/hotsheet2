@@ -67,6 +67,15 @@ fast-forward pushes of verified ticket commits to `origin/main`; do not ask agai
 After pushing, check the covering `main` CI run with `node scripts/ci-gate.mjs
 status --covers <full-sha>`. A remote run never replaces a failing local gate.
 
+Batch deviation (HS2-9G0M3V): only while the maintainer allows the `batch`
+integration strategy (`coordination strategy-allow --strategy batch --reason
+<why>`) may a batch integrator depart from `push-per-ticket` and from that rule. It
+integrates several non-overlapping reviewed handoffs, runs only the declared
+`scripts/check.sh --smoke` gate, pushes once, and lets one covering `main` CI run
+gate them all. A red run needs an attributed follow-up for each failure before the
+batch tickets complete, and the circuit breaker falls back to serial while `main`
+stays red. Serial remains the default.
+
 Per-commit `CI` runs Linux x86_64 only (HS2-WSE3FJ). Linux arm64, Windows x86_64
 and arm64, macOS Apple Silicon, and the Tauri desktop targets run in the
 `Platforms` workflow (`.github/workflows/platforms.yml`, HS2-31RGRK) daily, by

@@ -15167,7 +15167,27 @@ components:
                 $ref: '#/components/schemas/IntegrationStrategyName'
               reason:
                 type: string
+              circuit_breaker:
+                $ref: '#/components/schemas/IntegrationCircuitBreaker'
             additionalProperties: false
+      additionalProperties: false
+    IntegrationCircuitBreaker:
+      description:
+        Batch-only thresholds (HS2-9G0M3V). Either limit trips the breaker and the integrator falls back to serial.
+        Absent means 2 consecutive red batches or 120 red minutes.
+      type: object
+      required:
+        - max_red_batches
+        - max_red_minutes
+      properties:
+        max_red_batches:
+          type: integer
+          minimum: 1
+          maximum: 100
+        max_red_minutes:
+          type: integer
+          minimum: 1
+          maximum: 10080
       additionalProperties: false
     IntegrationStrategyReport:
       type: object

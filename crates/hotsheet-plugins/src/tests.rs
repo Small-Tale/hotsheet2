@@ -439,7 +439,7 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         ))
     );
     assert!(worker.contains("<!-- hotsheet-skill-version: 48 -->")); // HS2-6WFCZR
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 22 -->")); // HS2-NEY1QH
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 23 -->")); // HS2-9G0M3V
     assert!(flatten(integrator).contains("release the claim and `review-return` the handoff")); // HS2-KBK83M
     assert!(flatten(integrator).contains("A `blocked_reason` does not refuse the claim")); // HS2-BAK4BC
     assert!(
@@ -492,19 +492,19 @@ fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy_without_unbui
         "`coordination strategies`",
         "`--strategy <name>`",
         "A strategy is fixed for one generation",
-        "This executable refuses to register them; do not perform their steps.",
+        "This executable refuses to register it; do not perform its steps.",
         "`--all-participants-upgraded`",
     ] {
         assert!(integrator.contains(phrase), "integrator missing {phrase}");
     }
     for phrase in [
         "`integration_strategy`",
-        "Under `serial`, the only strategy implemented now",
+        "Under `serial` and `batch` (HS2-9G0M3V), apply every rule below unchanged",
         "Never assign more freely",
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
     }
-    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 5 -->")); // HS2-6WFCZR
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 6 -->")); // HS2-6WFCZR, HS2-9G0M3V
 }
 
 #[test]
@@ -544,6 +544,46 @@ fn hs2_6wfczr_role_skills_state_preferences_while_the_dispatcher_decides() {
         "refuse the other with `assigned`",
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
+    }
+}
+
+#[test]
+fn hs2_9g0m3v_integrator_skill_documents_the_built_batch_steps_and_its_deviation() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let integrator = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-integrator/SKILL.md"
+    ));
+    let at = |phrase: &str| {
+        integrator
+            .find(phrase)
+            .unwrap_or_else(|| panic!("integrator missing {phrase}"))
+    };
+    // The batch steps appear in order, each naming the command that performs it.
+    let steps = [
+        "## Batch integration (HS2-9G0M3V)",
+        "`coordination batch-plan [--max <n>]`",
+        "`coordination batch-open --id <integrator>",
+        "--gate-arg --smoke`",
+        "`coordination batch-abort --batch <id>",
+        "`coordination batch-pushed --batch <id>",
+        "`node scripts/integration-batch.mjs record",
+        "`node scripts/integration-batch.mjs ci ...` once; never poll",
+        "`coordination batch-follow-ups`",
+        "`batches.effective_strategy: serial`",
+        "`node scripts/integration-batch.mjs recover ...`",
+    ];
+    for pair in steps.windows(2) {
+        assert!(at(pair[0]) < at(pair[1]), "{} before {}", pair[0], pair[1]);
+    }
+    for phrase in [
+        "the project records that deviation beside its push policy",
+        "never affected suites or browser suites",
+        "nothing is pushed",
+        "`mark --phase done` refuses a red batch member until every failure has a recorded follow-up",
+        "tell the user that text",
+        "reports `integration_batches`",
+    ] {
+        at(phrase);
     }
 }
 

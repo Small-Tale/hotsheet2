@@ -54,7 +54,7 @@ fn hs2_ney1qh_policy_commands_never_open_the_pool_and_validate_reasons() {
         .filter(|d| d["implemented"] == true)
         .map(|d| d["name"].as_str().unwrap().to_owned())
         .collect();
-    assert_eq!(implemented, ["serial"]);
+    assert_eq!(implemented, ["serial", "batch"]);
     refused(
         &f,
         &["strategy-allow", "--strategy", "batch", "--reason", " "],

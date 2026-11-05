@@ -231,6 +231,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
   scripts/ci-failure-attribution.mjs # Best-effort batch CI failure attribution: ranks a batch manifest's qualified tickets per distinct failure and files idempotent follow-up bugs, links and back-link notes, or prints them with --dry-run (HS2-HAHX20; tests: ci-failure-attribution.test.mjs; docs: 33-ci-failure-attribution.md)
   scripts/ci-failure-parse.mjs # Identifier-only parsers for gh --log-failed output (nextest, vitest, Playwright, node --test, rustc/rustfmt/tsc/ESLint/Prettier) and JUnit/vitest/Playwright reports, with attempt-based flake detection (HS2-HAHX20; tests: ci-failure-parse.test.mjs)
+  scripts/integration-batch.mjs # Batch integration ticket steps: manifest notes with CI gate commit, integration records, one-shot CI result with HS2-HAHX20 attribution follow-ups, breaker recovery (HS2-9G0M3V; tests: integration-batch.test.mjs)
+  scripts/gate-smoke.json # Declared batch smoke checks for scripts/check.sh --smoke (HS2-9G0M3V)
   scripts/integration-record.mjs # Provider-qualified source-to-shipping ledger in the Git common directory, fresh remote-main reachability, replay, and retained source refs (HS2-39D5YS; tests: integration-record.test.mjs; server reader: code_review.rs)
   scripts/windows-crt-directives.mjs # Windows platform-target (daily) dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
   scripts/windows-crt-link-correlation.mjs # Windows platform-target (daily) one-target verbose link; same-SHA/run/attempt, fresh package/test diagnostic attribution and private complete-member digests; weak matches advisory (HS2-9E879K; tests: windows-crt-link-correlation.test.mjs, registered local+CI)
@@ -1101,8 +1103,9 @@ scope review behind the schema-five fence (HS2-YHYNJ6); `scope_tests.rs` and
 tentative worker intent, bounded event replay, manual-assignment reconciliation and
 verified dispatch under the schema-seven fence (HS2-XCMAVT); `next_plan_tests.rs`
 and real CLI, HTTP and MCP tests pin its transitions.
-`strategy.rs` owns the typed integration strategy registry (`serial` implemented;
-`batch` and `ci-staged` registered but refused), its `StrategyRules`, and the
+`strategy.rs` owns the typed integration strategy registry (`serial` and `batch`
+implemented; `ci-staged` registered but refused), its `StrategyRules`, the batch
+circuit-breaker thresholds, and the
 committed `integration_strategies` project policy with one validated read/write
 shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
 /checkouts/{reference}/integration-strategies` (`hotsheet-server`
@@ -1116,6 +1119,13 @@ only under the schema-eight fence (HS2-NEY1QH); `strategy_tests.rs` and
 schema-nine fence; `assign_verified` enforces strict filters and consumes an honored
 request, and `refuse_request` records the authority's refusal. `preferences_tests.rs`
 and `tests/coordination_preferences.rs` pin the transitions.
+`batch.rs` owns batch integration (HS2-9G0M3V): the `batches.json` ledger beside the
+pool (own `version: 1`, written under `state.lock`, no pool schema bump), stable
+conflict-excluding `select_batch`, `batch_open`/`abort`/`pushed`/`result`/
+`follow_ups`/`recover`, the done-gating `batch_mark_rule`, and the circuit breaker.
+The CLI side is `dispatch/coordination_batch.rs` (`coordination batch-*`, Git
+changed paths, follow-up verification); `batch_tests.rs` and
+`tests/coordination_batch.rs` pin its transitions.
 `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,
