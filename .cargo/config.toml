@@ -1,5 +1,10 @@
 [alias]
 lint = "clippy --config build.target-dir=\"target/clippy\" --workspace --all-targets --all-features -- -D warnings -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented"
+# HS2-H37V5P: the desktop shell is its own Cargo workspace, so `cargo lint` never reaches it.
+# Same deny set; run from the repository root. Its build script needs the staged sidecars
+# (`npm run desktop:prepare`), or locally merge
+# TAURI_CONFIG='{"bundle":{"externalBin":[],"resources":null}}' to lint without staging.
+lint-desktop = "clippy --manifest-path clients/web/src-tauri/Cargo.toml --all-targets --all-features -- -D warnings -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented"
 
 # HS2-T9VXEP: every process cargo or cargo-nextest launches (test binaries, build
 # scripts, `cargo run`) gets a repository-local machine home. Hot Sheet-launched agent

@@ -934,8 +934,10 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   with the `x64-windows-static-md` or `arm64-windows-static-md` triplet and keep the
   HS2-1R2RGQ/HS2-9E879K CRT directive and link-correlation reports
   (`windows-crt-directives-<target>`, `windows-crt-link-correlation-<target>`). The Tauri desktop shell is its own `tauri-<target>` job
-  per desktop OS and architecture: `npm run desktop:prepare`, the `clients/web/src-tauri`
-  tests under nextest, and an unsigned `tauri build` (an `.app` bundle on macOS, no
+  per desktop OS and architecture: `npm run desktop:prepare`, the shell's own fmt check
+  and `cargo lint-desktop` clippy (its separate Cargo workspace is outside `cargo fmt --all`
+  and `cargo lint`, HS2-H37V5P), the `clients/web/src-tauri` tests under nextest, and an
+  unsigned `tauri build` (an `.app` bundle on macOS, no
   installer elsewhere; signed installers belong to HS2-BYXA4V). `fail-fast` is off and no
   step uses `continue-on-error`: a target that does not pass yet reports red under its
   stable job name for HS2-C6P32J, and the per-platform tickets HS2-F2ZVT3, HS2-V9NQ3Y,

@@ -129,6 +129,25 @@ test('HS2-31RGRK builds and tests the Tauri desktop shell as its own targets', (
   assert.doesNotMatch(tauri, /APPLE_SIGNING_IDENTITY|TAURI_SIGNING_PRIVATE_KEY/, 'the daily build is unsigned');
 });
 
+test('HS2-H37V5P formats and lints the desktop shell workspace on every Tauri target', () => {
+  const tauri = workflow.slice(workflow.indexOf('\n  tauri:'));
+  const at = (step) => {
+    const index = tauri.indexOf(step);
+    assert.notEqual(index, -1, `tauri target is missing ${step}`);
+    return index;
+  };
+  at('run: cargo fmt --manifest-path clients/web/src-tauri/Cargo.toml --check');
+  // Clippy needs the staged sidecars that the prepare step writes.
+  assert.ok(at('npm run desktop:prepare') < at('run: cargo lint-desktop'));
+  const config = readFileSync(new URL('../.cargo/config.toml', import.meta.url), 'utf8');
+  const alias = config.match(/^lint-desktop = "(.*)"$/m)?.[1];
+  assert.ok(alias, '.cargo/config.toml defines the lint-desktop alias');
+  assert.match(alias, /^clippy --manifest-path clients\/web\/src-tauri\/Cargo\.toml --all-targets --all-features /);
+  // Same deny set as the workspace `cargo lint` (Rust lint rule).
+  const deny = (line) => line.slice(line.indexOf(' -- '));
+  assert.equal(deny(alias), deny(config.match(/^lint = "(.*)"$/m)?.[1] ?? ''));
+});
+
 test('HS2-WTETE8 installs Playwright browsers before the web unit tests that launch Chromium', () => {
   const step = (name) => {
     const at = workflow.indexOf(`- name: ${name}`);

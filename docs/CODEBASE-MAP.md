@@ -807,7 +807,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .github/scripts/free-runner-disk.sh # Removes unused preinstalled toolchains and logs `df -h /` before the check/coverage jobs restore their bounded Swatinem/rust-cache (HS2-CTC6BA; tests: platform-matrix.test.mjs)
   .github/scripts/with-secret-service.sh # Disposable headless Linux Secret Service and smoke probe around CI Rust/browser test commands (HS2-1S4QEX)
   .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)
-  .github/workflows/platforms.yml # `Platforms`: daily/manual/workflow_call full suite per target (Linux x86_64/arm64, Windows x86_64/arm64, macOS arm64) + `tauri-<target>` desktop shell tests and unsigned build; never per commit, never a ci-gate run (HS2-31RGRK)
+  .github/workflows/platforms.yml # `Platforms`: daily/manual/workflow_call full suite per target (Linux x86_64/arm64, Windows x86_64/arm64, macOS arm64) + `tauri-<target>` desktop shell fmt, `cargo lint-desktop` clippy (HS2-H37V5P), tests and unsigned build; never per commit, never a ci-gate run (HS2-31RGRK)
   scripts/platform-matrix.mjs # Platform target ids, runners and target selection for platforms.yml's plan job (HS2-31RGRK; tests: platform-matrix.test.mjs)
   .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns, GitHub/GitLab/Jira providers)
   .env                       # gitignored, machine-local live-provider settings as 1Password refs; `op run --env-file=.env -- …` (docs/12 §12.7.6)

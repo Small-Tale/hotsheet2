@@ -433,6 +433,17 @@ jobs:
         working-directory: clients/web
         run: npm run desktop:prepare
 
+      # The shell is its own Cargo workspace, outside `cargo fmt --all` and `cargo lint`
+      # (HS2-H37V5P). Clippy follows the prepare step because the build script checks the
+      # staged sidecars.
+      - name: Desktop shell format
+        if: ${{ !cancelled() }}
+        run: cargo fmt --manifest-path clients/web/src-tauri/Cargo.toml --check
+
+      - name: Desktop shell clippy
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: cargo lint-desktop
+
       - name: Desktop shell Rust tests
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: cargo nextest run --manifest-path clients/web/src-tauri/Cargo.toml --config-file .config/nextest.toml --no-tests=warn

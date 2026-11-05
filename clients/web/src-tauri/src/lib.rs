@@ -146,12 +146,11 @@ fn launch_bridge(
 
     let deadline = Instant::now() + Duration::from_secs(30);
     let result = loop {
-        if let Ok(contents) = fs::read_to_string(&ready) {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&contents) {
-                if let Some(url) = value.get("url").and_then(serde_json::Value::as_str) {
-                    break tauri::Url::parse(url).map_err(|error| error.into());
-                }
-            }
+        if let Ok(contents) = fs::read_to_string(&ready)
+            && let Ok(value) = serde_json::from_str::<serde_json::Value>(&contents)
+            && let Some(url) = value.get("url").and_then(serde_json::Value::as_str)
+        {
+            break tauri::Url::parse(url).map_err(|error| error.into());
         }
         if let Some(status) = child.try_wait()? {
             break Err(format!("Hot Sheet local bridge exited during startup: {status}").into());
@@ -293,10 +292,10 @@ pub fn run() {
             }
             _ => {}
         }
-        if let RunEvent::Exit = event {
-            if let Some(child) = app.try_state::<BridgeChild>() {
-                stop_bridge(&child.0);
-            }
+        if let RunEvent::Exit = event
+            && let Some(child) = app.try_state::<BridgeChild>()
+        {
+            stop_bridge(&child.0);
         }
     });
 }
