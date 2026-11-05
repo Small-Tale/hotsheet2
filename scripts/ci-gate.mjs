@@ -11,14 +11,17 @@ const TICKET_ROW = /^\s*[*●]*\s*(HS2-[A-Z0-9]+)\s/;
 const COMMIT_MARKER = /^CI gate commit:[ \t]*([0-9a-f]{40})[ \t]*$/i;
 const MAX_SCAN_LINE = 256;
 
-export function latestGreenRun(value) {
+// HS2-GT57BQ: a ci-staged project's integration branch runs the same CI workflow.
+const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+
+export function latestGreenRun(value, branch = 'main') {
   if (!Array.isArray(value)) throw new Error('gh returned a non-array CI run list');
   const runs = value.filter(
     (run) =>
       run &&
       run.conclusion === 'success' &&
       run.status === 'completed' &&
-      run.headBranch === 'main' &&
+      run.headBranch === branch &&
       run.event === 'push' &&
       run.workflowName === 'CI' &&
       SHA.test(run.headSha) &&
@@ -148,14 +151,16 @@ export function isCovered(commit, greenSha, run = command) {
 
 export async function gateStatus({
   covers,
+  branch = 'main',
   run = command,
   readTicket = (slug) => streamWaitingCommit('hotsheet-cli', ['show', slug]),
 } = {}) {
+  if (!BRANCH.test(branch) || branch.includes('..')) throw new Error('Use a plain branch name');
   const list = run('gh', [
     'run',
     'list',
     '--branch',
-    'main',
+    branch,
     '--workflow',
     'CI',
     '--event',
@@ -168,7 +173,7 @@ export async function gateStatus({
     'conclusion,status,headBranch,event,workflowName,headSha,databaseId,createdAt,url',
   ]);
   if (list.status !== 0) throw new Error(list.stderr?.trim() || 'gh run list failed');
-  const green = latestGreenRun(JSON.parse(list.stdout));
+  const green = latestGreenRun(JSON.parse(list.stdout), branch);
   if (!green) return { green: null, covers: null, waiting: [] };
 
   const coverage = covers ? isCovered(covers, green.headSha, run) : null;
@@ -182,22 +187,32 @@ export async function gateStatus({
   return { green, covers: coverage, waiting };
 }
 
-async function main(args) {
-  if (
-    args[0] !== 'status' ||
-    (args.length !== 1 && args.length !== 3) ||
-    (args.length === 3 && (args[1] !== '--covers' || !SHA.test(args[2])))
-  ) {
-    throw new Error('usage: node scripts/ci-gate.mjs status [--covers <full-sha>]');
+export function parseStatusArgs(args) {
+  const usage = 'usage: node scripts/ci-gate.mjs status [--branch <name>] [--covers <full-sha>]';
+  if (args[0] !== 'status') throw new Error(usage);
+  const options = { branch: 'main', covers: undefined };
+  const seen = new Set();
+  for (let index = 1; index < args.length; index += 2) {
+    const [flag, value] = [args[index], args[index + 1]];
+    if (seen.has(flag) || !value) throw new Error(usage);
+    seen.add(flag);
+    if (flag === '--covers' && SHA.test(value)) options.covers = value;
+    else if (flag === '--branch' && BRANCH.test(value) && !value.includes('..')) options.branch = value;
+    else throw new Error(usage);
   }
-  const result = await gateStatus({ covers: args[2] });
+  return options;
+}
+
+async function main(args) {
+  const options = parseStatusArgs(args);
+  const result = await gateStatus(options);
   if (!result.green) {
-    console.log('No successful main push CI run found in the latest 20 successful run records.');
+    console.log(`No successful ${options.branch} push CI run found in the latest 20 successful run records.`);
     return;
   }
-  console.log(`Last green main CI: ${result.green.headSha} (run ${result.green.databaseId})`);
+  console.log(`Last green ${options.branch} CI: ${result.green.headSha} (run ${result.green.databaseId})`);
   console.log(result.green.url);
-  if (args[2]) console.log(`Covers ${args[2]}: ${result.covers}`);
+  if (options.covers) console.log(`Covers ${options.covers}: ${result.covers}`);
   console.log('Waiting final_testing tickets with an explicit CI gate commit:');
   for (const ticket of result.waiting) console.log(`  ${ticket.slug} ${ticket.commit} ${ticket.coverage}`);
   if (result.waiting.length === 0) console.log('  none');

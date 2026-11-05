@@ -13,8 +13,10 @@ import {
   attributionManifest,
   batchRun,
   ci,
+  gateCommit,
   manifestNote,
   parseArgs,
+  promote,
   record,
   recover,
 } from './integration-batch.mjs';
@@ -442,3 +444,139 @@ test(
     assert.equal(coord('status').batches.effective_strategy, 'batch');
   },
 );
+
+// HS2-GT57BQ: ci-staged batches test the staged SHA on the integration branch and reach main
+// only through an exact promotion.
+const STAGED = 'e'.repeat(40);
+
+function stagedBatch(state = 'ci', extra = {}) {
+  const value = batch(state, extra);
+  delete value.main_commit;
+  value.staging = { branch: 'integration', base_commit: MAIN, staged_commit: STAGED, ...extra.staging };
+  return value;
+}
+
+function stagedFake(initial = 'ci', { runs = [], attribution, pushFails = false } = {}) {
+  const ledger = { version: 2, batches: { 'batch-1': stagedBatch(initial) } };
+  const base = fake({ ledger, runs, attribution });
+  const calls = base.calls;
+  const run = (binary, args, extra = {}) => {
+    if (binary === 'bash') {
+      calls.push({ binary, args, cwd: extra.cwd });
+      return pushFails
+        ? { status: 1, stdout: '', stderr: 'Remote main moved and no longer fast-forwards' }
+        : { status: 0, stdout: '', stderr: '' };
+    }
+    if (binary === 'git') {
+      calls.push({ binary, args });
+      return { status: 0, stdout: '', stderr: '' };
+    }
+    if (args.includes('batch-promote')) {
+      calls.push({ binary, args });
+      const current = ledger.batches['batch-1'];
+      current.state = 'promoted';
+      current.main_commit = args[args.indexOf('--main-commit') + 1];
+      return { status: 0, stdout: JSON.stringify(current), stderr: '' };
+    }
+    return base.run(binary, args, extra);
+  };
+  return { run, calls, ledger };
+}
+
+const stagedRun = (conclusion, databaseId = 21) => ({
+  databaseId,
+  status: 'completed',
+  conclusion,
+  headSha: STAGED,
+  event: 'push',
+  workflowName: 'CI',
+  createdAt: '2026-11-05T00:00:00Z',
+});
+
+test('HS2-GT57BQ a staged manifest gates on the staged SHA and defers integration records until promotion', () => {
+  const note = manifestNote(stagedBatch(), stagedBatch().tickets[0], 'hotsheet2-0123456789ab');
+  const manifest = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(note)[1]);
+  assert.equal(manifest.staged_commit, STAGED);
+  assert.equal(manifest.staging_branch, 'integration');
+  assert.equal(manifest.main_commit, undefined);
+  assert.ok(note.includes(`CI gate commit: ${STAGED}`));
+  assert.equal(gateCommit(stagedBatch()), STAGED);
+  assert.equal(gateCommit(batch()), MAIN);
+  const recorded = [];
+  const { run } = stagedFake();
+  const result = record(options, { run, recordIntegrationFn: (input) => recorded.push(input) });
+  assert.equal(result.gate_commit, STAGED);
+  assert.deepEqual(
+    result.tickets.map((ticket) => ticket.integration),
+    ['after promotion', 'after promotion'],
+  );
+  assert.deepEqual(recorded, []);
+});
+
+test('HS2-GT57BQ ci reads the staging branch run once and a green batch waits for promotion', () => {
+  const { run, calls } = stagedFake('ci', { runs: [stagedRun('success')] });
+  const result = ci(options, { run });
+  assert.deepEqual([result.status, result.completable, result.next], ['green', false, 'promote']);
+  const listed = calls.find((call) => call.binary === 'gh').args;
+  assert.equal(listed[listed.indexOf('--branch') + 1], 'integration');
+  assert.equal(listed[listed.indexOf('--commit') + 1], STAGED);
+  // Reported again without another gh call.
+  const again = ci(options, { run });
+  assert.deepEqual([again.status, again.next], ['green', 'promote']);
+  assert.equal(calls.filter((call) => call.binary === 'gh').length, 1);
+});
+
+test('HS2-GT57BQ a red staged run is attributed against the staged SHA and points at re-staging', (t) => {
+  const { run, calls } = stagedFake('ci', {
+    runs: [stagedRun('failure')],
+    attribution: { filed: [{ key: 'k1', kind: 'failure', slug: 'HS2-CCC333', links: ['HS2-AAA111'] }] },
+  });
+  const result = ci(options, { run, scratch: scratch(t) });
+  assert.deepEqual([result.status, result.completable, result.next], ['red', false, 'restage']);
+  assert.deepEqual(result.follow_ups, ['HS2-CCC333']);
+  assert.equal(calls.find((call) => call.binary === process.execPath).manifest.shipping_sha, STAGED);
+});
+
+test('HS2-GT57BQ promote fast-forwards main through push.sh, records the promotion, then integrations', () => {
+  const recorded = [];
+  const { run, calls } = stagedFake('green');
+  const result = promote(options, { run, recordIntegrationFn: (input) => recorded.push(input) });
+  assert.deepEqual([result.status, result.main_commit, result.completable], ['promoted', STAGED, true]);
+  const push = calls.find((call) => call.binary === 'bash');
+  assert.deepEqual(push.args.slice(1, 3), ['--promote', STAGED]);
+  assert.ok(push.args[0].endsWith('scripts/push.sh'));
+  const order = calls.map((call) => call.binary === 'bash' ? 'push' : call.args.includes('batch-promote') ? 'promote' : null).filter(Boolean);
+  assert.deepEqual(order, ['push', 'promote']);
+  assert.deepEqual(
+    recorded.map((input) => input.operation),
+    ['op-1', 'op-2'],
+  );
+  // A replay after promotion pushes nothing and re-records idempotently.
+  const before = calls.filter((call) => call.binary === 'bash').length;
+  promote(options, { run, recordIntegrationFn: () => {} });
+  assert.equal(calls.filter((call) => call.binary === 'bash').length, before);
+});
+
+test('HS2-GT57BQ promotion is refused for unpromotable batches and when main moved', () => {
+  for (const state of ['ci', 'red', 'restaged']) {
+    const { run } = stagedFake(state);
+    assert.throws(() => promote(options, { run, recordIntegrationFn: () => {} }), /only a green staged batch/);
+  }
+  const unstaged = fake();
+  assert.throws(() => promote(options, { run: unstaged.run, recordIntegrationFn: () => {} }), /not staged/);
+  const moved = stagedFake('green', { pushFails: true });
+  assert.throws(() => promote(options, { run: moved.run, recordIntegrationFn: () => {} }), /no longer fast-forwards/);
+  assert.ok(!moved.calls.some((call) => call.args?.includes('batch-promote')));
+  assert.equal(moved.ledger.batches['batch-1'].state, 'green');
+  assert.equal(parseArgs(['promote', '--project', '/p', '--store', '/s', '--batch', 'b', '--integrator-id', 'i', '--integrator-session', 'g']).action, 'promote');
+});
+
+test('HS2-GT57BQ CI runs on the default staging branch the strategy and push wrapper use', () => {
+  const workflow = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../.github/workflows/ci.yml'), 'utf8');
+  assert.match(workflow, /^on:\n {2}push:\n {4}branches: \[main, integration\]\n/m);
+  const strategy = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../crates/hotsheet-cli/src/coordination/strategy.rs'),
+    'utf8',
+  );
+  assert.match(strategy, /pub const DEFAULT_STAGING_BRANCH: &str = "integration";/);
+});

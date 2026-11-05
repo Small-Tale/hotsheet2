@@ -1,10 +1,12 @@
 // HS2-BND42N: one local main writer from preflight through gate, push and confirmation.
+// HS2-GT57BQ: the same window reserves a ci-staged integrator's push to its integration branch
+// (`--staged`) and its fast-forward of main to an exact green staged SHA (`--promote`).
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseMainPushArgs } from './main-integration-options.mjs';
+import { parseMainPushArgs, validStagingBranch } from './main-integration-options.mjs';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const project = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -36,6 +38,13 @@ function gitResult(repo, args) {
 
 function commonDir(repo) {
   return realpathSync(resolve(repo, git(repo, ['rev-parse', '--git-common-dir'])));
+}
+
+// HS2-GT57BQ: a promotion pushes a recorded SHA, not the checkout, so it needs no clean HEAD.
+function promotionSnapshot(repo, sha) {
+  if (gitResult(repo, ['cat-file', '-e', `${sha}^{commit}`]).status !== 0)
+    throw new Error(`Promotion commit ${sha} is not in this repository; fetch the staging branch first`);
+  return { head: sha, tree: git(repo, ['rev-parse', `${sha}^{tree}`]) };
 }
 
 function snapshot(repo, requested = 'HEAD') {
@@ -94,7 +103,10 @@ export function readWindow(repo, query = gitResult) {
     !fullSha.test(value.head) ||
     !fullSha.test(value.tree) ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value.remote) ||
-    value.target !== 'refs/heads/main' ||
+    !['main', 'staged', 'promote'].includes(value.mode ?? 'main') ||
+    ((value.mode ?? 'main') === 'staged'
+      ? !value.target?.startsWith('refs/heads/') || !validStagingBranch(value.target.slice(11))
+      : value.target !== 'refs/heads/main') ||
     (value.phase === 'ready' &&
       (!Array.isArray(value.gateArgs) ||
         !value.gateArgs.every((arg) => typeof arg === 'string') ||
@@ -161,7 +173,8 @@ async function acquire(repo, options) {
       const current = readWindow(repo);
       unresolved = false;
       if (!current || current.value.expiresAt <= Date.now()) {
-        const selected = snapshot(repo, options.source);
+        const selected =
+          options.mode === 'promote' ? promotionSnapshot(repo, options.promote) : snapshot(repo, options.source);
         const written = writeWindow(repo, current?.oid, {
           version: 1,
           token,
@@ -178,6 +191,7 @@ async function acquire(repo, options) {
           assignments: options.assignments,
           standalone: options.standalone,
           sourceStore: options.sourceStore,
+          mode: options.mode,
         });
         if (written) return written;
       }
@@ -195,12 +209,39 @@ async function acquire(repo, options) {
 }
 
 function assertSnapshot(repo, value) {
+  if (value.mode === 'promote') {
+    promotionSnapshot(repo, value.head);
+    return;
+  }
   const current = snapshot(repo, value.head);
   if (current.head !== value.head || current.tree !== value.tree)
     throw new Error('Checked-out main changed during integration');
 }
 
-export function authorizeMainState(state, value, projectId, sourceId, now) {
+/**
+ * HS2-GT57BQ: what a ci-staged integrator may push. `staged` sends the opened batch to the
+ * integration branch; `promote` fast-forwards main to a green staged batch's exact SHA; a plain
+ * main push is serial fallback, allowed only while the batch circuit breaker is tripped.
+ */
+function authorizeStaged(state, value, ledger) {
+  const mode = value.mode ?? 'main';
+  const strategy = state.integrator.strategy;
+  if (mode !== 'main' && strategy !== 'ci-staged') throw new Error(`--${mode} needs a ci-staged integrator`);
+  if (strategy !== 'ci-staged') return;
+  if (mode === 'promote') {
+    const green = Object.values(ledger?.batches ?? {}).find(
+      (batch) => batch?.state === 'green' && batch.staging?.staged_commit === value.head,
+    );
+    if (!green) throw new Error(`No green staged batch has staged commit ${value.head}; promotion refused`);
+    return;
+  }
+  if (mode === 'main' && !ledger?.breaker?.tripped)
+    throw new Error(
+      'A ci-staged integrator reaches main only through --promote of a green staged SHA, or serially while its circuit breaker is tripped',
+    );
+}
+
+export function authorizeMainState(state, value, projectId, sourceId, now, ledger = null) {
   if (!state) {
     if (value.identity) throw new Error('No coordinator pool for integrator push');
     if (value.gateArgs?.includes('--smoke')) throw new Error('The --smoke gate is only for a batch integrator push');
@@ -228,13 +269,18 @@ export function authorizeMainState(state, value, projectId, sourceId, now) {
       state.integrator.generation !== value.identity.session
     )
       throw new Error('Live integrator owns main; supply its exact id and session');
-    // HS2-9G0M3V: the smoke gate replaces the affected gate only for a project-allowed batch.
-    if (value.gateArgs?.includes('--smoke') && state.integrator.strategy !== 'batch')
+    // HS2-9G0M3V: the smoke gate replaces the affected gate only for a project-allowed batch
+    // (HS2-GT57BQ: or ci-staged) integrator.
+    const batchStrategy = ['batch', 'ci-staged'].includes(state.integrator.strategy);
+    if (value.gateArgs?.includes('--smoke') && !batchStrategy)
       throw new Error('The --smoke gate is only for a batch integrator push');
+    authorizeStaged(state, value, ledger);
+    // HS2-GT57BQ: a promotion moves no assignment; the green ledger batch is its authority.
+    if (value.mode === 'promote') return 'integrator';
     const batch = value.assignments?.length > 1 ? value.assignments : null;
     if (batch) {
       // HS2-9G0M3V: one push for an opened batch: its members are exactly the integrating set.
-      if (state.integrator.strategy !== 'batch') throw new Error('A multi-assignment push needs a batch integrator');
+      if (!batchStrategy) throw new Error('A multi-assignment push needs a batch integrator');
       const members = new Set(batch);
       if (
         fence.length !== members.size ||
@@ -258,6 +304,7 @@ export function authorizeMainState(state, value, projectId, sourceId, now) {
     return 'integrator';
   }
   if (value.identity) throw new Error('Integrator session expired or was replaced');
+  if ((value.mode ?? 'main') !== 'main') throw new Error(`--${value.mode} needs a live ci-staged integrator`);
   if (value.gateArgs?.includes('--smoke')) throw new Error('The --smoke gate is only for a batch integrator push');
   if (fence.length) throw new Error('An integration/review fence needs recovery before standalone push');
   if (!value.standalone) throw new Error('Existing pool requires explicit --standalone without a live integrator');
@@ -272,6 +319,9 @@ function authority(repo, value) {
   if (!statSync(directory).isDirectory() || !existsSync(pool))
     throw new Error('Coordination pool is partial; repair it before pushing main');
   const state = JSON.parse(readFileSync(pool, 'utf8'));
+  // HS2-GT57BQ: the batch ledger beside the pool decides promotion and serial fallback.
+  const ledgerPath = join(directory, 'batches.json');
+  const ledger = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) : null;
   const shipping = realpathSync(resolve(common, '..'));
   const slug = basename(shipping)
     .replace(/[^A-Za-z0-9]/g, '-')
@@ -279,7 +329,7 @@ function authority(repo, value) {
     .replace(/^-+|-+$/g, '');
   const projectId = `${slug}-${createHash('sha256').update(shipping).digest('hex').slice(0, 12)}`;
   const sourceId = createHash('sha256').update(realpathSync(value.sourceStore)).digest('hex');
-  return authorizeMainState(state, value, projectId, sourceId, Math.floor(Date.now() / 1000));
+  return authorizeMainState(state, value, projectId, sourceId, Math.floor(Date.now() / 1000), ledger);
 }
 
 async function child(repo, program, args, { env = withoutGitRepositoryEnv(process.env), signal, output = false, timeoutMs } = {}) {
@@ -350,16 +400,27 @@ async function child(repo, program, args, { env = withoutGitRepositoryEnv(proces
   });
 }
 
-async function remoteTip(repo, remote, signal) {
-  const line = await child(repo, 'git', ['ls-remote', '--heads', remote, 'main'], {
+async function remoteTip(repo, remote, signal, ref = 'refs/heads/main') {
+  const line = await child(repo, 'git', ['ls-remote', remote, ref], {
     output: true,
     signal,
     timeoutMs: 120_000,
   });
   const tip = line ? line.split(/\s+/)[0] : null;
-  if (tip && !fullSha.test(tip)) throw new Error('Remote main returned an invalid SHA');
+  if (tip && !fullSha.test(tip)) throw new Error(`Remote ${ref} returned an invalid SHA`);
   return tip;
 }
+
+async function ensureCommit(repo, remote, tip, ref, signal) {
+  if (gitResult(repo, ['cat-file', '-e', `${tip}^{commit}`]).status !== 0)
+    await child(repo, 'git', ['fetch', '--no-tags', '--no-write-fetch-head', remote, ref], {
+      signal,
+      timeoutMs: 120_000,
+    });
+}
+
+const isAncestor = (repo, ancestor, descendant) =>
+  gitResult(repo, ['merge-base', '--is-ancestor', ancestor, descendant]).status === 0;
 
 async function preflight(repo, value, signal) {
   assertSnapshot(repo, value);
@@ -369,15 +430,28 @@ async function preflight(repo, value, signal) {
     throw new Error('Main reservation requires one matching fetch/push URL for the named remote');
   const tip = await remoteTip(repo, value.remote, signal);
   if (tip) {
-    if (gitResult(repo, ['cat-file', '-e', `${tip}^{commit}`]).status !== 0)
-      await child(repo, 'git', ['fetch', '--no-tags', '--no-write-fetch-head', value.remote, 'main'], {
-        signal,
-        timeoutMs: 120_000,
-      });
-    if (gitResult(repo, ['merge-base', '--is-ancestor', tip, value.head]).status !== 0)
+    await ensureCommit(repo, value.remote, tip, 'main', signal);
+    if (!isAncestor(repo, tip, value.head)) {
+      // HS2-GT57BQ: main is never merged or rewritten into a promotion; the batch re-stages.
+      if (value.mode === 'promote')
+        throw new Error(
+          `Remote main moved and no longer fast-forwards to ${value.head}; re-stage the batch on the new main (coordination batch-restage)`,
+        );
+      if (value.mode === 'staged')
+        throw new Error('Remote main is not an ancestor of the staged commit; rebuild the integration branch on main');
       throw new Error('Remote main is not an ancestor of the checked-out commit; fetch and integrate first');
+    }
   }
-  return tip;
+  if (value.mode !== 'staged') return tip;
+  // HS2-GT57BQ: the integration branch is integrator-owned scratch. It moves forward, or is
+  // rebuilt over a tip that main does not contain; never over a SHA main already holds.
+  const staged = await remoteTip(repo, value.remote, signal, value.target);
+  if (staged && !isAncestor(repo, staged, value.head)) {
+    await ensureCommit(repo, value.remote, staged, value.target, signal);
+    if (!isAncestor(repo, staged, value.head) && tip && isAncestor(repo, staged, tip))
+      throw new Error(`Remote ${value.target} is ${staged}, which main contains; the staged commit must descend from it`);
+  }
+  return staged;
 }
 
 async function ticketPhase(repo, options, phase, signal) {
@@ -476,14 +550,18 @@ export async function pushMain(repo, args) {
   };
   try {
     authority(repo, window.value);
-    await preflight(repo, window.value, control.signal);
+    const before = await preflight(repo, window.value, control.signal);
     check();
-    await child(repo, 'bash', ['scripts/check.sh', ...options.gateArgs], { signal: control.signal });
-    check();
-    await child(repo, 'bash', ['scripts/check.sh', '--verify-receipt', ...options.gateArgs], {
-      signal: control.signal,
-    });
-    check();
+    // HS2-GT57BQ: a promotion's gate is the green CI run on the exact SHA, not a local receipt.
+    if (options.mode === 'promote' && before === window.value.head) return window.value.head;
+    if (options.mode !== 'promote') {
+      await child(repo, 'bash', ['scripts/check.sh', ...options.gateArgs], { signal: control.signal });
+      check();
+      await child(repo, 'bash', ['scripts/check.sh', '--verify-receipt', ...options.gateArgs], {
+        signal: control.signal,
+      });
+      check();
+    }
     authority(repo, window.value);
     const oldTip = await preflight(repo, window.value, control.signal);
     check();
@@ -498,13 +576,25 @@ export async function pushMain(repo, args) {
     window = ready;
     const expected = oldTip ?? zero;
     verifyMainPush(repo, token, options.remote, options.target, window.value.head, expected);
-    await child(repo, 'git', ['push', ...options.gitFlags, options.remote, `${window.value.head}:refs/heads/main`], {
-      signal: control.signal,
-      timeoutMs: 10 * 60_000,
-      env: { ...withoutGitRepositoryEnv(process.env), HOTSHEET_MAIN_WINDOW_TOKEN: token },
-    });
+    // HS2-GT57BQ: a rebuilt integration tip replaces exactly the old one it was checked against.
+    const lease =
+      options.mode === 'staged' && oldTip && !isAncestor(repo, oldTip, window.value.head)
+        ? [`--force-with-lease=${options.target}:${oldTip}`]
+        : [];
+    await child(
+      repo,
+      'git',
+      ['push', ...options.gitFlags, ...lease, options.remote, `${window.value.head}:${options.target}`],
+      {
+        signal: control.signal,
+        timeoutMs: 10 * 60_000,
+        env: { ...withoutGitRepositoryEnv(process.env), HOTSHEET_MAIN_WINDOW_TOKEN: token },
+      },
+    );
     check();
-    const confirmed = await remoteTip(repo, options.remote, control.signal);
+    const confirmed = await remoteTip(repo, options.remote, control.signal, options.target);
+    if (options.mode === 'staged' && confirmed !== window.value.head)
+      throw new Error(`Push returned, but remote ${options.target} is not the reserved commit`);
     if (confirmed !== window.value.head) {
       if (!confirmed) throw new Error('Remote main disappeared after push');
       if (gitResult(repo, ['cat-file', '-e', `${confirmed}^{commit}`]).status !== 0)
@@ -545,11 +635,14 @@ async function main() {
     const [remote, target, localSha, remoteSha] = args;
     if (args.length !== 4) throw new Error('verify needs remote, target, local SHA and remote SHA');
     const value = verifyMainPush(project, process.env.HOTSHEET_MAIN_WINDOW_TOKEN, remote, target, localSha, remoteSha);
-    await child(project, 'bash', ['scripts/check.sh', '--verify-receipt', ...value.gateArgs]);
+    // HS2-GT57BQ: a promotion was gated by its green CI run, which authority() re-read.
+    if (value.mode !== 'promote')
+      await child(project, 'bash', ['scripts/check.sh', '--verify-receipt', ...value.gateArgs]);
     verifyMainPush(project, process.env.HOTSHEET_MAIN_WINDOW_TOKEN, remote, target, localSha, remoteSha);
   } else if (command === 'push') {
     const sha = await pushMain(project, args);
-    console.log(`Confirmed remote main contains ${sha}`);
+    const options = parseMainPushArgs(args);
+    console.log(`Confirmed remote ${options.target.slice(11)} contains ${sha}`);
   } else throw new Error('Expected push or verify');
 }
 

@@ -5,6 +5,9 @@ mod authority;
 #[cfg(test)]
 mod authority_tests;
 pub mod batch;
+pub mod batch_staged;
+#[cfg(test)]
+mod batch_staged_tests;
 #[cfg(test)]
 mod batch_tests;
 pub mod contract;

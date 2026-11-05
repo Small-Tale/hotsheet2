@@ -84,3 +84,28 @@ test('HS2-9G0M3V a batch push names every member, its phase tickets and only the
   ])
     assert.throws(() => parseMainPushArgs(args), args.join(' '));
 });
+
+test('HS2-GT57BQ staged and promote pushes name the integration branch or one exact SHA', () => {
+  const identity = ['--integrator-id', 'i', '--integrator-session', 'g'];
+  const staged = parseMainPushArgs(['--staged', ...identity, '--gate-arg', '--smoke']);
+  assert.equal(staged.mode, 'staged');
+  assert.equal(staged.target, 'refs/heads/integration');
+  assert.equal(
+    parseMainPushArgs(['--staged', '--staging-branch', 'staging/ci', ...identity]).target,
+    'refs/heads/staging/ci',
+  );
+  for (const branch of ['main', 'HEAD', 'a..b', 'x/', 'x.lock', '-x', 'a//b'])
+    assert.throws(() => parseMainPushArgs(['--staged', '--staging-branch', branch, ...identity]), /Invalid staging/);
+  assert.throws(() => parseMainPushArgs(['--staging-branch', 'integration', ...identity]), /requires --staged/);
+  assert.throws(() => parseMainPushArgs(['--staged', 'origin', 'HEAD:main', ...identity]), /omit the refspec/);
+  assert.throws(() => parseMainPushArgs(['--staged']), /requires integrator identity/);
+  const sha = 'A'.repeat(40);
+  const promote = parseMainPushArgs(['--promote', sha, ...identity]);
+  assert.deepEqual([promote.mode, promote.source, promote.target], ['promote', 'a'.repeat(40), 'refs/heads/main']);
+  assert.throws(() => parseMainPushArgs(['--promote', 'abc', ...identity]), /full green staged SHA/);
+  assert.throws(() => parseMainPushArgs(['--promote', sha, '--staged', ...identity]), /cannot be combined/);
+  assert.throws(() => parseMainPushArgs(['--promote', sha, '--gate-arg', '--smoke', ...identity]), /no local gate/);
+  assert.throws(() => parseMainPushArgs(['--promote', sha, '--assignment', 'op', ...identity]), /moves no assignment/);
+  assert.throws(() => parseMainPushArgs(['--promote', sha, '--source', 'HEAD', ...identity]), /omit --source/);
+  assert.throws(() => parseMainPushArgs(['--promote', sha]), /requires integrator identity/);
+});

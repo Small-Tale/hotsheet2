@@ -69,6 +69,9 @@ pub struct StrategyRules {
     /// The integrator may open one batch of several integrating code handoffs, smoke-gate
     /// and push it once, and let CI test it together (HS2-9G0M3V).
     pub batch_integration: bool,
+    /// Batches are pushed to an integration branch, may stack while CI runs, and `main`
+    /// only fast-forwards to an exact green staged SHA (HS2-GT57BQ).
+    pub staged_integration: bool,
 }
 
 impl IntegrationStrategy {
@@ -90,7 +93,7 @@ impl IntegrationStrategy {
             },
             Self::CiStaged => StrategyDescriptor {
                 name: "ci-staged",
-                implemented: false,
+                implemented: true,
                 ticket: "HS2-GT57BQ",
                 summary: "Stage batches on an integration branch and fast-forward main only to a green SHA.",
             },
@@ -99,14 +102,21 @@ impl IntegrationStrategy {
 
     pub const fn rules(self) -> StrategyRules {
         match self {
-            // Unimplemented strategies keep serial rules until their tickets change them.
-            Self::Serial | Self::CiStaged => StrategyRules {
+            Self::Serial => StrategyRules {
                 exclusive_integration: true,
                 batch_integration: false,
+                staged_integration: false,
             },
             Self::Batch => StrategyRules {
                 exclusive_integration: true,
                 batch_integration: true,
+                staged_integration: false,
+            },
+            // HS2-GT57BQ: ci-staged reuses every batch rule and stages before main.
+            Self::CiStaged => StrategyRules {
+                exclusive_integration: true,
+                batch_integration: true,
+                staged_integration: true,
             },
         }
     }
@@ -155,6 +165,40 @@ pub struct AllowedStrategy {
     /// (HS2-9G0M3V). Absent means [`CircuitBreaker::default`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub circuit_breaker: Option<CircuitBreaker>,
+    /// ci-staged only: the integration branch batches are pushed to before `main`
+    /// (HS2-GT57BQ). Absent means [`DEFAULT_STAGING_BRANCH`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging_branch: Option<String>,
+}
+
+/// The ci-staged integration branch when the project names none (HS2-GT57BQ).
+pub const DEFAULT_STAGING_BRANCH: &str = "integration";
+
+/// A staging branch is one plain, integrator-owned branch name: never `main`, and nothing
+/// Git would read as a revision expression.
+pub fn validate_staging_branch(name: &str) -> Result<()> {
+    ensure!(
+        !name.is_empty()
+            && name.len() <= 100
+            && name
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphanumeric())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
+            && !name.contains("..")
+            && !name.contains("//")
+            && !name.ends_with('/')
+            && !name.ends_with('.')
+            && !name.ends_with(".lock"),
+        "staging branch must be a plain branch name of ASCII letters, digits, '-', '_', '.' or '/'"
+    );
+    ensure!(
+        name != "main" && name != "HEAD",
+        "the staging branch must not be main"
+    );
+    Ok(())
 }
 
 /// Batch circuit breaker thresholds (HS2-9G0M3V). Either limit trips the breaker.
@@ -237,9 +281,16 @@ impl StrategyPolicy {
             if let Some(breaker) = &entry.circuit_breaker {
                 ensure!(
                     entry.strategy.rules().batch_integration,
-                    "only the batch strategy has a circuit breaker"
+                    "only the batch and ci-staged strategies have a circuit breaker"
                 );
                 breaker.validate()?;
+            }
+            if let Some(branch) = &entry.staging_branch {
+                ensure!(
+                    entry.strategy.rules().staged_integration,
+                    "only the ci-staged strategy has a staging branch"
+                );
+                validate_staging_branch(branch)?;
             }
         }
         ensure!(
@@ -256,11 +307,26 @@ impl StrategyPolicy {
 
     /// The batch circuit breaker thresholds: the allowed batch entry's, else the default.
     pub fn circuit_breaker(&self) -> CircuitBreaker {
+        self.circuit_breaker_for(IntegrationStrategy::Batch)
+    }
+
+    /// The circuit breaker thresholds of one strategy's entry, else the default
+    /// (HS2-GT57BQ: batch and ci-staged keep their own).
+    pub fn circuit_breaker_for(&self, strategy: IntegrationStrategy) -> CircuitBreaker {
         self.allowed
             .iter()
-            .find(|entry| entry.strategy.rules().batch_integration)
+            .find(|entry| entry.strategy == strategy)
             .and_then(|entry| entry.circuit_breaker)
             .unwrap_or_default()
+    }
+
+    /// The ci-staged integration branch (HS2-GT57BQ).
+    pub fn staging_branch(&self) -> String {
+        self.allowed
+            .iter()
+            .find(|entry| entry.strategy.rules().staged_integration)
+            .and_then(|entry| entry.staging_branch.clone())
+            .unwrap_or_else(|| DEFAULT_STAGING_BRANCH.to_owned())
     }
 
     /// The strategy a new integrator generation runs under: the explicit request, else the
@@ -317,6 +383,24 @@ impl StrategyPolicy {
         self.allow_with_breaker(strategy, reason, None)
     }
 
+    /// Allow ci-staged (or re-justify it) with an optional integration branch name;
+    /// re-allowing without one keeps the recorded branch (HS2-GT57BQ).
+    pub fn allow_with_options(
+        &mut self,
+        strategy: IntegrationStrategy,
+        reason: &str,
+        circuit_breaker: Option<CircuitBreaker>,
+        staging_branch: Option<String>,
+    ) -> Result<()> {
+        self.allow_with_breaker(strategy, reason, circuit_breaker)?;
+        if staging_branch.is_some()
+            && let Some(entry) = self.allowed.iter_mut().find(|e| e.strategy == strategy)
+        {
+            entry.staging_branch = staging_branch;
+        }
+        self.validate()
+    }
+
     /// Allow a strategy with batch circuit breaker thresholds. Re-allowing without
     /// thresholds keeps the ones already recorded.
     pub fn allow_with_breaker(
@@ -329,16 +413,15 @@ impl StrategyPolicy {
             !strategy.is_serial(),
             "serial is always allowed; do not list it"
         );
-        let kept = self
-            .allowed
-            .iter()
-            .find(|entry| entry.strategy == strategy)
-            .and_then(|entry| entry.circuit_breaker);
+        let existing = self.allowed.iter().find(|entry| entry.strategy == strategy);
+        let kept = existing.and_then(|entry| entry.circuit_breaker);
+        let kept_branch = existing.and_then(|entry| entry.staging_branch.clone());
         self.allowed.retain(|entry| entry.strategy != strategy);
         self.allowed.push(AllowedStrategy {
             strategy,
             reason: reason.to_owned(),
             circuit_breaker: circuit_breaker.or(kept),
+            staging_branch: kept_branch,
         });
         self.validate()
     }
@@ -401,6 +484,7 @@ mod tests {
                 strategy: IntegrationStrategy::Batch,
                 reason: "throughput".into(),
                 circuit_breaker: None,
+                staging_branch: None,
             }],
         }
     }
@@ -417,10 +501,15 @@ mod tests {
                 serde_json::json!(strategy.name())
             );
             assert!(strategy.rules().exclusive_integration);
-            // HS2-9G0M3V: only batch may open a multi-handoff integration unit.
+            // HS2-9G0M3V/HS2-GT57BQ: batch and ci-staged open multi-handoff units; only
+            // ci-staged stages them before main.
             assert_eq!(
                 strategy.rules().batch_integration,
-                strategy == IntegrationStrategy::Batch
+                strategy != IntegrationStrategy::Serial
+            );
+            assert_eq!(
+                strategy.rules().staged_integration,
+                strategy == IntegrationStrategy::CiStaged
             );
         }
         assert_eq!(
@@ -429,7 +518,7 @@ mod tests {
                 .filter(|d| d.implemented)
                 .map(|d| d.name)
                 .collect::<Vec<_>>(),
-            ["serial", "batch"]
+            ["serial", "batch", "ci-staged"]
         );
         assert!(IntegrationStrategy::parse("merge-queue").is_err());
     }
@@ -450,17 +539,72 @@ mod tests {
     }
 
     #[test]
-    fn hs2_ney1qh_allowed_but_unimplemented_strategy_is_refused_with_its_ticket() {
+    fn hs2_gt57bq_ci_staged_resolves_when_allowed_and_keeps_its_staging_branch() {
+        assert!(
+            StrategyPolicy::default()
+                .resolve(Some(IntegrationStrategy::CiStaged))
+                .unwrap_err()
+                .to_string()
+                .contains("not allowed by this project")
+        );
         let mut policy = StrategyPolicy::default();
+        assert_eq!(policy.staging_branch(), DEFAULT_STAGING_BRANCH);
         policy
-            .allow(IntegrationStrategy::CiStaged, "staging")
+            .allow(IntegrationStrategy::CiStaged, "keep main green")
             .unwrap();
-        let refused = policy
-            .resolve(Some(IntegrationStrategy::CiStaged))
+        assert_eq!(
+            policy.resolve(Some(IntegrationStrategy::CiStaged)).unwrap(),
+            IntegrationStrategy::CiStaged
+        );
+        assert_eq!(policy.staging_branch(), "integration");
+        let custom = CircuitBreaker {
+            max_red_batches: 4,
+            max_red_minutes: 60,
+        };
+        policy
+            .allow_with_options(
+                IntegrationStrategy::CiStaged,
+                "keep main green",
+                Some(custom),
+                Some("staging/ci".into()),
+            )
+            .unwrap();
+        assert_eq!(policy.staging_branch(), "staging/ci");
+        // Each strategy keeps its own breaker; batch still has the default.
+        assert_eq!(
+            policy.circuit_breaker_for(IntegrationStrategy::CiStaged),
+            custom
+        );
+        assert_eq!(policy.circuit_breaker(), CircuitBreaker::default());
+        // Re-justifying keeps the recorded branch and breaker.
+        policy
+            .allow(IntegrationStrategy::CiStaged, "re-justified")
+            .unwrap();
+        assert_eq!(policy.staging_branch(), "staging/ci");
+        assert_eq!(
+            policy.circuit_breaker_for(IntegrationStrategy::CiStaged),
+            custom
+        );
+        for invalid in [
+            "main", "HEAD", "", "-x", "a..b", "a/", "a.lock", "a b", "a~1", "a//b",
+        ] {
+            assert!(
+                StrategyPolicy::default()
+                    .allow_with_options(
+                        IntegrationStrategy::CiStaged,
+                        "x",
+                        None,
+                        Some(invalid.into())
+                    )
+                    .is_err(),
+                "{invalid}"
+            );
+        }
+        let refused = StrategyPolicy::default()
+            .allow_with_options(IntegrationStrategy::Batch, "x", None, Some("int".into()))
             .unwrap_err()
             .to_string();
-        assert!(refused.contains("not implemented"), "{refused}");
-        assert!(refused.contains("HS2-GT57BQ"), "{refused}");
+        assert!(refused.contains("only the ci-staged strategy"), "{refused}");
     }
 
     #[test]
@@ -507,11 +651,12 @@ mod tests {
                     .is_err()
             );
         }
-        let refused = StrategyPolicy::default()
-            .allow_with_breaker(IntegrationStrategy::CiStaged, "x", Some(custom))
-            .unwrap_err()
-            .to_string();
-        assert!(refused.contains("only the batch strategy"), "{refused}");
+        // HS2-GT57BQ: ci-staged has its own breaker too.
+        assert!(
+            StrategyPolicy::default()
+                .allow_with_breaker(IntegrationStrategy::CiStaged, "x", Some(custom))
+                .is_ok()
+        );
     }
 
     #[test]
@@ -595,6 +740,7 @@ mod tests {
         let request =
             StrategyRequest::from_policy(&StrategyPolicy::default(), None, false).unwrap();
         assert_eq!(request, StrategyRequest::default());
+        // Not allowed by the default policy.
         assert!(
             StrategyRequest::from_policy(
                 &StrategyPolicy::default(),

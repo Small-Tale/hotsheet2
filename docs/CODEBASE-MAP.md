@@ -231,7 +231,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
   scripts/ci-failure-attribution.mjs # Best-effort batch CI failure attribution: ranks a batch manifest's qualified tickets per distinct failure and files idempotent follow-up bugs, links and back-link notes, or prints them with --dry-run (HS2-HAHX20; tests: ci-failure-attribution.test.mjs; docs: 33-ci-failure-attribution.md)
   scripts/ci-failure-parse.mjs # Identifier-only parsers for gh --log-failed output (nextest, vitest, Playwright, node --test, rustc/rustfmt/tsc/ESLint/Prettier) and JUnit/vitest/Playwright reports, with attempt-based flake detection (HS2-HAHX20; tests: ci-failure-parse.test.mjs)
-  scripts/integration-batch.mjs # Batch integration ticket steps: manifest notes with CI gate commit, integration records, one-shot CI result with HS2-HAHX20 attribution follow-ups, breaker recovery (HS2-9G0M3V; tests: integration-batch.test.mjs)
+  scripts/integration-batch.mjs # Batch integration ticket steps: manifest notes with CI gate commit, integration records, one-shot CI result with HS2-HAHX20 attribution follow-ups, breaker recovery (HS2-9G0M3V); ci-staged staged-SHA notes, staging-branch CI and promote (HS2-GT57BQ; tests: integration-batch.test.mjs)
   scripts/gate-smoke.json # Declared batch smoke checks for scripts/check.sh --smoke (HS2-9G0M3V)
   scripts/integration-record.mjs # Provider-qualified source-to-shipping ledger in the Git common directory, fresh remote-main reachability, replay, and retained source refs (HS2-39D5YS; tests: integration-record.test.mjs; server reader: code_review.rs)
   scripts/windows-crt-directives.mjs # Windows platform-target (daily) dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
@@ -1103,9 +1103,9 @@ scope review behind the schema-five fence (HS2-YHYNJ6); `scope_tests.rs` and
 tentative worker intent, bounded event replay, manual-assignment reconciliation and
 verified dispatch under the schema-seven fence (HS2-XCMAVT); `next_plan_tests.rs`
 and real CLI, HTTP and MCP tests pin its transitions.
-`strategy.rs` owns the typed integration strategy registry (`serial` and `batch`
-implemented; `ci-staged` registered but refused), its `StrategyRules`, the batch
-circuit-breaker thresholds, and the
+`strategy.rs` owns the typed integration strategy registry (`serial`, `batch` and
+`ci-staged` implemented), its `StrategyRules`, the per-strategy circuit-breaker
+thresholds, the ci-staged `staging_branch`, and the
 committed `integration_strategies` project policy with one validated read/write
 shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
 /checkouts/{reference}/integration-strategies` (`hotsheet-server`
@@ -1126,6 +1126,13 @@ conflict-excluding `select_batch`, `batch_open`/`abort`/`pushed`/`result`/
 The CLI side is `dispatch/coordination_batch.rs` (`coordination batch-*`, Git
 changed paths, follow-up verification); `batch_tests.rs` and
 `tests/coordination_batch.rs` pin its transitions.
+`batch_staged.rs` owns ci-staged integration (HS2-GT57BQ): the staged manifest record,
+stacking on the pending tip, `batch_staged`/`batch_promote`/`batch_restage`, the staged
+CI result (implied green, invalidation above a red batch), held suspects and the
+`staging` status summary, in ledger `version: 2`. `batch_staged_tests.rs` and the
+`hs2_gt57bq_*` case of `tests/coordination_batch.rs` pin its transitions. The push side
+is `scripts/main-integration-window.mjs` (`--staged`, `--promote`) and
+`integration-batch.mjs promote`.
 `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,

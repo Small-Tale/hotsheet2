@@ -11,6 +11,10 @@
 //!
 //! Every batch transition is idempotent by batch id, so replaying a command repairs a write
 //! interrupted between the two files.
+//!
+//! ci-staged batches (HS2-GT57BQ, `batch_staged.rs`) add a `staging` record and three
+//! states. A ledger holding one is written as version two, which a batch-only executable
+//! refuses.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,10 +27,13 @@ use super::*;
 
 /// The ledger file in the coordination directory.
 pub const LEDGER_FILE: &str = "batches.json";
-/// The only ledger version this executable reads and writes.
-pub const LEDGER_VERSION: u32 = 1;
+/// The newest ledger version this executable reads and writes. Version two adds staged
+/// batches (HS2-GT57BQ); a ledger without one stays at [`LEDGER_VERSION_UNSTAGED`].
+pub const LEDGER_VERSION: u32 = 2;
+/// The version of a ledger that holds no staged batch (HS2-9G0M3V).
+pub const LEDGER_VERSION_UNSTAGED: u32 = 1;
 const MAX_ID_CHARS: usize = 128;
-const MAX_REASON_CHARS: usize = 500;
+pub(super) const MAX_REASON_CHARS: usize = 500;
 
 /// Every batch this pool has opened, plus the circuit breaker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,7 +49,7 @@ pub struct BatchLedger {
 impl Default for BatchLedger {
     fn default() -> Self {
         Self {
-            version: LEDGER_VERSION,
+            version: LEDGER_VERSION_UNSTAGED,
             batches: BTreeMap::new(),
             breaker: BreakerState::default(),
         }
@@ -60,6 +67,22 @@ pub enum BatchState {
     Ci,
     Green,
     Red,
+    /// ci-staged: `main` fast-forwarded to this batch's green staged SHA or a green
+    /// descendant's (HS2-GT57BQ).
+    Promoted,
+    /// ci-staged: withdrawn from staging (red with follow-ups, stale or abandoned); every
+    /// member returned to handoff for a new batch.
+    Restaged,
+    /// ci-staged: stacked above a batch that went red or was re-staged; every member
+    /// returned to handoff.
+    Invalidated,
+}
+
+impl BatchState {
+    /// Whether this batch gave its members back, so they may join another batch.
+    pub fn released(self) -> bool {
+        matches!(self, Self::Aborted | Self::Restaged | Self::Invalidated)
+    }
 }
 
 impl std::fmt::Display for BatchState {
@@ -70,6 +93,9 @@ impl std::fmt::Display for BatchState {
             Self::Ci => "ci",
             Self::Green => "green",
             Self::Red => "red",
+            Self::Promoted => "promoted",
+            Self::Restaged => "restaged",
+            Self::Invalidated => "invalidated",
         })
     }
 }
@@ -103,6 +129,39 @@ pub struct BatchManifest {
     pub attributed: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub failures: Vec<BatchFailure>,
+    /// ci-staged only (HS2-GT57BQ): where the batch was staged and what became of it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging: Option<StagedBatch>,
+}
+
+/// A ci-staged batch's integration-branch facts (HS2-GT57BQ). `main_commit` stays empty
+/// until promotion, then holds the exact main SHA that contains this batch.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StagedBatch {
+    /// The integration branch the batch was pushed to.
+    pub branch: String,
+    /// The commit the batch was built on: remote `main`, or its parent's staged commit.
+    pub base_commit: String,
+    /// The staged batch this one stacks on while that one is still in CI or unpromoted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// The exact integration-branch SHA CI tests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staged_commit: Option<String>,
+    /// Green because a descendant's run passed on a tip that contains this batch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implied_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promoted_at: Option<i64>,
+    /// The red or re-staged ancestor that invalidated this batch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invalidated_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restage_reason: Option<String>,
+    /// Members held back from re-staging as suspects until review-returned.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub held: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,19 +256,23 @@ impl BreakerState {
         Some(reason)
     }
 
-    fn record_red(
+    /// Count a red batch. `main_commit` is the red commit pushed to main; a red staged
+    /// batch (HS2-GT57BQ) left main untouched and passes `None`.
+    pub(super) fn record_red(
         &mut self,
         now: i64,
-        main_commit: &str,
+        main_commit: Option<&str>,
         limits: CircuitBreaker,
     ) -> Option<String> {
         self.consecutive_red += 1;
         self.red_since.get_or_insert(now);
-        self.last_red_main = Some(main_commit.to_owned());
+        if let Some(main_commit) = main_commit {
+            self.last_red_main = Some(main_commit.to_owned());
+        }
         self.evaluate(now, limits)
     }
 
-    fn record_green(&mut self, now: i64, run: &str, main_commit: &str) {
+    pub(super) fn record_green(&mut self, now: i64, run: &str, main_commit: &str) {
         self.consecutive_red = 0;
         self.red_since = None;
         self.last_red_main = None;
@@ -229,13 +292,27 @@ impl BatchManifest {
         self.tickets.iter().any(|t| t.assignment == assignment)
     }
 
-    fn assignments(&self) -> Vec<&str> {
+    pub(super) fn assignments(&self) -> Vec<&str> {
         self.tickets.iter().map(|t| t.assignment.as_str()).collect()
     }
 
     /// Whether this batch's tickets may complete: green, or red with a recorded follow-up
     /// for every failure the batch caused.
     pub fn completable(&self) -> Result<()> {
+        if self.staging.is_some() {
+            // HS2-GT57BQ: a staged ticket is on main only after promotion.
+            return match self.state {
+                BatchState::Promoted => Ok(()),
+                BatchState::Red => bail!(
+                    "staged batch {} is red and never reached main; record its follow-ups, re-stage it and integrate the members again",
+                    self.id
+                ),
+                state => bail!(
+                    "staged batch {} is {state}; its tickets complete only after main is promoted to it",
+                    self.id
+                ),
+            };
+        }
         match self.state {
             BatchState::Green => Ok(()),
             BatchState::Red => {
@@ -256,17 +333,32 @@ impl BatchManifest {
 
 impl BatchLedger {
     /// The batch that holds the integration unit: integrating, or pushed and awaiting CI.
+    /// A staged batch in CI holds it only for a strategy that does not stage
+    /// (HS2-GT57BQ); under ci-staged the next batch may stack on it.
     pub fn open_batch(&self) -> Option<&BatchManifest> {
-        self.batches
-            .values()
-            .find(|b| matches!(b.state, BatchState::Integrating | BatchState::Ci))
+        self.open_batch_for(false)
     }
 
-    /// The batch an assignment belongs to; an aborted batch returned its members.
+    pub(super) fn open_batch_for(&self, staged: bool) -> Option<&BatchManifest> {
+        self.batches.values().find(|b| match b.staging {
+            None => matches!(b.state, BatchState::Integrating | BatchState::Ci),
+            Some(_) => {
+                b.state == BatchState::Integrating
+                    || (!staged
+                        && matches!(
+                            b.state,
+                            BatchState::Ci | BatchState::Green | BatchState::Red
+                        ))
+            }
+        })
+    }
+
+    /// The batch an assignment belongs to; an aborted, re-staged or invalidated batch
+    /// returned its members.
     pub fn batch_of(&self, assignment: &str) -> Option<&BatchManifest> {
         self.batches
             .values()
-            .find(|b| b.state != BatchState::Aborted && b.member(assignment))
+            .find(|b| !b.state.released() && b.member(assignment))
     }
 }
 
@@ -368,7 +460,7 @@ fn paths_overlap(left: &[String], right: &[String]) -> bool {
         .any(|l| right.iter().any(|r| scopes_overlap(l, r)))
 }
 
-fn valid_id(kind: &str, id: &str) -> Result<()> {
+pub(super) fn valid_id(kind: &str, id: &str) -> Result<()> {
     ensure!(
         !id.is_empty()
             && id.chars().count() <= MAX_ID_CHARS
@@ -398,6 +490,9 @@ pub struct BatchStatus {
     pub breaker: BreakerState,
     /// Batches whose tickets are not all done: open, pushed, or concluded but uncompleted.
     pub active: Vec<BatchManifest>,
+    /// ci-staged summary once a staged batch exists (HS2-GT57BQ).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging: Option<super::batch_staged::StagingStatus>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
@@ -422,8 +517,14 @@ impl Coordinator {
             Err(error) => return Err(error.into()),
         };
         ensure!(
-            ledger.version == LEDGER_VERSION,
+            (LEDGER_VERSION_UNSTAGED..=LEDGER_VERSION).contains(&ledger.version),
             "batch ledger version {} is not supported by this executable",
+            ledger.version
+        );
+        ensure!(
+            ledger.version >= LEDGER_VERSION
+                || ledger.batches.values().all(|b| b.staging.is_none()),
+            "batch ledger version {} cannot hold staged batches",
             ledger.version
         );
         Ok(ledger)
@@ -474,10 +575,11 @@ impl Coordinator {
         BatchStatus {
             effective_strategy,
             breaker: ledger.breaker.clone(),
+            staging: super::batch_staged::staging_status(state, ledger),
             active: ledger
                 .batches
                 .values()
-                .filter(|b| b.state != BatchState::Aborted)
+                .filter(|b| !b.state.released())
                 .filter(|b| {
                     b.tickets.iter().any(|t| {
                         state
@@ -491,7 +593,12 @@ impl Coordinator {
         }
     }
 
-    fn batch_integrator(state: &State, id: &str, generation: &str, now: i64) -> Result<()> {
+    pub(super) fn batch_integrator(
+        state: &State,
+        id: &str,
+        generation: &str,
+        now: i64,
+    ) -> Result<()> {
         Self::integrator(state, id, generation, now)?;
         let strategy = Self::active_strategy(state);
         ensure!(
@@ -501,7 +608,7 @@ impl Coordinator {
         Ok(())
     }
 
-    fn move_member(
+    pub(super) fn move_member(
         state: &mut State,
         integrator: &str,
         assignment: &str,
@@ -543,10 +650,36 @@ impl Coordinator {
         members: Vec<(String, Vec<String>)>,
         limits: CircuitBreaker,
     ) -> Result<BatchManifest> {
+        self.batch_open_unit(integrator, generation, now, batch_id, members, limits, None)
+    }
+
+    /// [`Self::batch_open`] for every strategy: `staging` is required exactly when the
+    /// session runs ci-staged (HS2-GT57BQ).
+    #[allow(clippy::too_many_arguments)] // HS2-GT57BQ: one fenced transition, every input explicit.
+    pub(super) fn batch_open_unit(
+        &self,
+        integrator: &str,
+        generation: &str,
+        now: i64,
+        batch_id: &str,
+        members: Vec<(String, Vec<String>)>,
+        limits: CircuitBreaker,
+        staging: Option<super::batch_staged::StagingOpen>,
+    ) -> Result<BatchManifest> {
         valid_id("batch id", batch_id)?;
         ensure!(!members.is_empty(), "a batch needs at least one handoff");
         let outcome = self.change_batches(|state, ledger| {
             Self::batch_integrator(state, integrator, generation, now)?;
+            let staged = Self::active_strategy(state).rules().staged_integration;
+            ensure!(
+                staged == staging.is_some(),
+                "{}",
+                if staged {
+                    "a ci-staged batch needs its staging branch and remote main base"
+                } else {
+                    "only a ci-staged integrator stages a batch"
+                }
+            );
             let requested: Vec<&str> = members.iter().map(|(a, _)| a.as_str()).collect();
             if let Some(existing) = ledger.batches.get(batch_id) {
                 ensure!(
@@ -564,13 +697,19 @@ impl Coordinator {
             if let Some(trip) = &ledger.breaker.tripped {
                 return Ok(Err(trip.reason.clone()));
             }
-            if let Some(open) = ledger.open_batch() {
+            if let Some(open) = ledger.open_batch_for(staged) {
                 bail!(
                     "batch {} is {}; record its push or abort it before opening another",
                     open.id,
                     open.state
                 );
             }
+            // HS2-GT57BQ: stack on the newest staged tip, never over a red batch or a held
+            // suspect.
+            let staged_batch = staging
+                .as_ref()
+                .map(|open| Self::staged_open_rule(ledger, &requested, open))
+                .transpose()?;
             let distinct: BTreeSet<&str> = requested.iter().copied().collect();
             ensure!(
                 distinct.len() == requested.len(),
@@ -636,7 +775,11 @@ impl Coordinator {
                 abort_reason: None,
                 attributed: false,
                 failures: Vec::new(),
+                staging: staged_batch,
             };
+            if manifest.staging.is_some() {
+                ledger.version = LEDGER_VERSION;
+            }
             ledger.batches.insert(batch_id.to_owned(), manifest.clone());
             Ok(Ok(manifest))
         })?;
@@ -732,6 +875,10 @@ impl Coordinator {
                 .batches
                 .get_mut(batch_id)
                 .ok_or_else(|| anyhow::anyhow!("unknown batch {batch_id}"))?;
+            ensure!(
+                batch.staging.is_none(),
+                "batch {batch_id} is staged; record its integration-branch push with batch-staged"
+            );
             let members: BTreeSet<&str> = batch
                 .tickets
                 .iter()
@@ -789,6 +936,15 @@ impl Coordinator {
         valid_id("CI run id", run)?;
         self.change_batches(|state, ledger| {
             Self::integrator(state, integrator, generation, now)?;
+            if ledger
+                .batches
+                .get(batch_id)
+                .is_some_and(|b| b.staging.is_some())
+            {
+                return Self::staged_result(
+                    state, ledger, integrator, now, batch_id, run, conclusion, limits,
+                );
+            }
             let batch = ledger
                 .batches
                 .get_mut(batch_id)
@@ -816,7 +972,7 @@ impl Coordinator {
                     _ => {
                         notify = ledger
                             .breaker
-                            .record_red(now, &main_commit, limits)
+                            .record_red(now, Some(&main_commit), limits)
                             .map(|reason| {
                                 format!(
                                     "Batch integration fell back to serial: {reason}. Integrate serially until main is green, then run batch-recover."

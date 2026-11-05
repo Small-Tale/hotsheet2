@@ -76,6 +76,15 @@ gate them all. A red run needs an attributed follow-up for each failure before t
 batch tickets complete, and the circuit breaker falls back to serial while `main`
 stays red. Serial remains the default.
 
+CI-staged deviation (HS2-GT57BQ): only while the maintainer allows `ci-staged` may a
+ci-staged integrator push each smoke-gated batch to its integration branch (default
+`integration`) instead of `main`. CI on that exact staged SHA is the gate, so a batch
+needs no other local gate. `main` moves only through `scripts/push.sh --promote`, a
+fast-forward to a green staged SHA; a red batch leaves `main` untouched and is
+re-staged. The integration branch is integrator-owned scratch, not shared history: a
+rebuilt tip may replace only an old tip that `main` does not contain, by
+`--force-with-lease`. `main` is never merged, rewritten or force-pushed.
+
 Per-commit `CI` runs Linux x86_64 only (HS2-WSE3FJ). Linux arm64, Windows x86_64
 and arm64, macOS Apple Silicon, and the Tauri desktop targets run in the
 `Platforms` workflow (`.github/workflows/platforms.yml`, HS2-31RGRK) daily, by

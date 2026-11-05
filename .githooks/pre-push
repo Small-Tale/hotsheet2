@@ -7,8 +7,14 @@ updates=0
 total_updates=0
 main_local_sha=''
 main_remote_sha=''
+last_remote_ref=''
+last_local_sha=''
+last_remote_sha=''
 while read -r local_ref local_sha remote_ref remote_sha; do
   total_updates=$((total_updates + 1))
+  last_remote_ref="$remote_ref"
+  last_local_sha="$local_sha"
+  last_remote_sha="$remote_sha"
   if [[ "$remote_ref" == refs/heads/main ]]; then
     updates=$((updates + 1))
     if [[ "$updates" -ne 1 ]]; then
@@ -19,6 +25,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     main_remote_sha="$remote_sha"
   fi
 done
+# HS2-GT57BQ: a reserved ci-staged push to the integration branch carries the window token;
+# verify it against that reservation and its smoke receipt instead of running the root gate.
+if [[ "$updates" -eq 0 && -n "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
+  if [[ "$total_updates" -ne 1 ]]; then
+    echo 'Main integration permits exactly one ref update' >&2
+    exit 1
+  fi
+  zsh -ic 'node scripts/main-integration-window.mjs verify "$@"' \
+    hotsheet-main-window "$remote_name" "$last_remote_ref" "$last_local_sha" "$last_remote_sha"
+  exit
+fi
 if [[ "$updates" -eq 0 ]]; then
   scripts/check.sh
   exit 0

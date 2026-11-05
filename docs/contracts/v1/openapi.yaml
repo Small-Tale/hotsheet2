@@ -15169,12 +15169,20 @@ components:
                 type: string
               circuit_breaker:
                 $ref: '#/components/schemas/IntegrationCircuitBreaker'
+              staging_branch:
+                description:
+                  Ci-staged only (HS2-GT57BQ). The integration branch batches are pushed to before promotion; absent means
+                  `integration`. Never `main` or `HEAD`.
+                type: string
+                minLength: 1
+                maxLength: 100
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
             additionalProperties: false
       additionalProperties: false
     IntegrationCircuitBreaker:
       description:
-        Batch-only thresholds (HS2-9G0M3V). Either limit trips the breaker and the integrator falls back to serial.
-        Absent means 2 consecutive red batches or 120 red minutes.
+        Batch and ci-staged thresholds, recorded per strategy (HS2-9G0M3V, HS2-GT57BQ). Either limit trips the breaker
+        and the integrator falls back to serial. Absent means 2 consecutive red batches or 120 red minutes.
       type: object
       required:
         - max_red_batches

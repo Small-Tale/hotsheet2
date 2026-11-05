@@ -1,11 +1,13 @@
 # Per-commit gate: Linux x86_64 only (maintainer policy, 2026-11-03; HS2-WSE3FJ). Windows, macOS,
 # Linux arm64 and the Tauri desktop shell run daily and for releases in platforms.yml (HS2-31RGRK).
 # scripts/ci-gate.mjs counts only push runs of this workflow, so keep its name `CI`.
+# HS2-GT57BQ: `integration` is the ci-staged staging branch. A staged batch is tested there and
+# main fast-forwards only to a green SHA; a project with another staging branch lists it here.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, integration]
   pull_request:
 
 env:

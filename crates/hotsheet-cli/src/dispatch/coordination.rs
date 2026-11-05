@@ -230,6 +230,10 @@ enum CoordinationCmd {
         /// (default 120; HS2-9G0M3V).
         #[arg(long)]
         max_red_minutes: Option<u32>,
+        /// ci-staged only: the integration branch batches are pushed to before main
+        /// (default `integration`; HS2-GT57BQ).
+        #[arg(long)]
+        staging_branch: Option<String>,
     },
     /// Withdraw an allowed integration strategy; the project default cannot be withdrawn.
     StrategyDisallow {
@@ -276,6 +280,10 @@ enum CoordinationCmd {
         /// Member assignment in integration order; repeat for each.
         #[arg(long = "assignment", required = true)]
         assignments: Vec<String>,
+        /// ci-staged: the remote whose tracking `main` a batch without a pending parent is
+        /// built on (HS2-GT57BQ).
+        #[arg(long, default_value = "origin")]
+        remote: String,
     },
     /// The smoke gate or integration failed before push: return every member to handoff.
     BatchAbort {
@@ -335,6 +343,52 @@ enum CoordinationCmd {
         /// The green run's full head SHA on main.
         #[arg(long)]
         main_commit: String,
+    },
+    /// ci-staged: record the batch's one confirmed push to the integration branch; every
+    /// member enters CI and main is untouched (HS2-GT57BQ).
+    BatchStaged {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        /// Full pushed integration-branch SHA, equal to the remote-tracking staging ref.
+        #[arg(long)]
+        staged_commit: String,
+        /// `<assignment>=<full shipping SHA>`; repeat for each member and commit.
+        #[arg(long = "shipping", required = true)]
+        shipping: Vec<String>,
+        /// A smoke-gate check that passed; repeat for each.
+        #[arg(long = "smoke-check", required = true)]
+        smoke_checks: Vec<String>,
+        #[arg(long, default_value = "origin")]
+        remote: String,
+    },
+    /// ci-staged: record that main was fast-forwarded to a green batch's exact staged SHA;
+    /// its green ancestors are promoted with it (HS2-GT57BQ).
+    BatchPromote {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        /// Full main SHA, equal to the remote-tracking main after the fast-forward.
+        #[arg(long)]
+        main_commit: String,
+        #[arg(long, default_value = "origin")]
+        remote: String,
+    },
+    /// ci-staged: withdraw a red (follow-ups recorded), stale or abandoned staged batch;
+    /// every member returns to handoff and batches stacked above are invalidated.
+    BatchRestage {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        batch: String,
+        #[arg(long)]
+        reason: String,
+        /// A red batch's suspect to keep out of new batches until it is review-returned;
+        /// repeatable.
+        #[arg(long = "hold")]
+        holds: Vec<String>,
     },
     /// Print the batch ledger: every batch and the circuit breaker.
     BatchStatus,
@@ -685,6 +739,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         | CoordinationCmd::BatchResult { .. }
         | CoordinationCmd::BatchFollowUps { .. }
         | CoordinationCmd::BatchRecover { .. }
+        | CoordinationCmd::BatchStaged { .. }
+        | CoordinationCmd::BatchPromote { .. }
+        | CoordinationCmd::BatchRestage { .. }
         | CoordinationCmd::BatchStatus => {
             let report = batch::run(&coordinator, ctx, &args.project, args.command, now)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
@@ -1395,6 +1452,7 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
             reason,
             max_red_batches,
             max_red_minutes,
+            staging_branch,
         } => {
             let breaker = (max_red_batches.is_some() || max_red_minutes.is_some()).then(|| {
                 let defaults = hotsheet_cli::coordination::strategy::CircuitBreaker::default();
@@ -1403,7 +1461,7 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
                     max_red_minutes: max_red_minutes.unwrap_or(defaults.max_red_minutes),
                 }
             });
-            policy.allow_with_breaker(*strategy, reason, breaker)?
+            policy.allow_with_options(*strategy, reason, breaker, staging_branch.clone())?
         }
         CoordinationCmd::StrategyDisallow { strategy } => policy.disallow(*strategy)?,
         CoordinationCmd::StrategyDefault { strategy } => policy.set_default(*strategy)?,

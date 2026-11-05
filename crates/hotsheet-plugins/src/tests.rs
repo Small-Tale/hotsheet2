@@ -439,7 +439,7 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         ))
     );
     assert!(worker.contains("<!-- hotsheet-skill-version: 48 -->")); // HS2-6WFCZR
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 23 -->")); // HS2-9G0M3V
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 24 -->")); // HS2-GT57BQ
     assert!(flatten(integrator).contains("release the claim and `review-return` the handoff")); // HS2-KBK83M
     assert!(flatten(integrator).contains("A `blocked_reason` does not refuse the claim")); // HS2-BAK4BC
     assert!(
@@ -479,7 +479,7 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
 }
 
 #[test]
-fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy_without_unbuilt_modes() {
+fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy() {
     let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let integrator = flatten(include_str!(
         "../../../.claude/skills/hotsheet-integrator/SKILL.md"
@@ -492,19 +492,20 @@ fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy_without_unbui
         "`coordination strategies`",
         "`--strategy <name>`",
         "A strategy is fixed for one generation",
-        "This executable refuses to register it; do not perform its steps.",
+        "The runtime refuses a strategy the project has not allowed or this executable does not implement",
         "`--all-participants-upgraded`",
     ] {
         assert!(integrator.contains(phrase), "integrator missing {phrase}");
     }
     for phrase in [
         "`integration_strategy`",
-        "Under `serial` and `batch` (HS2-9G0M3V), apply every rule below unchanged",
+        "Under `serial`, `batch` (HS2-9G0M3V) and `ci-staged` (HS2-GT57BQ), apply every rule below unchanged",
+        "never on the staging branch",
         "Never assign more freely",
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
     }
-    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 6 -->")); // HS2-6WFCZR, HS2-9G0M3V
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 7 -->")); // HS2-6WFCZR, HS2-9G0M3V, HS2-GT57BQ
 }
 
 #[test]
@@ -582,6 +583,46 @@ fn hs2_9g0m3v_integrator_skill_documents_the_built_batch_steps_and_its_deviation
         "`mark --phase done` refuses a red batch member until every failure has a recorded follow-up",
         "tell the user that text",
         "reports `integration_batches`",
+    ] {
+        at(phrase);
+    }
+}
+
+#[test]
+fn hs2_gt57bq_integrator_skill_documents_staging_promotion_and_the_red_path() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let integrator = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-integrator/SKILL.md"
+    ));
+    let at = |phrase: &str| {
+        integrator
+            .find(phrase)
+            .unwrap_or_else(|| panic!("integrator missing {phrase}"))
+    };
+    // The staged steps appear in order, each naming the command that performs it.
+    let steps = [
+        "## CI-staged integration (HS2-GT57BQ)",
+        "`git switch -C <branch> <base_commit>`",
+        "`scripts/push.sh --staged --staging-branch",
+        "`coordination batch-staged --batch <id>",
+        "`node scripts/ci-gate.mjs status --branch <branch>",
+        "`node scripts/integration-batch.mjs promote ...`",
+        "`scripts/push.sh --promote <sha>`",
+        "`coordination batch-restage --batch <id> --reason \"main moved\"`",
+        "--hold <suspect assignment>...`",
+        "`batch-status` (and `status`) report `staging`",
+    ];
+    for pair in steps.windows(2) {
+        assert!(at(pair[0]) < at(pair[1]), "{} before {}", pair[0], pair[1]);
+    }
+    for phrase in [
+        "`ci-staged` (implemented, HS2-GT57BQ)",
+        "reports `integration_batches: 2`",
+        "Never cherry-pick onto `main`.",
+        "Never merge or rewrite `main`.",
+        "`mark --phase done` refuses a staged member until its batch is promoted",
+        "a held suspect is refused until it is review-returned",
+        "the only time a plain `main` push is allowed",
     ] {
         at(phrase);
     }

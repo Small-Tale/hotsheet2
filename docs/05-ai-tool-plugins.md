@@ -2592,14 +2592,16 @@ The integrator runs under one named integration strategy per session generation.
 handoff at a time, its own exact-tree affected local gate, a push, and covering CI.
 The typed registry (`crates/hotsheet-cli/src/coordination/strategy.rs`) also names
 `batch` (implemented, HS2-9G0M3V; see "Batch integration" below) and `ci-staged`
-(HS2-GT57BQ). The `ci-staged` descriptor reports `implemented: false`, and this
-executable refuses to register an integrator under it. Each strategy carries
+(implemented, HS2-GT57BQ; see "CI-staged integration" below). Each strategy carries
 `StrategyRules`, which the runtime consults instead of matching on names:
 
 - `exclusive_integration` gates the one-integrating-or-verifying fence in `mark` and
   `resume-integration`. Every strategy keeps it.
-- `batch_integration` (batch only) permits `batch-open`, which moves several handoffs
-  into integration together as one integration unit.
+- `batch_integration` (batch and ci-staged) permits `batch-open`, which moves several
+  handoffs into integration together as one integration unit.
+- `staged_integration` (ci-staged only) pushes batches to an integration branch,
+  lets them stack while CI runs, and moves `main` only by fast-forward to an exact
+  green staged SHA.
 
 A strategy ticket adds its rule together with the code that reads it.
 
@@ -2614,11 +2616,14 @@ consulted for this decision. One validated read/write workflow serves:
 - `coordination strategies`, which prints the policy and the registry without opening
   (and so without migrating) the pool;
 - `coordination strategy-allow --strategy <name> --reason <why>`, `strategy-disallow`
-  (the current default cannot be withdrawn), and `strategy-default`. For batch,
-  `--max-red-batches <n>` (1-100) and `--max-red-minutes <m>` (1-10080) record the
-  circuit breaker as `"circuit_breaker": {"max_red_batches": n, "max_red_minutes": m}`
-  on the batch entry. Absent thresholds mean 2 batches and 120 minutes, and
-  re-allowing without them keeps the recorded ones;
+  (the current default cannot be withdrawn), and `strategy-default`. For batch and
+  ci-staged, `--max-red-batches <n>` (1-100) and `--max-red-minutes <m>` (1-10080)
+  record the circuit breaker as `"circuit_breaker": {"max_red_batches": n,
+"max_red_minutes": m}` on that strategy's entry; each strategy keeps its own.
+  Absent thresholds mean 2 batches and 120 minutes. For ci-staged,
+  `--staging-branch <name>` records `"staging_branch"` (default `integration`; a plain
+  branch name, never `main`). Re-allowing without these options keeps the recorded
+  values;
 - authenticated `GET`/`PUT /checkouts/{reference}/integration-strategies`, which
   returns the same `{ policy, registry }` report and answers `400` for an invalid
   policy.
@@ -2781,8 +2786,8 @@ result or `batch-open`, which records the trip before refusing.
   CLI requires that run's commit to contain the last red batch push.
 
 **State, without a schema bump.** Batch state lives in a ledger beside the pool,
-`<git-common-dir>/hotsheet-coordination/batches.json` (`version: 1`; any other
-version is refused). It holds each manifest (id, integrator generation, state
+`<git-common-dir>/hotsheet-coordination/batches.json` (`version: 1`, or `version: 2`
+once it holds a ci-staged batch; any other version is refused). It holds each manifest (id, integrator generation, state
 `integrating|aborted|ci|green|red`, members with qualified tickets, source commit,
 paths and shipping commits, main commit, smoke checks, run, abort reason, failures
 with follow-ups) and the breaker. The ledger is read and written under the pool's
@@ -2798,12 +2803,75 @@ The pool schema stays at eight:
 
 Every batch transition is idempotent by batch id, so replaying a command repairs a
 write interrupted between the two files. `coordination capabilities` reports
-`integration_batches: 1`, and the integrator uses only an executable that reports
-it. `coordination batch-status` prints the ledger. `status` and `next` report
+`integration_batches` (the newest ledger version, `2` since HS2-GT57BQ), and the
+integrator uses only an executable that reports it. `coordination batch-status` prints the ledger. `status` and `next` report
 `batches` (effective strategy, breaker, and batches whose tickets are not all done)
 once a ledger exists, and the ledger takes part in the snapshot cursor.
 `scripts/main-integration-window.mjs` reads pool schemas 3 through 9, including
 HS2-6WFCZR's schema nine (HS2-JBAD2Z).
+
+#### CI-staged integration (HS2-GT57BQ)
+
+ci-staged is batch integration with `main` kept green. The integrator collects, opens,
+smoke-gates and aborts batches exactly as above. Each batch is pushed to an
+integrator-owned integration branch instead of `main`, and CI tests the exact staged
+SHA. `main` fast-forwards to that SHA only after its run is green. The project must
+allow `ci-staged` with a recorded reason, and the deviation is recorded beside the push
+policy in `AGENTS.md`. The integrator registers with `--strategy ci-staged`.
+
+| Step        | Command                                                                                                                | Effect                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open        | `batch-open --batch <id> --assignment <id>... [--remote origin]`                                                       | Under ci-staged, records `staging`: the policy's branch, the parent (the pending staged tip it stacks on) and the base commit (that tip's staged SHA, or the remote-tracking `main`). Refused while a red staged batch is not re-staged, for a held suspect, or when the staging branch changed under a pending batch.                                                           |
+| Staged push | `scripts/push.sh --staged [--staging-branch <b>] ... --assignment <id>... --phase-ticket <slug>... --gate-arg --smoke` | The same local window and smoke gate as batch, but it pushes HEAD to the staging branch. Remote `main` must be an ancestor of HEAD. A rebuilt tip uses `--force-with-lease` over the exact old staging tip, and only when `main` does not contain that tip. The pre-push hook verifies the reservation and the smoke receipt instead of running the root gate.                   |
+| Staged      | `batch-staged --batch <id> --staged-commit <sha> --shipping <assignment>=<sha>... --smoke-check <check>...`            | The CLI checks that the remote-tracking staging ref equals the staged commit, that the commit descends from the batch base, and that it contains every shipping SHA. Every member enters `ci`; `main_commit` stays empty. `batch-pushed` refuses a staged batch.                                                                                                                 |
+| Record      | `node scripts/integration-batch.mjs record ...`                                                                        | The `## Batch manifest` note carries `CI gate commit: <staged SHA>` and the staging facts. The integration record is deferred until promotion.                                                                                                                                                                                                                                   |
+| CI result   | `node scripts/integration-batch.mjs ci ...` (after `ci-gate.mjs status --branch <b> --covers <sha>`)                   | Reads the staging branch's push run for the staged SHA once. Green also marks unconcluded ancestors green (`implied_by`). Red invalidates every batch stacked above it (members return to `handoff`) and runs the attribution against the staged SHA. Main stays untouched.                                                                                                      |
+| Promote     | `node scripts/integration-batch.mjs promote ...`                                                                       | Runs `scripts/push.sh --promote <sha>`: no local gate, no force, and a fast-forward of remote `main` to exactly the green SHA. Then `batch-promote --batch <id> --main-commit <sha>`, which requires the remote-tracking `main` to equal the green staged SHA and promotes its green ancestors with it. Only then does it write each ticket's integration record against `main`. |
+| Re-stage    | `batch-restage --batch <id> --reason <text> [--hold <assignment>...]`                                                  | Withdraws a staged batch: red with a follow-up for every failure, or in CI, or green but stale. Every member returns to `handoff` and stacked batches are invalidated. A red batch may hold suspects; `batch-plan` defers them and `batch-open` refuses them until they are review-returned.                                                                                     |
+
+**Completion rule.** A staged member's `mark --phase done` is refused until its batch
+is `promoted`. A red staged batch never reached `main`, so its members are re-staged
+rather than completed.
+
+**Main moved (decision).** When `main` moved and no longer fast-forwards to a green
+staged SHA, `push.sh --promote` refuses and `main` is untouched. `batch-promote` also
+refuses any SHA other than the green staged one. The integrator re-stages the batch
+with a reason and integrates its members again on the new `main`. `main` is never
+merged or rewritten.
+
+**Circuit breaker.** A red staged batch counts toward the strategy's
+`max_red_batches`, and time since the first red staged batch counts toward
+`max_red_minutes`. It never sets `last_red_main`, because `main` stayed green. While
+the breaker is tripped, `batch-open` is refused, and a plain `main` push by the
+ci-staged integrator is allowed only then, as serial fallback. Promotion and
+re-staging of existing batches stay allowed. A green staged batch or `batch-recover`
+clears the breaker.
+
+**Never rewriting shared history.** The integration branch is integrator-owned
+scratch space, never a shipping branch, and nothing outside the integrator builds on
+it. Moving it forward is a fast-forward. A rebuild after a red or stale batch is a new
+tip pushed with `--force-with-lease` over the exact old tip, and only when `main` does
+not contain that tip. `main` itself only fast-forwards. This is the recorded deviation
+beside the push policy.
+
+**State.** Staged batches live in the same ledger. A staged manifest adds
+`staging: {branch, base_commit, parent, staged_commit, implied_by, promoted_at,
+invalidated_by, restage_reason, held}` and the states `promoted`, `restaged` and
+`invalidated`. A ledger holding a staged batch is written as `version: 2`. This
+executable reads versions 1 and 2 and refuses a version-1 ledger that holds a staged
+batch, so a batch-only executable fails closed. The pool schema stays eight.
+`coordination capabilities` reports `integration_batches: 2`.
+
+`coordination batch-status` adds a `staging` summary, which `status` and `next` also
+report under `batches.staging`. It holds the branch, the tip batch and commit, the
+batches in CI, awaiting promotion or red, the slugs of their waiting tickets, and the
+held suspects. A restarted integrator registers a new ci-staged generation and
+continues from the ledger.
+
+**CI trigger.** `.github/workflows/ci.yml` runs on `push` to `[main, integration]`.
+`scripts/ci-gate.mjs status --branch <name> [--covers <sha>]` finds the covering run on
+either branch. A project that names another staging branch adds it to its CI push
+trigger.
 
 #### Three-role guidance and setup (HS2-7E5R4A)
 

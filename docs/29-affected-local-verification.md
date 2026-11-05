@@ -282,7 +282,9 @@ Real-Git and interleaving regressions run against the local Apple Git 2.54 files
 
 ## Batch smoke profile (HS2-9G0M3V)
 
-`scripts/check.sh --smoke` is the one gate of a batch integration push. It runs
+`scripts/check.sh --smoke` is the one gate of a batch integration push, and of a
+ci-staged push to the integration branch (HS2-GT57BQ). A ci-staged promotion of
+`main` runs no local gate: the green CI run on that exact staged SHA is its gate. It runs
 exactly the stages declared in `scripts/gate-smoke.json`: build or compile, lint, and
 a fast sanity set. It never expands to affected suites, and the declaration refuses
 browser suites (`playwright`, `test:browser`, `test:e2e`). Each stage declares only a

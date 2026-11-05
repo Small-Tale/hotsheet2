@@ -917,3 +917,101 @@ test(
     }
   },
 );
+
+// HS2-GT57BQ: a live ci-staged pool and its batch ledger in the fixture's coordination directory.
+function stagedPool(f, ledger) {
+  const canonical = realpathSync(f.repo);
+  const directory = resolve(f.repo, '.git/hotsheet-coordination');
+  put(
+    resolve(directory, 'state.json'),
+    JSON.stringify({
+      version: 8,
+      project_id: `repo-${createHash('sha256').update(canonical).digest('hex').slice(0, 12)}`,
+      source_id: createHash('sha256').update(canonical).digest('hex'),
+      stopped: null,
+      integrator: { id: 'i', generation: 'g', expires_at: Math.floor(Date.now() / 1000) + 600, strategy: 'ci-staged' },
+      assignments: {},
+    }),
+  );
+  put(resolve(directory, 'batches.json'), JSON.stringify(ledger));
+}
+
+const stagedLedger = (state, sha, tripped = false) => ({
+  version: 2,
+  batches: { 'batch-1': { id: 'batch-1', state, staging: { branch: 'integration', staged_commit: sha } } },
+  breaker: tripped ? { consecutive_red: 2, tripped: { at: 1, reason: 'synthetic' } } : { consecutive_red: 0 },
+});
+
+const integrator = ['--integrator-id', 'i', '--integrator-session', 'g'];
+
+test('HS2-GT57BQ staged pushes move only the integration branch and promotion fast-forwards main exactly', () => {
+  const f = fixture();
+  try {
+    const env = withoutGitRepositoryEnv(f.env);
+    run('bash', ['scripts/push.sh'], f.repo, env);
+    const main = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+    stagedPool(f, stagedLedger('ci', '0'.repeat(40)));
+    run('git', ['switch', '-qc', 'integration'], f.repo, env);
+    commit(f.repo, 'staged-1', env);
+    const first = run('git', ['rev-parse', 'HEAD'], f.repo);
+    run('bash', ['scripts/push.sh', '--staged', ...integrator, '--gate-arg', '--smoke'], f.repo, env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/integration'], f.remote), first);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), main);
+    // The hook verified the reservation instead of running the root gate a second time.
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
+    // A ci-staged integrator never pushes main directly unless its breaker tripped.
+    assert.throws(() => run('bash', ['scripts/push.sh', ...integrator], f.repo, env), /only through --promote/);
+    // A rebuilt tip replaces the unpromoted old tip, never rewriting main.
+    run('git', ['reset', '-q', '--hard', 'main'], f.repo, env);
+    commit(f.repo, 'staged-2', env);
+    const rebuilt = run('git', ['rev-parse', 'HEAD'], f.repo);
+    run('bash', ['scripts/push.sh', '--staged', ...integrator, '--gate-arg', '--smoke'], f.repo, env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/integration'], f.remote), rebuilt);
+    // Promotion needs a green ledger batch for the exact SHA and runs no local gate.
+    assert.throws(() => run('bash', ['scripts/push.sh', '--promote', rebuilt, ...integrator], f.repo, env), /No green/);
+    stagedPool(f, stagedLedger('green', rebuilt));
+    run('git', ['switch', '-q', 'main'], f.repo, env);
+    run('bash', ['scripts/push.sh', '--promote', rebuilt, ...integrator], f.repo, env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), rebuilt);
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\ngate\n');
+    // Replaying a completed promotion pushes nothing.
+    run('bash', ['scripts/push.sh', '--promote', rebuilt, ...integrator], f.repo, env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), rebuilt);
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-GT57BQ promotion is refused once main moved and no longer fast-forwards', () => {
+  const f = fixture();
+  try {
+    const env = withoutGitRepositoryEnv(f.env);
+    run('bash', ['scripts/push.sh'], f.repo, env);
+    run('git', ['switch', '-qc', 'integration'], f.repo, env);
+    commit(f.repo, 'staged', env);
+    const staged = run('git', ['rev-parse', 'HEAD'], f.repo);
+    // Another writer moved main after the batch was staged.
+    const writer = resolve(f.root, 'writer');
+    run('git', ['clone', '-q', f.remote, writer], f.root, env);
+    run('git', ['config', 'user.name', 'Remote Test'], writer);
+    run('git', ['config', 'user.email', 'remote@invalid.example'], writer);
+    commit(writer, 'moved', env);
+    run('git', ['push', '-q', 'origin', 'main'], writer, env);
+    const moved = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+    stagedPool(f, stagedLedger('green', staged));
+    assert.throws(
+      () => run('bash', ['scripts/push.sh', '--promote', staged, ...integrator], f.repo, env),
+      /no longer fast-forwards/,
+    );
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), moved);
+    // While the breaker is tripped, the integrator may integrate serially onto main.
+    stagedPool(f, stagedLedger('green', staged, true));
+    run('git', ['switch', '-q', 'main'], f.repo, env);
+    run('git', ['pull', '-q', '--ff-only', 'origin', 'main'], f.repo, env);
+    commit(f.repo, 'serial', env);
+    run('bash', ['scripts/push.sh', ...integrator], f.repo, env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), run('git', ['rev-parse', 'HEAD'], f.repo));
+  } finally {
+    f.dispose();
+  }
+});

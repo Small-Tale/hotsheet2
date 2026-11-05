@@ -5,6 +5,7 @@ import {
   gateStatus,
   isCovered,
   latestGreenRun,
+  parseStatusArgs,
   startedSlugs,
   streamWaitingCommit,
   waitingCommit,
@@ -167,4 +168,37 @@ test('reports only explicit final-testing tickets covered by the green run', asy
     { slug: 'HS2-TWO', commit: futureSha, coverage: 'uncovered' },
   ]);
   assert.ok(calls.some((call) => call[0] === 'gh' && call.includes('--branch') && call.includes('main')));
+});
+
+test('HS2-GT57BQ status reads the covering run on a ci-staged integration branch', async () => {
+  const staged = recordedRuns.map((run) => (run.headBranch === 'other' ? { ...run, headBranch: 'integration' } : run));
+  assert.equal(latestGreenRun(staged, 'integration')?.headSha, futureSha);
+  assert.equal(latestGreenRun(staged)?.headSha, greenSha);
+  const calls = [];
+  const run = (binary, args) => {
+    calls.push([binary, ...args]);
+    if (binary === 'gh') return { status: 0, stdout: JSON.stringify(staged) };
+    if (binary === 'hotsheet-cli') return { status: 0, stdout: '' };
+    if (args[0] === 'cat-file' || args[0] === 'merge-base') return { status: 0 };
+    throw new Error(`unexpected command: ${binary} ${args.join(' ')}`);
+  };
+  const result = await gateStatus({ covers: futureSha, branch: 'integration', run, readTicket: async () => null });
+  assert.equal(result.green.headSha, futureSha);
+  assert.equal(result.covers, 'covered');
+  const listed = calls.find((call) => call[0] === 'gh');
+  assert.equal(listed[listed.indexOf('--branch') + 1], 'integration');
+  await assert.rejects(gateStatus({ branch: 'a..b', run }), /plain branch/);
+  assert.deepEqual(parseStatusArgs(['status']), { branch: 'main', covers: undefined });
+  assert.deepEqual(parseStatusArgs(['status', '--branch', 'integration', '--covers', futureSha]), {
+    branch: 'integration',
+    covers: futureSha,
+  });
+  for (const args of [
+    ['status', '--covers', 'abc'],
+    ['status', '--branch'],
+    ['status', '--branch', 'x', '--branch', 'y'],
+    ['status', '--other', 'x'],
+    ['list'],
+  ])
+    assert.throws(() => parseStatusArgs(args), /usage/);
 });

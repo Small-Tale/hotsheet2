@@ -1,13 +1,15 @@
-//! Headless batch integration commands (HS2-9G0M3V). Git and ticket-store facts are read
-//! here; the fenced transitions live in `hotsheet_cli::coordination::batch`.
+//! Headless batch integration commands (HS2-9G0M3V) and their ci-staged variants
+//! (HS2-GT57BQ). Git and ticket-store facts are read here; the fenced transitions live in
+//! `hotsheet_cli::coordination::batch` and `::batch_staged`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Result, bail, ensure};
 use hotsheet_cli::coordination::batch::{
-    BatchCandidate, BatchFailure, priority_rank, select_batch,
+    BatchCandidate, BatchFailure, BatchLedger, priority_rank, select_batch,
 };
+use hotsheet_cli::coordination::batch_staged::StagingOpen;
 use hotsheet_cli::coordination::{
     Assignment, Coordinator, HandoffEvidence, Phase, StrategyPolicy, TransitionKind,
 };
@@ -23,11 +25,15 @@ pub(super) fn run(
     command: CoordinationCmd,
     now: i64,
 ) -> Result<serde_json::Value> {
+    let policy = || StrategyPolicy::read(&hotsheet_ticketing::Settings::for_project(project));
+    // HS2-GT57BQ: batch and ci-staged keep their own breaker thresholds.
     let limits = || -> Result<_> {
-        Ok(
-            StrategyPolicy::read(&hotsheet_ticketing::Settings::for_project(project))?
-                .circuit_breaker(),
-        )
+        let strategy = coordinator
+            .state()?
+            .integrator
+            .map(|session| session.strategy)
+            .unwrap_or_default();
+        Ok(policy()?.circuit_breaker_for(strategy))
     };
     Ok(match command {
         CoordinationCmd::BatchPlan { max } => {
@@ -39,6 +45,7 @@ pub(super) fn run(
             integrator,
             batch,
             assignments,
+            remote,
         } => {
             let state = coordinator.state()?;
             let mut members = Vec::with_capacity(assignments.len());
@@ -49,14 +56,34 @@ pub(super) fn run(
                     .ok_or_else(|| anyhow::anyhow!("unknown assignment {id}"))?;
                 members.push((id.clone(), changed_paths(project, a)?));
             }
-            serde_json::to_value(coordinator.batch_open(
-                &integrator.id,
-                &integrator.session,
-                now,
-                &batch,
-                members,
-                limits()?,
-            )?)?
+            let staged = state
+                .integrator
+                .as_ref()
+                .is_some_and(|session| session.strategy.rules().staged_integration);
+            if staged {
+                let staging = StagingOpen {
+                    branch: policy()?.staging_branch(),
+                    main_commit: remote_ref(project, &remote, "main")?,
+                };
+                serde_json::to_value(coordinator.batch_open_staged(
+                    &integrator.id,
+                    &integrator.session,
+                    now,
+                    &batch,
+                    members,
+                    limits()?,
+                    staging,
+                )?)?
+            } else {
+                serde_json::to_value(coordinator.batch_open(
+                    &integrator.id,
+                    &integrator.session,
+                    now,
+                    &batch,
+                    members,
+                    limits()?,
+                )?)?
+            }
         }
         CoordinationCmd::BatchAbort {
             integrator,
@@ -78,22 +105,7 @@ pub(super) fn run(
         } => {
             require_current_main(project, &main_commit)?;
             require_pushed_main(project, None)?;
-            let mut mapped: BTreeMap<String, Vec<String>> = BTreeMap::new();
-            for raw in shipping {
-                let (assignment, sha) = raw.split_once('=').ok_or_else(|| {
-                    anyhow::anyhow!("shipping must be <assignment>=<full sha>, got {raw}")
-                })?;
-                let ancestry =
-                    git_output(project, &["merge-base", "--is-ancestor", sha, &main_commit])?;
-                ensure!(
-                    ancestry.status.success(),
-                    "shipping commit {sha} is not contained in the batch main commit"
-                );
-                mapped
-                    .entry(assignment.to_owned())
-                    .or_default()
-                    .push(sha.to_owned());
-            }
+            let mapped = shipping_map(project, shipping, &main_commit, "batch main commit")?;
             serde_json::to_value(coordinator.batch_pushed(
                 &integrator.id,
                 &integrator.session,
@@ -174,11 +186,147 @@ pub(super) fn run(
                 &main_commit,
             )?)?
         }
+        CoordinationCmd::BatchStaged {
+            integrator,
+            batch,
+            staged_commit,
+            shipping,
+            smoke_checks,
+            remote,
+        } => {
+            let ledger = coordinator.batch_ledger()?.unwrap_or_default();
+            let staging = ledger
+                .batches
+                .get(&batch)
+                .and_then(|b| b.staging.clone())
+                .ok_or_else(|| anyhow::anyhow!("batch {batch} is not a staged batch"))?;
+            let pushed = remote_ref(project, &remote, &staging.branch)?;
+            ensure!(
+                pushed == staged_commit,
+                "the staged commit must equal {remote}/{} after the push ({pushed})",
+                staging.branch
+            );
+            require_ancestor(
+                project,
+                &staging.base_commit,
+                &staged_commit,
+                "the staged commit does not descend from the batch base",
+            )?;
+            let mapped = shipping_map(project, shipping, &staged_commit, "staged commit")?;
+            serde_json::to_value(coordinator.batch_staged(
+                &integrator.id,
+                &integrator.session,
+                now,
+                &batch,
+                &staged_commit,
+                mapped,
+                smoke_checks,
+            )?)?
+        }
+        CoordinationCmd::BatchPromote {
+            integrator,
+            batch,
+            main_commit,
+            remote,
+        } => {
+            let main = remote_ref(project, &remote, "main")?;
+            ensure!(
+                main == main_commit,
+                "promotion records the remote-tracking {remote}/main ({main}); fast-forward main with scripts/push.sh --promote first"
+            );
+            serde_json::to_value(coordinator.batch_promote(
+                &integrator.id,
+                &integrator.session,
+                now,
+                &batch,
+                &main_commit,
+            )?)?
+        }
+        CoordinationCmd::BatchRestage {
+            integrator,
+            batch,
+            reason,
+            holds,
+        } => serde_json::to_value(coordinator.batch_restage(
+            &integrator.id,
+            &integrator.session,
+            now,
+            &batch,
+            &reason,
+            holds,
+        )?)?,
         CoordinationCmd::BatchStatus => {
-            serde_json::to_value(coordinator.batch_ledger()?.unwrap_or_default())?
+            let ledger = coordinator.batch_ledger()?.unwrap_or_default();
+            ledger_report(&coordinator.state()?, &ledger)?
         }
         _ => unreachable!("only batch commands are routed here"),
     })
+}
+
+/// The ledger plus its ci-staged summary (HS2-GT57BQ): which batches are in CI, awaiting
+/// promotion or red, and which tickets wait on them.
+fn ledger_report(
+    state: &hotsheet_cli::coordination::State,
+    ledger: &BatchLedger,
+) -> Result<serde_json::Value> {
+    let mut report = serde_json::to_value(ledger)?;
+    if let Some(staging) = Coordinator::staging_report(state, ledger) {
+        report["staging"] = serde_json::to_value(staging)?;
+    }
+    Ok(report)
+}
+
+/// The SHA of `<remote>/<branch>` as last fetched or pushed.
+fn remote_ref(project: &Path, remote: &str, branch: &str) -> Result<String> {
+    ensure!(
+        !remote.is_empty()
+            && remote
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')),
+        "use a named remote"
+    );
+    let reference = format!("refs/remotes/{remote}/{branch}");
+    let out = git_output(project, &["rev-parse", "--verify", "--quiet", &reference])?;
+    ensure!(
+        out.status.success(),
+        "{reference} is unknown; fetch {remote} first"
+    );
+    Ok(String::from_utf8(out.stdout)?.trim().to_owned())
+}
+
+fn require_ancestor(project: &Path, ancestor: &str, descendant: &str, message: &str) -> Result<()> {
+    let ancestry = git_output(
+        project,
+        &["merge-base", "--is-ancestor", ancestor, descendant],
+    )?;
+    ensure!(ancestry.status.success(), "{message}");
+    Ok(())
+}
+
+/// `<assignment>=<sha>` shipping arguments, each contained in `tip`.
+fn shipping_map(
+    project: &Path,
+    shipping: Vec<String>,
+    tip: &str,
+    what: &str,
+) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut mapped: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for raw in shipping {
+        let (assignment, sha) = raw.split_once('=').ok_or_else(|| {
+            anyhow::anyhow!("shipping must be <assignment>=<full sha>, got {raw}")
+        })?;
+        require_ancestor(
+            project,
+            sha,
+            tip,
+            &format!("shipping commit {sha} is not contained in the {what}"),
+        )?;
+        mapped
+            .entry(assignment.to_owned())
+            .or_default()
+            .push(sha.to_owned());
+    }
+    Ok(mapped)
 }
 
 /// Ready code handoffs with the facts batch selection needs.
@@ -196,6 +344,15 @@ fn candidates(
         .then(|| FsStore::open_without_maintenance(&ctx.path))
         .transpose()?;
     let connection = store.as_ref().map(git_connection_id);
+    // HS2-GT57BQ: a suspect held by a re-staged batch waits for its review return.
+    let ledger = coordinator.batch_ledger()?.unwrap_or_default();
+    let held = |id: &str| {
+        ledger.batches.values().find(|b| {
+            b.staging
+                .as_ref()
+                .is_some_and(|s| s.held.iter().any(|h| h == id))
+        })
+    };
     let mut candidates = Vec::new();
     for a in snapshot.state.assignments.values() {
         if a.phase != Phase::Handoff
@@ -224,6 +381,12 @@ fn candidates(
             .any(|claim| claim.ticket == a.ticket)
         {
             blocker = Some("its ticket claim is still live".into());
+        }
+        if let Some(batch) = held(&a.id) {
+            blocker = Some(format!(
+                "it is held as a suspect of re-staged batch {}; review-return it",
+                batch.id
+            ));
         }
         let paths = match changed_paths(project, a) {
             Ok(paths) => paths,

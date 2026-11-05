@@ -875,6 +875,25 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   The policy and its deviation from `push-per-ticket` are in
   [05 §5.9.1](05-ai-tool-plugins.md#batch-integration-hs2-9g0m3v) and
   [29](29-affected-local-verification.md#batch-smoke-profile-hs2-9g0m3v).
+
+- **Staged push and promotion (HS2-GT57BQ):** A ci-staged integrator uses the same
+  local window for two more pushes.
+  - `scripts/push.sh --staged [--staging-branch <b>] --integrator-id <id>
+--integrator-session <generation> --assignment <id>... --phase-ticket <slug>...
+--gate-arg --smoke` pushes HEAD to the integration branch, never to `main`. Remote
+    `main` must be an ancestor of HEAD. A rebuilt tip uses `--force-with-lease` over
+    the exact old tip, only when `main` does not contain that tip.
+  - `scripts/push.sh --promote <sha> --integrator-id <id> --integrator-session
+<generation>` fast-forwards remote `main` to exactly a green staged SHA. It runs no
+    local gate and never forces. It needs a green staged ledger batch with that SHA,
+    and it refuses when `main` moved and no longer fast-forwards.
+  - A ci-staged integrator's plain `main` push is refused unless its circuit breaker
+    is tripped (serial fallback).
+  - The pre-push hook verifies a window-token push to a non-main ref against its
+    reservation and smoke receipt instead of running the root gate. Other branch
+    pushes keep their behavior.
+
+  See [05 §5.9.1](05-ai-tool-plugins.md#ci-staged-integration-hs2-gt57bq).
   Git's fast-forward check remains the cross-machine guard. The root gate requires
   `cargo-nextest`, `git-filter-repo`, and installed npm packages.
   Permission integration tests use an in-memory vault under the test-only dependency

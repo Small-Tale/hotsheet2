@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 23 -->
+<!-- hotsheet-skill-version: 24 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -30,8 +30,10 @@ that refusal to the user instead of silently falling back.
   the per-handoff gate, push and CI steps. First check that `coordination
   capabilities` reports `integration_batches`, and use only that executable for every
   integrator call.
-- `ci-staged` (HS2-GT57BQ) is a registered name only. This executable refuses to
-  register it; do not perform its steps.
+- `ci-staged` (implemented, HS2-GT57BQ): batch integration with `main` kept green.
+  Follow "Batch integration" with the replacements in "CI-staged integration" below.
+  First check that `coordination capabilities` reports `integration_batches: 2` or
+  later.
 
 Only the maintainer allows a non-default strategy, with `coordination
 strategy-allow --strategy <name> --reason <why>`, because it deviates from shared
@@ -100,6 +102,58 @@ Batch changes only the gate, push and CI steps.
    - Then run `node scripts/integration-batch.mjs recover ...` (or `coordination
      batch-recover --run <id> --main-commit <sha>`). It needs a green main run that
      contains the last red batch push.
+
+## CI-staged integration (HS2-GT57BQ)
+
+Follow this section only when this session registered with `--strategy ci-staged`.
+Collect, review, open (steps 1 and 2) and abort exactly as in "Batch integration".
+The project records this deviation beside its push policy. These steps replace
+steps 3 to 6; `main` moves only by fast-forward to an exact SHA whose CI run passed.
+
+1. **Integrate on the staging branch.** `batch-open` reports `staging.branch` (the
+   project's `staging_branch`, default `integration`) and `staging.base_commit`: the
+   pending staged tip it stacks on, or remote `main`. Check out that base as the
+   staging branch (`git switch -C <branch> <base_commit>`) and cherry-pick each
+   member in batch order. Never cherry-pick onto `main`.
+2. **Smoke gate and staged push.** Run `scripts/push.sh --staged --staging-branch
+   <branch> --integrator-id <id> --integrator-session <session> --assignment <id>...
+   --phase-ticket <slug>... --gate-arg --smoke`. It pushes HEAD to the staging
+   branch, never to `main`. A rebuilt tip replaces only an old staging tip that
+   `main` does not contain.
+3. **Record.** `coordination batch-staged --batch <id> --staged-commit <pushed HEAD>
+   --shipping <assignment>=<staged sha>... --smoke-check <check>...` puts every
+   member in `ci`. Then run `node scripts/integration-batch.mjs record ...`: each
+   ticket's `CI gate commit:` is the staged SHA, and its integration record waits for
+   promotion. Release the claims while CI runs.
+4. **Stack.** While a staged batch is in CI, the next `batch-open` may stack on its
+   tip. A green run on a tip implies its ancestors passed. A red run invalidates
+   everything stacked above it, and those members return to handoff for a new batch.
+5. **CI result.** When `node scripts/ci-gate.mjs status --branch <branch> --covers
+   <staged sha>` reports that the run finished, run `node
+   scripts/integration-batch.mjs ci ...` once; never poll.
+6. **Green: promote.** Run `node scripts/integration-batch.mjs promote ...`. It
+   fast-forwards `main` to exactly the green staged SHA through `scripts/push.sh
+   --promote <sha>` and records `coordination batch-promote`. Only then does it record
+   each ticket's integration against `main`. Then reclaim and complete every promoted
+   ticket and mark each mailbox `done`; `mark --phase done` refuses a staged member
+   until its batch is promoted.
+7. **Main moved.** If `main` moved and no longer fast-forwards to the green SHA,
+   promotion is refused and `main` is untouched. Never merge or rewrite `main`. Run
+   `coordination batch-restage --batch <id> --reason "main moved"` and stage the
+   members again on the new `main`.
+8. **Red: main untouched.** The `ci` step records the result and the attribution
+   follow-ups, as in batch mode. Then run `coordination batch-restage --batch <id>
+   --reason "<run>" --hold <suspect assignment>...`. Every member returns to
+   handoff. Review-return each held suspect to its worker with the failure and its
+   follow-up. Then batch the remaining members again; a held suspect is refused until
+   it is review-returned.
+9. **Circuit breaker.** Red staged batches count toward `max_red_batches` and
+   `max_red_minutes` (set with `strategy-allow --strategy ci-staged`), but `main`
+   never turns red. While it is tripped, `batch-open` refuses: integrate serially with
+   the steps below, which is then the only time a plain `main` push is allowed. You
+   may still promote or re-stage existing staged batches. `batch-status` (and
+   `status`) report `staging`: the tip, batches in CI, awaiting promotion or red,
+   their waiting tickets and the held suspects.
 
 ## Continuous local session
 

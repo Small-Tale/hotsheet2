@@ -894,7 +894,8 @@ fn hs2_9g0m3v_ledger_refuses_an_unknown_version() {
     let path = c.directory.join(LEDGER_FILE);
     let mut raw: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     assert_eq!(raw["version"], 1);
-    raw["version"] = 2.into();
+    // HS2-GT57BQ: version two is the staged ledger; three is unknown.
+    raw["version"] = 3.into();
     fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
     assert!(c.batch_ledger().is_err());
     assert!(

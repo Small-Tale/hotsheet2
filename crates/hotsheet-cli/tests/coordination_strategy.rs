@@ -54,7 +54,7 @@ fn hs2_ney1qh_policy_commands_never_open_the_pool_and_validate_reasons() {
         .filter(|d| d["implemented"] == true)
         .map(|d| d["name"].as_str().unwrap().to_owned())
         .collect();
-    assert_eq!(implemented, ["serial", "batch"]);
+    assert_eq!(implemented, ["serial", "batch", "ci-staged"]);
     refused(
         &f,
         &["strategy-allow", "--strategy", "batch", "--reason", " "],
@@ -117,14 +117,11 @@ fn hs2_ney1qh_register_refuses_disallowed_and_unimplemented_strategies_and_repor
             "keep main green",
         ],
     );
+    // HS2-GT57BQ: ci-staged is implemented; an allowed one still needs the upgrade flag.
     refused(
         &f,
-        &[
-            &INTEGRATOR[..],
-            &["--strategy", "ci-staged", "--all-participants-upgraded"],
-        ]
-        .concat(),
-        "not implemented by this executable yet (HS2-GT57BQ)",
+        &[&INTEGRATOR[..], &["--strategy", "ci-staged"]].concat(),
+        "all-participants-upgraded",
     );
     refused(
         &f,

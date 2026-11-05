@@ -3,6 +3,21 @@ const fullSha = /^[0-9a-f]{40}$/i;
 const allowedGitFlags = new Set(['--quiet', '-q', '--verbose', '-v', '--porcelain', '--atomic']);
 const valuedGateFlags = new Set(['--ticket', '--t2-stage', '--base', '--budget', '--tier']);
 
+// HS2-GT57BQ: the ci-staged integration branch; the Rust policy validates the same shape.
+export function validStagingBranch(name) {
+  return (
+    typeof name === 'string' &&
+    name.length <= 100 &&
+    /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(name) &&
+    !name.includes('..') &&
+    !name.includes('//') &&
+    !/[/.]$/.test(name) &&
+    !name.endsWith('.lock') &&
+    name !== 'main' &&
+    name !== 'HEAD'
+  );
+}
+
 export function parseMainPushArgs(args) {
   const result = {
     remote: 'origin',
@@ -17,6 +32,11 @@ export function parseMainPushArgs(args) {
     assignments: [],
     phaseTickets: [],
     standalone: false,
+    // HS2-GT57BQ: `main` (default), `staged` (push HEAD to the integration branch) or
+    // `promote` (fast-forward main to an exact green staged SHA).
+    mode: 'main',
+    stagingBranch: null,
+    promote: null,
   };
   const identity = {};
   const positionals = [];
@@ -38,6 +58,12 @@ export function parseMainPushArgs(args) {
     else if (value === '--assignment') result.assignments.push(next(index++, value));
     else if (value === '--phase-ticket') result.phaseTickets.push(next(index++, value));
     else if (value === '--standalone') result.standalone = true;
+    else if (value === '--staged') result.mode = result.mode === 'main' ? 'staged' : 'conflict';
+    else if (value === '--staging-branch') result.stagingBranch = next(index++, value);
+    else if (value === '--promote') {
+      result.promote = next(index++, value);
+      result.mode = result.mode === 'main' ? 'promote' : 'conflict';
+    }
     else if (value === '--gate-arg' || value.startsWith('--gate-arg=')) {
       const gateArg = value === '--gate-arg' ? args[++index] : value.slice(11);
       if (!gateArg) throw new Error('--gate-arg requires a value');
@@ -45,6 +71,9 @@ export function parseMainPushArgs(args) {
     } else if (value.startsWith('-')) throw new Error(`Unsupported push option: ${value}`);
     else positionals.push(value);
   }
+  if (result.mode === 'conflict') throw new Error('--staged and --promote cannot be combined');
+  if (result.stagingBranch !== null && result.mode !== 'staged')
+    throw new Error('--staging-branch requires --staged');
   if (positionals.length > 2) throw new Error('Push exactly one main ref to one named remote');
   if (positionals[0]) result.remote = positionals[0];
   if (positionals[1]) {
@@ -62,6 +91,21 @@ export function parseMainPushArgs(args) {
     throw new Error('Push the checked-out HEAD only');
   if (!['main', 'refs/heads/main'].includes(result.target)) throw new Error('Only main is supported');
   result.target = 'refs/heads/main';
+  if (result.mode === 'staged') {
+    if (positionals[1]) throw new Error('A staged push sends the checked-out HEAD; omit the refspec');
+    result.stagingBranch ??= 'integration';
+    if (!validStagingBranch(result.stagingBranch)) throw new Error('Invalid staging branch');
+    result.target = `refs/heads/${result.stagingBranch}`;
+  }
+  if (result.mode === 'promote') {
+    if (!fullSha.test(result.promote)) throw new Error('--promote requires the full green staged SHA');
+    if (explicitSource || positionals[1]) throw new Error('--promote names its SHA; omit --source and the refspec');
+    if (result.gateArgs.length) throw new Error('--promote runs no local gate; its green CI run is the gate');
+    if (result.assignments.length || result.phaseTickets.length)
+      throw new Error('--promote moves no assignment; record it with coordination batch-promote');
+    result.promote = result.promote.toLowerCase();
+    result.source = result.promote;
+  }
   if (Boolean(identity.id) !== Boolean(identity.session))
     throw new Error('Integrator id and session must be supplied together');
   if (new Set(result.assignments).size !== result.assignments.length) throw new Error('Duplicate --assignment');
@@ -69,6 +113,7 @@ export function parseMainPushArgs(args) {
   if (result.assignment && !identity.id) throw new Error('Assignment requires integrator identity');
   if (result.phaseTickets.length && !result.assignment) throw new Error('--phase-ticket requires --assignment');
   if (result.standalone && identity.id) throw new Error('Standalone conflicts with integrator identity');
+  if (result.mode !== 'main' && !identity.id) throw new Error(`--${result.mode} requires integrator identity`);
   if (identity.id) result.identity = identity;
   const singleGateFlags = new Set(['--full', '--smoke', '--ticket', '--base', '--budget', '--tier']);
   const seenGateFlags = new Set();
