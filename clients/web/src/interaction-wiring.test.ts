@@ -170,7 +170,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(387); // HS2-B8M0QB, HS2-63D6F9, HS2-1YXCCW, HS2-RFJ1GN, HS2-2Z11A5, HS2-PWNPM2, HS2-9YVX6Q, HS2-ZP869N, HS2-KPJWBK, HS2-C7GMQN
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(388); // HS2-F788GW, HS2-B8M0QB, HS2-63D6F9, HS2-1YXCCW, HS2-RFJ1GN, HS2-2Z11A5, HS2-PWNPM2, HS2-9YVX6Q, HS2-ZP869N, HS2-KPJWBK, HS2-C7GMQN
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))

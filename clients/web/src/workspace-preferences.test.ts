@@ -32,6 +32,7 @@ describe('workspace preferences', () => {
       inspectorVisible: false,
       commandGroupExpanded: false,
       commandGroupsCollapsed: {},
+      liveSectionExpanded: false,
     });
     const invalid = JSON.stringify({
       viewMode: 'grid',
@@ -57,6 +58,7 @@ describe('workspace preferences', () => {
         inspectorVisible: true,
         commandGroupExpanded: false,
         commandGroupsCollapsed: { project: ['Quality', 'Git'] },
+        liveSectionExpanded: true,
       },
     );
     expect(loadWorkspacePreferences({ getItem: (key) => values.get(key) ?? null })).toEqual({
@@ -70,7 +72,18 @@ describe('workspace preferences', () => {
       inspectorVisible: true,
       commandGroupExpanded: false,
       commandGroupsCollapsed: { project: ['Quality', 'Git'] },
+      liveSectionExpanded: true,
     });
+  });
+
+  it('keeps the Live section compact unless a boolean detail choice was saved (HS2-F788GW)', () => {
+    const load = (record: Record<string, unknown>) =>
+      loadWorkspacePreferences({ getItem: () => JSON.stringify(record) }).liveSectionExpanded;
+    expect(DEFAULT_WORKSPACE_PREFERENCES.liveSectionExpanded).toBe(false);
+    expect(load({})).toBe(false);
+    expect(load({ liveSectionExpanded: 'yes' })).toBe(false);
+    expect(load({ liveSectionExpanded: true })).toBe(true);
+    expect(load({ liveSectionExpanded: false })).toBe(false);
   });
 
   it('remembers the last ticket view independently of a persisted Notifications or Settings view (HS2-42T028)', () => {

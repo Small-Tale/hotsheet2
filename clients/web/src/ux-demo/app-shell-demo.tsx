@@ -30,6 +30,8 @@ import { ticketInspectorPanel } from '../components/ticket-inspector';
 import { ticketInspectorPlaceholderPanel } from '../components/ticket-inspector-placeholder';
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { hostCallouts, projectLiveSummary } from '../project-live-summary';
 import { DemoEvent } from './components/demo-event';
 import { tabContextMenu } from './components/demo-state';
 import {
@@ -44,6 +46,7 @@ import {
 import { DEMO_ACTIONS, DEMO_MARKERS } from './demo-actions';
 import { type DemoModule, type FormControl, listen } from './demo-module';
 import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
+import { DEMO_LIVE_NOW_MS, demoHostHealth, demoLiveState } from './live-section-fixtures';
 import {
   collapsedCommandGroups,
   commandGroupExpanded,
@@ -105,6 +108,8 @@ export const resizeDemoWidth = signal(260);
 export const resizeDemoHeight = signal(180);
 export const resizeDemoCollapsed = signal(false);
 export const shellEvent = signal('Explore the application shell.');
+/** The sidebar Live section's mode in the shell (HS2-F788GW); the app persists it per viewer. */
+export const shellLiveExpanded = signal(false);
 /** AppShell's public presentation props (HS2-DR549A), adjustable in the demo settings (HS2-8ZJMCE). */
 export const appShellSettings = {
   presentation: signal<'framed' | 'viewport'>('framed'),
@@ -127,6 +132,7 @@ export function resetAppShellDemo(root?: ParentNode): void {
   appShellSettings.overlayOpen.value = false;
   appShellSettings.mobileView.value = false;
   appShellSettings.mobileViewValue.value = 'all';
+  shellLiveExpanded.value = false;
   if (root)
     syncSettingsControls(root, 'app-shell', {
       values: { presentation: appShellSettings.presentation.value },
@@ -447,6 +453,11 @@ function shellSidebarPanel() {
     openCount: 17,
     upNextCount: 4,
     activeCount: 2,
+    live: {
+      summary: projectLiveSummary([demoLiveState('attention')], DEMO_LIVE_NOW_MS),
+      callouts: hostCallouts(demoHostHealth('disk-warning')),
+      expanded: shellLiveExpanded.value,
+    },
   });
 }
 
@@ -645,6 +656,13 @@ function wireAppShellDemo(root: HTMLElement): () => void {
       onCommit: ({ id, size }) => {
         setRegionSize(id, size);
       },
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.toggleLiveSection.selector, (_event, target) => {
+      // The Live section's own specimens sit in sidebar-width frames and toggle their own setting.
+      if (target.closest('.demo-sidebar-width')) return;
+      shellLiveExpanded.value = !shellLiveExpanded.value;
     }),
   );
   demoListeners.add(

@@ -157,6 +157,7 @@ views-and-saved-views	delegate	document.body	'click'	'[data-action="confirm-dele
 views-and-saved-views	delegate	document.body	'click'	'[data-action="cancel-delete-saved-view"]'
 views-and-saved-views	delegate	document.body	'kui-request-close'	'[data-dialog-component="saved-view-delete-dialog"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="toggle-command-group"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="toggle-live-section"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="toggle-command-section"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="toggle-drive"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="toggle-drive-options"]'

@@ -12,6 +12,7 @@ import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
 import { type AiToolDescriptor, type AiToolSelection, DriveOptionsMenu } from './drive-options-menu';
+import { ProjectLiveSection, type ProjectLiveSectionProps } from './project-live-section';
 import { ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
 import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
@@ -56,6 +57,8 @@ export interface ProjectSidebarProps {
   activeCount: number;
   countsPartial?: boolean;
   collapseControl?: boolean;
+  /** The Live section under the completion chart (HS2-F788GW); absent while nothing has reported. */
+  live?: ProjectLiveSectionProps;
 }
 
 /**
@@ -149,6 +152,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           pressed={props.statsSelected}
         />
       </List>
+      {props.live && <ProjectLiveSection {...props.live} />}
       <RepositorySummary
         branch={props.branch}
         unpushed={props.unpushed}

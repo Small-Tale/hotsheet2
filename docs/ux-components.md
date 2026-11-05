@@ -335,6 +335,17 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   or "Unavailable" with no value. Loading, a failed first read, and a stale snapshot use Kerf
   `EmptyState` and `StateBanner`. The demo's Scenario setting covers each state.
 
+- `ProjectLiveSection` — **shipped** (`components/project-live-section.tsx`, HS2-F788GW;
+  docs/34-glance-surfaces.md §34.6): the project sidebar's Live section under the completion chart.
+  Compact (the default) is one line of two bare chip `GlanceGauge`s (blue tokens/min, green tickets
+  updated/h) and Kerf `Badge` chips with a glyph and a raw number: a problem state, Needs you, the
+  worst ETA overrun, and the queue runway, each only when it has something to say. Every explanation
+  is in the chip's title and accessible name. Expanded shows two medium full gauges and the `m1`
+  detail rows (work state and last-progress age, Needs you, past ETA, queue runway). The `ListHeader`
+  action `toggle-live-section` switches modes and the choice persists in the workspace preferences.
+  Host conditions past a threshold (HS2-DTAVQA) are full-width Kerf `StateBanner` callouts in both
+  modes. Numbers derive in `project-live-summary.ts`; ages re-render from a local render-only clock.
+
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain

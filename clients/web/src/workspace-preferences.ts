@@ -9,6 +9,8 @@ export interface WorkspacePreferences {
   inspectorVisible: boolean;
   commandGroupExpanded: boolean;
   commandGroupsCollapsed: Record<string, string[]>;
+  /** The project sidebar's Live section shows its detail rows instead of the compact line (HS2-F788GW). */
+  liveSectionExpanded: boolean;
 }
 
 export type SortableWorkspaceViewMode = 'list' | 'board';
@@ -30,6 +32,7 @@ export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   inspectorVisible: true,
   commandGroupExpanded: true,
   commandGroupsCollapsed: {},
+  liveSectionExpanded: false,
 };
 
 const STORAGE_KEY = 'hotsheet.layout.workspace-preferences.v1';
@@ -133,6 +136,10 @@ export function loadWorkspacePreferences(storage: Pick<Storage, 'getItem'>): Wor
         ? record.commandGroupExpanded
         : DEFAULT_WORKSPACE_PREFERENCES.commandGroupExpanded,
     commandGroupsCollapsed: validatedCollapsedCommandGroups(record.commandGroupsCollapsed),
+    liveSectionExpanded:
+      typeof record.liveSectionExpanded === 'boolean'
+        ? record.liveSectionExpanded
+        : DEFAULT_WORKSPACE_PREFERENCES.liveSectionExpanded,
   };
 }
 

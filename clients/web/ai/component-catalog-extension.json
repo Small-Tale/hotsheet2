@@ -1439,6 +1439,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "project-live-section",
+      "name": "ProjectLiveSection",
+      "kind": "component",
+      "purpose": "Project sidebar Live section: compact bare gauges and glyph chips, or expanded detail rows, with full-width host callouts.",
+      "useWhen": [
+        "The project sidebar shows the selected project's live work state, rates, and host callouts (HS2-F788GW)."
+      ],
+      "avoidWhen": [
+        "A surface shows several projects at once; use the grid sidebar or Stats glance surfaces."
+      ],
+      "publicClasses": [
+        "project-live-section"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-live-section.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "none"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "project-setup-warning-banner",
       "name": "ProjectSetupWarningBanner",
       "kind": "component",

@@ -68,6 +68,8 @@ function feedbackRaterId(): string {
 /** Live application bindings used by this handler group. */
 export interface CommandAndAiInteractionsDependencies {
   readonly commandGroupExpanded: Signal<boolean>;
+  /** The project sidebar Live section's persisted detail mode (HS2-F788GW). */
+  readonly liveSectionExpanded: Signal<boolean>;
   readonly persistWorkspacePreferences: () => void;
   readonly project: () => Project | undefined;
   readonly commandGroupsCollapsed: Signal<Record<string, string[]>>;
@@ -245,6 +247,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(wireConfirmation(document.body, dependencies.confirmation));
   const {
     commandGroupExpanded,
+    liveSectionExpanded,
     persistWorkspacePreferences,
     project,
     commandGroupsCollapsed,
@@ -391,6 +394,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleCommandGroup.selector, () => {
       commandGroupExpanded.value = !commandGroupExpanded.value;
+      persistWorkspacePreferences();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleLiveSection.selector, () => {
+      liveSectionExpanded.value = !liveSectionExpanded.value;
       persistWorkspacePreferences();
     }),
   );

@@ -250,6 +250,7 @@ import { createBrowserToastModalHost } from '../toast-modal-host';
 import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
+import { createTurnClock } from '../turn-clock';
 import { createWorkerTicketRefresh } from '../worker-ticket-refresh';
 import { qualifiedWorkerTicket, type WorkerTicketDetails, type WorkerView } from '../worker-view-model';
 import { startWorkerViewStream } from '../worker-view-stream';
@@ -912,6 +913,8 @@ export async function startHotSheetWebClient() {
     inspectorTab = signal<InspectorTab>('info'),
     readerTab = signal<InspectorTab>('info'),
     sidebarVisible = signal(storedWorkspacePreferences.sidebarVisible),
+    // The project sidebar Live section's detail mode, persisted per viewer (HS2-F788GW).
+    liveSectionExpanded = signal(storedWorkspacePreferences.liveSectionExpanded),
     inspectorVisible = signal(storedWorkspacePreferences.inspectorVisible);
   const composerAttachments = signal<PendingEvidence[]>([]),
     composerUnrestoredAttachments = signal<StoredPendingAttachment[]>([]),
@@ -2610,6 +2613,7 @@ export async function startHotSheetWebClient() {
       inspectorVisible: inspectorVisible.value,
       commandGroupExpanded: commandGroupExpanded.value,
       commandGroupsCollapsed: commandGroupsCollapsed.value,
+      liveSectionExpanded: liveSectionExpanded.value,
     });
   }
   function draftScope(kind: 'composer' | 'not-working', projectId = selectedProjectId.value) {
@@ -4032,6 +4036,19 @@ export async function startHotSheetWebClient() {
     const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
     return new Api(target?.apiPath ?? '');
   });
+  // Render-only clock that ages the Live section's rates and times while live state exists; it never
+  // issues a request (HS2-F788GW).
+  const liveClock = signal(Date.now());
+  const liveClockTimer = createTurnClock(
+    () => liveStates.states.peek().size > 0,
+    () => {
+      liveClock.value = Date.now();
+    },
+    30_000,
+  );
+  effect(() => {
+    if (liveStates.states.value.size > 0 || liveClockTimer.running()) liveClockTimer.sync();
+  });
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
@@ -4613,6 +4630,14 @@ export async function startHotSheetWebClient() {
     commandRunFor,
     commandIcon,
     aiToolLabel,
+    liveStates,
+    liveClock,
+    liveSectionExpanded,
+    hostHealth: {
+      get value() {
+        return hostHealth.state.value.snapshot;
+      },
+    },
   });
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
   const { settingsWorkspace } = createSettingsSurface({
@@ -5600,6 +5625,7 @@ export async function startHotSheetWebClient() {
     closeSavedViewDelete,
     savedViewDeleteBusy,
     commandGroupExpanded,
+    liveSectionExpanded,
     persistWorkspacePreferences,
     commandGroupsCollapsed,
     guidanceOverview,
@@ -6194,6 +6220,7 @@ export async function startHotSheetWebClient() {
       statsGlance.dispose();
       hostHealth.dispose();
       liveStates.reset();
+      liveClockTimer.stop();
       announcerController.dispose();
       terminalDashboardController.dispose();
     },

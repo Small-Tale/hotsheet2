@@ -9,6 +9,8 @@ import { action } from 'kerfjs/actions';
 export const COMMANDS_AND_AI_ACTIONS = {
   toggleCommandGroup: action('toggle-command-group'),
   toggleCommandSection: action('toggle-command-section'),
+  /** The project sidebar Live section's compact/detail switch (HS2-F788GW). */
+  toggleLiveSection: action('toggle-live-section'),
   toggleDrive: action('toggle-drive'),
   toggleDriveOptions: action('toggle-drive-options'),
   selectDriveDefault: action('select-drive-default'),

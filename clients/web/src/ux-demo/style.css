@@ -74,6 +74,11 @@ body[data-resizing-project-sidebar='true'] {
 .demo-tone-surface[data-surface='standby'] {
   background: var(--hs-standby-background);
 }
+/* The project sidebar's default rail width, so the Live section specimens wrap as they do in the app (HS2-F788GW). */
+.demo-sidebar-width {
+  inline-size: remify(264px);
+  max-inline-size: 100%;
+}
 /* A phone-sized screen inside the framed CatalogExample: contain: paint makes it the containing
    block for the fixed focus surface and backdrop. */
 .terminal-drawer-focus-demo__stage {

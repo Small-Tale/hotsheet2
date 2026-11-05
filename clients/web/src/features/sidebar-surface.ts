@@ -16,13 +16,16 @@ import type { SettingsCategory } from '../components/settings-navigation';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { SidebarSurfaceProps } from '../components/workspace-composition-surfaces';
 import type { WorkspaceViewMode } from '../components/workspace-header';
+import type { HostHealthSnapshot } from '../host-health';
 import type { Project } from '../interactions/types';
+import type { LiveStateStore } from '../live-state';
 import {
   projectChatConnectionId,
   projectConnections,
   projectDriveControlState,
   projectDriveTarget,
 } from '../project-drive';
+import { hostCallouts, projectLiveSummary } from '../project-live-summary';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
 import { customTicketViewId, type TicketScope, ticketSearchCountViews, type TicketView } from '../ticket-views';
 import type { SidebarSearchCounts } from './workspace-search';
@@ -76,6 +79,14 @@ export interface SidebarSurfaceDependencies {
   commandRunFor: (commandId: string) => CommandRun | undefined;
   commandIcon: (command: CommandDefinition) => string;
   aiToolLabel: (tool: string) => string;
+  /** The server-pushed live state the Live section reads (HS2-JTTQMY, HS2-F788GW). */
+  liveStates?: Pick<LiveStateStore, 'forProject'>;
+  /** The render-only clock that ages the Live section; its timer never issues requests. */
+  liveClock?: Readable<number>;
+  /** Whether the Live section shows its detail rows (persisted per viewer). */
+  liveSectionExpanded?: Readable<boolean>;
+  /** The server host's health, for the Live section's threshold callouts (HS2-DTAVQA). */
+  hostHealth?: Readable<HostHealthSnapshot | undefined>;
 }
 
 /**
@@ -126,7 +137,20 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     commandRunFor,
     commandIcon,
     aiToolLabel,
+    liveStates,
+    liveClock,
+    liveSectionExpanded,
+    hostHealth,
   } = dependencies;
+  /** The Live section's props, or `undefined` while it has nothing to show (HS2-F788GW). */
+  function liveSection(projectId: string) {
+    const summary = liveStates
+        ? projectLiveSummary(liveStates.forProject(projectId), liveClock?.value ?? Date.now())
+        : undefined,
+      callouts = hostCallouts(hostHealth?.value);
+    if (!summary && !callouts.length) return undefined;
+    return { summary, callouts, expanded: liveSectionExpanded?.value ?? false };
+  }
   function sidebarSurfaceProps(statsSelected = false): SidebarSurfaceProps {
     const current = project()!;
     if (!statsSelected && viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
@@ -274,6 +298,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         activeCount: counts.active,
         countsPartial,
         collapseControl: true,
+        live: liveSection(current.id),
       },
     };
   }

@@ -58,6 +58,7 @@ export const demoCatalog: DemoCategory[] = [
         'button',
         'toolbar',
         'project-summary',
+        'project-live-section',
         'repository-summary',
         'view-navigation',
         'command-navigation',
@@ -68,6 +69,7 @@ export const demoCatalog: DemoCategory[] = [
         'list-header',
       ]),
       cataloged('project-summary'),
+      cataloged('project-live-section', ['glance-gauge', 'list-header', 'badge', 'state-banner', 'row', 'text']),
       cataloged('repository-summary', ['list-item', 'row', 'text', 'badge']),
       cataloged('repository-status-popover', [
         'toolbar',

@@ -117,7 +117,7 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
   and respect `prefers-reduced-motion`.
 - **Requests:** standby issues no requests of its own; it renders the pushed live state model.
 
-## 34.6 Project sidebar Live section (HS2-F788GW, HS2-6B9S7P, design only)
+## 34.6 Project sidebar Live section (HS2-F788GW shipped; HS2-6B9S7P design only)
 
 A **Live** section under the completion chart. Mocks: `r3-project-sidebar-compact-{light,dark}` (compact,
 the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
@@ -128,6 +128,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
 - **Expanded:** the detailed rows of `m1`: work state and last-progress age, Needs you, overdue ETA, `main`
   CI, queue runway, and a machine warning only past a threshold. A toggle in the section header switches
   modes, and the choice persists per viewer.
+- **Shipped (HS2-F788GW).** `ProjectLiveSection` renders the compact line and the expanded rows from the
+  live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
+  change stream. Ages and decaying rates re-render from a local 30-second render clock that runs only while
+  live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
+  Halted) is a glyph whose title gives the state and the last-progress age. The `main` CI chip and row wait
+  for a CI source (HS2-M8HHEA).
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
   It uses the `ToolbarControlGroup` button badge from Kerf `KF-HDQTVV` (§34.10).

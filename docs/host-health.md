@@ -2,7 +2,8 @@
 
 Status: **partial**. The server sampler, push channel, REST and CLI configuration, and a client
 resource have shipped (HS2-DTAVQA), and the Stats **This Mac** cards render them (HS2-NS0AYR). The
-sidebar callouts are follow-ups (HS2-F788GW, HS2-E1AQE8). The approved
+project sidebar's Live section callouts shipped with HS2-F788GW; the grid sidebar callouts are a
+follow-up (HS2-E1AQE8). The approved
 design is HS2-CT5EWR.
 
 Related: [04 Core server and CLI](04-core-server-cli.md) (change bus, `/ws/sync`, `/ws/poll`),

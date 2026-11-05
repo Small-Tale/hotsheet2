@@ -4355,6 +4355,75 @@
       }
     },
     {
+      "key": "hotsheet-web:project-live-section",
+      "package": "hotsheet-web",
+      "id": "project-live-section",
+      "name": "ProjectLiveSection",
+      "kind": "component",
+      "purpose": "Project sidebar Live section: compact bare gauges and glyph chips, or expanded detail rows, with full-width host callouts.",
+      "publicExports": [
+        {
+          "name": "ProjectLiveSection"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-live-section.tsx",
+        "src/project-live-summary.ts"
+      ],
+      "source": "src/components/project-live-section.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "feedback"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "none",
+          "padding": "none"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-live-section"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-live-section"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-live-section.tsx",
+        "composition": "src/components/project-live-section.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:project-setup-warning-banner",
       "package": "hotsheet-web",
       "id": "project-setup-warning-banner",
