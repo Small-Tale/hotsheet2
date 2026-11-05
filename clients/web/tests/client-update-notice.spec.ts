@@ -20,7 +20,56 @@ const project = {
   compatibility: { kind: 'compatible', revisionMismatch: false, sourceStale: false, canRestartServer: false },
 };
 
-async function installHost(page: Page) {
+/** One editable ticket for the draft-flush tests (HS2-TDTWF5); the queue is otherwise empty. */
+const ticketRow = {
+  connection_id: 'git-local',
+  native_id: '01',
+  qualified_id: 'git-local:01',
+  id: '01',
+  slug: 'HS2-DRAFT',
+  title: 'Draft across a reload',
+  category: 'feature',
+  priority: 'default',
+  status: 'started',
+  up_next: false,
+  feedback_needed: false,
+  tags: [],
+  blocked_by: [],
+  claim_count: 0,
+  created_at: '2026-09-01T00:00:00Z',
+  updated_at: '2026-09-14T00:00:00Z',
+};
+const gitProvider = {
+  connection_id: 'git-local',
+  provider: 'git',
+  display_name: 'Hot Sheet Git',
+  locator: '/tickets',
+  default: true,
+  capabilities: {
+    create: true,
+    update: true,
+    close: true,
+    notes: true,
+    note_edit: true,
+    note_delete: true,
+    attachments: true,
+    assignment: true,
+    review_requests: true,
+    dependencies: true,
+    up_next: true,
+    close_reasons: true,
+    claims: true,
+    atomic_batch: true,
+    not_working_report: true,
+    offline_mutation: true,
+    history: true,
+    watch: true,
+    provider_idempotency: true,
+    query_fields: [],
+  },
+};
+
+async function installHost(page: Page, withTicket = false) {
   const host = {
     served: undefined as string | undefined,
     socket: undefined as WebSocketRoute | undefined,
@@ -29,7 +78,26 @@ async function installHost(page: Page) {
     /** The bundle id the next document load is stamped with; undefined keeps the dev server's id. */
     documentBuild: undefined as string | undefined,
     requests: [] as string[],
+    /** The ticket's stored details and the details body of every PATCH it received, in order. */
+    details: 'Intro',
+    token: 'T0',
+    patches: [] as string[],
+    /** When set, a PATCH gets this status and body: the reply of a host that has no project session. */
+    patchFailure: undefined as { status: number; json: object } | undefined,
+    /** Ticket writes, their settled answers, and document loads in the order they happened. */
+    timeline: [] as string[],
+    /** While set, a PATCH's answer waits for this gate, so a test can see whether the page waits for it. */
+    patchGate: undefined as Promise<void> | undefined,
   };
+  const fullTicket = () => ({
+    store: 'git-local',
+    ...ticketRow,
+    details: host.details,
+    blocked_reason: null,
+    notes: [],
+    attachments: [],
+    concurrency_token: host.token,
+  });
   await page.routeWebSocket(/.*/, (socket) => {
     if (new URL(socket.url()).pathname !== WS_MUX) {
       void socket.close();
@@ -61,6 +129,7 @@ async function installHost(page: Page) {
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
     if (path.startsWith('/__hotsheet/')) host.requests.push(`${request.method()} ${path}`);
+    if (request.resourceType() === 'document') host.timeline.push('document');
   });
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -95,8 +164,27 @@ async function installHost(page: Page) {
         .catch(() => undefined);
     }
     if (path.endsWith('/ws/poll')) return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
-    if (path.endsWith('/providers')) return route.fulfill({ json: [] });
-    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(request, []) });
+    if (path.endsWith('/providers')) return route.fulfill({ json: withTicket ? [gitProvider] : [] });
+    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(request, withTicket ? [ticketRow] : []) });
+    if (withTicket && /\/tickets\/(?:git-local%3A)?01$/iu.test(path)) {
+      if (request.method() === 'GET') return route.fulfill({ json: fullTicket() });
+      if (request.method() === 'PATCH') {
+        const body = request.postDataJSON() as { details?: string };
+        if (body.details !== undefined) host.patches.push(body.details);
+        host.timeline.push('patch');
+        await host.patchGate;
+        // A page that navigated away cancelled this request; fulfilling it then fails and settles nothing.
+        const settle = (answer: Parameters<typeof route.fulfill>[0]) =>
+          route.fulfill(answer).then(
+            () => host.timeline.push('patch-settled'),
+            () => host.timeline.push('patch-cancelled'),
+          );
+        if (host.patchFailure) return settle(host.patchFailure);
+        if (body.details !== undefined) host.details = body.details;
+        host.token = `T${host.patches.length}`;
+        return settle({ json: fullTicket() });
+      }
+    }
     if (path.endsWith('/repository/status'))
       return route.fulfill({ json: { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 } });
     // The project's other collections are empty; nothing reaches the dev bridge, which has no session.
@@ -222,4 +310,94 @@ test('dismissal holds through same-build reconnects and idle or visibility chang
   host.served = 'bundle-1111111111111111';
   await host.socket!.close();
   await expect(notice).toBeVisible({ timeout: 30_000 });
+});
+
+const storedDraft = (page: Page) =>
+  page.evaluate(() => {
+    const entry = Object.entries(localStorage).find(([key]) => key.startsWith('hotsheet.ticket-draft:'));
+    return entry ? (JSON.parse(entry[1]) as { draft: string }).draft : undefined;
+  });
+
+/** Select the ticket and open its details editor in the inspector. */
+async function editDetails(page: Page) {
+  await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-DRAFT"]').click();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  return inspector.getByRole('textbox', { name: 'Ticket details' });
+}
+
+/** Type into the open details editor without blurring it, then press Reload in the newer-client notice. */
+async function reloadWithOpenDraft(page: Page, host: Awaited<ReturnType<typeof installHost>>, draft: string) {
+  host.served = 'bundle-2222222222222222';
+  await openProject(page);
+  const notice = page.locator('[data-component="client-update-notice-banner"]');
+  await expect(notice).toBeVisible({ timeout: 30_000 });
+  const editor = await editDetails(page);
+  await editor.fill(draft);
+  await expect.poll(() => storedDraft(page)).toBe(draft);
+  await expect(editor).toBeFocused();
+  // Typing alone never writes (HS2-RE1PS6).
+  expect(host.patches).toEqual([]);
+  host.documentBuild = host.served;
+  host.timeline.length = 0;
+  // Hold the save's answer until the host has received it, so a reload that does not wait for the
+  // save shows up as a document load before the settled answer.
+  let release = () => {};
+  host.patchGate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const navigation = page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame());
+  await notice.getByRole('button', { name: 'Reload' }).click();
+  await expect.poll(() => host.patches).toEqual([draft]);
+  host.patchGate = undefined;
+  release();
+  await navigation;
+  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
+  expect(await loadedBuild(page)).toBe('bundle-2222222222222222');
+}
+
+test('Reload in the newer-client notice saves an open details draft before the page reloads (HS2-TDTWF5)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const host = await installHost(page, true);
+  const draft = 'Intro\n- typed, never blurred, then Reload';
+  await reloadWithOpenDraft(page, host, draft);
+  // Exactly one write carried the whole draft, and the reload waited for its answer.
+  expect(host.patches).toEqual([draft]);
+  expect(host.timeline).toEqual(['patch', 'patch-settled', 'document']);
+  expect(host.details).toBe(draft);
+  // The committed save cleared the recovery copy, so the reopened editor shows the saved text, restoring nothing.
+  expect(await storedDraft(page)).toBeUndefined();
+  const editor = await editDetails(page);
+  await expect(editor).toHaveValue(draft);
+  await expect(page.locator('.app-toast', { hasText: 'Restored an unsaved edit.' })).toHaveCount(0);
+  expect(host.patches).toEqual([draft]);
+});
+
+test('a Reload whose draft save fails on a restarted host restores the draft from its recovery copy (HS2-TDTWF5)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const host = await installHost(page, true);
+  // The dev bridge's reply when the restarted host no longer holds this page's project session.
+  host.patchFailure = { status: 404, json: { error: 'Project session is not open.' } };
+  const draft = 'Intro\n- typed before the host restarted';
+  await reloadWithOpenDraft(page, host, draft);
+  // The save was attempted before the reload, failed, and the page reloaded anyway.
+  expect(host.patches).toEqual([draft]);
+  expect(host.timeline).toEqual(['patch', 'patch-settled', 'document']);
+  expect(host.details).toBe('Intro');
+  expect(await storedDraft(page)).toBe(draft);
+
+  // The host has its session again; reopening the editor restores the draft and the next blur saves it.
+  host.patchFailure = undefined;
+  const editor = await editDetails(page);
+  await expect(editor).toHaveValue(draft);
+  await expect(page.locator('.app-toast')).toContainText('Restored an unsaved edit.');
+  await editor.blur();
+  await expect.poll(() => host.details).toBe(draft);
+  await expect.poll(() => storedDraft(page)).toBeUndefined();
 });
