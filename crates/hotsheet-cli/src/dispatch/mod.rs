@@ -5,6 +5,7 @@
 //! new subcommand fails to compile until it is routed; each group module then matches
 //! only its own variants.
 
+mod checkout_remove;
 mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;

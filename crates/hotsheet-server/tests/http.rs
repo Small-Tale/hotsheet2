@@ -31102,3 +31102,111 @@ async fn hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim() {
     assert_eq!(worker["tickets"][0]["assignment_id"], "next-1");
     assert_eq!(store.read_ticket(&ticket.id).unwrap().claimed_by, None);
 }
+
+/// HS2-X4RZ73: `DELETE /checkouts/{reference}` removes a registered checkout through the same
+/// workflow as `hotsheet-cli checkout remove`, refuses while a client has the project open,
+/// keeps the ticket store, and is a no-op for a checkout that is not registered.
+#[tokio::test]
+async fn hs2_x4rz73_removing_a_checkout_refuses_while_open_and_repeats_cleanly() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let store_path = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("AP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let app = app(st.with_checkout_registry(registry_path.clone()));
+    let open_body = serde_json::json!({"root": checkout, "stores": [store_path]}).to_string();
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/projects/open", Some(&open_body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let send = |method: &'static str, uri: String| {
+        let app = app.clone();
+        async move {
+            let response = app.oneshot(authed(method, &uri, None)).await.unwrap();
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes)
+                    .unwrap_or(serde_json::Value::Null),
+            )
+        }
+    };
+
+    // A window has the project open: removal (and its dry run) is refused.
+    let poll = format!("/ws/poll?since=0&timeout_ms=0&checkout={id}&client=tab-1");
+    assert_eq!(send("GET", poll).await.0, StatusCode::OK);
+    let before = std::fs::read(&registry_path).unwrap();
+    for uri in [
+        format!("/checkouts/{id}"),
+        format!("/checkouts/{id}?dry_run=true"),
+    ] {
+        let (status, body) = send("DELETE", uri).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("is open in a Hot Sheet window"),
+            "{body}"
+        );
+    }
+    assert_eq!(std::fs::read(&registry_path).unwrap(), before);
+
+    // Once closed, a dry run reports without writing and the removal goes through.
+    assert_eq!(
+        send("POST", format!("/checkouts/{id}/close?client=tab-1"))
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+    let (status, plan) = send("DELETE", format!("/checkouts/{id}?dry_run=true")).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    assert_eq!(plan["registered"], true, "{plan}");
+    assert_eq!(plan["removed"], false, "{plan}");
+    assert_eq!(std::fs::read(&registry_path).unwrap(), before);
+    let (status, removed) = send("DELETE", format!("/checkouts/{id}")).await;
+    assert_eq!(status, StatusCode::OK, "{removed}");
+    assert_eq!(removed["removed"], true);
+    assert_eq!(removed["checkout_id"], id.as_str());
+    assert_eq!(removed["kept_git_stores"].as_array().unwrap().len(), 1);
+    let (_, listed) = send("GET", "/checkouts".into()).await;
+    assert!(listed.as_array().unwrap().is_empty(), "{listed}");
+    assert_eq!(
+        send("GET", format!("/checkouts/{id}")).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert!(
+        store_path.join("hotsheet-store.json").is_file(),
+        "the ticket store stays"
+    );
+    assert!(checkout.is_dir(), "the checkout directory stays");
+
+    // Repeating it, or naming nothing registered, succeeds without a change.
+    let after = std::fs::read(&registry_path).unwrap();
+    for reference in [id.as_str(), "never-registered"] {
+        let (status, again) = send("DELETE", format!("/checkouts/{reference}")).await;
+        assert_eq!(status, StatusCode::OK, "{again}");
+        assert_eq!(again["registered"], false, "{again}");
+    }
+    assert_eq!(std::fs::read(&registry_path).unwrap(), after);
+
+    // Re-opening the same root restores it under the same readable id.
+    let reopened = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/projects/open", Some(&open_body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reopened["checkout"]["id"], id.as_str());
+}

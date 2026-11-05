@@ -2298,6 +2298,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: remove_checkout_route
+      description:
+        Remove a registered checkout (HS2-X4RZ73). Refuses with 409 while a window has the project open. Stores,
+        files, shared connections, and credentials are kept and listed.
+      parameters:
+        - name: dry_run
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutRemoval'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     parameters:
       - name: reference
         in: path
@@ -14989,6 +15024,51 @@ components:
         removed_connection:
           type: boolean
         still_used_by:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    CheckoutRemoval:
+      type: object
+      required:
+        - reference
+        - dry_run
+        - registered
+        - removed
+        - kept_git_stores
+        - removed_connections
+        - shared_connections
+        - kept_credentials
+      properties:
+        reference:
+          type: string
+        dry_run:
+          type: boolean
+        registered:
+          type: boolean
+        removed:
+          type: boolean
+        checkout_id:
+          type: string
+        alias:
+          type: string
+        root:
+          type: string
+        kept_git_stores:
+          type: array
+          items:
+            type: string
+        removed_connections:
+          type: array
+          items:
+            type: string
+        shared_connections:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        kept_credentials:
           type: array
           items:
             type: string

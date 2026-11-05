@@ -214,6 +214,9 @@ still pins all hosted stores for version skew.
   after, which covers the gap between long-polls.
 - **Explicit close:** a client closing a project calls `POST /checkouts/{reference}/close?client=<id>`.
   That drops its lease immediately and triggers an unhost sweep; an unknown checkout returns 404.
+- **Removal:** `DELETE /checkouts/{reference}` (the server side of `checkout remove`,
+  HS2-X4RZ73) answers 409 while any live lease names the checkout. After a removal it requests
+  the same unhost sweep.
 - **What the sweep keeps:** it unhosts a project store only when no live lease names a checkout
   that references it, and nothing else needs it. Live needs are a drive on the store, a live
   terminal whose working directory lies inside such a checkout, or an unexpired claim in the
@@ -878,6 +881,7 @@ hotsheet provider-disable github-main           # temporary: no reads/writes, ti
 hotsheet provider-enable github-main
 hotsheet provider-remove github-main [--json]  # permanent, every project; the account stays signed in
 hotsheet checkout remove-source web github-main [--json]  # this project only; deletes the connection if no other project uses it
+hotsheet checkout remove <id|path|alias> [--dry-run] [--json]  # unregister a checkout; no-op when not registered (HS2-X4RZ73)
 hotsheet checkout source-color web github-main              # JSON: checkout_id, connection_id, effective color
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
 hotsheet checkout set-source-color web github-main '#6b7280' # restore the default Gray mark
@@ -907,6 +911,33 @@ and hyphens; unique names; a non-empty query). Notification rules name views by 
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
 commands they read the `-C` store's `providers.json`.
+
+`checkout remove` takes a checkout out of the machine registry (`HOTSHEET_HOME/checkouts.json`,
+HS2-X4RZ73), for example after a test or a deleted clone left a stale entry. It and the
+server's `DELETE /checkouts/{reference}[?dry_run=true]` call one workflow,
+`hotsheet_ticketing::checkout_removal::remove_checkout`:
+
+- **What it accepts.** An exact checkout id, a root path (also after the directory was
+  deleted), or an alias that names exactly one checkout. A shared alias is refused as
+  ambiguous. Unlike `checkout resolve`, it never accepts an id prefix.
+- **What it removes.** Under the registry lock it removes the entry and its retained source
+  aliases. An external connection that no remaining checkout links is deleted from
+  `providers.json`, as removing a project's last link with `remove-source` would.
+- **What it keeps.** The code checkout, its worklist file and permission vault, every linked
+  Git ticket store, every connection another checkout still links, and every account
+  credential. The report lists each one.
+- **Idempotent.** A reference that names nothing registered succeeds with `registered: false`
+  and changes nothing. Registering the same root again restores the same readable id.
+- **Running servers.** When live servers are registered under `HOTSHEET_HOME/instances`, the
+  CLI asks each one for a dry run, and then removes through one of them. Only a server knows
+  whether a window has the project open; in that case it answers 409 and nothing changes. A
+  live server that cannot be reached also refuses the removal, because it cannot confirm
+  that the project is closed. With no live server, the CLI runs the workflow directly against
+  the `-C` store's `providers.json`.
+
+`--json` prints the report: `registered`, `removed`, `dry_run`, `checkout_id`, `alias`, `root`,
+`kept_git_stores`, `removed_connections`, `shared_connections` (connection id to the
+checkout ids still using it), and `kept_credentials`.
 Provider configuration saves publish a complete synced sibling by atomic replacement,
 preserving existing file permissions. Event-driven coordination readers therefore see
 the previous or next complete configuration; malformed committed JSON still reports an

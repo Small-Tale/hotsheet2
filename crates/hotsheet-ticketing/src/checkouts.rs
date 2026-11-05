@@ -800,6 +800,32 @@ impl PreparedCheckoutLinks<'_> {
         true
     }
 
+    /// HS2-X4RZ73: resolve a removal target strictly; see [`resolve_for_removal`].
+    pub(crate) fn resolve_for_removal(
+        &self,
+        reference: &str,
+    ) -> Result<Option<Checkout>, CheckoutError> {
+        resolve_for_removal(&self.file.checkouts, reference)
+    }
+
+    /// HS2-X4RZ73: drop one checkout with its retained source aliases. Its sources'
+    /// stores and connections are the caller's concern; nothing on disk but the
+    /// registry changes when this is published.
+    pub(crate) fn remove_entry(&mut self, checkout_id: &str) -> Option<Checkout> {
+        let index = self
+            .file
+            .checkouts
+            .iter()
+            .position(|entry| entry.id == checkout_id)?;
+        let removed = self.file.checkouts.remove(index);
+        self.file.source_aliases.remove(checkout_id);
+        self.file
+            .link_derived_sources
+            .retain(|(id, _)| id != checkout_id);
+        self.changed = true;
+        Some(removed)
+    }
+
     pub(crate) fn publish(&mut self) -> Result<(), CheckoutError> {
         if self.changed {
             self.locked.registry.write_locked(&self.file)?;
@@ -1294,6 +1320,12 @@ impl CheckoutRegistry {
     /// Read checkout configuration for recovery UI without opening linked ticket stores.
     pub fn describe(&self, reference: &str) -> Result<Checkout, CheckoutError> {
         resolve_checkout(self.list()?, reference)
+    }
+
+    /// The checkout a removal of `reference` would remove, or `None` when nothing that
+    /// strict reference names is registered (HS2-X4RZ73). Read-only.
+    pub fn find_for_removal(&self, reference: &str) -> Result<Option<Checkout>, CheckoutError> {
+        resolve_for_removal(&self.read()?.checkouts, reference)
     }
 
     /// Record vault registration before creating the file, so a crash between these
@@ -2149,6 +2181,68 @@ fn resolve_checkout(entries: Vec<Checkout>, reference: &str) -> Result<Checkout,
         [] => Err(CheckoutError::NotFound(reference.to_owned())),
         _ => Err(CheckoutError::Ambiguous(reference.to_owned())),
     }
+}
+
+/// HS2-X4RZ73: removal is destructive, so it accepts only an exact id, a root path, or an
+/// alias that names one checkout — never the id prefix [`resolve_checkout`] allows. A path
+/// matches even after its directory was deleted, because a vanished checkout is the usual
+/// reason to remove one. `None` means nothing is registered under that reference.
+fn resolve_for_removal(
+    entries: &[Checkout],
+    reference: &str,
+) -> Result<Option<Checkout>, CheckoutError> {
+    let reference = reference.trim();
+    if reference.is_empty() {
+        return Err(CheckoutError::Invalid(
+            "checkout reference is empty".to_owned(),
+        ));
+    }
+    if let Some(entry) = entries.iter().find(|entry| entry.id == reference) {
+        return Ok(Some(entry.clone()));
+    }
+    let paths = removal_path_candidates(Path::new(reference));
+    if let Some(entry) = entries.iter().find(|entry| paths.contains(&entry.root)) {
+        return Ok(Some(entry.clone()));
+    }
+    let aliased: Vec<_> = entries
+        .iter()
+        .filter(|entry| entry.alias == reference)
+        .collect();
+    match aliased.as_slice() {
+        [] => Ok(None),
+        [one] => Ok(Some((*one).clone())),
+        _ => Err(CheckoutError::Ambiguous(format!(
+            "{reference} is the alias of {} checkouts ({}); remove one by its id or path",
+            aliased.len(),
+            aliased
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
+/// The registry spellings a removal path may have: its canonical form when it exists, or
+/// its canonical parent joined with its name once the directory itself is gone.
+fn removal_path_candidates(reference: &Path) -> Vec<String> {
+    let absolute = if reference.is_absolute() {
+        reference.to_path_buf()
+    } else {
+        match std::env::current_dir() {
+            Ok(cwd) => cwd.join(reference),
+            Err(_) => return Vec::new(),
+        }
+    };
+    let mut paths = vec![absolute.to_string_lossy().into_owned()];
+    if let Ok(canonical) = absolute.canonicalize() {
+        paths.push(canonical.to_string_lossy().into_owned());
+    } else if let (Some(parent), Some(name)) = (absolute.parent(), absolute.file_name())
+        && let Ok(parent) = parent.canonicalize()
+    {
+        paths.push(parent.join(name).to_string_lossy().into_owned());
+    }
+    paths
 }
 
 fn normalize_registry(mut file: RegistryFile) -> Result<RegistryFile, CheckoutError> {

@@ -1,10 +1,12 @@
 //! Project / checkout registration, sources, repository, code review, and checkout ticket listing.
 
 mod listing;
+mod removal;
 pub(crate) use listing::{
     TRUNCATED_HEADER, create_corrupt_ticket_repair, list_checkout_corrupt_tickets,
     list_checkout_tickets, prewarm_corrupt_tickets,
 };
+pub(crate) use removal::remove_checkout_route;
 
 use crate::api_error::ApiError;
 use crate::multistore::{StoreEntry, StoreHost};

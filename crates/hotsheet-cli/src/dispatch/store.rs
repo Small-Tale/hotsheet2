@@ -903,6 +903,13 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 }
             }
         }
+        CheckoutCmd::Remove {
+            reference,
+            dry_run,
+            json,
+        } => super::checkout_remove::cmd_checkout_remove(
+            &registry, store, &reference, dry_run, json,
+        )?,
         CheckoutCmd::RenameSource {
             reference,
             connection_id,
@@ -1232,6 +1239,23 @@ pub(crate) enum CheckoutCmd {
     RemoveSource {
         reference: String,
         connection_id: String,
+        /// Print the removal report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a checkout from this machine's registry; a no-op when it is not registered.
+    ///
+    /// Drops the entry and its source aliases (HS2-X4RZ73), and deletes an external
+    /// connection from the -C store's providers.json only when no other checkout links it.
+    /// The checkout directory, ticket stores, and account credentials are never touched. A
+    /// running server refuses while a window has the project open.
+    Remove {
+        /// An exact checkout id, a root path (also after the directory was deleted), or an
+        /// alias that names one checkout; never an id prefix.
+        reference: String,
+        /// Report what would be removed and kept without changing anything.
+        #[arg(long)]
+        dry_run: bool,
         /// Print the removal report as JSON.
         #[arg(long)]
         json: bool,
