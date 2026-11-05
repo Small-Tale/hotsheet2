@@ -7,7 +7,8 @@ describe('SettingsNavigation', () => {
     const markup = String(SettingsNavigation({ selected: 'permissions', collapseControl: true }));
     expect(markup).toContain('aria-label="Settings categories"');
     expect(markup).toContain('data-component="pane"');
-    expect(markup.match(/data-component="list"/g)).toHaveLength(3);
+    // Pane content, both category lists, and the Project Settings command list (HS2-C7GMQN).
+    expect(markup.match(/data-component="list"/g)).toHaveLength(4);
     expect(markup).toContain('<nav aria-label="Project Settings">');
     expect(markup).toContain('<nav aria-label="App Settings">');
     expect(markup).not.toContain('divider-sides');
@@ -41,6 +42,18 @@ describe('SettingsNavigation', () => {
     expect(markup.indexOf('Project Settings')).toBeLessThan(markup.indexOf('App Settings'));
     expect(markup.indexOf('data-item-id="columns"')).toBeLessThan(markup.indexOf('data-item-id="general"'));
     expect(markup.indexOf('data-item-id="general"')).toBeLessThan(markup.indexOf('data-item-id="keyboard"'));
+  });
+
+  it('offers Close Project… under Project Settings, outside the category landmark (HS2-C7GMQN)', () => {
+    const markup = String(SettingsNavigation({ selected: 'sources' })),
+      close = markup.indexOf('data-action="close-project-from-settings"');
+    expect(close).toBeGreaterThan(-1);
+    expect(markup.match(/data-action="close-project-from-settings"/g)).toHaveLength(1);
+    expect(markup).toContain('Close Project…');
+    expect(markup.slice(close)).toContain('data-lucide="x"');
+    // After the Project Settings navigation closes, before the App Settings heading.
+    expect(close).toBeGreaterThan(markup.indexOf('</nav>'));
+    expect(close).toBeLessThan(markup.indexOf('App Settings'));
   });
 
   it('uses the same category labels for navigation and workspace headings', () => {

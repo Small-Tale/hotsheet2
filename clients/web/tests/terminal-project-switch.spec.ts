@@ -252,3 +252,92 @@ for (const [width, height] of [
     await expect(page.locator('[data-terminal-viewport-parking] [data-project-id="b"]')).toHaveCount(0);
     await expect(dedicated(page, 'a')).toHaveAttribute('data-connection', 'connected');
   });
+
+// HS2-C7GMQN: phones have no project tab close button, so Project Settings offers Close Project…,
+// which opens the same running-resources confirmation as the tab and closes the project the same way.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const)
+  test(`closes the project from Project Settings through the tab close flow at ${width}px (HS2-C7GMQN)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await installWorkspace(page);
+    await page.goto('/');
+    await expectActive(page, 'a');
+    await expect(dedicated(page, 'a')).toHaveAttribute('data-connection', 'connected');
+    const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
+    const running = dialog.getByRole('complementary', { name: 'Running Terminals and AI Chats' });
+
+    // Desktop: the tab close button still opens the same confirmation, which Cancel dismisses.
+    if (!narrow(page)) {
+      await tab(page, 'a').hover();
+      await page.getByRole('button', { name: 'Close Project A' }).click();
+      await expect(dialog).toHaveJSProperty('open', true);
+      await expect(dialog).toHaveAttribute('data-project-id', 'a');
+      await expect(running).toContainText('Shell');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(tab(page, 'a')).toHaveCount(1);
+    }
+
+    await page.getByLabel('Settings View').click();
+    if (narrow(page)) await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+    const close = page.getByRole('button', { name: 'Close Project…' });
+    await expect(close).toBeVisible();
+    // A command beside the categories, not one of them.
+    await expect(
+      page.getByRole('navigation', { name: 'Project Settings', exact: true }).getByRole('button', {
+        name: 'Close Project…',
+      }),
+    ).toHaveCount(0);
+    // Let the phone sidebar finish sliding in before the capture.
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.getAnimations().filter((animation) => animation.playState === 'running').length),
+      )
+      .toBe(0);
+    await expect(close).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `target/visual-captures/hs2-c7gmqn-settings-close-action-${width}.png` });
+    await close.click();
+
+    await expect(dialog).toHaveJSProperty('open', true);
+    await expect(dialog).toHaveAttribute('data-project-id', 'a');
+    await expect(dialog).toHaveAttribute('data-has-resources', 'true');
+    await expect(running).toContainText('Shell');
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await expect
+      .poll(() =>
+        dialog.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return box.left >= 0 && box.right <= innerWidth + 1 && document.documentElement.scrollWidth <= innerWidth;
+        }),
+      )
+      .toBe(true);
+    await expect
+      .poll(() =>
+        dialog.evaluate(
+          (element) =>
+            (element instanceof HTMLDialogElement ? element : element.shadowRoot!.querySelector('dialog')!)
+              .getAnimations()
+              .filter((animation) => animation.playState === 'running').length,
+        ),
+      )
+      .toBe(0);
+    await page.screenshot({ path: `target/visual-captures/hs2-c7gmqn-settings-close-dialog-${width}.png` });
+
+    await dialog.getByRole('button', { name: 'Keep Running' }).click();
+    await expect(dialog).toHaveCount(0);
+    // The project is closed: B is active, A is gone from the switcher, and A's terminal socket closed.
+    await expectActive(page, 'b');
+    if (narrow(page))
+      await expect(page.locator('kui-select[name="mobile-project"] .kui-select__option[data-value="a"]')).toHaveCount(
+        0,
+      );
+    else await expect(tab(page, 'a')).toHaveCount(0);
+    await expect.poll(async () => (await attachSockets(page, 'a')).every((socket) => socket.closed)).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.open-projects') ?? '[]') as string[]))
+      .toEqual(['/work/b']);
+  });

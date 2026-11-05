@@ -877,6 +877,12 @@ preview/download, server directory browser) are separate design work.
   project sidebar with a persistent category navigator, following the HS1 settings-tab
   pattern. The navigator groups the project-scoped categories under a **Project Settings**
   heading and the device-local categories under an **App Settings** heading (HS2-QT6PGR).
+  Below the project categories, outside the category navigation landmark, a **Close Project…**
+  command runs the project tab close flow for the selected project: the same running
+  terminals and AI chats confirmation, Keep Running and Stop & Close choices, and teardown
+  (HS2-C7GMQN). It is there for phones, whose project picker has no tab close button; it
+  shows at every width. It closes the project in this window only. Forgetting a registered
+  project (`DELETE /checkouts/{reference}`, `hotsheet-cli checkout remove`) stays headless.
   Ticket sources, Commands, Lifecycle, Permissions, and Column view each render as a
   separate workspace so unrelated controls do not become one long settings page.
   Ticket sources are never global (HS2-SM9PM8, see
@@ -2895,7 +2901,7 @@ view layer is new work.
 - Search (FTS) and filtered views.
 
 Closing a project tab always requires confirmation, including when no live resources are
-running; the empty-resource form is compact, names the destructive action directly, and
+running (Project Settings → **Close Project…** enters the same flow, HS2-C7GMQN); the empty-resource form is compact, names the destructive action directly, and
 does not present the absence of running resources as a warning.
 When resources are running, the dialog's warning summary is its accessible description;
 the empty-resource confirmation has no description reference (HS2-1E6HE7).

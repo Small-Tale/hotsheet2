@@ -5,6 +5,7 @@ import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import type { SafeHtml } from 'kerfjs';
 import {
   ArchiveRestore,
   Bell,
@@ -18,8 +19,10 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   TerminalSquare,
+  X,
 } from 'lucide';
 
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export type SettingsCategory =
@@ -120,7 +123,7 @@ export function settingsCategoryTitle(category: SettingsCategory): string {
 
 /** The settings navigator's panel parts for the Workbench's left rail (HS2-RWGQWN). */
 export function settingsNavigationPanel({ selected }: { selected: SettingsCategory }): SidebarPanelParts {
-  const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][]) => (
+  const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][], actions?: SafeHtml) => (
     <section>
       <ListHeader label={heading} />
       <nav aria-label={heading}>
@@ -136,7 +139,21 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
           ))}
         </List>
       </nav>
+      {actions}
     </section>
+  );
+  // The phone client has no project tab close button, so Project Settings offers the same close
+  // flow: it opens the tab's running-resources confirmation (HS2-C7GMQN). It sits outside the
+  // category landmark because it is a command, not a category.
+  const projectActions = (
+    <List gap={rem(0.125)}>
+      <ListItem
+        action={TERMINALS_ACTIONS.closeProjectFromSettings.value}
+        divider="before"
+        icon={<LucideIcon icon={X} name="x" />}
+        label="Close Project…"
+      />
+    </List>
   );
   return {
     label: 'Settings categories',
@@ -144,7 +161,7 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
     toggle: { action: 'toggle-project-sidebar', name: 'Settings Sidebar' },
     content: (
       <List gap="m" controlInsets="tb">
-        {renderGroup('Project Settings', projectCategories)}
+        {renderGroup('Project Settings', projectCategories, projectActions)}
         {renderGroup('App Settings', appCategories)}
       </List>
     ),

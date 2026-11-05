@@ -24,6 +24,7 @@ import {
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
 import { type TerminalInteractionsDependencies, wireTerminalInteractions } from './terminals';
+import type { Project } from './types';
 import {
   type ViewAndSavedViewInteractionsDependencies,
   wireViewAndSavedViewInteractions,
@@ -400,6 +401,41 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     expect(state.capturingShortcutId.value).toBeUndefined();
     expect(state.storage.size).toBe(0);
   });
+});
+
+it('closes a project from Project Settings through the same entry point as its tab (HS2-C7GMQN)', () => {
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('customElements', { whenDefined: () => Promise.resolve() });
+  Object.assign(document.body, { querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} });
+  const requested: string[][] = [];
+  let current: Pick<Project, 'id'> | undefined = { id: 'b' };
+  wireTerminalInteractions({
+    requestProjectClose: (ids: readonly string[]) => {
+      requested.push([...ids]);
+    },
+    project: () => current as Project | undefined,
+  } as unknown as TerminalInteractionsDependencies);
+  const fromTab = handler('click', '[data-action="close-project-tab"]'),
+    fromSettings = handler('click', '[data-action="close-project-from-settings"]');
+  fromTab(new Event('click'), {
+    closest: () => target({ projectId: 'b' }),
+  } as unknown as Element);
+  fromSettings(new Event('click'), target({}));
+  // Both routes hand the same project to the one close flow (its confirmation, teardown, and queue).
+  expect(requested).toEqual([['b'], ['b']]);
+  // Repeated, after a project switch, and with no project open.
+  current = { id: 'a' };
+  fromSettings(new Event('click'), target({}));
+  fromSettings(new Event('click'), target({}));
+  current = undefined;
+  fromSettings(new Event('click'), target({}));
+  expect(requested).toEqual([['b'], ['b'], ['a'], ['a']]);
 });
 
 it('keeps LAN visibility identities stable on rename and distinct after delete/refill (HS2-76ZR5P)', () => {

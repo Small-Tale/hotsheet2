@@ -802,6 +802,13 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       requestProjectClose([data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!]);
     }),
   );
+  // Project Settings' Close Project… (HS2-C7GMQN) enters the same close flow as the tab button.
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeProjectFromSettings.selector, () => {
+      const current = project();
+      if (current) requestProjectClose([current.id]);
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.selectProjectCloseResource.selector, (_event, target) => {
       const state = projectCloseDialog.value,

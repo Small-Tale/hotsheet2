@@ -105,6 +105,7 @@ terminals	delegate	document.body	'click'	'[data-action="create-terminal-drawer-i
 terminals	delegate	document.body	'click'	'[data-action="open-saved-conversation"]'
 terminals	delegate	document.body	'click'	'[data-action="create-project-terminal"]'
 terminals	delegate	document.body	'click'	'[data-action="close-project-tab"]'
+terminals	delegate	document.body	'click'	'[data-action="close-project-from-settings"]'
 terminals	delegate	document.body	'click'	'[data-action="select-project-close-resource"]'
 terminals	delegate	document.body	'click'	'[data-action="cancel-project-close"]'
 terminals	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="project-close-dialog"]'
