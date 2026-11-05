@@ -14,7 +14,7 @@ const tools = [
   },
 ];
 
-async function openedApp(context: Parameters<typeof desktopApp>[0], baseURL: string) {
+async function launchedApp(context: Parameters<typeof desktopApp>[0], baseURL: string) {
   const app = await desktopApp(context, baseURL);
   // Only external AI discovery is synthetic; all ticket, attachment and command storage is real.
   await context.route('**/ai-tools*', (route) => route.fulfill({ json: tools }));
@@ -25,8 +25,19 @@ async function openedApp(context: Parameters<typeof desktopApp>[0], baseURL: str
   page.on('dialog', (dialog) => {
     throw new Error(`Unexpected native dialog: ${dialog.type()}`);
   });
+  return { app, page };
+}
+
+async function clickOpenProject(page: Page) {
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+}
+
+async function openedApp(context: Parameters<typeof desktopApp>[0], baseURL: string) {
+  const { app, page } = await launchedApp(context, baseURL);
+  await clickOpenProject(page);
+  // The click returns before the open does; a reload sooner restores no project (HS2-ED4A0G).
+  await app.projectRemembered();
   return { app, page };
 }
 
@@ -69,6 +80,31 @@ async function captureWidths(page: Page, surface: Locator, name: string) {
   }
   await page.emulateMedia({ colorScheme: 'light' });
 }
+
+test('a reload restores the project once its open is remembered and lists a ticket created meanwhile (HS2-ED4A0G)', async ({
+  context,
+  baseURL,
+}) => {
+  const { app, page } = await launchedApp(context, baseURL!);
+  try {
+    // Hold the open's provider discovery, as the slow macOS runner effectively did.
+    const held = app.pauseApi((method, path) => method === 'GET' && path.endsWith('/providers'));
+    await clickOpenProject(page);
+    await held.started;
+    expect(await app.rememberedProjects()).not.toContain(app.server.root);
+    held.release();
+    await app.projectRemembered();
+    const ticket = await app.server.request<FullTicket>(`/checkouts/${app.server.checkoutId}/tickets`, 'POST', {
+      title: 'Synthetic reload proof',
+      category: 'task',
+    });
+    await page.reload();
+    await expect(page.locator(`[data-ticket-slug="${ticket.slug}"]`).first()).toBeVisible();
+  } finally {
+    await page.close();
+    await app.stop();
+  }
+});
 
 test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
   test.setTimeout(120_000);

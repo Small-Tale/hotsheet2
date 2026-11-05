@@ -169,6 +169,16 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     });
   });
   let launches = 0;
+  /** What the native app-data bridge holds now. A relaunch restores only this; a reload's snapshot overrides the page's copy. */
+  async function storedPreference(matches: (key: string) => boolean) {
+    const entries = (await (await bridge.request(new URL('/__hotsheet/desktop-storage', baseURL).href)).json()) as {
+      key: string;
+      value: string | null;
+    }[];
+    return entries.find((entry) => matches(entry.key));
+  }
+  const rememberedProjects = async () =>
+    JSON.parse((await storedPreference((key) => key === 'hotsheet.open-projects'))?.value ?? '[]') as string[];
   return {
     origin: appOrigin,
     server,
@@ -230,17 +240,21 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
       await next.goto(origin.href);
       return next;
     },
-    async storedSession(projectId = server.checkoutId) {
-      const entries = (await (await bridge.request(new URL('/__hotsheet/desktop-storage', baseURL).href)).json()) as {
-        key: string;
-        value: string | null;
-      }[];
-      return (
-        entries.find(
-          (entry) => entry.key.startsWith('hotsheet.workspace.project-session.v1.') && entry.key.includes(projectId),
-        )?.value ?? ''
-      );
+    storedSession: async (projectId = server.checkoutId) =>
+      (
+        await storedPreference(
+          (key) => key.startsWith('hotsheet.workspace.project-session.v1.') && key.includes(projectId),
+        )
+      )?.value ?? '',
+    /**
+     * HS2-ED4A0G: a reload restores only the projects whose open finished and was remembered. Clicking
+     * Open Project returns before the open does, and a slow runner (macOS CI) reloaded first, so the
+     * reloaded app showed the welcome page instead of the project. Wait for the remembered root.
+     */
+    async projectRemembered(root = server.root) {
+      await expect.poll(async () => (await rememberedProjects()).includes(root)).toBe(true);
     },
+    rememberedProjects,
     async stop() {
       stopping = true;
       listener.closeAllConnections();
