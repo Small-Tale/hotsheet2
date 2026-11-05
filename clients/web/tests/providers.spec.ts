@@ -8247,10 +8247,35 @@ test('keeps the chat reading position when a slow host renders before the scroll
   }
 });
 
+/**
+ * Capture a drawer chat once its box holds still between two polls, through a page clip. The chat
+ * itself does not move once rendered (a per-frame probe saw one box from the first frame), but an
+ * element screenshot re-checks stability on page animation frames, and a saturated gate host has
+ * starved those for tens of seconds after a toast while the box was already settled (HS2-ATRDQ4).
+ * Polling the box uses timers, and the clip capture forces its own frame.
+ */
+async function captureSettledDrawerChat(page: Page, surface: Locator, path: string) {
+  let previous = '';
+  await expect
+    .poll(async () => {
+      const box = JSON.stringify(await surface.boundingBox()),
+        settled = box !== 'null' && box === previous;
+      previous = box;
+      return settled;
+    })
+    .toBe(true);
+  const box = await surface.boundingBox();
+  expect(box).not.toBeNull();
+  await page.screenshot({ path, clip: box! });
+}
+
 test('selects and copies chat messages before saving that range without choosing it again', async ({
   page,
   context,
 }) => {
+  // Eight visual captures across a full save and reopen flow; under a shared gate host the cold
+  // load alone took 10-21 s and the flow up to 55 s, so it gets this file's long-flow budget (HS2-ATRDQ4).
+  test.setTimeout(120_000);
   let savedPayload: ConversationExportPayload | undefined,
     openCount = 0;
   const resumedConnections: Array<Record<string, unknown>> = [];
@@ -8370,7 +8395,7 @@ test('selects and copies chat messages before saving that range without choosing
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain('The referenced proof is ready.');
   expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain('Export the referenced proof.');
-  await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-selected-chat-wide.png' });
+  await captureSettledDrawerChat(page, conversation, 'target/visual-captures/hs2-eqhary-selected-chat-wide.png');
   const saveConversation = drawer.getByRole('button', { name: 'Save Conversation' });
   await expect(saveConversation).toHaveJSProperty('tagName', 'BUTTON');
   await saveConversation.focus();
@@ -8471,7 +8496,7 @@ test('selects and copies chat messages before saving that range without choosing
   const savedConversation = drawer.locator('[data-component="ai-conversation"][data-read-only="true"]');
   await expect(savedConversation).toContainText('This selected range is read-only');
   await expect(savedConversation.getByRole('textbox', { name: 'Message Codex' })).toHaveCount(0);
-  await savedConversation.screenshot({ path: 'target/visual-captures/hs2-zzpf2b-saved-read-only-wide.png' });
+  await captureSettledDrawerChat(page, savedConversation, 'target/visual-captures/hs2-zzpf2b-saved-read-only-wide.png');
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
