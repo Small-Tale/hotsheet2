@@ -2073,7 +2073,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   message, leaving any selection intact. Shift+F10 and the Context Menu key open the same
   menu on a focused message row; links, file controls, and selected text retain the native
   browser menu. Opening and dismissing the menu preserve the transcript's reading position
-  at desktop and phone widths (HS2-BT9MD3). Download opens the existing export wizard scoped
+  at desktop and phone widths (HS2-BT9MD3), including on a slow host where the menu renders
+  before the browser dispatches the reader's scroll event, and after a resize recentres or
+  narrows the dialog: only the selection bar's movement within the conversation is compensated
+  (HS2-TG2ZV3). Download opens the existing export wizard scoped
   to those message ids. The selection bar provides Download on touch devices (HS2-YR405B).
   Save reuses the current
   selection instead of asking for it again. With a selection, the compact wizard

@@ -6,21 +6,28 @@ interface FakeTranscript {
   scrollTop: number;
   clientHeight: number;
   scrollHeight: number;
+  clientWidth: number;
+  parentElement: { getBoundingClientRect: () => { top: number } };
   getBoundingClientRect: () => { top: number };
   addEventListener: (type: string, listener: () => void) => void;
   scroll: (top: number) => void;
   resize: (height: number) => void;
   move: (top: number) => void;
+  /** Moves the whole conversation on screen, as a window resize recentering the dialog does. */
+  shift: (by: number) => void;
 }
 
 function transcript(clientHeight: number, scrollHeight: number): FakeTranscript {
   const listeners: Array<() => void> = [];
-  let viewportTop = 0;
+  let viewportTop = 0,
+    parentTop = 0;
   const fake: FakeTranscript = {
     scrollTop: 0,
     clientHeight,
     scrollHeight,
-    getBoundingClientRect: () => ({ top: viewportTop }),
+    clientWidth: 600,
+    parentElement: { getBoundingClientRect: () => ({ top: parentTop }) },
+    getBoundingClientRect: () => ({ top: parentTop + viewportTop }),
     addEventListener: (type, listener) => {
       if (type === 'scroll') listeners.push(listener);
     },
@@ -36,6 +43,9 @@ function transcript(clientHeight: number, scrollHeight: number): FakeTranscript 
     },
     move: (top) => {
       viewportTop = top;
+    },
+    shift: (by) => {
+      parentTop += by;
     },
   };
   return fake;
@@ -192,6 +202,57 @@ describe('conversation scroll', () => {
     view.resize(1_100);
     followConversationEnd(rootOf(view));
     expect(view.scrollTop).toBe(1_100);
+  });
+
+  it('adopts a reader scroll whose event has not arrived when a render syncs (HS2-TG2ZV3)', () => {
+    const view = transcript(525, 1_219),
+      root = rootOf(view);
+    syncConversationScroll(root);
+    // The reader scrolls back; a slow host renders (opening the message menu) before the frame
+    // that would dispatch the scroll event.
+    view.scrollTop = 298;
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(298);
+    // The late event and further renders, including growth, keep the reader in place.
+    view.scroll(298);
+    view.resize(1_400);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(298);
+    // A pending scroll further down while unpinned is the reader's position too.
+    view.scrollTop = 400;
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(400);
+  });
+
+  it('never compensates a recentred conversation or a reflow as selection chrome (HS2-TG2ZV3)', () => {
+    const view = transcript(525, 1_219),
+      root = rootOf(view);
+    syncConversationScroll(root);
+    view.scroll(298);
+    syncConversationScroll(root);
+    // A phone-width resize moves the dialog up 452px and narrows the messages before any render;
+    // the reader then scrolls a message into view, and that event is held for the reflow.
+    view.shift(-452);
+    view.clientWidth = 360;
+    view.scroll(345);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(345);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(345);
+    // Selection chrome after the resize is still compensated.
+    view.move(40);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(385);
+  });
+
+  it('keeps following the end through a reflow while pinned (HS2-TG2ZV3)', () => {
+    const view = transcript(300, 1_000),
+      root = rootOf(view);
+    syncConversationScroll(root);
+    view.clientWidth = 360;
+    view.resize(1_500);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(1_500);
   });
 
   it('is a no-op when no conversation is mounted', () => {

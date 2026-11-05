@@ -8180,6 +8180,73 @@ test('opening and closing a chat message menu keeps the reading position (HS2-BT
   }
 });
 
+test('keeps the chat reading position when a slow host renders before the scroll event (HS2-TG2ZV3)', async ({
+  page,
+  browserName,
+}) => {
+  await page.setViewportSize({ width: 1662, height: 1286 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
+    messages = conversation.locator('[data-action="pick-conversation-message"]'),
+    transcript = conversation.locator('.ai-conversation__transcript'),
+    menu = page.locator('[data-context-menu="conversation"]'),
+    scrollTop = () => transcript.evaluate((node) => node.scrollTop),
+    frames = () =>
+      page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  for (let turn = 1; turn <= 6; turn += 1) {
+    await composer.fill('What time is it in California?');
+    await composer.press('Enter');
+    await expect(messages).toHaveCount(turn * 2);
+    await expect(composer).toBeEnabled();
+  }
+  // A slow host (the macOS Platforms runners) delivers the next input before the frame that dispatches
+  // the reader's `scroll` event. Opening the message menu in the scroll's own task makes that order
+  // deterministic: the menu render syncs while the tracker still believes the reader follows the end.
+  const scrollBackAndOpenMenu = () =>
+    messages.nth(5).evaluate((node) => {
+      node.scrollIntoView({ block: 'center' });
+      const top = node.closest('.ai-conversation__transcript')?.scrollTop ?? -1,
+        box = node.getBoundingClientRect();
+      node.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+        }),
+      );
+      return top;
+    });
+  if (browserName === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+  }
+  for (const [width, height] of [
+    [1662, 1286],
+    [390, 844],
+  ]) {
+    // The phone-width resize recentres and narrows the dialog; the reader scrolls before or after the
+    // render that observes it, and neither order may be compensated as selection chrome.
+    await page.setViewportSize({ width, height });
+    const before = await scrollBackAndOpenMenu();
+    expect(before).toBeGreaterThan(40);
+    await expect(menu.getByRole('menuitem', { name: 'Copy Message' })).toBeVisible();
+    await frames();
+    await expect.poll(scrollTop).toBe(before);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await frames();
+    await expect.poll(scrollTop).toBe(before);
+  }
+});
+
 test('selects and copies chat messages before saving that range without choosing it again', async ({
   page,
   context,
