@@ -14143,8 +14143,13 @@ test('contains and centers inspector tabs while showing labels only when they fi
                 cellStyle = getComputedStyle(tab),
                 button = tab.querySelector<HTMLElement>('[role="tab"]')!,
                 target = button.getBoundingClientRect(),
+                // Kerf beta.124's tab label is `display: contents` while icon-only and so has no box (KF-VQ1Z8H,
+                // HS2-GAJSX9); only children that draw a box locate the visible content.
                 content = Array.from(button.children)
-                  .filter((child) => getComputedStyle(child).position !== 'absolute')
+                  .filter((child) => {
+                    const style = getComputedStyle(child);
+                    return style.position !== 'absolute' && style.display !== 'contents';
+                  })
                   .map((child) => child.getBoundingClientRect()),
                 contentLeft = Math.min(...content.map((box) => box.left)),
                 contentRight = Math.max(...content.map((box) => box.right));

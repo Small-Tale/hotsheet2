@@ -13,6 +13,7 @@ import './style.css';
 
 import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
 import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
+import { wireForms } from '@kerfjs/ui/wire-forms';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
@@ -43,3 +44,5 @@ void wireResizableRegions(appRoot, { onCommit: () => undefined });
 void wireChoiceChips(appRoot);
 // The clearable permission-rules search emits native input/change after Clear (HS2-CQ1TZN).
 void wireTextFields(appRoot);
+// Kerf Form's required wiring (beta.124, KF-JPE38T): a Form submission never navigates the page.
+void wireForms(appRoot);

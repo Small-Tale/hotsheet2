@@ -27,6 +27,7 @@ import './style.css';
 
 import { revealCatalogEntry, wireCatalog } from '@kerfjs/ui/wire-catalog';
 import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
+import { wireForms } from '@kerfjs/ui/wire-forms';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
@@ -70,6 +71,7 @@ mount(root, withControlledOpen(root, DemoApp));
 demoListeners.add(wireToolbarVisibility(root));
 demoListeners.add(wireScrollDividers(root, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] }));
 demoListeners.add(wireChoiceChips(root));
+demoListeners.add(wireForms(root));
 demoListeners.add(wireTextFields(root));
 demoListeners.add(wireWorkspaceToolbarVisibility(root));
 demoListeners.add(wireTicketRailToolbarVisibility(root));

@@ -1523,8 +1523,10 @@ preview/download, server directory browser) are separate design work.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.123 (HS2-6ABCVC, HS2-T8SPNP). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.124 (HS2-6ABCVC, HS2-T8SPNP, HS2-GAJSX9). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
+  Since beta.124 (KF-JPE38T, `KUI-L303`) the client renders no raw `<form>`: forms are Kerf `Form`, and
+  both entry points install `wireForms` so a submission never navigates the page (HS2-GAJSX9).
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
   in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
   and any active error, review finding, or warning fails the gate; known Kerf gaps are

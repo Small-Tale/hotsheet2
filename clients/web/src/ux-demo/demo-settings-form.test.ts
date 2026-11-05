@@ -9,7 +9,7 @@ describe('demo settings compositions (HS2-3AZ08H)', () => {
   it('stacks an entry settings form in a Kerf List with control insets', () => {
     const markup = String(DemoSettingsForm({ settings: 'status-badge', children: undefined }));
     expect(markup).toMatch(
-      /^<form data-settings="status-badge"><div class="kui-list" data-component="list"[^>]*data-control-insets="rbl"/u,
+      /^<form data-settings="status-badge" class="kui-form" data-component="form"><div class="kui-list" data-component="list"[^>]*data-control-insets="rbl"/u,
     );
     expect(markup).not.toContain('settings-form');
   });

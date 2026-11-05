@@ -376,11 +376,12 @@ describe('TerminalDrawer', () => {
 
   it('reserves the shared trailing tab slot whether or not a terminal has state', () => {
     const markup = render();
+    // Kerf beta.124 wraps the tab name for its shrink-with-ellipsis label (KF-VQ1Z8H, HS2-GAJSX9).
     expect(markup.match(/kui-tab-bar-item__trailing/g)).toHaveLength(2);
     expect(markup).toMatch(
-      /Terminal 1<\/span><span class="kui-tab-bar-item__trailing"><svg[^>]*class="[^"]*terminal-drawer__busy-dot[^"]*"/,
+      /Terminal 1<\/span><\/span><span class="kui-tab-bar-item__trailing"><svg[^>]*class="[^"]*terminal-drawer__busy-dot[^"]*"/,
     );
-    expect(markup).toMatch(/Terminal 2<\/span><span class="kui-tab-bar-item__trailing"><\/span>/);
+    expect(markup).toMatch(/Terminal 2<\/span><\/span><span class="kui-tab-bar-item__trailing"><\/span>/);
   });
   it('describes the rail double-click state', () => {
     const markup = String(

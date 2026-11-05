@@ -26,6 +26,13 @@ describe('RepositorySetup', () => {
     expect(markup).toContain('origin could not be added');
   });
 
+  it('HS2-GAJSX9 submits the origin through a Kerf Form, not a raw form (KUI-L303)', () => {
+    const markup = String(RepositorySetup({ step: 'remote' }));
+    expect(markup).toMatch(/<form class="kui-form" data-component="form" data-action="connect-repository-remote"/u);
+    expect(markup.match(/<form\b/gu)).toHaveLength(1);
+    expect(markup).toMatch(/^<div class="repository-setup" data-component="repository-setup" data-step="remote">/u);
+  });
+
   it('exposes deterministic busy copy and a narrow responsive layout', () => {
     expect(String(RepositorySetup({ busy: true }))).toContain('Initializing…');
     expect(String(RepositorySetup({ step: 'remote', busy: true }))).toContain('Adding origin…');

@@ -1,4 +1,5 @@
 import { ContentItem } from '@kerfjs/ui/content-item';
+import { Form } from '@kerfjs/ui/form';
 import { List, type ListProps } from '@kerfjs/ui/list';
 import { Text } from '@kerfjs/ui/text';
 
@@ -10,11 +11,11 @@ import { Text } from '@kerfjs/ui/text';
  */
 export function DemoSettingsForm({ settings, children }: { settings: string; children: ListProps['children'] }) {
   return (
-    <form data-settings={settings}>
+    <Form rootAttributes={{ 'data-settings': settings }}>
       <List gap="m" controlInsets="rbl">
         {children}
       </List>
-    </form>
+    </Form>
   );
 }
 

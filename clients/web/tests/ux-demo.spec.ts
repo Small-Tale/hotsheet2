@@ -3026,7 +3026,12 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
     return {
       rowWidth: node.closest('.ticket-list-row')!.getBoundingClientRect().width,
       visibleTitleCharacters,
-      lines: Number.parseFloat(titleStyle.maxHeight) / Number.parseFloat(titleStyle.lineHeight),
+      // Kerf beta.124 pads the clamp box by a focus ring's reach on each side (KF-ETTYMK, HS2-GAJSX9).
+      lines:
+        (Number.parseFloat(titleStyle.maxHeight) -
+          Number.parseFloat(titleStyle.paddingTop) -
+          Number.parseFloat(titleStyle.paddingBottom)) /
+        Number.parseFloat(titleStyle.lineHeight),
     };
   });
   expect(metrics.rowWidth).toBeGreaterThanOrEqual(220);
@@ -3257,11 +3262,16 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await row.evaluate((node: HTMLElement) => {
     node.style.width = '320px';
   });
-  const [rowBox, timeBox, slugBox, identityBox, titleLineBoxes] = await Promise.all([
+  const [rowBox, timeBox, slugBox, identityBox, titleRingRoom, titleLineBoxes] = await Promise.all([
     row.boundingBox(),
     row.locator('.kui-summary-row__trailing').boundingBox(),
     row.locator('.ticket-list-row__slug').boundingBox(),
     row.locator('.kui-summary-row__title').boundingBox(),
+    // Kerf beta.124 pads the clamp box by a focus ring's reach on each side (KF-ETTYMK, HS2-GAJSX9).
+    row.locator('.kui-summary-row__title').evaluate((node) => {
+      const style = getComputedStyle(node);
+      return Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    }),
     row
       .locator('.ticket-list-row__identity strong')
       .evaluate((node) =>
@@ -3274,7 +3284,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   expect(identityBox).not.toBeNull();
   expect(timeBox!.x + timeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(8);
-  expect(identityBox!.height).toBeLessThanOrEqual(43);
+  expect(identityBox!.height - titleRingRoom).toBeLessThanOrEqual(43);
   await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'inline');
   await expect(row.locator('.kui-summary-row__trailing')).toHaveCSS('float', 'inline-end');
   await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
@@ -4128,7 +4138,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const listIdentity = listRow.locator('.kui-summary-row__title');
   const listTitleMetrics = await listIdentity.evaluate((node) => {
     const style = getComputedStyle(node);
-    return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
+    // The clamp box's ring-room padding is outside the line budget (KF-ETTYMK, HS2-GAJSX9).
+    const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) - padding };
   });
   expect(listTitleMetrics.maxHeight / listTitleMetrics.lineHeight).toBeCloseTo(2, 1);
   const listWidth = await listRow.evaluate((node) => node.getBoundingClientRect().width);
@@ -4249,7 +4261,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const columnIdentity = narrowRow.locator('.kui-summary-row__title');
   const columnTitleMetrics = await columnIdentity.evaluate((node) => {
     const style = getComputedStyle(node);
-    return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
+    // The clamp box's ring-room padding is outside the line budget (KF-ETTYMK, HS2-GAJSX9).
+    const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) - padding };
   });
   expect(columnTitleMetrics.maxHeight / columnTitleMetrics.lineHeight).toBeCloseTo(4, 1);
   const longColumnRow = board.locator('[data-ticket-slug="HS2-SG1BKJ"]');
