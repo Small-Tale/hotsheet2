@@ -216,7 +216,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(launch.program, "codex");
-        assert_eq!(launch.args, ["--model", "gpt-test"]);
+        // HS2-4J7WCV: the headless launch shares the manifest's `--no-daemon`, ahead of the
+        // caller's arguments, exactly like a Hot Sheet terminal launch.
+        assert_eq!(launch.args, ["--no-daemon", "--model", "gpt-test"]);
+        let resumed = prepare(
+            &store,
+            "codex",
+            vec!["resume".into(), "--last".into()],
+            &home,
+        )
+        .unwrap();
+        assert_eq!(resumed.args, ["--no-daemon", "resume", "--last"]);
     }
 
     #[test]

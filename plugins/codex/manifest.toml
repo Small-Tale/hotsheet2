@@ -76,7 +76,11 @@ permission_modes = [
 [launch]
 # Interactive REPL; intentionally not the headless app-server drive command above.
 program = "codex"
-args = []
+# HS2-4J7WCV: every Hot Sheet Codex terminal hosts its own session. On the shared app-server
+# daemon its MCP servers and hooks would see whichever tab started the daemon, so attribution
+# is only correct in-process. Cost: daemon-only halt detection (HS2-MN865E) and native
+# per-ticket usage (HS2-J14225) do not cover these terminals.
+args = ["--no-daemon"]
 model_args = ["--model", "{model}"]
 effort_args = ["--config", "model_reasoning_effort=\"{effort}\""]
 

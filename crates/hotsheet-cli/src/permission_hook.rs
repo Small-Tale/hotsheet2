@@ -136,6 +136,21 @@ pub fn permission_terminal_id(
         .filter(|id| !id.is_empty())
 }
 
+/// The Hot Sheet terminal a hook may report to (HS2-4J7WCV): `terminal`, the inherited
+/// `HOTSHEET_TERMINAL_ID`, unless `shared_host` says the hook runs under a host serving many
+/// sessions (the Codex app-server daemon), whose environment belongs to whichever session
+/// started it. A hook there reports no terminal, so a prompt is never pinned to the wrong tab.
+/// `shared_host` is consulted only for a non-empty id, so a hook outside a Hot Sheet terminal
+/// never reads the process table.
+pub fn trusted_terminal_id(
+    terminal: Option<String>,
+    shared_host: impl FnOnce() -> bool,
+) -> Option<String> {
+    terminal
+        .filter(|id| !id.is_empty())
+        .filter(|_| !shared_host())
+}
+
 /// Map a native hook **input** to the bridge's `(tool, action)` rule key. The
 /// action is the command (Bash), else a file path (Edit/Write/Read), else empty — the same
 /// coarse key codex uses, so an `Always` rule remembered on one transport matches the other.
@@ -439,6 +454,50 @@ mod tests {
         assert_eq!(
             permission_hook_event(&json!({ "hook_event_name": "StopFailure" })),
             PermissionHookEvent::Other
+        );
+    }
+
+    /// HS2-4J7WCV: under the shared Codex app-server the inherited terminal id is another
+    /// tab's and is dropped; under the hook's own Codex TUI it is kept.
+    #[test]
+    fn a_hook_under_a_shared_app_server_reports_no_terminal() {
+        use hotsheet_plugins::SharedMcpHost;
+        use hotsheet_plugins::shared_host::hosted_by_shared_host;
+        let hosts = [SharedMcpHost {
+            program: "codex".into(),
+            subcommand: "app-server".into(),
+        }];
+        let under = |chain: &[&str]| {
+            let chain: Vec<String> = chain.iter().map(|c| (*c).to_owned()).collect();
+            trusted_terminal_id(Some("codex-tab-a".into()), || {
+                hosted_by_shared_host(&chain, &hosts)
+            })
+        };
+        let wrapper = "/bin/sh -c hotsheet-cli permission-hook --agent codex";
+        assert_eq!(
+            under(&[
+                wrapper,
+                "/u/.codex/bin/codex app-server --listen unix:// --managed-daemon"
+            ]),
+            None
+        );
+        assert_eq!(
+            under(&[wrapper, "codex --no-daemon"]).as_deref(),
+            Some("codex-tab-a")
+        );
+        assert_eq!(
+            under(&[
+                wrapper,
+                "codex --no-daemon --model gpt-6-astra --config model_reasoning_effort=\"high\""
+            ])
+            .as_deref(),
+            Some("codex-tab-a")
+        );
+        // No terminal id, or an empty one: nothing to trust and no ancestry read.
+        assert_eq!(trusted_terminal_id(None, || panic!("not consulted")), None);
+        assert_eq!(
+            trusted_terminal_id(Some(String::new()), || panic!("not consulted")),
+            None
         );
     }
 

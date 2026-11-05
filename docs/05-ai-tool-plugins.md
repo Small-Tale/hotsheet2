@@ -1836,7 +1836,11 @@ app-server daemon (HS2-MN865E):
 Limits:
 
 - The v2 protocol is experimental and its schema is version-specific.
-- TUIs started with `--no-daemon` or `daemon_auto_start = false` are invisible.
+- TUIs started with `--no-daemon` or `daemon_auto_start = false` are invisible. Hot Sheet
+  launches its own Codex terminals with `--no-daemon`, and the hook of a daemon-hosted session
+  reports no terminal (HS2-4J7WCV). No Hot Sheet terminal therefore reports a daemon thread to
+  watch, and the watch only rejoins a thread a session reported from outside the daemon.
+  HS2-CYHAWB tracks recovering halt detection for in-process sessions.
 - While a session is reported connected, the watch's subscription keeps the daemon from
   unloading the thread (it otherwise unloads 30 minutes after the last subscriber).
 - A terminal whose Codex process dies without `SessionEnd` keeps its watch until the daemon
@@ -2043,9 +2047,34 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > levels) running a declared program has that subcommand among its later arguments, the shim
 > ignores `HOTSHEET_TERMINAL_ID`, `HOTSHEET_AGENT`, `HOTSHEET_SERVER` and `HOTSHEET_SECRET`,
 > finds its server through the instance registry, and holds a project-only lease. A
-> daemon-hosted Codex terminal therefore shows MCP not connected rather than connecting the
-> tab that started the daemon. Per-thread attribution on the daemon, and
-> the same daemon problem for hooks, are open in HS2-4J7WCV.
+> daemon-hosted Codex session therefore shows MCP not connected rather than connecting the
+> tab that started the daemon.
+>
+> **Codex terminals host their own session (HS2-4J7WCV).** Hot Sheet launches every Codex
+> TUI with `--no-daemon` (the manifest's `[launch] args`), before any `--model` or effort
+> `--config` the selection adds. The terminal drawer, `POST /terminals` and headless
+> `hotsheet-cli launch codex` all use these arguments. Each tab's MCP server and hooks are
+> then its own children and name its own terminal. The accepted cost: daemon-only Codex halt
+> detection (HS2-MN865E, §5.7) and native per-ticket Codex usage (HS2-J14225,
+> [14](14-metrics-interface.md)) no longer cover launches without an effort. Launches with an
+> effort ran in process before and already lacked both. With the hook guard below, no Hot Sheet
+> terminal reaches either path; HS2-CYHAWB tracks recovering both for in-process sessions.
+> `codex queue` messaging still reaches a `--no-daemon` session under the same `CODEX_HOME`.
+> `hotsheet-cli trigger codex` and AI commands use the app-server drive, not a TUI.
+>
+> **Hook guard (HS2-4J7WCV).** The hook applies the same classifier, so a user's own `codex`
+> started in a Hot Sheet shell terminal can't credit a prompt to another tab. The classifier
+> is `hotsheet_plugins::shared_host`, shared with the shim:
+>
+> - When the hook's `--agent` plugin declares shared hosts and the nearest such ancestor is
+>   `codex app-server`, `hotsheet-cli permission-hook` ignores `HOTSHEET_TERMINAL_ID`.
+> - A PermissionRequest there still reaches Hot Sheet, with no `terminal_id`. SessionStart
+>   and SessionEnd report nothing.
+> - Codex runs hook commands through a shell. Arguments after a shell script flag (`-c`,
+>   `-lc`, `/C`) are therefore not program candidates, so the wrapper's `--agent codex` never
+>   hides the daemon above it.
+> - Claude declares no shared host, so its hooks never read the process table.
+> - Windows reports no ancestors, so the guard and the shim's filter are Unix-only.
 >
 > **Following a moved server (HS2-HNXE38 reopen).** A Hot Sheet terminal outlives a server
 > restart through its broker, so its `HOTSHEET_SERVER` route-back can name a dead port, and a

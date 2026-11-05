@@ -17,7 +17,6 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use hotsheet_plugins::SharedMcpHost;
 use serde_json::{Value, json};
 
 /// How often the lease is renewed; the server's lease TTL is three heartbeats.
@@ -81,63 +80,9 @@ pub const INHERITED_IDENTITY: &[&str] = &[
     "HOTSHEET_SECRET",
 ];
 
-/// Whether this shim runs under a host that serves many sessions at once (HS2-MRR6Z0).
-/// `ancestors` holds the command lines of the shim's parent, grandparent, and so on, nearest
-/// first; `hosts` are the shared hosts plugins declare (for Codex, `codex app-server`, the
-/// managed daemon). The nearest ancestor running one of the hosts' programs decides: it is
-/// shared when a later argument is that host's subcommand, while the same program run
-/// interactively hosts only its own session. No such ancestor means no shared host.
-pub fn hosted_by_shared_host(ancestors: &[String], hosts: &[SharedMcpHost]) -> bool {
-    for command in ancestors {
-        let tokens: Vec<&str> = command.split_whitespace().collect();
-        for (index, token) in tokens.iter().enumerate() {
-            let name = token.rsplit(['/', '\\']).next().unwrap_or(token);
-            let name = name.strip_suffix(".exe").unwrap_or(name);
-            let matching: Vec<&SharedMcpHost> =
-                hosts.iter().filter(|host| host.program == name).collect();
-            if !matching.is_empty() {
-                return matching
-                    .iter()
-                    .any(|host| tokens[index + 1..].contains(&host.subcommand.as_str()));
-            }
-        }
-    }
-    false
-}
-
-/// Up to `max` ancestor command lines of this process, nearest first (HS2-MRR6Z0). Read with
-/// `ps`; an unreadable process table yields what was read so far, and Windows yields none.
-pub fn ancestor_commands(max: usize) -> Vec<String> {
-    #[cfg(unix)]
-    {
-        let mut out = Vec::new();
-        let mut pid = std::os::unix::process::parent_id();
-        while out.len() < max && pid > 1 {
-            let Some((parent, command)) = std::process::Command::new("ps")
-                .args(["-o", "ppid=,args=", "-p", &pid.to_string()])
-                .stderr(std::process::Stdio::null())
-                .output()
-                .ok()
-                .filter(|output| output.status.success())
-                .and_then(|output| {
-                    let line = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-                    let (ppid, command) = line.split_once(char::is_whitespace)?;
-                    Some((ppid.trim().parse::<u32>().ok()?, command.trim().to_owned()))
-                })
-            else {
-                break;
-            };
-            out.push(command);
-            pid = parent;
-        }
-        out
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = max;
-        Vec::new()
-    }
-}
+// HS2-MRR6Z0, HS2-4J7WCV: the ancestry classifier is shared with `hotsheet-cli
+// permission-hook`, whose hooks the same Codex daemon starts.
+pub use hotsheet_plugins::shared_host::{ancestor_commands, hosted_by_shared_host};
 
 /// `env`, minus [`INHERITED_IDENTITY`] when `untrusted` (the shim runs under a shared host,
 /// see [`hosted_by_shared_host`]). Such a shim still finds its server through the instance registry and holds a
@@ -405,43 +350,6 @@ mod tests {
         );
         let blank = env(&[("HOTSHEET_SERVER", " "), ("HOTSHEET_SECRET", "s")]);
         assert!(PresenceTarget::resolve(None, None, blank, || None, 7, None, "L".into()).is_none());
-    }
-
-    /// HS2-MRR6Z0: the nearest ancestor running a declared host program decides.
-    #[test]
-    fn only_a_declared_shared_host_ancestor_marks_the_host_shared() {
-        let chain =
-            |commands: &[&str]| commands.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
-        let hosts = [SharedMcpHost {
-            program: "codex".into(),
-            subcommand: "app-server".into(),
-        }];
-        let shared = |commands: &[&str]| hosted_by_shared_host(&chain(commands), &hosts);
-        // Observed on 0.166.0: the managed daemon parents every daemon-hosted thread's server.
-        assert!(shared(&[
-            "/u/.codex/packages/app-server-daemon/releases/0.166.0/bin/codex app-server --listen unix:// --managed-daemon",
-        ]));
-        // An npm install runs the native binary under node; a wrapper shell may sit between.
-        assert!(shared(&[
-            "/bin/sh -c hotsheet-mcp --project .",
-            "node /usr/local/lib/node_modules/@openai/codex/bin/codex app-server",
-        ]));
-        // A TUI hosting its own session (a --config override or --no-daemon), even when a
-        // later ancestor is an app-server.
-        assert!(!shared(&[
-            "codex --model gpt-6 --config model_reasoning_effort=\"high\"",
-            "/x/codex app-server --managed-daemon",
-        ]));
-        assert!(!shared(&["C:\\tools\\codex.exe --no-daemon"]));
-        assert!(shared(&["C:\\tools\\codex.exe app-server"]));
-        // Not a declared host (Claude, a shell), an unreadable process table, a lookalike
-        // name, or the subcommand before the program.
-        assert!(!shared(&["claude --resume", "-zsh"]));
-        assert!(!shared(&[]));
-        assert!(!shared(&["mycodex app-server"]));
-        assert!(!shared(&["app-server-wrapper codex"]));
-        // No declared hosts: nothing is shared.
-        assert!(!hosted_by_shared_host(&chain(&["codex app-server"]), &[]));
     }
 
     /// HS2-MRR6Z0: a shim hosted by a shared app-server drops the inherited terminal identity

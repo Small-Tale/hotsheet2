@@ -747,11 +747,23 @@ fn codex_declares_its_project_local_skill() {
     );
     let launch = p.manifest.launch.as_ref().expect("codex declares a launch");
     assert_eq!(launch.program, "codex");
-    assert!(launch.args.is_empty());
+    // HS2-4J7WCV: every Hot Sheet Codex terminal hosts its own session, whatever is selected,
+    // so its hooks and MCP server are its own children.
+    assert_eq!(launch.args, ["--no-daemon"]);
     assert_eq!(launch.model_args, ["--model", "{model}"]);
+    assert_eq!(p.launch_args(None, None).unwrap(), ["--no-daemon"]);
+    assert_eq!(
+        p.launch_args(Some("gpt-6-astra"), None).unwrap(),
+        ["--no-daemon", "--model", "gpt-6-astra"]
+    );
+    assert_eq!(
+        p.launch_args(None, Some("low")).unwrap(),
+        ["--no-daemon", "--config", "model_reasoning_effort=\"low\""]
+    );
     assert_eq!(
         p.launch_args(Some("gpt-6-astra"), Some("high")).unwrap(),
         [
+            "--no-daemon",
             "--model",
             "gpt-6-astra",
             "--config",

@@ -190,13 +190,15 @@ CI uses fake Codex parents; this checks an installed Codex against the user's ow
 
 1. Run `hotsheet-cli setup --tool codex` (or open the project) and confirm `.codex/config.toml` lists `env_vars` with the five `HOTSHEET_*` names and no values.
 2. Open two Codex terminals in one project, each with an effort selected (in-process sessions). Confirm each tab's connection icon reads connected and that closing one tab disconnects only that tab.
-3. Open a third Codex terminal with no effort and no model (a daemon-hosted session). Confirm it shows MCP not connected and that neither earlier tab changes state; HS2-4J7WCV tracks connecting it.
+3. Open a third Codex terminal with no effort and no model. Hot Sheet launches it with `--no-daemon` (HS2-4J7WCV), so confirm it connects only itself and that neither earlier tab changes state.
+4. In a Hot Sheet shell terminal, run your own `codex` (on the shared daemon) and trigger a permission prompt. Confirm the prompt appears in Hot Sheet without being pinned to any Codex tab, and that the shell terminal and the earlier tabs show no hook connection change (HS2-4J7WCV).
 
 ### Native Codex terminal usage (HS2-J14225)
 
-1. Launch a Codex terminal in Hot Sheet with the shared Codex daemon enabled. Claim one ticket from that terminal's session, run a turn with nonzero token use, and open that ticket's Timeline. Confirm the Codex model (when reported), tokens, and per-model total appear at wide and phone widths.
-2. Release the claim, run another turn, and confirm that turn stays in project metrics without increasing the ticket total. Repeat with two simultaneous claims; neither ticket should receive the ambiguous turn.
-3. Repeat with `--no-daemon` to confirm the timeline makes no unsupported usage claim. The protocol cassette covers the watcher, but CI cannot reliably exercise an installed interactive Codex TUI and its daemon together.
+Since HS2-4J7WCV no Hot Sheet terminal reaches the daemon thread watch: Hot Sheet's Codex terminals launch with `--no-daemon`, and a daemon-hosted `codex` started in a shell terminal reports no terminal from its hooks. HS2-CYHAWB tracks recovering native usage.
+
+1. Open a Codex terminal in Hot Sheet, claim one ticket from its session, and run a turn with nonzero token use. Confirm the ticket's Timeline makes no unsupported Codex usage claim and that project metrics are unaffected by the claim.
+2. The protocol cassette covers the watcher itself; CI cannot reliably exercise an installed interactive Codex TUI and its daemon together.
 
 ### Codex Work claim-release usage (HS2-2K2D7E)
 

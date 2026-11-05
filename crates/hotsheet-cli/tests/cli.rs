@@ -2771,6 +2771,128 @@ fn permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection(
     );
 }
 
+/// HS2-4J7WCV: run the real `hotsheet-cli permission-hook --agent codex` the way Codex does,
+/// through `sh -c` under a fake `codex` whose arguments are `codex_args`, with a Hot Sheet
+/// terminal's identity in its environment. Returns the request the hook sent.
+#[cfg(unix)]
+fn codex_hook_under(codex_args: &[&str], input: &str) -> (String, String, String) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || capture_one_request(listener));
+    let output = run_codex_hook(codex_args, &url, input);
+    assert!(output.status.success());
+    server.join().unwrap()
+}
+
+/// Run the hook through `sh -c` under a fake `codex <codex_args>` whose environment names
+/// terminal `codex-tab-a` and the route `url` (HS2-4J7WCV).
+#[cfg(unix)]
+fn run_codex_hook(codex_args: &[&str], url: &str, input: &str) -> std::process::Output {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let codex = bin.path().join("codex");
+    // The compound script keeps the wrapper shell alive (no exec of a lone command), so the
+    // hook's parent is a shell whose own arguments name `--agent codex`, as under Codex.
+    std::fs::write(
+        &codex,
+        "#!/bin/sh\n/bin/sh -c \"\\\"$HOOK\\\" permission-hook --agent codex; exit \\$?\"\nexit $?\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut command = std::process::Command::new(&codex);
+    for name in INHERITED_HOOK_SESSION_ENV {
+        command.env_remove(name);
+    }
+    let mut child = command
+        .args(codex_args)
+        .env("HOOK", assert_cmd::cargo::cargo_bin("hotsheet-cli"))
+        .env("HOTSHEET_HOME", home.path())
+        // What a daemon started from the first Codex tab would carry.
+        .env("HOTSHEET_SERVER", url)
+        .env("HOTSHEET_SECRET", "first-tab-secret")
+        .env("HOTSHEET_TERMINAL_ID", "codex-tab-a")
+        .env("HOTSHEET_AGENT", "codex")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[cfg(unix)]
+#[test]
+fn hs2_4j7wcv_a_codex_hook_under_the_shared_app_server_reports_no_terminal() {
+    let ask = r#"{"hook_event_name":"PermissionRequest","session_id":"s-daemon","tool_name":"Bash","tool_input":{"command":"git push"}}"#;
+    let daemon = ["app-server", "--listen", "unix://", "--managed-daemon"];
+    let (route, secret, body) = codex_hook_under(&daemon, ask);
+    assert_eq!(route.trim_end(), "POST /permissions/ask HTTP/1.1");
+    assert_eq!(secret, "first-tab-secret");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    // The prompt still reaches Hot Sheet, but pinned to no tab rather than the one that
+    // started the daemon.
+    assert!(body["terminal_id"].is_null(), "{body}");
+    assert_eq!(body["agent"], "codex");
+    assert_eq!(body["action"], "git push");
+
+    // Hot Sheet's own launches (`--no-daemon`, with or without an effort) host the session in
+    // the TUI, so the hook's terminal is the tab's own.
+    for tui in [
+        &["--no-daemon"][..],
+        &[
+            "--no-daemon",
+            "--model",
+            "gpt-6-astra",
+            "--config",
+            "model_reasoning_effort=\"high\"",
+        ][..],
+    ] {
+        let (route, _, body) = codex_hook_under(tui, ask);
+        assert_eq!(route.trim_end(), "POST /permissions/ask HTTP/1.1");
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["terminal_id"], "codex-tab-a", "{tui:?}");
+    }
+
+    // SessionStart under the TUI connects the tab (the daemon case is the next test).
+    let start = r#"{"hook_event_name":"SessionStart","session_id":"s-1","source":"startup"}"#;
+    let (route, _, _) = codex_hook_under(&["--no-daemon"], start);
+    assert_eq!(
+        route.trim_end(),
+        "POST /terminals/codex-tab-a/ai-connection HTTP/1.1"
+    );
+}
+
+/// HS2-4J7WCV: a daemon-hosted SessionStart sends nothing at all, so a listener that never
+/// answers is never contacted and the hook still exits at once.
+#[cfg(unix)]
+#[test]
+fn hs2_4j7wcv_a_daemon_hosted_codex_session_start_reports_nothing() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let output = run_codex_hook(
+        &["app-server", "--managed-daemon"],
+        &url,
+        r#"{"hook_event_name":"SessionStart","session_id":"s-1","source":"startup"}"#,
+    );
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    // The hook has exited; any connection it made would be queued on the listener.
+    assert_eq!(
+        listener.accept().map_err(|error| error.kind()).err(),
+        Some(std::io::ErrorKind::WouldBlock),
+        "a daemon-hosted SessionStart must not report a terminal"
+    );
+}
+
 #[test]
 fn claude_session_start_reports_its_inbox_socket_token_and_version() {
     // HS2-M15CHN: Claude exports its per-session inbox to hooks; SessionStart forwards the

@@ -30,6 +30,7 @@ pub mod mcp_local_layer;
 pub mod rulesync_consolidation;
 pub mod rulesync_updates;
 pub mod setup;
+pub mod shared_host;
 pub use setup::{
     ArtifactFinding, ArtifactKind, ArtifactStatus, PlannedAction, PlannedChange, RefreshReport,
     RemovalReport, SetupError, SetupPlan, SetupReport, ToolSetupFindings, apply_setup_plan,

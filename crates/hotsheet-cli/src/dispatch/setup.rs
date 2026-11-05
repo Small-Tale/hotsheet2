@@ -714,7 +714,7 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     // hook runs in. They never print a decision or context, and outside a Hot Sheet
     // terminal or without a reachable server they do nothing.
     if let Some(session) = hotsheet_cli::permission_hook::session_hook_event(&input) {
-        let terminal = std::env::var("HOTSHEET_TERMINAL_ID").unwrap_or_default();
+        let terminal = hook_terminal_id(installed_agent).unwrap_or_default();
         if let (false, Some((url, secret))) = (terminal.is_empty(), hook_server_route()) {
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
@@ -766,7 +766,7 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         .or_else(|_| std::env::var("HOTSHEET_PROJECT"))
         .unwrap_or_default();
     let route = hook_server_route();
-    let terminal_env = std::env::var("HOTSHEET_TERMINAL_ID").ok();
+    let terminal_env = hook_terminal_id(installed_agent);
     let terminal = permission_terminal_id(event, terminal_env.as_deref());
     let fallback = || {
         // In Claude auto's headless mode, a native ask with no bridge answer may be
@@ -808,6 +808,26 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         println!("{output}");
     }
     Ok(())
+}
+
+/// The inherited `HOTSHEET_TERMINAL_ID`, unless this hook runs under a shared host its agent's
+/// plugin declares (the Codex app-server daemon), whose environment names whichever tab started
+/// it (HS2-4J7WCV). The installed `--agent` decides which hosts apply, so a Claude hook never
+/// reads the process table.
+fn hook_terminal_id(installed_agent: Option<&str>) -> Option<String> {
+    use hotsheet_plugins::shared_host::{
+        ANCESTOR_DEPTH, ancestor_commands, hook_identity_untrusted, shared_hosts_for,
+    };
+    let env_agent = std::env::var("HOTSHEET_AGENT").ok();
+    let agent = installed_agent.or(env_agent.as_deref());
+    hotsheet_cli::permission_hook::trusted_terminal_id(
+        std::env::var("HOTSHEET_TERMINAL_ID").ok(),
+        || {
+            hook_identity_untrusted(agent, shared_hosts_for, || {
+                ancestor_commands(ANCESTOR_DEPTH)
+            })
+        },
+    )
 }
 
 /// Report a native Claude turn boundary without sending prompt or transcript content.

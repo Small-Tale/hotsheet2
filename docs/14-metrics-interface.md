@@ -158,8 +158,11 @@ Metrics can be shared across a team **through git** — no server sync needed:
   usage event. It snapshots the terminal session's unique live ticket claim at turn start.
   The resumed thread supplies the model when available; an unknown model remains unknown.
   Codex sessions without the shared daemon, and telemetry from before this capture path,
-  cannot be attributed by this path. Raw events already recorded without a ticket are not
-  retroactively assigned because their work cannot be identified reliably.
+  cannot be attributed by this path. Since HS2-4J7WCV, Hot Sheet launches its own Codex
+  terminals with `--no-daemon`, and a daemon-hosted session's hooks report no terminal, so no
+  Hot Sheet terminal currently records usage through this path (HS2-CYHAWB). Raw events
+  already recorded without a ticket are not retroactively assigned because their work cannot
+  be identified reliably.
   **Interactive Claude terminals (HS2-W2GNTT):** the documented `UserPromptSubmit`,
   `Stop`, and `StopFailure` hooks provide a session id and transcript path, but no token
   counters. The server snapshots the transcript byte offset and unique live claim of

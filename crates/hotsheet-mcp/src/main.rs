@@ -87,7 +87,7 @@ fn main() -> Result<()> {
                 .iter()
                 .any(|key| std::env::var_os(key).is_some())
                 && presence::hosted_by_shared_host(
-                    &presence::ancestor_commands(4),
+                    &presence::ancestor_commands(hotsheet_plugins::shared_host::ANCESTOR_DEPTH),
                     &hotsheet_plugins::shared_mcp_hosts(),
                 ),
         ),
