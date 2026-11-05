@@ -3801,10 +3801,12 @@ tiles cold-mount, at the existing progressive pace of two per turn.
 
 The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
 
-- **Size:** at every viewport width, the instance renders the dashboard's 80×24 grid at the
-  dashboard font and line height, like the lightweight preview, and claims 80×24. It never fits
-  the tile's own cell count: a fitted claim shrank the shared PTY to about 47×12 for a desktop
-  card, and every other viewer then showed that small grid (HS2-JQCGQF).
+- **Size:** at every viewport width and every Workspace Grid or drawer project-grid zoom level,
+  the instance renders the dashboard's 80×24 grid at the dashboard font and line height, like the
+  lightweight preview, and claims 80×24. Zoom changes only how many cards fit, and so the card
+  size the grid scales into, never the grid or the font. It never fits the tile's own cell count:
+  a fitted claim shrank the shared PTY to about 47×12 for a desktop card, and every other viewer
+  then showed that small grid (HS2-JQCGQF, HS2-JWKD3W).
 - **Scale:** the 80×24 screen is uniformly scaled and centered in the card, so it fills the card
   along one axis. Before its first geometry pass, and while another viewer drives the PTY, the
   tile shows the reported PTY grid scaled and contained the same way.

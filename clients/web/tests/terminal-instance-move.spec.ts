@@ -6,8 +6,16 @@ import { ticketsJson } from './ticket-page-fixture';
 // moves that same emulator and socket between the grid and the session without replay.
 const TERMINALS = ['one', 'two', 'three'].map((name) => `demo-${name}`);
 
-async function openProject(page: Page, width: number, terminals = TERMINALS, warmLimit?: number) {
-  await page.setViewportSize({ width, height: 900 });
+type FixtureTerminal = string | { id: string; kind?: 'ai' | 'shell'; tool?: string };
+
+async function openProject(
+  page: Page,
+  width: number,
+  terminals: readonly FixtureTerminal[] = TERMINALS,
+  warmLimit?: number,
+  height = 900,
+) {
+  await page.setViewportSize({ width, height });
   await page.addInitScript(() => {
     localStorage.setItem('hotsheet.open-projects', JSON.stringify(['/work/demo']));
     localStorage.setItem('hotsheet.workspace.active-project-root.v1', '/work/demo');
@@ -76,7 +84,14 @@ async function openProject(page: Page, width: number, terminals = TERMINALS, war
       });
     if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(request, []) });
     if (path.endsWith('/terminals'))
-      return route.fulfill({ json: terminals.map((id) => ({ id, alive: true, busy: false, cwd: '/work/demo' })) });
+      return route.fulfill({
+        json: terminals.map((terminal) => ({
+          ...(typeof terminal === 'string' ? { id: terminal } : terminal),
+          alive: true,
+          busy: false,
+          cwd: '/work/demo',
+        })),
+      });
     if (path.endsWith('/terminal-limits') && warmLimit !== undefined)
       return route.fulfill({
         json: {
@@ -465,3 +480,117 @@ for (const width of [1440, 1024, 390])
     const refit = (await dedicated.getAttribute('data-grid-size'))!;
     await expect.poll(async () => (await latestClaim(page, 'demo-one')) ?? null).toMatchObject(claimOf(refit));
   });
+
+// HS2-JQCGQF / HS2-JWKD3W: the Workspace Grid and drawer project-grid zoom buttons change only how many
+// tiles fit, never a live tile's PTY. At every zoom level each live tile, cold-mounted or moved from the
+// drawer, shell or AI, renders 80×24 at the dashboard font scaled into its card and claims 80×24.
+const ZOOM_TERMINALS: readonly FixtureTerminal[] = [
+  'demo-shell',
+  { id: 'demo-claude', kind: 'ai', tool: 'claude' },
+  { id: 'demo-codex', kind: 'ai', tool: 'codex' },
+];
+const ZOOM_IDS = ['demo-shell', 'demo-claude', 'demo-codex'];
+
+type TileReading = { id: string; presentation: string; grid: string; font: string; claim: string; cardWidth: number };
+
+/** Each grid tile's rendered grid, font, card width, and newest PTY claim within `scope`. */
+async function readTiles(page: Page, scope: Locator): Promise<TileReading[]> {
+  const readings = await scope
+    .locator('[data-component="terminal-tile"] [data-component="terminal-viewport"]')
+    .evaluateAll((viewports) =>
+      (viewports as HTMLElement[]).map((viewport) => ({
+        id: viewport.dataset.terminalId ?? '',
+        presentation: viewport.dataset.presentation ?? viewport.dataset.displayMode ?? '',
+        grid: viewport.dataset.gridSize ?? '',
+        font: viewport.dataset.fontSize ?? '',
+        cardWidth: Math.round(viewport.closest('[data-component="terminal-tile"]')!.getBoundingClientRect().width),
+      })),
+    );
+  return Promise.all(
+    readings.map(async (reading) => {
+      const claim = await latestClaim(page, reading.id);
+      return { ...reading, claim: claim ? `${String(claim.cols)}x${String(claim.rows)}` : '' };
+    }),
+  );
+}
+
+/** Steps `scope`'s zoom from the most tiles per row to the fewest and checks every tile at each level. */
+async function stepEveryZoom(page: Page, scope: Locator, label: string) {
+  const zoomOut = scope.getByRole('button', { name: /Zoom Out, Fit More Items/ }),
+    zoomIn = scope.getByRole('button', { name: /Zoom In, Fit Fewer Items/ }),
+    live = scope.locator('[data-component="terminal-tile"] [data-presentation="tile"]');
+  while (await zoomOut.isEnabled()) await zoomOut.click();
+  const levels: Array<{ level: number; tiles: TileReading[] }> = [];
+  for (let level = 0; ; level += 1) {
+    await expect(live, `${label} zoom level ${String(level)} live tiles`).toHaveCount(ZOOM_IDS.length);
+    for (const id of ZOOM_IDS)
+      await expectScaled80x24Tile(
+        page,
+        scope.locator(`[data-component="terminal-tile"][data-terminal-key="demo-checkout:${id}"]`),
+        id,
+      );
+    levels.push({ level, tiles: await readTiles(page, scope) });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-jqcgqf-zoom-${label.replace(' ', '-')}-${String(level)}.png`,
+      animations: 'disabled',
+    });
+    if (!(await zoomIn.isEnabled())) break;
+    await zoomIn.click();
+  }
+  await test
+    .info()
+    .attach(`${label} zoom levels`, { body: JSON.stringify(levels, null, 2), contentType: 'application/json' });
+  return levels;
+}
+
+test('keeps every live grid tile at a scaled 80x24 grid at every zoom level (HS2-JQCGQF, HS2-JWKD3W)', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await openProject(page, 2048, ZOOM_TERMINALS, undefined, 1128);
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(drawer).toHaveAttribute('data-mode', 'grid');
+  // A ruler of exactly 80 columns makes a wrong grid visible in the captures: it wraps below 80 columns
+  // and leaves blank cells beyond them. Zoomed fully out, every tile is visible and cold-mounts live.
+  const drawerZoomOut = drawer.getByRole('button', { name: /Zoom Out, Fit More Items/ });
+  while (await drawerZoomOut.isEnabled()) await drawerZoomOut.click();
+  for (const id of ZOOM_IDS)
+    await expect(drawer.locator(`[data-terminal-key="demo-checkout:${id}"] [data-presentation="tile"]`)).toContainText(
+      `${id} READY`,
+    );
+  await page.evaluate((ids) => {
+    const ruler = '1234567890'.repeat(8);
+    for (const socket of (window as unknown as { __moveSockets?: MoveSocket[] }).__moveSockets ?? [])
+      if (ids.some((id) => socket.url.includes(`/terminals/${id}/`)))
+        socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(`\r\n${ruler}`).buffer }));
+  }, ZOOM_IDS);
+  // Cold-mounted live tiles (HS2-QV814W) in the drawer project grid.
+  expect((await stepEveryZoom(page, drawer, 'drawer cold')).length).toBeGreaterThan(1);
+  const coldClaude = (await emulatorOf(page, 'demo-claude')).find((xterm) => xterm.mode === 'interactive')!;
+
+  // The same instance moved into the drawer, then back into the project grid, at every zoom.
+  await drawer.getByRole('tab', { name: /^Demo Claude/ }).click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="demo-claude"]');
+  await expect(dedicated).toHaveAttribute('data-geometry-ready', 'true');
+  const drawerFit = (await dedicated.getAttribute('data-grid-size'))!;
+  expect(drawerFit).not.toBe('80x24');
+  await expect.poll(async () => (await latestClaim(page, 'demo-claude')) ?? null).toMatchObject(claimOf(drawerFit));
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
+  await stepEveryZoom(page, drawer, 'drawer moved');
+  expect(
+    (await emulatorOf(page, 'demo-claude')).filter((xterm) => xterm.mode === 'interactive').map((xterm) => xterm.tag),
+    'the moved emulator, not a new one',
+  ).toEqual([coldClaude.tag]);
+
+  // The drawer keeps its own fitted size after the zoom walk, then the Workspace Grid hosts the instance.
+  await drawer.getByRole('tab', { name: /^Demo Claude/ }).click();
+  await expect(dedicated).toHaveAttribute('data-grid-size', drawerFit);
+  await expect.poll(async () => (await latestClaim(page, 'demo-claude')) ?? null).toMatchObject(claimOf(drawerFit));
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid', exact: true }).first().click();
+  const workspace = page.getByRole('region', { name: 'Workspace Grid' });
+  expect((await stepEveryZoom(page, workspace, 'workspace')).length).toBeGreaterThan(1);
+  expect(
+    (await emulatorOf(page, 'demo-claude')).filter((xterm) => xterm.mode === 'interactive').map((xterm) => xterm.tag),
+  ).toEqual([coldClaude.tag]);
+});

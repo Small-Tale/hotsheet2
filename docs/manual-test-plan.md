@@ -703,6 +703,7 @@ available, open an AI chat in the terminal drawer and in the conversation dialog
 ## Grid tiles claim scaled 80×24 (HS2-JQCGQF)
 
 - Run Claude Code (or another full-screen TUI) in a drawer terminal, then show the drawer project grid and the Workspace Grid on a desktop window. Confirm the tile shows a full 80-column, 24-row screen scaled to the card and that the TUI does not truncate its own lines.
+- Step every zoom level with − and + in both grids and confirm the tile stays 80 columns by 24 rows at each one; only the card size changes (HS2-JWKD3W). Close the terminal in other windows or devices first: a viewer that drives the PTY more recently makes the tile mirror its size by design (HS2-1YX5VS).
 - Return to the drawer tab and confirm the TUI reflows to the drawer's full width and height.
 
 ## Rulesync local policy migration review
