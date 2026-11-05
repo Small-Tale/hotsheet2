@@ -37559,3 +37559,43 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     }
   }
 });
+
+test('opens command history from a hold when a busy page runs the hold timer late (HS2-1TXYXS)', async ({ page }) => {
+  await mockProject(page);
+  const runs: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/commands\/[^/]+\/run$/.test(new URL(request.url()).pathname))
+      runs.push(request.url());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const command = page.getByRole('button', { name: 'Run checks' }),
+    history = page.locator('[data-dialog-component="command-run-dialog"]');
+  await expect(command).toHaveAttribute('title', 'Press and hold for command history.');
+  // A real hold, with the page's main thread busy across the hold deadline: the macOS runner's slow
+  // pages ran the hold timer after the release, which cancelled it and the history never opened.
+  await command.hover();
+  await page.mouse.down();
+  const busy = page.evaluate(() => {
+    const end = performance.now() + 1500;
+    while (performance.now() < end) {
+      // Hold the main thread so the release is queued beside the overdue hold timer.
+    }
+  });
+  // The hold itself is a duration, not a wait for state: release after the 550 ms hold.
+  await page.waitForTimeout(700);
+  const release = page.mouse.up();
+  await busy;
+  await release;
+  await expect(history).toHaveAttribute('open', '');
+  // The click that follows the release is the end of the hold, not a run.
+  await expect(page.getByRole('button', { name: 'Running Run checks' })).toHaveCount(0);
+  expect(runs).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(history).toHaveCount(0);
+  // A short press still runs the command.
+  await command.click();
+  await expect(page.getByRole('button', { name: 'Running Run checks' })).toBeVisible();
+  expect(runs).toHaveLength(1);
+});

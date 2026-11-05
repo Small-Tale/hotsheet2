@@ -808,6 +808,10 @@ preview/download, server directory browser) are separate design work.
   shows its title and current status), and a shell launch's terminal; with none it says
   Never run (HS2-PWNPM2). A launch record that fails for any reason except an older
   server without the route shows the error instead of leaving the history silently empty.
+  A hold is a press of at least 550 ms, measured between the pointer events' own
+  timestamps, so a busy page that runs the hold timer late still opens the history on
+  release instead of dropping the hold, and the click that ends a hold does not run the
+  command (HS2-1TXYXS).
   Definitions are edited in Project
   Settings through a responsive master-detail editor with add, reorder, delete, typed
   target fields, validation, and debounced autosave; raw command JSON is not exposed as the

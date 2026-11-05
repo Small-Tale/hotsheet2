@@ -433,7 +433,8 @@ shell-and-global	document.addEventListener	'pointerdown'
 shell-and-global	document.addEventListener	'keydown'
 shell-and-global	wireContextMenuDismissal	document.body
 shell-and-global	document.addEventListener	'pointerdown'
-shell-and-global	document.addEventListener	eventName
+shell-and-global	document.addEventListener	'pointerup'
+shell-and-global	document.addEventListener	'pointercancel'
 shell-and-global	document.addEventListener	'keydown'
 shell-and-global	delegate	document.body	'click'	'*'
 shell-and-global	delegateCapture	document.body	'pointerup'	'*'

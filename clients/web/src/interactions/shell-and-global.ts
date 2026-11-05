@@ -8,6 +8,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
 import { type AppRegionId, normalizeAppRegionSize, terminalDrawerDragDecision } from '../app-region-resize';
+import { createCommandHold } from '../command-hold';
 import { type DismissibleContextMenu, wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
@@ -120,7 +121,6 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly repositoryFileMenu: Signal<RepositoryFileMenu | undefined>;
   readonly attachmentMenu: Signal<AttachmentMenu | undefined>;
   commandLongPressFired: boolean;
-  commandLongPressTimer: number | undefined;
   readonly openCommandHistory: (commandId: string) => Promise<void>;
   readonly attachmentGalleryUrl: Signal<string | undefined>;
   readonly shiftGallery: (delta: number) => void;
@@ -676,32 +676,47 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       dismissible('attachment', attachmentMenu),
     ]),
   );
+  // A held command button opens its run history. The release's timestamp also counts, so a busy page
+  // that runs the hold timer late still opens it (HS2-1TXYXS).
+  const commandHold = createCommandHold(
+    {
+      setTimeout: (callback, ms) => window.setTimeout(callback, ms),
+      clearTimeout: (id) => {
+        window.clearTimeout(id);
+      },
+    },
+    (commandId) => {
+      dependencies.commandLongPressFired = true;
+      void openCommandHistory(commandId);
+    },
+  );
+  lifetime.add(() => {
+    commandHold.cancel();
+  });
   document.addEventListener(
     'pointerdown',
     (event) => {
       const target = (event.target as Element).closest<HTMLElement>('[data-action="run-command"]');
       if (!target) return;
       dependencies.commandLongPressFired = false;
-      if (dependencies.commandLongPressTimer !== undefined) window.clearTimeout(dependencies.commandLongPressTimer);
-      dependencies.commandLongPressTimer = window.setTimeout(() => {
-        dependencies.commandLongPressTimer = undefined;
-        dependencies.commandLongPressFired = true;
-        void openCommandHistory(target.dataset.itemId!);
-      }, 550);
+      commandHold.press(target.dataset.itemId!, event.timeStamp);
     },
     { signal: lifetime.signal },
   );
-  for (const eventName of ['pointerup', 'pointercancel'] as const)
-    document.addEventListener(
-      eventName,
-      () => {
-        if (dependencies.commandLongPressTimer !== undefined) {
-          window.clearTimeout(dependencies.commandLongPressTimer);
-          dependencies.commandLongPressTimer = undefined;
-        }
-      },
-      { signal: lifetime.signal },
-    );
+  document.addEventListener(
+    'pointerup',
+    (event) => {
+      commandHold.release(event.timeStamp);
+    },
+    { signal: lifetime.signal },
+  );
+  document.addEventListener(
+    'pointercancel',
+    () => {
+      commandHold.cancel();
+    },
+    { signal: lifetime.signal },
+  );
   document.addEventListener(
     'keydown',
     (event) => {

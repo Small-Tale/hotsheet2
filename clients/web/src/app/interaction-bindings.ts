@@ -25,7 +25,7 @@ type InteractionDependencies = Parameters<typeof wireProjectLifecycleInteraction
   Parameters<typeof wireInspectorAndEditorInteractions>[0] &
   Parameters<typeof wireShellAndGlobalInteractions>[0];
 
-type OwnedInteractionState = 'commandLongPressFired' | 'commandLongPressTimer' | 'draggedTickets';
+type OwnedInteractionState = 'commandLongPressFired' | 'draggedTickets';
 
 /** Live application dependencies consumed by the interaction registration groups. */
 export type InteractionBindingsPort = Omit<InteractionDependencies, OwnedInteractionState>;
@@ -36,7 +36,6 @@ export type InteractionBindingsPort = Omit<InteractionDependencies, OwnedInterac
  * runtime's getter/setter semantics for state shared with controllers and rendering.
  */
 export function createHotSheetInteractionBindings(port: InteractionBindingsPort): HotSheetInteractionRegistrations {
-  let commandLongPressTimer: number | undefined;
   let commandLongPressFired = false;
   let draggedTickets: InteractionDependencies['draggedTickets'];
 
@@ -46,12 +45,6 @@ export function createHotSheetInteractionBindings(port: InteractionBindingsPort)
       get: () => commandLongPressFired,
       set: (value: boolean) => {
         commandLongPressFired = value;
-      },
-    },
-    commandLongPressTimer: {
-      get: () => commandLongPressTimer,
-      set: (value: number | undefined) => {
-        commandLongPressTimer = value;
       },
     },
     draggedTickets: {
