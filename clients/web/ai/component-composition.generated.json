@@ -5951,6 +5951,75 @@
       }
     },
     {
+      "key": "hotsheet-web:stats-this-mac",
+      "package": "hotsheet-web",
+      "id": "stats-this-mac",
+      "name": "StatsThisMac",
+      "kind": "component",
+      "purpose": "The server host's health cards on Stats: disk, memory, CPU, and power, plus network and thermal only while degraded; crossed cards tint and unsupported signals say so (HS2-NS0AYR).",
+      "publicExports": [
+        {
+          "name": "StatsThisMac"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/stats-this-mac.tsx",
+        "src/stats-this-mac.ts"
+      ],
+      "source": "src/components/stats-this-mac.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "stats-this-mac"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "stats-this-mac"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-this-mac.tsx",
+        "composition": "src/components/stats-this-mac.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:status-badge",
       "package": "hotsheet-web",
       "id": "status-badge",

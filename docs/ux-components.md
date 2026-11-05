@@ -326,6 +326,15 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   terminal through `open-terminal-project`. A row with no open project or terminal has no action. A
   native table (Kerf has no tabular-data component) that scrolls sideways inside its own container.
 
+- `StatsThisMac` — **demo built** (`components/stats-this-mac.tsx`, HS2-NS0AYR): the server host's
+  health cards on Stats, headed by the host name and "Server host · platform · sampled time". A Kerf
+  `Grid` of framed `ContentItem` cards: disk free with rate, time to full, and total; memory pressure
+  with swap and its trend; CPU with the top process; power and sleep (kept awake, on battery, lid
+  closed on battery, may sleep when idle); network and thermal only while degraded. A crossed card
+  takes `appearance="warning"` or `"danger"`; unsupported or unreadable signals read "Not supported"
+  or "Unavailable" with no value. Loading, a failed first read, and a stale snapshot use Kerf
+  `EmptyState` and `StateBanner`. The demo's Scenario setting covers each state.
+
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain

@@ -163,6 +163,7 @@ import {
   guidanceUpdateCacheIsFresh,
 } from '../guidance-update-cache';
 import { projectHaltedSessions } from '../halted-sessions';
+import { createHostHealthResource } from '../host-health-resource';
 import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
 import type { DetailsFinishTask, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
@@ -4025,6 +4026,12 @@ export async function startHotSheetWebClient() {
   });
   // Server-pushed per-store live state that glance surfaces bind to (HS2-JTTQMY).
   const liveStates = createLiveStateStore();
+  // The server host's health (HS2-NS0AYR). Every project reaches the same machine server through
+  // the bridge, so one resource reads through the Stats project, else the first open project.
+  const hostHealth = createHostHealthResource(() => {
+    const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
+    return new Api(target?.apiPath ?? '');
+  });
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
@@ -4054,6 +4061,7 @@ export async function startHotSheetWebClient() {
     onActivity: announcerController.onActivity,
     loadRepositorySize,
     liveStates,
+    hostHealth,
   });
   const {
     feedbackDelivery,
@@ -4708,6 +4716,7 @@ export async function startHotSheetWebClient() {
     liveStates,
     analyticsByProject,
     terminalGroups,
+    hostHealth,
   });
   const { workspaceTerminalGroups, globalWorkspaceSurfaceProps, projectTerminalDrawerProps, aiConversationSurface } =
     createTerminalPresentation({
@@ -6183,6 +6192,7 @@ export async function startHotSheetWebClient() {
       workerDetailRefresh?.dispose();
       disposeProjectChangeStreams();
       statsGlance.dispose();
+      hostHealth.dispose();
       liveStates.reset();
       announcerController.dispose();
       terminalDashboardController.dispose();

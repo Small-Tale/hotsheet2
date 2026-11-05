@@ -1969,6 +1969,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "stats-this-mac",
+      "name": "StatsThisMac",
+      "kind": "component",
+      "purpose": "The server host's health cards on Stats: disk, memory, CPU, and power, plus network and thermal only while degraded; crossed cards tint and unsupported signals say so (HS2-NS0AYR).",
+      "useWhen": [
+        "Showing the server host's health with trends and projections at full size on Stats."
+      ],
+      "avoidWhen": [
+        "A compact glance surface; show one all-normal line and a callout per crossed condition instead."
+      ],
+      "publicClasses": [
+        "stats-this-mac"
+      ],
+      "publicTokens": [],
+      "source": "src/components/stats-this-mac.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "status-badge",
       "name": "StatusBadge",
       "kind": "component",

@@ -148,7 +148,7 @@ dots float **fixed at the bottom of the sidebar** above scrolling content (appro
 `r3-grid-sidebar-page1`). The selected page persists per viewer; Completion is the default. Paging uses
 Kerf `PagedView` (`KF-0QJ2K3`).
 
-## 34.8 Stats Right now (HS2-ERTNJ7 shipped; HS2-9AN4DN, HS2-NS0AYR design only; HS2-DTAVQA partial)
+## 34.8 Stats Right now (HS2-ERTNJ7, HS2-NS0AYR shipped; HS2-9AN4DN design only; HS2-DTAVQA partial)
 
 A **Right now** section above the existing "Ticket flow and usage" on the Stats page, approved as
 `m3-stats-right-now-{light,dark}`. Scope follows §34.3.
@@ -174,6 +174,13 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   when known; memory pressure with swap trend; CPU with a sparkline and top process; power and sleep (kept
   awake or at risk); network and thermal only when degraded. Cards past a threshold take the warning tone.
   The group is labelled with the server's host name, because the viewer may be remote.
+- **Shipped (HS2-NS0AYR).** `StatsThisMac` sits below the Projects table and above Ticket flow and
+  usage, headed by the host name with "Server host · platform · sampled time". Disk, memory, CPU,
+  and power always show; network and thermal only while warning or critical. Crossed cards take
+  the warning or danger tone; `unsupported` and `unavailable` signals say so and show no value. The
+  runtime creates one host-health resource fed by every project stream's `host_health` events and
+  resyncs. The CPU sparkline and the largest growing directory wait on server-side history in the
+  snapshot (HS2-RBFR94); the left column beside the cards is reserved for the Overnight timeline.
 - **Host health sampler (HS2-DTAVQA):** a server-side sampler of those signals pushes threshold crossings
   and coarse snapshots over the existing WebSocket; sampling cadence is server-local and clients never
   poll. Thresholds are configurable with CLI and REST parity, and use hysteresis so they do not flap. macOS

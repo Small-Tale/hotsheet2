@@ -15,6 +15,7 @@ import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } fr
 import { inspectorToggle, type NavigationPanelParts, type SidebarPanelParts } from './sidebar-panel';
 import { StatsDashboard, type StatsDashboardProps } from './stats-dashboard';
 import { StatsRightNow, type StatsRightNowProps } from './stats-right-now';
+import { StatsThisMac, type StatsThisMacProps } from './stats-this-mac';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
 import {
@@ -100,6 +101,8 @@ export type GlobalWorkspaceSurfaceProps =
       analytics: StatsDashboardProps['projects'];
       /** Live glance numbers above the ticket flow (HS2-ERTNJ7). */
       rightNow?: StatsRightNowProps;
+      /** The server host's health cards (HS2-NS0AYR). */
+      thisMac?: StatsThisMacProps;
       calibration?: ConfidenceCalibrationState;
       /** Git object and attachment sizes against GitHub's limits (HS2-QF44T7). */
       repositorySize?: RepositorySizeState;
@@ -118,6 +121,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
             {props.projectName} project statistics
           </Text>
           {props.rightNow && <StatsRightNow {...props.rightNow} />}
+          {props.thisMac && <StatsThisMac {...props.thisMac} />}
           <StatsDashboard projects={props.analytics} />
           <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
           <RepositorySize state={props.repositorySize ?? { status: 'loading' }} compaction={props.compaction} />
@@ -131,6 +135,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
           Cross-project statistics
         </Text>
         {props.rightNow && <StatsRightNow {...props.rightNow} />}
+        {props.thisMac && <StatsThisMac {...props.thisMac} />}
         <StatsDashboard projects={props.analytics} crossProject />
       </div>
     </Pane>

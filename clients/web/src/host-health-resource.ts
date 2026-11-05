@@ -81,3 +81,5 @@ export function createHostHealthResource(transport: () => Transport) {
 
   return { state, refresh, applyEvents, resync, dispose };
 }
+
+export type HostHealthResource = ReturnType<typeof createHostHealthResource>;

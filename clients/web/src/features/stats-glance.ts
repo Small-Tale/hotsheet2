@@ -4,7 +4,9 @@ import type { LiveStoreState } from '../api';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { StatsDashboardState } from '../components/stats-dashboard';
 import type { StatsRightNowProps } from '../components/stats-right-now';
+import type { StatsThisMacProps } from '../components/stats-this-mac';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { HostHealthResourceState } from '../host-health-resource';
 import type { Project } from '../interactions/types';
 import type { LiveStateStore } from '../live-state';
 import { completedSinceUtcMidnight, rightNowRows, rightNowTiles } from '../stats-right-now';
@@ -19,6 +21,8 @@ export interface StatsGlanceDependencies {
   liveStates: LiveStateStore;
   analyticsByProject: Signal<Record<string, StatsDashboardState>>;
   terminalGroups: Signal<TerminalDashboardGroup[]>;
+  /** The server host's health for the This Mac cards (HS2-NS0AYR). */
+  hostHealth?: { state: Signal<HostHealthResourceState> };
   /** Injected for tests. */
   now?: () => number;
   setInterval?: (callback: () => void, ms: number) => number;
@@ -113,6 +117,11 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     };
   }
 
+  /** The This Mac cards' input: the pushed server-host snapshot (HS2-NS0AYR). */
+  function thisMac(): StatsThisMacProps | undefined {
+    return dependencies.hostHealth ? { state: dependencies.hostHealth.state.value } : undefined;
+  }
+
   function dispose() {
     disposeApplied();
     disposeClock();
@@ -120,7 +129,7 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     timer = undefined;
   }
 
-  return { rightNow, clock, appliedAt, dispose };
+  return { rightNow, thisMac, clock, appliedAt, dispose };
 }
 
 export type StatsGlanceController = ReturnType<typeof createStatsGlanceController>;

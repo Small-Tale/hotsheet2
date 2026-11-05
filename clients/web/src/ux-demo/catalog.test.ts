@@ -106,6 +106,7 @@ describe('UX demo catalog', () => {
       'stats-dashboard',
       'stats-right-now',
       'stats-projects-table',
+      'stats-this-mac',
       'glance-gauge',
       'glance-sparkline',
       'repository-size',

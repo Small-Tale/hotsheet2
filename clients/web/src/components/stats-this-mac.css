@@ -1,0 +1,5 @@
+/* The Stats This Mac cards (HS2-NS0AYR). Kerf List, Grid, ContentItem, and Text own the stack,
+   cards, tint, and copy; the section only keeps itself from widening the page. */
+.stats-this-mac {
+  min-width: 0;
+}

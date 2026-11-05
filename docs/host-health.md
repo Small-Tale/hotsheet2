@@ -1,8 +1,8 @@
 # Host health sampler
 
 Status: **partial**. The server sampler, push channel, REST and CLI configuration, and a client
-resource have shipped (HS2-DTAVQA). The glance surfaces that render them are follow-ups: the stats
-**This Mac** cards (HS2-NS0AYR) and the sidebar callouts (HS2-F788GW, HS2-E1AQE8). The approved
+resource have shipped (HS2-DTAVQA), and the Stats **This Mac** cards render them (HS2-NS0AYR). The
+sidebar callouts are follow-ups (HS2-F788GW, HS2-E1AQE8). The approved
 design is HS2-CT5EWR.
 
 Related: [04 Core server and CLI](04-core-server-cli.md) (change bus, `/ws/sync`, `/ws/poll`),
@@ -105,7 +105,9 @@ and makes no network requests. Clients never poll.
   A client reads it in three cases: on start, on each `host_health` event, and on change-stream
   resync (initial, reconnect, or overflow). The event payload stays minimal so that `ChangeEvent`
   needs no new field.
-- **Client resource.** The web client resource is `clients/web/src/host-health-resource.ts`. It
+- **Client resource.** The web client resource is `clients/web/src/host-health-resource.ts`. The
+  runtime creates one per client (every project reaches the same machine server through the
+  bridge) and feeds it every project stream's events and resyncs (HS2-NS0AYR). It
   coalesces bursts into one follow-up read. It dedupes the same event cursor arriving through
   several project streams of one server, and it resets that cursor on resync, because a
   restarted server restarts its cursors.

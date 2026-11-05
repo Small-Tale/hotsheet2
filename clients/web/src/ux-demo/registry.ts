@@ -41,6 +41,7 @@ import { demoModule as setupSettings } from './setup-settings-demo';
 import { demoModule as statsDashboard } from './stats-dashboard-demo';
 import { demoModule as statsProjectsTable } from './stats-projects-table-demo';
 import { demoModule as statsRightNow } from './stats-right-now-demo';
+import { demoModule as statsThisMac } from './stats-this-mac-demo';
 import { demoModule as statusBadge } from './status-badge-demo';
 import { demoModule as tagChip } from './tag-chip-demo';
 import { demoModule as terminalComponents } from './terminal-components-demo';
@@ -111,6 +112,7 @@ export const demoModules: readonly DemoModule[] = [
   glanceSparkline,
   statsRightNow,
   statsProjectsTable,
+  statsThisMac,
 ];
 
 const entries = new Map<string, DemoEntry>();

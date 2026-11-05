@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { StatsDashboardState } from '../components/stats-dashboard';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { HostHealthResourceState } from '../host-health-resource';
 import type { Project } from '../interactions/types';
 import { createLiveStateStore } from '../live-state';
+import { hostHealthFixture } from '../ux-demo/host-health-fixtures';
 import { GLANCE_FIXTURE_NOW as NOW, glanceScenario } from '../ux-demo/live-state-fixtures';
 import { createStatsGlanceController, STATS_GLANCE_TICK_MS } from './stats-glance';
 
@@ -122,6 +124,26 @@ describe('HS2-ERTNJ7 stats glance controller', () => {
     expect(scoped.rows.map((row) => row.name)).toEqual(['Hot Sheet 2']);
     expect(scoped.tiles.needsYou).toBe(0);
     test.controller.dispose();
+  });
+
+  it('passes the pushed server-host snapshot to the This Mac cards (HS2-NS0AYR)', () => {
+    const test = setup();
+    expect(test.controller.thisMac()).toBeUndefined();
+    test.controller.dispose();
+    const state = signal<HostHealthResourceState>({ loading: true });
+    const withHost = createStatsGlanceController({
+      projects: signal<Project[]>([]),
+      shellMode: signal<ProjectTabBarMode>('project'),
+      statsProjectId: signal<string | undefined>(undefined),
+      liveStates: createLiveStateStore(),
+      analyticsByProject: signal<Record<string, StatsDashboardState>>({}),
+      terminalGroups: signal<TerminalDashboardGroup[]>([]),
+      hostHealth: { state },
+    });
+    expect(withHost.thisMac()).toEqual({ state: { loading: true } });
+    state.value = { loading: false, snapshot: hostHealthFixture('crossed') };
+    expect(withHost.thisMac()?.state.snapshot?.host.name).toBe('studio');
+    withHost.dispose();
   });
 
   it('counts completions once per shared store, only after no scoped analytics report is loading', () => {

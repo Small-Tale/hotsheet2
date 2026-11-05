@@ -15,6 +15,7 @@ import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
 import { projectScopedServerPath } from '../src/project-bridge';
+import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
@@ -24771,6 +24772,104 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
   await projectRows.nth(0).getByRole('button', { name: 'Open Terminal' }).click();
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mode', 'project');
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
+});
+
+test('Stats This Mac cards show the server host, tint crossed thresholds, and re-read only on a pushed event (HS2-NS0AYR)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  await page.route('**/live-state', (route) =>
+    route.fulfill({ json: { epoch_ms: 1, stores: glanceScenario(Date.now()) } }),
+  );
+  let snapshot = hostHealthFixture('normal');
+  let hostReads = 0;
+  await page.route('**/host-health', (route) => {
+    hostReads += 1;
+    return route.fulfill({ json: snapshot });
+  });
+  // Like the real server, the pushed event is also replayable by cursor from the long poll.
+  const pushed: Array<{ cursor: number; store: string; kind: string; id: string; slug: string; message: string }> = [];
+  await page.route('**/ws/poll*', (route) => {
+    const since = new URL(route.request().url()).searchParams.get('since');
+    if (since === null) return route.fulfill({ json: { cursor: 100 + pushed.length, events: [], overflow: false } });
+    const events = pushed.filter((event) => event.cursor > Number(since));
+    return events.length
+      ? route.fulfill({ json: { cursor: 100 + pushed.length, events, overflow: false } })
+      : route.fallback();
+  });
+  const sockets: import('@playwright/test').WebSocketRoute[] = [];
+  await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
+    sockets.push(route);
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  const region = page.getByRole('region', { name: 'Cross-Project Stats' });
+  const thisMac = region.getByRole('region', { name: 'Server Host studio' });
+  await expect(thisMac).toBeVisible();
+  await expect(thisMac).toContainText(/Server host · macOS · aarch64 · sampled/u);
+  // Below the Right now section and above Ticket flow and usage.
+  const order = await region.evaluate((node) =>
+    ['stats-right-now', 'stats-this-mac', 'stats-dashboard'].map(
+      (name) => node.querySelector(`[data-component="${name}"]`)?.getBoundingClientRect().top ?? -1,
+    ),
+  );
+  expect(order[0]).toBeGreaterThanOrEqual(0);
+  expect(order[0]).toBeLessThan(order[1]);
+  expect(order[1]).toBeLessThan(order[2]);
+  const cards = thisMac.locator('[data-card]');
+  expect(await cards.evaluateAll((items) => items.map((item) => item.getAttribute('data-card')))).toEqual([
+    'disk',
+    'memory',
+    'cpu',
+    'power',
+  ]);
+  await expect(thisMac.locator('[data-card="power"]')).toContainText('Kept awake');
+  const readsBefore = hostReads;
+  expect(readsBefore).toBeGreaterThan(0);
+
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await thisMac.screenshot({ path: `target/visual-captures/hs2-ns0ayr-this-mac-normal-${scheme}-wide.png` });
+  }
+
+  // The server pushes a threshold crossing: the client re-reads once and the crossed cards tint.
+  snapshot = hostHealthFixture('crossed');
+  await expect.poll(() => sockets.length).toBeGreaterThan(0);
+  const crossing = {
+    cursor: 101,
+    store: '',
+    kind: 'host_health',
+    id: 'disk',
+    slug: 'warning',
+    message: 'projected_full',
+  };
+  pushed.push(crossing);
+  for (const socket of sockets) socket.send(JSON.stringify(crossing));
+  await expect(thisMac.locator('[data-card="disk"]')).toContainText('full in ~8h 36m');
+  await expect(thisMac.locator('[data-card="disk"]')).toHaveAttribute('data-status', 'warning');
+  await expect(thisMac.locator('[data-card="network"]')).toHaveAttribute('data-status', 'critical');
+  await expect(thisMac.locator('[data-card="memory"]')).toHaveAttribute('data-status', 'normal');
+  expect(hostReads).toBe(readsBefore + 1);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1024],
+      ['narrow', 600],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(thisMac).toBeVisible();
+      expect(await thisMac.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await thisMac.screenshot({ path: `target/visual-captures/hs2-ns0ayr-this-mac-crossed-${scheme}-${label}.png` });
+    }
+  }
 });
 
 test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({

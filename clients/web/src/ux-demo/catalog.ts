@@ -176,6 +176,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('stats-dashboard', ['state-banner']),
           cataloged('stats-right-now', ['glance-gauge', 'glance-sparkline', 'stats-projects-table', 'list', 'text']),
           cataloged('stats-projects-table', ['button', 'text']),
+          cataloged('stats-this-mac', ['state-banner', 'list', 'text']),
           cataloged('glance-gauge'),
           cataloged('glance-sparkline'),
           cataloged('repository-size', ['state-banner', 'value-table', 'badge']),

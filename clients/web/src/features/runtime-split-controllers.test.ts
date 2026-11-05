@@ -321,6 +321,51 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     owner.dispose();
   });
 
+  it('change streams: host_health events and resyncs feed the host health resource, idle time reads nothing (HS2-NS0AYR)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      hostHealth = { applyEvents: vi.fn(() => undefined), resync: vi.fn(async () => undefined) },
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('stats'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        hostHealth,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onResync.get('/api/b')!('reconnect');
+    expect(hostHealth.resync).toHaveBeenCalledTimes(2);
+    const events = [
+      { cursor: 4, store: '', kind: 'host_health', id: 'disk', slug: 'warning', message: 'low_free_space' },
+    ];
+    await streams.onEvents.get('/api/a')!({ cursor: 4, overflow: false, events });
+    expect(hostHealth.applyEvents).toHaveBeenCalledWith(events);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(hostHealth.resync).toHaveBeenCalledTimes(2);
+    expect(hostHealth.applyEvents).toHaveBeenCalledTimes(1);
+    owner.dispose();
+  });
+
   it('change streams: a repository_size event reloads only that project size report (HS2-KKFEY5)', async () => {
     const projects = signal([project('a'), project('b')]),
       noop = vi.fn(async () => undefined),
