@@ -506,7 +506,7 @@ fn discover_ticket(
         .filter(|commit| !reconciled.contains(commit.sha.as_str()))
         .collect::<Vec<_>>();
     let mut ranges = unmerged_ranges(&pending);
-    ranges.extend(contiguous_ranges(&all, &merged));
+    ranges.extend(merged_ranges(root, &merged));
     let mut seen: HashSet<String> = merged.iter().map(|commit| commit.sha.clone()).collect();
     for shipping in records.iter().flat_map(|record| &record.shipping_commits) {
         if !seen.insert(shipping.clone()) {
@@ -632,8 +632,9 @@ fn file_commits(commits: &[CodeReviewCommit]) -> Vec<&CodeReviewCommit> {
 /// Split commits into maximal first-parent runs as `(oldest, newest)` pairs (HS2-F10Y9P).
 /// A run continues only while exactly one selected commit has the previous one as its
 /// first parent, so a run never spans a commit outside the selection. On linear history
-/// these are the same runs as [`contiguous_ranges`]; across merges they are stricter, since
-/// adjacency in a date-ordered log does not imply a parent link.
+/// these are the same runs as date-ordered log adjacency would give; across merges they are
+/// stricter, since adjacency in a date-ordered log does not imply a parent link. Merged
+/// commit ranges ([`merged_ranges`]) use the same runs (HS2-0WPFZV).
 fn first_parent_runs<'a>(
     selected: &[&'a CodeReviewCommit],
 ) -> Vec<(&'a CodeReviewCommit, &'a CodeReviewCommit)> {
@@ -1577,37 +1578,44 @@ fn is_ticket_char(value: char) -> bool {
     value.is_ascii_alphanumeric() || value == '_' || value == '-'
 }
 
-fn contiguous_ranges(
-    all: &[CodeReviewCommit],
-    matched: &[CodeReviewCommit],
-) -> Vec<CodeReviewRange> {
-    let matched = matched
+/// Reviewable ranges among the ticket's merged commits, newest run first (HS2-0WPFZV).
+/// Each range is one maximal first-parent run ([`first_parent_runs`]) ordered by topology
+/// ([`order_runs`]), so a `from^..to` launch never spans another ticket's commits even when
+/// a date-ordered log lists two ticket commits next to each other across a merge.
+fn merged_ranges(root: &Path, merged: &[CodeReviewCommit]) -> Vec<CodeReviewRange> {
+    let mut seen = HashSet::new();
+    let selected = merged
         .iter()
-        .map(|commit| commit.sha.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    let mut ranges = Vec::new();
-    let mut run: Vec<&CodeReviewCommit> = Vec::new();
-    let flush = |run: &mut Vec<&CodeReviewCommit>, ranges: &mut Vec<CodeReviewRange>| {
-        if let (Some(newest), Some(oldest)) = (run.first(), run.last()) {
-            ranges.push(CodeReviewRange {
+        .filter(|commit| seen.insert(commit.sha.as_str()))
+        .collect::<Vec<_>>();
+    let by_sha: HashMap<&str, &CodeReviewCommit> = selected
+        .iter()
+        .map(|commit| (commit.sha.as_str(), *commit))
+        .collect();
+    let mut runs = order_runs(root, first_parent_runs(&selected));
+    runs.reverse();
+    runs.into_iter()
+        .map(|(oldest, newest)| {
+            let mut count = 1;
+            let mut current = newest;
+            while current.sha != oldest.sha {
+                let Some(parent) = current
+                    .parents
+                    .first()
+                    .and_then(|parent| by_sha.get(parent.as_str()))
+                else {
+                    break;
+                };
+                current = parent;
+                count += 1;
+            }
+            CodeReviewRange {
                 from: oldest.sha.clone(),
                 to: newest.sha.clone(),
-                count: run.len(),
-            });
-        }
-        run.clear();
-    };
-    for commit in all {
-        if matched.contains(commit.sha.as_str()) {
-            run.push(commit);
-        } else if !run.is_empty() {
-            flush(&mut run, &mut ranges);
-        }
-    }
-    if !run.is_empty() {
-        flush(&mut run, &mut ranges);
-    }
-    ranges
+                count,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1952,7 +1960,7 @@ mod tests {
 
     #[test]
     fn adjacent_matches_form_reviewable_ranges_without_crossing_unrelated_commits() {
-        let all = vec![
+        let all = [
             commit("eeeeeeee", "HS2-X: later polish", "dddddddd"),
             commit("dddddddd", "HS2-X: later implementation", "cccccccc"),
             commit("cccccccc", "unrelated", "bbbbbbbb"),
@@ -1964,8 +1972,10 @@ mod tests {
             .filter(|entry| subject_mentions_ticket(&entry.subject, "HS2-X"))
             .cloned()
             .collect::<Vec<_>>();
+        // Outside a repository `order_runs` falls back to commit time, then SHA.
+        let outside = tempfile::tempdir().unwrap();
         assert_eq!(
-            contiguous_ranges(&all, &matched),
+            merged_ranges(outside.path(), &matched),
             vec![
                 CodeReviewRange {
                     from: "dddddddd".into(),
@@ -2463,6 +2473,86 @@ mod tests {
         git(&["commit", "-m", "HS2-AAAAAA Second run"]);
         let second = git(&["rev-parse", "HEAD"]);
         (first, other, second)
+    }
+
+    /// Commit everything staged with an exact committer and author time, so the date-ordered
+    /// log is deterministic.
+    fn commit_at(root: &Path, message: &str, seconds: u32) -> String {
+        let date = format!("2026-09-02T00:00:{seconds:02}Z");
+        let run = |args: &[&str]| {
+            let output = hotsheet_ticketing::git::command_in(root)
+                .env("GIT_COMMITTER_DATE", &date)
+                .env("GIT_AUTHOR_DATE", &date)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        run(&["commit", "-q", "--allow-empty", "-m", message]);
+        run(&["rev-parse", "HEAD"])
+    }
+
+    #[test]
+    fn hs2_0wpfzv_merged_ranges_follow_first_parents_not_date_adjacency() {
+        let (temporary, git) = synthetic_repository();
+        let root = temporary.path();
+        write(root, "seed.txt", "seed\n");
+        git(&["add", "-A"]);
+        commit_at(root, "Seed", 0);
+        // A side branch carries another ticket's commit under two ticket commits.
+        git(&["checkout", "-q", "-b", "side"]);
+        write(root, "b.txt", "b\n");
+        git(&["add", "-A"]);
+        let other = commit_at(root, "HS2-BBBBBB Other ticket", 1);
+        write(root, "side.txt", "side\n");
+        git(&["add", "-A"]);
+        let side_first = commit_at(root, "HS2-AAAAAA Side work", 2);
+        write(root, "side.txt", "side\nmore\n");
+        git(&["add", "-A"]);
+        let side_second = commit_at(root, "HS2-AAAAAA Side polish", 3);
+        git(&["checkout", "-q", "main"]);
+        write(root, "main.txt", "main\n");
+        git(&["add", "-A"]);
+        let main_only = commit_at(root, "HS2-AAAAAA Main work", 4);
+        git(&["merge", "-q", "--no-ff", "--no-commit", "side"]);
+        commit_at(root, "Merge side", 5);
+
+        // The defect: by date, the main commit sits next to the side run, so log adjacency
+        // joined them into one range whose `from^..to` diff spans HS2-BBBBBB.
+        let dated = git(&["log", "--format=%H", "HEAD"]);
+        let dated = dated.lines().collect::<Vec<_>>();
+        assert_eq!(
+            dated[1..5],
+            [
+                main_only.as_str(),
+                side_second.as_str(),
+                side_first.as_str(),
+                other.as_str()
+            ]
+        );
+
+        let review = discover(root, "HS2-AAAAAA").unwrap();
+        // Newest run first: topology ranks the merge's first parent ahead of the side run.
+        assert_eq!(
+            review.ranges,
+            vec![
+                CodeReviewRange {
+                    from: main_only.clone(),
+                    to: main_only.clone(),
+                    count: 1,
+                },
+                CodeReviewRange {
+                    from: side_first.clone(),
+                    to: side_second.clone(),
+                    count: 2,
+                },
+            ]
+        );
     }
 
     #[test]

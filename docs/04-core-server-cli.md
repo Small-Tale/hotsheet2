@@ -427,7 +427,9 @@ explicitly mapped originals, includes the recorded shipping commits even when
 their messages differ, and keeps later branch work pending. A checkout behind
 the recorded remote main tip reports that state separately. Replaying the same
 operation is idempotent; a changed mapping requires a new reviewed operation.
-Adjacent matching commits form reviewable ranges without spanning unrelated work. The
+Matching commits linked by first parents form reviewable ranges without spanning
+unrelated work, newest range first; adjacency in the date-ordered log never joins them,
+so a range across merge history excludes another ticket's commits (HS2-0WPFZV). The
 response also reports the checkout's Git `diff.tool`. The matching `POST` accepts only a
 single commit or adjacent range returned by a fresh discovery, rejects arbitrary refs,
 and starts `git difftool --no-prompt` with an argument array in the registered checkout.
