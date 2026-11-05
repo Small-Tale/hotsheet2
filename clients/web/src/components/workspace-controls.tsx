@@ -37,6 +37,7 @@ import {
 
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import { type WorkersLive, workersLiveTitle } from '../project-live-summary';
 import { createTicketSearchModel } from '../ticket-search-model';
 import { QuickTicketLauncher } from './quick-ticket-composer';
 import { TicketSearchField } from './ticket-search-field';
@@ -119,6 +120,11 @@ export interface WorkspaceHeaderProps {
   sortDirection?: WorkspaceSortDirection;
   controlsVisible?: boolean;
   notificationCount?: number;
+  /**
+   * Live AI workers for the Workers view choice's accessible name and title (HS2-6B9S7P); the
+   * visible count badge waits on Kerf KF-170258.
+   */
+  workers?: WorkersLive;
   selectedTicketCount?: number;
   selectedTicketsUpNext?: WorkspaceUpNextState;
   selectedTicketsUpNextEligible?: boolean;
@@ -228,6 +234,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
 function workspaceModeChoices(
   count: number,
   presentation: WorkspaceControlsPresentation,
+  workers?: WorkersLive,
 ): ReadonlyArray<SegmentedControlChoice<WorkspaceViewMode>> {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'List', icon: List, iconName: 'list' },
@@ -241,11 +248,12 @@ function workspaceModeChoices(
       // The rail offers list, columns (paged), and notifications; settings stay in the main workspace (HS2-656Q43).
       .filter(({ value }) => presentation !== 'rail' || value !== 'settings')
       .map(({ value, label, icon, iconName }) => {
-        const badge = value === 'notifications' ? count : 0;
+        const badge = value === 'notifications' ? count : 0,
+          live = value === 'workers' ? workers : undefined;
         return {
           value,
-          label: `${label} View${badge ? `, ${badge} pending` : ''}`,
-          title: `${label} view`,
+          label: `${label} View${badge ? `, ${badge} pending` : ''}${live ? `, ${live.live} live` : ''}`,
+          title: live ? workersLiveTitle(live) : `${label} view`,
           content: (
             <span class="view-mode-switcher__content">
               <LucideIcon icon={icon} name={iconName} />
@@ -476,6 +484,7 @@ export function WorkspaceControls({
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
   notificationCount = 0,
+  workers,
   selectedTicketCount = 0,
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
@@ -506,7 +515,7 @@ export function WorkspaceControls({
         id="workspace-view-mode"
         label="View mode"
         value={mode}
-        choices={workspaceModeChoices(notificationCount, presentation)}
+        choices={workspaceModeChoices(notificationCount, presentation, workers)}
         action="set-view-mode"
         appearance="toolbar"
         shape={rail ? 'rounded' : 'pill'}

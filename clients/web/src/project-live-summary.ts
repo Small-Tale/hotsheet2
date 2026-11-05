@@ -229,3 +229,26 @@ export function hostCallouts(snapshot: HostHealthSnapshot | undefined): HostCall
     text: hostCalloutText(snapshot, signal),
   }));
 }
+
+/** The live worker count the Workers view choice names (HS2-6B9S7P); absent at 0 workers. */
+export interface WorkersLive {
+  live: number;
+  progressAgeMs?: number;
+}
+
+/** The project's live workers for the Workers view choice, or `undefined` when none are live. */
+export function workersLive(summary: ProjectLiveSummary | undefined): WorkersLive | undefined {
+  if (!summary || summary.workersLive <= 0) return undefined;
+  return {
+    live: summary.workersLive,
+    ...(summary.progressAgeMs === undefined ? {} : { progressAgeMs: summary.progressAgeMs }),
+  };
+}
+
+/** The Workers choice's hover title, e.g. `2 workers live · last progress 2m ago`. */
+export function workersLiveTitle(workers: WorkersLive): string {
+  const count = `${workers.live} worker${workers.live === 1 ? '' : 's'} live`;
+  return workers.progressAgeMs === undefined
+    ? `${count} · no progress yet`
+    : `${count} · last progress ${formatGlanceDuration(workers.progressAgeMs)} ago`;
+}

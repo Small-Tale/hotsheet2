@@ -97,3 +97,35 @@ test('project sidebar Live section is compact by default and remembers the detai
     await server.stop();
   }
 });
+
+// HS2-6B9S7P: the Workers view choice names the live worker count and the time since last progress;
+// with nobody working it keeps its plain name. The visible badge waits on Kerf KF-170258.
+test('Workers view choice names live workers and last progress (HS2-6B9S7P)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server);
+    const workers = page.locator('[data-segment-value="workers"]').first();
+    await expect(workers).toHaveAccessibleName('Workers View', { timeout: 30_000 });
+    await expect(workers).toHaveAttribute('title', 'Workers view');
+
+    const ticket = await server.request<{ id: string }>('/tickets', 'POST', {
+      title: 'Claimed work',
+      category: 'task',
+    });
+    await server.request(`/tickets/${ticket.id}/claim`, 'POST', { worker: 'worker-a', lease_minutes: 30 });
+    await expect(workers).toHaveAccessibleName('Workers View, 1 live', { timeout: 30_000 });
+    await expect(workers).toHaveAttribute('title', /^1 worker live · (last progress \S+ ago|no progress yet)$/);
+    // No hand-positioned badge joins the choice.
+    await expect(workers.locator('.view-mode-switcher__badge')).toHaveCount(0);
+
+    await server.request(`/tickets/${ticket.id}/release`, 'POST', { worker: 'worker-a' });
+    await expect(workers).toHaveAccessibleName('Workers View', { timeout: 30_000 });
+  } finally {
+    await server.stop();
+  }
+});

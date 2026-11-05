@@ -181,6 +181,7 @@ import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRo
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
+import { projectLiveSummary, workersLive } from '../project-live-summary';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
@@ -5028,6 +5029,8 @@ export async function startHotSheetWebClient() {
     pendingRestoreEntries,
     permissionCount: (projectId?: string) =>
       permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
+    workersLive: (projectId: string) =>
+      workersLive(projectLiveSummary(liveStates.forProject(projectId), liveClock.value)),
     permissionPopupSurface,
     project,
     projectRestoreFailures,

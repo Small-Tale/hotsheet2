@@ -136,7 +136,11 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   for a CI source (HS2-M8HHEA).
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
-  It uses the `ToolbarControlGroup` button badge from Kerf `KF-HDQTVV` (§34.10).
+  The Workers button is a choice of the toolbar `SegmentedControl` view switcher, which Kerf prescribes
+  for an exclusive view switch, so the `ToolbarButton` badge from `KF-HDQTVV` does not apply. The
+  accessible name (`Workers View, 2 live`) and title (`2 workers live · last progress 2m ago`) shipped
+  with HS2-6B9S7P; the visible badge waits on the Kerf gap `KF-170258` (a badge on a `SegmentedControl`
+  choice), and no app CSS positions one (§34.10).
 
 ## 34.7 Workspace grid sidebar pages (HS2-E1AQE8, HS2-EZSQDF, design only)
 
@@ -233,7 +237,10 @@ HS2-GAJSX9:
 
 - `KF-0QJ2K3`: PagedView, swipeable panes with bottom-floating page dots (HS2-EZSQDF). A styled
   `wa-carousel` is not a substitute; it also sits behind the Web Awesome license decision.
-- `KF-HDQTVV`: a count badge on `ToolbarControlGroup` buttons (HS2-6B9S7P).
+- `KF-HDQTVV`: a count badge on `ToolbarControlGroup` buttons. The Workers view button turned out to be a
+  `SegmentedControl` choice, so HS2-6B9S7P needs `KF-170258` (open): the same badge on a
+  `SegmentedControl` choice. It would also retire the hand-positioned Notifications count
+  (`view-mode-switcher__badge`, HS2-X9EMBF).
 
 ## 34.11 Ticket map
 
@@ -244,7 +251,7 @@ HS2-GAJSX9:
 | Glance gauge, full and bare variants                     | §34.3      | HS2-CVE3SK | none                    |
 | Standby mode                                             | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
 | Project sidebar Live section                             | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
-| Workers view button badge                                | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-HDQTVV` |
+| Workers view button badge                                | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-170258` |
 | Grid sidebar shared groups, gauge and triage page bodies | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |
 | Grid sidebar paging with floating dots                   | §34.7      | HS2-EZSQDF | HS2-E1AQE8, `KF-0QJ2K3` |
 | Stats Right now tiles and projects table                 | §34.8      | HS2-ERTNJ7 | HS2-JTTQMY, HS2-CVE3SK  |

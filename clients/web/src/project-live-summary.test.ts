@@ -10,6 +10,8 @@ import {
   projectLiveSummary,
   runwayDescription,
   runwayLabel,
+  workersLive,
+  workersLiveTitle,
 } from './project-live-summary';
 import { DEMO_LIVE_NOW_MS, demoHostHealth, demoLiveState } from './ux-demo/live-section-fixtures';
 
@@ -219,5 +221,24 @@ describe('hostCallouts (HS2-F788GW, HS2-DTAVQA)', () => {
     ]);
     snapshot.signals.power = { ...snapshot.signals.power, reason: 'on_battery' };
     expect(hostCallouts(snapshot).at(-1)?.text).toBe('On battery');
+  });
+});
+
+describe('workersLive (HS2-6B9S7P)', () => {
+  it('is absent without live state or at 0 workers', () => {
+    expect(workersLive(undefined)).toBeUndefined();
+    expect(workersLive(summary(demoLiveState('stopped')))).toBeUndefined();
+  });
+
+  it('carries the count and the freshest progress age into the Workers title', () => {
+    const workers = workersLive(summary(demoLiveState('quiet')));
+    expect(workers).toEqual({ live: 2, progressAgeMs: 2 * MINUTE });
+    expect(workersLiveTitle(workers!)).toBe('2 workers live · last progress 2m ago');
+    expect(workersLiveTitle({ live: 1 })).toBe('1 worker live · no progress yet');
+    const fresh = summary({
+      ...demoLiveState('quiet'),
+      activity: { ...demoLiveState('quiet').activity, last_progress_ms: null },
+    });
+    expect(workersLive(fresh)).toEqual({ live: 2 });
   });
 });

@@ -84,6 +84,7 @@ import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import type { PermissionItem } from '../permission-notifications';
+import type { WorkersLive } from '../project-live-summary';
 import { showsStaleSourceNotice } from '../source-stale-notice';
 import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
@@ -128,6 +129,8 @@ export interface HotSheetShellDependencies {
   pendingPermissions: () => PermissionItem[];
   pendingRestoreEntries: <T>(item: (root: string) => T) => { rank: number; item: T }[];
   permissionCount: (projectId?: string) => number;
+  /** Live AI workers for the Workers view choice's name and title (HS2-6B9S7P). */
+  workersLive?: (projectId: string) => WorkersLive | undefined;
   permissionPopupSurface: (layer?: 'flow' | 'top') => SafeHtml | undefined;
   project: () => Project | undefined;
   projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
@@ -220,6 +223,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     pendingPermissions,
     pendingRestoreEntries,
     permissionCount,
+    workersLive,
     permissionPopupSurface,
     project,
     projectRestoreFailures,
@@ -579,6 +583,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             sort={sort.value}
             sortDirection={sortDirection.value}
             notificationCount={permissionCount(current.id)}
+            workers={workersLive?.(current.id)}
             selectedTicketCount={selection.length}
             selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}
             selectedTicketsUpNextEligible={

@@ -115,6 +115,22 @@ describe('WorkspaceHeader', () => {
     else expect(markup).not.toContain('view-mode-switcher__badge');
   });
 
+  it('names the live worker count and last progress on the Workers choice, and nothing at 0 (HS2-6B9S7P)', () => {
+    const workersButton = (markup: string) => /<button[^>]*data-segment-value="workers"[^>]*>/.exec(markup)?.[0] ?? '';
+    const live = workersButton(
+      String(WorkspaceControls({ mode: 'list', workers: { live: 2, progressAgeMs: 120_000 } })),
+    );
+    expect(live).toContain('aria-label="Workers View, 2 live"');
+    expect(live).toContain('title="2 workers live · last progress 2m ago"');
+    const idle = workersButton(String(WorkspaceControls({ mode: 'list' })));
+    expect(idle).toContain('aria-label="Workers View"');
+    expect(idle).toContain('title="Workers view"');
+    // No hand-positioned badge: the visible count waits on Kerf KF-170258.
+    expect(String(WorkspaceControls({ mode: 'list', workers: { live: 3 } }))).not.toMatch(
+      /data-segment-value="workers"[\s\S]*?view-mode-switcher__badge[\s\S]*?<\/button>/,
+    );
+  });
+
   it('offers equal-width List, Columns, and Notifications in the explicit rounded rail presentation', () => {
     const markup = String(WorkspaceControls({ mode: 'notifications', presentation: 'rail', notificationCount: 7 }));
     expect(markup).toContain('data-shape="rounded"');

@@ -24,6 +24,7 @@ export function WorkspaceHeader({
   sortDirection = defaultWorkspaceSortDirection(sort),
   controlsVisible = true,
   notificationCount = 0,
+  workers,
   selectedTicketCount = 0,
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
@@ -46,6 +47,7 @@ export function WorkspaceHeader({
             sort={sort}
             sortDirection={sortDirection}
             notificationCount={notificationCount}
+            workers={workers}
             selectedTicketCount={selectedTicketCount}
             selectedTicketsUpNext={selectedTicketsUpNext}
             selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
