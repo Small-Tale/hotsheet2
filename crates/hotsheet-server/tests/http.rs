@@ -43,7 +43,7 @@ type RecordedClientPreparations =
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    // Codex halt detection must never reach the real ~/.codex daemon (HS2-MN865E).
+    // The Codex rollout watch must never read the real ~/.codex sessions (HS2-CYHAWB).
     let codex_home = dir.path().join("no-codex-home");
     (
         dir,
@@ -2423,54 +2423,40 @@ async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kil
     );
 }
 
-#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_codex_tuis_failed_turn_on_the_shared_daemon_halts_and_a_new_turn_resumes_the_terminal() {
-    // HS2-MN865E: the server rejoins the reported thread on a (fake) Codex daemon socket with
-    // `thread/resume` only, and maps its notifications onto the terminal's halt state.
-    use futures_util::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::Message;
-    const THREAD: &str = "01a1475b-96ed-7462-8f59-ba7c7ca4cbd7";
-    // A short path: the control socket must fit the platform's sun_path limit.
-    let home = tempfile::Builder::new()
-        .prefix("hs-cx")
-        .tempdir_in("/tmp")
-        .unwrap();
-    let control = home.path().join("app-server-control");
-    std::fs::create_dir_all(&control).unwrap();
-    let listener = tokio::net::UnixListener::bind(control.join("app-server-control.sock")).unwrap();
-    let (push, mut pushes) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
-    let received = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
-    let (closed_tx, closed) = tokio::sync::oneshot::channel::<()>();
-    let daemon_received = received.clone();
-    tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let ws = tokio_tungstenite::accept_async(stream).await.unwrap();
-        let (mut write, mut read) = ws.split();
-        loop {
-            tokio::select! {
-                frame = read.next() => match frame {
-                    Some(Ok(Message::Text(text))) => {
-                        let message: serde_json::Value = serde_json::from_str(&text).unwrap();
-                        let id = message.get("id").cloned();
-                        daemon_received.lock().unwrap().push(message);
-                        if let Some(id) = id {
-                            let reply = serde_json::json!({ "id": id, "result": {} });
-                            write.send(Message::Text(reply.to_string().into())).await.unwrap();
-                        }
-                    }
-                    Some(Ok(_)) => {}
-                    _ => break,
-                },
-                Some(note) = pushes.recv() => {
-                    write.send(Message::Text(note.to_string().into())).await.unwrap();
-                }
-            }
-        }
-        let _ = closed_tx.send(());
-    });
-
-    let (_dir, state) = state();
+async fn hs2_cyhawb_an_in_process_codex_rollout_halts_resumes_and_records_ticket_usage_once() {
+    // HS2-CYHAWB: a `--no-daemon` Codex terminal is followed through its own session rollout.
+    // A failed completion halts the terminal, the next turn clears it, and each response's
+    // usage is recorded once for the terminal session's claimed ticket. No daemon is reached.
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, metrics, ops};
+    use std::io::Write as _;
+    use time::format_description::well_known::Rfc3339;
+    const SESSION: &str = "01a1475b-96ed-7462-8f59-ba7c7ca4cbd7";
+    let home = tempfile::tempdir().unwrap();
+    let (dir, state) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-11-05T00:00:00Z"),
+        NewTicket {
+            title: "Codex terminal work".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::claim(
+        &store,
+        &ticket.id,
+        &Timestamp::new("2026-11-05T00:00:00Z"),
+        Timestamp::new("2099-01-01T00:00:00Z"),
+        &hotsheet_aitools::session_worker_id("codex", "watched"),
+        None,
+    )
+    .unwrap();
     let router = app(state);
     let send = |method: &'static str, path: &'static str, body: Option<String>| {
         let router = router.clone();
@@ -2484,7 +2470,7 @@ async fn a_codex_tuis_failed_turn_on_the_shared_daemon_halts_and_a_new_turn_resu
     let halt =
         || async { body_json(send("GET", "/terminals/watched", None).await).await["halt"].clone() };
     async fn eventually<F: std::future::Future<Output = bool>>(mut check: impl FnMut() -> F) {
-        for _ in 0..250 {
+        for _ in 0..500 {
             if check().await {
                 return;
             }
@@ -2492,6 +2478,13 @@ async fn a_codex_tuis_failed_turn_on_the_shared_daemon_halts_and_a_new_turn_resu
         }
         panic!("condition not reached");
     }
+    let usage = || {
+        metrics::read_raw(&store)
+            .unwrap()
+            .into_iter()
+            .filter(|event| event.tool == "codex")
+            .collect::<Vec<_>>()
+    };
 
     send(
         "POST",
@@ -2501,69 +2494,124 @@ async fn a_codex_tuis_failed_turn_on_the_shared_daemon_halts_and_a_new_turn_resu
     .await;
     let connect = serde_json::json!({
         "agent": "codex",
-        "session_id": THREAD,
+        "session_id": SESSION,
         "codex_home": home.path(),
     })
     .to_string();
-    send(
-        "POST",
-        "/terminals/watched/ai-connection",
-        Some(connect.clone()),
-    )
-    .await;
-    eventually(|| {
-        let received = received.clone();
-        async move { received.lock().unwrap().len() >= 3 }
-    })
-    .await;
-    // A repeated SessionStart for the same thread keeps the one rejoin.
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/watched/ai-connection",
+            Some(connect.clone()),
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    // A repeated SessionStart for the same session keeps the one watch.
     send("POST", "/terminals/watched/ai-connection", Some(connect)).await;
 
-    let failed = |thread: &str| {
-        serde_json::json!({ "method": "turn/completed", "params": { "threadId": thread, "turn": {
-            "id": "t-1", "status": "failed", "error": {
-                "message": "{\"type\":\"error\",\"status\":400,\"error\":{\"message\":\"The model is not supported.\"}}",
-                "codexErrorInfo": "other",
-            }
-        }}})
+    let live = |offset: i64| {
+        (time::OffsetDateTime::now_utc() + time::Duration::seconds(offset))
+            .format(&Rfc3339)
+            .unwrap()
     };
-    // A retried error and another thread's failure change nothing.
-    push.send(serde_json::json!({ "method": "error", "params": {
-        "threadId": THREAD, "willRetry": true, "error": { "message": "Reconnecting 1/5" } } }))
-        .unwrap();
-    push.send(failed("00000000-0000-7000-8000-000000000009"))
-        .unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    assert!(halt().await.is_null());
-
-    push.send(failed(THREAD)).unwrap();
+    let line = |value: serde_json::Value| format!("{value}\n");
+    let usage_line = |ts: String, response: &str, input: u64, output: u64| {
+        line(
+            serde_json::json!({"timestamp": ts, "type": "token_usage_record", "payload": {
+            "response_id": response, "turn_id": "t1", "root_turn_id": "t1",
+            "usage": {"input_tokens": input, "output_tokens": output}}}),
+        )
+    };
+    // Codex creates the dated rollout with the session's first turn, after the report.
+    let day = home.path().join("sessions/2026/11/05");
+    std::fs::create_dir_all(&day).unwrap();
+    let mut rollout =
+        std::fs::File::create(day.join(format!("rollout-2026-11-05T00-00-00-{SESSION}.jsonl")))
+            .unwrap();
+    let mut append = |text: String| {
+        rollout.write_all(text.as_bytes()).unwrap();
+        rollout.flush().unwrap();
+    };
+    append(
+        [
+            line(
+                serde_json::json!({"timestamp": "2026-11-05T00:00:00Z", "type": "session_meta",
+                "payload": {"id": SESSION, "originator": "codex-tui"}}),
+            ),
+            // An earlier, resumed turn predates the report: neither a halt nor usage.
+            line(
+                serde_json::json!({"timestamp": "2026-11-05T00:00:01Z", "type": "event_msg",
+                "payload": {"type": "task_complete", "turn_id": "t0",
+                    "error": {"codex_error_info": "other", "message": "stale"}}}),
+            ),
+            usage_line("2026-11-05T00:00:01Z".into(), "resp_old", 9, 9),
+            line(
+                serde_json::json!({"timestamp": live(1), "type": "turn_context",
+                "payload": {"turn_id": "t1", "model": "gpt-synthetic"}}),
+            ),
+            line(
+                serde_json::json!({"timestamp": live(1), "type": "event_msg",
+                "payload": {"type": "task_started", "turn_id": "t1"}}),
+            ),
+            usage_line(live(2), "resp_1", 1200, 40),
+            line(
+                serde_json::json!({"timestamp": live(3), "type": "event_msg",
+                "payload": {"type": "task_complete", "turn_id": "t1", "error": {
+                    "codex_error_info": "server_overloaded",
+                    "message": "{\"error\":{\"message\":\"Synthetic overload.\"}}"}}}),
+            ),
+        ]
+        .concat(),
+    );
     eventually(|| async { !halt().await.is_null() }).await;
     let halted = halt().await;
-    assert_eq!(halted["error_type"], "other");
-    assert_eq!(halted["message"], "The model is not supported.");
+    assert_eq!(halted["error_type"], "server_overloaded");
+    assert_eq!(halted["message"], "Synthetic overload.");
     assert_eq!(halted["agent"], "codex");
+    let recorded = usage();
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert_eq!(
+        recorded[0].session.as_deref(),
+        Some(format!("codex-work:{SESSION}:resp_1").as_str())
+    );
+    assert_eq!(recorded[0].ticket, Some(ticket.id.to_string()));
+    assert_eq!(recorded[0].model.as_deref(), Some("gpt-synthetic"));
+    assert_eq!((recorded[0].tokens_in, recorded[0].tokens_out), (1200, 40));
 
-    push.send(serde_json::json!({ "method": "turn/started", "params": {
-        "threadId": THREAD, "turn": { "id": "t-2", "status": "inProgress" } } }))
-        .unwrap();
+    // The next turn clears the halt; a repeated response is not counted twice.
+    append(
+        [
+            line(
+                serde_json::json!({"timestamp": live(4), "type": "event_msg",
+                "payload": {"type": "task_started", "turn_id": "t2"}}),
+            ),
+            usage_line(live(5), "resp_1", 1200, 40),
+            usage_line(live(5), "resp_2", 300, 7),
+        ]
+        .concat(),
+    );
     eventually(|| async { halt().await.is_null() }).await;
+    eventually(|| async { usage().len() == 2 }).await;
+    assert_eq!(
+        usage()[1].session.as_deref(),
+        Some(format!("codex-work:{SESSION}:resp_2").as_str())
+    );
+    assert!(
+        !home.path().join("app-server-control").exists(),
+        "the server never reaches a Codex daemon"
+    );
 
-    // The watcher only ever rejoined: no turn/start, no answered requests.
-    let methods: Vec<String> = received
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|m| m["method"].as_str().unwrap_or_default().to_owned())
-        .collect();
-    assert_eq!(methods, ["initialize", "initialized", "thread/resume"]);
-    assert_eq!(received.lock().unwrap()[2]["params"]["threadId"], THREAD);
-
-    // SessionEnd closes the daemon connection.
+    // SessionEnd stops the watch: a later failure reaches no terminal state.
     send("DELETE", "/terminals/watched/ai-connection", None).await;
-    tokio::time::timeout(std::time::Duration::from_secs(5), closed)
-        .await
-        .expect("the rejoin connection closes on SessionEnd")
-        .unwrap();
+    append(line(
+        serde_json::json!({"timestamp": live(6), "type": "event_msg",
+        "payload": {"type": "task_complete", "turn_id": "t2",
+            "error": {"codex_error_info": "other", "message": "after end"}}}),
+    ));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(halt().await.is_null());
     send("DELETE", "/terminals/watched", None).await;
 }
 

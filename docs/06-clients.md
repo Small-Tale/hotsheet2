@@ -3569,8 +3569,8 @@ connected (HS2-Z1W068). Each change emits a
 `terminal_ai_connection` event. The client refetches its terminals on that event and on a
 `permission_asked` event, so a visible prompt reconciles the indicator even if the separate
 connection event was missed (HS2-XYSXVT). The session id and Codex `codex_home` the hook
-reports stay server-internal; Codex halt detection uses them to rejoin that session's thread
-([`05`](05-ai-tool-plugins.md) §5.7, HS2-FKM97G, HS2-MN865E).
+reports stay server-internal; Codex halt detection and terminal usage use them to follow that
+session's own rollout ([`05`](05-ai-tool-plugins.md) §5.7, HS2-FKM97G, HS2-CYHAWB).
 `last_hook_report {agent, at, source}` records the latest trusted `SessionStart` or interactive
 `PermissionRequest` report for that terminal. It remains after `SessionEnd`, but disappears on
 terminal exit/kill or server restart. Each report emits `terminal_hook_report`, which also

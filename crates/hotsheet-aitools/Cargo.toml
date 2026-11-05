@@ -42,6 +42,10 @@ futures-util.workspace = true
 # Session push (HS2-PEJ962): loopback HTTP calls into a launched tool's own session API.
 ureq.workspace = true
 base64.workspace = true
+# The Codex rollout watch (HS2-CYHAWB) follows a session file by change notification and
+# compares its RFC 3339 record times with the moment the session reported.
+notify.workspace = true
+time.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

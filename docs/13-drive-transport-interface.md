@@ -196,13 +196,14 @@ that transport talks to the **same** daemon, so plays reuse one persistent insta
 rather than launching a process each time. `ensure_codex_daemon_in(program, codex_home)`
 targets a specific (isolated) home.
 
-**Observing a TUI's thread (HS2-MN865E):** a second `UdsWsTransport` connection that sends
-only `initialize` and `thread/resume {threadId}` rejoins a thread the interactive TUI is
-running, and receives that thread's `turn/started`, `error {willRetry}`, and
-`turn/completed {turn.status, turn.error}` notifications. The server uses this read-only
-rejoin for Codex halt detection ([05](05-ai-tool-plugins.md) §5.7). It never starts the
-daemon or a turn. The managed daemon may run a newer build than the CLI: on 0.162.1 it
-installed and ran 0.163.0 under `$CODEX_HOME/packages/app-server-daemon/`.
+**Observing a TUI's thread (HS2-MN865E, retired by HS2-CYHAWB):** a second `UdsWsTransport`
+connection that sends only `initialize` and `thread/resume {threadId}` rejoins a thread a
+daemon-hosted TUI is running, and receives that thread's notifications. The server no longer
+does this. Hot Sheet's terminals host their Codex session in process (HS2-4J7WCV), and
+`thread/resume` of an in-process thread could load a second copy into a user's daemon. Halt
+detection and terminal usage follow the session's rollout instead ([05](05-ai-tool-plugins.md)
+§5.7). The managed daemon may run a newer build than the CLI: on 0.162.1 it installed and
+ran 0.163.0 under `$CODEX_HOME/packages/app-server-daemon/`.
 
 **Wired into the trigger (HS2-B7C66H, live-verified 2026-08-21):** `hotsheet-cli trigger
 codex --shared-daemon` builds a **daemon-ready isolated `CODEX_HOME`** (the HS2-YRDQNX

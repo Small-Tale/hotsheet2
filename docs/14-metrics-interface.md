@@ -153,16 +153,21 @@ Metrics can be shared across a team **through git** — no server sync needed:
   the event also names that ticket (HS2-J14225). Ambiguous or expired claims leave usage
   project-only rather than assigning it to the wrong ticket. If a plugin omits the model
   from its telemetry, an explicitly selected turn/connection model labels that event.
-- **Interactive Codex terminals (HS2-J14225):** the existing read-only daemon thread watch
-  takes the last `thread/tokenUsage/updated` count for each completed turn and records one
-  usage event. It snapshots the terminal session's unique live ticket claim at turn start.
-  The resumed thread supplies the model when available; an unknown model remains unknown.
-  Codex sessions without the shared daemon, and telemetry from before this capture path,
-  cannot be attributed by this path. Since HS2-4J7WCV, Hot Sheet launches its own Codex
-  terminals with `--no-daemon`, and a daemon-hosted session's hooks report no terminal, so no
-  Hot Sheet terminal currently records usage through this path (HS2-CYHAWB). Raw events
-  already recorded without a ticket are not retroactively assigned because their work cannot
-  be identified reliably.
+- **Interactive Codex terminals (HS2-J14225, HS2-CYHAWB):** the terminal's rollout watch
+  ([05](05-ai-tool-plugins.md) §5.7) records one usage event per model response from the
+  session's own `token_usage_record` lines (`input_tokens`, which already includes its cached
+  subset, and `output_tokens`). The model comes from the turn's `turn_context`; an unknown
+  model remains unknown and unpriced. Each event takes the terminal Codex or shell worker's
+  unique live ticket claim snapshotted at `task_started`. A turn already running when the
+  session reported takes its snapshot at its first response. Only responses recorded after the
+  report count. The session key is `codex-work:<session>:<response_id>`, shared with
+  claim-release capture below. One file-locked, checkpointed write path deduplicates both, so
+  a response is recorded at most once even when both paths see it. This covers every Hot Sheet
+  Codex launch kind (`--no-daemon`, HS2-4J7WCV). It replaces the retired per-turn daemon thread
+  watch (HS2-MN865E), and sessions that watch recorded under their bare id stay excluded from
+  release capture. Subagent threads write their own rollouts and are not counted (HS2-R3Y8Z7).
+  Raw events already recorded without a ticket are not retroactively assigned because their
+  work cannot be identified reliably.
   **Interactive Claude terminals (HS2-W2GNTT):** the documented `UserPromptSubmit`,
   `Stop`, and `StopFailure` hooks provide a session id and transcript path, but no token
   counters. The server snapshots the transcript byte offset and unique live claim of
@@ -235,8 +240,9 @@ Metrics can be shared across a team **through git** — no server sync needed:
   rollout metadata, and reads only numeric `token_usage_record` and model-bearing
   `turn_context` fields. A response is attributed only when its timestamp falls in
   exactly one unexpired claim interval for that worker; overlapping or unclaimed
-  work remains unassigned. Response IDs deduplicate repeated captures, and an
-  already watched terminal session is skipped. A machine-local, gitignored response-ID
+  work remains unassigned. Response IDs deduplicate repeated captures and responses a
+  terminal rollout watch already recorded (HS2-CYHAWB). A session the retired daemon watch
+  recorded per turn is skipped. A machine-local, gitignored response-ID
   checkpoint keeps repeated captures idempotent after raw metrics are pruned. The
   raw rollout's prompts and tool content are neither copied into metrics nor logged.
   This local format is observed from installed Codex sessions rather than a stable

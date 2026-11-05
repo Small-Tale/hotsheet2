@@ -1738,11 +1738,11 @@ not satisfy it. The `missing` tooltip describes absent active hook reporting; th
 unavailable. These possible states do not establish the cause of a particular reported
 incident without its contemporaneous terminal fields and hook diagnosis.
 
-**Codex session address (HS2-FKM97G, HS2-MN865E).** Codex's `SessionStart` report also carries
+**Codex session address (HS2-FKM97G, HS2-CYHAWB).** Codex's `SessionStart` report also carries
 `codex_home` when `CODEX_HOME` is set; an unset home means the user's default. The server keeps
 it and the thread id (`session_id`) internal on the terminal's connection. A permission ask from
-the same session keeps the reported home. Codex halt detection rejoins the thread under that
-home. Observed live on codex 0.162.1:
+the same session keeps the reported home. Codex halt detection and terminal usage follow the
+session's rollout under that home. Observed live on codex 0.162.1:
 
 - `SessionStart` fires lazily, when the first prompt is submitted. A freshly opened Hot
   Sheet-owned TUI accepts its first message through a one-shot PTY bootstrap adapter;
@@ -1814,37 +1814,46 @@ skips `UserPromptSubmit` and `Stop` when they carry `matcher: "*"`. A new sessio
 report its transcript path before creating the file; the server starts that cursor at
 byte zero and waits briefly for the final append after `Stop`.
 
-Codex halts are therefore detected best-effort by rejoining the TUI's thread on the shared
-app-server daemon (HS2-MN865E):
+Codex halts are therefore detected best-effort from the session's own rollout file
+(HS2-CYHAWB). Hot Sheet's Codex terminals host their session in process (`--no-daemon`,
+HS2-4J7WCV), and the host appends every turn to
+`<codex_home or the default home>/sessions/YYYY/MM/DD/rollout-<time>-<session_id>.jsonl`. The
+file name and its first `session_meta.id` are the reported `session_id`, so the file is per
+session and cannot belong to another tab.
 
-- **Rejoin.** When a Codex session reports a UUID thread id, the server connects to
-  `<codex_home or the default home>/app-server-control/app-server-control.sock` with
-  `UdsWsTransport`. It sends `initialize` and `thread/resume {threadId}` only
-  (`hotsheet_aitools::codex_thread_watch`). It never sends `turn/start`, never answers a server
-  request, and never starts a daemon.
-- **Mapping.** `turn/completed` with `turn.status: "failed"`, or `error` with
-  `willRetry: false`, records the same terminal halt as `StopFailure`:
-  - `error_type` is `turn.error.codexErrorInfo` (the variant name).
-  - The message is `turn.error.message`, unwrapped from a provider JSON error body.
+- **Follow.** When a Codex session reports a UUID `session_id`, the server follows that rollout
+  (`hotsheet_aitools::codex_rollout_watch`) through filesystem change notifications. Until the
+  file exists, it waits on `sessions/` (or on the home until `sessions/` appears). It then
+  watches the file itself and reads only appended, complete lines. Each change of
+  subscription is followed by one settle read 3 seconds later, because a native stream
+  (FSEvents) can start after a write it should have reported. Nothing polls.
+- **Mapping.** An `event_msg` `task_complete` that carries `error` records the same terminal halt
+  as `StopFailure`:
+  - `error_type` is `error.codex_error_info` (the variant name, for example `server_overloaded`).
+  - The message is `error.message`, unwrapped from a provider JSON error body.
   - `agent` is `codex`.
-- **Ignored and cleared.** `willRetry: true` is ignored. The next `turn/started` clears the halt.
-- **Lifecycle.** One watch runs per terminal. It is replaced by a newer session and closed on
+- **Ignored and cleared.** Codex writes nothing for an error it retries. A `turn_aborted`
+  (user interrupt) is not a halt. The next `task_started` clears the halt.
+- **Only new records count.** Records timestamped before the session's report, such as the
+  earlier turns of a resumed session, neither halt nor clear. A file whose `session_meta`
+  names another session yields nothing.
+- **Lifecycle.** One watch runs per terminal. It is replaced by a newer session and stopped on
   `SessionEnd`, terminal kill, or shell exit.
-- **Verified live** on codex 0.162.1 (daemon 0.163.0) with an invalid model; the cassette is
-  `crates/hotsheet-aitools/tests/fixtures/codex-0.162.1-thread-rejoin-failure.json`.
+- **No daemon.** The server never connects to a Codex app-server daemon for a terminal. The
+  HS2-MN865E read-only `thread/resume` rejoin is retired. After HS2-4J7WCV it reached no Hot
+  Sheet terminal, and for an in-process session it could load a second copy of the thread into
+  a user's own daemon.
+- **Observed** on codex-tui 0.166.0 (record shapes only): `task_started {turn_id}`,
+  `task_complete {turn_id, error?: {codex_error_info, message}}`, `turn_aborted`,
+  `turn_context {turn_id, model}`, and `token_usage_record {response_id, turn_id, usage}`.
 
 Limits:
 
-- The v2 protocol is experimental and its schema is version-specific.
-- TUIs started with `--no-daemon` or `daemon_auto_start = false` are invisible. Hot Sheet
-  launches its own Codex terminals with `--no-daemon`, and the hook of a daemon-hosted session
-  reports no terminal (HS2-4J7WCV). No Hot Sheet terminal therefore reports a daemon thread to
-  watch, and the watch only rejoins a thread a session reported from outside the daemon.
-  HS2-CYHAWB tracks recovering halt detection for in-process sessions.
-- While a session is reported connected, the watch's subscription keeps the daemon from
-  unloading the thread (it otherwise unloads 30 minutes after the last subscriber).
-- A terminal whose Codex process dies without `SessionEnd` keeps its watch until the daemon
-  closes it.
+- The rollout is an observed local format, not a public contract. Unrecognized or unverified
+  records fail closed.
+- A turn that fails within milliseconds before its session's report is not seen.
+- A user's own daemon-hosted `codex` started in a Hot Sheet shell terminal reports no terminal
+  (HS2-4J7WCV), so it has no halt detection.
 
 Driven sessions report completed
 provider failure diagnostics (`HS2-AZVE3P`). Identical active halt error type/message reports
@@ -2054,11 +2063,9 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > TUI with `--no-daemon` (the manifest's `[launch] args`), before any `--model` or effort
 > `--config` the selection adds. The terminal drawer, `POST /terminals` and headless
 > `hotsheet-cli launch codex` all use these arguments. Each tab's MCP server and hooks are
-> then its own children and name its own terminal. The accepted cost: daemon-only Codex halt
-> detection (HS2-MN865E, §5.7) and native per-ticket Codex usage (HS2-J14225,
-> [14](14-metrics-interface.md)) no longer cover launches without an effort. Launches with an
-> effort ran in process before and already lacked both. With the hook guard below, no Hot Sheet
-> terminal reaches either path; HS2-CYHAWB tracks recovering both for in-process sessions.
+> then its own children and name its own terminal. Halt detection (§5.7) and native per-ticket
+> Codex usage ([14](14-metrics-interface.md)) come from the session's own rollout (HS2-CYHAWB),
+> so they cover every launch kind, with or without an effort or model.
 > `codex queue` messaging still reaches a `--no-daemon` session under the same `CODEX_HOME`.
 > `hotsheet-cli trigger codex` and AI commands use the app-server drive, not a TUI.
 >

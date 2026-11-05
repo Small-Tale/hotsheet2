@@ -130,7 +130,16 @@ fn windows(ticket: &Ticket, worker: &str) -> Vec<ClaimWindow> {
     result
 }
 
-fn find_rollout(root: &Path, session: &str, depth: usize) -> io::Result<Option<PathBuf>> {
+/// The rollout file Codex writes for `session` under `codex_home/sessions/YYYY/MM/DD`, if it
+/// exists yet. Shared with the terminal rollout watch (HS2-CYHAWB).
+pub fn find_rollout(codex_home: &Path, session: &str) -> io::Result<Option<PathBuf>> {
+    if !valid_session_id(session) {
+        return Ok(None);
+    }
+    find_rollout_in(&codex_home.join("sessions"), session, 5)
+}
+
+fn find_rollout_in(root: &Path, session: &str, depth: usize) -> io::Result<Option<PathBuf>> {
     if depth == 0 {
         return Ok(None);
     }
@@ -141,7 +150,7 @@ fn find_rollout(root: &Path, session: &str, depth: usize) -> io::Result<Option<P
         let entry = entry?;
         let kind = entry.file_type()?;
         if kind.is_dir() {
-            if let Some(path) = find_rollout(&entry.path(), session, depth - 1)? {
+            if let Some(path) = find_rollout_in(&entry.path(), session, depth - 1)? {
                 return Ok(Some(path));
             }
         } else if kind.is_file()
@@ -215,7 +224,7 @@ pub fn capture_session(
     if !valid_session_id(session) {
         return Ok(0);
     }
-    let Some(path) = find_rollout(&codex_home.join("sessions"), session, 5)? else {
+    let Some(path) = find_rollout(codex_home, session)? else {
         return Ok(0);
     };
     let listing = store.list_tickets_resilient().map_err(io::Error::other)?;
@@ -294,6 +303,42 @@ pub fn capture_session(
     if !verified {
         return Ok(0);
     }
+    let responses = events
+        .into_iter()
+        .map(|(ts, payload, ticket)| {
+            let event = UsageEvent {
+                ts,
+                tool: "codex".to_owned(),
+                model: models.get(&payload.root_turn_id).cloned(),
+                tokens_in: payload.usage.input_tokens,
+                tokens_out: payload.usage.output_tokens,
+                cost_usd: None,
+                ticket: Some(ticket),
+                session: None,
+            };
+            (payload.response_id, event)
+        })
+        .collect();
+    record_session_responses(store, session, responses)
+}
+
+/// The metrics session key of one Codex response, shared by claim-release capture and the
+/// terminal rollout watch so either path records a response at most once (HS2-CYHAWB).
+pub fn response_key(session: &str, response_id: &str) -> String {
+    format!("codex-work:{session}:{response_id}")
+}
+
+/// Record `(response_id, event)` usage for one Codex session, each response at most once
+/// across every capture path, raw pruning, and restarts. Each event's `session` becomes the
+/// response key. Returns how many were new.
+pub fn record_session_responses(
+    store: &FsStore,
+    session: &str,
+    responses: Vec<(String, UsageEvent)>,
+) -> io::Result<usize> {
+    if responses.is_empty() || !valid_session_id(session) {
+        return Ok(0);
+    }
     let local = store.root().join("metrics/local");
     fs::create_dir_all(&local)?;
     #[cfg(unix)]
@@ -319,7 +364,8 @@ pub fn capture_session(
         Err(error) if error.kind() == io::ErrorKind::NotFound => HashSet::new(),
         Err(error) => return Err(error),
     };
-    // Remember a server-managed terminal even after its raw metrics are pruned.
+    // A session the retired daemon thread watch (HS2-MN865E) recorded per turn under its bare
+    // id cannot be deduplicated per response; keep excluding it, even after raw pruning.
     let watched = format!("codex-work-managed:{session}");
     if existing
         .iter()
@@ -331,29 +377,21 @@ pub fn capture_session(
         write_checkpoint(&checkpoint, seen)?;
         return Ok(0);
     }
+    let prefix = response_key(session, "");
     seen.extend(
         existing
             .iter()
             .filter_map(|event| event.session.as_ref())
-            .filter(|value| value.starts_with(&format!("codex-work:{session}:")))
+            .filter(|value| value.starts_with(&prefix))
             .cloned(),
     );
     let mut added = 0;
-    for (ts, payload, ticket) in events {
-        let key = format!("codex-work:{session}:{}", payload.response_id);
+    for (response_id, mut event) in responses {
+        let key = response_key(session, &response_id);
         if !seen.insert(key.clone()) {
             continue;
         }
-        let event = UsageEvent {
-            ts,
-            tool: "codex".to_owned(),
-            model: models.get(&payload.root_turn_id).cloned(),
-            tokens_in: payload.usage.input_tokens,
-            tokens_out: payload.usage.output_tokens,
-            cost_usd: None,
-            ticket: Some(ticket),
-            session: Some(key.clone()),
-        };
+        event.session = Some(key);
         record_priced(store, event)?;
         added += 1;
     }
@@ -643,5 +681,112 @@ mod tests {
             0
         );
         assert!(super::super::read_raw(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn hs2_cyhawb_terminal_watch_and_release_capture_record_each_response_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("HS")).unwrap();
+        let home = dir.path().join("codex");
+        let session = "00000000-0000-7000-8000-0000000000c2";
+        let rollout = home
+            .join("sessions/2026/11/05")
+            .join(format!("rollout-2026-11-05T00-00-00-{session}.jsonl"));
+        fs::create_dir_all(rollout.parent().unwrap()).unwrap();
+        assert_eq!(find_rollout(&home, session).unwrap(), None);
+        assert_eq!(find_rollout(&home, "not-a-session").unwrap(), None);
+        let ticket = ops::create(
+            &store,
+            Ulid::new(),
+            "HS",
+            at("2026-11-05T00:00:00Z"),
+            NewTicket {
+                title: "terminal".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        ops::claim(
+            &store,
+            &ticket.id,
+            &at("2026-11-05T01:00:00Z"),
+            at("2026-11-05T02:00:00Z"),
+            "codex-terminal",
+            None,
+        )
+        .unwrap();
+        let record = |response: &str, tokens: u64| serde_json::json!({"type":"token_usage_record","timestamp":"2026-11-05T01:10:00Z","payload":{"response_id":response,"root_turn_id":"turn","usage":{"input_tokens":tokens,"output_tokens":1}}});
+        fs::write(
+            &rollout,
+            [
+                serde_json::json!({"type":"session_meta","timestamp":"2026-11-05T00:00:00Z","payload":{"id":session}}),
+                record("watched", 10),
+                record("released", 20),
+            ]
+            .map(|row| row.to_string())
+            .join("\n"),
+        )
+        .unwrap();
+        assert_eq!(find_rollout(&home, session).unwrap(), Some(rollout));
+        let event = |tokens: u64| UsageEvent {
+            ts: "2026-11-05T01:10:00Z".into(),
+            tool: "codex".into(),
+            model: None,
+            tokens_in: tokens,
+            tokens_out: 1,
+            cost_usd: None,
+            ticket: Some(ticket.id.to_string()),
+            session: None,
+        };
+        // The terminal watch records one response live, twice in the same batch.
+        assert_eq!(
+            record_session_responses(
+                &store,
+                session,
+                vec![("watched".into(), event(10)), ("watched".into(), event(10))],
+            )
+            .unwrap(),
+            1
+        );
+        // Claim-release capture then adds only the response the watch has not seen.
+        assert_eq!(
+            capture_session(&store, "codex-terminal", session, &home).unwrap(),
+            1
+        );
+        // And a late watch batch repeating either response adds nothing.
+        assert_eq!(
+            record_session_responses(
+                &store,
+                session,
+                vec![
+                    ("released".into(), event(20)),
+                    ("watched".into(), event(10))
+                ],
+            )
+            .unwrap(),
+            0
+        );
+        let mut keys: Vec<_> = super::super::read_raw(&store)
+            .unwrap()
+            .into_iter()
+            .filter_map(|event| event.session)
+            .collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                response_key(session, "released"),
+                response_key(session, "watched")
+            ]
+        );
+        assert_eq!(
+            record_session_responses(&store, "bad", vec![("x".into(), event(1))]).unwrap(),
+            0
+        );
+        assert_eq!(
+            record_session_responses(&store, session, Vec::new()).unwrap(),
+            0
+        );
     }
 }

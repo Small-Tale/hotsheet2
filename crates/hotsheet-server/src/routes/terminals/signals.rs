@@ -335,8 +335,8 @@ pub(crate) async fn halt_terminal(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Record and announce a halt for terminal `id`: the hook route above, and the Codex thread
-/// watcher that sees a failed turn on the shared daemon (HS2-MN865E).
+/// Record and announce a halt for terminal `id`: the hook route above, and the Codex rollout
+/// watch that sees a turn complete with an error (HS2-CYHAWB).
 pub(crate) fn record_terminal_halt(
     state: &AppState,
     id: &str,
@@ -379,7 +379,7 @@ pub(crate) fn record_terminal_halt(
     }
 }
 
-/// Clear terminal `id`'s halt because its session started a new turn (HS2-MN865E).
+/// Clear terminal `id`'s halt because its Codex session started a new turn (HS2-CYHAWB).
 pub(crate) fn clear_terminal_halt_on_resume(state: &AppState, id: &str) {
     if forget_terminal_halt(state, id) {
         emit_terminal_halted(state, id, None);
@@ -497,7 +497,7 @@ pub(crate) async fn connect_terminal_ai(
             .and_then(|previous| previous.checkout_id.clone()),
     };
     // A permission ask does not carry the home; keep the one the same session's SessionStart
-    // reported, so messaging and halt detection still reach it (HS2-FKM97G, HS2-MN865E).
+    // reported, so messaging and halt detection still reach it (HS2-FKM97G, HS2-CYHAWB).
     let codex_home = body
         .codex_home
         .filter(|home| !home.trim().is_empty())
@@ -562,13 +562,14 @@ pub(crate) async fn connect_terminal_ai(
         .lock_or_recover()
         .insert(id.clone(), connection)
         .is_none_or(|previous| previous.agent != agent);
-    // Rejoin a Codex TUI's thread on the shared daemon to see failed turns (HS2-MN865E).
-    super::codex_watch::sync_codex_thread_watch(
+    // Follow a Codex session's own rollout for failed turns and usage (HS2-CYHAWB).
+    super::codex_watch::sync_codex_session_watch(
         &state,
         &id,
         agent.as_deref(),
         watch_session.as_deref(),
         watch_home.as_deref(),
+        &reported_at,
     );
     // Make the session reachable by `POST /connections/{id}/message` (HS2-FKM97G).
     crate::routes::session_messages::register_reported(&state, &id, agent.as_deref(), &reported);
@@ -640,7 +641,7 @@ fn watch_shell_ai_session_exit(state: &AppState, id: String, reported_at: String
                 matches && connections.remove(&id).is_some()
             };
             if removed {
-                super::codex_watch::stop_codex_thread_watch(&state, &id);
+                super::codex_watch::stop_codex_session_watch(&state, &id);
                 crate::routes::session_messages::unregister_reported(&state, &id);
                 if forget_terminal_halt(&state, &id) {
                     emit_terminal_halted(&state, &id, None);
@@ -704,7 +705,7 @@ fn forget_terminal_ai_connection_if(
     }
     let removed = connections.remove(id).is_some();
     drop(connections);
-    super::codex_watch::stop_codex_thread_watch(state, id);
+    super::codex_watch::stop_codex_session_watch(state, id);
     super::claude_usage::forget_claude_turn(state, id);
     crate::routes::session_messages::unregister_reported(state, id);
     Some(removed)

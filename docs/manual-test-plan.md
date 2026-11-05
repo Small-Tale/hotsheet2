@@ -193,12 +193,14 @@ CI uses fake Codex parents; this checks an installed Codex against the user's ow
 3. Open a third Codex terminal with no effort and no model. Hot Sheet launches it with `--no-daemon` (HS2-4J7WCV), so confirm it connects only itself and that neither earlier tab changes state.
 4. In a Hot Sheet shell terminal, run your own `codex` (on the shared daemon) and trigger a permission prompt. Confirm the prompt appears in Hot Sheet without being pinned to any Codex tab, and that the shell terminal and the earlier tabs show no hook connection change (HS2-4J7WCV).
 
-### Native Codex terminal usage (HS2-J14225)
+### Native Codex terminal usage and halts (HS2-J14225, HS2-CYHAWB)
 
-Since HS2-4J7WCV no Hot Sheet terminal reaches the daemon thread watch: Hot Sheet's Codex terminals launch with `--no-daemon`, and a daemon-hosted `codex` started in a shell terminal reports no terminal from its hooks. HS2-CYHAWB tracks recovering native usage.
+The server follows each Codex terminal session's own rollout under its `CODEX_HOME`. CI covers this with synthetic rollouts; this checks an installed Codex, whose rollout format is observed rather than published.
 
-1. Open a Codex terminal in Hot Sheet, claim one ticket from its session, and run a turn with nonzero token use. Confirm the ticket's Timeline makes no unsupported Codex usage claim and that project metrics are unaffected by the claim.
-2. The protocol cassette covers the watcher itself; CI cannot reliably exercise an installed interactive Codex TUI and its daemon together.
+1. Open a Codex terminal in Hot Sheet, with no effort and again with an effort selected. From each session, claim one ticket and run a turn with nonzero token use. Confirm the ticket's Timeline lists the Codex model and tokens, once per response, and that a second turn adds only its own responses.
+2. Release the claim from the same session. Confirm the Timeline totals do not change, because release capture skips responses the terminal already recorded.
+3. Start a Codex terminal with an invalid model and send a prompt. Confirm the terminal shows the stopped-on-error notice with the provider message, and that the notice clears once a new turn starts after you switch to a valid model.
+4. With your own `codex app-server` daemon running under the same `CODEX_HOME`, repeat step 1. Confirm the daemon gains no copy of the terminal's thread, for example in its thread list, because Hot Sheet no longer sends `thread/resume`.
 
 ### Codex Work claim-release usage (HS2-2K2D7E)
 
