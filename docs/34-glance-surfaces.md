@@ -44,12 +44,16 @@ Stats, and phone notifications therefore always agree.
 | Waiting on you | A ticket in the store is blocked on the user: an open feedback request, a review flag, or a review request. New for clients. | HS2-JTTQMY (design only) |
 
 Two **stuck causes** refine May be stuck and Halted so a surface can say why nothing is happening
-(HS2-EGKKA0, design only):
+(HS2-EGKKA0; the data ships in the live state as `activity.causes`, §32.8.4, and no surface renders it yet):
 
 - **Usage-limit pause:** an AI tool reported a usage or rate limit. When the tool reports a reset time, the
-  surface shows the resume time in place of a stuck state. This extends the `terminal_halted` signal.
+  surface shows the resume time in place of a stuck state. When it does not, the reset is unknown and the
+  surface says "paused at a usage limit" without a time. This extends the `terminal_halted` signal.
 - **Awaiting input:** a terminal session waits at a permission or approval prompt. The surface links
   straight to that terminal.
+
+The state word does not change for a cause, so notifications and clients keep one vocabulary; a surface
+shows the cause's text in place of the word it refines.
 
 ## 34.3 Live values, rates, and gauges
 

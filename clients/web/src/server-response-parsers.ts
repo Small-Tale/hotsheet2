@@ -777,6 +777,16 @@ const liveActivity = shape('live activity', {
   idle_deadline_ms: isNullableNumber,
   stalled: listOf(shape('live stalled claim', { slug: isString, worker: isString }).check),
   halted: listOf(shape('live halt', { worker: isString, message: isString, at_ms: isNumber }).check),
+  causes: listOf(
+    shape('live cause', {
+      kind: (field) => field === 'usage_limit' || field === 'awaiting_input',
+      worker: isString,
+      terminal: isNullableString,
+      since_ms: isNumber,
+      resets_at_ms: isNullableNumber,
+      prompt: (field) => field === null || field === 'permission' || field === 'question',
+    }).check,
+  ),
 });
 const liveWaiting = shape('live waiting', {
   count: isNumber,

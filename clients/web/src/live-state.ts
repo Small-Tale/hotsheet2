@@ -1,6 +1,6 @@
 import { signal } from 'kerfjs';
 
-import type { ChangeEvent, LiveClaim, LiveStateList, LiveStoreState, LiveWord } from './api';
+import type { ChangeEvent, LiveCause, LiveClaim, LiveStateList, LiveStoreState, LiveWord } from './api';
 import { parseLiveStoreState } from './server-response-parsers';
 
 /**
@@ -67,6 +67,28 @@ export function etaOverrunMs(claim: LiveClaim, nowMs: number): number | undefine
 export function gaugeFraction(value: number, peak: number): number {
   if (peak <= 0) return value > 0 ? 1 : 0;
   return Math.min(1, Math.max(0, value / peak));
+}
+
+/**
+ * When a usage-limit pause ends (HS2-EGKKA0): `undefined` without a pause, `null` while any
+ * paused session's tool did not state its reset (unknown), else the latest stated reset, when
+ * every paused session can continue. A past time means the limit reset but the session still
+ * waits for a new prompt.
+ */
+export function pausedUntilMs(state: LiveStoreState): number | null | undefined {
+  const pauses = state.activity.causes.filter((cause) => cause.kind === 'usage_limit');
+  if (pauses.length === 0) return undefined;
+  let latest = -Infinity;
+  for (const pause of pauses) {
+    if (pause.resets_at_ms === null) return null;
+    latest = Math.max(latest, pause.resets_at_ms);
+  }
+  return latest;
+}
+
+/** The terminal prompts this store's workers wait at, oldest first (HS2-EGKKA0). */
+export function awaitingInputCauses(state: LiveStoreState): LiveCause[] {
+  return state.activity.causes.filter((cause) => cause.kind === 'awaiting_input');
 }
 
 /** The most severe word among `states`, or `stopped` when there are none. */

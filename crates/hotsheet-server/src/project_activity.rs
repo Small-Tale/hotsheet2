@@ -11,6 +11,9 @@
 //! (HS2-JTTQMY): the one-shot reports above stay the notification path, while the tracker
 //! keeps the last period's outcome, recorded halts, per-ticket progress times, and the
 //! workers seen in the period, so glance surfaces show the states notifications use.
+//!
+//! It also keeps each halt's detail and the terminal prompts each worker's session waits at,
+//! from which the live state derives its stuck causes (HS2-EGKKA0, §32.8.4).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -91,7 +94,41 @@ pub struct HaltNote {
     pub worker: String,
     pub message: String,
     pub at: OffsetDateTime,
+    pub detail: HaltDetail,
 }
+
+/// What the router knows about a halt beyond its message (HS2-EGKKA0).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HaltDetail {
+    /// The terminal that reported it.
+    pub terminal: Option<String>,
+    /// The tool reported a usage or rate limit ([`crate::stuck_causes::is_usage_limit`]).
+    pub usage_limit: bool,
+    /// When the tool said the limit resets; `None` when it did not say so exactly.
+    pub resets_at: Option<OffsetDateTime>,
+}
+
+/// What a terminal's session is waiting on the user for (HS2-EGKKA0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PromptKind {
+    /// A permission request bridged to Hot Sheet.
+    Permission,
+    /// An `AskUserQuestion` the session presents.
+    Question,
+}
+
+/// A terminal prompt a worker's session is waiting at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptNote {
+    pub worker: String,
+    pub terminal: String,
+    pub kind: PromptKind,
+    /// When the prompt appeared (the hook's time when it reports one, else first seen).
+    pub since: OffsetDateTime,
+}
+
+/// One prompt as the router reads it from hook state: `(worker, terminal, kind, since)`.
+pub type PromptReport = (String, String, PromptKind, Option<OffsetDateTime>);
 
 /// The tracker's continuous state word for one store (HS2-JTTQMY). The words match the
 /// notification reasons; `Active` covers the release grace, as notifications do.
@@ -118,6 +155,8 @@ pub struct LiveActivity {
     pub stalled: Vec<(String, String)>,
     /// Halts of workers that still hold a live claim here.
     pub halted: Vec<HaltNote>,
+    /// Terminal prompts that workers with a live claim here are waiting at (HS2-EGKKA0).
+    pub prompts: Vec<PromptNote>,
     /// Distinct workers that held a claim during the current (or stalled) period.
     pub expected_workers: usize,
     /// One time per ticket whose last progress write is inside [`UPDATED_WINDOW`], oldest
@@ -161,6 +200,9 @@ impl StoreActivity {
 #[derive(Debug)]
 pub struct ProjectActivity {
     stores: HashMap<String, StoreActivity>,
+    /// Open terminal prompts by `(worker, terminal, kind)`, with when each appeared. They
+    /// belong to workers, not stores: [`Self::live`] shows them where the worker holds a claim.
+    prompts: BTreeMap<(String, String, PromptKind), OffsetDateTime>,
     grace: Duration,
     /// `None` disables idle detection.
     idle: Option<Duration>,
@@ -177,6 +219,7 @@ impl ProjectActivity {
     pub fn with_grace(grace: Duration) -> ProjectActivity {
         ProjectActivity {
             stores: HashMap::new(),
+            prompts: BTreeMap::new(),
             grace,
             idle: Some(IDLE_WINDOW),
         }
@@ -239,6 +282,17 @@ impl ProjectActivity {
     /// live word reads Halted until the session resumes, progresses on its claim, or loses
     /// its claims. Returns the stores that changed.
     pub fn note_halt(&mut self, worker: &str, message: &str, now: OffsetDateTime) -> Vec<String> {
+        self.note_halt_with(worker, message, HaltDetail::default(), now)
+    }
+
+    /// [`Self::note_halt`] with what else the router knows about the halt (HS2-EGKKA0).
+    pub fn note_halt_with(
+        &mut self,
+        worker: &str,
+        message: &str,
+        detail: HaltDetail,
+        now: OffsetDateTime,
+    ) -> Vec<String> {
         let mut changed: Vec<String> = Vec::new();
         for (store, activity) in &mut self.stores {
             if activity.holds_live_claim(worker, now) {
@@ -248,11 +302,51 @@ impl ProjectActivity {
                         worker: worker.to_string(),
                         message: message.to_string(),
                         at: now,
+                        detail: detail.clone(),
                     },
                 );
                 changed.push(store.clone());
             }
         }
+        changed.sort();
+        changed
+    }
+
+    /// Replace the open terminal prompts with `current`, the complete set the hooks report
+    /// now (HS2-EGKKA0). A prompt that stays open keeps its first time unless the hook
+    /// reports one. Returns the stores where a worker whose prompts changed holds a claim.
+    pub fn sync_prompts(&mut self, current: Vec<PromptReport>, now: OffsetDateTime) -> Vec<String> {
+        let mut next: BTreeMap<(String, String, PromptKind), OffsetDateTime> = BTreeMap::new();
+        for (worker, terminal, kind, since) in current {
+            let key = (worker, terminal, kind);
+            let at = since
+                .or_else(|| self.prompts.get(&key).copied())
+                .unwrap_or(now);
+            next.insert(key, at);
+        }
+        let mut workers: BTreeSet<String> = BTreeSet::new();
+        for (key, at) in &next {
+            if self.prompts.get(key) != Some(at) {
+                workers.insert(key.0.clone());
+            }
+        }
+        for key in self.prompts.keys() {
+            if !next.contains_key(key) {
+                workers.insert(key.0.clone());
+            }
+        }
+        self.prompts = next;
+        let mut changed: Vec<String> = self
+            .stores
+            .iter()
+            .filter(|(_, activity)| {
+                activity
+                    .claims
+                    .values()
+                    .any(|claim| workers.contains(&claim.worker))
+            })
+            .map(|(store, _)| store.clone())
+            .collect();
         changed.sort();
         changed
     }
@@ -427,6 +521,7 @@ impl ProjectActivity {
                 idle_deadline: None,
                 stalled: Vec::new(),
                 halted: Vec::new(),
+                prompts: Vec::new(),
                 expected_workers: 0,
                 updated: Vec::new(),
             };
@@ -460,6 +555,18 @@ impl ProjectActivity {
             .filter(|h| live.iter().any(|c| c.worker == h.worker))
             .cloned()
             .collect();
+        let mut prompts: Vec<PromptNote> = self
+            .prompts
+            .iter()
+            .filter(|((worker, _, _), _)| live.iter().any(|c| c.worker == *worker))
+            .map(|((worker, terminal, kind), since)| PromptNote {
+                worker: worker.clone(),
+                terminal: terminal.clone(),
+                kind: *kind,
+                since: *since,
+            })
+            .collect();
+        prompts.sort_by(|a, b| (a.since, &a.worker, a.kind).cmp(&(b.since, &b.worker, b.kind)));
         let idle_deadline = self.idle.filter(|_| !live.is_empty()).and_then(|idle| {
             activity
                 .last_progress
@@ -500,6 +607,7 @@ impl ProjectActivity {
                 Vec::new()
             },
             halted,
+            prompts,
             expected_workers: match word {
                 ActivityWord::Stopped => 0,
                 _ => activity.period_workers.len(),
@@ -945,5 +1053,121 @@ mod tests {
             p.check("s", t(base + 60));
             assert_eq!(word(&p, "s", base + 61), ActivityWord::Stopped);
         }
+    }
+
+    fn prompt(worker: &str, terminal: &str, kind: PromptKind, since: Option<i64>) -> PromptReport {
+        (worker.into(), terminal.into(), kind, since.map(t))
+    }
+
+    fn prompts(p: &ProjectActivity, store: &str, at: i64) -> Vec<(String, PromptKind, i64)> {
+        p.live(store, t(at))
+            .prompts
+            .into_iter()
+            .map(|n| (n.worker, n.kind, (n.since - t(0)).whole_seconds()))
+            .collect()
+    }
+
+    #[test]
+    fn hs2_egkka0_prompts_follow_claims_resolution_and_repeated_syncs() {
+        let mut p = ProjectActivity::default();
+        // Empty, then a prompt for a worker with no claim anywhere: nothing to touch or show.
+        assert!(p.sync_prompts(Vec::new(), t(0)).is_empty());
+        assert!(
+            p.sync_prompts(vec![prompt("w1", "t1", PromptKind::Permission, None)], t(5))
+                .is_empty()
+        );
+        assert!(prompts(&p, "s", 6).is_empty(), "no store knows w1 yet");
+        // The worker claims afterwards: the open prompt shows with its first-seen time.
+        p.observe("s", claim("A", "w1", 99_999), t(10));
+        p.observe("other", claim("B", "w2", 99_999), t(10));
+        assert_eq!(
+            prompts(&p, "s", 11),
+            [("w1".into(), PromptKind::Permission, 5)]
+        );
+        assert!(
+            prompts(&p, "other", 11).is_empty(),
+            "another worker's store"
+        );
+        // Repeating the same set keeps the time and touches nothing.
+        let same = vec![prompt("w1", "t1", PromptKind::Permission, None)];
+        assert!(p.sync_prompts(same.clone(), t(20)).is_empty());
+        assert!(p.sync_prompts(same, t(30)).is_empty());
+        assert_eq!(prompts(&p, "s", 31)[0].2, 5);
+        // A question joins it (with the hook's own time); both list, oldest first.
+        let both = vec![
+            prompt("w1", "t1", PromptKind::Question, Some(25)),
+            prompt("w1", "t1", PromptKind::Permission, None),
+        ];
+        assert_eq!(p.sync_prompts(both, t(40)), ["s"]);
+        assert_eq!(
+            prompts(&p, "s", 41),
+            [
+                ("w1".into(), PromptKind::Permission, 5),
+                ("w1".into(), PromptKind::Question, 25)
+            ]
+        );
+        // A replacement question (new hook time) is a change.
+        let replaced = vec![
+            prompt("w1", "t1", PromptKind::Question, Some(45)),
+            prompt("w1", "t1", PromptKind::Permission, None),
+        ];
+        assert_eq!(p.sync_prompts(replaced, t(46)), ["s"]);
+        // The permission resolves; then a different worker's prompt appears (interleaved).
+        let question = vec![prompt("w1", "t1", PromptKind::Question, Some(45))];
+        assert_eq!(p.sync_prompts(question.clone(), t(50)), ["s"]);
+        let mut with_w2 = question;
+        with_w2.push(prompt("w2", "t2", PromptKind::Permission, None));
+        assert_eq!(p.sync_prompts(with_w2, t(55)), ["other"]);
+        assert_eq!(
+            prompts(&p, "other", 56),
+            [("w2".into(), PromptKind::Permission, 55)]
+        );
+        // Prompts are not progress and do not change the tracker's word.
+        assert_eq!(word(&p, "s", 56), ActivityWord::Active);
+        assert_eq!(word(&p, "s", 99_000), ActivityWord::MayBeStuck);
+        // Everything answered: both stores change, and an empty refill starts fresh.
+        assert_eq!(p.sync_prompts(Vec::new(), t(60)), ["other", "s"]);
+        assert!(prompts(&p, "s", 61).is_empty());
+        p.sync_prompts(
+            vec![prompt("w1", "t1", PromptKind::Permission, None)],
+            t(70),
+        );
+        assert_eq!(
+            prompts(&p, "s", 71)[0].2,
+            70,
+            "a reopened prompt has a new time"
+        );
+        // Losing the claim hides the prompt; the lease lapsing hides it too.
+        p.observe("s", release("A", false), t(80));
+        assert!(prompts(&p, "s", 81).is_empty());
+        let mut q = ProjectActivity::default();
+        q.observe("s", claim("A", "w1", 100), t(0));
+        q.sync_prompts(vec![prompt("w1", "t1", PromptKind::Question, None)], t(1));
+        assert_eq!(prompts(&q, "s", 99).len(), 1);
+        assert!(prompts(&q, "s", 100).is_empty());
+    }
+
+    #[test]
+    fn hs2_egkka0_halt_detail_follows_the_halt_lifecycle() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 99_999), t(0));
+        let limit = HaltDetail {
+            terminal: Some("t1".into()),
+            usage_limit: true,
+            resets_at: Some(t(3600)),
+        };
+        assert_eq!(p.note_halt_with("w1", "limit", limit.clone(), t(10)), ["s"]);
+        let live = p.live("s", t(11));
+        assert_eq!(live.word, ActivityWord::Halted);
+        assert_eq!(live.halted[0].detail, limit);
+        // A later, different halt replaces the detail (an overload is not a pause).
+        p.note_halt("w1", "overloaded", t(20));
+        assert_eq!(p.live("s", t(21)).halted[0].detail, HaltDetail::default());
+        // A reset time passing changes nothing by itself: the session still waits.
+        p.note_halt_with("w1", "limit", limit.clone(), t(30));
+        assert_eq!(p.live("s", t(7200)).halted[0].detail, limit);
+        // Resume clears it, as for any halt.
+        assert_eq!(p.resumed("w1"), ["s"]);
+        assert!(p.live("s", t(7201)).halted.is_empty());
     }
 }

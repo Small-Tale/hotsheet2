@@ -17020,6 +17020,32 @@ components:
     LiveWord:
       type: string
       enum: [active, stopped, may_be_stuck, stalled, halted, waiting_on_you]
+    LiveCause:
+      type: object
+      description: A stuck cause of a worker holding a live claim in the store (HS2-EGKKA0).
+      required: [kind, worker, terminal, since_ms, resets_at_ms, prompt]
+      properties:
+        kind:
+          type: string
+          enum: [usage_limit, awaiting_input]
+        worker:
+          type: string
+        terminal:
+          type: [string, 'null']
+          description: The Hot Sheet terminal the session runs in; null when unknown.
+        since_ms:
+          type: integer
+          description: When the halt was reported or the prompt appeared.
+        resets_at_ms:
+          type: [integer, 'null']
+          description: usage_limit only. When the tool said the limit resets; null when it stated no reset that needs no time-zone guess (unknown).
+        prompt:
+          description: awaiting_input only. Which terminal prompt the session waits at; null for usage_limit.
+          anyOf:
+            - type: string
+              enum: [permission, question]
+            - type: 'null'
+      additionalProperties: false
     LiveStoreState:
       type: object
       description: One store's live state (HS2-JTTQMY, docs/32-notifier-plugins.md §32.8.3). Times are Unix milliseconds; clients compute ages and decaying rates locally.
@@ -17045,7 +17071,7 @@ components:
           $ref: '#/components/schemas/LiveWord'
         activity:
           type: object
-          required: [word, active_since_ms, stopped_at_ms, last_progress_ms, idle_deadline_ms, stalled, halted]
+          required: [word, active_since_ms, stopped_at_ms, last_progress_ms, idle_deadline_ms, stalled, halted, causes]
           properties:
             word:
               $ref: '#/components/schemas/LiveWord'
@@ -17079,6 +17105,11 @@ components:
                     type: string
                   at_ms:
                     type: integer
+            causes:
+              type: array
+              description: Why held claims are not moving, as the tools report it (HS2-EGKKA0, §32.8.4). Usage-limit pauses first, then terminal prompts, each oldest first.
+              items:
+                $ref: '#/components/schemas/LiveCause'
         claims:
           type: array
           items:

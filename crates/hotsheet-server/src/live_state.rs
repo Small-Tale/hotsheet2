@@ -30,7 +30,7 @@ use time::{Duration, OffsetDateTime};
 use crate::AppState;
 use crate::api_error::ApiError;
 use crate::events::ChangeEvent;
-use crate::project_activity::{ActivityWord, LiveActivity, UPDATED_WINDOW};
+use crate::project_activity::{ActivityWord, LiveActivity, PromptKind, UPDATED_WINDOW};
 
 /// The change-event kind that carries a [`LiveStoreState`].
 pub const LIVE_STATE_KIND: &str = "live_state";
@@ -125,6 +125,44 @@ pub struct LiveActivityFacts {
     pub idle_deadline_ms: Option<i64>,
     pub stalled: Vec<LiveStalledClaim>,
     pub halted: Vec<LiveHalt>,
+    /// Why held claims are not moving, as the tools report it (HS2-EGKKA0): usage-limit
+    /// pauses first, then terminal prompts, each oldest first.
+    pub causes: Vec<LiveCause>,
+}
+
+/// A stuck cause's kind (HS2-EGKKA0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveCauseKind {
+    /// A halted session's tool reported a usage or rate limit.
+    UsageLimit,
+    /// A session waits at a terminal prompt for the user.
+    AwaitingInput,
+}
+
+/// Which terminal prompt an `awaiting_input` cause waits at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LivePrompt {
+    Permission,
+    Question,
+}
+
+/// One stuck cause of a worker holding a live claim in this store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveCause {
+    pub kind: LiveCauseKind,
+    pub worker: String,
+    /// The Hot Sheet terminal the session runs in, for a direct link; `null` when unknown.
+    pub terminal: Option<String>,
+    /// When the halt was reported or the prompt appeared.
+    pub since_ms: i64,
+    /// `usage_limit`: when the tool said the limit resets. `null` means the tool did not
+    /// state a reset time that needs no time-zone guess, so it is unknown. Always `null` for
+    /// `awaiting_input`.
+    pub resets_at_ms: Option<i64>,
+    /// `awaiting_input`: the prompt; `null` for `usage_limit`.
+    pub prompt: Option<LivePrompt>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -475,7 +513,38 @@ fn facts(activity: &LiveActivity) -> LiveActivityFacts {
                 at_ms: unix_ms(halt.at),
             })
             .collect(),
+        causes: causes(activity),
     }
+}
+
+/// The snapshot's stuck causes (HS2-EGKKA0): usage-limit halts, then terminal prompts.
+pub fn causes(activity: &LiveActivity) -> Vec<LiveCause> {
+    let mut limits: Vec<LiveCause> = activity
+        .halted
+        .iter()
+        .filter(|halt| halt.detail.usage_limit)
+        .map(|halt| LiveCause {
+            kind: LiveCauseKind::UsageLimit,
+            worker: halt.worker.clone(),
+            terminal: halt.detail.terminal.clone(),
+            since_ms: unix_ms(halt.at),
+            resets_at_ms: halt.detail.resets_at.map(unix_ms),
+            prompt: None,
+        })
+        .collect();
+    limits.sort_by(|a, b| (a.since_ms, &a.worker).cmp(&(b.since_ms, &b.worker)));
+    limits.extend(activity.prompts.iter().map(|prompt| LiveCause {
+        kind: LiveCauseKind::AwaitingInput,
+        worker: prompt.worker.clone(),
+        terminal: Some(prompt.terminal.clone()),
+        since_ms: unix_ms(prompt.since),
+        resets_at_ms: None,
+        prompt: Some(match prompt.kind {
+            PromptKind::Permission => LivePrompt::Permission,
+            PromptKind::Question => LivePrompt::Question,
+        }),
+    }));
+    limits
 }
 
 /// Rows with an unexpired lease, oldest claim first.
@@ -1120,6 +1189,7 @@ mod tests {
                 idle_deadline_ms: Some(1_900_000),
                 stalled: Vec::new(),
                 halted: Vec::new(),
+                causes: Vec::new(),
             },
             claims: Vec::new(),
             workers: LiveWorkers {
@@ -1173,5 +1243,75 @@ mod tests {
             tokens: 1,
         });
         assert!(materially_changed(&base, &tokens));
+        let mut cause = base.clone();
+        cause.activity.causes.push(LiveCause {
+            kind: LiveCauseKind::AwaitingInput,
+            worker: "w".into(),
+            terminal: Some("t".into()),
+            since_ms: 0,
+            resets_at_ms: None,
+            prompt: Some(LivePrompt::Question),
+        });
+        assert!(materially_changed(&base, &cause), "a new cause pushes");
+    }
+
+    #[test]
+    fn hs2_egkka0_causes_list_usage_limits_then_prompts_and_serialize_unknown_as_null() {
+        use crate::project_activity::{HaltDetail, HaltNote, PromptNote};
+        let now = at(1_800_000_000_000);
+        let mut activity = crate::project_activity::ProjectActivity::default().live("none", now);
+        assert!(causes(&activity).is_empty(), "nothing reported");
+        let halt = |worker: &str, ms: i64, detail: HaltDetail| HaltNote {
+            worker: worker.into(),
+            message: "m".into(),
+            at: at(ms),
+            detail,
+        };
+        activity.halted = vec![
+            halt(
+                "w2",
+                20,
+                HaltDetail {
+                    terminal: Some("t2".into()),
+                    usage_limit: true,
+                    resets_at: None,
+                },
+            ),
+            // An overload halt is no usage-limit cause.
+            halt("w3", 5, HaltDetail::default()),
+            halt(
+                "w1",
+                10,
+                HaltDetail {
+                    terminal: Some("t1".into()),
+                    usage_limit: true,
+                    resets_at: Some(at(3_600_010)),
+                },
+            ),
+        ];
+        activity.prompts = vec![PromptNote {
+            worker: "w4".into(),
+            terminal: "t4".into(),
+            kind: PromptKind::Permission,
+            since: at(1),
+        }];
+        let list = causes(&activity);
+        assert_eq!(
+            list.iter().map(|c| c.worker.as_str()).collect::<Vec<_>>(),
+            ["w1", "w2", "w4"]
+        );
+        assert_eq!(list[0].resets_at_ms, Some(3_600_010));
+        assert_eq!(list[1].resets_at_ms, None);
+        assert_eq!(list[2].kind, LiveCauseKind::AwaitingInput);
+        let json = serde_json::to_value(&list).unwrap();
+        assert_eq!(
+            json[0],
+            serde_json::json!({"kind":"usage_limit","worker":"w1","terminal":"t1","since_ms":10,
+                "resets_at_ms":3_600_010,"prompt":null})
+        );
+        assert_eq!(json[1]["resets_at_ms"], serde_json::Value::Null, "unknown");
+        assert_eq!(json[2]["kind"], "awaiting_input");
+        assert_eq!(json[2]["prompt"], "permission");
+        assert_eq!(json[2]["terminal"], "t4");
     }
 }

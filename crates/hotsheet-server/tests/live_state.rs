@@ -285,3 +285,214 @@ async fn hs2_jttqmy_an_unrenewed_lease_reads_stalled_and_an_unchanged_state_push
     assert_eq!(stalled.workers.expected, 1);
     assert_eq!(stalled.workers.live, 0);
 }
+
+/// A ticket claimed by the session of a live `cat` terminal `terminal` (worker
+/// `terminal-<terminal>`, the id that terminal's session claims with).
+async fn claimed_terminal(router: &axum::Router, terminal: &str) -> String {
+    let (status, _) = call(
+        router,
+        "POST",
+        "/terminals",
+        Some(json!({"command":"cat","id":terminal})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, created) = call(
+        router,
+        "POST",
+        "/tickets",
+        Some(json!({"title":format!("Work in {terminal}")})),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    call(
+        router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":format!("terminal-{terminal}"),"lease_minutes":60})),
+    )
+    .await;
+    id
+}
+
+fn causes(live: &Value) -> Vec<Value> {
+    live["activity"]["causes"].as_array().unwrap().clone()
+}
+
+/// HS2-EGKKA0 E2E: a usage-limit halt reported by the terminal's hook becomes a cause with
+/// the reset time the message states, an unstated reset is explicitly null, an overload is
+/// no cause, and resuming clears it, all through the running router without rules.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_egkka0_usage_limit_pause_carries_its_reset_and_clears_on_resume() {
+    let h = harness();
+    let router = app(h.state.clone());
+    let _router_task =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+    let mut events = h.state.subscribe();
+    claimed_terminal(&router, "lim").await;
+    next_live(&mut events, &h.store_id, |live| live["state"] == "active").await;
+
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/terminals/lim/halt",
+        Some(json!({"error_type":"rate_limit","message":"Usage limit reached. Resets in 2h 15m.","agent":"claude"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let paused = next_live(&mut events, &h.store_id, |live| !causes(live).is_empty()).await;
+    assert_eq!(paused["state"], "halted", "the word is unchanged");
+    let cause = &causes(&paused)[0];
+    assert_eq!(cause["kind"], "usage_limit");
+    assert_eq!(cause["worker"], "terminal-lim");
+    assert_eq!(cause["terminal"], "lim");
+    assert_eq!(cause["prompt"], Value::Null);
+    let since = cause["since_ms"].as_i64().unwrap();
+    let resets = cause["resets_at_ms"].as_i64().unwrap();
+    assert!(
+        (resets - since - 135 * 60_000).abs() < 5_000,
+        "2h 15m after the report: {since} -> {resets}"
+    );
+
+    // A reset stated only as a local time is unknown, never guessed.
+    call(
+        &router,
+        "POST",
+        "/terminals/lim/halt",
+        Some(json!({"error_type":"usage_limit_exceeded","message":"You've hit your usage limit. Try again at 3:10 PM.","agent":"codex"})),
+    )
+    .await;
+    let unknown = next_live(&mut events, &h.store_id, |live| {
+        causes(live)
+            .first()
+            .is_some_and(|cause| cause["resets_at_ms"].is_null())
+    })
+    .await;
+    assert_eq!(causes(&unknown)[0]["kind"], "usage_limit");
+
+    // An overload is a halt but no usage-limit cause.
+    call(
+        &router,
+        "POST",
+        "/terminals/lim/halt",
+        Some(json!({"error_type":"overloaded","message":"Selected model is at capacity."})),
+    )
+    .await;
+    let overloaded = next_live(&mut events, &h.store_id, |live| causes(live).is_empty()).await;
+    assert_eq!(overloaded["state"], "halted");
+
+    // Usage limit again, then the user prompts again (resume): the cause clears.
+    call(
+        &router,
+        "POST",
+        "/terminals/lim/halt",
+        Some(json!({"error_type":"rate_limit","message":"Usage limit reached."})),
+    )
+    .await;
+    next_live(&mut events, &h.store_id, |live| !causes(live).is_empty()).await;
+    call(&router, "DELETE", "/terminals/lim/halt", None).await;
+    let resumed = next_live(&mut events, &h.store_id, |live| live["state"] == "active").await;
+    assert!(causes(&resumed).is_empty());
+    let (_, read) = call(
+        &router,
+        "GET",
+        &format!("/stores/{}/live-state", h.store_id),
+        None,
+    )
+    .await;
+    assert_eq!(read["activity"]["causes"], json!([]));
+    call(&router, "DELETE", "/terminals/lim", None).await;
+}
+
+/// HS2-EGKKA0 E2E: a terminal session waiting at an `AskUserQuestion` or a bridged permission
+/// prompt marks its worker's project awaiting input; answering each clears it.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_egkka0_terminal_prompts_mark_awaiting_input_until_answered() {
+    let h = harness();
+    let router = app(h.state.clone());
+    let _router_task =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+    let mut events = h.state.subscribe();
+    claimed_terminal(&router, "ask").await;
+    // An unclaimed terminal's prompt never shows on the store.
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/terminals",
+        Some(json!({"command":"cat","id":"idle"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    next_live(&mut events, &h.store_id, |live| live["state"] == "active").await;
+
+    // A question.
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/terminals/ask/question",
+        Some(json!({"question":"Which?","tool_use_id":"tu-1","session_id":"s-ask","questions":[]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let asked = next_live(&mut events, &h.store_id, |live| !causes(live).is_empty()).await;
+    let cause = &causes(&asked)[0];
+    assert_eq!(cause["kind"], "awaiting_input");
+    assert_eq!(cause["prompt"], "question");
+    assert_eq!(cause["terminal"], "ask");
+    assert_eq!(cause["worker"], "terminal-ask");
+    assert_eq!(cause["resets_at_ms"], Value::Null);
+    assert_eq!(
+        asked["state"], "active",
+        "a prompt is a cause, not a new word"
+    );
+    call(
+        &router,
+        "POST",
+        "/terminals/idle/question",
+        Some(json!({"question":"Idle?","tool_use_id":"tu-9","questions":[]})),
+    )
+    .await;
+    call(
+        &router,
+        "DELETE",
+        "/terminals/ask/question?tool_use_id=tu-1",
+        None,
+    )
+    .await;
+    let answered = next_live(&mut events, &h.store_id, |live| causes(live).is_empty()).await;
+    assert_eq!(answered["state"], "active");
+
+    // A permission prompt raised by the terminal's hook, matched by its session id.
+    let ask_router = router.clone();
+    let ask = tokio::spawn(async move {
+        call(
+            &ask_router,
+            "POST",
+            "/permissions/ask",
+            Some(
+                json!({"connection":"s-ask","tool":"Bash","action":"rm x","agent":"claude",
+                "terminal_id":"ask","session_id":"s-ask"}),
+            ),
+        )
+        .await
+    });
+    let waiting = next_live(&mut events, &h.store_id, |live| !causes(live).is_empty()).await;
+    assert_eq!(causes(&waiting)[0]["prompt"], "permission");
+    assert_eq!(causes(&waiting)[0]["terminal"], "ask");
+    let (_, pending) = call(&router, "GET", "/permissions", None).await;
+    let request = pending[0]["id"].as_u64().unwrap();
+    let (status, _) = call(
+        &router,
+        "POST",
+        &format!("/permissions/{request}"),
+        Some(json!({"decision":"allow","scope":"once"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ask.await.unwrap().1["decision"], "allow");
+    let resolved = next_live(&mut events, &h.store_id, |live| causes(live).is_empty()).await;
+    assert_eq!(resolved["state"], "active");
+    for terminal in ["ask", "idle"] {
+        call(&router, "DELETE", &format!("/terminals/{terminal}"), None).await;
+    }
+}

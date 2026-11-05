@@ -39,6 +39,7 @@ pub mod repository_browser;
 mod request_timing;
 mod routes;
 pub mod source_revision;
+pub mod stuck_causes;
 pub mod sync_loop;
 pub mod terminal_broker;
 mod terminal_names;

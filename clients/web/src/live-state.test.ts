@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChangeEvent, LiveStoreState } from './api';
+import type { ChangeEvent, LiveCause, LiveStoreState } from './api';
 import {
   aggregateLiveStates,
+  awaitingInputCauses,
   createLiveStateStore,
   etaOverrunMs,
   gaugeFraction,
   isNewerLiveState,
+  pausedUntilMs,
   progressAgeMs,
   ticketsUpdatedPerHour,
   tokensPerMinute,
@@ -35,6 +37,7 @@ function liveFixture(overrides: Partial<LiveStoreState> = {}): LiveStoreState {
       idle_deadline_ms: NOW + 28 * MINUTE,
       stalled: [],
       halted: [],
+      causes: [],
     },
     claims: [
       {
@@ -148,6 +151,69 @@ describe('live state helpers (HS2-JTTQMY)', () => {
     // A restarted server counts revisions from 1 again.
     expect(isNewerLiveState(liveFixture({ revision: 90 }), liveFixture({ epoch_ms: 2, revision: 1 }))).toBe(true);
     expect(isNewerLiveState(liveFixture({ epoch_ms: 2, revision: 1 }), liveFixture({ revision: 90 }))).toBe(false);
+  });
+});
+
+describe('stuck causes (HS2-EGKKA0)', () => {
+  const pause = (worker: string, resets: number | null): LiveCause => ({
+    kind: 'usage_limit',
+    worker,
+    terminal: `t-${worker}`,
+    since_ms: NOW - MINUTE,
+    resets_at_ms: resets,
+    prompt: null,
+  });
+  const prompt = (worker: string, which: 'permission' | 'question'): LiveCause => ({
+    kind: 'awaiting_input',
+    worker,
+    terminal: `t-${worker}`,
+    since_ms: NOW - 2 * MINUTE,
+    resets_at_ms: null,
+    prompt: which,
+  });
+  const withCauses = (causes: LiveCause[]) => {
+    const state = liveFixture();
+    return { ...state, activity: { ...state.activity, causes } };
+  };
+
+  it('the parser accepts both causes and rejects an unknown kind or prompt', () => {
+    const state = withCauses([pause('w1', NOW + 60 * MINUTE), prompt('w2', 'question')]);
+    expect(parseLiveStoreState(state)).toEqual(state);
+    expect(() => parseLiveStoreState(withCauses([{ ...pause('w1', null), kind: 'idle' } as never]))).toThrow(
+      'live state',
+    );
+    expect(() => parseLiveStoreState(withCauses([{ ...prompt('w1', 'question'), prompt: 'shell' } as never]))).toThrow(
+      'live state',
+    );
+    const missing = liveFixture();
+    delete (missing.activity as Partial<LiveStoreState['activity']>).causes;
+    expect(() => parseLiveStoreState(missing)).toThrow('live state');
+  });
+
+  it('pausedUntilMs: none, unknown when any reset is unstated, else the latest reset', () => {
+    expect(pausedUntilMs(withCauses([]))).toBeUndefined();
+    expect(pausedUntilMs(withCauses([prompt('w1', 'permission')]))).toBeUndefined();
+    expect(pausedUntilMs(withCauses([pause('w1', NOW + MINUTE)]))).toBe(NOW + MINUTE);
+    expect(pausedUntilMs(withCauses([pause('w1', NOW + MINUTE), pause('w2', NOW + 9 * MINUTE)]))).toBe(
+      NOW + 9 * MINUTE,
+    );
+    expect(pausedUntilMs(withCauses([pause('w1', NOW + MINUTE), pause('w2', null)]))).toBeNull();
+    // A reset in the past is still reported: the session waits for a new prompt.
+    expect(pausedUntilMs(withCauses([pause('w1', NOW - MINUTE)]))).toBe(NOW - MINUTE);
+  });
+
+  it('awaitingInputCauses lists only terminal prompts', () => {
+    const causes = [pause('w1', null), prompt('w2', 'permission'), prompt('w3', 'question')];
+    expect(awaitingInputCauses(withCauses(causes)).map((cause) => cause.worker)).toEqual(['w2', 'w3']);
+    expect(awaitingInputCauses(withCauses([]))).toEqual([]);
+  });
+
+  it('a pushed snapshot replaces the causes, and a later one without them clears them', () => {
+    const store = createLiveStateStore();
+    store.applyEvents([liveEvent(withCauses([prompt('w1', 'question')]))]);
+    expect(awaitingInputCauses(store.states.value.get('s1')!)).toHaveLength(1);
+    store.applyEvents([liveEvent({ ...withCauses([]), revision: 2 })]);
+    expect(awaitingInputCauses(store.states.value.get('s1')!)).toEqual([]);
   });
 });
 

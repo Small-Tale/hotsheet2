@@ -251,6 +251,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
         idle_deadline_ms: null,
         stalled: [],
         halted: [],
+        causes: [],
       },
       claims: [],
       workers: { live: 0, expected: 0 },

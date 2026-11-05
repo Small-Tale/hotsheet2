@@ -705,6 +705,107 @@ pub(crate) async fn terminal_worker(state: &AppState, id: &str) -> Option<String
         .and_then(|t| t.worker_id().map(str::to_owned))
 }
 
+/// Every live terminal's claim worker id, by terminal id (HS2-EGKKA0). `None` when the broker
+/// cannot list its terminals, so a transient failure never reads as "no prompts".
+pub(crate) async fn terminal_workers(
+    state: &AppState,
+) -> Option<std::collections::HashMap<String, String>> {
+    if let Some(tb) = &state.terminal_broker {
+        return match tb.call(hotsheet_terminals::BrokerRequest::List).await {
+            Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => Some(
+                terminals
+                    .into_iter()
+                    .filter(|t| t.alive)
+                    .filter_map(|t| Some((t.id, t.worker?)))
+                    .collect(),
+            ),
+            _ => None,
+        };
+    }
+    Some(
+        state
+            .terminals
+            .list()
+            .into_iter()
+            .filter_map(|key| {
+                let term = state.terminals.get(&key)?;
+                let worker = term
+                    .is_alive()
+                    .then(|| term.worker_id().map(str::to_owned))??;
+                Some((key.1, worker))
+            })
+            .collect(),
+    )
+}
+
+/// The terminal prompts each live terminal's session is waiting at (HS2-EGKKA0), read from hook
+/// state only: an unanswered `AskUserQuestion` the terminal reported, and a pending bridged
+/// permission request whose connection is the session id the terminal's AI session reported.
+/// A terminal without a worker id, or a session that reported no id, yields nothing.
+pub(crate) fn awaiting_prompts(
+    state: &AppState,
+    workers: &std::collections::HashMap<String, String>,
+) -> Vec<crate::project_activity::PromptReport> {
+    use crate::project_activity::PromptKind;
+    use hotsheet_sync::LockExt;
+    let questions = state.terminal_questions.lock_or_recover().clone();
+    let sessions: std::collections::HashMap<String, String> = state
+        .terminal_ai_connections
+        .lock_or_recover()
+        .iter()
+        .filter_map(|(id, connection)| Some((id.clone(), connection.session_id.clone()?)))
+        .collect();
+    let pending = state.permissions.pending();
+    let mut prompts = Vec::new();
+    for (terminal, worker) in workers {
+        if let Some(question) = questions
+            .get(terminal)
+            .filter(|question| question.answer.is_none())
+        {
+            let since = hotsheet_model::Timestamp::new(&question.at).instant();
+            prompts.push((
+                worker.clone(),
+                terminal.clone(),
+                PromptKind::Question,
+                since,
+            ));
+        }
+        if sessions
+            .get(terminal)
+            .is_some_and(|session| pending.iter().any(|request| request.connection == *session))
+        {
+            prompts.push((
+                worker.clone(),
+                terminal.clone(),
+                PromptKind::Permission,
+                None,
+            ));
+        }
+    }
+    prompts
+}
+
+/// Terminal `id`'s halt error type and report time while its halt still carries `message`
+/// (HS2-EGKKA0); `None` once it was cleared or replaced by a different report.
+pub(crate) fn terminal_halt_kind(
+    state: &AppState,
+    id: &str,
+    message: &str,
+) -> Option<(String, Option<time::OffsetDateTime>)> {
+    use hotsheet_sync::LockExt;
+    state
+        .terminal_halts
+        .lock_or_recover()
+        .get(id)
+        .filter(|halt| halt.message == message)
+        .map(|halt| {
+            (
+                halt.error_type.clone(),
+                hotsheet_model::Timestamp::new(&halt.at).instant(),
+            )
+        })
+}
+
 /// The terminal-manager key for a terminal id — the served store root is the project.
 pub(crate) fn term_key(state: &AppState, id: &str) -> hotsheet_terminals::TermKey {
     (state.store.root().display().to_string(), id.to_string())

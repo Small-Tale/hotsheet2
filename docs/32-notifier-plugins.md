@@ -423,7 +423,8 @@ notification always agree. The tracker therefore runs whether or not a rule name
 **Values.** Times are Unix milliseconds, `null` when unknown.
 
 - `activity`: period start, stop time, last progress (the idle detector's definition, so
-  claim renewals do not count), the idle deadline, stalled claims, and halts.
+  claim renewals do not count), the idle deadline, stalled claims, halts, and stuck
+  `causes` (§32.8.4).
 - `claims`: each live claim's ticket, worker, phase, claim time, lease expiry, and ETA. A
   client computes the ETA overrun locally.
 - `workers`: `live` counts distinct workers with a live claim. `expected` counts the workers
@@ -449,7 +450,7 @@ Main CI status is not part of the snapshot yet (HS2-M8HHEA).
 **Delivery.** Each change to a snapshot is pushed as one `live_state` change event whose
 `live` member is the whole snapshot. It reaches every client on the existing WebSocket or
 long-poll stream and replays by cursor. A rebuild follows a ticket write, activity, a turn,
-a usage record, a halt or resume, or a tracker deadline (lease expiry, grace end, idle
+a usage record, a halt or resume, a terminal prompt opening or closing, or a tracker deadline (lease expiry, grace end, idle
 window). Rebuilds within 250 ms share one. An unchanged snapshot is not pushed, and a
 last-progress move under 15 seconds alone does not push. `epoch_ms` (server start) and
 `revision` order snapshots across restarts. Clients compute ages and decaying rates from
@@ -463,8 +464,50 @@ so there is no serverless form.
 
 The web client keeps the snapshots in `clients/web/src/live-state.ts`
 (`createLiveStateStore`). Its pure helpers (`tokensPerMinute`, `ticketsUpdatedPerHour`,
-`progressAgeMs`, `etaOverrunMs`, `gaugeFraction`, `aggregateLiveStates`) give glance
-surfaces their numbers. The all-projects gauges scale to the sum of the stores' peaks (HS2-Y11TFC).
+`progressAgeMs`, `etaOverrunMs`, `gaugeFraction`, `aggregateLiveStates`, `pausedUntilMs`,
+`awaitingInputCauses`) give glance surfaces their numbers. The all-projects gauges scale to the
+sum of the stores' peaks (HS2-Y11TFC).
+
+### 32.8.4 Stuck causes (HS2-EGKKA0)
+
+`activity.causes` says why a worker that holds a live claim in the store is not moving, using
+only what the AI tools report. Each cause has `kind`, `worker`, `terminal` (the Hot Sheet
+terminal to open, `null` when unknown), and `since_ms`. Usage-limit pauses come first, then
+prompts, each oldest first. A cause never changes the state word, so notifications and clients
+keep one vocabulary; a glance surface shows the cause in place of the word it refines
+([34](34-glance-surfaces.md) §34.2).
+
+**Usage-limit pause** (`usage_limit`). A terminal halt (§32.8.1) whose tool error type is a
+usage or rate limit: Claude's `StopFailure` `rate_limit`, or a Codex rollout's
+`usage_limit_exceeded` ([05](05-ai-tool-plugins.md), halted sessions). Neither tool sends a
+structured reset time, so `resets_at_ms` is read from the halt message only when the message
+states an instant that needs no time-zone guess:
+
+| Form                                                  | Example                                       |
+| ----------------------------------------------------- | --------------------------------------------- |
+| Claude's legacy pipe and Unix time                    | `Claude AI usage limit reached\|1794023400`   |
+| An RFC 3339 instant                                   | `try again at 2026-11-07T03:10:00Z`           |
+| A relative time after "reset(s) in" or "try again in" | `resets in 2h 15m`, `try again in 45 minutes` |
+| A time of day that names UTC or GMT                   | `resets 3pm (UTC)`                            |
+
+Anything else, including a local time ("try again at 3:10 PM") or a named zone ("resets 3pm
+(America/Los_Angeles)"), is `resets_at_ms: null`: the reset is unknown, never guessed. A
+reset more than 5 minutes before the halt or more than 8 days after it is also unknown. The
+cause ends with its halt: the session resumes or prompts again, it progresses on its claim,
+or it loses its claims. A reset time passing does not end it, because the session still
+waits for a new prompt.
+
+**Awaiting input** (`awaiting_input`). The terminal's session waits for the user at a prompt
+its hooks reported. `prompt` is `question` for an `AskUserQuestion` the terminal reported
+(`POST /terminals/{id}/question`) and not yet answered, and `permission` for a pending
+bridged permission request (`POST /permissions/ask`) whose connection is the session id the
+terminal's AI session reported. Prompts are not read from terminal output, so a tool without
+these hooks reports no prompt cause. The router re-reads the prompts after each
+`terminal_question`, `permission_asked`, `permission_resolved`, or `terminal_ai_connection`
+event, with one terminal list per event. The cause ends when the question is answered or
+withdrawn, the permission is resolved or its hook disconnects, or the session ends. A prompt
+belongs to its terminal's worker, so it shows in every store where that worker holds a live
+claim, including a claim made after the prompt opened.
 
 ## 32.9 Headless CLI and REST API
 

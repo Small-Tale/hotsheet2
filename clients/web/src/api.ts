@@ -1352,6 +1352,21 @@ export interface LiveClaim {
   lease_expires_at_ms: number;
   eta_at_ms: number | null;
 }
+/**
+ * A stuck cause of a worker holding a live claim (HS2-EGKKA0, docs/32-notifier-plugins.md
+ * §32.8.4): a usage-limit pause, or a terminal prompt waiting for the user.
+ */
+export interface LiveCause {
+  kind: 'usage_limit' | 'awaiting_input';
+  worker: string;
+  /** The Hot Sheet terminal to open; `null` when unknown. */
+  terminal: string | null;
+  since_ms: number;
+  /** When the usage limit resets; `null` when the tool did not state it (unknown). */
+  resets_at_ms: number | null;
+  /** Which prompt an `awaiting_input` cause waits at; `null` for `usage_limit`. */
+  prompt: 'permission' | 'question' | null;
+}
 /** A hosted store's server-pushed live snapshot; clients derive ages and decaying rates locally. */
 export interface LiveStoreState {
   store: string;
@@ -1369,6 +1384,8 @@ export interface LiveStoreState {
     idle_deadline_ms: number | null;
     stalled: { slug: string; worker: string }[];
     halted: { worker: string; message: string; at_ms: number }[];
+    /** Why held claims are not moving, as the tools report it (HS2-EGKKA0). */
+    causes: LiveCause[];
   };
   claims: LiveClaim[];
   workers: { live: number; expected: number };

@@ -41,6 +41,16 @@ const TICKET_KINDS: [&str; 9] = [
     "moved",
 ];
 
+/// Change kinds after which a terminal prompt may have opened or closed (HS2-EGKKA0): a
+/// question asked or answered, a permission asked or resolved, or a session connecting or
+/// ending (which also ends its prompts).
+const PROMPT_KINDS: [&str; 4] = [
+    "terminal_question",
+    "permission_asked",
+    "permission_resolved",
+    "terminal_ai_connection",
+];
+
 #[derive(Default)]
 struct Snapshots {
     seeded: HashSet<String>,
@@ -297,6 +307,11 @@ fn track_activity(
     event: &ChangeEvent,
 ) -> Vec<Message> {
     let kind = event.kind.as_str();
+    if PROMPT_KINDS.contains(&kind) {
+        // These carry no store of their own: the prompt's worker decides which stores change.
+        sync_prompts(state);
+        return Vec::new();
+    }
     let tracked = matches!(kind, "activity" | "turn_event" | "terminal_halted")
         || TICKET_KINDS.contains(&kind);
     if !tracked {
@@ -917,10 +932,11 @@ fn halt_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
         return Vec::new();
     };
     let at = now();
+    let detail = halt_detail(state, &event.id, &halt, at);
     let (reports, halted) = {
         let mut activity = state.notification_delivery.activity.lock_or_recover();
         let reports = activity.halted(&worker, &halt, at);
-        (reports, activity.note_halt(&worker, &halt, at))
+        (reports, activity.note_halt_with(&worker, &halt, detail, at))
     };
     for store in halted {
         crate::live_state::touch(state, &store);
@@ -933,6 +949,49 @@ fn halt_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
             message
         })
         .collect()
+}
+
+/// The stuck cause behind terminal `id`'s halt (HS2-EGKKA0): whether its tool reported a usage
+/// or rate limit and, when the message states one exactly, when it resets. The halt record is
+/// read only while it still carries the announced message; otherwise the cause is unknown.
+fn halt_detail(
+    state: &AppState,
+    id: &str,
+    message: &str,
+    at: OffsetDateTime,
+) -> crate::project_activity::HaltDetail {
+    let (error_type, reported_at) =
+        crate::routes::terminals::terminal_halt_kind(state, id, message).unwrap_or_default();
+    let usage_limit = crate::stuck_causes::is_usage_limit(&error_type);
+    let halted_at = reported_at.unwrap_or(at);
+    crate::project_activity::HaltDetail {
+        terminal: Some(id.to_string()),
+        usage_limit,
+        resets_at: usage_limit
+            .then(|| crate::stuck_causes::reported_reset(message, halted_at))
+            .flatten(),
+    }
+}
+
+/// Re-read which terminal prompts each worker's session waits at (HS2-EGKKA0) after a question,
+/// permission, or AI-connection change, and refresh the stores whose shown prompts changed.
+/// One terminal list per event; nothing polls.
+fn sync_prompts(state: &AppState) {
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let Some(workers) = runtime.block_on(crate::routes::terminals::terminal_workers(state)) else {
+        return;
+    };
+    let current = crate::routes::terminals::awaiting_prompts(state, &workers);
+    let changed = state
+        .notification_delivery
+        .activity
+        .lock_or_recover()
+        .sync_prompts(current, now());
+    for store in changed {
+        crate::live_state::touch(state, &store);
+    }
 }
 
 #[cfg(test)]
