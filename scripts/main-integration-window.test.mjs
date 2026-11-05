@@ -90,7 +90,8 @@ function fixture() {
   run('git', ['remote', 'add', 'origin', remote], repo);
   put(
     resolve(bin, 'zsh'),
-    '#!/bin/sh\nif [ "$2" = "npm run format:check" ]; then exit 0; fi\nexec /bin/zsh "$@"\n',
+    // Linux runners have no /bin/zsh; the wrapped commands are POSIX sh (HS2-KKDZF4).
+    '#!/bin/sh\nif [ "$2" = "npm run format:check" ]; then exit 0; fi\nif [ -x /bin/zsh ]; then exec /bin/zsh "$@"; fi\nexec /bin/sh "$@"\n',
     true,
   );
   const env = {
