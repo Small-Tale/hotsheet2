@@ -6795,19 +6795,57 @@ async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_repla
         .await
         .unwrap();
     assert_eq!(hook.status(), StatusCode::NO_CONTENT);
-    let hooked = body_json(waiting_hook.await.unwrap()).await;
+    // HS2-XPMCRA: `host-pty` leaves the drive registry from its 500 ms liveness loop,
+    // not inside DELETE, so its removal is a real cursor change that may wake this
+    // waiter before the hook lands. Replay from each returned cursor until the hooked
+    // row appears; every replay is still a long poll that returns only on a change.
+    let is_hooked_row = |row: &serde_json::Value| {
+        row["id"] == "connection:hooked-shell"
+            && row["tool"] == "codex"
+            && row["connection_kind"] == "terminal_hook"
+            && row["observed_alive"] == true
+            && row["process_busy"].is_null()
+    };
+    let hook_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut hooked = body_json(
+        tokio::time::timeout_at(hook_deadline, waiting_hook)
+            .await
+            .expect("worker-view hook response exceeded deadline")
+            .unwrap(),
+    )
+    .await;
+    let mut hook_replays = Vec::new();
+    while !hooked["workers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(is_hooked_row)
+    {
+        let next = hooked["cursor"]
+            .as_str()
+            .expect("worker view cursor")
+            .to_owned();
+        hook_replays.push(hooked["workers"].clone());
+        assert!(
+            tokio::time::Instant::now() < hook_deadline,
+            "hooked-shell row never appeared; responses: {hook_replays:?}"
+        );
+        hooked = body_json(
+            tokio::time::timeout_at(
+                hook_deadline,
+                app.clone().oneshot(authed(
+                    "GET",
+                    &format!("{route}?after={next}&wait_ms=1000"),
+                    None,
+                )),
+            )
+            .await
+            .expect("worker-view hook replay exceeded deadline")
+            .unwrap(),
+        )
+        .await;
+    }
     assert_ne!(hooked["cursor"], before_hook["cursor"]);
-    assert!(
-        hooked["workers"].as_array().unwrap().iter().any(|row| {
-            row["id"] == "connection:hooked-shell"
-                && row["tool"] == "codex"
-                && row["connection_kind"] == "terminal_hook"
-                && row["observed_alive"] == true
-                && row["process_busy"].is_null()
-        }),
-        "worker rows: {}",
-        hooked["workers"]
-    );
     let _ = app
         .clone()
         .oneshot(authed("DELETE", "/terminals/hooked-shell", None))
