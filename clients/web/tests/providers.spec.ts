@@ -21359,6 +21359,78 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
 });
 
+test('links ticket numbers in the blocked reason without stealing its edit entry (HS2-HYGBAQ)', async ({ page }) => {
+  const patches = await mockProject(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByText('Use real project tickets').click();
+  const inspector = page.locator('#app-right-rail');
+  const reasonText = 'Waits on earlier tickets (HS2-NEXT01 and siblings), which wait on backlog HS2-BACK01.';
+  await inspector.getByRole('button', { name: 'Block ticket' }).click();
+  const field = inspector.getByRole('textbox', { name: 'Blocked Reason' });
+  await field.fill(reasonText);
+  await field.blur();
+  await expect.poll(() => patches.some((patch) => patch.blocked_reason === reasonText)).toBe(true);
+  const surface = inspector.locator('[data-edit-blocked-reason="true"]');
+  const links = surface.locator('a[data-action="open-linked-ticket"]');
+  await expect(links).toHaveCount(2);
+  await expect(links.first()).toHaveText('HS2-NEXT01');
+  await expect(links.first()).toHaveAttribute('data-ticket-slug', 'HS2-NEXT01');
+  await expect(surface).toContainText(reasonText);
+  // The link reads as a link: the same color as ticket references in Details, unlike the plain text.
+  const [linkColor, textColor] = await surface.evaluate((element) => {
+    const link = element.querySelector('a')!,
+      paragraph = element.querySelector('p')!;
+    return [getComputedStyle(link).color, getComputedStyle(paragraph).color];
+  });
+  expect(linkColor).not.toBe(textColor);
+  for (const [label, width] of [
+    ['wide', 1440],
+    ['medium', 1024],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await inspector.locator('.ticket-inspector-panel').evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await inspector.screenshot({ path: `target/visual-captures/hs2-hygbaq-blocked-reason-${label}.png` });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Enter on a focused link opens the linked ticket's reader; it does not open the blocked-reason editor.
+  await links.first().focus();
+  await page.keyboard.press('Enter');
+  const nextReader = page.getByRole('dialog', { name: /Read and edit HS2-NEXT01/ });
+  await expect(nextReader).toBeVisible();
+  await expect(field).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(nextReader).toHaveCount(0);
+  // A pointer click on the second link opens that ticket and leaves the editor closed.
+  await surface.getByRole('link', { name: 'HS2-BACK01' }).click();
+  const backReader = page.getByRole('dialog', { name: /Read and edit HS2-BACK01/ });
+  await expect(backReader).toBeVisible();
+  await expect(field).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(backReader).toHaveCount(0);
+  // The edit affordance stays reachable: a double-click on the reason's text still opens the editor.
+  await surface.locator('p').dblclick({ position: { x: 4, y: 4 } });
+  await expect(inspector.getByRole('textbox', { name: 'Blocked Reason' })).toBeFocused();
+  await inspector.getByRole('textbox', { name: 'Blocked Reason' }).blur();
+  // The reader shows the same linked reason at a narrow phone width, and back to wide.
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  for (const [label, width, height] of [
+    ['reader-narrow', 390, 844],
+    ['reader-wide-again', 1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    const readerLinks = reader.locator('[data-edit-blocked-reason="true"] a[data-action="open-linked-ticket"]');
+    await expect(readerLinks).toHaveCount(2);
+    await expect(readerLinks.last()).toBeInViewport();
+    await page.screenshot({ path: `target/visual-captures/hs2-hygbaq-blocked-reason-${label}.png` });
+  }
+});
+
 test('honors the first control click while ticket details is focused', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');

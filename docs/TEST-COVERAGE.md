@@ -140,6 +140,12 @@ HS2-08EPQM adds `ticket-code-review.test.ts` row-composition checks and the
 clip no text, and wrap long titles in the inspector (1440, 1024, 1440 px) and the
 reader (390 px and back to wide).
 
+HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
+the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the
+`providers.spec.ts` browser flow that links both slugs in an inspector blocked reason,
+opens each linked ticket by Enter and by click without starting an edit, keeps
+double-click editing, and shows the same links in the reader at 390 px.
+
 HS2-R7T9XB's tiny natural-copy regression in `clients/web/scripts/stable-dev.test.mjs`
 checks exclusion of `src-tauri/target` while preserving adjacent native source and unrelated
 nested `target` source directories. Existing `scripts/stable-dev.e2e.test.mjs` real-process

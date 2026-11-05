@@ -107,6 +107,29 @@ describe('ticket field editor wiring (HS2-KAWNER)', () => {
     expect(bindings.finish).toHaveBeenCalledWith(field);
   });
 
+  it('leaves a ticket link in the blocked reason to its own action (HS2-HYGBAQ)', () => {
+    const bindings = { begin: vi.fn(), input: vi.fn(), finish: vi.fn() };
+    wireBlockedReasonEditor(root, bindings);
+    const surface = {
+      matches: () => false,
+      localName: 'div',
+      parentElement: null,
+      contains: (node: unknown) => node === link || node === plain,
+    };
+    const link = { matches: () => true, localName: 'a', parentElement: surface, contains: () => false };
+    const plain = { matches: () => false, localName: 'p', parentElement: surface, contains: () => false };
+    const dblclick = handler('dblclick', '[data-edit-blocked-reason="true"]'),
+      keydown = handler('keydown', '[data-edit-blocked-reason="true"]');
+    const linkPrevented = vi.fn();
+    dblclick({ target: link }, surface);
+    keydown(keyEvent('Enter', { target: link, preventDefault: linkPrevented }), surface);
+    expect(bindings.begin).not.toHaveBeenCalled();
+    expect(linkPrevented).not.toHaveBeenCalled();
+    dblclick({ target: plain }, surface);
+    keydown(keyEvent('Enter', { target: plain }), surface);
+    expect(bindings.begin.mock.calls.map((call) => call[1])).toEqual(['dblclick', 'key']);
+  });
+
   it('toggles feedback choices with modifiers but leaves nested controls alone', () => {
     const bindings = { toggle: vi.fn() };
     wireFeedbackChoices(root, bindings);

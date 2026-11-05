@@ -780,6 +780,10 @@ preview/download, server directory browser) are separate design work.
   press of a habitual double-click keeps focus in the editor the first click opened.
   Rendered GFM task-list checkboxes stay read-only. The plain-text blocked reason and the
   ticket title keep double-click entry.
+  Ticket numbers in a read-only blocked reason are links, the same ticket references
+  Details and notes render (HS2-HYGBAQ): the reason stays plain text, no other Markdown is
+  interpreted, a click or Enter on a link opens that ticket, and a double-click or Enter
+  that starts on a link never opens the blocked-reason editor.
   On phone-width inspector and reader surfaces, a static ticket title occupies at most
   three lines until the user chooses **Show full title**. The disclosure expands and
   collapses independently for each ticket and presentation across updates. Wide layouts

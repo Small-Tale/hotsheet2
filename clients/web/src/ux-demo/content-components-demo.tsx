@@ -442,7 +442,7 @@ interface PreviewVariant {
   label: string;
   surface?: ToneSurfaceKind;
   source?: string;
-  props: Partial<Pick<MarkdownPreviewProps, 'tone' | 'size' | 'density' | 'media'>>;
+  props: Partial<Pick<MarkdownPreviewProps, 'tone' | 'size' | 'density' | 'media' | 'format'>>;
 }
 
 /** Every public MarkdownPreview presentation variant, each on the surface it is designed for. */
@@ -456,6 +456,11 @@ export const PREVIEW_VARIANTS: readonly PreviewVariant[] = [
   { label: 'density="flush"', props: { density: 'flush' } },
   { label: 'media="full"', source: PREVIEW_DEMO_IMAGE, props: {} },
   { label: 'media="thumbnail"', source: PREVIEW_DEMO_IMAGE, props: { media: 'thumbnail' } },
+  {
+    label: 'format="plain" (blocked reason)',
+    source: 'Waits on HS2-DEMO01 and @beta-02/HS2-REMOTE1; *stars* stay literal.\nA second line keeps its break.',
+    props: { format: 'plain', density: 'flush' },
+  },
   { label: 'Empty', source: '', props: {} },
 ];
 

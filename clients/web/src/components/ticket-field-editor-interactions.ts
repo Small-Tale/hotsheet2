@@ -3,6 +3,7 @@ import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
+import { keyBeginsMarkdownEdit, startsInInteractiveDescendant } from '../markdown-click-edit';
 import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
 import { TICKET_TAG_COMBOBOX_COMMIT } from './app-combobox-wiring';
 import { TAG_CHIP_REMOVE_ACTION } from './tag-chip';
@@ -118,13 +119,16 @@ export function wireBlockedReasonEditor(root: HTMLElement, bindings: BlockedReas
     }),
   );
   lifetime.add(
-    delegate(root, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (_event, target) => {
+    delegate(root, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (event, target) => {
+      // A ticket link in the reason opens its ticket and never starts an edit (HS2-HYGBAQ).
+      if (startsInInteractiveDescendant(event.target, target)) return;
       bindings.begin(target, 'dblclick');
     }),
   );
   lifetime.add(
     delegate(root, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (event, target) => {
-      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+      // Enter on a focused ticket link follows the link instead of starting an edit (HS2-HYGBAQ).
+      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
       event.preventDefault();
       bindings.begin(target, 'key');
     }),

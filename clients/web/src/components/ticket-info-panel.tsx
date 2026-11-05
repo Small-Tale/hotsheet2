@@ -21,6 +21,7 @@ import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, detailsRequestFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
+import { MarkdownPreview } from './markdown-preview';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
 import { PhaseEstimate } from './phase-estimate';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
@@ -250,9 +251,8 @@ function LoadedTicketInfoPanel({
               title={canEditText ? 'Double-click to edit' : undefined}
             >
               <SunkenPanel>
-                <Text variant="p" wrap="anywhere" flush>
-                  {blockedReason}
-                </Text>
+                {/* Ticket numbers link like Details and notes; the text stays plain (HS2-HYGBAQ). */}
+                <MarkdownPreview source={blockedReason} format="plain" size="inherit" density="flush" />
               </SunkenPanel>
             </div>
           </>

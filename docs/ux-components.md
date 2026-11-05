@@ -1577,7 +1577,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   outlined chip that keeps AA contrast on loud fills such as the AI user bubble, HS2-WS438X), `size`
   (`default`; `small` is the 12px/1.4 secondary scale; `inherit` takes the container
   font), `density` (`default` 16px block rhythm; `compact` 4px; `flush` 0), and `media`
-  (`full`; `thumbnail` crops attachment images into a 192 x 112px box). The
+  (`full`; `thumbnail` crops attachment images into a 192 x 112px box). `format`
+  (`markdown`; `plain` escapes the source as one paragraph that keeps its line breaks and
+  links only ticket references, used by the blocked reason, HS2-HYGBAQ). The
   `MarkdownPreview` UX demo shows every variant on the surface it is designed for.
 - `MarkdownEditor` — **demo built**: rendered preview by default, single-click/keyboard
   to edit (non-empty or empty content alike; a click or Enter on a link or other control

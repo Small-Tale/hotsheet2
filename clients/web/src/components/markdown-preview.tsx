@@ -116,6 +116,14 @@ export function renderMarkdown(source: string, attachmentContext?: AttachmentRef
   return linkTicketReferences(marked.parse(expandAttachmentReferences(source, attachmentContext), { async: false }));
 }
 
+/**
+ * Plain text as one escaped paragraph that keeps its line breaks, with the same ticket-reference
+ * links as rendered Markdown (HS2-HYGBAQ). No other Markdown syntax is interpreted.
+ */
+export function renderPlainText(source: string): string {
+  return linkTicketReferences(`<p>${escapeMarkdownHtml(source).replace(/\r?\n/g, '<br>')}</p>`);
+}
+
 /** Text color: the reading color, the container's color, or the container's color for links too. */
 export type MarkdownPreviewTone = 'default' | 'inherit' | 'inverse';
 /** Type scale: the reading size, a small secondary size, or the container's font. */
@@ -124,6 +132,8 @@ export type MarkdownPreviewSize = 'default' | 'small' | 'inherit';
 export type MarkdownPreviewDensity = 'default' | 'compact' | 'flush';
 /** Attachment image presentation: full width or a fixed, cropped thumbnail. */
 export type MarkdownPreviewMedia = 'full' | 'thumbnail';
+/** Source syntax: Markdown, or plain text whose only rich content is ticket-reference links. */
+export type MarkdownPreviewFormat = 'markdown' | 'plain';
 
 export interface MarkdownPreviewProps {
   source: string;
@@ -134,11 +144,13 @@ export interface MarkdownPreviewProps {
   size?: MarkdownPreviewSize;
   density?: MarkdownPreviewDensity;
   media?: MarkdownPreviewMedia;
+  format?: MarkdownPreviewFormat;
 }
 
 /**
  * Sanitized Markdown rendering. Consumers choose presentation through `tone`, `size`, `density`,
- * and `media` rather than restyling `.markdown-preview` from their own stylesheets.
+ * and `media` rather than restyling `.markdown-preview` from their own stylesheets; `format="plain"`
+ * shows plain text with only its ticket references linked.
  */
 export function MarkdownPreview({
   source,
@@ -148,6 +160,7 @@ export function MarkdownPreview({
   size = 'default',
   density = 'default',
   media = 'full',
+  format = 'markdown',
 }: MarkdownPreviewProps) {
   const presentation = {
     'data-component': 'markdown-preview',
@@ -162,9 +175,9 @@ export function MarkdownPreview({
         {emptyLabel}
       </div>
     );
-  // renderMarkdown escapes raw HTML and constrains URL schemes before this deliberately raw Kerf
-  // rendering boundary, so the dynamic value is already sanitized (documented at renderMarkdown).
-  const rendered = renderMarkdown(source, attachmentContext);
+  // renderMarkdown escapes raw HTML and constrains URL schemes, and renderPlainText escapes the whole
+  // source, before this deliberately raw Kerf rendering boundary, so the dynamic value is sanitized.
+  const rendered = format === 'plain' ? renderPlainText(source) : renderMarkdown(source, attachmentContext);
   return (
     <div class="markdown-preview" {...presentation}>
       {/* eslint-disable-next-line kerfjs/no-raw-with-dynamic-arg -- sanitized upstream by renderMarkdown */}

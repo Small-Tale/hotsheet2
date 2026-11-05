@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
-import { linkTicketReferences } from './markdown-preview';
+import { linkTicketReferences, MarkdownPreview, renderPlainText } from './markdown-preview';
 
 describe('Markdown ticket links', () => {
+  it('links ticket references in plain text without interpreting Markdown (HS2-HYGBAQ)', () => {
+    const markup = renderPlainText(
+      'Waits on earlier tickets (HS2-EBHDSB and siblings), which wait on @beta-02/HS2-SBQ3T8.\n*Not* <b>markup</b>',
+    );
+    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);
+    expect(markup).toContain('data-ticket-slug="HS2-EBHDSB"');
+    expect(markup).toContain('data-ticket-slug="HS2-SBQ3T8" data-ticket-project-id="beta-02"');
+    expect(markup).toContain('<br>*Not* &lt;b&gt;markup&lt;/b&gt;</p>');
+    expect(markup).not.toContain('<em>');
+    const preview = String(MarkdownPreview({ source: 'Blocked by HS2-EBHDSB', format: 'plain', density: 'flush' }));
+    expect(preview).toContain('data-ticket-slug="HS2-EBHDSB"');
+    expect(preview).toContain('data-density="flush"');
+  });
+
   it('preserves the production hook and adds an explicit project ID for cross-project references', () => {
     const markup = linkTicketReferences('Local HS2-LOCAL1 and cross-project @beta-02/HS2-REMOTE1.');
     expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);

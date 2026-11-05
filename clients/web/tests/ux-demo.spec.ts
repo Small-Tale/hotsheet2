@@ -3941,7 +3941,10 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
     await page.goto('/ux-demo?component=markdown-preview');
     const variant = (label: string) =>
       page.getByRole('region', { name: label }).locator('[data-component="markdown-preview"]');
-    await expect(page.locator('[data-catalog-example] [data-component="markdown-preview"]')).toHaveCount(10);
+    // HS2-HYGBAQ added the format="plain" (blocked reason) variant.
+    await expect(page.locator('[data-catalog-example] [data-component="markdown-preview"]')).toHaveCount(11);
+    // Plain format keeps the text literal and linkifies ticket references only.
+    await expect(variant('format="plain" (blocked reason)').locator('a').first()).toBeVisible();
     const style = (label: string, selector: string, property: string) =>
       variant(label)
         .locator(selector)
