@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChangeEvent, PollResponse } from './api';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from './change-stream-worker-host';
 import {
+  CHANGE_STREAM_CLIENT_BUILD_VERSION,
   CHANGE_STREAM_WORKER_PROTOCOL,
   type ChangeStreamDelivery,
   ChangeStreamDeliveryQueue,
@@ -127,6 +128,27 @@ describe('change-stream worker protocol (HS2-SH9179)', () => {
       { type: 'batch', project: 'a', generation: 1, kind: 'deliver', response: page(1), force: false },
       { type: 'error', project: 'a', generation: 1 },
       { type: 'batch', project: 4, generation: 1 },
+    ])
+      expect(parseChangeStreamWorkerMessage(bad)).toBeUndefined();
+  });
+
+  it('validates the versioned client-build relay (HS2-WHW3M1)', () => {
+    expect(parseChangeStreamWorkerMessage({ type: 'client-build', version: 1, build: 'bundle-0123' })).toEqual({
+      type: 'client-build',
+      version: 1,
+      build: 'bundle-0123',
+    });
+    // A future relay version still parses, so the host can recognize and ignore it.
+    expect(parseChangeStreamWorkerMessage({ type: 'client-build', version: 7, build: 'dev-1' })).toMatchObject({
+      version: 7,
+    });
+    for (const bad of [
+      { type: 'client-build', build: 'bundle-0123' },
+      { type: 'client-build', version: -1, build: 'bundle-0123' },
+      { type: 'client-build', version: 1 },
+      { type: 'client-build', version: 1, build: '' },
+      { type: 'client-build', version: 1, build: 'has spaces' },
+      { type: 'client-build', version: 1, build: 'x'.repeat(129) },
     ])
       expect(parseChangeStreamWorkerMessage(bad)).toBeUndefined();
   });
@@ -424,6 +446,70 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     runtime.dispose();
   });
 
+  it('relays the bridge client build after the handshake, once per change (HS2-WHW3M1)', () => {
+    const { runs, runTransport } = fakeTransports();
+    const sockets: FakeSocket[] = [];
+    const posted: ChangeStreamWorkerMessage[] = [];
+    const runtime = createChangeStreamWorkerRuntime({
+      post: (message) => posted.push(message),
+      runTransport,
+      openWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+    });
+    const relays = () => posted.filter((message) => message.type === 'client-build');
+    const mux = { changeMuxUrl: 'http://host/__hotsheet/change-mux/poll' };
+    runtime.handle(open('a', 1, { ...mux, webSocketUrl: 'ws://host/p/a/ws/sync' }));
+    runtime.handle(open('b', 1, { ...mux, webSocketUrl: 'ws://host/p/b/ws/sync' }));
+    runs[0].options.openWebSocket!('ws://host/p/a/ws/sync');
+    runs[1].options.openWebSocket!('ws://host/p/b/ws/sync');
+    sockets[0].open();
+    // Announced before the page's hello: remembered, not yet posted.
+    sockets[0].message({
+      version: 2,
+      type: 'subscribed',
+      client: 'tab-1',
+      project: 'a',
+      subscription: 1,
+      client_build: 'bundle-1111',
+    });
+    expect(relays()).toEqual([]);
+    runtime.handle({ type: 'hello', protocol: CHANGE_STREAM_WORKER_PROTOCOL });
+    expect(posted.map((message) => message.type)).toEqual(['ready', 'client-build']);
+    expect(relays()).toEqual([
+      { type: 'client-build', version: CHANGE_STREAM_CLIENT_BUILD_VERSION, build: 'bundle-1111' },
+    ]);
+    // The same build on another answer, a `closed` answer, or an event adds nothing.
+    sockets[0].message({
+      version: 2,
+      type: 'subscribed',
+      client: 'tab-1',
+      project: 'b',
+      subscription: 2,
+      client_build: 'bundle-1111',
+    });
+    sockets[0].message({ version: 2, type: 'event', client: 'tab-1', project: 'b', subscription: 2, data: '{}' });
+    expect(relays()).toHaveLength(1);
+    // A reconnect onto a newer host build relays the new id; an older host omits it and changes nothing.
+    sockets[0].message({
+      version: 2,
+      type: 'closed',
+      client: 'tab-1',
+      project: 'b',
+      subscription: 2,
+      client_build: 'bundle-2222',
+    });
+    sockets[0].message({ version: 2, type: 'subscribed', client: 'tab-1', project: 'a', subscription: 1 });
+    expect(relays().map((message) => (message as { build: string }).build)).toEqual(['bundle-1111', 'bundle-2222']);
+    // A repeated hello (a restarted page host) hears the current build again, after its ready.
+    runtime.handle({ type: 'hello', protocol: CHANGE_STREAM_WORKER_PROTOCOL });
+    expect(posted.slice(-2).map((message) => message.type)).toEqual(['ready', 'client-build']);
+    expect(relays().at(-1)).toMatchObject({ build: 'bundle-2222' });
+    runtime.dispose();
+  });
+
   it('keeps a second project live when one multiplexed project overflows its delivery queue (HS2-QJR1K6)', async () => {
     const posted: ChangeStreamWorkerMessage[] = [];
     const { runs, runTransport } = fakeTransports();
@@ -507,6 +593,13 @@ function inMemoryWorker(runTransport: ReturnType<typeof fakeTransports>['runTran
   return {
     worker,
     received,
+    runtime,
+    /** Post a raw message as the worker, bypassing the runtime. */
+    post: (data: unknown) => {
+      queueMicrotask(() => {
+        emit('message', data);
+      });
+    },
     crash: () => {
       emit('error');
     },
@@ -559,6 +652,31 @@ describe('change-stream worker host (HS2-SH9179)', () => {
     expect(host.mode()).toBe('worker');
     host.dispose();
     expect(memory.isTerminated()).toBe(true);
+  });
+
+  it('hands the relayed client build to the page and ignores other relay versions (HS2-WHW3M1)', async () => {
+    const memory = inMemoryWorker(fakeTransports().runTransport);
+    const builds: string[] = [];
+    const host = createChangeStreamWorkerHost({
+      createWorker: () => memory.worker,
+      clientId: 'tab-1',
+      onClientBuild: (build) => builds.push(build),
+    });
+    const a = consumerOptions();
+    host.start('a', a.options, { apiUrl: 'http://host/p/a' });
+    memory.runtime.noteClientBuild('bundle-3333');
+    await vi.waitFor(() => {
+      expect(builds).toEqual(['bundle-3333']);
+    });
+    // A skewed worker's relay of another version is ignored; its streams keep running in the worker.
+    memory.post({ type: 'client-build', version: CHANGE_STREAM_CLIENT_BUILD_VERSION + 1, build: 'bundle-4444' });
+    memory.post({ type: 'client-build', version: CHANGE_STREAM_CLIENT_BUILD_VERSION, build: 'not valid' });
+    memory.runtime.noteClientBuild('bundle-5555');
+    await vi.waitFor(() => {
+      expect(builds).toEqual(['bundle-3333', 'bundle-5555']);
+    });
+    expect(host.mode()).toBe('worker');
+    host.dispose();
   });
 
   it('stops a project: closes it in the worker and drops late deliveries', async () => {

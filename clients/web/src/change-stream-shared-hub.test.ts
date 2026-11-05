@@ -153,4 +153,77 @@ describe('SharedWorker change-stream port hub', () => {
     expect(b.closed).toBe(true);
     expect(hub.portCount()).toBe(0);
   });
+
+  it('relays the shared bridge socket client build to every port, including later ones (HS2-WHW3M1)', () => {
+    const sockets: FakeSocket[] = [];
+    const runs: Array<{ options: ProjectChangeTransportOptions }> = [];
+    const hub = createChangeStreamSharedHub({
+      openWebSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+      runTransport: (options) => {
+        runs.push({ options });
+      },
+    });
+    const relays = (port: FakePort) =>
+      port.sent.filter((message) => (message as { type?: string }).type === 'client-build');
+    const a = new FakePort(),
+      b = new FakePort();
+    hub.connect(a);
+    a.incoming({ type: 'hello', protocol: 1 });
+    a.incoming({
+      type: 'open',
+      project: 'one',
+      generation: 1,
+      apiUrl: 'http://host/__hotsheet/project-api/one',
+      webSocketUrl: 'ws://host/__hotsheet/project-api/one/ws/sync?client=tab-a',
+      changeMuxUrl: 'http://host/__hotsheet/change-mux/poll',
+      clientId: 'tab-a',
+    });
+    runs[0].options.openWebSocket!('ws://host/one');
+    sockets[0].open();
+    const [command] = sockets[0].sent.map((raw) => JSON.parse(raw) as { subscription: number });
+    sockets[0].message({
+      version: 2,
+      type: 'subscribed',
+      client: 'tab-a',
+      project: 'one',
+      subscription: command.subscription,
+      client_build: 'bundle-aaaa',
+    });
+    expect(relays(a)).toEqual([{ type: 'client-build', version: 1, build: 'bundle-aaaa' }]);
+    // A tab that connects later hears the build already announced, right after its ready.
+    hub.connect(b);
+    expect(relays(b)).toEqual([]);
+    b.incoming({ type: 'hello', protocol: 1 });
+    expect(b.sent).toEqual([
+      { type: 'ready', protocol: 1 },
+      { type: 'client-build', version: 1, build: 'bundle-aaaa' },
+    ]);
+    // A newer announcement on the shared socket reaches both ports once.
+    sockets[0].message({
+      version: 2,
+      type: 'closed',
+      client: 'tab-a',
+      project: 'one',
+      subscription: command.subscription,
+      client_build: 'bundle-bbbb',
+    });
+    expect(relays(a).map((message) => (message as { build: string }).build)).toEqual(['bundle-aaaa', 'bundle-bbbb']);
+    expect(relays(b).map((message) => (message as { build: string }).build)).toEqual(['bundle-aaaa', 'bundle-bbbb']);
+    // A disposed port hears nothing more.
+    a.incoming({ type: 'dispose' });
+    sockets[0].message({
+      version: 2,
+      type: 'closed',
+      client: 'tab-a',
+      project: 'one',
+      subscription: 99,
+      client_build: 'bundle-cccc',
+    });
+    expect(relays(a)).toHaveLength(2);
+    expect(relays(b)).toHaveLength(3);
+  });
 });

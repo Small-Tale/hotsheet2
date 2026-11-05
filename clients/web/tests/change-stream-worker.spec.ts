@@ -403,3 +403,70 @@ test('a version-skewed worker falls back to main-thread streams for both project
   await page.getByRole('tab', { name: 'Beta' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
 });
+
+test('a worker-owned bridge socket relays the host client build to the newer-version notice (HS2-WHW3M1)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await enableWorker(page);
+  const workers: Worker[] = [];
+  page.on('worker', (worker) => workers.push(worker));
+  await installProjects(page);
+  const MUX = '/__hotsheet/change-mux/poll';
+  const STAMPED = 'bundle-0123456789abcdef';
+  // Registered after the fixture, so these run first: the projects advertise the change bridge, and
+  // the document is stamped with another bundle than the dev bridge serves.
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    if (request.resourceType() === 'document') {
+      const response = await route.fetch();
+      const html = (await response.text()).replace(
+        /(<meta name="hotsheet-client-build" content=")[^"]*(")/u,
+        `$1${STAMPED}$2`,
+      );
+      return route.fulfill({ response, body: html });
+    }
+    if (path === '/__hotsheet/projects/open') {
+      const root = (request.postDataJSON() as { root: string }).root;
+      return route.fulfill({
+        status: 201,
+        json: { ...(root === projects.beta.root ? projects.beta : projects.alpha), changeMuxPath: MUX },
+      });
+    }
+    if (path === MUX) {
+      const polls = (request.postDataJSON() as { polls: { project: string; since?: number; timeout_ms: number }[] })
+        .polls;
+      // A genuine long poll: idle, it stays pending until its bounded timeout.
+      if (polls.every((poll) => poll.since !== undefined && poll.timeout_ms > 0))
+        await new Promise((resolve) => setTimeout(resolve, Math.min(2_000, ...polls.map((poll) => poll.timeout_ms))));
+      return route
+        .fulfill({
+          json: {
+            version: 1,
+            results: polls.map((poll) => ({
+              project: poll.project,
+              status: 200,
+              body: { cursor: 1, events: [], overflow: false },
+            })),
+          },
+        })
+        .catch(() => undefined);
+    }
+    return route.fallback();
+  });
+  await openBothProjects(page);
+  expect(await page.locator('meta[name="hotsheet-client-build"]').getAttribute('content')).toBe(STAMPED);
+  await expect.poll(() => streamWorkers(workers).length).toBe(1);
+  // The worker's socket reaches the real dev bridge, which has no session for these projects: its
+  // `closed` answer carries the dev server's build, which the worker relays to this page.
+  const notice = page.locator('[data-component="client-update-notice-banner"]');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('A newer version of Hot Sheet is available');
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-whw3m1-worker-client-update-notice-1280.png',
+    animations: 'disabled',
+  });
+  // Still worker-owned: no fallback started main-thread project sockets or a second worker.
+  expect(streamWorkers(workers)).toHaveLength(1);
+});

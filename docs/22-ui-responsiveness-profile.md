@@ -366,6 +366,13 @@ then reload, to use it.
   bounded backoff and replays each project from its last applied cursor,
   dropping repeated events. More than three crashes within a minute fall
   back for the rest of the session.
+- **Client build relay.** The worker owns the change bridge socket, so it
+  relays the bridge's `client_build` announcement (`HS2-KPJWBK`) as a
+  `{ type: 'client-build', version: 1, build }` message (`HS2-WHW3M1`).
+  It posts after `ready` and only when the build changes; the SharedWorker
+  hub remembers the latest build for tabs that connect later. The message is
+  additive, so the worker protocol stays 1: an older page ignores it, and a
+  page ignores a relay of another version without falling back.
 
 `npm run profile:ui:worker` repeats the `HS2-WDTN3W` scenario with the worker
 on. Playwright cannot route WebSockets opened inside a worker, so that

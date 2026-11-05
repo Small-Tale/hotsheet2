@@ -224,6 +224,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     workerHost ??= createChangeStreamWorkerHost({
       createWorker: dependencies.createChangeStreamWorker ?? createBundledChangeStreamWorker,
       clientId: CHANGE_STREAM_CLIENT_ID,
+      // The worker owns the bridge socket, so it relays the announced build (HS2-WHW3M1).
+      onClientBuild: noteHostClientBuild,
     });
     const api = new Api(current.apiPath);
     return workerHost.start(current.id, streamOptions, {

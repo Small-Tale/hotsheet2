@@ -1278,8 +1278,10 @@ preview/download, server directory browser) are separate design work.
   project session, still reloads, because the recovery copies restore drafts when their editors
   reopen. Dismissal is global and keyed on the loaded and served pair, so a later host build
   announces again. The connection details dialog shows the loaded and served client bundles
-  beside the host-selected server build. The opt-in change-stream worker does not relay the
-  announcement yet (HS2-WHW3M1).
+  beside the host-selected server build. When the opt-in change-stream worker owns the bridge
+  socket, it relays the announcement to each page as a versioned `client-build` message, after
+  its `ready` and only when the build changes; a SharedWorker also gives it to tabs that connect
+  later (HS2-WHW3M1).
   Every banner in the header slot wraps inside the viewport when several stack, including at
   phone width: the slot is one shrinkable grid track, and the connection alert gives its detail
   its own wrapping line (StateBanner `copyLayout="stacked"`) rather than truncating it beside

@@ -1,4 +1,5 @@
 import type { PollResponse } from './api';
+import { validClientBuildId } from './client-build';
 import type { ProjectChangeResync } from './project-change-poll';
 
 /**
@@ -8,6 +9,13 @@ import type { ProjectChangeResync } from './project-change-poll';
  * from a closed or restarted subscription can always be recognized and dropped.
  */
 export const CHANGE_STREAM_WORKER_PROTOCOL = 1;
+
+/**
+ * Version of the worker's `client-build` relay (HS2-WHW3M1). The message is additive: a page that
+ * predates it ignores an unrecognized worker message, and a page ignores a relay of any other
+ * version, so neither side of a skew falls back or fails because of it.
+ */
+export const CHANGE_STREAM_CLIENT_BUILD_VERSION = 1;
 
 export interface ChangeStreamWorkerOpen {
   type: 'open';
@@ -40,7 +48,9 @@ export type ChangeStreamDelivery =
 export type ChangeStreamWorkerMessage =
   | { type: 'ready'; protocol: number }
   | ({ type: 'batch'; project: string; generation: number; seq: number } & ChangeStreamDelivery)
-  | { type: 'error'; project: string; generation: number; message: string };
+  | { type: 'error'; project: string; generation: number; message: string }
+  /** The web client build the host announced on a change-bridge answer (HS2-KPJWBK, HS2-WHW3M1). */
+  | { type: 'client-build'; version: number; build: string };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -84,6 +94,10 @@ export function parseChangeStreamMainMessage(value: unknown): ChangeStreamMainMe
 export function parseChangeStreamWorkerMessage(value: unknown): ChangeStreamWorkerMessage | undefined {
   if (!isRecord(value)) return undefined;
   if (value.type === 'ready') return isCount(value.protocol) ? { type: 'ready', protocol: value.protocol } : undefined;
+  if (value.type === 'client-build') {
+    const build = validClientBuildId(value.build);
+    return isCount(value.version) && build ? { type: 'client-build', version: value.version, build } : undefined;
+  }
   if (typeof value.project !== 'string' || !isCount(value.generation)) return undefined;
   const { project, generation } = value;
   if (value.type === 'error')

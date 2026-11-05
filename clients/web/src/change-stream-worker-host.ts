@@ -1,4 +1,5 @@
 import {
+  CHANGE_STREAM_CLIENT_BUILD_VERSION,
   CHANGE_STREAM_WORKER_PROTOCOL,
   type ChangeStreamMainMessage,
   parseChangeStreamWorkerMessage,
@@ -38,6 +39,8 @@ export interface ChangeStreamWorkerHostOptions {
   /** The main-thread stream used for fallback (injected by tests). */
   startFallback?: typeof startProjectChangeStream;
   onModeChange?(mode: ChangeStreamHostMode, reason?: string): void;
+  /** Receives the client build the host announced to the worker's bridge socket (HS2-WHW3M1). */
+  onClientBuild?(build: string): void;
   now?: () => number;
 }
 
@@ -145,6 +148,11 @@ export function createChangeStreamWorkerHost(options: ChangeStreamWorkerHostOpti
       ready = true;
       if (readyTimer !== undefined) clearTimeout(readyTimer);
       readyTimer = undefined;
+      return;
+    }
+    if (message.type === 'client-build') {
+      // A relay of another version is a skewed worker's; streams continue and the notice waits.
+      if (message.version === CHANGE_STREAM_CLIENT_BUILD_VERSION) options.onClientBuild?.(message.build);
       return;
     }
     const hosted = projects.get(message.project);

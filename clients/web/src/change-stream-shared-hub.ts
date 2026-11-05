@@ -12,7 +12,14 @@ export function createChangeStreamSharedHub(
     idleMs?: number;
   } = {},
 ) {
-  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers(options.openWebSocket);
+  const ports = new Map<SharedPort, { dispose(): void; lastSeen: number; noteClientBuild(build: string): void }>();
+  // Every port hears the build the shared bridge socket announced, including a port that connects
+  // after the announcement (HS2-WHW3M1).
+  let clientBuild: string | undefined;
+  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers(options.openWebSocket, (build) => {
+    clientBuild = build;
+    for (const owner of ports.values()) owner.noteClientBuild(build);
+  });
   const pollMultiplexerFor = createChangePollMultiplexers({
     parse: parsePollResponse,
     sharedAcrossClients: true,
@@ -24,7 +31,6 @@ export function createChangeStreamSharedHub(
     directOnly: true,
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
-  const ports = new Map<SharedPort, { dispose(): void; lastSeen: number }>();
   const now = options.now ?? Date.now;
   const idleMs = options.idleMs ?? 90_000;
   return {
@@ -44,7 +50,9 @@ export function createChangeStreamSharedHub(
           runtime.dispose();
         },
         lastSeen: now(),
+        noteClientBuild: runtime.noteClientBuild,
       };
+      if (clientBuild !== undefined) runtime.noteClientBuild(clientBuild);
       ports.set(port, owner);
       port.addEventListener('message', (event) => {
         owner.lastSeen = now();
