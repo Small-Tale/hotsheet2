@@ -170,6 +170,7 @@ The numbered requirements docs (source of truth for behavior; status in
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
 - [26-orchestration-projects.md](26-orchestration-projects.md) — Partial target source implementation (HS2-4J6V46), pending verification; links/grants/dispatch remain design (HS2-4JFP0S)
 - [32-notifier-plugins.md](32-notifier-plugins.md) — Notifier plugins: capabilities, rendering, built-ins, external protocol, rules, router, CLI/REST (HS2-R5HTZN)
+- [34-glance-surfaces.md](34-glance-surfaces.md) — Glance surfaces: standby, sidebar live state, Stats Right now, away digest (design only, HS2-3AA1N7)
 
 Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is

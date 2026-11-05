@@ -369,6 +369,10 @@ detection. They are stored as `project_activity` in `notifications.json`. Raw to
 are not used: per-turn usage records arrive after a turn ends, so they add nothing to
 activity and turn events as a liveness signal.
 
+These state words (Active, Stopped, May be stuck, Stalled, Halted) are also the vocabulary of the
+glance surfaces (standby, sidebars, and Stats), which add **Waiting on you**; see
+[34-glance-surfaces.md](34-glance-surfaces.md) §34.2 (design only, HS2-3AA1N7).
+
 For example, to push to a phone when any project stops:
 
 ```sh

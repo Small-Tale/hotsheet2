@@ -1,0 +1,233 @@
+# 34 · Glance surfaces: standby, sidebars, and stats (HS2-3AA1N7)
+
+**Status: design only.** Nothing in this document is built yet. It records the design the maintainer
+approved on the planning ticket HS2-CT5EWR over four rounds of annotated mocks, so the implementation
+tickets reference one requirements source instead of ticket notes. Each requirement names the ticket that
+builds it (§34.11). When a ticket ships, update its section's status here and in
+[README.md](README.md).
+
+A **glance surface** answers "is everything fine, and if not, which project needs me?" without the user
+opening a ticket or a terminal. There are five: standby, the project sidebar, the workspace grid sidebar,
+the Stats page's Right now section, and the away digest shown on leaving standby.
+
+All mocks named below are attachments on HS2-CT5EWR. They were made by injecting the proposed regions into
+the real `/ux-demo?component=app-shell` screens with synthetic fixtures; the mock generator scripts
+(`hs2-ct5ewr-mock-generator*.mjs`) are attached beside them.
+
+## 34.1 Dark-cockpit principle
+
+When everything is fine, a glance surface is quiet. Brightness, tint, and motion mean that something needs
+attention, and nothing else earns them.
+
+- Normal states render dim or neutral. A problem state brightens only the row, chip, or callout that
+  carries it; the rest of the surface stays as it was.
+- Standby is dark red on solid black. It encodes severity by brightness and glyph shape, and uses **amber**
+  (low in blue light) for alerts. Amber was approved with mock `m5`.
+- **Likely-critical conditions keep a full-width callout**, even on a compact surface (for example a disk
+  about to fill). This size was approved with mock `m1`.
+- Host conditions show one "all normal" line until a threshold is crossed, then one callout per crossed
+  condition (§34.8).
+
+## 34.2 Live-state vocabulary
+
+Every glance surface uses the project states that notifications already use
+([32-notifier-plugins.md](32-notifier-plugins.md) §32.8.1), plus one new state. Standby, the sidebars,
+Stats, and phone notifications therefore always agree.
+
+| State          | Meaning                                                                                                                      | Source                   |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Active         | At least one ticket in the store holds a live claim.                                                                         | §32.8.1 (shipped)        |
+| Stopped        | The last claim was released and no new claim appeared within the grace. Stopped-as-expected rows render dimmed.              | §32.8.1 (shipped)        |
+| May be stuck   | Claims are held but nothing progressed for the idle window.                                                                  | §32.8.1 (shipped)        |
+| Stalled        | A claim's lease expired without renewal.                                                                                     | §32.8.1 (shipped)        |
+| Halted         | A terminal whose worker holds a claim reported a halt.                                                                       | §32.8.1 (shipped)        |
+| Waiting on you | A ticket in the store is blocked on the user: an open feedback request, a review flag, or a review request. New for clients. | HS2-JTTQMY (design only) |
+
+Two **stuck causes** refine May be stuck and Halted so a surface can say why nothing is happening
+(HS2-EGKKA0, design only):
+
+- **Usage-limit pause:** an AI tool reported a usage or rate limit. When the tool reports a reset time, the
+  surface shows the resume time in place of a stuck state. This extends the `terminal_halted` signal.
+- **Awaiting input:** a terminal session waits at a permission or approval prompt. The surface links
+  straight to that terminal.
+
+## 34.3 Live values, rates, and gauges
+
+The per-store live state model (HS2-JTTQMY, design only) is the one data source for every glance surface.
+For each store it carries the state above and:
+
+- the time of last progress, using the idle detector's progress definition;
+- live claims with ticket, phase, and ETA overrun;
+- workers live versus expected;
+- queue runway: the ready Up Next count and an ETA-based estimate;
+- `main` CI status;
+- two rates, each with a rolling 30-day peak.
+
+The rates are:
+
+- **Tokens per minute**, from the metrics usage events ([14-metrics-interface.md](14-metrics-interface.md)).
+- **Tickets updated per hour:** distinct tickets with a progress write in the last 60 minutes. **Claim
+  renewals do not count**, matching the idle detector (§32.8.1), so a session that only renews looks idle.
+
+**Gauge semantics.** One glance gauge component (HS2-CVE3SK, design only) implements the speedometer HS2-PZPD83
+asked for: a needle rotating over an arc, scaled to that value's own 30-day peak, and pinned at the end of
+the arc above the peak.
+
+- **Blue = tokens/min, green = tickets updated/h**, from Kerf tone tokens. On standby both are dark red.
+- **Full variant:** value and unit inside the dial. Used on Stats Right now and, very large, in standby.
+- **Bare variant:** arc, fill, and needle only. Value, unit, and 30-day peak are in the title and the
+  accessible name. Used at chip height (about 38 px) in the compact project sidebar and at about 84 px on
+  the grid sidebar's gauge page.
+- The needle animates only when the value changes and respects `prefers-reduced-motion`.
+
+**Scope** follows HS2-PZPD83: on a project tab a surface shows that project; on All Projects or the
+workspace grid it shows all projects.
+
+**Delivery.** The model is pushed over the existing WebSocket change stream with cursor replay. There is no
+fixed-interval polling. Clients compute ages locally from timestamps, and local display timers never issue
+requests.
+
+## 34.4 Compact-surface rule
+
+Compact glance surfaces show **glyphs, gauges, and raw numbers only**. Every explanation, unit, and
+duration goes in the hover title and the accessible name, never on the face. For example, "no progress for
+34 minutes" is the title of a May be stuck glyph, not visible text. Chips and rows appear only when they
+have something to say. The full-width callout for likely-critical conditions (§34.1) is the one exception.
+
+## 34.5 Standby (HS2-EQVZTZ, design only)
+
+The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
+`m5-standby-attention-desktop`, `m6-standby-phone-project`.
+
+- **Entry:** after no direct human interaction for a threshold. An app-level setting turns it on or off and
+  sets the thresholds; the setting has CLI and REST parity like other app settings. A **moon** button
+  beside the left sidebar rail's collapse toggle forces entry (approved with `m1`).
+- **Exit:** any click, tap, or key.
+- **Display:** solid black background; a very large dark-red full gauge for tokens/min; the count of
+  tickets updated in the last 60 minutes; a clock; a dim per-project state strip; and a freshness line that
+  says when the change stream has dropped, so a frozen screen never looks healthy.
+- **Alerts:** Stalled, Halted, and Waiting on you show an amber callout and light that project's row in
+  the strip (`m5`). Nothing else brightens.
+- **Scope:** by entry point (§34.3). `m6` shows a phone in portrait entered from a project tab.
+- **Devices:** request a Screen Wake Lock on phones and tablets, drift content slowly against OLED burn-in,
+  and respect `prefers-reduced-motion`.
+- **Requests:** standby issues no requests of its own; it renders the pushed live state model.
+
+## 34.6 Project sidebar Live section (HS2-F788GW, HS2-6B9S7P, design only)
+
+A **Live** section under the completion chart. Mocks: `r3-project-sidebar-compact-{light,dark}` (compact,
+the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
+
+- **Compact:** one line with two bare gauges (blue tokens/min, green tickets updated/h), then icon chips:
+  Needs you count, ETA overrun, `main` CI, queue runway. Chips appear only when non-trivial. A
+  likely-critical callout (for example disk, §34.8) keeps its full width.
+- **Expanded:** the detailed rows of `m1`: work state and last-progress age, Needs you, overdue ETA, `main`
+  CI, queue runway, and a machine warning only past a threshold. A toggle in the section header switches
+  modes, and the choice persists per viewer.
+- **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
+  at 0. The button's title and accessible name carry the worker count and the time since last progress.
+  It is blocked on Kerf gap `KF-HDQTVV` (§34.10).
+
+## 34.7 Workspace grid sidebar pages (HS2-E1AQE8, HS2-EZSQDF, design only)
+
+The grid sidebar keeps today's completion charts and becomes swipeable pages. The maintainer chose these
+pages (option A) over a single integrated line.
+
+1. **Completion** (default, unchanged): `r3-grid-sidebar-page1`.
+2. **Gauges:** `r4-grid-sidebar-page2-{light,dark}`. The same list header per group as page 1 (All
+   projects, then each project) and the same divider under All projects. Each group's body is a pair of
+   bare gauges (tokens/min, tickets updated/h) with the project's state glyph at the row end.
+3. **Triage:** `m2-grid-sidebar-projects`. One row per project with state glyph and state word, current
+   ticket and phase, sorted by need, stopped-as-expected rows dimmed, durations on hover only (§34.4).
+
+All pages share one group component (header, divider, and a per-page body slot), so project order,
+alignment, and scroll position match across pages (HS2-E1AQE8).
+
+**Paging (HS2-EZSQDF):** swipe, horizontal trackpad scroll, dot click, and arrow keys change pages. The page
+dots float **fixed at the bottom of the sidebar** above scrolling content (approved with
+`r3-grid-sidebar-page1`). The selected page persists per viewer; Completion is the default. Paging is
+blocked on Kerf gap `KF-0QJ2K3`; until then pages 2 and 3 ship only as `/ux-demo` demos.
+
+## 34.8 Stats Right now (HS2-ERTNJ7, HS2-9AN4DN, HS2-NS0AYR, HS2-DTAVQA, design only)
+
+A **Right now** section above the existing "Ticket flow and usage" on the Stats page, approved as
+`m3-stats-right-now-{light,dark}`. Scope follows §34.3.
+
+- **Tiles (HS2-ERTNJ7):** full tokens/min gauge; tickets updated in the last 60 minutes with a sparkline;
+  completed since a period start; Needs you (tinted when non-zero); workers live versus expected; `main` CI.
+- **Projects table (HS2-ERTNJ7):** state glyph and word, project, current work (ticket and phase, including
+  final-testing tickets waiting on CI), last progress, ETA overrun, queue runway, a 12-hour token sparkline,
+  and the one action that unsticks it (Open terminal, Answer). Sorted by need, with a "data as of"
+  freshness line.
+- **Overnight timeline (HS2-9AN4DN):** one swimlane per project over a selectable window (default: since
+  standby was entered, or the last 12 hours), segments coloured by state (Active, Waiting on CI, May be
+  stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket. Hover shows state,
+  start, end, and duration. It needs persisted per-store state transitions: compact append-only records
+  with bounded retention, served over REST with CLI parity.
+- **This Mac cards (HS2-NS0AYR):** disk free with rate, time to full, and the largest growing directory
+  when known; memory pressure with swap trend; CPU with a sparkline and top process; power and sleep (kept
+  awake or at risk); network and thermal only when degraded. Cards past a threshold take the warning tone.
+  The group is labelled with the server's host name, because the viewer may be remote.
+- **Host health sampler (HS2-DTAVQA):** a server-side sampler of those signals pushes threshold crossings
+  and coarse snapshots over the existing WebSocket; sampling cadence is server-local and clients never
+  poll. Thresholds are configurable with CLI and REST parity, and use hysteresis so they do not flap. macOS
+  is first; other platforms report unsupported signals explicitly. The sampler also feeds the sidebar
+  callouts (§34.6) and the away digest.
+
+## 34.9 While-you-were-away digest (HS2-JJ9RYN, design only)
+
+Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf's dialog component.
+
+- The time range and duration spent in standby.
+- Three tiles: Completed, Need you (tinted when non-zero), and tokens with cost.
+- One row per event since standby began, each with the single action that resolves it: a project stalled
+  (Open), waited on you (Answer), paused at a usage limit with its resume time, a host threshold crossed
+  (for example a disk dip), a queue finished.
+- Actions: Dismiss and "Show what needs me".
+- An uneventful standby exits silently, with no digest.
+- Sources: the live state transitions (HS2-JTTQMY), host health events (HS2-DTAVQA), and the activity
+  narration digest ([15-activity-narration-interface.md](15-activity-narration-interface.md)) where useful.
+
+## 34.10 Icons and Kerf gaps
+
+**State icons (provisional, pending HS2-CSPKQX).** Glyphs are official Lucide assets through the shared
+icon component. Only the standby `moon` is approved; the maintainer has not yet standardized the rest. When
+HS2-CSPKQX decides them, replace this table and pin the map with a policy test named with that slug.
+
+| State                | Lucide icon     | Status      |
+| -------------------- | --------------- | ----------- |
+| Standby button       | `moon`          | Approved    |
+| Active               | `activity`      | Provisional |
+| Waiting on you       | `hand`          | Provisional |
+| May be stuck         | `hourglass`     | Provisional |
+| Stalled              | `octagon-alert` | Provisional |
+| Halted / usage limit | `zap-off`       | Provisional |
+| Stopped              | `circle-pause`  | Provisional |
+
+**Kerf gaps.** Per the Kerf usage rule, these parts stay blocked rather than ship app CSS or an app-local
+replacement:
+
+- `KF-0QJ2K3`: PagedView, swipeable panes with bottom-floating page dots. Blocks HS2-EZSQDF. A styled
+  `wa-carousel` is not a substitute; it also sits behind the Web Awesome license decision.
+- `KF-HDQTVV`: a count badge on `ToolbarControlGroup` buttons. Blocks HS2-6B9S7P.
+
+## 34.11 Ticket map
+
+| Requirement                                              | Section    | Ticket     | Depends on              |
+| -------------------------------------------------------- | ---------- | ---------- | ----------------------- |
+| This requirements document                               | all        | HS2-3AA1N7 | none                    |
+| Per-project live state model, rates, 30-day peaks, push  | §34.2–34.3 | HS2-JTTQMY | none                    |
+| Glance gauge, full and bare variants                     | §34.3      | HS2-CVE3SK | none                    |
+| Standby mode                                             | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
+| Project sidebar Live section                             | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
+| Workers view button badge                                | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-HDQTVV` |
+| Grid sidebar shared groups, gauge and triage page bodies | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |
+| Grid sidebar paging with floating dots                   | §34.7      | HS2-EZSQDF | HS2-E1AQE8, `KF-0QJ2K3` |
+| Stats Right now tiles and projects table                 | §34.8      | HS2-ERTNJ7 | HS2-JTTQMY, HS2-CVE3SK  |
+| Host health sampler and push channel                     | §34.8      | HS2-DTAVQA | none                    |
+| Stats This Mac cards                                     | §34.8      | HS2-NS0AYR | HS2-DTAVQA, HS2-ERTNJ7  |
+| Stats overnight timeline with persisted transitions      | §34.8      | HS2-9AN4DN | HS2-JTTQMY, HS2-ERTNJ7  |
+| While-you-were-away digest                               | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
+| Stuck causes: usage-limit resume time, awaiting input    | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
+| Standardize the state icons                              | §34.10     | HS2-CSPKQX | none                    |
+| Speedometer gauge request (intake)                       | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |
