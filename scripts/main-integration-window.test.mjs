@@ -126,12 +126,19 @@ function runAsync(program, args, cwd, env) {
   };
 }
 
-async function waitForFile(path) {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (existsSync(path)) return;
+/**
+ * Wait for the held gate's started marker, or fail with the push's output if it exits first.
+ * The test's own timeout bounds the wait; a fixed attempt cap timed out under full-gate load (HS2-Z5NYGH).
+ */
+async function waitForFile(path, running) {
+  let closed;
+  void running.completed.then((result) => {
+    closed = result;
+  });
+  while (!existsSync(path)) {
+    if (closed) throw new Error(`push exited (${closed.code}) before its gate started:\n${closed.output}`);
     await new Promise((done) => setTimeout(done, 100));
   }
-  throw new Error('Timed out waiting for the first gate to start');
 }
 
 test('HS2-W110HQ release or replacement after lookup preserves one immutable reservation snapshot', () => {
@@ -752,7 +759,7 @@ test('HS2-BND42N a remote writer during the gate fails the second preflight', { 
     const hold = resolve(f.root, 'hold');
     put(hold, 'hold');
     running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
-    await waitForFile(f.env.HS2_TEST_STARTED);
+    await waitForFile(f.env.HS2_TEST_STARTED, running);
     run('git', ['push', 'origin', 'main'], writer);
     const tip = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
     rmSync(hold);
@@ -781,7 +788,7 @@ test('HS2-BND42N a changed local HEAD during the gate cannot be pushed', { timeo
     const hold = resolve(f.root, 'hold');
     put(hold, 'hold');
     running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
-    await waitForFile(f.env.HS2_TEST_STARTED);
+    await waitForFile(f.env.HS2_TEST_STARTED, running);
     commit(f.repo, 'changed', f.env);
     rmSync(hold);
     const result = await running.completed;
@@ -814,7 +821,7 @@ test('HS2-BND42N two worktrees serialize the gate and reject the superseded writ
     const hold = resolve(f.root, 'hold');
     put(hold, 'hold');
     first = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
-    await waitForFile(f.env.HS2_TEST_STARTED);
+    await waitForFile(f.env.HS2_TEST_STARTED, first);
     second = runAsync('bash', ['scripts/push.sh', 'origin', 'HEAD:main'], other, f.env);
     await new Promise((done) => setTimeout(done, 350));
     assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
@@ -888,7 +895,7 @@ test(
         HS2_TEST_HOLD: hold,
         HOTSHEET_MAIN_WINDOW_HEARTBEAT_MS: '100',
       });
-      await waitForFile(f.env.HS2_TEST_STARTED);
+      await waitForFile(f.env.HS2_TEST_STARTED, running);
       // Something outside this push removes the reservation while its gate runs.
       run('git', ['update-ref', '-d', 'refs/hotsheet/main-integration-window'], f.repo);
       // The gate is still held: only the heartbeat can end it.
