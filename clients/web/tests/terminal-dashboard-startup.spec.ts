@@ -218,7 +218,8 @@ test('reveals a restored terminal workspace atomically and separates All Project
   expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
   await page.screenshot({ path: 'target/visual-captures/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
-  const sidebar = page.locator('#app-left-rail'),
+  // The completion charts are the paged sidebar's default page (HS2-EZSQDF).
+  const sidebar = page.locator('#app-left-rail [data-grid-sidebar-page="completion"]'),
     all = sidebar.locator('.grid-sidebar-group[data-project-id="all"]'),
     summaries = sidebar.locator('[data-component="project-summary"]'),
     demoSummary = sidebar.locator('[data-project-id="demo-checkout"] [data-component="project-summary"]'),

@@ -4,6 +4,7 @@ import { Badge } from '@kerfjs/ui/badge';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PagedView } from '@kerfjs/ui/paged-view';
 
 import { type GridSidebarLive, liveStateTitle, liveWordColor, triageOrder } from '../grid-sidebar-live';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
@@ -40,6 +41,15 @@ export function aggregateTerminalProjectSummaries(projects: readonly TerminalPro
 /** The grid sidebar's pages (HS2-E1AQE8, docs/34-glance-surfaces.md §34.7); Completion is the default. */
 export const GRID_SIDEBAR_PAGES = ['completion', 'gauges', 'triage'] as const;
 export type GridSidebarPage = (typeof GRID_SIDEBAR_PAGES)[number];
+/** The grid sidebar PagedView's DOM id, which `wirePagedViews` reports with each page change. */
+export const GRID_SIDEBAR_PAGED_VIEW_ID = 'grid-sidebar-pages';
+/** Where the chosen page persists per viewer (HS2-EZSQDF). */
+export const GRID_SIDEBAR_PAGE_STORAGE_KEY = 'hotsheet.terminals.sidebar-page';
+
+/** A stored or reported page id, or Completion when it is missing or unknown. */
+export function parseGridSidebarPage(value: string | null | undefined): GridSidebarPage {
+  return GRID_SIDEBAR_PAGES.find((page) => page === value) ?? 'completion';
+}
 export const GRID_SIDEBAR_PAGE_LABELS: Readonly<Record<GridSidebarPage, string>> = {
   completion: 'Completion',
   gauges: 'Gauges',
@@ -157,7 +167,19 @@ export function terminalOperationsPanel(props: TerminalOperationsPanelProps): Si
     label: 'Terminal operations sidebar',
     toolbar: { label: 'Operations sidebar toolbar', dividerSides: '' },
     toggle: { action: 'toggle-project-sidebar', name: 'Operations Sidebar' },
-    content: gridSidebarPageContent(props.page ?? 'completion', props),
+    // The pages fill the pane; each scrolls under Kerf's bottom-floating page dots (HS2-EZSQDF).
+    content: (
+      <PagedView
+        id={GRID_SIDEBAR_PAGED_VIEW_ID}
+        label="Sidebar pages"
+        page={props.page ?? 'completion'}
+        pages={GRID_SIDEBAR_PAGES.map((page) => ({
+          id: page,
+          label: GRID_SIDEBAR_PAGE_LABELS[page],
+          content: gridSidebarPageContent(page, props),
+        }))}
+      />
+    ),
     pane: { contentElement: 'section', contentLabel: 'Terminal operations sidebar' },
   };
 }

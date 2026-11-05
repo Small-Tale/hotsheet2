@@ -7,8 +7,10 @@ import { type GridSidebarLive, LIVE_WORD_LABELS } from '../grid-sidebar-live';
 import { LIVE_STATE_ICONS } from '../live-state-icons';
 import {
   aggregateTerminalProjectSummaries,
+  GRID_SIDEBAR_PAGED_VIEW_ID,
   GRID_SIDEBAR_PAGES,
   gridSidebarPageContent,
+  parseGridSidebarPage,
   TerminalOperationsSidebar,
 } from './terminal-operations-sidebar';
 
@@ -76,7 +78,8 @@ describe('TerminalOperationsSidebar', () => {
   it('separates only the multi-project aggregate through the List divider API', () => {
     const multiple = String(TerminalOperationsSidebar({ projects }));
     expect(multiple).toContain('data-project-id="all"');
-    expect(multiple.match(/divider-sides="b"/g)).toHaveLength(1);
+    // One divider per page, each under that page's All projects group (HS2-E1AQE8).
+    expect(multiple.match(/divider-sides="b"/g)).toHaveLength(GRID_SIDEBAR_PAGES.length);
     expect(String(TerminalOperationsSidebar({ projects: [projects[0]] }))).not.toContain('divider-sides="b"');
   });
 
@@ -128,10 +131,24 @@ describe('TerminalOperationsSidebar', () => {
       expect(groupsOf(String(gridSidebarPageContent('triage', { projects: live })))).toEqual(['all', 'two', 'one']);
     });
 
-    it('keeps production on the Completion page by default', () => {
+    it('pages Completion, Gauges, and Triage through Kerf PagedView, Completion by default (HS2-EZSQDF)', () => {
       const markup = String(TerminalOperationsSidebar({ projects: live, allLive }));
-      expect(markup).toContain('data-grid-sidebar-page="completion"');
-      expect(markup).not.toContain('data-component="grid-sidebar-gauges"');
+      expect(markup).toContain(`id="${GRID_SIDEBAR_PAGED_VIEW_ID}"`);
+      expect(markup).toContain('data-component="paged-view"');
+      expect(markup).toContain('data-page="completion"');
+      expect(markup).toContain('aria-label="Sidebar pages"');
+      expect(markup.match(/role="tab"/g)).toHaveLength(3);
+      for (const page of GRID_SIDEBAR_PAGES) expect(markup).toContain(`data-grid-sidebar-page="${page}"`);
+      expect(markup).toContain('Page 2 of 3: Gauges');
+      expect(markup).toContain('Page 3 of 3: Triage');
+      expect(String(TerminalOperationsSidebar({ projects: live, page: 'triage' }))).toContain('data-page="triage"');
+    });
+
+    it('parses stored pages, falling back to Completion', () => {
+      expect(parseGridSidebarPage('gauges')).toBe('gauges');
+      expect(parseGridSidebarPage('triage')).toBe('triage');
+      for (const value of [null, undefined, '', 'Gauges', 'stats'])
+        expect(parseGridSidebarPage(value)).toBe('completion');
     });
 
     it('gives each gauge group two bare gauges and its state glyph, the aggregate none', () => {

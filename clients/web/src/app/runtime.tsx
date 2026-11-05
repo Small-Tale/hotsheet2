@@ -4810,14 +4810,18 @@ export async function startHotSheetWebClient() {
     ticketContextMenu,
     tickets,
   });
-  const { terminalOperationsSurfaceProps } = createTerminalOperationsSurface({
+  const terminalOperationsSurface = createTerminalOperationsSurface({
     partialSourcesByProject,
     projects,
     projectTicketCounts,
     selectedProjectId,
     ticketRowsByProject,
     tickets,
+    // The grid sidebar's gauge and triage pages and its persisted page (HS2-EZSQDF).
+    liveStates,
+    storage: localStorage,
   });
+  const { terminalOperationsSurfaceProps } = terminalOperationsSurface;
   const { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps, previewInspectorProps } =
     createInspectorSurface({
       feedbackDelivery,
@@ -5303,6 +5307,7 @@ export async function startHotSheetWebClient() {
       },
     },
   });
+  const disposeGridSidebarPages = terminalOperationsSurface.wire(appRoot);
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
 
@@ -6222,6 +6227,8 @@ export async function startHotSheetWebClient() {
       disposeProjectChangeStreams();
       statsGlance.dispose();
       hostHealth.dispose();
+      disposeGridSidebarPages();
+      terminalOperationsSurface.dispose();
       liveStates.reset();
       liveClockTimer.stop();
       announcerController.dispose();

@@ -1678,8 +1678,10 @@ test('represents the production terminal dashboard and its shared context menu i
 test('represents aggregate and per-project terminal operations in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-operations-sidebar');
-  const sidebar = page.getByRole('complementary', { name: 'Terminal operations sidebar' });
-  await expect(sidebar).toBeVisible();
+  const rail = page.getByRole('complementary', { name: 'Terminal operations sidebar' });
+  await expect(rail).toBeVisible();
+  // The completion charts are the default page of the paged sidebar (HS2-EZSQDF).
+  const sidebar = rail.locator('[data-grid-sidebar-page="completion"]');
   await expect(sidebar.locator('[data-component="list-header"]')).toHaveCount(4);
   const summaries = sidebar.locator('[data-component="project-summary"]');
   await expect(summaries).toHaveCount(4);
@@ -1710,10 +1712,10 @@ test('represents aggregate and per-project terminal operations in the UX catalog
     const chart = await group.locator('.project-summary__chart').boundingBox();
     expect(Math.abs(heading.x - chart!.x)).toBeLessThanOrEqual(1);
   }
-  await sidebar.screenshot({ path: 'target/visual-captures/hs2-737h3x-terminal-operations-wide.png' });
+  await rail.screenshot({ path: 'target/visual-captures/hs2-737h3x-terminal-operations-wide.png' });
   await page.setViewportSize({ width: 390, height: 1200 });
   await expect(sidebar).toBeVisible();
-  await sidebar.screenshot({ path: 'target/visual-captures/hs2-737h3x-terminal-operations-narrow.png' });
+  await rail.screenshot({ path: 'target/visual-captures/hs2-737h3x-terminal-operations-narrow.png' });
 });
 
 test('represents the compact terminal ticket rail in the UX catalog', async ({ page }) => {

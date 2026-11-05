@@ -393,6 +393,11 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   `ticket · phase`, sorted by need, Stopped quiet, durations only in the title; the All projects
   group lists Needs you when non-zero and workers live). The catalog's Page and Live State
   settings show each page with and without live state.
+  The pages sit in a Kerf `PagedView` (HS2-EZSQDF) that fills the rail: swipe, trackpad scroll,
+  dot click, and arrow keys change the page, the dots float fixed at the rail's bottom, and each
+  page scrolls beneath them. `features/terminal-operations-surface.ts` owns the page signal,
+  persists it per viewer, and wires `wirePagedViews` on the app root; the catalog demo wires the
+  same helper and mirrors the page in its Page setting.
 - `RepositorySummary` — **production built**: one accessible branch/status action with
   Kerf `Row` and `Text` ahead/behind metrics and a compact `Badge` for uncommitted changes.
   The branch tail keeps app-owned truncation so long paths remain identifiable.

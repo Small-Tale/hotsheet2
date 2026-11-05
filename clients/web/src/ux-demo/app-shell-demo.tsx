@@ -46,6 +46,7 @@ import {
 import { DEMO_ACTIONS, DEMO_MARKERS } from './demo-actions';
 import { type DemoModule, type FormControl, listen } from './demo-module';
 import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
+import { GRID_SIDEBAR_DEMO_ALL, GRID_SIDEBAR_DEMO_PROJECTS, gridSidebarDemoSettings } from './grid-sidebar-demo';
 import { DEMO_LIVE_NOW_MS, demoHostHealth, demoLiveState } from './live-section-fixtures';
 import {
   collapsedCommandGroups,
@@ -463,11 +464,14 @@ function shellSidebarPanel() {
 }
 
 function shellTerminalOperationsPanel() {
+  // The production pager over the grid sidebar fixtures; its page follows the catalog wiring (HS2-EZSQDF).
   return terminalOperationsPanel({
     projects: [
       { id: 'hotsheet', name: 'Hot Sheet 2', completedToday: 6, inProgress: 3, trend: [3, 0, 2, 5, 4, 7, 6] },
       { id: 'website', name: 'Small Tale Website', completedToday: 2, inProgress: 1, trend: [0, 1, 0, 2, 1, 0, 2] },
-    ],
+    ].map((project, index) => ({ ...project, live: GRID_SIDEBAR_DEMO_PROJECTS[index === 0 ? 0 : 2]?.live })),
+    allLive: GRID_SIDEBAR_DEMO_ALL,
+    page: gridSidebarDemoSettings.page.value,
   });
 }
 

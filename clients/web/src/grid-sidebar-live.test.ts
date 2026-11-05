@@ -34,6 +34,7 @@ function store(overrides: Partial<LiveStoreState> = {}): LiveStoreState {
       idle_deadline_ms: null,
       stalled: [],
       halted: [],
+      causes: [],
     },
     claims: [
       {

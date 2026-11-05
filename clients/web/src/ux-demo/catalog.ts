@@ -262,6 +262,7 @@ export const demoCatalog: DemoCategory[] = [
         'list',
         'list-header',
         'list-item',
+        'paged-view',
         'toolbar',
       ]),
       cataloged('terminal-ticket-rail', [

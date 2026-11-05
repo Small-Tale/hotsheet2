@@ -859,6 +859,15 @@ only the selected synthetic item plays and no temporary speech file remains.
 Repeat with an incoming synthetic live event while Live is enabled. The browser
 suite uses fake audio to verify request and state wiring; it cannot hear output.
 
+### Grid sidebar touch swipe on a phone or tablet (HS2-EZSQDF)
+
+Open Workspace Grid with two synthetic projects on a phone (iOS Safari and Android
+Chrome) and open the operations sidebar. Swipe left and right across a page:
+it snaps to Gauges, then Triage, and back, and the page dots follow. Scroll a
+long page vertically and confirm the dots stay fixed at the bottom. Reload and
+confirm the last page returns. Kerf browser-tests a real swipe in Chromium only
+(`KF-0QJ2K3`); the Hot Sheet suite covers dots, arrow keys, and trackpad scroll.
+
 ### Jira advisory process claims (HS2-BPKM76)
 
 For HS2-2MZWZT, open the same Jira ticket in the web inspector and reader at

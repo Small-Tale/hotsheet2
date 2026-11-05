@@ -262,6 +262,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/stats-right-now.ts   # Stats Right now derivations (HS2-ERTNJ7): tiles per scope, update sparkline buckets, rows sorted by need with the one unstick action, UTC-day completions; features/stats-glance.ts owns the display clock (Stats only, no requests) and data-as-of; components/stats-right-now.tsx, stats-projects-table.tsx, glance-sparkline.tsx render it
     src/stats-this-mac.ts    # Stats This Mac card model (HS2-NS0AYR): server-host disk, memory, CPU, power, plus network/thermal only when degraded; unsupported/unavailable never show values; rendered by components/stats-this-mac.tsx from the runtime's host-health resource
     src/project-live-summary.ts # Project sidebar Live section numbers: linked-store summary, compact chips, host callouts; rendered by components/project-live-section.tsx (HS2-F788GW)
+    src/grid-sidebar-live.ts # Grid sidebar gauge/triage numbers per project group from live state, state words, hover titles, need order (HS2-E1AQE8)
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
@@ -300,7 +301,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV)
       sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands, Drive (HS2-BSSWGV)
       ticket-view-surface.tsx # Ticket view titles, view action spec, ticket context-menu surface (HS2-K0VC2C)
-      terminal-operations-surface.ts # Terminal operations dashboard per-project summary (HS2-K0VC2C)
+      terminal-operations-surface.ts # Terminal operations dashboard per-project summary (HS2-K0VC2C); grid sidebar live numbers on a local minute clock, the persisted page (`hotsheet.terminals.sidebar-page`), and its Kerf PagedView wiring (HS2-EZSQDF)
       inspector-surface.ts # Selected-ticket inspector props, not-working dialog props, attachment items (HS2-K0VC2C)
       reader-layers-surface.tsx # Ticket reader stack: reader layer props, gallery source lookup (HS2-K0VC2C)
       workspace-surface.tsx # Main workspace pane props and empty states (HS2-K0VC2C)

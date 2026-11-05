@@ -1,6 +1,6 @@
 # 34 · Glance surfaces: standby, sidebars, and stats (HS2-3AA1N7)
 
-**Status: design only.** Nothing in this document is built yet. It records the design the maintainer
+**Status: partial.** Each section states its own status; §34.7 (grid sidebar pages) is shipped. It records the design the maintainer
 approved on the planning ticket HS2-CT5EWR over four rounds of annotated mocks, so the implementation
 tickets reference one requirements source instead of ticket notes. Each requirement names the ticket that
 builds it (§34.11). When a ticket ships, update its section's status here and in
@@ -142,12 +142,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   with HS2-6B9S7P; the visible badge waits on the Kerf gap `KF-170258` (a badge on a `SegmentedControl`
   choice), and no app CSS positions one (§34.10).
 
-## 34.7 Workspace grid sidebar pages (HS2-E1AQE8 page bodies built; HS2-EZSQDF paging design only)
+## 34.7 Workspace grid sidebar pages (HS2-E1AQE8, HS2-EZSQDF, shipped)
 
-**Status:** the shared group and all three page bodies are built (HS2-E1AQE8,
+**Status: shipped.** The shared group and the three page bodies (HS2-E1AQE8,
 `clients/web/src/components/terminal-operations-sidebar.tsx`, `grid-sidebar-*.tsx`,
-`clients/web/src/grid-sidebar-live.ts`) and shown in `/ux-demo?component=terminal-operations-sidebar`.
-Production shows the Completion page until paging lands (HS2-EZSQDF).
+`clients/web/src/grid-sidebar-live.ts`) page in production through Kerf `PagedView` (HS2-EZSQDF,
+`clients/web/src/features/terminal-operations-surface.ts`), fed by the pushed live state.
 
 The grid sidebar keeps today's completion charts and becomes swipeable pages. The maintainer chose these
 pages (option A) over a single integrated line.
@@ -169,7 +169,12 @@ alignment, and scroll position match across pages (HS2-E1AQE8).
 **Paging (HS2-EZSQDF):** swipe, horizontal trackpad scroll, dot click, and arrow keys change pages. The page
 dots float **fixed at the bottom of the sidebar** above scrolling content (approved with
 `r3-grid-sidebar-page1`). The selected page persists per viewer; Completion is the default. Paging uses
-Kerf `PagedView` (`KF-0QJ2K3`).
+Kerf `PagedView` (`KF-0QJ2K3`), which jumps without animation under `prefers-reduced-motion`.
+
+The page is stored in the viewer's `localStorage` (`hotsheet.terminals.sidebar-page`); an unknown or
+unreadable value shows Completion. Each page scrolls on its own beneath the dots. Gauge rates decay
+with time, so a local minute clock re-renders them while any store reports live state; it never
+issues a request. A store linked by several open projects counts once in All projects.
 
 ## 34.8 Stats Right now (HS2-ERTNJ7, HS2-NS0AYR shipped; HS2-9AN4DN design only; HS2-DTAVQA partial)
 

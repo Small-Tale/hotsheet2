@@ -5347,7 +5347,9 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     'default',
   );
   await expect(operations).toBeVisible();
-  await expect(operations.getByText('demo', { exact: true })).toBeVisible();
+  // The completion charts are the paged sidebar's default page (HS2-EZSQDF).
+  const completion = operations.locator('[data-grid-sidebar-page="completion"]');
+  await expect(completion.getByText('demo', { exact: true })).toBeVisible();
   await expect(operations.locator('[data-component="project-summary"]')).toHaveCount(1);
   await expect(operations.getByText('All projects')).toHaveCount(0);
   await expect(dashboard).toHaveAttribute('data-basis', 'across');

@@ -20,8 +20,8 @@ import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashb
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
 import {
   terminalOperationsPanel,
+  type TerminalOperationsPanelProps,
   TerminalOperationsSidebar,
-  type TerminalProjectSummary,
 } from './terminal-operations-sidebar';
 import { TerminalTicketRail, terminalTicketRailPanel, type TerminalTicketRailProps } from './terminal-ticket-rail';
 import { TicketBoard } from './ticket-board';
@@ -183,12 +183,11 @@ export function ProjectTerminalDrawerSurface({ drawer }: ProjectTerminalDrawerSu
   return drawer ? <TerminalDrawer {...drawer} /> : <></>;
 }
 
-export interface TerminalOperationsSurfaceProps {
-  projects: readonly TerminalProjectSummary[];
+/** The grid sidebar's projects, All projects live numbers, and current page (HS2-EZSQDF). */
+export type TerminalOperationsSurfaceProps = TerminalOperationsPanelProps;
+export function TerminalOperationsSurface(props: TerminalOperationsSurfaceProps) {
+  return <TerminalOperationsSidebar {...props} />;
 }
-export function TerminalOperationsSurface({ projects }: TerminalOperationsSurfaceProps) {
-  return <TerminalOperationsSidebar projects={projects} />;
-}
-export function terminalOperationsSurfacePanel({ projects }: TerminalOperationsSurfaceProps): SidebarPanelParts {
-  return terminalOperationsPanel({ projects });
+export function terminalOperationsSurfacePanel(props: TerminalOperationsSurfaceProps): SidebarPanelParts {
+  return terminalOperationsPanel(props);
 }

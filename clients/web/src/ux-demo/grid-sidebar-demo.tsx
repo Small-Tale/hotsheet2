@@ -1,6 +1,7 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
+import { wirePagedViews } from '@kerfjs/ui/wire-paged-views';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -8,8 +9,10 @@ import type { LiveWord } from '../api';
 import { GridSidebarGauges } from '../components/grid-sidebar-gauges';
 import {
   GRID_SIDEBAR_PAGE_LABELS,
+  GRID_SIDEBAR_PAGED_VIEW_ID,
   GRID_SIDEBAR_PAGES,
   type GridSidebarPage,
+  parseGridSidebarPage,
   TerminalOperationsSidebar,
   type TerminalProjectSummary,
 } from '../components/terminal-operations-sidebar';
@@ -208,6 +211,17 @@ function wireGridSidebarDemo(root: HTMLElement): () => void {
       const name = control.getAttribute('name');
       if (name === 'page') gridSidebarDemoSettings.page.value = control.value as GridSidebarPage;
       if (name === 'live') gridSidebarDemoSettings.live.value = control.value as DemoLiveSource;
+    }),
+  );
+  // The production pager wiring: swipes, trackpad scrolls, dots, and arrow keys change the page, which
+  // the Page setting mirrors (HS2-EZSQDF). AppShell's Workspace Grid mode shares this page.
+  scope.add(
+    wirePagedViews(root, {
+      onPageChange: (page, view) => {
+        if (view !== GRID_SIDEBAR_PAGED_VIEW_ID) return;
+        gridSidebarDemoSettings.page.value = parseGridSidebarPage(page);
+        syncSettingsControls(root, 'grid-sidebar', { values: { page: gridSidebarDemoSettings.page.value } });
+      },
     }),
   );
   return () => {

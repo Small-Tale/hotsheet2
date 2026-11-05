@@ -295,6 +295,7 @@ describe('UX demo catalog', () => {
               'list',
               'list-action-row',
               'loading-spinner',
+              'paged-view',
               'row',
               'state-banner',
               'surface-scaffold',
