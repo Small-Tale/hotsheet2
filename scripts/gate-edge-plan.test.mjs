@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { edgePreview, edgePreviewForRepo, rustConsumersFromMetadata, rustPrivateBodyOnly } from './gate-edge-plan.mjs';
 import { parseCheckScript, plan } from './gate-plan.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const rustPath = 'crates/hotsheet-cli/src/broken_pipe.rs';
@@ -98,7 +99,7 @@ test('HS2-55MWQ9 repository proof requires an existing changed private file and 
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), body);
   };
-  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+  const git = (...args) => execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
   git('init', '--quiet', '-b', 'main');
   git('config', 'user.name', 'Synthetic');
   git('config', 'user.email', 'synthetic@invalid.example');

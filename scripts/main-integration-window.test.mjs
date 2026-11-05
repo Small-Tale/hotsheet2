@@ -16,10 +16,11 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 import { acceptedHooksPath, readWindow, verifyMainPush } from './main-integration-window.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const run = (program, args, cwd, env = process.env, input) =>
+const run = (program, args, cwd, env = withoutGitRepositoryEnv(process.env), input) =>
   execFileSync(program, args, { cwd, env, input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 const put = (path, contents, executable = false) => {
   mkdirSync(dirname(path), { recursive: true });
@@ -56,6 +57,7 @@ function fixture() {
     'scripts/push.sh',
     'scripts/main-integration-window.mjs',
     'scripts/main-integration-options.mjs',
+    'clients/web/scripts/repository-env.mjs',
     '.githooks/pre-commit',
     '.githooks/pre-push',
   ]) {
@@ -75,6 +77,7 @@ function fixture() {
       'scripts/push.sh',
       'scripts/main-integration-window.mjs',
       'scripts/main-integration-options.mjs',
+      'clients/web/scripts/repository-env.mjs',
       '.githooks/pre-commit',
       '.githooks/pre-push',
       'scripts/check.sh',
@@ -91,7 +94,7 @@ function fixture() {
     true,
   );
   const env = {
-    ...process.env,
+    ...withoutGitRepositoryEnv(process.env),
     PATH: `${bin}:${process.env.PATH}`,
     HS2_TEST_GATE_LOG: resolve(root, 'gate.log'),
     HS2_TEST_FAIL: resolve(root, 'fail'),
@@ -159,7 +162,7 @@ test('HS2-W110HQ release or replacement after lookup preserves one immutable res
       let lookups = 0;
       const snapshot = readWindow(f.repo, (repo, args) => {
         lookups++;
-        const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+        const result = spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
         assert.equal(result.status, 0, result.stderr);
         if (next) run('git', ['update-ref', ref, next, oid], repo);
         else run('git', ['update-ref', '-d', ref, oid], repo);
@@ -340,7 +343,7 @@ test('HS2-BYDMV4 a new owner between unresolved lookup and existence requires a 
       let queries = 0;
       const read = () =>
         readWindow(f.repo, (repo, args) => {
-          const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+          const result = spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
           if (++queries === 1) {
             assert.equal(result.status, 1);
             assert.equal(result.stderr, '');
@@ -499,7 +502,7 @@ finally { Date.now = originalNow; }
     );
     assert.equal(run('git', ['rev-parse', ref], f.repo), oid);
     assert.equal(existsSync(env.HS2_TEST_GATE_LOG), false);
-    assert.equal(spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], { cwd: f.remote }).status, 2);
+    assert.equal(spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], { cwd: f.remote, env: withoutGitRepositoryEnv(process.env) }).status, 2);
   } finally {
     f.dispose();
   }
@@ -577,7 +580,7 @@ finally { Date.now = originalNow; }
       assert.equal(readFileSync(marker, 'utf8'), '');
     assert.equal(run('git', ['rev-parse', ref], f.repo), oid);
     assert.equal(existsSync(env.HS2_TEST_GATE_LOG), false);
-    assert.equal(spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], { cwd: f.remote }).status, 2);
+    assert.equal(spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], { cwd: f.remote, env: withoutGitRepositoryEnv(process.env) }).status, 2);
   } finally {
     f.dispose();
   }
@@ -839,7 +842,7 @@ test("HS2-Z333GJ accepts only this repository's .githooks, absolute or relative,
     const repo = resolve(root, 'repo'),
       worktree = resolve(root, 'linked'),
       env = {
-        ...process.env,
+        ...withoutGitRepositoryEnv(process.env),
         GIT_AUTHOR_NAME: 't',
         GIT_AUTHOR_EMAIL: 't@example.invalid',
         GIT_COMMITTER_NAME: 't',

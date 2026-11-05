@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseBudget } from './gate-budget.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const slugPattern = /\bHS2-[A-Z0-9]+\b/g;
 const defaultProfile = (reason) => ({
@@ -76,7 +77,11 @@ export function chooseTicket({ explicit, subject = '', dirty = false, workerId, 
 }
 
 export function projectTicketRoot(repo) {
-  const listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: repo, encoding: 'utf8' });
+  const listing = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+  });
   const paths = [...listing.matchAll(/^worktree (.+)$/gm)].map((match) => resolve(match[1]));
   return paths.find((path) => existsSync(join(path, '.hotsheet2/store'))) ?? paths[0] ?? repo;
 }
@@ -104,7 +109,7 @@ export function readTicketProfile(
     .filter(Boolean)
     .map((line) => line.trim().split(/\s+/)[0]);
   const tickets = providers.flatMap((connection) => JSON.parse(run('provider-ls', connection)));
-  const subject = execFileSync('git', ['log', '-1', '--format=%s'], { cwd: repo, encoding: 'utf8' }).trim();
+  const subject = execFileSync('git', ['log', '-1', '--format=%s'], { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
   const chosen = chooseTicket({ explicit, subject, dirty, workerId, tickets });
   if (!chosen.ticket) return defaultProfile(chosen.reason);
   const ticket = JSON.parse(run('provider-get', chosen.ticket.connection_id, chosen.ticket.native_id));

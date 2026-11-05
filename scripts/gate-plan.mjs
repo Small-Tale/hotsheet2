@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -44,6 +45,7 @@ export const ROOT_POLICY_TESTS = [
   'check-test-quarantine',
   'gitgist-tooling',
   'check-rulesync-generation',
+  'repository-env-isolation',
 ];
 export const ROOT_TOOLING_TESTS = [
   'test-quiet',
@@ -169,7 +171,7 @@ export function plan({ stages, changes, fallback = [] }) {
 }
 
 function git(args, cwd) {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', args, { cwd, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
   return { ok: result.status === 0, out: (result.stdout ?? '').trim() };
 }
 

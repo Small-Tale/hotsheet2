@@ -95,9 +95,12 @@ async function main() {
   try {
     summary.claudeVersion = (await run('claude', ['--version'])).stdout.trim();
     summary.serverRevision = JSON.parse(
-      (await run(binaries.HOTSHEET_SERVER_BIN, ['--revision-status'])).stdout,
+      (await run(binaries.HOTSHEET_SERVER_BIN, ['--revision-status'], { env: withoutGitRepositoryEnv(process.env) }))
+        .stdout,
     ).build_revision;
-    summary.gitHead = (await run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot })).stdout.trim();
+    summary.gitHead = (
+      await run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, env: withoutGitRepositoryEnv(process.env) })
+    ).stdout.trim();
     const viteBuild = (args) => run('npx', ['vite', 'build', ...args], { cwd: webRoot, env: productionEnvironment });
     await viteBuild(['--outDir', resolve(buildRoot, 'dist'), '--emptyOutDir']);
     await viteBuild(['--ssr', 'src/local-host.ts', '--outDir', resolve(buildRoot, 'dist-host'), '--emptyOutDir']);
@@ -258,7 +261,7 @@ async function main() {
       await new Promise((done) => host.once('exit', done));
     }
     await run(binaries.HOTSHEET_CLI_BIN, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop', '--force'], {
-      env: { ...process.env, HOTSHEET_HOME: home },
+      env: { ...withoutGitRepositoryEnv(process.env), HOTSHEET_HOME: home },
     }).catch(() => {});
     const deadline = Date.now() + 10_000;
     while ((await processesUsing(home)).length > 0 && Date.now() < deadline)

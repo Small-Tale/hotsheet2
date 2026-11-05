@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { syntheticTicket } from '../scripts/scale-stress.mjs';
 import type { RealTicketFixtureContext } from './real-ticket-server';
 
@@ -16,7 +17,9 @@ export async function seedLocalGitTickets(
     count: number;
   }[],
 ) {
-  const { store, env } = fixture;
+  // HS2-KKDZF4: the server fixture already scrubs its environment; keep every git call here scrubbed too.
+  const { store } = fixture;
+  const env = withoutGitRepositoryEnv(fixture.env);
   const directories = new Set<string>();
   let index = 0;
   for (const group of groups) {

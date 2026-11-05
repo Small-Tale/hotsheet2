@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 export const repository = 'https://github.com/Small-Tale/ai-playbook.git';
 export const destinations = {
@@ -51,7 +52,11 @@ export function checkBundled(root, lock) {
 }
 
 function git(source, ...args) {
-  return execFileSync('git', ['-C', source, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return execFileSync('git', ['-C', source, ...args], {
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 export function readSource(source, commit, release) {
@@ -113,8 +118,10 @@ export function main(args, root = path.resolve(import.meta.dirname, '..')) {
     if (fetch) {
       temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'hotsheet-playbook-'));
       source = temporary;
-      execFileSync('git', ['init', '--quiet', source]);
-      execFileSync('git', ['-C', source, 'fetch', '--quiet', '--depth=1', repository, current.commit]);
+      execFileSync('git', ['init', '--quiet', source], { env: withoutGitRepositoryEnv(process.env) });
+      execFileSync('git', ['-C', source, 'fetch', '--quiet', '--depth=1', repository, current.commit], {
+        env: withoutGitRepositoryEnv(process.env),
+      });
     }
     if (source) {
       const upstream = readSource(source, commit ?? current.commit, release ?? current.release);

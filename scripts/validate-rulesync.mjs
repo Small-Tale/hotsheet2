@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const cli = path.join(root, 'target/debug/hotsheet-cli');
@@ -11,7 +12,7 @@ const example = path.join(root, 'guidance/rulesync');
 const config = JSON.parse(fs.readFileSync(path.join(example, 'rulesync.jsonc'), 'utf8'));
 const pinnedCommit = JSON.parse(fs.readFileSync(path.join(root, 'guidance/ai-playbook.lock.json'), 'utf8')).commit;
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'hotsheet-rulesync-'));
-const env = { ...process.env, HOTSHEET_HOME: path.join(temporary, 'home') };
+const env = { ...withoutGitRepositoryEnv(process.env), HOTSHEET_HOME: path.join(temporary, 'home') };
 const write = (file, text) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text);

@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isCovered } from './ci-gate.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const SHA = /^[0-9a-f]{40}$/i;
 const OPERATION = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
@@ -20,7 +21,7 @@ const hash = (value) => createHash('sha256').update(value).digest('hex');
 export const COMMAND_OUTPUT_LIMIT = 64 * 1024 * 1024;
 
 export function command(binary, args, cwd, input, maxBuffer = COMMAND_OUTPUT_LIMIT) {
-  const result = spawnSync(binary, args, { cwd, encoding: 'utf8', input, maxBuffer });
+  const result = spawnSync(binary, args, { cwd, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8', input, maxBuffer });
   if (result.error?.code === 'ENOBUFS')
     throw new Error(`${binary} ${args.join(' ')} wrote more than ${maxBuffer} bytes (HS2-9BH8GF)`);
   if (result.error) throw result.error;

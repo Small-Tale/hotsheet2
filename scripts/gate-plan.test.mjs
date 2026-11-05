@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { classifyPath, collect, execute, main, parseCheckScript, plan, stageGroup } from './gate-plan.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const realCheck = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'check-full.sh'), 'utf8');
 const stages = parseCheckScript(realCheck);
@@ -180,7 +181,7 @@ test('HS2-3ZJBRM scopes web lint and script-local tests by declared inputs', () 
 function repository(t) {
   const repo = mkdtempSync(join(tmpdir(), 'hs2-fccrck-plan-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
   git('init', '--quiet', '-b', 'main');
   git('config', 'user.email', 'synthetic@example.invalid');
   git('config', 'user.name', 'Synthetic');
@@ -277,6 +278,7 @@ test('HS2-FCCRCK execute mode never touches the root-gate tree cache', (t) => {
   assert.ok(!commands.includes('cargo lint'));
   assert.throws(() => git('rev-parse', '--verify', '--quiet', 'refs/hotsheet-root-gate'));
   const cache = execFileSync('git', ['-C', repo, 'rev-parse', '--git-path', 'hotsheet-root-gate'], {
+    env: withoutGitRepositoryEnv(process.env),
     encoding: 'utf8',
   }).trim();
   assert.throws(() => readFileSync(join(repo, cache, git('rev-parse', 'HEAD^{tree}'))));

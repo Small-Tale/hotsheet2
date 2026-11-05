@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const RUST_PRIVATE_PATH = 'crates/hotsheet-cli/src/broken_pipe.rs';
 const WEB_PRIVATE_PATH = 'clients/web/src/trailing-task-internal.ts';
@@ -129,7 +130,12 @@ export function edgePreview({ changes, rustBefore, rustAfter, rustConsumers = []
 }
 
 function command(repo, program, args) {
-  const result = spawnSync(program, args, { cwd: repo, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  const result = spawnSync(program, args, {
+    cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  });
   return result.status === 0 ? result.stdout : null;
 }
 

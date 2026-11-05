@@ -14,6 +14,7 @@ import {
   ruleBody,
   validateLock,
 } from './sync-ai-playbook.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 test('rule packaging is removed without changing the managed body', () => {
   assert.equal(ruleBody('---\nroot: true\n---\n\nbody\n'), 'body\n');
@@ -70,7 +71,11 @@ test('real git source produces an offline bundle, detects drift, and restores it
     });
     fs.writeFileSync(path.join(source, 'rules-manifest.json'), JSON.stringify({ schema_version: 1, rules }));
     const git = (...args) =>
-      execFileSync('git', ['-C', source, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      execFileSync('git', ['-C', source, ...args], {
+        env: withoutGitRepositoryEnv(process.env),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
     git('init', '--quiet');
     git('add', 'rules', 'rules-manifest.json');
     git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--quiet', '-m', 'fixture');

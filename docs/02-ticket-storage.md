@@ -933,6 +933,17 @@ outside that constructor. Web test helpers that spawn Hot Sheet binaries or git
 (`clients/web/tests/real-ticket-server.ts`, `clients/web/scripts/scale-stress.mjs`)
 strip the same list through `clients/web/scripts/repository-env.mjs`.
 
+The repository's own Node scripts and test fixtures do the same (HS2-KKDZF4). A linked
+worktree's `pre-push` hook runs `scripts/check.sh` with an absolute `GIT_DIR`, and
+`pre-commit` adds `GIT_INDEX_FILE`. A fixture's `git -C <tmp> commit` started with them
+once committed into the calling worktree and ran its hooks, and a fixture `git init --bare`
+set `core.bare = true` in the shared config. `scripts/local-gate.mjs` now removes the list
+from its own environment before any stage starts. Every git-spawning file under `scripts/`,
+`clients/web/scripts/`, `clients/web/tests/`, and `migrator/` passes
+`withoutGitRepositoryEnv(process.env)`. `scripts/repository-env-isolation.test.mjs` scans
+those spawns and runs real fixtures under a hook-style environment aimed at a sentinel
+repository, which must stay byte-identical.
+
 The web client's production Node code does the same (HS2-T1H6NP). Every child process in
 `clients/web/src` (the dev bridge's git runner, store init, server launch, reveal and
 folder-chooser helpers, the HS1 backup git calls, and the

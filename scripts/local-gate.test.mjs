@@ -16,6 +16,7 @@ import {
 } from './local-gate.mjs';
 import { demoEntryIds, exerciseIndex, exerciseIndexForRepo, ownHooks, routeHooks } from './gate-browser-exercise.mjs';
 import { profileFromTags } from './gate-ticket-profile.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
 test('HS2-RS0FFT tool versions exclude changing login-shell session messages', () => {
@@ -26,7 +27,7 @@ test('HS2-RS0FFT tool versions exclude changing login-shell session messages', (
 function fixture(t) {
   const repo = mkdtempSync(join(tmpdir(), 'hs2-rs0fft-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+  const git = (...args) => execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
   const put = (path, body) => {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), body);

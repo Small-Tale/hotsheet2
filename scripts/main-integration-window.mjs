@@ -5,6 +5,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'nod
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMainPushArgs } from './main-integration-options.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const project = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const ref = 'refs/hotsheet/main-integration-window';
@@ -18,6 +19,7 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 function git(repo, args, input) {
   const result = spawnSync('git', args, {
     cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
     input,
     encoding: 'utf8',
     timeout: 10_000,
@@ -29,7 +31,7 @@ function git(repo, args, input) {
 }
 
 function gitResult(repo, args) {
-  return spawnSync('git', args, { cwd: repo, encoding: 'utf8', timeout: 10_000 });
+  return spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8', timeout: 10_000 });
 }
 
 function commonDir(repo) {
@@ -257,7 +259,7 @@ function authority(repo, value) {
   return authorizeMainState(state, value, projectId, sourceId, Math.floor(Date.now() / 1000));
 }
 
-async function child(repo, program, args, { env = process.env, signal, output = false, timeoutMs } = {}) {
+async function child(repo, program, args, { env = withoutGitRepositoryEnv(process.env), signal, output = false, timeoutMs } = {}) {
   return new Promise((done, reject) => {
     if (signal?.aborted) {
       reject(new Error('Integration command canceled before launch'));
@@ -471,7 +473,7 @@ export async function pushMain(repo, args) {
     await child(repo, 'git', ['push', ...options.gitFlags, options.remote, `${window.value.head}:refs/heads/main`], {
       signal: control.signal,
       timeoutMs: 10 * 60_000,
-      env: { ...process.env, HOTSHEET_MAIN_WINDOW_TOKEN: token },
+      env: { ...withoutGitRepositoryEnv(process.env), HOTSHEET_MAIN_WINDOW_TOKEN: token },
     });
     check();
     const confirmed = await remoteTip(repo, options.remote, control.signal);

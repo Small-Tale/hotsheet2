@@ -16,6 +16,7 @@ import {
   summarize,
   workerIdleGaps,
 } from './throughput-baseline.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const at = (n) => Date.parse('2026-10-27T10:00:00Z') + n * 60_000;
 const iso = (n) => new Date(at(n)).toISOString();
@@ -302,7 +303,7 @@ test('HS2-34PWSK frozen identifier-only inputs replay without a CLI, Git or netw
 test('HS2-34PWSK collector verifies a real cherry-pick independently of same-slug subjects', () => {
   const dir = mkdtempSync(join(tmpdir(), 'hs2-34pwsk-git-'));
   const git = (...args) =>
-    execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    execFileSync('git', ['-C', dir, ...args], { env: withoutGitRepositoryEnv(process.env), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   try {
     git('init', '-b', 'main');
     git('config', 'commit.gpgsign', 'false');

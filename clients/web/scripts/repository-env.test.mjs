@@ -52,7 +52,7 @@ describe('git repository environment stripping (HS2-RRD417)', () => {
     execFileSync('git', ['init', '-q', sentinel], { env: withoutGitRepositoryEnv(process.env) });
     const configBefore = readFileSync(join(sentinel, '.git', 'config'), 'utf8');
     const hostile = {
-      ...process.env,
+      ...withoutGitRepositoryEnv(process.env),
       GIT_DIR: join(sentinel, '.git'),
       GIT_WORK_TREE: sentinel,
       GIT_INDEX_FILE: join(sentinel, '.git', 'index'),

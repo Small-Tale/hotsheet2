@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const SHA = /^[0-9a-f]{40}$/i;
 const TICKET_ROW = /^\s*[*●]*\s*(HS2-[A-Z0-9]+)\s/;
@@ -107,7 +108,7 @@ export function waitingCommit(ticketOutput) {
 // spawnSync's fixed buffer; only short metadata/marker lines matter (HS2-HBGGRQ).
 export function streamWaitingCommit(binary, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(binary, args, { env: withoutGitRepositoryEnv(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
     const scanner = ticketScanner();
     const decoder = new StringDecoder('utf8');
     let stderr = '';
@@ -128,7 +129,7 @@ export function streamWaitingCommit(binary, args) {
 }
 
 export function command(binary, args, options = {}) {
-  const result = spawnSync(binary, args, { encoding: 'utf8', ...options });
+  const result = spawnSync(binary, args, { encoding: 'utf8', env: withoutGitRepositoryEnv(process.env), ...options });
   if (result.error) throw result.error;
   return result;
 }

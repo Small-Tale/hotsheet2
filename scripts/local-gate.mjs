@@ -1,6 +1,7 @@
 // HS2-RS0FFT: affected local verification and exact-input evidence.
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { removeGitRepositoryEnv, withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +36,12 @@ export function parseToolVersion(command, output) {
   return version;
 }
 const git = (repo, args) => {
-  const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const result = spawnSync('git', args, {
+    cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (result.status !== 0)
     throw new Error(`Git evidence unavailable: ${args[0]} (${result.error?.code ?? result.status})`);
   return result.stdout.trim();
@@ -72,7 +78,7 @@ function reportFor(stage, repo) {
 }
 
 function instrumentedRunner(stage, repo, report) {
-  const env = { ...process.env };
+  const env = withoutGitRepositoryEnv(process.env);
   let command = stage.command;
   if (report?.kind === 'vitest')
     command += ` -- --reporter=default --reporter=json --outputFile.json=${quote(report.path)}`;
@@ -472,7 +478,7 @@ export function runGate(options = {}) {
     ticket,
     profile,
     log = console.log,
-    env = process.env,
+    env = withoutGitRepositoryEnv(process.env),
   } = options;
   let selection = { budgetMs, tier, analyzed, ticket, profile };
   let before;
@@ -576,6 +582,9 @@ export function runGate(options = {}) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  // HS2-KKDZF4: under a git hook, GIT_DIR and GIT_INDEX_FILE name the calling worktree. Remove
+  // them before any stage starts so no test fixture's git can commit into, or re-initialize, it.
+  removeGitRepositoryEnv(process.env);
   try {
     const args = process.argv.slice(2);
     const allowed = new Set([

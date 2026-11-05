@@ -14,9 +14,10 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const run = (program, args, cwd, env = process.env) =>
+const run = (program, args, cwd, env = withoutGitRepositoryEnv(process.env)) =>
   execFileSync(program, args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const put = (path, content) => {
   mkdirSync(dirname(path), { recursive: true });
@@ -41,6 +42,7 @@ function fixture() {
     'scripts/push.sh',
     'scripts/main-integration-window.mjs',
     'scripts/main-integration-options.mjs',
+    'clients/web/scripts/repository-env.mjs',
     '.githooks/pre-commit',
     '.githooks/pre-push',
   ]) {
@@ -59,6 +61,7 @@ function fixture() {
       'scripts/push.sh',
       'scripts/main-integration-window.mjs',
       'scripts/main-integration-options.mjs',
+      'clients/web/scripts/repository-env.mjs',
       '.githooks/pre-commit',
       '.githooks/pre-push',
     ],
@@ -94,7 +97,7 @@ test('HS2-BND42N reserves main before gate and rejects direct main push', () => 
     run('git', ['remote', 'add', 'origin', remote], f.repo);
     run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
     const env = {
-      ...process.env,
+      ...withoutGitRepositoryEnv(process.env),
       PATH: `${bin}:${process.env.PATH}`,
       HOTSHEET_HOOK_TEST_LOG: log,
       HOTSHEET_HOOK_TEST_FAIL: fail,
@@ -127,7 +130,7 @@ test('HS2-CD3D2T pre-commit rejects staged whitespace before formatting', () => 
     const log = resolve(f.root, 'format.log');
     executable(resolve(bin, 'zsh'), '#!/bin/sh\nprintf "format\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\n');
     run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOTSHEET_HOOK_TEST_LOG: log };
+    const env = { ...withoutGitRepositoryEnv(process.env), PATH: `${bin}:${process.env.PATH}`, HOTSHEET_HOOK_TEST_LOG: log };
     put(resolve(f.repo, 'bad'), 'bad  \n');
     run('git', ['add', 'bad'], f.repo);
     assert.throws(() => run('git', ['commit', '-m', 'Bad'], f.repo, env));

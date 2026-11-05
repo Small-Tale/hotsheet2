@@ -12,6 +12,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const NOTE = /<!-- hotsheet:note:begin (\S+) ([^>]*?)-->\n?([\s\S]*?)<!-- hotsheet:note:end -->/g;
 const HANDOFF = /^## (Integration|Findings) handoff\b/m;
@@ -325,7 +326,12 @@ export function formatSummary(summary) {
 }
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...options });
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    env: withoutGitRepositoryEnv(process.env),
+    maxBuffer: 256 * 1024 * 1024,
+    ...options,
+  });
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed: ${result.stderr?.trim()}`);
   return result.stdout;
 }
@@ -338,6 +344,7 @@ export function mapMainCommits(project, sources, mainRef = 'origin/main') {
     .filter(Boolean);
   const patchId = (sha) => {
     const result = spawnSync('git', ['-C', project, 'show', '--pretty=format:', '--no-ext-diff', sha], {
+      env: withoutGitRepositoryEnv(process.env),
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
     });
@@ -418,7 +425,9 @@ function main(argv) {
     for (const commit of mainCommits)
       for (const r of runs)
         if (requiredRun(r)) {
-          const result = spawnSync('git', ['-C', project, 'merge-base', '--is-ancestor', commit.sha, r.headSha]);
+          const result = spawnSync('git', ['-C', project, 'merge-base', '--is-ancestor', commit.sha, r.headSha], {
+            env: withoutGitRepositoryEnv(process.env),
+          });
           if (result.status === 0 || result.status === 1) ancestry[`${commit.sha}:${r.headSha}`] = result.status === 0;
         }
     input = {

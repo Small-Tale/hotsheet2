@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { integrationRecordPath, recordIntegration } from './integration-record.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const run = (program, args, cwd) =>
-  execFileSync(program, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  execFileSync(program, args, { cwd, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const git = (cwd, ...args) => run('git', args, cwd);
 
 function fixture() {

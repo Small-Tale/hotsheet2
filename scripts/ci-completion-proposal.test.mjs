@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { classifyRuns, command, evaluate, parseTicket, refresh, register } from './ci-completion-proposal.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const source = 'a'.repeat(40);
 const integrated = 'b'.repeat(40);
@@ -247,7 +248,7 @@ test('HS2-1C1565 real CLI process replays a registered proposal and refuses chan
   for (const path of [project, bin, store]) mkdirSync(path, { recursive: true });
   const ticketRef = { ...ref, connection_id: connectionFor(store) };
   const git = (cwd, ...args) => {
-    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    const result = spawnSync('git', args, { cwd, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
     assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr}`);
     return result.stdout.trim();
   };
@@ -282,7 +283,7 @@ test('HS2-1C1565 real CLI process replays a registered proposal and refuses chan
   writeFileSync(gh, '#!/bin/sh\ncat "$HS2_FIXTURE_DIR/runs"\n');
   chmodSync(cli, 0o755); chmodSync(gh, 0o755);
   const script = new URL('./ci-completion-proposal.mjs', import.meta.url).pathname;
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, HS2_FIXTURE_DIR: root };
+  const env = { ...withoutGitRepositoryEnv(process.env), PATH: `${bin}:${process.env.PATH}`, HS2_FIXTURE_DIR: root };
   const invoke = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: project, env, encoding: 'utf8' });
   const first = invoke('register', '--project', project, '--store', store, '--assignment', 'process-op', '--integrated', sha, '--worktree', worker);
   assert.equal(first.status, 0, `${first.stderr}\n${first.stdout}`);

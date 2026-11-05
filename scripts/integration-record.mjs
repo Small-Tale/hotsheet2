@@ -5,13 +5,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, linkSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const sha = /^[0-9a-f]{40}$/i;
 const refPart = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const operationPart = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function git(project, args) {
-  return execFileSync('git', args, { cwd: project, encoding: 'utf8', timeout: 120_000 }).trim();
+  return execFileSync('git', args, { cwd: project, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8', timeout: 120_000 }).trim();
 }
 
 function qualifiedTicket(value) {
