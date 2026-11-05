@@ -126,7 +126,7 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   modes, and the choice persists per viewer.
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
-  It is blocked on Kerf gap `KF-HDQTVV` (§34.10).
+  It uses the `ToolbarControlGroup` button badge from Kerf `KF-HDQTVV` (§34.10).
 
 ## 34.7 Workspace grid sidebar pages (HS2-E1AQE8, HS2-EZSQDF, design only)
 
@@ -145,8 +145,8 @@ alignment, and scroll position match across pages (HS2-E1AQE8).
 
 **Paging (HS2-EZSQDF):** swipe, horizontal trackpad scroll, dot click, and arrow keys change pages. The page
 dots float **fixed at the bottom of the sidebar** above scrolling content (approved with
-`r3-grid-sidebar-page1`). The selected page persists per viewer; Completion is the default. Paging is
-blocked on Kerf gap `KF-0QJ2K3`; until then pages 2 and 3 ship only as `/ux-demo` demos.
+`r3-grid-sidebar-page1`). The selected page persists per viewer; Completion is the default. Paging uses
+Kerf `PagedView` (`KF-0QJ2K3`).
 
 ## 34.8 Stats Right now (HS2-ERTNJ7, HS2-9AN4DN, HS2-NS0AYR, HS2-DTAVQA, design only)
 
@@ -190,26 +190,27 @@ Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf
 
 ## 34.10 Icons and Kerf gaps
 
-**State icons (provisional, pending HS2-CSPKQX).** Glyphs are official Lucide assets through the shared
-icon component. Only the standby `moon` is approved; the maintainer has not yet standardized the rest. When
-HS2-CSPKQX decides them, replace this table and pin the map with a policy test named with that slug.
+**State icons (HS2-CSPKQX).** Glyphs are official Lucide assets through the shared icon component. The
+maintainer standardized this set on 2026-11-06 (May be stuck chosen over `clock-alert` and `timer-off`; the
+rest kept as in the approved mocks). Every glance surface takes them from
+`clients/web/src/live-state-icons.ts`, pinned by `live-state-icons.test.ts`.
 
-| State                | Lucide icon     | Status      |
-| -------------------- | --------------- | ----------- |
-| Standby button       | `moon`          | Approved    |
-| Active               | `activity`      | Provisional |
-| Waiting on you       | `hand`          | Provisional |
-| May be stuck         | `hourglass`     | Provisional |
-| Stalled              | `octagon-alert` | Provisional |
-| Halted / usage limit | `zap-off`       | Provisional |
-| Stopped              | `circle-pause`  | Provisional |
+| State                | Lucide icon     |
+| -------------------- | --------------- |
+| Standby button       | `moon`          |
+| Active               | `activity`      |
+| Waiting on you       | `hand`          |
+| May be stuck         | `hourglass`     |
+| Stalled              | `octagon-alert` |
+| Halted / usage limit | `zap-off`       |
+| Stopped              | `circle-pause`  |
 
-**Kerf gaps.** Per the Kerf usage rule, these parts stay blocked rather than ship app CSS or an app-local
-replacement:
+**Kerf capabilities.** Both gaps filed for these surfaces shipped in Kerf 5.0.0-beta.124, adopted by
+HS2-GAJSX9:
 
-- `KF-0QJ2K3`: PagedView, swipeable panes with bottom-floating page dots. Blocks HS2-EZSQDF. A styled
+- `KF-0QJ2K3`: PagedView, swipeable panes with bottom-floating page dots (HS2-EZSQDF). A styled
   `wa-carousel` is not a substitute; it also sits behind the Web Awesome license decision.
-- `KF-HDQTVV`: a count badge on `ToolbarControlGroup` buttons. Blocks HS2-6B9S7P.
+- `KF-HDQTVV`: a count badge on `ToolbarControlGroup` buttons (HS2-6B9S7P).
 
 ## 34.11 Ticket map
 
