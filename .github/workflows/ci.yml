@@ -31,9 +31,8 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-browser-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-browser-
-            ${{ runner.os }}-cargo-
+          # HS2-CTC6BA: no generic `-cargo-` fallback; it could restore another job's larger cache.
+          restore-keys: ${{ runner.os }}-cargo-browser-
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -82,6 +81,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # HS2-CTC6BA: an unbounded cargo + target cache (8 GB compressed) ran the runner out of disk
+      # during extraction. Free unused preinstalled toolchains and log free space first.
+      - name: Free runner disk
+        run: bash .github/scripts/free-runner-disk.sh
+
       - name: Configure a git identity (tests create + commit git stores)
         run: |
           git config --global user.name "Hot Sheet CI"
@@ -90,15 +94,15 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup show # honors rust-toolchain.toml (adds rustfmt + clippy)
 
-      - name: Cache cargo + target
-        uses: actions/cache@v4
+      # HS2-CTC6BA: rust-cache keeps only dependency artifacts (no incremental or workspace crates)
+      # and prunes stale ones before saving, so the cache stays bounded across Cargo.lock changes.
+      - name: Cache cargo registry and dependency artifacts
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          shared-key: check
+
+      - name: Report free disk after the cache restore
+        run: df -h /
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -266,6 +270,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # HS2-CTC6BA: see the check job; this job's unbounded cache was 7.6 GB compressed.
+      - name: Free runner disk
+        run: bash .github/scripts/free-runner-disk.sh
+
       - name: Configure a git identity (tests create + commit git stores)
         run: |
           git config --global user.name "Hot Sheet CI"
@@ -274,15 +282,13 @@ jobs:
       - name: Install the pinned toolchain + llvm-tools
         run: rustup show && rustup component add llvm-tools-preview
 
-      - name: Cache cargo + target
-        uses: actions/cache@v4
+      - name: Cache cargo registry and dependency artifacts
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-cov-
+          shared-key: coverage
+
+      - name: Report free disk after the cache restore
+        run: df -h /
 
       - name: Install cargo-llvm-cov + nextest
         uses: taiki-e/install-action@v2
@@ -369,9 +375,8 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-browser-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-browser-
-            ${{ runner.os }}-cargo-
+          # HS2-CTC6BA: no generic `-cargo-` fallback; it could restore another job's larger cache.
+          restore-keys: ${{ runner.os }}-cargo-browser-
 
       - name: Install the AVIF decoder
         # These are Ubuntu packages; unrelated runner-image sources can fail independently.

@@ -158,3 +158,40 @@ test('HS2-MM68CT names the MSVC linker after activating MSVC in every Windows jo
   // Native build scripts resolve link.exe from PATH, so Git's coreutils link.exe is moved aside.
   assert.equal(workflow.split("Where-Object { $_.Source -like '*\\Git\\usr\\bin\\*' }").length - 1, count(point));
 });
+
+test('HS2-CTC6BA bounds the per-commit Rust caches and frees runner disk before restoring them', () => {
+  const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const job = (id, next) => ci.slice(ci.indexOf(`\n  ${id}:`), ci.indexOf(`\n  ${next}:`));
+  for (const [id, next] of [
+    ['check', 'coverage'],
+    ['coverage', 'browser-full'],
+  ]) {
+    const body = job(id, next);
+    const at = (needle) => {
+      const index = body.indexOf(needle);
+      assert.notEqual(index, -1, `${id}: missing ${needle}`);
+      return index;
+    };
+    // An unbounded actions/cache of `target` reached 8 GB compressed and ran the runner out of disk.
+    assert.doesNotMatch(body, /actions\/cache@/, `${id}: cache Rust artifacts only through rust-cache`);
+    assert.match(body, new RegExp(`uses: Swatinem/rust-cache@v2\\n\\s+with:\\n\\s+shared-key: ${id}\\n`));
+    const free = at('- name: Free runner disk\n        run: bash .github/scripts/free-runner-disk.sh');
+    assert.ok(free < at('- name: Install the pinned toolchain'), `${id}: free disk before any install`);
+    assert.ok(
+      at('- name: Install the pinned toolchain') < at('uses: Swatinem/rust-cache@v2'),
+      'rust-cache keys on rustc',
+    );
+    const report = at('- name: Report free disk after the cache restore\n        run: df -h /');
+    assert.ok(at('uses: Swatinem/rust-cache@v2') < report);
+    assert.ok(report < at('- name: Install cargo-'), `${id}: report free disk before the build`);
+  }
+  // Browser jobs keep their own small cache and never fall back to another job's key.
+  assert.doesNotMatch(ci, /^\s+\$\{\{ runner\.os \}\}-cargo-$/m);
+  assert.equal(ci.match(/restore-keys: \$\{\{ runner\.os \}\}-cargo-browser-\n/g)?.length, 2);
+
+  const script = readFileSync(new URL('../.github/scripts/free-runner-disk.sh', import.meta.url), 'utf8');
+  assert.equal(script.match(/^df -h \/$/gm)?.length, 2, 'free space is logged before and after cleanup');
+  for (const path of ['/usr/share/dotnet', '/usr/local/lib/android', '/opt/ghc', '/opt/hostedtoolcache/CodeQL'])
+    assert.ok(script.includes(`  ${path}\n`), `removes ${path}`);
+  assert.match(script, /if \[ -e "\$path" \]; then/, 'each removal is guarded');
+});
