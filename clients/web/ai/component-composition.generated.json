@@ -2479,6 +2479,75 @@
       }
     },
     {
+      "key": "hotsheet-web:glance-gauge",
+      "package": "hotsheet-web",
+      "id": "glance-gauge",
+      "name": "GlanceGauge",
+      "kind": "component",
+      "purpose": "Speedometer for one live rate scaled to its 30-day peak: full with value and unit in the dial, or bare at chip height with the reading in its title.",
+      "publicExports": [
+        {
+          "name": "GlanceGauge"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/glance-gauge.tsx",
+        "src/components/glance-gauge-geometry.ts"
+      ],
+      "source": "src/components/glance-gauge.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "feedback"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "none",
+          "padding": "none"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "glance-gauge"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "glance-gauge"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/glance-gauge.tsx",
+        "composition": "src/components/glance-gauge.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:guidance-settings",
       "package": "hotsheet-web",
       "id": "guidance-settings",

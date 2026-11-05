@@ -35,6 +35,16 @@
   --hs-command-pink: #ec4899;
   --hs-command-teal: var(--hs-category-task);
   --hs-command-gray: var(--hs-category-issue);
+  /* Standby is dark red on solid black in every theme, so a night display stays dim and low in blue
+     light (HS2-CT5EWR). Kerf has no ramp this dark; the glance gauge's standby palette uses these
+     (HS2-CVE3SK). */
+  --hs-standby-background: black;
+  --hs-standby-text: #8a0f0f;
+  --hs-standby-text-quiet: #5a0a0a;
+  --hs-standby-gauge-track: #1a0303;
+  --hs-standby-gauge-fill: #7a0d0d;
+  --hs-standby-gauge-tick: #3a0606;
+  --hs-standby-gauge-needle: #9a1212;
   /* Media annotations keep vivid strokes over either light or dark source pixels. */
   --hs-annotation-blue: #5ca8ff;
   --hs-annotation-red: #ff626b;

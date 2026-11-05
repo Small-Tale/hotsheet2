@@ -70,6 +70,10 @@ body[data-resizing-project-sidebar='true'] {
   font-size: var(--wa-font-size-xs);
   font-weight: 700;
 }
+/* The standby night display's solid black, behind the glance gauge's standby palette (HS2-CVE3SK). */
+.demo-tone-surface[data-surface='standby'] {
+  background: var(--hs-standby-background);
+}
 /* A phone-sized screen inside the framed CatalogExample: contain: paint makes it the containing
    block for the fixed focus surface and backdrop. */
 .terminal-drawer-focus-demo__stage {

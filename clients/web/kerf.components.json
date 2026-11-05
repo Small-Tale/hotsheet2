@@ -264,6 +264,69 @@
       }
     },
     {
+      "id": "glance-gauge",
+      "name": "GlanceGauge",
+      "kind": "component",
+      "purpose": "Speedometer for one live rate scaled to its 30-day peak: full with value and unit in the dial, or bare at chip height with the reading in its title.",
+      "source": "src/components/glance-gauge.tsx",
+      "publicExports": [
+        {
+          "name": "GlanceGauge"
+        }
+      ],
+      "sourceLinks": ["src/components/glance-gauge.tsx", "src/components/glance-gauge-geometry.ts"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["feedback"],
+          "geometry": {
+            "margin": "none",
+            "border": "none",
+            "padding": "none"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["glance-gauge"],
+        "publicTokens": [],
+        "placeableClasses": ["glance-gauge"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/glance-gauge.tsx",
+        "composition": "src/components/glance-gauge.tsx"
+      },
+      "selection": {
+        "useWhen": ["A glance surface shows a live rate (tokens/min, tickets updated/h) against its own 30-day peak."],
+        "avoidWhen": ["The value is task progress; use Kerf ProgressBar or ProgressRing."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "repository-summary",
       "name": "RepositorySummary",
       "kind": "component",

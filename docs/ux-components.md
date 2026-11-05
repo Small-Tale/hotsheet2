@@ -290,6 +290,17 @@ props configure it. The badge overhangs only the top edge because the rail's res
 covers anything past the button's end. The demo's Unread chat messages setting shows none, 3, and
 120 (HS2-59CXAC).
 
+- `GlanceGauge` — **demo built** (`components/glance-gauge.tsx`, HS2-CVE3SK; designed on
+  HS2-CT5EWR): a speedometer for one live rate, its needle sweeping a 240-degree arc scaled to the
+  series' own 30-day peak (a reading above the peak pins to the end). `variant="full"` draws ticks
+  plus the value and unit in the dial; `variant="bare"` is arc, fill, and needle only, at chip
+  height (`size="chip"`, 40px) or `medium` (88px). Its hover title is also its accessible name:
+  label, reading with unit, and 30-day peak. `tone="brand"` (blue) means tokens/min and
+  `tone="success"` (green) tickets updated/h; `palette="standby"` overrides both with the dark red
+  on black `--hs-standby-*` tokens. The needle and fill animate only when the value changes, and
+  not under reduced motion. Kerf has no gauge (KF-Y0XT2R), so this is an app-owned visualization.
+  Data wiring belongs to the glance surfaces (HS2-JTTQMY and its consumers).
+
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain

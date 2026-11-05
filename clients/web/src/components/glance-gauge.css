@@ -1,0 +1,86 @@
+/* The glance gauge is an app-owned domain data visualization (Kerf has no gauge: KF-Y0XT2R). Its
+   palette resolves from Kerf's semantic ramps, so it follows the light and dark themes (HS2-CVE3SK). */
+.glance-gauge {
+  --_glance-gauge-track: var(--kui-color-neutral-fill-normal);
+  --_glance-gauge-value-fill: var(--kui-color-brand-fill-loud);
+  --_glance-gauge-tick: var(--kui-color-neutral-border-normal);
+  --_glance-gauge-needle: var(--kui-color-text);
+  --_glance-gauge-text: var(--kui-color-text);
+  --_glance-gauge-text-quiet: var(--kui-color-text-quiet);
+  display: block;
+  overflow: visible;
+  flex: none;
+  inline-size: remify(120px);
+  block-size: auto;
+}
+/* Sizes from the approved mocks: chip height in compact sidebars, the grid sidebar's gauge page, the
+   stats tile, and the standby hero, which fills its container. */
+.glance-gauge[data-size='chip'] {
+  inline-size: remify(40px);
+}
+.glance-gauge[data-size='medium'] {
+  inline-size: remify(88px);
+}
+.glance-gauge[data-size='fill'] {
+  inline-size: 100%;
+}
+/* Meaning by colour (HS2-CT5EWR): blue is tokens/min, green is tickets updated/h. */
+.glance-gauge[data-tone='success'] {
+  --_glance-gauge-value-fill: var(--kui-color-success-fill-loud);
+}
+/* Standby's dark red on black overrides both tones, so nothing on the night display is bright. */
+.glance-gauge[data-palette='standby'] {
+  --_glance-gauge-track: var(--hs-standby-gauge-track);
+  --_glance-gauge-value-fill: var(--hs-standby-gauge-fill);
+  --_glance-gauge-tick: var(--hs-standby-gauge-tick);
+  --_glance-gauge-needle: var(--hs-standby-gauge-needle);
+  --_glance-gauge-text: var(--hs-standby-text);
+  --_glance-gauge-text-quiet: var(--hs-standby-text-quiet);
+}
+/* Track and value arcs share one path; the value arc is a dash of the reading's share of 100. */
+.glance-gauge__track,
+.glance-gauge__fill {
+  fill: none;
+  stroke-linecap: round;
+}
+.glance-gauge__track {
+  stroke: var(--_glance-gauge-track);
+}
+.glance-gauge__fill {
+  stroke: var(--_glance-gauge-value-fill);
+  stroke-dasharray: var(--_glance-gauge-fill) 100;
+  transition: stroke-dasharray 600ms ease-out;
+}
+/* An empty dial draws no value arc: a zero-length round-capped dash would still paint a dot. */
+.glance-gauge[data-empty='true'] .glance-gauge__fill {
+  visibility: hidden;
+}
+.glance-gauge__tick {
+  stroke: var(--_glance-gauge-tick);
+}
+/* The needle is drawn pointing straight up and rotated about the dial centre, so a value change
+   sweeps it; the first render has no previous value and so does not animate. */
+.glance-gauge__needle {
+  transform: rotate(var(--_glance-gauge-angle));
+  transform-box: view-box;
+  transform-origin: 50px 52px;
+  transition: transform 600ms ease-out;
+  fill: var(--_glance-gauge-needle);
+  stroke: var(--_glance-gauge-needle);
+  stroke-linecap: round;
+}
+.glance-gauge__value {
+  fill: var(--_glance-gauge-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.glance-gauge__unit {
+  fill: var(--_glance-gauge-text-quiet);
+}
+/* Reduced motion jumps straight to the new reading. */
+@media (prefers-reduced-motion: reduce) {
+  .glance-gauge__fill,
+  .glance-gauge__needle {
+    transition: none;
+  }
+}

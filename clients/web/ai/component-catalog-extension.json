@@ -830,6 +830,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "glance-gauge",
+      "name": "GlanceGauge",
+      "kind": "component",
+      "purpose": "Speedometer for one live rate scaled to its 30-day peak: full with value and unit in the dial, or bare at chip height with the reading in its title.",
+      "useWhen": [
+        "A glance surface shows a live rate (tokens/min, tickets updated/h) against its own 30-day peak."
+      ],
+      "avoidWhen": [
+        "The value is task progress; use Kerf ProgressBar or ProgressRing."
+      ],
+      "publicClasses": [
+        "glance-gauge"
+      ],
+      "publicTokens": [],
+      "source": "src/components/glance-gauge.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "none"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
