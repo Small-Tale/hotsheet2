@@ -339,10 +339,11 @@ fn base_tools_list() -> Value {
             "name": "hotsheet_batch",
             "description": "Apply the same field update (status/priority/tags/up_next/category) to many tickets at once. Returns {updated:[slugs], errors:[{id,message}]} — one bad id never aborts the rest.",
             "inputSchema": { "type": "object", "properties": {
-                "ids": { "type": "array", "items": { "type": "string" }, "description": "tickets to update (slug or ULID)" },
+                "ids": { "type": "array", "items": { "type": "string" }, "description": "tickets to update (slug, ULID, or provider-native id), resolved exactly as hotsheet_update resolves one" },
                 "status": str_prop(""), "priority": str_prop(""), "category": str_prop(""),
                 "up_next": { "type": "boolean" },
-                "tags": { "type": "array", "items": { "type": "string" }, "description": "replace the tag set on each" }
+                "tags": { "type": "array", "items": { "type": "string" }, "description": "replace the tag set on each" },
+                "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["ids"] }
         },
         {
@@ -939,7 +940,7 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
-        "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
+        "hotsheet_batch" => batch_update(args, backend),
         "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
         "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
         "hotsheet_resolve_checkout" => backend
@@ -1270,6 +1271,41 @@ fn has_connection(args: &Value) -> bool {
     args.get("connection")
         .and_then(Value::as_str)
         .is_some_and(|value| !value.is_empty())
+}
+
+/// `hotsheet_batch`: the same update applied to each id through exactly the route
+/// `hotsheet_update` takes, so a slug, ULID, or provider id resolves in the same checkout or
+/// connection (including the session's default checkout) for both tools (HS2-0ADMDX). The
+/// root `/batch` route resolves only in the server's own store. One bad id never aborts the
+/// rest.
+fn batch_update(args: &Value, backend: &dyn Backend) -> Result<Value, String> {
+    let ids = args
+        .get("ids")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "missing ids".to_string())?;
+    let update = without_many(args, &["ids", "checkout", "connection"]);
+    let mut updated = Vec::new();
+    let mut errors = Vec::new();
+    for id in ids {
+        let Some(id) = id.as_str().filter(|id| !id.is_empty()) else {
+            errors.push(json!({"id": id, "message": "id must be a non-empty string"}));
+            continue;
+        };
+        match backend.send(
+            "PATCH",
+            &checkout_route(args, &format!("/tickets/{id}")),
+            &update,
+        ) {
+            Ok(ticket) => updated.push(
+                ["slug", "native_id"]
+                    .iter()
+                    .find_map(|key| ticket.get(*key).filter(|value| value.is_string()).cloned())
+                    .unwrap_or_else(|| Value::from(id)),
+            ),
+            Err(error) => errors.push(json!({"id": id, "message": error.message})),
+        }
+    }
+    Ok(json!({"updated": updated, "errors": errors}))
 }
 
 fn checkout_route(args: &Value, suffix: &str) -> String {
@@ -7129,6 +7165,119 @@ mod tests {
             json!({ "status": "started", "up_next": true }),
         );
         assert_eq!(started.as_array().unwrap().len(), 2);
+    }
+
+    /// HS2-0ADMDX: a project-launched session's default checkout names a store other than
+    /// the backend's own. `hotsheet_batch` resolves each slug there exactly as
+    /// `hotsheet_update` does, reports bad ids per id, and an explicit checkout still wins.
+    #[test]
+    fn hs2_0admdx_batch_resolves_slugs_in_the_default_checkout_like_update() {
+        let root = tempfile::tempdir().unwrap();
+        // The backend's own store (a machine server's bootstrap store) holds no tickets.
+        let own =
+            FsStore::init_git(root.path().join("own.hs2"), &StoreMetadata::new("HS")).unwrap();
+        let project_store_root = root.path().join("project.hs2");
+        let project_store =
+            FsStore::init_git(&project_store_root, &StoreMetadata::new("PR")).unwrap();
+        let other_store_root = root.path().join("other.hs2");
+        let other_store = FsStore::init_git(&other_store_root, &StoreMetadata::new("OT")).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let mut checkouts = Vec::new();
+        for (name, store) in [
+            ("project", &project_store_root),
+            ("other", &other_store_root),
+        ] {
+            let dir = root.path().join(name);
+            std::fs::create_dir(&dir).unwrap();
+            checkouts.push(
+                registry
+                    .register(&dir, Some(name), None, vec![store.clone()])
+                    .unwrap(),
+            );
+        }
+        let create = |store: &FsStore, prefix: &str, title: &str| {
+            ops::create(
+                store,
+                hotsheet_model::Ulid::new(),
+                prefix,
+                hotsheet_model::Timestamp::new("2026-11-06T00:00:00Z"),
+                hotsheet_ticketing::NewTicket {
+                    title: title.into(),
+                    category: "bug".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        let first = create(&project_store, "PR", "first");
+        let second = create(&project_store, "PR", "second");
+        let elsewhere = create(&other_store, "OT", "elsewhere");
+        let backend = CoreBackend::new(own).with_checkout_registry(registry);
+        let session = |name: &str, args: Value| {
+            let mut args = args;
+            let object = args.as_object_mut().unwrap();
+            object.insert("actor_role".into(), json!("human"));
+            object.insert("actor_id".into(), json!("mcp-test"));
+            let reply = handle_message_for_checkout(
+                &req("tools/call", json!({ "name": name, "arguments": args })),
+                &backend,
+                Some(checkouts[0].id.as_str()),
+            )
+            .unwrap();
+            let text = reply["result"]["content"][0]["text"].as_str().unwrap();
+            assert_ne!(reply["result"]["isError"], json!(true), "{name}: {text}");
+            serde_json::from_str::<Value>(text).unwrap()
+        };
+
+        let batch = session(
+            "hotsheet_batch",
+            json!({
+                "ids": [first.slug, first.id.to_string(), "PR-NOPE00", second.slug],
+                "tags": ["batched"],
+            }),
+        );
+        assert_eq!(
+            batch["updated"],
+            json!([first.slug, first.slug, second.slug]),
+            "{batch}"
+        );
+        let errors = batch["errors"].as_array().unwrap();
+        assert_eq!(errors.len(), 1, "{batch}");
+        assert_eq!(errors[0]["id"], "PR-NOPE00");
+        assert!(
+            errors[0]["message"]
+                .as_str()
+                .unwrap()
+                .contains("no ticket matching"),
+            "{batch}"
+        );
+        for ticket in [&first, &second] {
+            let stored = ops::resolve(&project_store, &ticket.slug).unwrap().unwrap();
+            assert_eq!(stored.tags, ["batched"]);
+        }
+
+        // The single-ticket tool resolves the same slug the same way.
+        let updated = session(
+            "hotsheet_update",
+            json!({"id": first.slug, "tags": ["updated"]}),
+        );
+        assert_eq!(updated["slug"], first.slug);
+
+        // An explicit checkout still overrides the session default.
+        let explicit = session(
+            "hotsheet_batch",
+            json!({"ids": [elsewhere.slug, first.slug], "checkout": "other", "up_next": true}),
+        );
+        assert_eq!(explicit["updated"], json!([elsewhere.slug]), "{explicit}");
+        assert_eq!(explicit["errors"][0]["id"], json!(first.slug));
+        assert!(
+            ops::resolve(&other_store, &elsewhere.slug)
+                .unwrap()
+                .unwrap()
+                .up_next
+        );
     }
 
     #[test]

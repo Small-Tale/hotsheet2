@@ -1118,7 +1118,11 @@ failed authoritative reads leave it retryable.
 `batch <ids…>` accepts the same field and note options as `edit`, reads a `--note-file`
 once, and applies the update to each id independently. It prints JSON with `updated`
 slugs and `errors` containing the requested id and message, like `POST /batch`; an
-invalid id does not prevent valid tickets from updating. `delete-note` uses the same
+invalid id does not prevent valid tickets from updating. The MCP `hotsheet_batch` tool has
+the same shape and applies the update to each id through the route `hotsheet_update`
+takes, so the session's default checkout (or an explicit `checkout` or `connection`)
+resolves every slug, ULID, or provider id exactly as for one ticket (HS2-0ADMDX); the root
+`POST /batch` resolves only in the server's own store. `delete-note` uses the same
 git-store deletion as the service, including removal of feedback tied to the deleted
 note. `provider-delete-note` checks the connection's `note_delete` capability and
 fails explicitly when unsupported. Neither deletion command changes other notes.
