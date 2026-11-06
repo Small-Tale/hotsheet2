@@ -756,7 +756,9 @@ preview/download, server directory browser) are separate design work.
   dialog, restoring a saved view, and switching projects flush pending text first. A project
   switch restores that project's visible search editor with its search state before its
   asynchronous refresh, so neither an old query nor a delayed restore can overwrite an edit
-  in the newly selected project (HS2-RDFY4A). The field's render reads only
+  in the newly selected project (HS2-RDFY4A). A saved non-empty query always restores with
+  its search open at the full expanded width on one line, even when the session recorded it
+  closed or predates the open flag (HS2-C5Y899). The field's render reads only
   Kerf's structural `SearchFieldModel.structure`, and the typed date-filter prefix reaches the
   date helper through a bound attribute, so keystrokes do not re-render the workspace
   (HS2-X72PD6). The helper uses native labeled date and time inputs, with Enter applying

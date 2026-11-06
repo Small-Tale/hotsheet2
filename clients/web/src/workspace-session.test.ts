@@ -70,6 +70,21 @@ describe('workspace session', () => {
       feedbackReplies: { n: [{ offset: 1, text: 'ok' }] },
     });
   });
+  it('HS2-C5Y899 restores a saved query with its search open, whatever the stored open flag says', () => {
+    const load = (fields: Record<string, unknown>) =>
+      loadProjectWorkspaceSession(
+        { getItem: () => JSON.stringify({ composer: { open: false }, selectedView: 'all', ...fields }) },
+        'p',
+      );
+    // Saved closed with a query, or saved before `searchOpen` existed: the query keeps it open.
+    expect(load({ searchOpen: false, searchQuery: 'gauge' })).toMatchObject({ searchOpen: true, searchQuery: 'gauge' });
+    expect(load({ searchQuery: 'tag:client' })).toMatchObject({ searchOpen: true, searchQuery: 'tag:client' });
+    // An open empty search stays open; a closed empty or whitespace-only one stays closed.
+    expect(load({ searchOpen: true, searchQuery: '' })?.searchOpen).toBe(true);
+    expect(load({ searchOpen: false, searchQuery: '' })?.searchOpen).toBe(false);
+    expect(load({ searchOpen: false, searchQuery: '   ' })?.searchOpen).toBe(false);
+    expect(load({ searchOpen: 'yes', searchQuery: 7 })).toMatchObject({ searchOpen: false, searchQuery: '' });
+  });
   it('restores well-formed custom view ids and rejects malformed ones', () => {
     const stored = (selectedView: string) =>
       JSON.stringify({ selectedView, composer: { open: false }, selectedTicketSlugs: [], feedbackReplies: {} });

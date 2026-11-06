@@ -110,7 +110,11 @@ export function loadProjectWorkspaceSession(
       selectedTicketSlugs: Array.isArray(value.selectedTicketSlugs)
         ? value.selectedTicketSlugs.filter((item): item is string => typeof item === 'string')
         : [],
-      searchOpen: booleanValue(value.searchOpen),
+      // HS2-C5Y899: a saved query means an open search. Kerf shows a collapsible field with content
+      // as open, so restoring it closed sized the group as the collapsed icon with the query
+      // wrapped inside, and each later switch re-saved that state. Sessions saved before
+      // `searchOpen` existed have no flag at all.
+      searchOpen: booleanValue(value.searchOpen) || stringValue(value.searchQuery).trim() !== '',
       searchQuery: stringValue(value.searchQuery),
       inspectorTab: (['info', 'timeline', 'attachments', 'code-review'].includes(inspectorTab)
         ? inspectorTab

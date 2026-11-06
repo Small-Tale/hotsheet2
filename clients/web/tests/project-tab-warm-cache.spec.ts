@@ -386,6 +386,61 @@ for (const width of [1280, 390]) {
   });
 }
 
+for (const width of [1280, 900, 390])
+  test(`returning to a project whose saved search has text shows the search field expanded at ${width}px (HS2-C5Y899)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 844 });
+    const workspace = await installWorkspace(page);
+    await bootWorkspace(page, workspace);
+    const search = page.getByRole('searchbox', { name: 'Search tickets' });
+    const editor = page.locator('[data-search-field-id="workspace-search"]');
+    const slot = page.locator('.workspace-header__search-actions');
+    await page.getByRole('button', { name: 'Search tickets' }).click();
+    await search.fill('gauge');
+    await expect(search).toContainText('gauge');
+    await switchTo(workspace, 1);
+    await expect(editor).toHaveAttribute('data-expanded', 'false');
+    // The reported state: project A's saved session holds its query but a closed search, as a
+    // session saved closed (or before the search-open field existed) does. Each switch re-saved it.
+    await page.evaluate((key) => {
+      const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+      localStorage.setItem(key, JSON.stringify({ ...stored, searchOpen: false, searchQuery: 'gauge' }));
+    }, 'hotsheet.workspace.project-session.v1.p0');
+    const fits = async (label: string) => {
+      await expect(search, label).toContainText('gauge');
+      await expect(editor, label).toHaveAttribute('data-expanded', 'true');
+      await expect(slot, label).toHaveAttribute('data-search-open', 'true');
+      // One line at its expanded width, never the collapsed icon's width with wrapped text.
+      await expect
+        .poll(() => editor.evaluate((node) => node.getBoundingClientRect().width), label)
+        .toBeGreaterThan(180);
+      await expect.poll(() => editor.evaluate((node) => node.getBoundingClientRect().height), label).toBeLessThan(48);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      ).toBe(true);
+    };
+    await switchTo(workspace, 0);
+    await fits('returned at 1280px');
+    await page.setViewportSize({ width, height: 844 });
+    await fits(`returned, then at ${width}px`);
+    await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
+    await page.screenshot({
+      path: `target/visual-captures/hs2-c5y899-returned-${width}-${test.info().project.use.browserName ?? 'chromium'}.png`,
+      animations: 'disabled',
+    });
+    // Wide to narrow to wide keeps it expanded on one line.
+    for (const size of [1280, 390, width]) {
+      await page.setViewportSize({ width: size, height: 844 });
+      await fits(`resized to ${size}px`);
+    }
+    // A later switch away and back saves and restores the open state.
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await switchTo(workspace, 1);
+    await switchTo(workspace, 0);
+    await fits('second return');
+  });
+
 test('a project evicted beyond the warm LRU bound reloads with a loading state; warm ones stay instant', async ({
   page,
 }) => {
