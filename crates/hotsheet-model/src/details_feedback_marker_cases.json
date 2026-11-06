@@ -1,0 +1,37 @@
+{
+  "_comment": "HS2-FF9ZMS: details feedback-marker cases shared by Note::details_request_feedback (Rust) and detailsTextRequestsFeedback (clients/web). Synthetic text only.",
+  "opens": [
+    "FEEDBACK NEEDED",
+    "FEEDBACK NEEDED: which layout?",
+    "FEEDBACK NEEDED is on this ticket.",
+    "Context first.\n\nFEEDBACK NEEDED - choose one",
+    "   FEEDBACK NEEDED: up to three spaces of indentation",
+    "## FEEDBACK NEEDED",
+    "- FEEDBACK NEEDED: in a list",
+    "* **FEEDBACK NEEDED:** emphasized in a list",
+    "1. FEEDBACK NEEDED: numbered",
+    "2) _FEEDBACK NEEDED_",
+    "```\nFEEDBACK NEEDED inside a closed fence\n```\nFEEDBACK NEEDED: after it",
+    "Windows line endings.\r\nFEEDBACK NEEDED: choose one\r\n",
+    "+ FEEDBACK NEEDED (bullet with a plus)",
+    "    ```\nFEEDBACK NEEDED: a four-space fence marker is indented code, not a fence"
+  ],
+  "never": [
+    "Shows the FEEDBACK NEEDED state and the needs-review flag when a note asks.",
+    "The derived `FEEDBACK NEEDED` state counts toward needs-review.",
+    "`FEEDBACK NEEDED` at the start of a line is still inline code.",
+    "IMMEDIATE FEEDBACK NEEDED: a prefix word is prose",
+    "FEEDBACK NEEDEDS is another word",
+    "FEEDBACK NEEDED_SUFFIX is an identifier",
+    "feedback needed from the user",
+    "> FEEDBACK NEEDED: quoted",
+    "    FEEDBACK NEEDED: indented code",
+    "\tFEEDBACK NEEDED: tab-indented",
+    "```\nFEEDBACK NEEDED inside a fence\n```",
+    "~~~~\nFEEDBACK NEEDED\n~~~\nstill fenced: the close needs four tildes\n",
+    "#FEEDBACK NEEDED is not a heading",
+    "",
+    "FEEDBACK NEEDEDé is a longer Unicode word",
+    "FEEDBACK NEEDED٣ ends in an Arabic-Indic digit"
+  ]
+}

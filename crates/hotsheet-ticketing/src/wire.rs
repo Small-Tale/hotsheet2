@@ -192,7 +192,7 @@ pub fn api_feedback_needed(notes: &[ApiNote], details: &str) -> bool {
         .map_or_else(
             || {
                 !notes.iter().any(api_note_participates_in_feedback_exchange)
-                    && hotsheet_model::Note::text_requests_feedback(details)
+                    && hotsheet_model::Note::details_request_feedback(details)
             },
             |note| {
                 note.kind == NoteKind::FeedbackNeeded

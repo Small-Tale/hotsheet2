@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   DETAILS_FEEDBACK_ID,
   detailsRequestFeedback,
+  detailsTextRequestsFeedback,
   fullTicketFeedbackNeeded,
   hasFeedbackExchange,
   isFeedbackNeeded,
@@ -173,9 +176,28 @@ describe('isFeedbackNeeded', () => {
       expect(fullTicketFeedbackNeeded({ details: '', notes: allAnswered })).toBe(false);
     }
   });
-  it('matches the core marker rule for feedback requests in descriptions', () => {
+  it('matches the core HS1 marker rule for notes', () => {
     expect(textRequestsFeedback('Context. FEEDBACK NEEDED: choose one')).toBe(true);
     expect(textRequestsFeedback('feedback needed from someone')).toBe(false);
+  });
+  it('HS2-FF9ZMS details open a request only from a line-start marker, case for case with the core', () => {
+    const cases = JSON.parse(
+      readFileSync(
+        new URL('../../../crates/hotsheet-model/src/details_feedback_marker_cases.json', import.meta.url),
+        'utf8',
+      ),
+    ) as { opens: string[]; never: string[] };
+    expect(cases.opens.length).toBeGreaterThan(5);
+    expect(cases.never.length).toBeGreaterThan(5);
+    for (const text of cases.opens) expect(detailsTextRequestsFeedback(text), JSON.stringify(text)).toBe(true);
+    for (const text of cases.never) expect(detailsTextRequestsFeedback(text), JSON.stringify(text)).toBe(false);
+  });
+  it('HS2-FF9ZMS a new ticket whose details only mention the marker needs no feedback', () => {
+    const prose = 'Describes the derived FEEDBACK NEEDED state and the needs-review flag.';
+    expect(fullTicketFeedbackNeeded({ details: prose, notes: [] })).toBe(false);
+    expect(detailsRequestFeedback(true, prose, [])).toBe(false);
+    expect(fullTicketFeedbackNeeded({ details: 'FEEDBACK NEEDED: which layout?', notes: [] })).toBe(true);
+    expect(detailsRequestFeedback(true, 'FEEDBACK NEEDED: which layout?', [])).toBe(true);
   });
   it('ignores the marker inside quoted reply lines but honors an unquoted new request (HS2-HG7FZ0)', () => {
     expect(textRequestsFeedback('> Context. FEEDBACK NEEDED: choose one\n\nGo with A.')).toBe(false);

@@ -2976,6 +2976,65 @@ mod tests {
         assert_eq!(rows[0].updated_at, "2026-08-27T00:00:00Z");
     }
 
+    /// HS2-FF9ZMS: prose that mentions the marker mid-line opens no request in the model, the
+    /// provider wire projection, or the provider page's `needs_review`; a line-start marker does.
+    #[test]
+    fn hs2_ff9zms_provider_projection_ignores_a_mid_line_details_mention() {
+        let (_dir, provider) = git_provider();
+        for (id, details, expected) in [
+            (
+                "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+                "Shows FEEDBACK NEEDED and the needs-review flag when a note asks.",
+                false,
+            ),
+            (
+                "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+                "The derived `FEEDBACK NEEDED` state.",
+                false,
+            ),
+            (
+                "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+                "Context.\n\nFEEDBACK NEEDED: which?",
+                true,
+            ),
+        ] {
+            let id = Ulid::from_string(id).unwrap();
+            provider
+                .create(
+                    ctx(id, "2026-08-26T00:00:00Z"),
+                    ProviderDraft {
+                        title: "details mention".into(),
+                        category: "task".into(),
+                        priority: Priority::Default,
+                        status: Status::NotStarted,
+                        details: details.into(),
+                        tags: vec![],
+                        up_next: false,
+                        blocked_by: vec![],
+                        transfer: None,
+                        created_by: None,
+                    },
+                )
+                .unwrap();
+            let api = provider.get(&id.to_string()).unwrap();
+            assert_eq!(
+                provider.store.read_ticket(&id).unwrap().feedback_needed(),
+                expected,
+                "{details:?}: model"
+            );
+            assert_eq!(
+                crate::wire::api_feedback_needed(&api.notes, &api.details),
+                expected,
+                "{details:?}: wire"
+            );
+            let filtered = filter_provider_ticket_page(vec![api], &TicketQuery::default());
+            assert_eq!(
+                filtered[0].needs_review, expected,
+                "{details:?}: needs_review"
+            );
+        }
+    }
+
     /// HS2-NVD36W: the Markdown model, the provider-neutral wire projection used by GitHub,
     /// GitLab and Jira adapters, and the provider page filter agree at every step of a
     /// details-marker plus typed request exchange.

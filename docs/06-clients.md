@@ -4910,7 +4910,9 @@ description that merely points at it ("FEEDBACK NEEDED is on this ticket."), and
 description card shows the Feedback needed treatment and its No response needed control
 only while the description itself is the open request (HS2-NVD36W). The core, the
 provider-neutral projection for GitHub, GitLab and Jira tickets, and the client apply the
-same rule.
+same rule. A description opens a request only from a line that begins with the marker;
+a description that mentions it mid-line, in inline code, a quote or a code block never
+shows Feedback needed or Needs review (HS2-FF9ZMS, docs/17).
 An explicitly `regular` note keeps its kind even when its text carries an unquoted
 `FEEDBACK NEEDED` line, so it opens no request. The note is still written, but CLI
 (stderr), MCP `hotsheet_update`, and the server ticket and provider PATCH routes return a

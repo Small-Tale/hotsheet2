@@ -16,6 +16,50 @@ export function textRequestsFeedback(text: string) {
   return text.split('\n').some((line) => !line.trimStart().startsWith('>') && line.includes('FEEDBACK NEEDED'));
 }
 
+/** Whether ticket details carry the dedicated line-start feedback marker (HS2-FF9ZMS).
+ * Details are prose that often names feedback state, so, unlike notes, a mention mid-line,
+ * in inline code, a quote, a fenced block or indented code never opens a request. A line
+ * opens one when, after up to three spaces and an optional heading, list and emphasis
+ * prefix, it begins with the phrase followed by a non-word character or the line's end.
+ * Mirrors the core `Note::details_request_feedback` exactly. */
+export function detailsTextRequestsFeedback(text: string): boolean {
+  const marker = 'FEEDBACK NEEDED';
+  let fence: { char: string; length: number } | null = null;
+  for (const line of text.split(/\r?\n/u)) {
+    const body = line.replace(/^ +/u, '');
+    const indent = line.length - body.length;
+    const run = (char: string) => {
+      let count = 0;
+      while (body[count] === char) count += 1;
+      return count;
+    };
+    if (fence) {
+      if (indent < 4 && run(fence.char) >= fence.length && body.slice(run(fence.char)).trim() === '') fence = null;
+      continue;
+    }
+    if (indent < 4) {
+      const opener = ['`', '~'].find((char) => run(char) >= 3);
+      if (opener) {
+        fence = { char: opener, length: run(opener) };
+        continue;
+      }
+    }
+    if (indent >= 4 || body.startsWith('\t') || body.startsWith('>')) continue;
+    let rest = body;
+    const hashes = /^#{1,6} /u.exec(rest);
+    if (hashes) rest = rest.slice(hashes[0].length).replace(/^ +/u, '');
+    const bullet = /^(?:[-*+] |\d{1,9}[.)] )/u.exec(rest);
+    if (bullet) rest = rest.slice(bullet[0].length).replace(/^ +/u, '');
+    const emphasis = ['**', '__', '*', '_'].find((opener) => rest.startsWith(opener)) ?? '';
+    rest = rest.slice(emphasis.length);
+    if (!rest.startsWith(marker)) continue;
+    let after = rest.slice(marker.length);
+    if (emphasis && after.startsWith(emphasis)) after = after.slice(emphasis.length);
+    if (!/^[\p{Alphabetic}\p{N}_]/u.test(after)) return true;
+  }
+  return false;
+}
+
 export function isAiThumbsFeedback(note: Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback'>>): boolean {
   return Boolean(
     note.ai_feedback ||
@@ -71,20 +115,22 @@ export function hasFeedbackExchange(notes: readonly ExchangeNote[]): boolean {
 }
 
 /** Whether the ticket details themselves are the open request (HS2-NVD36W): the ticket
- * needs feedback, the details carry an unquoted marker, and no note exchange exists. */
+ * needs feedback, the details carry a line-start marker (HS2-FF9ZMS), and no note exchange exists. */
 export function detailsRequestFeedback(
   feedbackNeeded: boolean,
   details: string,
   notes: readonly ExchangeNote[],
 ): boolean {
-  return feedbackNeeded && textRequestsFeedback(details) && !hasFeedbackExchange(notes);
+  return feedbackNeeded && detailsTextRequestsFeedback(details) && !hasFeedbackExchange(notes);
 }
 
 /** Preserve response UX when a newer client reads a full ticket from an older server
  * that predates the additive `feedback_needed` field on that wire shape. */
 export function fullTicketFeedbackNeeded(ticket: FullFeedbackTicket): boolean {
   if (typeof ticket.feedback_needed === 'boolean') return ticket.feedback_needed;
-  return hasFeedbackExchange(ticket.notes) ? isFeedbackNeeded(ticket.notes) : textRequestsFeedback(ticket.details);
+  return hasFeedbackExchange(ticket.notes)
+    ? isFeedbackNeeded(ticket.notes)
+    : detailsTextRequestsFeedback(ticket.details);
 }
 
 /** Present each answered request as an ordinary note, preserving legacy response order. */

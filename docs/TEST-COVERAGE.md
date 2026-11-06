@@ -1991,6 +1991,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-server/tests/http.rs # hs2_c1cfsh_provider_route_warns_and_hs2_nvd36w_projection_settles`; `clients/web/tests/feedback-dismissal-intent.spec.ts # HS2-NVD36W` opens the reported shape in the shipped sidebar inspector and reader through the real rebuilt server (captures with `HOTSHEET_NVD36W_VISUAL_REVIEW=1`).
 - Manual: none new.
 
+### Details open feedback only from a line-start marker (HS2-FF9ZMS)
+
+- Behavior: a details line opens a feedback request only when it begins with the marker. Up to three spaces of indentation and a heading, list or emphasis prefix are allowed, and the marker must be followed by the line's end or a non-word character. Mid-line, inline-code, quoted, fenced and indented-code mentions never set `feedback_needed` or `needs_review`, including on create. Notes keep the HS1 rule.
+- Unit: `crates/hotsheet-model/src/ticket.rs # hs2_ff9zms_details_open_feedback_only_with_a_line_start_marker, hs2_ff9zms_new_ticket_details_prose_does_not_need_feedback` and `clients/web/src/feedback-needed.test.ts # HS2-FF9ZMS` both read the shared `crates/hotsheet-model/src/details_feedback_marker_cases.json`. `crates/hotsheet-ticketing/src/provider.rs # hs2_ff9zms_provider_projection_ignores_a_mid_line_details_mention` covers the model, wire projection and provider `needs_review`.
+- End to end: `crates/hotsheet-mcp/tests/create_feedback_flags.rs # hs2_ff9zms_create_flags_follow_only_a_line_start_details_marker` drives the shipped serverless `hotsheet-mcp` binary through create, get and update. It fails without the fix.
+- Manual: none new.
+
 ### Explicit regular marker warning (HS2-C1CFSH)
 
 - Behavior: an append or edit that leaves an explicit Regular note (not a `response_to` reply) with an unquoted `FEEDBACK NEEDED` line is written unchanged and returns `ops::SUPPRESSED_FEEDBACK_MARKER_WARNING` from CLI (stderr), MCP `hotsheet_update`, and the server ticket and provider PATCH routes. Omitted kinds, quoted markers, replies and typed requests do not warn.

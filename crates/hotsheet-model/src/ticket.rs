@@ -213,6 +213,87 @@ impl Note {
             .any(|line| line.contains("FEEDBACK NEEDED"))
     }
 
+    /// Whether ticket details carry the dedicated feedback marker (HS2-FF9ZMS).
+    ///
+    /// Notes keep HS1's anywhere-on-a-line rule ([`Self::text_requests_feedback`]), but
+    /// details are free prose that often describes feedback state, so a mention there
+    /// must not open a request on a new ticket. Details open one only when a line *begins*
+    /// with the case-sensitive phrase:
+    /// - up to three spaces of indentation are allowed, then an optional heading (`#`…),
+    ///   list (`-`, `*`, `+`, `1.`, `1)`) and emphasis (`**`, `__`, `*`, `_`) prefix;
+    /// - the phrase must be followed by the end of the line or a non-word character.
+    ///
+    /// Quoted lines, fenced code blocks and indented code never count. The web client
+    /// mirrors this in `detailsTextRequestsFeedback` (`clients/web/src/feedback-needed.ts`).
+    pub fn details_request_feedback(text: &str) -> bool {
+        const MARKER: &str = "FEEDBACK NEEDED";
+        let mut fence: Option<(char, usize)> = None;
+        for line in text.lines() {
+            let indent = line.len() - line.trim_start_matches(' ').len();
+            let body = line.trim_start_matches(' ');
+            // A fence opens and closes on a run of three or more backticks or tildes.
+            let run = |c: char| body.chars().take_while(|&x| x == c).count();
+            if let Some((c, n)) = fence {
+                if indent < 4 && run(c) >= n && body[run(c)..].trim().is_empty() {
+                    fence = None;
+                }
+                continue;
+            }
+            if indent < 4 {
+                if let Some(c) = ['`', '~'].into_iter().find(|&c| run(c) >= 3) {
+                    fence = Some((c, run(c)));
+                    continue;
+                }
+            }
+            // Indented code, tab-indented text and quotes never carry the marker.
+            if indent >= 4 || body.starts_with('\t') || body.starts_with('>') {
+                continue;
+            }
+            let mut rest = body;
+            let hashes = rest.chars().take_while(|&c| c == '#').count();
+            if (1..=6).contains(&hashes) && rest[hashes..].starts_with(' ') {
+                rest = rest[hashes..].trim_start_matches(' ');
+            }
+            if let Some(after) = rest
+                .strip_prefix("- ")
+                .or_else(|| rest.strip_prefix("* "))
+                .or_else(|| rest.strip_prefix("+ "))
+            {
+                rest = after.trim_start_matches(' ');
+            } else {
+                let digits = rest.chars().take_while(char::is_ascii_digit).count();
+                if (1..=9).contains(&digits)
+                    && (rest[digits..].starts_with(". ") || rest[digits..].starts_with(") "))
+                {
+                    rest = rest[digits + 2..].trim_start_matches(' ');
+                }
+            }
+            let mut emphasis = "";
+            for opener in ["**", "__", "*", "_"] {
+                if let Some(after) = rest.strip_prefix(opener) {
+                    (rest, emphasis) = (after, opener);
+                    break;
+                }
+            }
+            if let Some(after) = rest.strip_prefix(MARKER) {
+                // The matching closing emphasis ends the word; any other word character
+                // (FEEDBACK NEEDEDS, FEEDBACK NEEDED_X) means this is not the marker.
+                let after = after
+                    .strip_prefix(emphasis)
+                    .filter(|_| !emphasis.is_empty())
+                    .unwrap_or(after);
+                if !after
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Canonical append/read inference for legacy callers only (HS2-CV5NMC).
     /// Early automation wrote the feedback marker as a regular note. Preserve that
     /// convention unless the caller explicitly selected the note kind.
@@ -838,7 +919,7 @@ impl Ticket {
                         .notes
                         .iter()
                         .any(Note::participates_in_feedback_exchange)
-                        && Note::text_requests_feedback(&self.details)
+                        && Note::details_request_feedback(&self.details)
                 },
                 |note| {
                     Note::is_feedback_needed_request(note)
@@ -1258,6 +1339,48 @@ mod tests {
     }
 
     #[test]
+    fn hs2_ff9zms_details_open_feedback_only_with_a_line_start_marker() {
+        // One case table for the core and the web client mirror, so they cannot drift.
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("details_feedback_marker_cases.json")).unwrap();
+        for text in cases["opens"].as_array().unwrap() {
+            let text = text.as_str().unwrap();
+            assert!(Note::details_request_feedback(text), "{text:?}");
+        }
+        for text in cases["never"].as_array().unwrap() {
+            let text = text.as_str().unwrap();
+            assert!(!Note::details_request_feedback(text), "{text:?}");
+        }
+        // Notes keep HS1's anywhere-on-a-line rule; only details changed.
+        assert!(Note::text_requests_feedback(
+            "Shows the FEEDBACK NEEDED state when a note asks."
+        ));
+    }
+
+    #[test]
+    fn hs2_ff9zms_new_ticket_details_prose_does_not_need_feedback() {
+        let mut ticket = Ticket::new(
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA9").unwrap(),
+            "HS2-FF9ZMS",
+            "Synthetic",
+            "bug",
+            "2026-11-06T00:00:00Z",
+            "2026-11-06T00:00:00Z",
+        );
+        ticket.details =
+            "Describes the derived FEEDBACK NEEDED state and needs-review flag.".into();
+        assert!(!ticket.feedback_needed(), "prose mention on a new ticket");
+        ticket.details = "FEEDBACK NEEDED: which layout?".into();
+        assert!(
+            ticket.feedback_needed(),
+            "a line-start marker is still a request"
+        );
+        // Rewording back to prose clears it again, with no stored flag to reset.
+        ticket.details = "No decision is pending; FEEDBACK NEEDED was answered.".into();
+        assert!(!ticket.feedback_needed());
+    }
+
+    #[test]
     fn quoted_feedback_marker_does_not_open_a_new_request() {
         // A reply that quotes the original request back (the client's inline-reply
         // composer prefixes each quoted line with `> `) must not read as a new request
@@ -1313,7 +1436,8 @@ mod tests {
     #[test]
     fn marked_description_opens_feedback_until_a_regular_note_answers_it() {
         let mut ticket = Ticket {
-            details: "Context. FEEDBACK NEEDED: choose a direction\n\nCHOICE:\n- A\n- B".into(),
+            // HS2-FF9ZMS: details open a request only from a line-start marker.
+            details: "Context.\n\nFEEDBACK NEEDED: choose a direction\n\nCHOICE:\n- A\n- B".into(),
             ..Ticket::default()
         };
         assert!(ticket.feedback_needed());

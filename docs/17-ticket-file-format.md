@@ -153,6 +153,14 @@ an unquoted marker; the file is written unchanged (HS2-C1CFSH).
 A details-body marker counts as a request only while no note participates in a
 feedback exchange (any Regular or `feedback_needed` note other than AI thumbs
 feedback); typed requests and their replies therefore take precedence (HS2-NVD36W).
+Details use a stricter marker than notes (HS2-FF9ZMS): a details line opens a request
+only when it _begins_ with the case-sensitive phrase. The line may have up to three
+spaces of indentation and an optional Markdown heading, list or emphasis prefix. The
+phrase must be followed by the end of the line or a non-word character. Quoted lines,
+fenced code, indented code, inline code and mid-line mentions never count, so prose
+that describes feedback state cannot flag a new ticket. Notes keep the HS1 rule of an
+unquoted phrase anywhere on a line. `crates/hotsheet-model/src/details_feedback_marker_cases.json`
+is the shared case table for the core and the web client.
 Older readers ignore this marker and may still infer feedback; older writers may
 strip it. Upgrade every writer before relying on explicit intent. This additive
 marker does not claim compatibility with old inference semantics (HS2-CV5NMC).
