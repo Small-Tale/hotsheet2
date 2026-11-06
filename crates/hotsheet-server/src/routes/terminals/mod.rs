@@ -8,6 +8,7 @@ pub(crate) mod codex_watch;
 pub(crate) mod launch;
 mod replay;
 mod signals;
+pub(crate) mod usage_store;
 
 pub(crate) use attach::attach_terminal;
 pub(crate) use claude_usage::report_claude_turn;
@@ -577,6 +578,10 @@ pub struct TerminalAiConnection {
     /// Explicit registered checkout binding for worker reads; never inferred from cwd.
     #[serde(skip)]
     pub(crate) checkout_id: Option<String>,
+    /// The registered checkout whose stores record this session's usage (HS2-B4EQ87):
+    /// `checkout_id` when reported, else the checkout containing the terminal's directory.
+    #[serde(skip)]
+    pub(crate) usage_checkout: Option<String>,
     /// RFC 3339 time the session reported in.
     #[serde(default)]
     at: String,

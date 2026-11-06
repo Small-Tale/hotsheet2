@@ -87,6 +87,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             cmd_phase_report(path, since.as_deref(), until.as_deref(), json)
         }
         Cmd::Metrics {
+            action: Some(action),
+            ..
+        } => super::usage_reroute::run(action),
+        Cmd::Metrics {
+            action: None,
             refresh_codex,
             roll_up,
             prune_before,

@@ -22,7 +22,8 @@ pub struct ClaudeTurnStart {
     session_id: String,
     transcript: PathBuf,
     offset: u64,
-    ticket: Option<String>,
+    /// The project store and claim snapshot at prompt time (HS2-B4EQ87).
+    target: super::usage_store::UsageTarget,
     phase: TurnPhase,
     end_attempted: bool,
     ended_at: Option<String>,
@@ -143,11 +144,18 @@ pub(crate) async fn report_claude_turn(
             };
             let ai_worker = hotsheet_aitools::session_worker_id("claude", &terminal);
             let shell_worker = super::launch::terminal_session_worker_id(&terminal);
-            let ticket = metrics::active_ticket_for_workers(
-                &state.store,
-                &[&ai_worker, &shell_worker],
-                &now(),
-            )
+            let lookup = state.clone();
+            let lookup_terminal = terminal.clone();
+            // Lists the project's tickets for the claim snapshot; keep it off Tokio workers.
+            let target = tokio::task::spawn_blocking(move || {
+                super::usage_store::terminal_usage_target(
+                    &lookup,
+                    &lookup_terminal,
+                    &[&ai_worker, &shell_worker],
+                )
+            })
+            .await
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
             .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
             let mut starts = state.claude_turn_starts.lock_or_recover();
             if starts.get(&terminal).is_some_and(|previous| {
@@ -176,7 +184,7 @@ pub(crate) async fn report_claude_turn(
                     session_id: body.session_id,
                     transcript,
                     offset,
-                    ticket,
+                    target,
                     phase: TurnPhase::Pending,
                     end_attempted: false,
                     ended_at: None,
@@ -202,7 +210,7 @@ pub(crate) async fn report_claude_turn(
                 }
                 start.clone()
             };
-            let store = state.store.clone();
+            let store = start.target.store.clone();
             let session_id = body.session_id;
             let turn_id = start.turn_id.clone();
             let live = state.clone();
@@ -236,13 +244,13 @@ pub(crate) async fn report_claude_turn(
                             tokens_in: turn.usage.tokens_in,
                             tokens_out: turn.usage.tokens_out,
                             cost_usd: turn.usage.cost_usd,
-                            ticket: start.ticket,
+                            ticket: start.target.ticket,
                             session: Some(session_id),
                         },
                         &start.turn_id,
                         turn.categories,
                     )?;
-                    // Tokens per minute moved (HS2-JTTQMY).
+                    // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
                     crate::live_state::touch(&live, &crate::multistore::store_url_id(&store));
                 }
                 Ok::<(), std::io::Error>(())

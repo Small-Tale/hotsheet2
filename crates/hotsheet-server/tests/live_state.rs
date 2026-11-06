@@ -496,3 +496,249 @@ async fn hs2_egkka0_terminal_prompts_mark_awaiting_input_until_answered() {
         call(&router, "DELETE", &format!("/terminals/{terminal}"), None).await;
     }
 }
+
+/// A machine server whose primary store is `demo.hs2` (A), hosting project B's checkout
+/// (`project-b`, linked to `project-b.hs2`), with a `cat` terminal opened in a subdirectory
+/// of that checkout (HS2-B4EQ87).
+struct ProjectB {
+    state: AppState,
+    router: axum::Router,
+    primary: FsStore,
+    store: FsStore,
+    id: String,
+    checkout: String,
+}
+
+impl ProjectB {
+    async fn open(h: &Harness, terminal: &str) -> Self {
+        let primary = FsStore::open(h._dir.path().join("demo.hs2")).unwrap();
+        let project = h._dir.path().join("project-b");
+        std::fs::create_dir_all(project.join("src")).unwrap();
+        let path = h._dir.path().join("project-b.hs2");
+        let store = FsStore::init_git(&path, &StoreMetadata::new("PB")).unwrap();
+        let id = hotsheet_server::multistore::store_url_id(&store);
+        let state = h
+            .state
+            .clone()
+            .with_checkout_registry(h._dir.path().join("checkouts.json"));
+        let router = app(state.clone());
+        let (status, opened) = call(
+            &router,
+            "POST",
+            "/projects/open",
+            Some(json!({"root": project, "stores": [path]})),
+        )
+        .await;
+        assert!(status.is_success(), "{status} {opened}");
+        let checkout = opened["checkout"]["id"].as_str().unwrap().to_string();
+        // The hook that reports the AI session names no checkout: the directory decides.
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/terminals",
+            Some(json!({"command":"cat","id":terminal,"cwd":project.join("src")})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        Self {
+            state,
+            router,
+            primary,
+            store,
+            id,
+            checkout,
+        }
+    }
+}
+
+/// One Claude turn in `terminal` for the session its transcript names: prompt, a transcript
+/// row with one input and `tokens` output tokens, then stop.
+async fn claude_turn(
+    router: &axum::Router,
+    terminal: &str,
+    transcript: &std::path::Path,
+    tokens: u64,
+) {
+    use std::io::Write as _;
+    let session = transcript
+        .file_stem()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let path = transcript.to_string_lossy().to_string();
+    let endpoint = format!("/terminals/{terminal}/claude-turn");
+    let turn =
+        |event: &str| json!({"event": event, "session_id": session, "transcript_path": path});
+    let (status, _) = call(router, "POST", &endpoint, Some(turn("start"))).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = json!({
+        "type":"assistant", "timestamp":"2026-11-06T00:00:00Z",
+        "message":{"id":format!("message-{tokens}"),"model":"claude-opus-4-8",
+            "usage":{"input_tokens":1,"output_tokens":tokens}}
+    });
+    writeln!(
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(transcript)
+            .unwrap(),
+        "{row}"
+    )
+    .unwrap();
+    let (status, _) = call(router, "POST", &endpoint, Some(turn("stop"))).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+/// HS2-B4EQ87 regression: a machine server whose primary store is A hosts project B. A
+/// Claude terminal opened in B's checkout records every turn in B's store (attributed to B's
+/// claim when the terminal holds one), never in A, and B's live tokens per minute and the
+/// project's Stats usage both show it.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_b4eq87_terminal_usage_records_in_its_project_store_not_the_primary() {
+    let h = harness();
+    let b = ProjectB::open(&h, "b-term").await;
+    let (router, b_id, checkout) = (&b.router, b.id.clone(), b.checkout.clone());
+    let mut events = b.state.subscribe();
+    let (status, _) = call(
+        router,
+        "POST",
+        "/terminals/b-term/ai-connection",
+        Some(json!({"agent":"claude","session_id":"b-session"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let transcripts = h._dir.path().join("claude").join("projects").join("b");
+    std::fs::create_dir_all(&transcripts).unwrap();
+    let transcript = transcripts.join("b-session.jsonl");
+
+    // Without a claim the turn still belongs to B, unattributed.
+    claude_turn(router, "b-term", &transcript, 40).await;
+    let recorded = hotsheet_ticketing::metrics::read_raw(&b.store).unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!((recorded[0].tokens_in, recorded[0].tokens_out), (1, 40));
+    assert_eq!(recorded[0].ticket, None);
+    let live = next_live(&mut events, &b_id, |live| {
+        live["rates"]["tokens"]["minutes"]
+            .as_array()
+            .is_some_and(|minutes| minutes.iter().any(|minute| minute["tokens"] == 41))
+    })
+    .await;
+    assert_eq!(live["rates"]["tokens"]["window_minutes"], 5);
+
+    // A claim in B attributes the next turn to B's ticket.
+    let (status, created) = call(
+        router,
+        "POST",
+        &format!("/stores/{b_id}/tickets"),
+        Some(json!({"title":"Project B work"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let ticket = created["id"].as_str().unwrap().to_string();
+    let (status, claimed) = call(
+        router,
+        "POST",
+        &format!("/checkouts/{checkout}/tickets/{ticket}/claim"),
+        Some(json!({"worker":"terminal-b-term","lease_minutes":60})),
+    )
+    .await;
+    assert!(status.is_success(), "{status} {claimed}");
+    claude_turn(router, "b-term", &transcript, 7).await;
+    let recorded = hotsheet_ticketing::metrics::read_raw(&b.store).unwrap();
+    assert_eq!(recorded.len(), 2);
+    assert_eq!(recorded[1].ticket.as_deref(), Some(ticket.as_str()));
+
+    assert!(
+        hotsheet_ticketing::metrics::read_raw(&b.primary)
+            .unwrap()
+            .is_empty(),
+        "the primary store records none of B's usage"
+    );
+    let (status, analytics) = call(
+        router,
+        "GET",
+        &format!("/checkouts/{checkout}/analytics"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(analytics["stores"][0]["store_id"], b_id.as_str());
+    assert_eq!(analytics["stores"][0]["usage"]["events"], 2);
+    assert_eq!(analytics["stores"][0]["usage"]["tokens_out"], 47);
+    call(router, "DELETE", "/terminals/b-term", None).await;
+}
+
+/// HS2-B4EQ87: a Codex terminal in project B records each rollout response in B's store,
+/// attributed to the claim its session holds there, and moves B's live tokens per minute.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_b4eq87_codex_terminal_usage_records_in_its_project_store() {
+    const SESSION: &str = "00000000-0000-4000-8000-0000000000b4";
+    let h = harness();
+    let b = ProjectB::open(&h, "codex-b").await;
+    let router = &b.router;
+    let mut events = b.state.subscribe();
+    let (_, created) = call(
+        router,
+        "POST",
+        &format!("/stores/{}/tickets", b.id),
+        Some(json!({"title":"Codex work in B"})),
+    )
+    .await;
+    let ticket = created["id"].as_str().unwrap().to_string();
+    let (status, _) = call(
+        router,
+        "POST",
+        &format!("/checkouts/{}/tickets/{ticket}/claim", b.checkout),
+        Some(
+            json!({"worker":hotsheet_aitools::session_worker_id("codex", "codex-b"),
+            "lease_minutes":60}),
+        ),
+    )
+    .await;
+    assert!(status.is_success(), "{status}");
+    let home = h._dir.path().join("codex-home");
+    std::fs::create_dir_all(&home).unwrap();
+    let (status, _) = call(
+        router,
+        "POST",
+        "/terminals/codex-b/ai-connection",
+        Some(json!({"agent":"codex","session_id":SESSION,"codex_home":home})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let at = (time::OffsetDateTime::now_utc() + time::Duration::seconds(1))
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let day = home.join("sessions/2026/11/06");
+    std::fs::create_dir_all(&day).unwrap();
+    let rows = [
+        json!({"timestamp": "2026-11-06T00:00:00Z", "type": "session_meta",
+            "payload": {"id": SESSION, "originator": "codex-tui"}}),
+        json!({"timestamp": at, "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": "t1"}}),
+        json!({"timestamp": at, "type": "token_usage_record", "payload": {
+            "response_id": "resp_b", "turn_id": "t1", "root_turn_id": "t1",
+            "usage": {"input_tokens": 30, "output_tokens": 3}}}),
+    ];
+    let text: String = rows.iter().map(|row| format!("{row}\n")).collect();
+    std::fs::write(
+        day.join(format!("rollout-2026-11-06T00-00-00-{SESSION}.jsonl")),
+        text,
+    )
+    .unwrap();
+    next_live(&mut events, &b.id, |live| {
+        live["rates"]["tokens"]["minutes"]
+            .as_array()
+            .is_some_and(|minutes| minutes.iter().any(|minute| minute["tokens"] == 33))
+    })
+    .await;
+    let recorded = hotsheet_ticketing::metrics::read_raw(&b.store).unwrap();
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert_eq!(recorded[0].ticket.as_deref(), Some(ticket.as_str()));
+    assert!(
+        hotsheet_ticketing::metrics::read_raw(&b.primary)
+            .unwrap()
+            .is_empty()
+    );
+    call(router, "DELETE", "/terminals/codex-b", None).await;
+}

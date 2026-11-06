@@ -153,6 +153,38 @@ Metrics can be shared across a team **through git** — no server sync needed:
   the event also names that ticket (HS2-J14225). Ambiguous or expired claims leave usage
   project-only rather than assigning it to the wrong ticket. If a plugin omits the model
   from its telemetry, an explicitly selected turn/connection model labels that event.
+- **The store a terminal records into (HS2-B4EQ87):** a terminal's usage belongs to its
+  project, never to the machine server's primary store, which is the bootstrap store
+  (`${HOTSHEET_HOME}/server-bootstrap.hs2`). When an AI session reports in, the server
+  records its registered checkout: the `checkout_id` the hook named, else the checkout
+  containing the terminal's working directory (the same rule that keeps that checkout's
+  stores hosted, HS2-R5KV1Q). At turn start the claim snapshot searches that checkout's linked
+  Git stores; the store holding the terminal worker's unique live claim records the turn and
+  supplies its ticket. Without such a claim the checkout's usage store records it: the
+  default source when it is a Git store, else the first linked Git store. A terminal outside
+  every registered checkout searches every hosted store for its claim and otherwise keeps the
+  primary store. Each write touches the receiving store's live state, so its tokens per
+  minute ([32](32-notifier-plugins.md) §32.8.3) and the project's Stats usage
+  (`GET /checkouts/{reference}/analytics`) show the turn. The client-drive turn route also
+  touches its drive store's live state after recording.
+
+  Builds before HS2-B4EQ87 recorded every Claude and Codex terminal turn in the bootstrap
+  store, unattributed, because its claim lookup saw only bootstrap tickets. `hotsheet-cli
+metrics reroute-bootstrap-usage` previews moving them; `--apply` moves them. It moves only
+  an unticketed Claude row whose session id names exactly one transcript under the Claude
+  projects directory (`--claude-projects`, default `$CLAUDE_CONFIG_DIR/projects`, else
+  `~/.claude/projects`) whose directory name is the Claude-encoded root of exactly one
+  registered checkout. It reads only directory and file names there, never transcript
+  content. The unchanged raw line is appended to the checkout's usage store and then removed
+  from the bootstrap file. The append skips a row the target already holds (same `turn_id`,
+  else the identical line), so an interrupted or repeated run converges. Rows on or before
+  either store's settled roll-up frontier stay put, because moving them would change a
+  settled total. Rows with a ticket came from a bootstrap claim and stay; Codex rows, whose
+  session cannot be tied to a checkout without reading rollout content, and rows with no
+  unique transcript or checkout stay and are counted. Price corrections already applied in
+  the bootstrap ledger do not follow a moved row; `hotsheet-cli reprice` in the project store
+  previews them again.
+
 - **Interactive Codex terminals (HS2-J14225, HS2-CYHAWB):** the terminal's rollout watch
   ([05](05-ai-tool-plugins.md) §5.7) records one usage event per model response from the
   session's own `token_usage_record` lines (`input_tokens`, which already includes its cached

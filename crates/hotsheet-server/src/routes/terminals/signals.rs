@@ -457,13 +457,14 @@ pub(crate) async fn connect_terminal_ai(
     Path(id): Path<String>,
     Json(body): Json<TerminalAiConnectionReq>,
 ) -> Result<StatusCode, ApiError> {
-    if !live_terminal_infos(&state)
+    let Some(terminal_dir) = live_terminal_infos(&state)
         .await
-        .iter()
-        .any(|info| info.id == id)
-    {
+        .into_iter()
+        .find(|info| info.id == id)
+        .map(|info| info.cwd)
+    else {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
-    }
+    };
     // A new or resumed AI session in this terminal cannot inherit an earlier session's halt.
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
@@ -531,9 +532,17 @@ pub(crate) async fn connect_terminal_ai(
                 .filter(|previous| session_id.is_some() && previous.session_id == session_id)
                 .and_then(|previous| previous.claude_inbox.clone())
         });
+    // Usage belongs to the terminal's project, never the server's primary store (HS2-B4EQ87).
+    let usage_checkout = checkout_id.clone().or_else(|| {
+        terminal_dir.and_then(|dir| {
+            super::usage_store::checkout_containing(&state, std::path::Path::new(&dir))
+                .map(|checkout| checkout.id)
+        })
+    });
     let connection = TerminalAiConnection {
         agent: agent.clone(),
         checkout_id,
+        usage_checkout,
         at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_default(),

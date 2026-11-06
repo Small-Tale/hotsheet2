@@ -436,8 +436,10 @@ notification always agree. The tracker therefore runs whether or not a rule name
   states an ETA.
 - `rates.tokens`: tokens per minute averages tokens in plus out over the last 5 whole
   minutes, the current one included. It reads the store's usage JSONL
-  ([14](14-metrics-interface.md)) incrementally. The snapshot carries the per-minute
-  buckets, so the gauge decays without another read.
+  ([14](14-metrics-interface.md)) incrementally. Terminal AI sessions record into their
+  project's store, not the machine server's bootstrap store, and touch that store's live
+  state (HS2-B4EQ87). The snapshot carries the per-minute buckets, so the gauge decays
+  without another read.
 - `rates.tickets_updated`: one time per distinct ticket whose last progress write is within
   60 minutes. A new ticket counts. Claim renewals do not.
 - Each rate has a rolling 30-day peak (`peak_per_minute`, `peak_per_hour`) that its gauge

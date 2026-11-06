@@ -27,6 +27,7 @@ use crate::store::{FsStore, StoreError};
 
 pub mod codex_work;
 pub mod reprice;
+pub mod reroute;
 
 /// Attribute a turn only when these session identities hold exactly one unexpired claim.
 /// Incomplete listings are ambiguous too: a corrupt ticket could hide another claim.

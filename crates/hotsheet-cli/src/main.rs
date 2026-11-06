@@ -639,6 +639,8 @@ enum Cmd {
     /// Show the usage/cost metrics rollup for this store (docs/14) — total cost + tokens,
     /// by model, and by day. DB-free: settled rollup files + a live scan of the raw tail.
     Metrics {
+        #[command(subcommand)]
+        action: Option<dispatch::usage_reroute::MetricsCmd>,
         /// Capture new numeric usage from this exact Codex Work session and worker.
         #[arg(long)]
         refresh_codex: bool,

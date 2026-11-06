@@ -138,6 +138,15 @@ impl Checkout {
         Ok(local)
     }
 
+    /// HS2-B4EQ87: the Git store that records this project's AI usage when no claim
+    /// attributes a turn to a ticket: the default source when it is a Git store, else the
+    /// first linked Git store. `None` for a project with no Hot Sheet Git store.
+    pub fn usage_source(&self) -> Option<&TicketSource> {
+        self.claim_next_sources()
+            .ok()
+            .and_then(|sources| sources.into_iter().next())
+    }
+
     /// Open a linked Git source only after its recorded store identity is verified.
     /// Permission migration uses this boundary so a moved or replaced source cannot
     /// select an unrelated legacy vault by its current path.
@@ -2390,6 +2399,25 @@ mod tests {
             let checkout = claim_checkout(checkout.sources.clone(), default);
             assert_eq!(ids(&checkout), ["first", "second", "third"]);
         }
+    }
+
+    #[test]
+    fn hs2_b4eq87_usage_source_is_the_default_git_store_else_the_first() {
+        let sources = vec![
+            source("issues", "github"),
+            source("first", "git"),
+            source("second", "git"),
+        ];
+        let usage = |default: Option<&str>| {
+            claim_checkout(sources.clone(), default)
+                .usage_source()
+                .map(|source| source.connection_id.clone())
+        };
+        assert_eq!(usage(Some("second")).as_deref(), Some("second"));
+        assert_eq!(usage(Some("issues")).as_deref(), Some("first"));
+        assert_eq!(usage(None).as_deref(), Some("first"));
+        let providers = claim_checkout(vec![source("issues", "github")], Some("issues"));
+        assert!(providers.usage_source().is_none());
     }
 
     #[test]

@@ -17,6 +17,7 @@ pub(crate) mod server;
 pub(crate) mod setup;
 pub(crate) mod store;
 pub(crate) mod tickets;
+pub(crate) mod usage_reroute;
 
 use std::path::PathBuf;
 

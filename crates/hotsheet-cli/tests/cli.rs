@@ -385,6 +385,107 @@ impl Drop for TemporaryLaunchHost {
     }
 }
 
+/// HS2-B4EQ87: the reroute previews by default, then moves only the Claude row whose
+/// session transcript names exactly one registered checkout, and converges on a rerun.
+#[test]
+fn hs2_b4eq87_reroute_bootstrap_usage_moves_only_provable_rows() {
+    use hotsheet_ticketing::checkouts::CheckoutRegistry;
+    use hotsheet_ticketing::metrics::{self, UsageEvent};
+    use hotsheet_ticketing::{FsStore, StoreMetadata};
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("hotsheet-home");
+    let bootstrap =
+        FsStore::init(home.join("server-bootstrap.hs2"), &StoreMetadata::new("BT")).unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let project_store =
+        FsStore::init_git(root.path().join("project.hs2"), &StoreMetadata::new("PJ")).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(
+            &project,
+            None,
+            None,
+            vec![project_store.root().to_path_buf()],
+        )
+        .unwrap();
+    let projects = root.path().join("claude").join("projects");
+    let encoded: String = checkout
+        .root
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    std::fs::create_dir_all(projects.join(&encoded)).unwrap();
+    std::fs::write(projects.join(&encoded).join("in-project.jsonl"), "").unwrap();
+    std::fs::create_dir_all(projects.join("-elsewhere")).unwrap();
+    std::fs::write(projects.join("-elsewhere").join("elsewhere.jsonl"), "").unwrap();
+    let row = |session: &str, ticket: Option<&str>| UsageEvent {
+        ts: "2026-11-01T00:00:00Z".into(),
+        tool: "claude".into(),
+        model: Some("claude-opus-4-8".into()),
+        tokens_in: 5,
+        tokens_out: 1,
+        cost_usd: None,
+        ticket: ticket.map(str::to_owned),
+        session: Some(session.into()),
+    };
+    metrics::record_once(&bootstrap, &row("in-project", None), "turn-1").unwrap();
+    metrics::record(&bootstrap, &row("elsewhere", None)).unwrap();
+    metrics::record(
+        &bootstrap,
+        &row("in-project", Some("01M6QHZ6SDGA77Y9589QCQG3QQ")),
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        let output = Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .current_dir(root.path())
+            .env("HOTSHEET_HOME", &home)
+            .args(["metrics", "reroute-bootstrap-usage", "--claude-projects"])
+            .arg(&projects)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let sessions = |store: &FsStore| {
+        metrics::read_raw(store)
+            .unwrap()
+            .into_iter()
+            .map(|event| (event.session.unwrap(), event.ticket.is_some()))
+            .collect::<Vec<_>>()
+    };
+
+    let preview = run(&["--dry-run"]);
+    assert!(preview.contains("Would move 1 usage row(s)"), "{preview}");
+    assert!(
+        preview.contains("1 with a bootstrap ticket")
+            && preview.contains("1 without one matching checkout"),
+        "{preview}"
+    );
+    assert_eq!(sessions(&bootstrap).len(), 3);
+    assert!(sessions(&project_store).is_empty());
+
+    let applied = run(&["--apply"]);
+    assert!(applied.contains("Moved 1 usage row(s)"), "{applied}");
+    assert!(applied.contains("project ("), "{applied}");
+    assert_eq!(sessions(&project_store), [("in-project".to_owned(), false)]);
+    assert_eq!(
+        sessions(&bootstrap),
+        [
+            ("elsewhere".to_owned(), false),
+            ("in-project".to_owned(), true)
+        ]
+    );
+    assert!(run(&["--apply"]).contains("Moved 0 usage row(s)"));
+    assert_eq!(sessions(&project_store).len(), 1);
+}
+
 #[test]
 fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
     use hotsheet_ticketing::metrics::{self, ClaudeTokenCategories, UsageEvent};

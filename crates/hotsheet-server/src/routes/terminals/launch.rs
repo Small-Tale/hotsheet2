@@ -484,13 +484,7 @@ fn terminal_permission_identity(state: &AppState, cwd: Option<&str>) -> String {
     let cwd = FsPath::new(cwd)
         .canonicalize()
         .unwrap_or_else(|_| cwd.into());
-    let checkout = state
-        .checkout_registry
-        .list()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|checkout| cwd.starts_with(FsPath::new(&checkout.root)))
-        .max_by_key(|checkout| checkout.root.len());
+    let checkout = super::usage_store::checkout_containing(state, &cwd);
     checkout.map_or_else(
         || format!("unregistered:{}", cwd.display()),
         |checkout| {
@@ -508,14 +502,7 @@ fn terminal_project_for_cwd(state: &AppState, cwd: Option<&str>) -> String {
     let cwd = FsPath::new(cwd)
         .canonicalize()
         .unwrap_or_else(|_| cwd.into());
-    let checkout = state
-        .checkout_registry
-        .list()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|checkout| cwd.starts_with(FsPath::new(&checkout.root)))
-        .max_by_key(|checkout| checkout.root.len());
-    if let Some(checkout) = checkout {
+    if let Some(checkout) = super::usage_store::checkout_containing(state, &cwd) {
         return checkout.root;
     }
     cwd.display().to_string()

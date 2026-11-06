@@ -15,10 +15,11 @@
 //! shell exit drops it, which stops its watcher.
 
 use super::signals::{clear_terminal_halt_on_resume, record_terminal_halt};
+use super::usage_store::{UsageTarget, terminal_usage_target};
 use crate::{AppState, now};
 use hotsheet_aitools::codex_rollout_watch::{RolloutSignal, RolloutWatch, watch_rollout};
 use hotsheet_sync::LockExt;
-use hotsheet_ticketing::metrics;
+use hotsheet_ticketing::{FsStore, metrics};
 use std::path::PathBuf;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -61,15 +62,16 @@ pub(crate) fn sync_codex_session_watch(
         OffsetDateTime::parse(reported_at, &Rfc3339).unwrap_or_else(|_| OffsetDateTime::now_utc());
     let signal_state = state.clone();
     let (signal_id, signal_session) = (id.to_owned(), session_id.to_owned());
-    // The claim snapshot of the current turn; a turn already running when the session
-    // reported takes its snapshot at its first response.
-    let mut turn_ticket: Option<Option<String>> = None;
+    // The project store and claim snapshot of the current turn; a turn already running when
+    // the session reported takes its snapshot at its first response (HS2-B4EQ87).
+    let mut turn_target: Option<UsageTarget> = None;
     let watch = watch_rollout(&home, session_id, live_after, move |signals| {
         // A late batch from a replaced or ended session changes nothing.
         if !is_current(&signal_state, &signal_id, &signal_session) {
             return;
         }
-        let mut responses = Vec::new();
+        // Responses grouped by the store their turn records into, in arrival order.
+        let mut batches: Vec<(FsStore, Vec<(String, metrics::UsageEvent)>)> = Vec::new();
         for signal in signals {
             match signal {
                 RolloutSignal::Halted {
@@ -84,37 +86,42 @@ pub(crate) fn sync_codex_session_watch(
                 ),
                 RolloutSignal::Resumed => {
                     clear_terminal_halt_on_resume(&signal_state, &signal_id);
-                    turn_ticket = Some(terminal_ticket(&signal_state, &signal_id));
+                    turn_target = Some(terminal_target(&signal_state, &signal_id));
                 }
-                RolloutSignal::Usage(usage) => responses.push((
-                    usage.response_id,
-                    metrics::UsageEvent {
+                RolloutSignal::Usage(usage) => {
+                    let target = turn_target
+                        .get_or_insert_with(|| terminal_target(&signal_state, &signal_id))
+                        .clone();
+                    let event = metrics::UsageEvent {
                         ts: now().as_str().to_owned(),
                         tool: "codex".to_owned(),
                         model: usage.model,
                         tokens_in: usage.tokens_in,
                         tokens_out: usage.tokens_out,
                         cost_usd: None,
-                        ticket: turn_ticket
-                            .get_or_insert_with(|| terminal_ticket(&signal_state, &signal_id))
-                            .clone(),
+                        ticket: target.ticket,
                         session: None,
-                    },
-                )),
+                    };
+                    let response = (usage.response_id, event);
+                    match batches
+                        .iter_mut()
+                        .find(|(store, _)| store.root() == target.store.root())
+                    {
+                        Some((_, responses)) => responses.push(response),
+                        None => batches.push((target.store, vec![response])),
+                    }
+                }
             }
         }
-        if let Err(error) = metrics::codex_work::record_session_responses(
-            &signal_state.store,
-            &signal_session,
-            responses,
-        ) {
-            tracing::warn!(%error, "recording Codex terminal usage failed");
+        for (store, responses) in batches {
+            if let Err(error) =
+                metrics::codex_work::record_session_responses(&store, &signal_session, responses)
+            {
+                tracing::warn!(%error, "recording Codex terminal usage failed");
+            }
+            // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
+            crate::live_state::touch(&signal_state, &crate::multistore::store_url_id(&store));
         }
-        // Tokens per minute moved (HS2-JTTQMY).
-        crate::live_state::touch(
-            &signal_state,
-            &crate::multistore::store_url_id(&signal_state.store),
-        );
     });
     // No Codex home, or it cannot be watched: nothing to follow.
     let Ok(watch) = watch else { return };
@@ -133,15 +140,18 @@ pub(crate) fn stop_codex_session_watch(state: &AppState, id: &str) {
     drop(removed);
 }
 
-/// The ticket the terminal's Codex or shell session worker uniquely holds now, if any.
-fn terminal_ticket(state: &AppState, id: &str) -> Option<String> {
+/// The project store recording the terminal's Codex turn, with the ticket its Codex or shell
+/// session worker uniquely holds now, if any (HS2-B4EQ87).
+fn terminal_target(state: &AppState, id: &str) -> UsageTarget {
     let ai_worker = hotsheet_aitools::session_worker_id("codex", id);
     let shell_worker = super::launch::terminal_session_worker_id(id);
-    metrics::active_ticket_for_workers(&state.store, &[&ai_worker, &shell_worker], &now())
-        .unwrap_or_else(|error| {
-            tracing::warn!(%error, "looking up Codex terminal ticket failed");
-            None
-        })
+    terminal_usage_target(state, id, &[&ai_worker, &shell_worker]).unwrap_or_else(|error| {
+        tracing::warn!(%error, "looking up Codex terminal ticket failed");
+        UsageTarget {
+            store: state.store.clone(),
+            ticket: None,
+        }
+    })
 }
 
 fn is_uuid(id: &str) -> bool {

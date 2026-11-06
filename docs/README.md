@@ -217,6 +217,12 @@ is shipped for eligible new native events (HS2-WZ986Q, HS2-38SAET):
 rewriting raw usage. Existing aggregate-only events lack safe cache categories and
 stay unpriced (HS2-WMWRHZ).
 
+Terminal AI usage is recorded in the terminal project's store, not the machine server's
+bootstrap store, and moves that store's live tokens per minute and Stats usage
+(HS2-B4EQ87, shipped). `hotsheet-cli metrics reroute-bootstrap-usage` previews and, with
+`--apply`, moves earlier misrouted Claude rows whose project can be proven; Codex rows and
+unprovable rows stay in the bootstrap store.
+
 Local continuous integrator/worker sessions (HS2-76VMYG) have durable,
 provider-qualified local mailboxes, exact assignment, filesystem-event waits, and
 selected-source queue/claim verification. Per-assignment route overrides with exact

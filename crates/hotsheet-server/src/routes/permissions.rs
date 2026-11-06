@@ -1273,6 +1273,12 @@ pub(crate) async fn send_drive_turn(
                     if let Err(error) = hotsheet_ticketing::metrics::record(&thread_store, &priced)
                     {
                         tracing::warn!(%error, "recording turn usage metrics failed");
+                    } else {
+                        // The drive's project store gained tokens (HS2-JTTQMY, HS2-B4EQ87).
+                        crate::live_state::touch(
+                            &thread_state,
+                            &crate::multistore::store_url_id(&thread_store),
+                        );
                     }
                     hotsheet_aitools::TurnEvent::Usage(hotsheet_aitools::Usage {
                         model: priced.model,
