@@ -201,6 +201,16 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       command: `npx playwright test ${quote('tests/ux-demo.spec.ts')} --grep ${quote(exercised.demoTitles.map(escapeTitle).join('|'))}`,
       reasons: ['HS2-N7EY18/HS2-R1D0S5: ux-demo tests that open or render the changed module'],
     });
+  // HS2-1DF5PQ: tests in other specs that walk the whole demo catalog, by title.
+  for (const [file, titles] of Object.entries(exercised?.scopedTitles ?? {}))
+    if (!files.has(file))
+      scoped.push({
+        cwd: 'clients/web',
+        group: 'web',
+        selected: true,
+        command: `npx playwright test ${quote(file)} --grep ${quote(titles.map(escapeTitle).join('|'))}`,
+        reasons: ['HS2-1DF5PQ: catalog-walking tests render every ux-demo entry, including a changed or new one'],
+      });
   patterns.push(...providerTitles.map(escapeTitle));
   if (changes.includes('clients/web/tests/providers.spec.ts') && !providerTitles.length) {
     files.add('tests/providers.spec.ts');

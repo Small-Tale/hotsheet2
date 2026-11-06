@@ -17,6 +17,7 @@ import {
 } from './local-gate.mjs';
 import {
   catalogSpecimenCount,
+  catalogWalkingTitles,
   demoEntryIds,
   exerciseIndex,
   exerciseIndexForRepo,
@@ -824,7 +825,14 @@ test('HS2-N7EY18 HS2-R1D0S5 an unrelated module pulls neither the attach specs n
   assert.deepEqual(unrelated.providerTitles, ['counts badges in the shipped list']);
   // A module reached only through a composition root adds nothing; the shared rules still apply.
   const rootOnly = exerciseIndex([web('src/trailing-task.ts')], fixture);
-  assert.deepEqual(rootOnly, { files: [], providerTitles: [], providerWhole: false, demoTitles: [], reasons: [] });
+  assert.deepEqual(rootOnly, {
+    files: [],
+    providerTitles: [],
+    providerWhole: false,
+    demoTitles: [],
+    scopedTitles: {},
+    reasons: [],
+  });
   const real = exerciseIndexForRepo(repoRoot, [web('src/ticket-timeline-data.ts')]);
   for (const spec of attachSpecs) assert.ok(!real.files.includes(spec), spec);
   assert.ok(!real.providerTitles.some((title) => /HS2-HJ4D1H|search syntax example/.test(title)));
@@ -1260,4 +1268,87 @@ test('HS2-B42XMS planning selects the inventory when a single-word demo entry ga
   assert.ok(demoStage(added).command.includes('Kerf CatalogExample'), demoStage(added).command);
   assert.ok(demoStage(added).command.includes('opens the list entry'));
   assert.ok(added.checks.every((stage) => !/'tests\/ux-demo\.spec\.ts'(?! --grep)/.test(stage.command)));
+});
+
+const AUDIT = 'every UX demo keeps its editable text fields at 16px or larger';
+
+test('HS2-1DF5PQ the catalog walk resolves to its own test title, or the whole file from a helper', () => {
+  const spec = [
+    "test.describe('touch phone audit', () => {",
+    `  test('${AUDIT}', async ({ page }) => {`,
+    "    const entries = await page.evaluate(async (m) => (await import(m)).flattenCatalog(), '/src/ux-demo/catalog.ts');",
+    '  });',
+    "  test('another phone check', async () => {});",
+    '});',
+    'test(',
+    "  'a wrapped catalog walk title',",
+    '  async () => flattenCatalog(),',
+    ');',
+  ].join('\n');
+  assert.deepEqual(catalogWalkingTitles(spec), {
+    titles: [AUDIT, 'a wrapped catalog walk title'].sort(),
+    unresolved: false,
+  });
+  const helper = "const all = () => flattenCatalog();\ntest('uses it', () => all());\n";
+  assert.deepEqual(catalogWalkingTitles(helper), { titles: [], unresolved: true });
+  const real = readFileSync(new URL('../clients/web/tests/touch-field-font.spec.ts', import.meta.url), 'utf8');
+  assert.deepEqual(catalogWalkingTitles(real), { titles: [AUDIT], unresolved: false });
+});
+
+test('HS2-1DF5PQ a new or changed demo selects the catalog-walking audit by title', () => {
+  const sources = new Map([
+    [
+      web('src/ux-demo/announcer-overlay-demo.tsx'),
+      'export const demoModule = {\n  entries: {\n    announcer: {},\n  },\n};\n',
+    ],
+    [web('src/ux-demo/catalog.ts'), "import './announcer-overlay-demo';\nexport const flattenCatalog = () => [];\n"],
+    [web('src/components/announcer-overlay.tsx'), 'export const AnnouncerOverlay = () => null;\n'],
+    [web('src/unrelated-format.ts'), 'export const format = (n) => String(n);\n'],
+  ]);
+  const specs = new Map([
+    [
+      web('tests/touch-field-font.spec.ts'),
+      [
+        "test.describe('touch phone audit', () => {",
+        `  test('${AUDIT}', async ({ page }) => {`,
+        "    await page.evaluate(async (m) => (await import(m)).flattenCatalog(), '/src/ux-demo/catalog.ts');",
+        '  });',
+        "  test('keeps native text fields', async () => {});",
+        '});',
+      ].join('\n'),
+    ],
+    [
+      web('tests/ux-demo.spec.ts'),
+      "test('opens the list entry', async ({ page }) => page.goto('/ux-demo?component=list'));\n",
+    ],
+  ]);
+  const index = (changes) => exerciseIndex(changes.map(web), { sources, specs });
+  // A new demo alone, and the demo with its component, select the audit test only, not its file.
+  for (const changes of [
+    ['src/ux-demo/announcer-overlay-demo.tsx'],
+    ['src/components/announcer-overlay.tsx', 'src/ux-demo/announcer-overlay-demo.tsx'],
+  ]) {
+    const selected = index(changes);
+    assert.deepEqual(selected.scopedTitles, { 'tests/touch-field-font.spec.ts': [AUDIT] }, changes.join(' '));
+    assert.ok(!selected.files.includes('tests/touch-field-font.spec.ts'));
+    assert.ok(selected.reasons.some((reason) => reason.startsWith('HS2-1DF5PQ:')));
+  }
+  // Registering it through an aggregator still runs the audit beside the whole demo spec.
+  const registered = index(['src/ux-demo/announcer-overlay-demo.tsx', 'src/ux-demo/catalog.ts']);
+  assert.ok(registered.files.includes('tests/ux-demo.spec.ts'));
+  assert.deepEqual(registered.scopedTitles, { 'tests/touch-field-font.spec.ts': [AUDIT] });
+  // Non-demo code and demo tests add no audit.
+  assert.deepEqual(index(['src/unrelated-format.ts']).scopedTitles, {});
+  assert.deepEqual(index(['src/ux-demo/catalog.test.ts']).scopedTitles, {});
+  // The planner turns the selection into one bounded grep stage.
+  const stages = browserStages(
+    [web('src/ux-demo/announcer-overlay-demo.tsx')],
+    false,
+    [],
+    {},
+    index(['src/ux-demo/announcer-overlay-demo.tsx']),
+  );
+  const audit = stages.filter((stage) => stage.command.includes('touch-field-font'));
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].command, `npx playwright test 'tests/touch-field-font.spec.ts' --grep '${AUDIT}'`);
 });

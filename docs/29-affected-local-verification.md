@@ -157,6 +157,18 @@ Edits that keep the count, aggregators and test files add nothing, and other dem
 deferred. Measured on 2026-11-07: the planning check took about 20 ms, and the inventory test ran
 in 9.2 s in Chromium, including Vite startup.
 
+**Catalog-walking tests (HS2-1DF5PQ).** Some browser tests render every catalog entry without
+naming one. The phone audit `touch-field-font.spec.ts` › `every UX demo keeps its editable text
+fields at 16px or larger` walks the catalog through `flattenCatalog` from `/src/ux-demo/catalog.ts`.
+Because no entry id appears, a new or changed demo never matched it, which is how CI run
+41296063177 found 12 px Announcer demo fields on phones after the local gate passed. Any changed
+`ux-demo` source (not tests) now selects each catalog-walking test by its own title: the nearest
+enclosing `test('…')`, through a per-file `--grep` stage. A walk outside any test (in a helper)
+selects the whole file. Measured on 2026-11-07, the audit test alone took 17.0 s in Chromium,
+against 53.4 s for its whole file. Shared layout compositions such as `project-tab-bar.tsx`
+already select their geometry cases through the exercise index; the project-strip overflow case
+is selected for a `project-tab-bar.tsx` change.
+
 ## Scoped repository-wide checks (HS2-3ZJBRM)
 
 The local stage catalog now runs repository-wide Prettier and `cargo fmt`

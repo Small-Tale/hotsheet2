@@ -220,6 +220,34 @@ export function exercisedTests(source, matchers) {
 
 const UX_DEMO = /^clients\/web\/src\/ux-demo\//;
 const DEMO_SPEC = 'tests/ux-demo.spec.ts';
+/** A test that walks the whole catalog reaches every demo entry without naming one (HS2-1DF5PQ). */
+const CATALOG_WALK = /flattenCatalog|\/src\/ux-demo\/catalog\b/;
+const TEST_TITLE = /^\s*test(?:\.(?:only|skip|fixme))?\(\s*'((?:\\.|[^'\\])*)'/;
+const TEST_OPEN = /^\s*test(?:\.(?:only|skip|fixme))?\(\s*$/;
+
+/**
+ * The titles of the tests that walk the whole demo catalog: for each line that walks it, the nearest
+ * enclosing `test('…')` (a `test.describe` is not a test). `unresolved` when a walk sits outside any
+ * test, for example in a helper, so only the whole file is safe.
+ */
+export function catalogWalkingTitles(source) {
+  const lines = source.split('\n');
+  const titles = new Set();
+  let unresolved = false;
+  for (const [index, line] of lines.entries()) {
+    if (!CATALOG_WALK.test(line)) continue;
+    let title = null;
+    for (let at = index; at >= 0 && title === null; at -= 1) {
+      const quoted = TEST_TITLE.exec(lines[at]);
+      if (quoted) title = quoted[1];
+      else if (TEST_OPEN.test(lines[at])) title = /^\s*'((?:\\.|[^'\\])*)'/.exec(lines[at + 1] ?? '')?.[1] ?? null;
+      else if (at < index && /^\S/.test(lines[at]) && !/^test\.describe/.test(lines[at])) break;
+    }
+    if (title === null) unresolved = true;
+    else titles.add(title.replace(/\\(.)/g, '$1'));
+  }
+  return { titles: [...titles].sort(), unresolved };
+}
 /** The catalog aggregators import every demo; walking through them would reach every entry. */
 const DEMO_AGGREGATOR = /^clients\/web\/src\/ux-demo\/(?:registry|catalog|main)\.tsx?$/;
 
@@ -299,8 +327,25 @@ export function exerciseIndex(changes, { sources, specs }) {
     providerTitles: new Set(),
     providerWhole: false,
     demoTitles: new Set(),
+    scopedTitles: new Map(),
     reasons: [],
   };
+  // HS2-1DF5PQ escape: a new or changed demo renders in every test that walks the whole catalog,
+  // such as the phone text-field audit, though those tests name no entry. Select them by title.
+  const demoSources = changes.filter((path) => UX_DEMO.test(path) && SOURCE.test(path) && !isTest(path));
+  if (demoSources.length)
+    for (const [spec, text] of [...specs].sort(([a], [b]) => a.localeCompare(b))) {
+      if (!/\.spec\.ts$/.test(spec) || !CATALOG_WALK.test(text)) continue;
+      const file = spec.replace(`${WEB}/`, '');
+      const walk = catalogWalkingTitles(text);
+      if (walk.unresolved) result.files.add(file);
+      else if (file === DEMO_SPEC) for (const title of walk.titles) result.demoTitles.add(title);
+      else if (file === 'tests/providers.spec.ts') for (const title of walk.titles) result.providerTitles.add(title);
+      else result.scopedTitles.set(file, new Set([...(result.scopedTitles.get(file) ?? []), ...walk.titles]));
+      result.reasons.push(
+        `HS2-1DF5PQ: ${demoSources.slice(0, 3).join(', ')}${demoSources.length > 3 ? `, +${demoSources.length - 3}` : ''} renders in the catalog walk of ${file}`,
+      );
+    }
   for (const changed of changes) {
     if (!SOURCE.test(changed) || isTest(changed) || !sources.has(changed)) continue;
     // A stylesheet speaks for its component module when one sits beside it.
@@ -379,6 +424,11 @@ export function exerciseIndex(changes, { sources, specs }) {
     providerWhole: result.providerWhole,
     // A title already covered by the whole file is not run twice.
     demoTitles: result.files.has(DEMO_SPEC) ? [] : [...result.demoTitles].sort(),
+    scopedTitles: Object.fromEntries(
+      [...result.scopedTitles]
+        .filter(([file, titles]) => !result.files.has(file) && titles.size)
+        .map(([file, titles]) => [file, [...titles].sort()]),
+    ),
     reasons: result.reasons,
   };
 }
@@ -398,7 +448,7 @@ function walk(directory, prefix, keep, out = new Map()) {
 /** Read the working tree once and build the index for the changed client paths. */
 export function exerciseIndexForRepo(repo, changes) {
   if (!changes.some((path) => SOURCE.test(path) && !isTest(path)))
-    return { files: [], providerTitles: [], providerWhole: false, demoTitles: [], reasons: [] };
+    return { files: [], providerTitles: [], providerWhole: false, demoTitles: [], scopedTitles: {}, reasons: [] };
   const sources = walk(join(repo, WEB, 'src'), `${WEB}/src`, (path) => SOURCE.test(path) && !isTest(path));
   const specs = walk(
     join(repo, WEB, 'tests'),
