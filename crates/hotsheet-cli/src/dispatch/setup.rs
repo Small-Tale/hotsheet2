@@ -865,35 +865,41 @@ fn report_claude_turn_hook(
         "event": event, "session_id": session_id, "transcript_path": transcript_path
     })
     .to_string();
-    let send = || {
-        ureq::post(&endpoint)
+    // `Some((status, reply))` when the server refused the report.
+    let send = || -> Result<Option<(u16, String)>> {
+        match ureq::post(&endpoint)
             .set("X-Hotsheet-Secret", secret)
             .set("Content-Type", "application/json")
             .timeout(std::time::Duration::from_secs(5))
             .send_string(&body)
-    };
-    match send() {
-        Ok(_) => Ok(()),
-        // A restarted server no longer knows this session (HS2-SSMDQ1): report it again
-        // exactly as SessionStart did, then retry this boundary once.
-        Err(ureq::Error::Status(status, response)) => {
-            let reply = response.into_string().unwrap_or_default();
-            if !hotsheet_cli::permission_hook::claude_turn_needs_reconnect(status, &reply) {
-                bail!("Claude turn report refused ({status})");
+        {
+            Ok(_) => Ok(None),
+            Err(ureq::Error::Status(status, response)) => {
+                Ok(Some((status, response.into_string().unwrap_or_default())))
             }
-            report_terminal_session(
-                url,
-                secret,
-                terminal,
-                &hotsheet_cli::permission_hook::SessionHookEvent::Connected,
-                Some("claude"),
-                Some(session_id),
-            )?;
-            send()?;
-            Ok(())
+            Err(error) => Err(error.into()),
         }
-        Err(error) => Err(error.into()),
+    };
+    let Some((status, reply)) = send()? else {
+        return Ok(());
+    };
+    // A restarted server no longer knows this session (HS2-SSMDQ1): report it again
+    // exactly as SessionStart did, then retry this boundary once.
+    if !hotsheet_cli::permission_hook::claude_turn_needs_reconnect(status, &reply) {
+        bail!("Claude turn report refused ({status})");
     }
+    report_terminal_session(
+        url,
+        secret,
+        terminal,
+        &hotsheet_cli::permission_hook::SessionHookEvent::Connected,
+        Some("claude"),
+        Some(session_id),
+    )?;
+    if let Some((status, _)) = send()? {
+        bail!("Claude turn report refused after reconnecting ({status})");
+    }
+    Ok(())
 }
 
 /// Set up and replace this process with a hook-capable interactive AI tool. Because the

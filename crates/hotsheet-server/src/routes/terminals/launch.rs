@@ -845,6 +845,17 @@ pub async fn resume_broker_terminal_sessions(state: &AppState) {
     else {
         return;
     };
+    let alive: Vec<String> = terminals
+        .iter()
+        .filter(|info| info.alive)
+        .map(|info| info.id.clone())
+        .collect();
+    // Keep recording the Claude usage of sessions that outlived the server (HS2-SSMDQ1).
+    let resume_state = state.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        super::claude_usage::resume_claude_usage_follows(&resume_state, &alive);
+    })
+    .await;
     for info in terminals.into_iter().filter(|info| info.alive) {
         let Some(worker) = info.worker else {
             continue;

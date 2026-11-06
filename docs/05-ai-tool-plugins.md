@@ -1803,8 +1803,9 @@ names. Codex has no equivalent hook (`HS2-5ZQ7J8`): a failed Codex turn fires
 
 The same Claude prompt and turn-end hooks send only `session_id`, `transcript_path`,
 and the boundary kind to `/terminals/{id}/claude-turn` (HS2-W2GNTT). The server accepts
-reports from the connected session and reads numeric usage from transcript bytes
-appended since that prompt. It snapshots a unique live terminal claim at the prompt,
+reports from the connected session, then follows the transcript and records numeric
+usage per assistant response as it completes rather than once per turn (HS2-SSMDQ1,
+`docs/14` §14.5). It snapshots a unique live terminal claim at the prompt,
 so a claim acquired later cannot retroactively own the turn. Transient transcript
 or metrics errors leave the turn available for a repeated turn-end hook, which keeps
 the original claim and records its usage once (HS2-F8578J). Transcript and prompt

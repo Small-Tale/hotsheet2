@@ -1,39 +1,74 @@
-//! Per-turn usage for native Claude terminals (HS2-W2GNTT).
+//! Continuous usage for native Claude terminals (HS2-W2GNTT, HS2-SSMDQ1).
 //!
-//! The hook supplies a transcript path at prompt and stop. We keep only the starting byte
-//! offset and the ticket claim snapshot; no transcript content enters server state.
+//! The hook names the session's transcript at prompt and stop. The server follows that
+//! transcript from the first prompt it sees and records each main-chain assistant message's
+//! numeric usage as soon as the message is final (a later message appeared) or the turn
+//! stopped, so a turn that runs for hours still moves its project's tokens per minute. Every
+//! message is recorded once under `claude-message:<session>:<message id>`, so the follower,
+//! a Stop flush, and a resumed follow cannot count it twice. The follow's resume offset,
+//! session, transcript path, and usage checkout persist under the machine home, so a
+//! restarted server resumes following terminals the broker kept alive. Only message ids,
+//! timestamps, models, and counters are read; no transcript content enters server state.
 
-use crate::{ApiError, AppState, now};
+use super::usage_store::{UsageTarget, terminal_usage_target, usage_target_for_checkout};
+use crate::{ApiError, AppState};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use hotsheet_aitools::claude_transcript_usage::{
+    MessageUsage, TranscriptFollower, TranscriptWatch, watch_transcript,
+};
+use hotsheet_model::Timestamp;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::metrics;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Component, Path as FilePath, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 const TRANSCRIPT_FLUSH_WAIT: Duration = Duration::from_secs(1);
 const TRANSCRIPT_FLUSH_RETRY: Duration = Duration::from_millis(50);
+/// Machine-home directory of persisted follows, one `<terminal>.json` each.
+const FOLLOW_DIR: &str = "claude-usage";
 
-#[derive(Clone)]
-pub struct ClaudeTurnStart {
-    turn_id: String,
+/// One terminal's live follow of its Claude session's transcript. Dropping it stops the
+/// watcher; the persisted record stays until the session or terminal ends.
+pub struct ClaudeUsageFollow {
+    session_id: String,
+    transcript: PathBuf,
+    inner: Arc<Mutex<FollowInner>>,
+    _watch: Option<TranscriptWatch>,
+}
+
+struct FollowInner {
+    terminal: String,
+    session_id: String,
+    transcript: PathBuf,
+    reader: TranscriptFollower,
+    usage_checkout: Option<String>,
+    /// The current turn's project store and unique claim snapshot (HS2-B4EQ87); `None`
+    /// until a prompt sets it or a resumed follow first records.
+    target: Option<UsageTarget>,
+    /// The resume offset when the current turn's prompt arrived: a repeated prompt before
+    /// the transcript grows keeps the original snapshot.
+    turn_start: Option<u64>,
+    /// Messages recorded since the current prompt, for Stop's wait for a late append.
+    turn_messages: usize,
+    /// A Stop is waiting for a late append; a concurrent Stop returns at once.
+    stop_waiting: bool,
+}
+
+/// The persisted part of a follow: no transcript content and no credential.
+#[derive(Serialize, Deserialize)]
+struct FollowRecord {
+    terminal: String,
     session_id: String,
     transcript: PathBuf,
     offset: u64,
-    /// The project store and claim snapshot at prompt time (HS2-B4EQ87).
-    target: super::usage_store::UsageTarget,
-    phase: TurnPhase,
-    end_attempted: bool,
-    ended_at: Option<String>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TurnPhase {
-    Pending,
-    Processing,
-    Completed,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    usage_checkout: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -141,8 +176,196 @@ fn check_claude_session(
     }
 }
 
-/// A hook report from one known Claude session. Unmatched and historical turns cannot
-/// create metrics events; a repeated stop reuses the same turn identity.
+fn internal(error: std::io::Error) -> ApiError {
+    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+}
+
+/// Where terminal `terminal`'s follow persists, or `None` for an id unsafe as a file name.
+fn record_path(state: &AppState, terminal: &str) -> Option<PathBuf> {
+    (!terminal.is_empty()
+        && terminal.len() <= 128
+        && terminal
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'))
+    .then(|| {
+        state
+            .machine_home()
+            .join(FOLLOW_DIR)
+            .join(format!("{terminal}.json"))
+    })
+}
+
+/// Best effort: a follow that cannot persist still records while this server runs.
+fn persist(state: &AppState, inner: &FollowInner) {
+    let Some(path) = record_path(state, &inner.terminal) else {
+        return;
+    };
+    let record = FollowRecord {
+        terminal: inner.terminal.clone(),
+        session_id: inner.session_id.clone(),
+        transcript: inner.transcript.clone(),
+        offset: inner.reader.resume_offset(),
+        usage_checkout: inner.usage_checkout.clone(),
+    };
+    let write = || -> std::io::Result<()> {
+        let dir = path.parent().expect("record paths have a directory");
+        std::fs::create_dir_all(dir)?;
+        let temp = path.with_extension("json.tmp");
+        std::fs::write(&temp, serde_json::to_vec(&record)?)?;
+        std::fs::rename(temp, &path)
+    };
+    if let Err(error) = write() {
+        tracing::warn!(%error, "persisting a Claude usage follow failed");
+    }
+}
+
+/// The project store and unique claim of the terminal's Claude or shell worker now.
+fn resolve_target(state: &AppState, terminal: &str, usage_checkout: Option<&str>) -> UsageTarget {
+    let ai_worker = hotsheet_aitools::session_worker_id("claude", terminal);
+    let shell_worker = super::launch::terminal_session_worker_id(terminal);
+    usage_target_for_checkout(state, usage_checkout, &[&ai_worker, &shell_worker]).unwrap_or_else(
+        |error| {
+            tracing::warn!(%error, "looking up Claude terminal ticket failed");
+            UsageTarget {
+                store: state.store.clone(),
+                ticket: None,
+            }
+        },
+    )
+}
+
+/// A message's own time when it is a valid past RFC 3339 time, else now. Using the message
+/// time keeps a re-read message in the same raw day file, where its identity dedupes it.
+fn message_ts(message: &MessageUsage) -> String {
+    let now = OffsetDateTime::now_utc();
+    let at = OffsetDateTime::parse(&message.timestamp, &Rfc3339)
+        .ok()
+        .map(|at| at.to_offset(time::UtcOffset::UTC))
+        .filter(|at| *at <= now)
+        .unwrap_or(now);
+    Timestamp::from_datetime(at).as_str().to_owned()
+}
+
+/// Read what the transcript appended and record every final message (all of them when the
+/// turn ended). Messages stay pending through a failed write and are retried by the next
+/// wake, prompt, or stop under the same identities. Blocking.
+fn record_ready(
+    state: &AppState,
+    inner: &mut FollowInner,
+    turn_ended: bool,
+) -> std::io::Result<usize> {
+    let target = match &inner.target {
+        Some(target) => target.clone(),
+        None => {
+            let target = resolve_target(state, &inner.terminal, inner.usage_checkout.as_deref());
+            inner.target = Some(target.clone());
+            target
+        }
+    };
+    let prices = hotsheet_ticketing::pricing::load_prices(&target.store);
+    inner
+        .reader
+        .read_appended(&inner.transcript, Some(&prices))?;
+    let ready = inner.reader.ready(turn_ended);
+    if ready.is_empty() {
+        persist(state, inner);
+        return Ok(0);
+    }
+    let events: Vec<_> = ready
+        .iter()
+        .map(|message| {
+            (
+                format!("claude-message:{}:{}", inner.session_id, message.message_id),
+                metrics::UsageEvent {
+                    ts: message_ts(message),
+                    tool: "claude".to_owned(),
+                    model: message.usage.model.clone(),
+                    tokens_in: message.usage.tokens_in,
+                    tokens_out: message.usage.tokens_out,
+                    cost_usd: message.usage.cost_usd,
+                    ticket: target.ticket.clone(),
+                    session: Some(inner.session_id.clone()),
+                },
+                message.categories,
+            )
+        })
+        .collect();
+    let added = metrics::record_many_once_with_claude_tokens(&target.store, &events)?;
+    inner.reader.recorded(ready.len());
+    inner.turn_messages += ready.len();
+    persist(state, inner);
+    if added > 0 {
+        // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
+        crate::live_state::touch(state, &crate::multistore::store_url_id(&target.store));
+    }
+    Ok(added)
+}
+
+/// Start following with `reader`; the watcher records each final message as it appears.
+fn start_follow(state: &AppState, inner: FollowInner) -> ClaudeUsageFollow {
+    let (session_id, transcript) = (inner.session_id.clone(), inner.transcript.clone());
+    persist(state, &inner);
+    let inner = Arc::new(Mutex::new(inner));
+    let (watch_state, watch_inner) = (state.clone(), inner.clone());
+    let watch = watch_transcript(&transcript, move || {
+        let mut inner = watch_inner.lock_or_recover();
+        if let Err(error) = record_ready(&watch_state, &mut inner, false) {
+            tracing::warn!(%error, "recording Claude terminal usage failed");
+        }
+    })
+    .inspect_err(|error| tracing::warn!(%error, "watching a Claude transcript failed"))
+    .ok();
+    ClaudeUsageFollow {
+        session_id,
+        transcript,
+        inner,
+        _watch: watch,
+    }
+}
+
+/// The follow of `terminal`'s Claude session, created at the transcript's current end when
+/// none exists (or a different session or transcript had it). `true` when it is new.
+fn ensure_follow(
+    state: &AppState,
+    terminal: &str,
+    session_id: &str,
+    transcript: &FilePath,
+) -> (Arc<Mutex<FollowInner>>, bool) {
+    if let Some(follow) = state.claude_usage_follows.lock_or_recover().get(terminal)
+        && follow.session_id == session_id
+        && follow.transcript == transcript
+    {
+        return (follow.inner.clone(), false);
+    }
+    // A new session starts at its transcript's end: older rows belong to earlier turns
+    // this server may already have recorded under other identities. A file not created
+    // yet starts at byte zero.
+    let offset = transcript.metadata().map(|meta| meta.len()).unwrap_or(0);
+    let follow = start_follow(
+        state,
+        FollowInner {
+            terminal: terminal.to_owned(),
+            session_id: session_id.to_owned(),
+            transcript: transcript.to_path_buf(),
+            reader: TranscriptFollower::new(offset),
+            usage_checkout: super::usage_store::terminal_usage_checkout(state, terminal),
+            target: None,
+            turn_start: None,
+            turn_messages: 0,
+            stop_waiting: false,
+        },
+    );
+    let inner = follow.inner.clone();
+    state
+        .claude_usage_follows
+        .lock_or_recover()
+        .insert(terminal.to_owned(), follow);
+    (inner, true)
+}
+
+/// A hook report from one known Claude session. A prompt makes the previous turn's
+/// messages final and snapshots the new turn's claim; a stop or failure records every
+/// message so far, waiting briefly for a late append.
 pub(crate) async fn report_claude_turn(
     State(state): State<AppState>,
     Path(terminal): Path<String>,
@@ -150,159 +373,142 @@ pub(crate) async fn report_claude_turn(
 ) -> Result<StatusCode, ApiError> {
     check_claude_session(&state, &terminal, &body.session_id)?;
     let transcript = transcript_for_session(&body.transcript_path, &body.session_id)?;
-    match body.event {
-        TurnEvent::Start => {
-            let offset = match transcript.metadata() {
-                Ok(metadata) => metadata.len(),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
-                Err(_) => {
-                    return Err(ApiError::new(
-                        StatusCode::BAD_REQUEST,
-                        "Claude transcript unavailable",
-                    ));
+    if let Err(error) = transcript.metadata()
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Claude transcript unavailable",
+        ));
+    }
+    let blocking = state.clone();
+    tokio::task::spawn_blocking(move || {
+        let state = blocking;
+        let (inner, created) = ensure_follow(&state, &terminal, &body.session_id, &transcript);
+        match body.event {
+            TurnEvent::Start => {
+                let ai_worker = hotsheet_aitools::session_worker_id("claude", &terminal);
+                let shell_worker = super::launch::terminal_session_worker_id(&terminal);
+                // Lists the project's tickets for the claim snapshot.
+                let snapshot =
+                    terminal_usage_target(&state, &terminal, &[&ai_worker, &shell_worker])?;
+                let mut inner = inner.lock_or_recover();
+                // The previous turn ended at this prompt; its last message is final.
+                if let Err(error) = record_ready(&state, &mut inner, true) {
+                    tracing::warn!(%error, "recording Claude terminal usage failed");
                 }
-            };
-            let ai_worker = hotsheet_aitools::session_worker_id("claude", &terminal);
-            let shell_worker = super::launch::terminal_session_worker_id(&terminal);
-            let lookup = state.clone();
-            let lookup_terminal = terminal.clone();
-            // Lists the project's tickets for the claim snapshot; keep it off Tokio workers.
-            let target = tokio::task::spawn_blocking(move || {
-                super::usage_store::terminal_usage_target(
-                    &lookup,
-                    &lookup_terminal,
-                    &[&ai_worker, &shell_worker],
-                )
-            })
-            .await
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-            let mut starts = state.claude_turn_starts.lock_or_recover();
-            if starts.get(&terminal).is_some_and(|previous| {
-                previous.phase == TurnPhase::Processing
-                    || (previous.end_attempted && previous.phase == TurnPhase::Pending)
-            }) {
-                return Err(ApiError::new(
-                    StatusCode::CONFLICT,
-                    "Claude turn end needs retry",
-                ));
+                let offset = inner.reader.resume_offset();
+                // A duplicate prompt hook before the transcript grows keeps its claim.
+                let repeated = !created
+                    && inner.turn_start == Some(offset)
+                    && inner.turn_messages == 0
+                    && !inner.reader.has_pending();
+                if !repeated {
+                    inner.target = Some(snapshot);
+                    inner.turn_start = Some(offset);
+                    inner.turn_messages = 0;
+                }
+                persist(&state, &inner);
             }
-            // A duplicate prompt hook before the transcript grows keeps its original claim.
-            if starts.get(&terminal).is_some_and(|previous| {
-                previous.phase == TurnPhase::Pending
-                    && !previous.end_attempted
-                    && previous.session_id == body.session_id
-                    && previous.transcript == transcript
-                    && previous.offset == offset
-            }) {
-                return Ok(StatusCode::NO_CONTENT);
-            }
-            starts.insert(
-                terminal,
-                ClaudeTurnStart {
-                    turn_id: ulid::Ulid::new().to_string(),
-                    session_id: body.session_id,
-                    transcript,
-                    offset,
-                    target,
-                    phase: TurnPhase::Pending,
-                    end_attempted: false,
-                    ended_at: None,
-                },
-            );
-        }
-        TurnEvent::Stop | TurnEvent::Failure => {
-            let start = {
-                let mut starts = state.claude_turn_starts.lock_or_recover();
-                let Some(start) = starts.get_mut(&terminal) else {
-                    return Ok(StatusCode::NO_CONTENT);
-                };
-                if start.session_id != body.session_id
-                    || start.transcript != transcript
-                    || start.phase != TurnPhase::Pending
-                {
-                    return Ok(StatusCode::NO_CONTENT);
+            TurnEvent::Stop | TurnEvent::Failure => {
+                // A follow first seen at a stop knows nothing of the turn that ended.
+                if created {
+                    return Ok(());
                 }
-                start.phase = TurnPhase::Processing;
-                start.end_attempted = true;
-                if start.ended_at.is_none() {
-                    start.ended_at = Some(now().as_str().to_owned());
-                }
-                start.clone()
-            };
-            let store = start.target.store.clone();
-            let session_id = body.session_id;
-            let turn_id = start.turn_id.clone();
-            let live = state.clone();
-            let result = tokio::task::spawn_blocking(move || {
-                let prices = hotsheet_ticketing::pricing::load_prices(&store);
                 // Claude can invoke Stop before its last transcript row is visible. Wait
                 // briefly for that local append; never poll the server or infer older rows.
-                let deadline = Instant::now() + TRANSCRIPT_FLUSH_WAIT;
-                let usage = loop {
-                    let usage = match hotsheet_aitools::claude_transcript_usage::priced_usage_with_evidence_since(
-                        &start.transcript,
-                        start.offset,
-                        &prices,
-                    ) {
-                        Ok(usage) => usage,
-                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                        Err(error) => return Err(error),
-                    };
-                    if usage.is_some() || Instant::now() >= deadline {
-                        break usage;
+                {
+                    let mut waiting = inner.lock_or_recover();
+                    if waiting.stop_waiting {
+                        // The Stop already waiting records this turn.
+                        return Ok(());
                     }
+                    waiting.stop_waiting = true;
+                }
+                let deadline = Instant::now() + TRANSCRIPT_FLUSH_WAIT;
+                let result = loop {
+                    let mut inner = inner.lock_or_recover();
+                    if let Err(error) = record_ready(&state, &mut inner, false) {
+                        break Err(error);
+                    }
+                    if inner.turn_messages > 0
+                        || inner.reader.has_pending()
+                        || Instant::now() >= deadline
+                    {
+                        break record_ready(&state, &mut inner, true);
+                    }
+                    drop(inner);
                     std::thread::sleep(TRANSCRIPT_FLUSH_RETRY);
                 };
-                if let Some(turn) = usage {
-                    metrics::record_once_with_claude_tokens(
-                        &store,
-                        &metrics::UsageEvent {
-                            ts: start.ended_at.clone().expect("Stop set the turn timestamp"),
-                            tool: "claude".to_owned(),
-                            model: turn.usage.model,
-                            tokens_in: turn.usage.tokens_in,
-                            tokens_out: turn.usage.tokens_out,
-                            cost_usd: turn.usage.cost_usd,
-                            ticket: start.target.ticket,
-                            session: Some(session_id),
-                        },
-                        &start.turn_id,
-                        turn.categories,
-                    )?;
-                    // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
-                    crate::live_state::touch(&live, &crate::multistore::store_url_id(&store));
-                }
-                Ok::<(), std::io::Error>(())
-            })
-            .await
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
-            .and_then(|result| {
-                result.map_err(|error| {
-                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-                })
-            });
-            if let Some(current) = state
-                .claude_turn_starts
-                .lock_or_recover()
-                .get_mut(&terminal)
-            {
-                if current.turn_id == turn_id {
-                    current.phase = if result.is_ok() {
-                        TurnPhase::Completed
-                    } else {
-                        TurnPhase::Pending
-                    };
-                }
+                inner.lock_or_recover().stop_waiting = false;
+                result.map_err(internal)?;
             }
-            result?;
         }
-    }
+        Ok::<(), ApiError>(())
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// The session or terminal ended: stop following and forget the persisted follow.
 pub(crate) fn forget_claude_turn(state: &AppState, terminal: &str) {
-    state.claude_turn_starts.lock_or_recover().remove(terminal);
+    let removed = state
+        .claude_usage_follows
+        .lock_or_recover()
+        .remove(terminal);
+    drop(removed);
+    if let Some(path) = record_path(state, terminal) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// At startup, resume the persisted follows of terminals the broker kept alive (HS2-SSMDQ1)
+/// from their resume offsets; already-recorded messages dedupe by identity. Records of
+/// terminals that did not survive are removed.
+pub fn resume_claude_usage_follows(state: &AppState, alive: &[String]) {
+    let Ok(entries) = std::fs::read_dir(state.machine_home().join(FOLLOW_DIR)) else {
+        return;
+    };
+    for path in entries.flatten().map(|entry| entry.path()) {
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let record = std::fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<FollowRecord>(&bytes).ok())
+            .filter(|record| {
+                record_path(state, &record.terminal).as_deref() == Some(path.as_path())
+                    && transcript_for_session(
+                        &record.transcript.to_string_lossy(),
+                        &record.session_id,
+                    )
+                    .is_ok()
+            });
+        let Some(record) = record.filter(|record| alive.contains(&record.terminal)) else {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        };
+        let terminal = record.terminal.clone();
+        let follow = start_follow(
+            state,
+            FollowInner {
+                terminal: record.terminal,
+                session_id: record.session_id,
+                transcript: record.transcript,
+                reader: TranscriptFollower::new(record.offset),
+                usage_checkout: record.usage_checkout,
+                target: None,
+                turn_start: None,
+                turn_messages: 0,
+                stop_waiting: false,
+            },
+        );
+        state
+            .claude_usage_follows
+            .lock_or_recover()
+            .insert(terminal, follow);
+    }
 }
 
 #[cfg(test)]
@@ -328,5 +534,40 @@ mod tests {
         assert!(transcript_for_session(transcript.to_str().unwrap(), "session-2").is_err());
         assert!(transcript_for_session(transcript.to_str().unwrap(), "../session-1").is_err());
         assert!(transcript_for_session("projects/project/pending.jsonl", "pending").is_err());
+    }
+
+    #[test]
+    fn hs2_ssmdq1_message_time_is_used_only_when_it_is_a_valid_past_time() {
+        let message = |timestamp: &str| MessageUsage {
+            message_id: "m".into(),
+            timestamp: timestamp.into(),
+            usage: Default::default(),
+            categories: None,
+        };
+        assert_eq!(
+            message_ts(&message("2026-10-23T01:02:03.5+01:00")),
+            "2026-10-23T00:02:03.5Z"
+        );
+        let today = &crate::now().as_str()[..10].to_owned();
+        assert!(message_ts(&message("")).starts_with(today.as_str()));
+        assert!(message_ts(&message("2999-01-01T00:00:00Z")).starts_with(today.as_str()));
+        assert!(record_path_is_safe("01M6JTZXXEBCC3KN9EHWQZD3P2"));
+        assert!(!record_path_is_safe("../x"));
+        assert!(!record_path_is_safe(""));
+    }
+
+    fn record_path_is_safe(terminal: &str) -> bool {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(
+            hotsheet_ticketing::FsStore::init(
+                root.path().join("s.hs2"),
+                &hotsheet_ticketing::StoreMetadata::new("HS"),
+            )
+            .unwrap(),
+            "secret".into(),
+        )
+        .unwrap()
+        .with_machine_home(root.path().join("home"));
+        record_path(&state, terminal).is_some()
     }
 }

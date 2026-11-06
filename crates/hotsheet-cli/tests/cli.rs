@@ -2405,6 +2405,7 @@ const HOOK_TESTS: &[&str] = &[
     "permission_hook_reports_claude_turn_boundaries_without_prompt_content",
     "permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection",
     "claude_session_start_reports_its_inbox_socket_token_and_version",
+    "hs2_ssmdq1_permission_hook_reconnects_a_session_the_server_forgot_and_retries",
 ];
 
 #[test]

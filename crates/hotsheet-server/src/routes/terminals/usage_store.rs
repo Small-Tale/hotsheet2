@@ -34,14 +34,13 @@ pub(crate) fn checkout_containing(state: &AppState, dir: &Path) -> Option<Checko
         .max_by_key(|checkout| checkout.root.len())
 }
 
-/// The checkout recorded for terminal `id`'s reported AI session, if any.
-fn terminal_checkout(state: &AppState, id: &str) -> Option<Checkout> {
-    let checkout_id = state
+/// The usage checkout id recorded for terminal `id`'s reported AI session, if any.
+pub(crate) fn terminal_usage_checkout(state: &AppState, id: &str) -> Option<String> {
+    state
         .terminal_ai_connections
         .lock_or_recover()
         .get(id)
-        .and_then(|connection| connection.usage_checkout.clone())?;
-    state.checkout_registry.describe(&checkout_id).ok()
+        .and_then(|connection| connection.usage_checkout.clone())
 }
 
 /// A linked Git source's store: the hosted entry when hosted, else opened from its path.
@@ -67,7 +66,22 @@ pub(crate) fn terminal_usage_target(
     id: &str,
     workers: &[&str],
 ) -> Result<UsageTarget, StoreError> {
-    let checkout = terminal_checkout(state, id);
+    usage_target_for_checkout(
+        state,
+        terminal_usage_checkout(state, id).as_deref(),
+        workers,
+    )
+}
+
+/// [`terminal_usage_target`] for a known usage checkout id, as a Claude transcript follow
+/// resumed after a restart persisted it before any session reported again (HS2-SSMDQ1).
+pub(crate) fn usage_target_for_checkout(
+    state: &AppState,
+    checkout_id: Option<&str>,
+    workers: &[&str],
+) -> Result<UsageTarget, StoreError> {
+    let checkout =
+        checkout_id.and_then(|checkout_id| state.checkout_registry.describe(checkout_id).ok());
     let (candidates, fallback) = match &checkout {
         Some(checkout) => {
             let stores: Vec<FsStore> = checkout

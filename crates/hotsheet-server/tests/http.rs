@@ -2796,8 +2796,8 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
     assert_eq!(events[2].ticket, None);
     assert_eq!((events[2].tokens_in, events[2].tokens_out), (3, 1));
 
-    // HS2-F8578J: an I/O failure after Stop starts processing retains the
-    // prompt-time cursor and claim for the next Stop hook.
+    // HS2-SSMDQ1 (replacing HS2-F8578J's turn retry): a transcript that shrank is read
+    // again from the start, and every message identity already recorded is skipped.
     let before_read_failure = std::fs::read(&transcript).unwrap();
     send("POST", endpoint, turn("start", "native-session")).await;
     std::fs::write(&transcript, b"").unwrap();
@@ -2805,14 +2805,13 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
         send("POST", endpoint, turn("stop", "native-session"))
             .await
             .status(),
-        StatusCode::INTERNAL_SERVER_ERROR
+        StatusCode::NO_CONTENT
     );
     assert_eq!(
         send("POST", endpoint, turn("start", "native-session"))
             .await
             .status(),
-        StatusCode::CONFLICT,
-        "a new prompt cannot replace a turn awaiting retry"
+        StatusCode::NO_CONTENT
     );
     let retried = serde_json::json!({
         "type":"assistant", "timestamp":"2026-10-23T00:00:04Z",
@@ -2979,6 +2978,145 @@ async fn hs2_ssmdq1_turn_reports_after_a_restart_reconnect_and_permission_asks_k
     assert_eq!(changed.status(), StatusCode::CONFLICT);
     assert!(body_json(changed).await.get("code").is_none());
     send("DELETE", "/terminals/survivor".into(), None).await;
+}
+
+/// HS2-SSMDQ1: Claude usage is recorded per assistant response while the turn runs, without
+/// waiting for Stop; Stop records the last response once; and a restarted server resumes
+/// the follow from its persisted offset without counting any response twice.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_ssmdq1_claude_usage_records_per_response_mid_turn_and_resumes_after_restart() {
+    use std::io::Write as _;
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(dir.path().join("store.hs2"), &StoreMetadata::new("HS")).unwrap();
+    let machine_home = dir.path().join("machine-home");
+    let server = || {
+        AppState::new(store.clone(), SECRET.into())
+            .unwrap()
+            .with_default_codex_home(dir.path().join("no-codex-home"))
+            .with_machine_home(&machine_home)
+    };
+    let transcripts = dir.path().join("claude").join("projects").join("p");
+    std::fs::create_dir_all(&transcripts).unwrap();
+    let transcript = transcripts.join("live-session.jsonl");
+    let path = transcript.to_string_lossy().to_string();
+    let append = |id: &str, output: u64| {
+        let row = serde_json::json!({
+            "type":"assistant",
+            "timestamp": time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339).unwrap(),
+            "message":{"id": id, "model":"claude-opus-4-8",
+                "usage":{"input_tokens":1,"output_tokens":output}}
+        });
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&transcript)
+            .unwrap();
+        writeln!(file, "{row}").unwrap();
+    };
+    let recorded = || {
+        hotsheet_ticketing::metrics::read_raw(&store)
+            .unwrap()
+            .iter()
+            .map(|event| event.tokens_out)
+            .collect::<Vec<_>>()
+    };
+    let until = |want: usize| {
+        let recorded = &recorded;
+        async move {
+            for _ in 0..200 {
+                if recorded().len() >= want {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            panic!("expected {want} recorded responses, got {:?}", recorded());
+        }
+    };
+    let call = |router: axum::Router, method: &'static str, uri: &'static str, body: String| async move {
+        router
+            .oneshot(authed(method, uri, Some(&body)))
+            .await
+            .unwrap()
+            .status()
+    };
+    let turn = |event: &str| {
+        serde_json::json!({"event": event, "session_id": "live-session", "transcript_path": path})
+            .to_string()
+    };
+    let connect = r#"{"agent":"claude","session_id":"live-session"}"#.to_owned();
+    let terminal = r#"{"command":"cat","id":"follow"}"#.to_owned();
+    let endpoint = "/terminals/follow/claude-turn";
+
+    let first = app(server());
+    call(first.clone(), "POST", "/terminals", terminal.clone()).await;
+    call(
+        first.clone(),
+        "POST",
+        "/terminals/follow/ai-connection",
+        connect.clone(),
+    )
+    .await;
+    assert_eq!(
+        call(first.clone(), "POST", endpoint, turn("start")).await,
+        StatusCode::NO_CONTENT
+    );
+    append("a", 1);
+    append("a", 1);
+    append("b", 2);
+    // A is final once B appears: recorded with no Stop. B may still grow, so it waits.
+    until(1).await;
+    assert_eq!(recorded(), [1]);
+    assert_eq!(
+        call(first.clone(), "POST", endpoint, turn("stop")).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(recorded(), [1, 2]);
+    call(first.clone(), "POST", endpoint, turn("stop")).await;
+    assert_eq!(recorded(), [1, 2], "a repeated Stop adds nothing");
+    // Mid-turn when the server stops: C is recorded, D is not yet final.
+    call(first.clone(), "POST", endpoint, turn("start")).await;
+    append("c", 3);
+    append("d", 4);
+    until(3).await;
+    let persisted = machine_home.join("claude-usage").join("follow.json");
+    assert!(persisted.is_file());
+    let record = std::fs::read_to_string(&persisted).unwrap();
+    assert!(
+        !record.contains("output_tokens"),
+        "no transcript content persists"
+    );
+    drop(first);
+
+    // A restarted server resumes the follow of a terminal that is still alive.
+    let restarted = server();
+    hotsheet_server::resume_claude_usage_follows(&restarted, &["follow".to_owned()]);
+    let second = app(restarted);
+    append("e", 5);
+    until(4).await;
+    assert_eq!(recorded(), [1, 2, 3, 4]);
+    // The hook reconnects (HS2-SSMDQ1) and its Stop records the last response once.
+    call(second.clone(), "POST", "/terminals", terminal).await;
+    call(
+        second.clone(),
+        "POST",
+        "/terminals/follow/ai-connection",
+        connect,
+    )
+    .await;
+    assert_eq!(
+        call(second.clone(), "POST", endpoint, turn("stop")).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(recorded(), [1, 2, 3, 4, 5]);
+    // The terminal ends: its follow and persisted record go away.
+    call(second.clone(), "DELETE", "/terminals/follow", String::new()).await;
+    assert!(!persisted.exists());
+
+    // A record of a terminal that did not survive is dropped at startup.
+    std::fs::write(&persisted, record).unwrap();
+    hotsheet_server::resume_claude_usage_follows(&server(), &[]);
+    assert!(!persisted.exists());
 }
 
 #[tokio::test]

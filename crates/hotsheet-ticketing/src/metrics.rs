@@ -187,6 +187,21 @@ pub fn record_once_with_claude_tokens(
     turn_id: &str,
     categories: Option<ClaudeTokenCategories>,
 ) -> io::Result<()> {
+    record_many_once_with_claude_tokens(store, &[(turn_id.to_owned(), event.clone(), categories)])
+        .map(|_| ())
+}
+
+/// [`record_once_with_claude_tokens`] for a batch, under one lock and one read of each day's
+/// file: each `(turn_id, event, categories)` whose identity that day's raw file does not
+/// hold yet is appended in order. Per-message Claude terminal usage (HS2-SSMDQ1) uses
+/// `claude-message:<session>:<message id>` identities. Returns how many were new.
+pub fn record_many_once_with_claude_tokens(
+    store: &FsStore,
+    events: &[(String, UsageEvent, Option<ClaudeTokenCategories>)],
+) -> io::Result<usize> {
+    if events.is_empty() {
+        return Ok(0);
+    }
     let dir = store.root().join("metrics").join("raw");
     fs::create_dir_all(&dir)?;
     let _lock = FileLock::acquire(
@@ -197,40 +212,62 @@ pub fn record_once_with_claude_tokens(
             .open(dir.join(".usage.lock"))?,
     )?;
     ensure_gitignored(store, "metrics/raw/")?;
-    let path = dir.join(format!("{}.jsonl", event.day()));
-    match fs::File::open(&path) {
-        Ok(file) => {
-            for line in BufReader::new(file).lines() {
-                let line = line?;
-                let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                    continue;
-                };
-                if value.get("turn_id").and_then(|id| id.as_str()) == Some(turn_id) {
-                    return Ok(());
+    let mut seen: std::collections::HashMap<String, std::collections::HashSet<String>> =
+        std::collections::HashMap::new();
+    let mut lines: std::collections::BTreeMap<String, Vec<u8>> = std::collections::BTreeMap::new();
+    let mut added = 0;
+    for (turn_id, event, categories) in events {
+        let day = event.day().to_owned();
+        if !seen.contains_key(&day) {
+            let mut ids = std::collections::HashSet::new();
+            match fs::File::open(dir.join(format!("{day}.jsonl"))) {
+                Ok(file) => {
+                    for line in BufReader::new(file).lines() {
+                        let line = line?;
+                        let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                            continue;
+                        };
+                        if let Some(id) = value.get("turn_id").and_then(|id| id.as_str()) {
+                            ids.insert(id.to_owned());
+                        }
+                    }
                 }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
             }
+            seen.insert(day.clone(), ids);
         }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
+        if !seen
+            .get_mut(&day)
+            .expect("read above")
+            .insert(turn_id.clone())
+        {
+            continue;
+        }
+        let mut value = serde_json::to_value(event).map_err(io::Error::other)?;
+        let object = value
+            .as_object_mut()
+            .expect("usage event serializes as an object");
+        object.insert("turn_id".into(), turn_id.as_str().into());
+        if let Some(categories) = categories {
+            object.insert(
+                "claude_tokens".into(),
+                serde_json::to_value(categories).map_err(io::Error::other)?,
+            );
+        }
+        let out = lines.entry(day).or_default();
+        out.extend(serde_json::to_vec(&value).map_err(io::Error::other)?);
+        out.push(b'\n');
+        added += 1;
     }
-    let mut value = serde_json::to_value(event).map_err(io::Error::other)?;
-    let object = value
-        .as_object_mut()
-        .expect("usage event serializes as an object");
-    object.insert("turn_id".into(), turn_id.into());
-    if let Some(categories) = categories {
-        object.insert(
-            "claude_tokens".into(),
-            serde_json::to_value(categories).map_err(io::Error::other)?,
-        );
+    for (day, bytes) in lines {
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join(format!("{day}.jsonl")))?
+            .write_all(&bytes)?;
     }
-    let mut line = serde_json::to_vec(&value).map_err(io::Error::other)?;
-    line.push(b'\n');
-    fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?
-        .write_all(&line)
+    Ok(added)
 }
 
 /// Read every raw usage event in the store (all days), skipping unparseable lines.
@@ -639,6 +676,49 @@ mod tests {
         assert_eq!(read_raw(&store).unwrap(), vec![event.clone()]);
         record_once(&store, &event, "turn-2").unwrap();
         assert_eq!(read_raw(&store).unwrap(), vec![event.clone(), event]);
+    }
+
+    #[test]
+    fn hs2_ssmdq1_batch_records_each_identity_once_per_day_and_in_order() {
+        let (_dir, store) = store();
+        let at = |ts: &str, tokens_in| UsageEvent {
+            ts: ts.into(),
+            tool: "claude".into(),
+            model: None,
+            tokens_in,
+            tokens_out: 1,
+            cost_usd: None,
+            ticket: None,
+            session: Some("s".into()),
+        };
+        let batch = vec![
+            ("m-1".to_owned(), at("2026-10-23T23:59:59Z", 1), None),
+            ("m-1".to_owned(), at("2026-10-23T23:59:59Z", 1), None),
+            ("m-2".to_owned(), at("2026-10-24T00:00:01Z", 2), None),
+        ];
+        assert_eq!(
+            record_many_once_with_claude_tokens(&store, &batch).unwrap(),
+            2
+        );
+        assert_eq!(
+            record_many_once_with_claude_tokens(&store, &batch).unwrap(),
+            0
+        );
+        assert_eq!(record_many_once_with_claude_tokens(&store, &[]).unwrap(), 0);
+        let batch = vec![
+            ("m-2".to_owned(), at("2026-10-24T00:00:01Z", 2), None),
+            ("m-3".to_owned(), at("2026-10-24T00:00:02Z", 3), None),
+        ];
+        assert_eq!(
+            record_many_once_with_claude_tokens(&store, &batch).unwrap(),
+            1
+        );
+        let recorded: Vec<u64> = read_raw(&store)
+            .unwrap()
+            .iter()
+            .map(|event| event.tokens_in)
+            .collect();
+        assert_eq!(recorded, [1, 2, 3]);
     }
 
     #[test]

@@ -438,7 +438,9 @@ notification always agree. The tracker therefore runs whether or not a rule name
   minutes, the current one included. It reads the store's usage JSONL
   ([14](14-metrics-interface.md)) incrementally. Terminal AI sessions record into their
   project's store, not the machine server's bootstrap store, and touch that store's live
-  state (HS2-B4EQ87). The snapshot carries the per-minute buckets, so the gauge decays
+  state (HS2-B4EQ87). Claude terminals record each assistant response at its own time as
+  it completes, not once at turn end, so a long autonomous turn moves the rate while it
+  runs (HS2-SSMDQ1). The snapshot carries the per-minute buckets, so the gauge decays
   without another read.
 - `rates.tickets_updated`: one time per distinct ticket whose last progress write is within
   60 minutes. A new ticket counts. Claim renewals do not.

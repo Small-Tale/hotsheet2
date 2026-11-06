@@ -170,7 +170,7 @@ use routes::store_scoped::{
 pub use routes::terminals::{
     TerminalAiConnection, TerminalHalt, TerminalHookSource, TerminalQuestion,
     prune_orphaned_terminal_names, release_orphaned_drive_sessions,
-    resume_broker_terminal_sessions,
+    resume_broker_terminal_sessions, resume_claude_usage_follows,
 };
 pub(crate) use routes::terminals::{
     answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal_halt,
@@ -386,9 +386,12 @@ pub struct AppState {
     terminal_questions: Arc<Mutex<std::collections::HashMap<String, TerminalQuestion>>>,
     /// AI sessions whose Hot Sheet hooks reported in from a terminal, by terminal id (HS2-EV1XK3).
     terminal_ai_connections: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
-    /// One native Claude turn's transcript cursor and unique ticket claim snapshot.
-    claude_turn_starts: Arc<
-        Mutex<std::collections::HashMap<String, routes::terminals::claude_usage::ClaudeTurnStart>>,
+    /// Per-terminal follows of a native Claude session's transcript for continuous usage
+    /// (HS2-SSMDQ1). Dropping an entry stops its watcher.
+    claude_usage_follows: Arc<
+        Mutex<
+            std::collections::HashMap<String, routes::terminals::claude_usage::ClaudeUsageFollow>,
+        >,
     >,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
@@ -638,7 +641,7 @@ impl AppState {
             terminal_halts: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            claude_turn_starts: Arc::default(),
+            claude_usage_follows: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             codex_session_watches: Arc::default(),
             default_codex_home: None,

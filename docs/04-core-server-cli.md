@@ -391,10 +391,11 @@ rolled-up-through day from the owning git store (`docs/14` §14.5). A ticket on 
 provider yields an empty history; an unknown ticket is `404`.
 Native Claude terminal hooks report prompt and turn-end boundaries to the authenticated
 `POST /terminals/{id}/claude-turn` route (HS2-W2GNTT). The route accepts only the
-currently connected Claude session, reads appended numeric transcript usage on turn
-end, and records the unique live ticket claim captured at prompt time (`docs/14` §14.5).
-Transient read or metrics-write errors can be retried by the same turn-end hook
-without counting the turn twice (HS2-F8578J). A terminal with no reported AI session (as
+currently connected Claude session. Its first boundary starts a follow of the session's
+transcript that records each assistant response's numeric usage as it completes, with
+the unique live ticket claim captured at prompt time; turn end records the last response
+(`docs/14` §14.5, HS2-SSMDQ1). Each response is recorded once by message identity, so
+repeated hooks and transient failures never count it twice (HS2-F8578J). A terminal with no reported AI session (as
 after a server restart, when the broker kept the terminal) gets `409` with code
 `claude_session_not_connected`; the hook then re-sends its `SessionStart` connection report
 and retries once. A different session's report stays a plain `409` (HS2-SSMDQ1). A

@@ -572,7 +572,9 @@ async fn claude_turn(
     let (status, _) = call(router, "POST", &endpoint, Some(turn("start"))).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let row = json!({
-        "type":"assistant", "timestamp":"2026-11-06T00:00:00Z",
+        // Usage is recorded at the message's own time (HS2-SSMDQ1): keep it current.
+        "type":"assistant", "timestamp": time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339).unwrap(),
         "message":{"id":format!("message-{tokens}"),"model":"claude-opus-4-8",
             "usage":{"input_tokens":1,"output_tokens":tokens}}
     });

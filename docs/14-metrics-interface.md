@@ -202,18 +202,27 @@ metrics reroute-bootstrap-usage` previews moving them; `--apply` moves them. It 
   work cannot be identified reliably.
   **Interactive Claude terminals (HS2-W2GNTT):** the documented `UserPromptSubmit`,
   `Stop`, and `StopFailure` hooks provide a session id and transcript path, but no token
-  counters. The server snapshots the transcript byte offset and unique live claim of
-  the terminal's Claude or shell worker at prompt time. At turn end it reads only the
-  appended JSONL records, sums numeric assistant usage once per message id, and records
-  one priced event. A turn stays pending through transient transcript or metrics
-  failures so a repeated Stop retries its original cursor and claim. The raw event
-  carries a unique turn identity and retains the first Stop timestamp, preventing
-  a retry across day boundaries from appending it twice
-  (HS2-F8578J). Duplicate stops and historical records cannot add usage; an
-  ambiguous or later-acquired claim leaves the event project-only. The parser skips
-  subagent, malformed, and unknown records and bounds each scan to 64 MiB. The first
-  prompt can precede transcript creation, so its cursor starts at byte zero; `Stop`
-  waits up to one second for a late append. Turn hooks omit the matcher key so Claude
+  counters. From the first prompt or stop it sees for a session, the server follows that
+  transcript (filesystem notifications, no polling) from its end, and records one priced
+  event per main-chain assistant message as soon as the message is final: a later
+  message appeared, the next prompt arrived, or the turn stopped (HS2-SSMDQ1). A turn
+  that runs for hours therefore moves tokens per minute while it runs. Each event's time
+  is the message's own transcript time and its raw identity is
+  `claude-message:<session>:<message id>`, so the follower, a Stop flush, and a re-read
+  never append a message twice. A prompt snapshots the unique live claim of the
+  terminal's Claude or shell worker, and the turn's messages are attributed to it; a
+  repeated prompt before the transcript grows keeps the snapshot. A message stays
+  pending through a transient metrics failure and is retried under the same identity.
+  The follow's resume offset (the first row of the oldest unrecorded message), session,
+  transcript path, and usage checkout persist in `${HOTSHEET_HOME}/claude-usage/<terminal>.json`;
+  a restarted server resumes the follows of terminals its broker kept alive and drops
+  the others. A session first seen after an upgrade starts at the transcript's end, so
+  earlier per-turn events are never recounted. Duplicate stops and historical records
+  cannot add usage; an ambiguous or later-acquired claim leaves the event project-only.
+  The parser skips subagent, malformed, and unknown records, and a transcript that
+  shrank is read again from its start under the same identities. The first prompt can
+  precede transcript creation, so its cursor starts at byte zero; `Stop` waits up to one
+  second for a late append when no message is known yet. Turn hooks omit the matcher key so Claude
   2.1.308 invokes them. Claude's transcript row shape is observed locally rather than
   a published hook contract, so a changed format can omit usage until the parser is
   updated. No prompt or response text is sent to the server or copied into metrics.

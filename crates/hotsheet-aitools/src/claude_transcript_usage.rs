@@ -75,71 +75,85 @@ fn usage_since_with_prices(
     Ok(usage_from_lines(&bytes, prices))
 }
 
+/// The numeric usage of one main-chain assistant transcript row. Only the message id,
+/// timestamp, model, and counters are read; content never leaves this function.
+struct MessageRow {
+    id: String,
+    timestamp: String,
+    usage: Usage,
+    cost: Option<f64>,
+    categories: Option<ClaudeTokenCategories>,
+}
+
+fn message_row(line: &[u8], prices: Option<&Prices>) -> Option<MessageRow> {
+    let value = serde_json::from_slice::<Value>(line).ok()?;
+    if value.get("type").and_then(Value::as_str) != Some("assistant")
+        || value.get("isSidechain").and_then(Value::as_bool) == Some(true)
+        || value
+            .get("parent_tool_use_id")
+            .is_some_and(|parent| !parent.is_null())
+    {
+        return None;
+    }
+    let message = value.get("message")?;
+    let id = message.get("id").and_then(Value::as_str)?;
+    let usage = crate::claude::claude_result_usage(message)?;
+    let categories = message.get("usage").and_then(categories_from_usage);
+    let cost = prices.and_then(|prices| {
+        let model = usage.model.as_ref()?;
+        let price = prices.get(model)?;
+        // Keep initial pricing's established zero-default for sparse transcript rows.
+        // Repricing evidence is stricter: it is omitted unless counters are explicit.
+        let counters = message.get("usage")?;
+        let count = |key| counters.get(key).and_then(Value::as_u64).unwrap_or(0);
+        let cache_creation = counters.get("cache_creation");
+        let cache_count = |key| {
+            cache_creation
+                .and_then(|value| value.get(key))
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+        };
+        let write_5m = cache_count("ephemeral_5m_input_tokens");
+        let write_1h = cache_count("ephemeral_1h_input_tokens");
+        price.claude_cost(
+            count("input_tokens"),
+            count("cache_read_input_tokens"),
+            write_5m,
+            write_1h,
+            count("cache_creation_input_tokens").saturating_sub(write_5m.saturating_add(write_1h)),
+            count("output_tokens"),
+        )
+    });
+    if usage.tokens_in == 0 && usage.tokens_out == 0 {
+        return None;
+    }
+    Some(MessageRow {
+        id: id.to_owned(),
+        timestamp: value
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned(),
+        usage,
+        cost,
+        categories,
+    })
+}
+
 fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<ClaudeTurnUsage> {
     let mut messages =
         BTreeMap::<String, (String, Usage, Option<f64>, Option<ClaudeTokenCategories>)>::new();
     for line in bytes.split(|byte| *byte == b'\n') {
-        let Ok(value) = serde_json::from_slice::<Value>(line) else {
+        let Some(row) = message_row(line, prices) else {
             continue;
         };
-        if value.get("type").and_then(Value::as_str) != Some("assistant")
-            || value.get("isSidechain").and_then(Value::as_bool) == Some(true)
-            || value
-                .get("parent_tool_use_id")
-                .is_some_and(|parent| !parent.is_null())
-        {
-            continue;
-        }
-        let Some(message) = value.get("message") else {
-            continue;
-        };
-        let Some(id) = message.get("id").and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(usage) = crate::claude::claude_result_usage(message) else {
-            continue;
-        };
-        let categories = message.get("usage").and_then(categories_from_usage);
-        let cost = prices.and_then(|prices| {
-            let model = usage.model.as_ref()?;
-            let price = prices.get(model)?;
-            // Keep initial pricing's established zero-default for sparse transcript rows.
-            // Repricing evidence is stricter: it is omitted unless counters are explicit.
-            let counters = message.get("usage")?;
-            let count = |key| counters.get(key).and_then(Value::as_u64).unwrap_or(0);
-            let cache_creation = counters.get("cache_creation");
-            let cache_count = |key| {
-                cache_creation
-                    .and_then(|value| value.get(key))
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0)
-            };
-            let write_5m = cache_count("ephemeral_5m_input_tokens");
-            let write_1h = cache_count("ephemeral_1h_input_tokens");
-            price.claude_cost(
-                count("input_tokens"),
-                count("cache_read_input_tokens"),
-                write_5m,
-                write_1h,
-                count("cache_creation_input_tokens")
-                    .saturating_sub(write_5m.saturating_add(write_1h)),
-                count("output_tokens"),
-            )
-        });
-        if usage.tokens_in == 0 && usage.tokens_out == 0 {
-            continue;
-        }
-        let timestamp = value.get("timestamp").and_then(Value::as_str).unwrap_or("");
         // A streamed assistant message may appear on several rows. The latest snapshot of
         // its counters is authoritative; stale rows received out of order cannot lower it.
         if messages
-            .get(id)
-            .is_none_or(|(previous, _, _, _)| timestamp >= previous.as_str())
+            .get(&row.id)
+            .is_none_or(|(previous, _, _, _)| row.timestamp >= *previous)
         {
-            messages.insert(
-                id.to_owned(),
-                (timestamp.to_owned(), usage, cost, categories),
-            );
+            messages.insert(row.id, (row.timestamp, row.usage, row.cost, row.categories));
         }
     }
     if messages.is_empty() {
@@ -202,10 +216,347 @@ fn categories_from_usage(usage: &Value) -> Option<ClaudeTokenCategories> {
     })
 }
 
+/// One main-chain assistant message's final numeric usage (HS2-SSMDQ1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MessageUsage {
+    /// Claude's message id: the identity that keeps a message counted once.
+    pub message_id: String,
+    /// The transcript row's timestamp, as written (may be empty).
+    pub timestamp: String,
+    pub usage: Usage,
+    pub categories: Option<ClaudeTokenCategories>,
+}
+
+struct PendingMessage {
+    /// Byte offset of the line that first named this message; a resume reads from here.
+    first_offset: u64,
+    message: MessageUsage,
+}
+
+/// Bytes read per chunk while following; complete lines only are consumed.
+const FOLLOW_CHUNK: u64 = 8 * 1024 * 1024;
+
+/// Follows one interactive Claude transcript and yields each assistant message's usage once
+/// it is final (HS2-SSMDQ1). A message is final when a row of a later message appears, or
+/// when the caller says the turn ended. Repeated rows of one message keep its latest
+/// counter snapshot, as the turn scan does. Only usage fields are retained.
+pub struct TranscriptFollower {
+    offset: u64,
+    pending: Vec<PendingMessage>,
+}
+
+impl TranscriptFollower {
+    /// Start following after byte `offset` (a prompt-time size, or a persisted resume point).
+    pub fn new(offset: u64) -> Self {
+        Self {
+            offset,
+            pending: Vec::new(),
+        }
+    }
+
+    /// The point a later follower must resume from so no unrecorded message is skipped:
+    /// the first line of the oldest pending message, else everything read so far.
+    pub fn resume_offset(&self) -> u64 {
+        self.pending
+            .first()
+            .map_or(self.offset, |pending| pending.first_offset)
+    }
+
+    /// Whether any message has been read but not yet handed out as recorded.
+    pub fn has_pending(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
+    /// Read complete lines appended since the last call. A trailing line without its newline
+    /// waits for the next call; a transcript that shrank (replaced) is read again from the
+    /// start, which callers keep idempotent by message id. A missing file reads nothing.
+    pub fn read_appended(&mut self, path: &Path, prices: Option<&Prices>) -> io::Result<()> {
+        let mut file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let len = file.metadata()?.len();
+        if len < self.offset {
+            self.offset = 0;
+            self.pending.clear();
+        }
+        while self.offset < len {
+            file.seek(SeekFrom::Start(self.offset))?;
+            let mut bytes = Vec::new();
+            (&mut file)
+                .take((len - self.offset).min(FOLLOW_CHUNK))
+                .read_to_end(&mut bytes)?;
+            let Some(end) = bytes.iter().rposition(|byte| *byte == b'\n') else {
+                if bytes.len() as u64 >= FOLLOW_CHUNK {
+                    // One line longer than a chunk carries no usage worth the memory: skip it.
+                    self.offset += bytes.len() as u64;
+                    continue;
+                }
+                break;
+            };
+            let mut line_start = self.offset;
+            for line in bytes[..=end].split_inclusive(|byte| *byte == b'\n') {
+                let at = line_start;
+                line_start += line.len() as u64;
+                let Some(row) = message_row(line, prices) else {
+                    continue;
+                };
+                match self
+                    .pending
+                    .iter_mut()
+                    .find(|pending| pending.message.message_id == row.id)
+                {
+                    Some(pending) => {
+                        // The latest snapshot is authoritative; a stale row cannot lower it.
+                        if row.timestamp >= pending.message.timestamp {
+                            pending.message.timestamp = row.timestamp;
+                            pending.message.usage = Usage {
+                                cost_usd: row.cost,
+                                ..row.usage
+                            };
+                            pending.message.categories = row.categories;
+                        }
+                    }
+                    None => self.pending.push(PendingMessage {
+                        first_offset: at,
+                        message: MessageUsage {
+                            message_id: row.id,
+                            timestamp: row.timestamp,
+                            usage: Usage {
+                                cost_usd: row.cost,
+                                ..row.usage
+                            },
+                            categories: row.categories,
+                        },
+                    }),
+                }
+            }
+            self.offset += end as u64 + 1;
+        }
+        Ok(())
+    }
+
+    /// The final messages, oldest first: every pending one but the newest, or all of them
+    /// when `turn_ended`. They stay pending until [`Self::recorded`] confirms them.
+    pub fn ready(&self, turn_ended: bool) -> Vec<MessageUsage> {
+        let count = if turn_ended {
+            self.pending.len()
+        } else {
+            self.pending.len().saturating_sub(1)
+        };
+        self.pending[..count]
+            .iter()
+            .map(|pending| pending.message.clone())
+            .collect()
+    }
+
+    /// The first `count` messages from [`Self::ready`] were recorded.
+    pub fn recorded(&mut self, count: usize) {
+        self.pending.drain(..count.min(self.pending.len()));
+    }
+}
+
+/// A live notification-driven follow of one transcript's directory. Dropping it stops the
+/// watcher thread.
+pub struct TranscriptWatch {
+    wake: std::sync::mpsc::Sender<bool>,
+}
+
+impl Drop for TranscriptWatch {
+    fn drop(&mut self) {
+        let _ = self.wake.send(false);
+    }
+}
+
+/// How long after subscribing the watcher reads once more, because a write made before the
+/// native stream started is never reported to it. One read, never a repeating timer.
+const WATCH_SETTLE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Call `on_change` from a background thread whenever `transcript`'s directory changes,
+/// once right away, and once more after [`WATCH_SETTLE`]. Wakes come from filesystem
+/// notifications and are coalesced; nothing polls. The directory must exist.
+pub fn watch_transcript(
+    transcript: &Path,
+    mut on_change: impl FnMut() + Send + 'static,
+) -> io::Result<TranscriptWatch> {
+    use notify::{RecursiveMode, Watcher};
+    use std::sync::mpsc::{RecvTimeoutError, channel};
+    let dir = transcript
+        .parent()
+        .filter(|dir| dir.is_dir())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no transcript directory"))?
+        .to_path_buf();
+    let (wake, woken) = channel::<bool>();
+    let notify_wake = wake.clone();
+    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        // Our own reads must not wake us again.
+        if event.is_ok_and(|event| !matches!(event.kind, notify::EventKind::Access(_))) {
+            let _ = notify_wake.send(true);
+        }
+    })
+    .map_err(io::Error::other)?;
+    std::thread::spawn(move || {
+        // Starting a native stream can take seconds under load; do it off the caller.
+        if watcher.watch(&dir, RecursiveMode::NonRecursive).is_err() {
+            return;
+        }
+        on_change();
+        let mut settle = Some(std::time::Instant::now() + WATCH_SETTLE);
+        loop {
+            let next = match settle {
+                Some(at) => match woken
+                    .recv_timeout(at.saturating_duration_since(std::time::Instant::now()))
+                {
+                    Err(RecvTimeoutError::Timeout) => {
+                        settle = None;
+                        Ok(true)
+                    }
+                    Err(RecvTimeoutError::Disconnected) => return,
+                    Ok(next) => Ok(next),
+                },
+                None => woken.recv(),
+            };
+            match next {
+                Ok(true) => {
+                    // One read covers a burst of notifications.
+                    while let Ok(next) = woken.try_recv() {
+                        if !next {
+                            return;
+                        }
+                    }
+                    on_change();
+                }
+                Ok(false) | Err(_) => return,
+            }
+        }
+    });
+    Ok(TranscriptWatch { wake })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn hs2_ssmdq1_follower_finalizes_each_message_once_a_later_one_appears() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "{}", row("old", "1", 99, 0, 1, "claude-a")).unwrap();
+        let start = file.as_file().metadata().unwrap().len();
+        let mut follower = TranscriptFollower::new(start);
+        // Empty, then a partial line that waits for its newline.
+        follower.read_appended(file.path(), None).unwrap();
+        assert!(!follower.has_pending());
+        let a1 = row("a", "2026-01-01T00:00:01Z", 1, 2, 3, "claude-a");
+        write!(file, "{}", &a1[..10]).unwrap();
+        follower.read_appended(file.path(), None).unwrap();
+        assert!(!follower.has_pending());
+        writeln!(file, "{}", &a1[10..]).unwrap();
+        writeln!(file, "not json").unwrap();
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({"type":"assistant","isSidechain":true,"message":{"id":"sub","usage":{"input_tokens":100,"output_tokens":50}}})
+        )
+        .unwrap();
+        // A repeated row with a later snapshot replaces the counters.
+        writeln!(
+            file,
+            "{}",
+            row("a", "2026-01-01T00:00:02Z", 1, 2, 9, "claude-a")
+        )
+        .unwrap();
+        follower.read_appended(file.path(), None).unwrap();
+        assert!(
+            follower.ready(false).is_empty(),
+            "the newest message may grow"
+        );
+        assert_eq!(follower.resume_offset(), start);
+        writeln!(
+            file,
+            "{}",
+            row("b", "2026-01-01T00:00:03Z", 4, 0, 5, "claude-a")
+        )
+        .unwrap();
+        follower.read_appended(file.path(), None).unwrap();
+        let ready = follower.ready(false);
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].message_id, "a");
+        assert_eq!(
+            (ready[0].usage.tokens_in, ready[0].usage.tokens_out),
+            (4, 9)
+        );
+        assert_eq!(ready[0].timestamp, "2026-01-01T00:00:02Z");
+        follower.recorded(1);
+        assert!(follower.resume_offset() > start);
+        let ended = follower.ready(true);
+        assert_eq!(ended.len(), 1);
+        assert_eq!(ended[0].message_id, "b");
+        follower.recorded(1);
+        assert!(!follower.has_pending());
+        assert_eq!(
+            follower.resume_offset(),
+            file.as_file().metadata().unwrap().len()
+        );
+
+        // A replaced (shorter) transcript is read again from the start.
+        std::fs::write(file.path(), format!("{}\n", row("c", "3", 1, 0, 1, "m"))).unwrap();
+        follower.read_appended(file.path(), None).unwrap();
+        assert_eq!(follower.ready(true)[0].message_id, "c");
+        // A missing transcript reads nothing.
+        let missing = file.path().with_extension("missing");
+        TranscriptFollower::new(0)
+            .read_appended(&missing, None)
+            .unwrap();
+    }
+
+    #[test]
+    fn hs2_ssmdq1_follower_prices_each_message_and_resumes_at_its_first_row() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        let priced = serde_json::json!({
+            "type": "assistant", "timestamp": "2026-01-01T00:00:01Z",
+            "message": {"id": "priced", "model": "claude-fable-5-1", "usage": {
+                "input_tokens": 10, "cache_read_input_tokens": 1000,
+                "cache_creation_input_tokens": 30,
+                "cache_creation": {"ephemeral_5m_input_tokens": 20, "ephemeral_1h_input_tokens": 10},
+                "output_tokens": 5
+            }}
+        });
+        writeln!(file, "{priced}").unwrap();
+        let prices = hotsheet_ticketing::pricing::default_prices();
+        let mut follower = TranscriptFollower::new(0);
+        follower.read_appended(file.path(), Some(&prices)).unwrap();
+        let resume = follower.resume_offset();
+        assert_eq!(resume, 0);
+        let ready = follower.ready(true);
+        assert_eq!(ready[0].usage.cost_usd, Some(0.00105));
+        assert!(ready[0].categories.is_some());
+        // A fresh follower from the persisted resume point sees the same message.
+        let mut resumed = TranscriptFollower::new(resume);
+        resumed.read_appended(file.path(), Some(&prices)).unwrap();
+        assert_eq!(resumed.ready(true), ready);
+    }
+
+    #[test]
+    fn hs2_ssmdq1_transcript_watch_wakes_on_appends_until_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let (sent, received) = std::sync::mpsc::channel();
+        let watch = watch_transcript(&path, move || {
+            let _ = sent.send(());
+        })
+        .unwrap();
+        received
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the first read runs at once");
+        std::fs::write(&path, "x\n").unwrap();
+        received
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("an append wakes the follower");
+        drop(watch);
+        assert!(watch_transcript(&dir.path().join("none/s.jsonl"), || {}).is_err());
+    }
 
     fn row(id: &str, at: &str, input: u64, cached: u64, output: u64, model: &str) -> String {
         serde_json::json!({
