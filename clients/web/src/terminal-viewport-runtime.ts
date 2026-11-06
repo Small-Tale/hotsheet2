@@ -800,6 +800,11 @@ function initializeTerminalViewport(
         terminal.resize(size.cols, size.rows);
         scheduleDashboardFill();
       } else {
+        // HS2-RF6YQW: an element with no layout size (hidden for a moment while its socket
+        // reconnects) is not a geometry. Fitting it proposed a degenerate grid (11×7); the reflow
+        // to it left xterm's viewport scrolled above the bottom, so later output stopped
+        // following. Keep the current grid; the ResizeObserver fits again once it is laid out.
+        if (element.clientWidth === 0 || element.clientHeight === 0) return;
         fit.fit();
         if (settledResize) {
           const contained = terminalDedicatedGridSize(terminal.cols, terminal.rows);

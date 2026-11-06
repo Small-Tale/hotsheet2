@@ -4420,6 +4420,10 @@ sees no position), and an older server ignores them. Measured on the profile's p
 reconnect after a dropped socket received 0 replay bytes and was live again in about 0.56 s on
 the slow profile, most of it the first 250 ms reconnect backoff; before, it re-sent the whole
 replay (1.7 to 4.5 s after the cap and compression, 20 s originally).
+A dedicated terminal never fits its grid to an element that has no layout size, for example
+for a moment during the reconnect. Fitting that zero-size element proposed an 11×7 grid, and the
+reflow left the emulator scrolled above the bottom, so output after the resume no longer
+followed (HS2-RF6YQW). It keeps its grid and fits again once the element is laid out.
 
 **Tail first.** A viewer on a non-loopback host (a phone or another computer reaching the
 server over the network) asks for `replay_tail_bytes=32768`. When the capped first replay is

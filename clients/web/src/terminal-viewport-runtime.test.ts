@@ -1944,6 +1944,31 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     };
   }
 
+  it('HS2-RF6YQW never fits a drawer terminal to an element with no layout size', () => {
+    const view = mountMovable();
+    allocated.proposed = { cols: 11, rows: 7 };
+    const fit = allocated.fits.at(-1)!.fit;
+    fit.mockImplementation(() => {
+      Object.assign(view.terminal, { cols: allocated.proposed.cols, rows: allocated.proposed.rows });
+    });
+    // Hidden for a moment while its socket reconnects: no layout size at all.
+    Object.assign(view.viewport, { clientWidth: 0, clientHeight: 0 });
+    const before = [view.terminal.cols, view.terminal.rows],
+      claimsBefore = view.claims().length;
+    view.flush();
+    expect(fit).not.toHaveBeenCalled();
+    expect([view.terminal.cols, view.terminal.rows]).toEqual(before);
+    expect(view.claims()).toHaveLength(claimsBefore);
+    // Laid out again: the next geometry pass fits it normally.
+    allocated.proposed = { cols: 50, rows: 60 };
+    Object.assign(view.viewport, { clientWidth: 390, clientHeight: 844 });
+    view.fire(TERMINAL_VIEWPORT_REPARENT_EVENT);
+    view.flush();
+    expect(fit).toHaveBeenCalled();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 50, rows: 59 });
+    view.dispose();
+  });
+
   it('keeps one 80x24 grid when a live tile moves into and out of phone magnification', () => {
     const view = mountMovable();
     view.flush();
