@@ -30,6 +30,19 @@ import { parseProviderAccount } from './server-response-parsers';
  */
 const live = process.env.HOTSHEET_LIVE_SERVER === '1';
 
+/** Resolve once a local process has exited; a stuck server is left to the OS after 15 s. */
+async function waitForExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)', () => {
   let home = '';
   let workspace = '';
@@ -48,6 +61,7 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
   afterAll(async () => {
     // Stop the detached server the onboarding path spawned (superviseServer records each
     // instance under $HOTSHEET_HOME/instances/<id>.json), then remove the temp trees.
+    const stopping: number[] = [];
     try {
       const dir = join(home, 'instances');
       for (const name of await readdir(dir).catch(() => [] as string[])) {
@@ -58,6 +72,7 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
         if (typeof info.pid === 'number') {
           try {
             process.kill(info.pid, 'SIGTERM');
+            stopping.push(info.pid);
           } catch {
             // Already gone — nothing to stop.
           }
@@ -66,8 +81,11 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     } finally {
       if (previousHome === undefined) delete process.env.HOTSHEET_HOME;
       else process.env.HOTSHEET_HOME = previousHome;
-      await rm(home, { recursive: true, force: true });
-      await rm(workspace, { recursive: true, force: true });
+      // HS2-4YEA4M: a terminating server still removes its instance record and flushes
+      // state, so removing the home at once raced it with ENOTEMPTY. Wait for each exit.
+      await Promise.all(stopping.map(async (pid) => waitForExit(pid)));
+      await rm(home, { recursive: true, force: true, maxRetries: 5 });
+      await rm(workspace, { recursive: true, force: true, maxRetries: 5 });
     }
   }, 120_000);
 
@@ -112,6 +130,18 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
       ),
       api = (project: string, path: string, init?: RequestInit) =>
         app.request(`/__hotsheet/project-api/${encodeURIComponent(project)}${path}`, init);
+    // HS2-4YEA4M: a github.com device-flow sign-in records its site beside the keychain entry.
+    // Since HS2-6H8ZY6 a managed `github-app-*` credential without one is refused with 409.
+    await writeFile(
+      join(home, 'keys.json'),
+      JSON.stringify({
+        'github-app-01live': {
+          provider: 'github-app-01live',
+          env: 'HOTSHEET_API_KEY_GITHUB_APP_01LIVE',
+          site: 'https://github.com',
+        },
+      }),
+    );
     // The bridge scopes the project's create to its checkout: record and link in one request.
     const created = await api(owner.id, '/provider-connections', {
       method: 'POST',
@@ -165,7 +195,11 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     expect(removed.status).toBe(200);
     expect(((await removed.json()) as SourceDetach).removed_connection).toBe(true);
     expect(await (await api(owner.id, '/provider-connections')).json()).toEqual([]);
-    expect(await (await api(owner.id, '/accounts')).json()).toEqual([]);
+    // The recorded sign-in stays listed as an unused account (HS2-16MYXN).
+    expect(parseProviderAccount.list(await (await api(owner.id, '/accounts')).json())).toEqual([
+      expect.objectContaining({ id: 'github-app-01live', host: 'github.com', sources: [], projects: [] }),
+    ]);
+    await writeFile(join(home, 'keys.json'), '{}');
   }, 120_000);
 
   it('reports the host of an unused Enterprise sign-in and seeds a reusing source (HS2-16MYXN)', async () => {

@@ -819,6 +819,14 @@ skipped, and the project carries `setupWarning`, shown as a dismissible **Projec
 skipped** warning banner with the reason and fix. Bootstrap and post-import setup still stop,
 because they would otherwise leave a project half set up.
 
+The open-time refresh runs in the background, so a user may delete the project folder
+while it is still writing. Setup creates a missing directory inside the project one level at
+a time from the existing project root and never recreates the root itself. A refresh that
+loses that race fails quietly instead of rebuilding the folder with `.codex/` or
+`opencode.json`, and the deleted project stays out of the remote project picker
+(HS2-4YEA4M). Machine-local targets outside the project, such as a client's user config,
+still create their parent directories.
+
 The stable local hosts (`npm run {prod,dev}:rebuild-lan`) are deliberately pinned until the
 user restarts them: the production host runs startup copies of its client bundle and
 binaries (`HOTSHEET_LOCAL_HOST_SNAPSHOT=1`) and the stable dev server sets

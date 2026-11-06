@@ -199,6 +199,7 @@ pub struct SetupPlan {
     pub report: RefreshReport,
     pub changes: Vec<PlannedChange>,
     pub tools: Vec<ToolSetupFindings>,
+    project: PathBuf,
     operations: Vec<PlannedOperation>,
 }
 
@@ -838,7 +839,7 @@ pub fn apply_selected_guidance_in(project: &Path) -> Result<(), SetupError> {
         .filter(is_detected)
         .collect::<Vec<_>>();
     write_selected_source_skills(&mut fs, project, &skill_plugins)?;
-    apply_operations(fs.final_operations(project))
+    apply_operations(project, fs.final_operations(project))
 }
 
 /// Install selected project skills for detected tools without touching instruction ownership.
@@ -849,7 +850,7 @@ pub fn apply_selected_skills_in(project: &Path) -> Result<(), SetupError> {
         .filter(is_detected)
         .collect::<Vec<_>>();
     write_selected_source_skills(&mut fs, project, &skill_plugins)?;
-    apply_operations(fs.final_operations(project))
+    apply_operations(project, fs.final_operations(project))
 }
 
 /// Select the instruction writer, preserving unmarked local prose before Rulesync owns it.
@@ -867,7 +868,7 @@ pub fn set_guidance_owner_in(project: &Path, owner: &str) -> Result<(), SetupErr
             + "\n";
     let mut fs = PlanFs::default();
     fs.write(&path, text.as_bytes());
-    apply_operations(fs.final_operations(project))
+    apply_operations(project, fs.final_operations(project))
 }
 
 /// Resolve the project's `enabled_plugins` shared setting (HS2-94) into the `enabled` set
@@ -1079,30 +1080,32 @@ pub fn plan_refresh_setup_in(
         report,
         changes,
         tools,
+        project: project_dir.to_path_buf(),
         operations,
     })
 }
 
 /// Apply exactly the operations produced by [`plan_refresh_setup_in`].
 pub fn apply_setup_plan(plan: SetupPlan) -> Result<RefreshReport, SetupError> {
-    apply_operations(plan.operations).map_err(|error| error.with_notices(&plan.report.set_up))?;
+    apply_operations(&plan.project, plan.operations)
+        .map_err(|error| error.with_notices(&plan.report.set_up))?;
     Ok(plan.report)
 }
 
-fn apply_operations(operations: Vec<PlannedOperation>) -> Result<(), SetupError> {
+fn apply_operations(project: &Path, operations: Vec<PlannedOperation>) -> Result<(), SetupError> {
     let shared_path = operations.iter().find_map(|operation| match operation {
         PlannedOperation::Write(path, _) if path.ends_with(SHARED_SETTINGS_PATH) => Some(path),
         _ => None,
     });
     let Some(shared_path) = shared_path else {
-        return apply_operations_unlocked(operations);
+        return apply_operations_unlocked(project, operations);
     };
-    let project = shared_path
+    let settings_project = shared_path
         .parent()
         .and_then(Path::parent)
         .expect("shared settings have a project root")
         .to_path_buf();
-    let settings = Settings::for_project(&project);
+    let settings = Settings::for_project(&settings_project);
     settings.with_scope_lock(Scope::Shared, || {
         let mut operations = operations;
         for operation in &mut operations {
@@ -1118,7 +1121,7 @@ fn apply_operations(operations: Vec<PlannedOperation>) -> Result<(), SetupError>
             let planned_policy = planned
                 .get(PUSH_POLICY_SETTING)
                 .ok_or_else(|| SetupError::InvalidPushPolicy(SHARED_SETTINGS_PATH.into()))?;
-            let mut current = shared_settings(&PlanFs::default(), &project)?;
+            let mut current = shared_settings(&PlanFs::default(), &settings_project)?;
             match current.get(PUSH_POLICY_SETTING) {
                 Some(value) if value != planned_policy => return Err(SetupError::StalePushPolicy),
                 Some(_) => {}
@@ -1130,16 +1133,19 @@ fn apply_operations(operations: Vec<PlannedOperation>) -> Result<(), SetupError>
                 + "\n")
                 .into_bytes();
         }
-        apply_operations_unlocked(operations)
+        apply_operations_unlocked(project, operations)
     })??;
     Ok(())
 }
 
-fn apply_operations_unlocked(operations: Vec<PlannedOperation>) -> Result<(), SetupError> {
+fn apply_operations_unlocked(
+    project: &Path,
+    operations: Vec<PlannedOperation>,
+) -> Result<(), SetupError> {
     for operation in operations {
         match operation {
             PlannedOperation::Write(path, contents) => {
-                write_file(&path, &String::from_utf8_lossy(&contents))?
+                write_file(project, &path, &String::from_utf8_lossy(&contents))?
             }
             PlannedOperation::MergeLocalMcp(path, edits) => {
                 crate::mcp_local_layer::apply_to_file(&path, &edits).map_err(|source| {
@@ -1149,13 +1155,13 @@ fn apply_operations_unlocked(operations: Vec<PlannedOperation>) -> Result<(), Se
                     }
                 })?;
             }
-            PlannedOperation::Remove(project, path) => {
+            PlannedOperation::Remove(root, path) => {
                 if path.is_file() {
                     std::fs::remove_file(&path).map_err(|source| SetupError::Io {
                         path: path.display().to_string(),
                         source,
                     })?;
-                    prune_empty_parent_dirs(&project, &path);
+                    prune_empty_parent_dirs(&root, &path);
                 }
             }
         }
@@ -1877,7 +1883,7 @@ fn setup_plugins(
     let result = setup_plugins_with_fs(&mut fs, store_path, project_dir, plugins, refresh_targets);
     // Explicit setup historically leaves earlier tools' successful writes in place if a
     // later tool fails. Refresh/diagnose use the pure plan, but retain this direct path.
-    apply_operations(fs.final_operations(project_dir))?;
+    apply_operations(project_dir, fs.final_operations(project_dir))?;
     result
 }
 
@@ -3585,12 +3591,40 @@ fn write_mcp_toml(
     Ok(())
 }
 
-fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
+/// Create `dir`, but never recreate a missing `project` root (HS2-4YEA4M). A background
+/// refresh that races the deletion of its project folder used to rebuild the folder with
+/// `.codex/` and `opencode.json`, so the deleted project reappeared in the picker. Below the
+/// project each level is created on its own from the existing root, so a deleted root makes
+/// the write fail instead. Machine-local targets outside the project keep `create_dir_all`.
+fn create_dirs_beneath(project: &Path, dir: &Path) -> std::io::Result<()> {
+    let Ok(relative) = dir.strip_prefix(project) else {
+        return std::fs::create_dir_all(dir);
+    };
+    if !project.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "project folder no longer exists",
+        ));
+    }
+    let mut current = project.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match std::fs::create_dir(&current) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && current.is_dir() => {
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+fn write_file(project: &Path, path: &Path, contents: &str) -> Result<(), SetupError> {
     if std::fs::read(path).is_ok_and(|existing| existing == contents.as_bytes()) {
         return Ok(());
     }
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|source| SetupError::Io {
+        create_dirs_beneath(project, parent).map_err(|source| SetupError::Io {
             path: parent.display().to_string(),
             source,
         })?;
@@ -3835,7 +3869,7 @@ mod tests {
                 Scope::Shared,
             )
             .unwrap();
-        apply_operations(operations).unwrap();
+        apply_operations(project.path(), operations).unwrap();
 
         let saved = shared_settings(&PlanFs::default(), project.path()).unwrap();
         assert_eq!(saved[PUSH_POLICY_SETTING], "push-per-ticket");
@@ -3860,7 +3894,7 @@ mod tests {
             )
             .unwrap();
         assert!(matches!(
-            apply_operations(operations),
+            apply_operations(project.path(), operations),
             Err(SetupError::StalePushPolicy)
         ));
         assert!(!guidance.exists());
@@ -6716,6 +6750,46 @@ args = []
     }
 
     #[test]
+    fn hs2_4yea4m_apply_never_recreates_a_deleted_project_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let mut fs = PlanFs::default();
+        fs.write(&project.join(".codex/config.toml"), b"[mcp_servers]\n");
+        fs.write(&project.join("opencode.json"), b"{}\n");
+        let operations = fs.final_operations(&project);
+        // The folder is deleted while the background refresh is still planning.
+        std::fs::remove_dir(&project).unwrap();
+        assert!(matches!(
+            apply_operations(&project, operations),
+            Err(SetupError::Io { .. })
+        ));
+        assert!(!project.exists());
+
+        // A live project still gets its nested directories, and a repeat is a no-op.
+        std::fs::create_dir(&project).unwrap();
+        for _ in 0..2 {
+            let mut fs = PlanFs::default();
+            fs.write(&project.join(".agents/nested/mcp_config.json"), b"{}\n");
+            apply_operations(&project, fs.final_operations(&project)).unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(project.join(".agents/nested/mcp_config.json")).unwrap(),
+            "{}\n"
+        );
+    }
+
+    #[test]
+    fn hs2_4yea4m_targets_outside_the_project_still_create_their_parents() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let outside = root.path().join("machine/config/settings.json");
+        write_file(&project, &outside, "{}").unwrap();
+        assert_eq!(std::fs::read_to_string(outside).unwrap(), "{}");
+    }
+
+    #[test]
     fn unchanged_managed_files_are_not_rewritten() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("managed.txt");
@@ -6723,7 +6797,7 @@ args = []
         let mut permissions = std::fs::metadata(&path).unwrap().permissions();
         permissions.set_readonly(true);
         std::fs::set_permissions(&path, permissions).unwrap();
-        write_file(&path, "same").unwrap();
+        write_file(dir.path(), &path, "same").unwrap();
     }
 
     #[test]
@@ -6738,12 +6812,12 @@ args = []
         ];
 
         // Empty -> populated, then repeatedly replace while a reader holds the old file.
-        write_file(&path, versions[0]).unwrap();
+        write_file(project.path(), &path, versions[0]).unwrap();
         for index in 0..12 {
             let old = versions[index % 2];
             let new = versions[(index + 1) % 2];
             let mut open_reader = std::fs::File::open(&path).unwrap();
-            write_file(&path, new).unwrap();
+            write_file(project.path(), &path, new).unwrap();
             let mut snapshot = String::new();
             open_reader.read_to_string(&mut snapshot).unwrap();
             assert_eq!(snapshot, old);
@@ -6764,7 +6838,7 @@ args = []
 
         let mut fs = PlanFs::default();
         ensure_local_git_exclude(&mut fs, &project, ".codex/config.toml").unwrap();
-        apply_operations(fs.final_operations(&project)).unwrap();
+        apply_operations(&project, fs.final_operations(&project)).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(git_dir.join("info/exclude")).unwrap(),
@@ -6810,12 +6884,12 @@ args = []
 
         let mut fs = PlanFs::default();
         ensure_local_git_exclude(&mut fs, &linked, "opencode.json").unwrap();
-        apply_operations(fs.final_operations(&linked)).unwrap();
+        apply_operations(&linked, fs.final_operations(&linked)).unwrap();
 
         assert_eq!(git(&linked, &["status", "--porcelain"]), "");
         let mut fs = PlanFs::default();
         remove_local_git_exclude(&mut fs, &linked, "opencode.json").unwrap();
-        apply_operations(fs.final_operations(&linked)).unwrap();
+        apply_operations(&linked, fs.final_operations(&linked)).unwrap();
         assert_eq!(
             git(&linked, &["status", "--porcelain"]),
             "?? opencode.json\n"
