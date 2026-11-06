@@ -105,15 +105,40 @@ fn transcript_for_session(path: &str, session_id: &str) -> Result<PathBuf, ApiEr
     Ok(path.to_path_buf())
 }
 
-fn current_claude_session(state: &AppState, terminal: &str, session_id: &str) -> bool {
-    state
+/// The `code` of the 409 for a turn report from a terminal with no reported AI session, as
+/// after a server restart: the hook re-sends its `SessionStart` report and retries
+/// (HS2-SSMDQ1). A different session keeps the plain conflict and is never adopted.
+pub(crate) const CLAUDE_SESSION_NOT_CONNECTED_CODE: &str = "claude_session_not_connected";
+
+/// Whether `session_id` is terminal `terminal`'s reported Claude session. With no report at
+/// all the conflict says so, so the hook can reconnect instead of losing every turn until
+/// its session restarts (HS2-SSMDQ1).
+fn check_claude_session(
+    state: &AppState,
+    terminal: &str,
+    session_id: &str,
+) -> Result<(), ApiError> {
+    match state
         .terminal_ai_connections
         .lock_or_recover()
         .get(terminal)
-        .is_some_and(|connection| {
-            connection.agent.as_deref() == Some("claude")
-                && connection.session_id.as_deref() == Some(session_id)
-        })
+    {
+        None => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Claude terminal session not connected",
+        )
+        .with_code(CLAUDE_SESSION_NOT_CONNECTED_CODE)),
+        Some(connection)
+            if connection.agent.as_deref() == Some("claude")
+                && connection.session_id.as_deref() == Some(session_id) =>
+        {
+            Ok(())
+        }
+        Some(_) => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "Claude terminal session changed",
+        )),
+    }
 }
 
 /// A hook report from one known Claude session. Unmatched and historical turns cannot
@@ -123,12 +148,7 @@ pub(crate) async fn report_claude_turn(
     Path(terminal): Path<String>,
     Json(body): Json<ClaudeTurnReq>,
 ) -> Result<StatusCode, ApiError> {
-    if !current_claude_session(&state, &terminal, &body.session_id) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "Claude terminal session changed",
-        ));
-    }
+    check_claude_session(&state, &terminal, &body.session_id)?;
     let transcript = transcript_for_session(&body.transcript_path, &body.session_id)?;
     match body.event {
         TurnEvent::Start => {

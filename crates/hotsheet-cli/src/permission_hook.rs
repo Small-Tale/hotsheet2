@@ -258,9 +258,33 @@ pub fn decision_from_server(reply: &Value) -> HookDecision {
     }
 }
 
+/// Whether a Claude turn report was refused only because the server knows no AI session for
+/// the terminal, as after a server restart (HS2-SSMDQ1). The hook then re-sends its
+/// `SessionStart` report and retries. A different session's plain conflict never matches.
+pub fn claude_turn_needs_reconnect(status: u16, body: &str) -> bool {
+    status == 409
+        && serde_json::from_str::<Value>(body)
+            .ok()
+            .and_then(|reply| reply.get("code").and_then(Value::as_str).map(str::to_owned))
+            .as_deref()
+            == Some("claude_session_not_connected")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_ssmdq1_only_an_unconnected_terminal_asks_the_hook_to_reconnect() {
+        let not_connected = r#"{"error":"x","code":"claude_session_not_connected"}"#;
+        assert!(claude_turn_needs_reconnect(409, not_connected));
+        assert!(!claude_turn_needs_reconnect(
+            409,
+            r#"{"error":"Claude terminal session changed"}"#
+        ));
+        assert!(!claude_turn_needs_reconnect(400, not_connected));
+        assert!(!claude_turn_needs_reconnect(409, "not json"));
+    }
 
     #[test]
     fn maps_question_tool_lifecycle_without_touching_other_pre_tool_events() {

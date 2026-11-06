@@ -861,17 +861,39 @@ fn report_claude_turn_hook(
         url.trim_end_matches('/'),
         urlencoding_component(terminal)
     );
-    ureq::post(&endpoint)
-        .set("X-Hotsheet-Secret", secret)
-        .set("Content-Type", "application/json")
-        .timeout(std::time::Duration::from_secs(5))
-        .send_string(
-            &serde_json::json!({
-                "event": event, "session_id": session_id, "transcript_path": transcript_path
-            })
-            .to_string(),
-        )?;
-    Ok(())
+    let body = serde_json::json!({
+        "event": event, "session_id": session_id, "transcript_path": transcript_path
+    })
+    .to_string();
+    let send = || {
+        ureq::post(&endpoint)
+            .set("X-Hotsheet-Secret", secret)
+            .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(5))
+            .send_string(&body)
+    };
+    match send() {
+        Ok(_) => Ok(()),
+        // A restarted server no longer knows this session (HS2-SSMDQ1): report it again
+        // exactly as SessionStart did, then retry this boundary once.
+        Err(ureq::Error::Status(status, response)) => {
+            let reply = response.into_string().unwrap_or_default();
+            if !hotsheet_cli::permission_hook::claude_turn_needs_reconnect(status, &reply) {
+                bail!("Claude turn report refused ({status})");
+            }
+            report_terminal_session(
+                url,
+                secret,
+                terminal,
+                &hotsheet_cli::permission_hook::SessionHookEvent::Connected,
+                Some("claude"),
+                Some(session_id),
+            )?;
+            send()?;
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// Set up and replace this process with a hook-capable interactive AI tool. Because the

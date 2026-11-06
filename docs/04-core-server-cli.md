@@ -394,7 +394,12 @@ Native Claude terminal hooks report prompt and turn-end boundaries to the authen
 currently connected Claude session, reads appended numeric transcript usage on turn
 end, and records the unique live ticket claim captured at prompt time (`docs/14` §14.5).
 Transient read or metrics-write errors can be retried by the same turn-end hook
-without counting the turn twice (HS2-F8578J).
+without counting the turn twice (HS2-F8578J). A terminal with no reported AI session (as
+after a server restart, when the broker kept the terminal) gets `409` with code
+`claude_session_not_connected`; the hook then re-sends its `SessionStart` connection report
+and retries once. A different session's report stays a plain `409` (HS2-SSMDQ1). A
+permission ask that names no session (Codex's hook) keeps the session the same agent's
+`SessionStart` reported, so its rollout watch keeps running.
 
 Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the

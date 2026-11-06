@@ -2619,6 +2619,17 @@ fn retained_permission_hook_uses_restarted_server_route() {
 
 /// Accept one HTTP request on `listener`, answer 204, and return its request line, secret, and body.
 fn capture_one_request(listener: std::net::TcpListener) -> (String, String, String) {
+    capture_one_request_replying(
+        listener,
+        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    )
+}
+
+/// [`capture_one_request`] answering with the raw HTTP `response` instead.
+fn capture_one_request_replying(
+    listener: std::net::TcpListener,
+    response: &str,
+) -> (String, String, String) {
     use std::io::{BufRead, BufReader, Read, Write};
     listener.set_nonblocking(true).unwrap();
     // HS2-T4TQK0: a parallel root gate can delay the client process past five seconds.
@@ -2657,11 +2668,7 @@ fn capture_one_request(listener: std::net::TcpListener) -> (String, String, Stri
     }
     let mut body = vec![0; length];
     reader.read_exact(&mut body).unwrap();
-    write!(
-        reader.get_mut(),
-        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-    )
-    .unwrap();
+    write!(reader.get_mut(), "{response}").unwrap();
     reader.get_mut().flush().unwrap();
     (
         request.trim_end().to_string(),
@@ -2902,6 +2909,67 @@ fn permission_hook_reports_claude_turn_boundaries_without_prompt_content() {
         );
         assert!(!requests[0].2.contains("private prompt text"));
     }
+}
+
+/// HS2-SSMDQ1: a restarted server answers a turn report with "not connected". The hook then
+/// re-sends its SessionStart connection report and retries the boundary once, so a Claude
+/// session that began before the restart keeps recording usage.
+#[test]
+fn hs2_ssmdq1_permission_hook_reconnects_a_session_the_server_forgot_and_retries() {
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let refused = r#"{"error":"Claude terminal session not connected","code":"claude_session_not_connected"}"#;
+        let mut requests = vec![capture_one_request_replying(
+            listener.try_clone().unwrap(),
+            &format!(
+                "HTTP/1.1 409 Conflict\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{refused}",
+                refused.len()
+            ),
+        )];
+        requests.extend((0..3).map(|_| capture_one_request(listener.try_clone().unwrap())));
+        requests
+    });
+    let input = serde_json::json!({
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "native-session",
+        "transcript_path": "/tmp/projects/fixture/native-session.jsonl",
+        "prompt": "private prompt text"
+    });
+    hook_cli()
+        .env("HOTSHEET_HOME", home.path())
+        .env_remove("HOTSHEET_PROJECT")
+        .env("HOTSHEET_TERMINAL_ID", "claude-8")
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .env_remove("CLAUDE_CODE_MESSAGING_SOCKET")
+        .env_remove("CLAUDE_CODE_MESSAGING_TOKEN")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(input.to_string())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    let requests = server.join().unwrap();
+    let lines: Vec<&str> = requests.iter().map(|request| request.0.as_str()).collect();
+    assert_eq!(
+        lines,
+        [
+            "POST /terminals/claude-8/claude-turn HTTP/1.1",
+            "POST /terminals/claude-8/ai-connection HTTP/1.1",
+            "POST /terminals/claude-8/claude-turn HTTP/1.1",
+            "DELETE /terminals/claude-8/halt HTTP/1.1",
+        ]
+    );
+    let connection: serde_json::Value = serde_json::from_str(&requests[1].2).unwrap();
+    assert_eq!(connection["agent"], "claude");
+    assert_eq!(connection["session_id"], "native-session");
+    assert_eq!(requests[0].2, requests[2].2, "the same boundary is retried");
+    assert!(
+        requests
+            .iter()
+            .all(|request| !request.2.contains("private prompt text"))
+    );
 }
 
 #[test]

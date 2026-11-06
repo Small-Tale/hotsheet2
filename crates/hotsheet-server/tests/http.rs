@@ -2891,6 +2891,96 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
     send("DELETE", "/terminals/claude-use", String::new()).await;
 }
 
+/// HS2-SSMDQ1: a restarted server knows no AI session for a terminal that survived in the
+/// broker. Its Claude turn reports then say "not connected" (so the hook reconnects and
+/// retries) rather than "changed"; a different session is still refused, and a Codex
+/// permission ask that names no session keeps the session SessionStart reported.
+#[tokio::test]
+async fn hs2_ssmdq1_turn_reports_after_a_restart_reconnect_and_permission_asks_keep_the_session() {
+    let (dir, state) = state();
+    let router = app(state);
+    let transcript_dir = dir.path().join("projects").join("fixture");
+    std::fs::create_dir_all(&transcript_dir).unwrap();
+    let path = transcript_dir
+        .join("restart-session.jsonl")
+        .to_string_lossy()
+        .to_string();
+    let send = |method: &'static str, path: String, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &path, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let turn = |session: &str| {
+        Some(
+            serde_json::json!({
+                "event": "start", "session_id": session, "transcript_path": path
+            })
+            .to_string(),
+        )
+    };
+    let endpoint = || "/terminals/survivor/claude-turn".to_owned();
+    send(
+        "POST",
+        "/terminals".into(),
+        Some(r#"{"command":"cat","id":"survivor"}"#.into()),
+    )
+    .await;
+    let refused = send("POST", endpoint(), turn("restart-session")).await;
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        body_json(refused).await["code"],
+        "claude_session_not_connected"
+    );
+    // The hook's reconnect: the same report SessionStart sends, then the retried boundary.
+    send(
+        "POST",
+        "/terminals/survivor/ai-connection".into(),
+        Some(r#"{"agent":"claude","session_id":"restart-session"}"#.into()),
+    )
+    .await;
+    assert_eq!(
+        send("POST", endpoint(), turn("restart-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let other = send("POST", endpoint(), turn("other-session")).await;
+    assert_eq!(other.status(), StatusCode::CONFLICT);
+    assert!(body_json(other).await.get("code").is_none());
+
+    // A permission ask naming no session (Codex's hook) keeps the same agent's session...
+    send(
+        "POST",
+        "/terminals/survivor/ai-connection".into(),
+        Some(r#"{"agent":"claude","source":"permission_request"}"#.into()),
+    )
+    .await;
+    let listed = body_json(send("GET", "/terminals/survivor".into(), None).await).await;
+    assert_eq!(listed["ai_connection"]["source"], "permission_request");
+    assert_eq!(
+        send("POST", endpoint(), turn("restart-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT,
+        "the session survives a permission ask that names none"
+    );
+    // ...but another agent's ask does not inherit it.
+    send(
+        "POST",
+        "/terminals/survivor/ai-connection".into(),
+        Some(r#"{"agent":"codex","source":"permission_request"}"#.into()),
+    )
+    .await;
+    let changed = send("POST", endpoint(), turn("restart-session")).await;
+    assert_eq!(changed.status(), StatusCode::CONFLICT);
+    assert!(body_json(changed).await.get("code").is_none());
+    send("DELETE", "/terminals/survivor".into(), None).await;
+}
+
 #[tokio::test]
 async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
     // HS2-EV1XK3: a session whose Hot Sheet SessionStart hook ran marks its terminal connected

@@ -476,7 +476,21 @@ pub(crate) async fn connect_terminal_ai(
         .agent
         .map(|agent| agent.trim().chars().take(64).collect::<String>())
         .filter(|agent| !agent.is_empty());
-    let session_id = body.session_id.filter(|id| !id.is_empty());
+    // Codex's permission hook names no session. Its ask is still the same agent's session, so
+    // it keeps the session (and with it the home, inbox, and rollout watch) its SessionStart
+    // reported; replacing it with none stopped that session's usage recording (HS2-SSMDQ1).
+    let session_id = body.session_id.filter(|id| !id.is_empty()).or_else(|| {
+        (body.source == TerminalHookSource::PermissionRequest)
+            .then(|| {
+                state
+                    .terminal_ai_connections
+                    .lock_or_recover()
+                    .get(&id)
+                    .filter(|previous| previous.agent == agent)
+                    .and_then(|previous| previous.session_id.clone())
+            })
+            .flatten()
+    });
     let checkout_id = match body.checkout_id {
         Some(id) => {
             let checkout = state
