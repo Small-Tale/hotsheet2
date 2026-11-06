@@ -9,6 +9,7 @@ import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-p
 import { exerciseIndexForRepo } from './gate-browser-exercise.mjs';
 import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engines.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
+import { platformCfgForRepo } from './platform-cfg.mjs';
 import { parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
 import { sandboxFailureNotice } from './sandbox-notice.mjs';
@@ -415,6 +416,7 @@ function prepareSmoke(repo, baseRef, versions, options) {
     floorOverBudget: false,
     checks: keyed,
     deferred,
+    platformCfg: platformCfgForRepo(repo, state.base, state.changes),
     key: hash({ context, tree: state.tree, checks: keyed.map((stage) => stage.key) }),
     cache: join(common, 'hotsheet-local-gate'),
     tools,
@@ -561,6 +563,8 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     profile,
     checks,
     browserCoverage: browserEvidence(repo, checks, budgeted.deferred),
+    // HS2-A7X8F5: Rust cfg branches this host never compiles; derived from the tree, not a key input.
+    platformCfg: platformCfgForRepo(repo, state.base, state.changes),
     key,
     cache: join(common, 'hotsheet-local-gate'),
     tools,
@@ -587,6 +591,11 @@ function recordedT2Selection(repo, base, full, versions, selection) {
     if (before.key === receipt.key) return { selection: candidate, before };
   }
   return undefined;
+}
+
+/** HS2-A7X8F5: a handoff quotes this so nobody reads a pass on this host as other-platform evidence. */
+function logPlatformCfg(prepared, log) {
+  if (prepared.platformCfg?.files.length) log(`Platform cfg code deferred to CI: ${prepared.platformCfg.summary}`);
 }
 
 export function runGate(options = {}) {
@@ -648,6 +657,7 @@ export function runGate(options = {}) {
   if (existing?.key === before.key && existing.tree === before.tree) {
     writeMarker();
     log(`Local gate already passed for tree ${before.tree}; reused exact receipt for budget ${budgetLabel}`);
+    logPlatformCfg(before, log);
     return 0;
   }
   clearMarker();
@@ -701,6 +711,7 @@ export function runGate(options = {}) {
       selected: before.checks.map((stage) => stage.command),
       deferred: before.deferred.map((stage) => stage.command),
       browserCoverage: before.browserCoverage,
+      platformCfg: before.platformCfg,
       results,
     }),
   );
@@ -720,6 +731,7 @@ export function runGate(options = {}) {
     if (before.browserCoverage.deferred.stages.length)
       log(`Browser engines deferred to CI: ${before.browserCoverage.deferred.summary}`);
   }
+  logPlatformCfg(before, log);
   return 0;
 }
 

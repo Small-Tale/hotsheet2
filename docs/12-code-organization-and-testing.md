@@ -1162,6 +1162,31 @@ Running the full suite with WebKit as its default engine would add a second set 
 1150 tests. It would cost about another four 20-minute shard jobs, before any WebKit-only
 failures are fixed. That proposal is measured separately before CI changes.
 
+**Platform `cfg` branches (HS2-A7X8F5).** The local gate compiles Rust only for its host. On
+macOS a `#[cfg(target_os = "linux")]` or `#[cfg(windows)]` branch is never type-checked, and code
+that only a macOS branch uses can become `dead_code` on Linux (CI run 42115994261). A local
+`cargo check --target x86_64-unknown-linux-gnu` cannot replace CI here. The target is installed,
+but the `ring`, `aws-lc-sys` and `libwebp-sys2` build scripts need a Linux C sysroot. Apple clang
+with `CC_x86_64_unknown_linux_gnu=clang` stops on missing `assert.h`, `stdlib.h` and
+`linux/random.h`. The gate therefore reports such changes instead of building them.
+
+`scripts/platform-cfg.mjs` scans the diff against the base. A changed Rust file is reported when a
+changed (or removed) line lies inside an item gated by a platform predicate:
+
+- the predicates are `target_os`, `target_family`, `target_env`, `target_vendor`, `windows` and
+  `unix`, in `#[cfg]`, `#[cfg_attr]` or `cfg!`;
+- an inner `#![cfg]` gates the whole file;
+- so does a parent's `#[cfg(..)] mod name;`.
+
+Gating to the host also counts, because the other platforms then compile without that code.
+`scripts/check.sh --plan` and each receipt carry `platformCfg`. A passing or reused gate prints
+`Platform cfg code deferred to CI: …`, naming each file and its first changed line. A handoff
+quotes that line, and the Linux `cargo lint` of the covering `main` CI run (or the Platforms
+workflow for Windows and macOS) is the evidence. The scan reads text only; it errs toward
+reporting. Measured on 2026-11-06 against `466793655` (the escaped change), `43afaf86f` and
+`3f1384fc5`, it took 55-65 ms per gate preparation, with one batched `git cat-file` and one
+`git diff`. It flagged both platform changes and nothing in the third commit.
+
 ### 12.7.7 AI-tool integration testing (the HS1 Codex pain, designed out)
 
 Adding an AI tool to HS1 (Codex, when it started Claude-only) was a heavy **manual**

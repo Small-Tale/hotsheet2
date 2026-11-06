@@ -55,6 +55,16 @@ quotes these lines rather than describing focused WebKit coverage as a full engi
 The matrix and its measurements are in
 [12-code-organization-and-testing.md](12-code-organization-and-testing.md#browser-engine-matrix-hs2-hw6ved).
 
+## Platform cfg code in gate evidence (HS2-A7X8F5)
+
+The gate compiles Rust only for its host, and a local cross `cargo check` cannot build the C
+dependencies' build scripts. `--plan` output and each receipt therefore carry `platformCfg`:
+the changed Rust files whose changed lines lie in, or are, platform `cfg`-gated code. A passing
+or reused gate prints `Platform cfg code deferred to CI: …`. A handoff quotes that line, and the
+covering `main` CI run (Linux) or the Platforms workflow (Windows, macOS) is the evidence for
+those branches. The scan and its measured 55-65 ms cost are described in
+[12-code-organization-and-testing.md](12-code-organization-and-testing.md).
+
 ## Browser specs that exercise a changed module (HS2-N7EY18, HS2-R1D0S5)
 
 Browser selection used to pick specs from path keywords (`terminal`, `timeline`,

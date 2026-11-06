@@ -17,6 +17,13 @@ import {
 } from './local-gate.mjs';
 import { demoEntryIds, exerciseIndex, exerciseIndexForRepo, ownHooks, routeHooks } from './gate-browser-exercise.mjs';
 import { profileFromTags } from './gate-ticket-profile.mjs';
+import {
+  changedLines,
+  parentModuleFiles,
+  platformCfgChanges,
+  platformCfgEvidence,
+  platformCfgRanges,
+} from './platform-cfg.mjs';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
@@ -28,7 +35,8 @@ test('HS2-RS0FFT tool versions exclude changing login-shell session messages', (
 function fixture(t) {
   const repo = mkdtempSync(join(tmpdir(), 'hs2-rs0fft-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const git = (...args) => execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
+  const git = (...args) =>
+    execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
   const put = (path, body) => {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), body);
@@ -1034,4 +1042,116 @@ test('HS2-9G0M3V the smoke profile refuses selection flags, browser suites and m
     f.put('scripts/gate-smoke.json', JSON.stringify(config));
     assert.throws(() => smokeStages(f.repo), JSON.stringify(config));
   }
+});
+
+test('HS2-A7X8F5 platform cfg ranges cover gated items, whole files and cfg! lines only', () => {
+  const text = [
+    '#[cfg(target_os = "linux")]', // 1
+    'fn linux_only() {', // 2
+    '    body();', // 3
+    '}', // 4
+    'fn shared() {}', // 5
+    '#[cfg(test)]', // 6
+    'mod tests;', // 7
+    '#[cfg(not(any(windows, target_os = "macos")))]', // 8
+    'mod other;', // 9
+    'fn inline() { if cfg!(unix) { run(); } }', // 10
+    '#[cfg_attr(windows, allow(dead_code))]', // 11
+    'struct Kept {', // 12
+    '    field: u8,', // 13
+    '}', // 14
+  ].join('\n');
+  assert.deepEqual(platformCfgRanges(text), [
+    { start: 1, end: 4, predicate: 'target_os = "linux"' },
+    { start: 8, end: 9, predicate: 'not(any(windows, target_os = "macos"))' },
+    { start: 10, end: 10, predicate: 'unix' },
+    { start: 11, end: 14, predicate: 'windows, allow(dead_code)' },
+  ]);
+  assert.deepEqual(platformCfgRanges('#![cfg(target_os = "macos")]\nuse a;\nfn b() {}\n'), [
+    { start: 1, end: 4, predicate: 'target_os = "macos"' },
+  ]);
+  assert.deepEqual(platformCfgRanges('#[cfg(feature = "x")]\nfn f() {}\n'), []);
+});
+
+test('HS2-A7X8F5 changed lines report removals, additions and cfg-declared modules', () => {
+  assert.deepEqual(changedLines('@@ -3,2 +3 @@\n-a\n-b\n+c\n@@ -10,0 +11,2 @@\n+d\n+e\n'), {
+    removed: [3, 4],
+    added: [3, 11, 12],
+  });
+  const files = {
+    'old\0src/lib.rs': 'fn a() {}\n#[cfg(target_os = "linux")]\nfn gone() {}\n',
+    'new\0src/lib.rs': 'fn a() { changed(); }\n#[cfg(windows)]\nmod win;\n',
+    'new\0src/win.rs': 'pub fn w() {}\n',
+    'old\0src/win.rs': null,
+    'new\0src/plain.rs': 'fn p() {}\n',
+    'old\0src/plain.rs': 'fn q() {}\n',
+  };
+  const read = (side, path) => files[`${side}\0${path}`] ?? null;
+  const diffs = {
+    // Line 1 is shared code; the removed line 3 was Linux-gated.
+    'src/lib.rs': '@@ -1 +1 @@\n-x\n+y\n@@ -3 +2,2 @@\n-z\n+w\n+v\n',
+    'src/win.rs': '@@ -0,0 +1 @@\n+pub fn w() {}\n',
+    'src/plain.rs': '@@ -1 +1 @@\n-q\n+p\n',
+  };
+  const changes = ['src/lib.rs', 'src/win.rs', 'src/plain.rs', 'README.md'];
+  assert.deepEqual(platformCfgChanges({ changes, read, diff: (path) => diffs[path] ?? '' }), [
+    { path: 'src/lib.rs', lines: [2, 3], predicates: ['target_os = "linux"', 'windows'] },
+    { path: 'src/win.rs', lines: [1], predicates: ['windows'] },
+  ]);
+  assert.deepEqual(parentModuleFiles('a/b/mod.rs'), {
+    name: 'b',
+    parents: ['a/mod.rs', 'a/lib.rs', 'a/main.rs', 'a.rs'],
+  });
+  const none = platformCfgEvidence([], 'darwin');
+  assert.equal(none.summary, 'none');
+  const some = platformCfgEvidence([{ path: 'src/win.rs', lines: [1], predicates: ['windows'] }], 'darwin');
+  assert.match(some.summary, /^1 Rust file change platform cfg code \(src\/win\.rs:1\); only the macOS branches/);
+});
+
+test('HS2-A7X8F5 the gate plan, receipt and output name platform cfg code deferred to CI', (t) => {
+  const f = fixture(t);
+  f.put('crates/demo/src/lib.rs', 'pub fn shared() {}\n');
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'rust base');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put('crates/demo/src/lib.rs', 'pub fn shared() {}\n#[cfg(target_os = "linux")]\npub fn linux() {}\n');
+  f.put('crates/demo/src/new_mac.rs', '#![cfg(target_os = "macos")]\npub fn mac() {}\n');
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'platform code');
+  const p = prepare(f.repo, undefined, false, f.options.versions);
+  assert.deepEqual(
+    p.platformCfg.files.map((file) => [file.path, file.lines]),
+    [
+      ['crates/demo/src/lib.rs', [2, 3]],
+      ['crates/demo/src/new_mac.rs', [1, 2]],
+    ],
+  );
+  // An untracked new file counts every line as changed.
+  f.put('crates/demo/src/untracked_win.rs', '#![cfg(windows)]\npub fn w() {}\n');
+  assert.deepEqual(prepare(f.repo, undefined, false, f.options.versions).platformCfg.files.at(-1), {
+    path: 'crates/demo/src/untracked_win.rs',
+    lines: [1, 2],
+    predicates: ['windows'],
+  });
+  rmSync(join(f.repo, 'crates/demo/src/untracked_win.rs'));
+  const lines = [];
+  const options = { ...f.options, log: (line) => lines.push(line), runner: () => ({ status: 0 }) };
+  assert.equal(runGate(options), 0);
+  assert.ok(
+    lines.some((line) => line.startsWith('Platform cfg code deferred to CI: 2 Rust files')),
+    lines.join('\n'),
+  );
+  const receipt = JSON.parse(readFileSync(join(p.cache, `${p.key}.json`), 'utf8'));
+  assert.equal(receipt.platformCfg.files.length, 2);
+  // A reused receipt still names what this host did not compile.
+  lines.length = 0;
+  assert.equal(runGate(options), 0);
+  assert.ok(lines.some((line) => line.startsWith('Local gate already passed')));
+  assert.ok(lines.some((line) => line.startsWith('Platform cfg code deferred to CI')));
+  // Shared-only Rust changes report nothing.
+  f.put('crates/demo/src/lib.rs', 'pub fn shared() { let _ = 1; }\n#[cfg(target_os = "linux")]\npub fn linux() {}\n');
+  f.git('commit', '--quiet', '-am', 'shared edit');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD~1');
+  const shared = prepare(f.repo, undefined, false, f.options.versions);
+  assert.deepEqual(shared.platformCfg.files, []);
 });
