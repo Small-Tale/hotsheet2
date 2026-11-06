@@ -186,11 +186,20 @@ export function createLiveStateStore() {
     return [...states.value.values()].filter((state) => state.checkouts.includes(projectId));
   }
 
+  /**
+   * The stores linked to any of these projects, each once. All-projects glance views pass the open
+   * project tabs, so a store the server still hosts for a closed project never shows (HS2-JGW031).
+   */
+  function forProjects(projectIds: Iterable<string>): LiveStoreState[] {
+    const open = new Set(projectIds);
+    return [...states.value.values()].filter((state) => state.checkouts.some((id) => open.has(id)));
+  }
+
   function reset() {
     states.value = new Map();
   }
 
-  return { states, apply, applyEvents, resync, remove, forProject, reset };
+  return { states, apply, applyEvents, resync, remove, forProject, forProjects, reset };
 }
 
 export type LiveStateStore = ReturnType<typeof createLiveStateStore>;

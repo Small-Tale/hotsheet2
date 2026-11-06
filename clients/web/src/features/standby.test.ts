@@ -11,19 +11,16 @@ const view = (enabled: boolean, idle: number, configured: Partial<StandbySetting
   effective: { enabled, idle_minutes: idle },
 });
 
-function harness(options: { api?: StandbyApi; touch?: boolean; entry?: 'project' | 'terminals' } = {}) {
+function harness(options: { api?: StandbyApi; touch?: boolean } = {}) {
   let clock = 1_000_000;
   const intervals = new Map<number, () => void>();
   let nextInterval = 0;
   const released = vi.fn(() => Promise.resolve());
   const request = vi.fn(() => Promise.resolve({ release: released }));
   const controller = createStandbyController({
+    openProjectIds: () => [],
     liveStates: createLiveStateStore(),
     api: () => options.api,
-    entryPoint: () =>
-      options.entry === 'terminals'
-        ? { mode: 'terminals' }
-        : { mode: 'project', project: { id: 'demo-ab12', name: 'Hot Sheet 2' } },
     // Fake timers drive the idle tests through the real clock.
     now: () => (vi.isFakeTimers() ? Date.now() : clock),
     touchDevice: () => options.touch ?? false,
@@ -54,10 +51,10 @@ afterEach(() => {
 });
 
 describe('standby controller (HS2-EQVZTZ)', () => {
-  it('forced entry scopes by entry point, ticks only a local display timer, and exits once', () => {
+  it('forced entry always shows all projects (HS2-JGW031), ticks only a local display timer, and exits once', () => {
     const { controller, intervals } = harness();
     controller.enter();
-    expect(controller.scope.value).toEqual({ kind: 'project', projectId: 'demo-ab12', name: 'Hot Sheet 2' });
+    expect(controller.scope.value).toEqual({ kind: 'all' });
     expect(intervals.size).toBe(1);
     // A repeated entry is ignored.
     controller.enter();
@@ -66,9 +63,6 @@ describe('standby controller (HS2-EQVZTZ)', () => {
     expect(controller.scope.value).toBeUndefined();
     expect(intervals.size).toBe(0);
     controller.exit();
-    const all = harness({ entry: 'terminals' });
-    all.controller.enter();
-    expect(all.controller.scope.value).toEqual({ kind: 'all' });
   });
 
   it('enters after the configured idle threshold and not while disabled', async () => {
@@ -82,7 +76,7 @@ describe('standby controller (HS2-EQVZTZ)', () => {
     await controller.refreshSettings();
     // Without `wire()` the idle timer has not started; settings alone re-arm it from construction.
     vi.advanceTimersByTime(5 * 60_000);
-    expect(controller.scope.value).toEqual({ kind: 'project', projectId: 'demo-ab12', name: 'Hot Sheet 2' });
+    expect(controller.scope.value).toEqual({ kind: 'all' });
     controller.exit();
     settings = view(false, 5, { enabled: false });
     await controller.refreshSettings();

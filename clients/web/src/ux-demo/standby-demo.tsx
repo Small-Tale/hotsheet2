@@ -7,7 +7,7 @@ import { createScope } from 'kerfjs/scope';
 import type { LiveStoreState, LiveWord } from '../api';
 import { StandbyScreen } from '../components/standby-screen';
 import { StandbySettings } from '../components/standby-settings';
-import { formatStandbyClock, standbyFreshnessLabel, standbyModel, type StandbyScope } from '../standby';
+import { formatStandbyClock, standbyFreshnessLabel, standbyModel } from '../standby';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
@@ -16,13 +16,12 @@ import { syncSettingsControls } from './settings-controls';
 const NOW = new Date(2026, 10, 6, 2, 47, 12).getTime();
 const MINUTE = 60_000;
 
-type Scenario = 'all-clear' | 'attention' | 'project' | 'connection-lost' | 'empty';
+type Scenario = 'all-clear' | 'attention' | 'connection-lost' | 'empty';
 type Orientation = 'landscape' | 'portrait';
 
 const SCENARIO_CHOICES: SelectChoice[] = [
   { value: 'all-clear', label: 'All Clear (m4)' },
   { value: 'attention', label: 'A Project Stalled (m5)' },
-  { value: 'project', label: 'One Project (m6)' },
   { value: 'connection-lost', label: 'Connection Lost' },
   { value: 'empty', label: 'No Live State Yet' },
 ];
@@ -101,8 +100,7 @@ function store(
   };
 }
 
-function fixtures(scenario: Scenario): { states: LiveStoreState[]; scope: StandbyScope } {
-  const all: StandbyScope = { kind: 'all' };
+function fixtures(scenario: Scenario): LiveStoreState[] {
   const hotSheet = store('hs2', 'Hot Sheet 2', 'active', { slug: 'HS2-R76MMW', workers: 2 });
   const site = (word: LiveWord) => store('stw', 'Small Tale Website', word, { slug: 'STW-4K2P', progressMinutes: 12 });
   // All clear means no problem anywhere: Waiting on you is a problem and brightens (§34.5).
@@ -111,16 +109,11 @@ function fixtures(scenario: Scenario): { states: LiveStoreState[]; scope: Standb
   switch (scenario) {
     case 'all-clear':
     case 'connection-lost':
-      return { states: [hotSheet, site('active'), review, kerf], scope: all };
+      return [hotSheet, site('active'), review, kerf];
     case 'attention':
-      return { states: [hotSheet, site('stalled'), review, kerf], scope: all };
-    case 'project':
-      return {
-        states: [store('hs2', 'Hot Sheet 2', 'active', { slug: 'HS2-R76MMW', workers: 2, waiting: 2 })],
-        scope: { kind: 'project', projectId: 'hs2-checkout', name: 'Hot Sheet 2' },
-      };
+      return [hotSheet, site('stalled'), review, kerf];
     case 'empty':
-      return { states: [], scope: all };
+      return [];
     default:
       return scenario satisfies never;
   }
@@ -140,14 +133,14 @@ export function resetStandbyDemo(root?: ParentNode): void {
 }
 
 function standbyFrame(scenario: Scenario, orientation: Orientation) {
-  const { states, scope } = fixtures(scenario);
+  const states = fixtures(scenario);
   const live = scenario !== 'connection-lost';
   return (
     <div class="demo-standby-frame" data-orientation={orientation}>
       <StandbyScreen
         presentation="inline"
         clock={formatStandbyClock(NOW, 'en-US')}
-        model={standbyModel(states, scope, NOW)}
+        model={standbyModel(states, NOW)}
         freshness={{
           live,
           label: standbyFreshnessLabel({ live, updatedAtMs: NOW - (live ? 0 : 6 * MINUTE) }, 'en-US'),
@@ -171,8 +164,8 @@ export function StandbyScreenDemo() {
       <CatalogExample label="A Project Stalled" note="Only the problem brightens: an amber callout and its row (m5).">
         {standbyFrame('attention', 'landscape')}
       </CatalogExample>
-      <CatalogExample label="Phone, One Project" note="Entered from a project tab, so it shows that project (m6).">
-        {standbyFrame('project', 'portrait')}
+      <CatalogExample label="Phone" note="Portrait stacks the gauge over the count; it still shows every open project.">
+        {standbyFrame('all-clear', 'portrait')}
       </CatalogExample>
     </CatalogExampleStack>
   );

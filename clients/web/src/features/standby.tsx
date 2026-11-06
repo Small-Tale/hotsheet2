@@ -6,11 +6,9 @@ import type { LiveStateStore } from '../live-state';
 import {
   createStandbyIdleTimer,
   formatStandbyClock,
-  type StandbyEntryPoint,
   standbyFreshnessLabel,
   standbyModel,
   type StandbyScope,
-  standbyScopeFor,
   type StandbySettingsView,
 } from '../standby';
 
@@ -27,10 +25,10 @@ interface WakeLockLike {
 
 export interface StandbyControllerDependencies {
   liveStates: LiveStateStore;
+  /** The open project tabs; standby shows only their stores (HS2-JGW031). */
+  openProjectIds: () => readonly string[];
   /** The API of the server this client talks to, once a project is open. */
   api: () => StandbyApi | undefined;
-  /** Where standby is being entered from; it picks the scope. */
-  entryPoint: () => StandbyEntryPoint;
   now?: () => number;
   /** The clock and ages re-render on this local display timer; it never issues a request. */
   tickMs?: number;
@@ -138,7 +136,8 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     const focused = page ? page.activeElement : null;
     returnFocus = typeof HTMLElement !== 'undefined' && focused instanceof HTMLElement ? focused : undefined;
     nowMs.value = now();
-    scope.value = standbyScopeFor(dependencies.entryPoint());
+    // Always every project, whichever tab or page standby was entered from (HS2-JGW031).
+    scope.value = { kind: 'all' };
     ticker = startInterval(() => {
       nowMs.value = now();
     }, tickMs);
@@ -174,12 +173,10 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     streams.value = next;
   }
 
-  /** Live unless a stream in scope has been down past the reconnect grace (judged at `at`). */
-  function live(current: StandbyScope, at: number): boolean {
-    const map = streams.value,
-      down = (since: number | null | undefined) => typeof since === 'number' && at - since >= streamGraceMs;
-    if (current.kind === 'project') return !down(map.get(current.projectId));
-    return ![...map.values()].some(down);
+  /** Live unless any project's stream has been down past the reconnect grace (judged at `at`). */
+  function live(at: number): boolean {
+    const down = (since: number | null | undefined) => typeof since === 'number' && at - since >= streamGraceMs;
+    return ![...streams.value.values()].some(down);
   }
 
   async function refreshSettings(keepMessage = false) {
@@ -231,11 +228,11 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
       const current = scope.value;
       if (!current) return <></>;
       const at = nowMs.value,
-        isLive = live(current, at);
+        isLive = live(at);
       return (
         <StandbyScreen
           clock={formatStandbyClock(at)}
-          model={standbyModel(dependencies.liveStates.states.value.values(), current, at)}
+          model={standbyModel(dependencies.liveStates.forProjects(dependencies.openProjectIds()), at)}
           freshness={{ live: isLive, label: standbyFreshnessLabel({ live: isLive, updatedAtMs: updatedAtMs.value }) }}
           touch={touchDevice()}
         />

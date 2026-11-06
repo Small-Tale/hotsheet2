@@ -83,8 +83,11 @@ async function openStandbyProject(page: Page, settings: Host['settings'] = { ena
     liveState: () => ({
       epoch_ms: 1,
       stores: [
+        // Two stores linked to the open demo tab, and one the server still hosts for a project whose
+        // tab is closed: standby must never show the closed one (HS2-JGW031).
         store('hs2', 'Hot Sheet 2', 'demo-checkout', 'active', host.now),
-        store('stw', 'Small Tale Website', 'other-checkout', 'active', host.now),
+        store('stw', 'Small Tale Website', 'demo-checkout', 'active', host.now),
+        store('kerf', 'Kerf', 'closed-checkout', 'active', host.now),
       ],
     }),
     standbySettings: {
@@ -129,7 +132,9 @@ async function expectFits(page: Page) {
 }
 
 test.describe('standby (HS2-EQVZTZ)', () => {
-  test('the moon forces standby scoped to the project tab, and a click or a key exits', async ({ page }) => {
+  test('the moon forces standby over every open project, even from a project tab, and a click or a key exits (HS2-JGW031)', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openStandbyProject(page);
     const moon = page.getByRole('button', { name: 'Enter Standby' });
@@ -165,12 +170,13 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     const screen = standby(page);
     await expect(screen).toBeVisible();
     await expect(screen).toHaveAttribute('aria-label', 'Standby');
-    await expect(screen.locator('[data-role="standby-scope"]')).toHaveText('demo');
-    // Only this project's store: one gauge reading, the count, and its row.
-    await expect(screen.getByRole('img', { name: /^Token rate: 1\.6k tokens\/min/ })).toBeVisible();
-    await expect(screen.getByRole('img', { name: 'Tickets updated: 2' })).toBeVisible();
-    await expect(screen.locator('[data-role="standby-row"]')).toHaveCount(1);
-    await expect(screen.locator('[data-role="standby-row"]')).toContainText('Active · 2 agents');
+    // Entered from a project tab, it still shows every open project, and nothing from closed ones.
+    await expect(screen.locator('[data-role="standby-scope"]')).toHaveText('All projects');
+    await expect(screen.getByRole('img', { name: /^Token rate: 3\.2k tokens\/min/ })).toBeVisible();
+    await expect(screen.getByRole('img', { name: 'Tickets updated: 4' })).toBeVisible();
+    await expect(screen.locator('[data-role="standby-row"]')).toHaveCount(2);
+    await expect(screen.locator('[data-role="standby-row"]').first()).toContainText('Hot Sheet 2');
+    await expect(screen).not.toContainText('Kerf');
     await expect(screen.locator('[data-role="standby-alert"]')).toHaveCount(0);
     // Solid black over the whole viewport, above the app.
     const box = await screen.boundingBox();
@@ -178,13 +184,13 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     expect(await screen.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgb(0, 0, 0)');
     expect(await screen.evaluate((node) => node.matches(':popover-open'))).toBe(true);
     await expectFits(page);
-    await capture(page, 'project-wide');
-    // Wide to medium, narrow, phone portrait (m6), and back: the layout follows the screen.
+    await capture(page, 'open-projects-wide');
+    // Wide to medium, narrow, phone portrait, and back: the layout follows the screen.
     for (const [width, height, name] of [
-      [1024, 768, 'project-medium'],
-      [700, 900, 'project-narrow'],
-      [390, 844, 'project-phone'],
-      [1440, 900, 'project-wide-again'],
+      [1024, 768, 'open-projects-medium'],
+      [700, 900, 'open-projects-narrow'],
+      [390, 844, 'open-projects-phone'],
+      [1440, 900, 'open-projects-wide-again'],
     ] as const) {
       await page.setViewportSize({ width, height });
       await expect(screen).toHaveJSProperty('offsetWidth', width);
@@ -225,7 +231,7 @@ test.describe('standby (HS2-EQVZTZ)', () => {
 
     // A pushed live-state change brightens only the problem: one amber callout and its row.
     await expect.poll(() => host.sockets.length).toBeGreaterThan(0);
-    const stalled = store('stw', 'Small Tale Website', 'other-checkout', 'stalled', host.now, 2);
+    const stalled = store('stw', 'Small Tale Website', 'demo-checkout', 'stalled', host.now, 2);
     for (const socket of host.sockets)
       socket.send(JSON.stringify({ cursor: 1, store: 'stw', kind: 'live_state', id: 'stw', slug: '', live: stalled }));
     const alert = screen.locator('[data-role="standby-alert"]');

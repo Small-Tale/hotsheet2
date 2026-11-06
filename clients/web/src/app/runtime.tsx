@@ -4055,18 +4055,10 @@ export async function startHotSheetWebClient() {
   // machine-wide on the server the active project talks to.
   const standby = createStandbyController({
     liveStates,
+    openProjectIds: () => projects.value.map((item) => item.id),
     api: () => {
       const current = project();
       return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
-    },
-    entryPoint: () => {
-      const current = project();
-      return {
-        mode: shellMode.peek(),
-        project: current && { id: current.id, name: current.name },
-        statsProjectId: statsProjectId.peek(),
-        projectName: (id) => projects.peek().find((item) => item.id === id)?.name,
-      };
     },
   });
   let standbySettingsServer: string | undefined;

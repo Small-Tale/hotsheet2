@@ -51,6 +51,7 @@ function setup(mode: ProjectTabBarMode = 'stats') {
   return {
     controller,
     liveStates,
+    projects,
     shellMode,
     statsProjectId,
     analyticsByProject,
@@ -111,13 +112,19 @@ describe('HS2-ERTNJ7 stats glance controller', () => {
     for (const state of glanceScenario()) test.liveStates.apply(state);
     const all = test.controller.rightNow();
     expect(all.scope).toEqual({ kind: 'all' });
-    expect(all.stores).toBe(4);
+    // All projects is the open tabs only: the Kerf store the server still hosts never shows (HS2-JGW031).
+    expect(all.stores).toBe(3);
+    expect(all.rows.find((row) => row.name === 'Kerf')).toBeUndefined();
     expect(all.rows.find((row) => row.state === 'may_be_stuck')?.action).toEqual({
       kind: 'open-terminal',
       terminalKey: 'website-c3d4:t-halted',
     });
-    // Kerf is not an open project: no action to route.
-    expect(all.rows.find((row) => row.name === 'Kerf')?.action).toBeUndefined();
+    // Closing a tab drops its store from All projects, and reopening restores it.
+    const open = test.projects.value;
+    test.projects.value = open.filter((item) => item.id !== 'review-e5f6');
+    expect(test.controller.rightNow().rows.map((row) => row.name)).not.toContain('UX Review');
+    test.projects.value = open;
+    expect(test.controller.rightNow().stores).toBe(3);
     test.statsProjectId.value = 'hotsheet2-a1b2';
     const scoped = test.controller.rightNow();
     expect(scoped.scope).toEqual({ kind: 'project', name: 'Hot Sheet 2' });

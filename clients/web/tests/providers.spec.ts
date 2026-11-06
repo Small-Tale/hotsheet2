@@ -24663,19 +24663,25 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
 }) => {
   test.setTimeout(120_000);
   await mockProject(page);
-  // The live state the server pushes (HS2-JTTQMY): the mock's four projects, two of them in this
-  // open project so their unstick actions route to it.
-  const states = glanceScenario(Date.now()).map((state) =>
-    state.state === 'may_be_stuck' || state.state === 'waiting_on_you'
-      ? {
-          ...state,
-          checkouts: [project.id],
-          waiting: state.waiting.count
-            ? { ...state.waiting, tickets: state.waiting.tickets.map((ticket) => ({ ...ticket, slug: row.slug })) }
-            : state.waiting,
-        }
-      : state,
-  );
+  // The live state the server pushes (HS2-JTTQMY): four stores linked to this open project, so
+  // they count as All projects and their unstick actions route to it, plus one store of a closed
+  // project that All projects must never show (HS2-JGW031).
+  const scenario = glanceScenario(Date.now());
+  const closed = { ...scenario[0], store: 'store-closed', name: 'Closed Project', checkouts: ['closed-checkout'] };
+  const states = [
+    ...scenario.map((state) =>
+      state.state === 'may_be_stuck' || state.state === 'waiting_on_you'
+        ? {
+            ...state,
+            checkouts: [project.id],
+            waiting: state.waiting.count
+              ? { ...state.waiting, tickets: state.waiting.tickets.map((ticket) => ({ ...ticket, slug: row.slug })) }
+              : state.waiting,
+          }
+        : { ...state, checkouts: [...state.checkouts, project.id] },
+    ),
+    closed,
+  ];
   const today = new Date().toISOString().slice(0, 10);
   await page.route('**/analytics', (route) =>
     route.fulfill({
@@ -24729,6 +24735,7 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
   await expect(rightNow.locator('[data-tile="tokens"] svg.glance-gauge')).toHaveAccessibleName(/^Token rate: /u);
   const rows = rightNow.locator('[data-component="stats-projects-table"] tbody tr');
   await expect(rows).toHaveCount(4);
+  await expect(rightNow).not.toContainText('Closed Project');
   expect(await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-state')))).toEqual([
     'may_be_stuck',
     'waiting_on_you',
@@ -24758,12 +24765,14 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
   }
   await page.emulateMedia({ colorScheme: 'light' });
 
-  // The project tab's Stats show only that project's stores (HS2-PZPD83).
+  // The project tab's Stats show only that project's stores (HS2-PZPD83): all four linked ones,
+  // never the closed project's.
   await page.getByRole('tab', { name: 'demo' }).click();
   await page.locator('[data-component="project-summary"]').click();
   const projectStats = page.getByRole('region', { name: 'demo Project Statistics' });
   const projectRows = projectStats.locator('[data-component="stats-projects-table"] tbody tr');
-  await expect(projectRows).toHaveCount(2);
+  await expect(projectRows).toHaveCount(4);
+  await expect(projectStats).not.toContainText('Closed Project');
   await expect(projectStats.locator('[data-freshness]')).toContainText(/^demo · live over the change stream/u);
 
   // Answer opens the waiting ticket through the existing linked-ticket route.

@@ -9,7 +9,6 @@ import {
   STANDBY_ALERT_WORDS,
   standbyFreshnessLabel,
   standbyModel,
-  standbyScopeFor,
   standbyWordLabel,
 } from './standby';
 
@@ -127,27 +126,9 @@ describe('standby settings contract (HS2-EQVZTZ)', () => {
   });
 });
 
-describe('standby scope by entry point (HS2-PZPD83 rule)', () => {
-  it('shows the project of a project tab, one project Stats page, and all projects otherwise', () => {
-    const project = { id: 'demo-ab12', name: 'Hot Sheet 2' };
-    expect(standbyScopeFor({ mode: 'project', project })).toEqual({
-      kind: 'project',
-      projectId: 'demo-ab12',
-      name: 'Hot Sheet 2',
-    });
-    expect(
-      standbyScopeFor({ mode: 'stats', project, statsProjectId: 'site-cd34', projectName: () => 'Small Tale Website' }),
-    ).toEqual({ kind: 'project', projectId: 'site-cd34', name: 'Small Tale Website' });
-    expect(standbyScopeFor({ mode: 'stats', project, statsProjectId: 'gone' })).toMatchObject({ name: 'gone' });
-    expect(standbyScopeFor({ mode: 'stats', project })).toEqual({ kind: 'all' });
-    expect(standbyScopeFor({ mode: 'terminals', project })).toEqual({ kind: 'all' });
-    expect(standbyScopeFor({ mode: 'project' })).toEqual({ kind: 'all' });
-  });
-});
-
 describe('standby display model', () => {
   it('sums the gauge and count over every project for All projects (m4)', () => {
-    const model = standbyModel([stopped, liveFixture(), waiting], { kind: 'all' }, NOW);
+    const model = standbyModel([stopped, liveFixture(), waiting], NOW);
     expect(model.scopeLabel).toBe('All projects');
     // 8,000 tokens over the 5-minute window per store; three stores share the fixture rates.
     expect(model.tokensPerMinute).toBe(3 * 1_600);
@@ -161,10 +142,10 @@ describe('standby display model', () => {
   });
 
   it('lights the problem row and adds one amber callout per problem (m5)', () => {
-    const quiet = standbyModel([liveFixture(), stopped], { kind: 'all' }, NOW);
+    const quiet = standbyModel([liveFixture(), stopped], NOW);
     expect(quiet.alerts).toEqual([]);
     expect(quiet.rows.every((row) => !row.alert)).toBe(true);
-    const loud = standbyModel([liveFixture(), stalled, stopped], { kind: 'all' }, NOW);
+    const loud = standbyModel([liveFixture(), stalled, stopped], NOW);
     expect(loud.alerts).toEqual([
       {
         key: 's2',
@@ -178,59 +159,27 @@ describe('standby display model', () => {
       state: 'halted',
       activity: { ...liveFixture().activity, halted: [{ worker: 'w', message: 'usage limit reached', at_ms: NOW }] },
     });
-    expect(standbyModel([halted], { kind: 'all' }, NOW).alerts[0]).toMatchObject({
+    expect(standbyModel([halted], NOW).alerts[0]).toMatchObject({
       title: 'Hot Sheet 2 halted',
       detail: 'usage limit reached',
     });
-    expect(standbyModel([waiting], { kind: 'all' }, NOW).alerts[0]?.title).toBe('UX Review is waiting on you');
+    expect(standbyModel([waiting], NOW).alerts[0]?.title).toBe('UX Review is waiting on you');
     expect([...STANDBY_ALERT_WORDS].sort()).toEqual(['halted', 'stalled', 'waiting_on_you']);
   });
 
-  it('scopes to one project and words its rows like m6', () => {
-    const busy = liveFixture({
-      waiting: {
-        count: 2,
-        tickets: [
-          { ticket: 'a', slug: 'HS2-A', title: 'A', reason: 'feedback' },
-          { ticket: 'b', slug: 'HS2-B', title: 'B', reason: 'review' },
-        ],
-      },
+  it('always covers every project and counts only feedback on Started tickets (HS2-JGW031)', () => {
+    const waitingFeedback = liveFixture({
+      store: 's5',
+      name: 'Kerf',
+      checkouts: ['kerf-ef56'],
+      state: 'waiting_on_you',
+      waiting: { count: 2, tickets: [{ ticket: 'a', slug: 'KF-A', title: 'A', reason: 'feedback' }] },
     });
-    const model = standbyModel([busy, stalled], { kind: 'project', projectId: 'demo-ab12', name: 'Hot Sheet 2' }, NOW);
-    expect(model.scopeLabel).toBe('Hot Sheet 2');
-    expect(model.ticketsUpdated).toBe(2);
-    expect(model.alerts).toEqual([]);
-    expect(model.rows).toEqual([
-      { key: 's1', word: 'active', title: 'Active · 2 agents', detail: 'last progress 2m ago', alert: false },
-      {
-        key: 's1:waiting',
-        word: 'waiting_on_you',
-        title: '2 need you',
-        detail: '1 feedback request · 1 review request',
-        alert: false,
-      },
-    ]);
-    // A project linked to two stores names each row.
-    const shared = liveFixture({
-      store: 's9',
-      name: 'Shared',
-      checkouts: ['demo-ab12'],
-      state: 'stopped',
-      workers: { live: 0, expected: 0 },
-    });
-    const two = standbyModel([busy, shared], { kind: 'project', projectId: 'demo-ab12', name: 'Hot Sheet 2' }, NOW);
-    expect(two.rows.map((row) => row.title)).toEqual([
-      'Hot Sheet 2 · Active · 2 agents',
-      '2 need you',
-      'Shared · Stopped',
-    ]);
-    // Nothing yet: an empty display, not an error.
-    expect(standbyModel([], { kind: 'project', projectId: 'x', name: 'X' }, NOW)).toMatchObject({
-      tokensPerMinute: 0,
-      ticketsUpdated: 0,
-      rows: [],
-      alerts: [],
-    });
+    const model = standbyModel([liveFixture(), waitingFeedback], NOW);
+    expect(model.scopeLabel).toBe('All projects');
+    expect(model.rows.map((row) => row.key)).toEqual(['s1', 's5'].sort((a, b) => a.localeCompare(b)));
+    expect(model.rows.find((row) => row.key === 's5')?.detail).toBe('Waiting on you · 2 feedback requests');
+    expect(standbyModel([], NOW)).toMatchObject({ tokensPerMinute: 0, ticketsUpdated: 0, rows: [], alerts: [] });
   });
 
   it('words every state and age', () => {
@@ -245,9 +194,9 @@ describe('standby display model', () => {
       activity: { ...liveFixture().activity, last_progress_ms: null },
       claims: [],
     });
-    expect(standbyModel([noProgress], { kind: 'all' }, NOW).rows[0]?.detail).toBe('May be stuck');
+    expect(standbyModel([noProgress], NOW).rows[0]?.detail).toBe('May be stuck');
     const ready = liveFixture({ state: 'stopped', runway: { ready: 4, estimate_ms: null } });
-    expect(standbyModel([ready], { kind: 'all' }, NOW).rows[0]?.detail).toBe('Stopped · 4 ready');
+    expect(standbyModel([ready], NOW).rows[0]?.detail).toBe('Stopped · 4 ready');
   });
 });
 

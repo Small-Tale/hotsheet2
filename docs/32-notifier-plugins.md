@@ -414,7 +414,7 @@ notification always agree. The tracker therefore runs whether or not a rule name
 | `halted`         | A worker that holds a live claim reported a halt. It clears when that session resumes, progresses on its claim, or loses its claims. |
 | `stalled`        | No live claim remains and a lease expired unrenewed. It stays until a new claim starts the next active period.                       |
 | `may_be_stuck`   | Claims are held and nothing progressed for the idle window.                                                                          |
-| `waiting_on_you` | An open ticket waits on the user: an unanswered feedback request, a review flag, or a review request.                                |
+| `waiting_on_you` | A Started ticket waits on an unanswered feedback request; review state and tickets in other columns never count (HS2-JGW031).        |
 | `active`         | An active period is open, including the release grace.                                                                               |
 | `stopped`        | Nothing else applies.                                                                                                                |
 

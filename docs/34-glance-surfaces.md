@@ -34,14 +34,14 @@ Every glance surface uses the project states that notifications already use
 ([32-notifier-plugins.md](32-notifier-plugins.md) §32.8.1), plus one new state. Standby, the sidebars,
 Stats, and phone notifications therefore always agree.
 
-| State          | Meaning                                                                                                                      | Source                   |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| Active         | At least one ticket in the store holds a live claim.                                                                         | §32.8.1 (shipped)        |
-| Stopped        | The last claim was released and no new claim appeared within the grace. Stopped-as-expected rows render dimmed.              | §32.8.1 (shipped)        |
-| May be stuck   | Claims are held but nothing progressed for the idle window.                                                                  | §32.8.1 (shipped)        |
-| Stalled        | A claim's lease expired without renewal.                                                                                     | §32.8.1 (shipped)        |
-| Halted         | A terminal whose worker holds a claim reported a halt.                                                                       | §32.8.1 (shipped)        |
-| Waiting on you | A ticket in the store is blocked on the user: an open feedback request, a review flag, or a review request. New for clients. | HS2-JTTQMY (design only) |
+| State          | Meaning                                                                                                                                                                                      | Source                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Active         | At least one ticket in the store holds a live claim.                                                                                                                                         | §32.8.1 (shipped)      |
+| Stopped        | The last claim was released and no new claim appeared within the grace. Stopped-as-expected rows render dimmed.                                                                              | §32.8.1 (shipped)      |
+| May be stuck   | Claims are held but nothing progressed for the idle window.                                                                                                                                  | §32.8.1 (shipped)      |
+| Stalled        | A claim's lease expired without renewal.                                                                                                                                                     | §32.8.1 (shipped)      |
+| Halted         | A terminal whose worker holds a claim reported a halt.                                                                                                                                       | §32.8.1 (shipped)      |
+| Waiting on you | A Started ticket waits on an unanswered feedback request. Review flags, review requests, and tickets outside the Started column never count (HS2-JGW031). Needs you counts the same tickets. | HS2-JTTQMY, HS2-JGW031 |
 
 Two **stuck causes** refine May be stuck and Halted so a surface can say why nothing is happening
 (HS2-EGKKA0; the data ships in the live state as `activity.causes`, §32.8.4, and no surface renders it yet):
@@ -85,7 +85,9 @@ the arc above the peak.
 - The needle animates only when the value changes and respects `prefers-reduced-motion`.
 
 **Scope** follows HS2-PZPD83: on a project tab a surface shows that project; on All Projects or the
-workspace grid it shows all projects.
+workspace grid it shows all projects. **All projects** always means the projects whose tabs are open in
+the app, never every store the server hosts or has ever loaded (HS2-JGW031). Standby always shows all
+projects (§34.5).
 
 **Delivery.** The model is pushed over the existing WebSocket change stream with cursor replay. There is no
 fixed-interval polling. Clients compute ages locally from timestamps, and local display timers never issue
@@ -112,7 +114,8 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
   says when the change stream has dropped, so a frozen screen never looks healthy.
 - **Alerts:** Stalled, Halted, and Waiting on you show an amber callout and light that project's row in
   the strip (`m5`). Nothing else brightens.
-- **Scope:** by entry point (§34.3). `m6` shows a phone in portrait entered from a project tab.
+- **Scope:** always all open projects, whichever tab or page it was entered from (HS2-JGW031). The
+  approved `m6` phone mock showed one project; the maintainer replaced that rule.
 - **Devices:** request a Screen Wake Lock on phones and tablets, drift content slowly against OLED burn-in,
   and respect `prefers-reduced-motion`.
 - **Requests:** standby issues no requests of its own; it renders the pushed live state model.
@@ -129,8 +132,7 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
   collapsed, it moves with the toggle into the workspace toolbar.
 - **Exit.** A click or tap anywhere on the display exits. Any key also exits, and the app beneath
   never receives that key.
-- **Scope.** A project tab, or one project's Stats page, shows that project. All Projects Stats and
-  the workspace grid show all projects.
+- **Scope.** Always every open project, entered from any tab or page (HS2-JGW031).
 - **Freshness.** The freshness line reads the health of each project's change stream. A dropped
   stream turns the line amber ("connection lost · last update …") once it has stayed down past a
   20-second reconnect grace. A failed refresh after an event is not a dropped stream.

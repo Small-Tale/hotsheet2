@@ -5,7 +5,7 @@ import { type ResponseParser, ServerResponseShapeError } from './server-response
 
 /**
  * Standby (HS2-EQVZTZ, docs/34-glance-surfaces.md §34.5): the pure parts of the night display. The
- * settings contract, scope resolution, the display model derived from the pushed live state, and the
+ * settings contract, the all-projects display model derived from the pushed live state, and the
  * idle timer live here; `features/standby.tsx` wires them to the page.
  */
 
@@ -47,33 +47,11 @@ export const parseStandbySettings: ResponseParser<StandbySettingsView> = (value)
   return value as unknown as StandbySettingsView;
 };
 
-/** What standby shows: one project's stores, or every hosted store (HS2-PZPD83 scope rule). */
-export type StandbyScope = { kind: 'all' } | { kind: 'project'; projectId: string; name: string };
-
-/** Where standby was entered from. */
-export interface StandbyEntryPoint {
-  /** The shell mode: a project tab, the Stats page, or the workspace grid. */
-  mode: 'project' | 'stats' | 'terminals';
-  /** The selected project, when the mode has one. */
-  project?: { id: string; name: string };
-  /** The project the Stats page shows, or `undefined` for All Projects. */
-  statsProjectId?: string;
-  /** Resolves a project id to its name (for the Stats page's project). */
-  projectName?: (id: string) => string | undefined;
-}
-
-/** Entered from a project tab (or one project's Stats): that project; from All Projects or the grid: all. */
-export function standbyScopeFor(entry: StandbyEntryPoint): StandbyScope {
-  if (entry.mode === 'project' && entry.project)
-    return { kind: 'project', projectId: entry.project.id, name: entry.project.name };
-  if (entry.mode === 'stats' && entry.statsProjectId)
-    return {
-      kind: 'project',
-      projectId: entry.statsProjectId,
-      name: entry.projectName?.(entry.statsProjectId) ?? entry.statsProjectId,
-    };
-  return { kind: 'all' };
-}
+/**
+ * What standby shows: always every hosted store, whichever project or page it was entered from
+ * (HS2-JGW031). Standby is a whole-machine night display, not a view of the active tab.
+ */
+export type StandbyScope = { kind: 'all' };
 
 /** The states that get brightness on standby: problems only (dark cockpit, §34.1). */
 export const STANDBY_ALERT_WORDS: ReadonlySet<LiveWord> = new Set(['stalled', 'halted', 'waiting_on_you']);
@@ -142,13 +120,9 @@ function stateDetail(state: LiveStoreState, nowMs: number): string {
     }
     case 'halted':
       return state.activity.halted[0]?.message ?? 'a worker halted';
-    case 'waiting_on_you': {
-      const feedback = state.waiting.tickets.filter((item) => item.reason === 'feedback').length;
-      const review = state.waiting.count - feedback;
-      return [feedback && plural(feedback, 'feedback request'), review > 0 && plural(review, 'review request')]
-        .filter(Boolean)
-        .join(' · ');
-    }
+    case 'waiting_on_you':
+      // Only Started tickets with an open feedback request count (HS2-JGW031).
+      return plural(state.waiting.count, 'feedback request');
     case 'stopped':
       return state.runway.ready ? `${state.runway.ready} ready` : 'queue empty';
     case 'active':
@@ -165,7 +139,7 @@ function alertTitle(state: LiveStoreState): string {
   return `${state.name} is waiting on you`;
 }
 
-/** Rows for all-projects scope: one per store, named by its project (m4/m5). */
+/** One row per store, named by its project (m4/m5). */
 function allRows(states: readonly LiveStoreState[], nowMs: number): StandbyRow[] {
   return states.map((state) => ({
     key: state.store,
@@ -176,56 +150,20 @@ function allRows(states: readonly LiveStoreState[], nowMs: number): StandbyRow[]
   }));
 }
 
-/** Rows for one project (m6): its work state, then how many tickets need the user. */
-function projectRows(states: readonly LiveStoreState[], nowMs: number): StandbyRow[] {
-  const named = states.length > 1;
-  return states.flatMap((state) => {
-    const age = progressAgeMs(state, nowMs);
-    const live = state.workers.live;
-    const rows: StandbyRow[] = [
-      {
-        key: state.store,
-        word: state.state,
-        title: [named ? state.name : undefined, standbyWordLabel(state.state), live ? plural(live, 'agent') : undefined]
-          .filter(Boolean)
-          .join(' · '),
-        detail:
-          state.state === 'active' || state.state === 'may_be_stuck' || state.state === 'stopped'
-            ? age === undefined
-              ? stateDetail(state, nowMs)
-              : `last progress ${formatStandbyAge(age)} ago`
-            : stateDetail(state, nowMs),
-        alert: STANDBY_ALERT_WORDS.has(state.state),
-      },
-    ];
-    // Waiting on you already says so in the state row; otherwise a waiting count gets its own row.
-    if (state.waiting.count > 0 && state.state !== 'waiting_on_you')
-      rows.push({
-        key: `${state.store}:waiting`,
-        word: 'waiting_on_you',
-        title: `${state.waiting.count} need you`,
-        detail: stateDetail({ ...state, state: 'waiting_on_you' }, nowMs),
-        alert: false,
-      });
-    return rows;
-  });
-}
-
-/** The stores a scope covers, in name order so a row never jumps when its state changes. */
-export function standbyStores(states: Iterable<LiveStoreState>, scope: StandbyScope): LiveStoreState[] {
-  const list = [...states].filter((state) => scope.kind === 'all' || state.checkouts.includes(scope.projectId));
-  return list.sort((a, b) => a.name.localeCompare(b.name));
+/** Every store, in name order so a row never jumps when its state changes. */
+export function standbyStores(states: Iterable<LiveStoreState>): LiveStoreState[] {
+  return [...states].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Derive the standby display from the live state model at `nowMs`; it issues no requests. */
-export function standbyModel(states: Iterable<LiveStoreState>, scope: StandbyScope, nowMs: number): StandbyModel {
-  const list = standbyStores(states, scope);
+export function standbyModel(states: Iterable<LiveStoreState>, nowMs: number): StandbyModel {
+  const list = standbyStores(states);
   return {
-    scopeLabel: scope.kind === 'all' ? 'All projects' : scope.name,
+    scopeLabel: 'All projects',
     tokensPerMinute: list.reduce((sum, state) => sum + tokensPerMinute(state, nowMs), 0),
     tokensPeakPerMinute: list.reduce((sum, state) => sum + state.rates.tokens.peak_per_minute, 0),
     ticketsUpdated: list.reduce((sum, state) => sum + ticketsUpdatedPerHour(state, nowMs), 0),
-    rows: scope.kind === 'all' ? allRows(list, nowMs) : projectRows(list, nowMs),
+    rows: allRows(list, nowMs),
     alerts: list
       .filter((state) => STANDBY_ALERT_WORDS.has(state.state))
       .map((state) => ({

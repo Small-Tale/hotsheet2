@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::Json;
 use axum::extract::{Path as RoutePath, State};
+use hotsheet_model::Status;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::FsStore;
 use hotsheet_ticketing::ops::TicketQuery;
@@ -210,7 +211,7 @@ pub struct LiveWaitingTicket {
     pub ticket: String,
     pub slug: String,
     pub title: String,
-    /// `feedback` (an open feedback request) or `review` (a review flag or request).
+    /// Always `feedback`: an open feedback request on a Started ticket (HS2-JGW031).
     pub reason: String,
 }
 
@@ -437,8 +438,10 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
         }),
         now,
     );
+    // Needs you counts only Started tickets waiting on a feedback answer (HS2-JGW031): a review
+    // request or a feedback prompt on a ticket outside the Started column is not live work.
     let waiting_rows = query(TicketQuery {
-        open_only: true,
+        status: Some(Status::Started),
         needs_review: Some(true),
         ..TicketQuery::default()
     });
@@ -577,23 +580,20 @@ pub fn ready_count(rows: &[TicketRow], claims: &[LiveClaim]) -> usize {
         .count()
 }
 
-/// Open tickets blocked on the user: feedback requests first, then review state.
+/// Started tickets blocked on a feedback answer, by slug (HS2-JGW031). Review requests and
+/// tickets outside the Started column never count.
 pub fn waiting_of(rows: &[TicketRow]) -> LiveWaiting {
     let mut tickets: Vec<LiveWaitingTicket> = rows
         .iter()
+        .filter(|row| row.feedback_needed && row.status.as_deref() == Some("started"))
         .map(|row| LiveWaitingTicket {
             ticket: row.id.clone(),
             slug: row.slug.clone(),
             title: row.title.clone(),
-            reason: if row.feedback_needed {
-                "feedback".into()
-            } else {
-                "review".into()
-            },
+            reason: "feedback".into(),
         })
         .collect();
-    tickets
-        .sort_by(|a, b| (a.reason != "feedback", &a.slug).cmp(&(b.reason != "feedback", &b.slug)));
+    tickets.sort_by(|a, b| a.slug.cmp(&b.slug));
     let count = tickets.len();
     tickets.truncate(WAITING_LIMIT);
     LiveWaiting { count, tickets }
@@ -1018,21 +1018,31 @@ mod tests {
     }
 
     #[test]
-    fn hs2_jttqmy_waiting_lists_feedback_first_and_caps_the_list() {
-        let mut rows: Vec<TicketRow> = (0..25)
-            .map(|n| {
-                let mut r = row(&format!("r{n:02}"), &format!("HS2-R{n:02}"));
-                r.needs_review = true;
-                r
-            })
-            .collect();
-        rows[24].feedback_needed = true;
+    fn hs2_jgw031_waiting_counts_only_started_feedback_and_caps_the_list() {
+        let started_feedback = |n: usize| {
+            let mut r = row(&format!("r{n:02}"), &format!("HS2-R{n:02}"));
+            r.status = Some("started".into());
+            r.feedback_needed = true;
+            r.needs_review = true;
+            r
+        };
+        let mut rows: Vec<TicketRow> = (0..25).map(started_feedback).collect();
+        // A review request alone, and feedback outside the Started column, never count.
+        let mut review = row("rv", "HS2-RV");
+        review.status = Some("started".into());
+        review.needs_review = true;
+        let mut not_started = row("ns", "HS2-NS");
+        not_started.status = Some("not_started".into());
+        not_started.feedback_needed = true;
+        let mut backlog = row("bl", "HS2-BL");
+        backlog.status = Some("backlog".into());
+        backlog.feedback_needed = true;
+        rows.extend([review, not_started, backlog]);
         let waiting = waiting_of(&rows);
         assert_eq!(waiting.count, 25);
         assert_eq!(waiting.tickets.len(), WAITING_LIMIT);
-        assert_eq!(waiting.tickets[0].slug, "HS2-R24");
-        assert_eq!(waiting.tickets[0].reason, "feedback");
-        assert_eq!(waiting.tickets[1].reason, "review");
+        assert_eq!(waiting.tickets[0].slug, "HS2-R00");
+        assert!(waiting.tickets.iter().all(|t| t.reason == "feedback"));
         assert_eq!(waiting_of(&[]).count, 0);
     }
 

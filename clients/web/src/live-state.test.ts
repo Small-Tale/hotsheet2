@@ -239,6 +239,9 @@ describe('live state store (HS2-JTTQMY)', () => {
     expect(seen.at(-1)).toBe(3);
     expect(store.forProject('demo-ab12').map((state) => state.store)).toEqual(['s1']);
     expect(store.forProject('other')).toEqual([]);
+    // HS2-JGW031: only stores linked to an open project, each once.
+    expect(store.forProjects(['other', 'demo-ab12', 'demo-ab12']).map((state) => state.store)).toEqual(['s1']);
+    expect(store.forProjects([])).toEqual([]);
     store.reset();
     expect(store.states.value.size).toBe(0);
     // Empty then refill.

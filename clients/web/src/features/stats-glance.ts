@@ -69,7 +69,8 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
   /** The stores in Stats' scope (HS2-PZPD83). */
   function scopedStates(): LiveStoreState[] {
     const projectId = statsProjectId.value;
-    return projectId ? liveStates.forProject(projectId) : [...liveStates.states.value.values()];
+    // All projects means the open project tabs, never every store the server hosts (HS2-JGW031).
+    return projectId ? liveStates.forProject(projectId) : liveStates.forProjects(projects.value.map((item) => item.id));
   }
 
   function projectFor(state: LiveStoreState): string | undefined {
