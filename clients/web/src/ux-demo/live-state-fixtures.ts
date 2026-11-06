@@ -25,6 +25,7 @@ export function liveStateFixture(overrides: Partial<LiveStoreState> = {}, now = 
       idle_deadline_ms: now + 28 * MINUTE,
       stalled: [],
       halted: [],
+      causes: [],
     },
     claims: [],
     workers: { live: 1, expected: 1 },
@@ -61,6 +62,7 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
           idle_deadline_ms: now - 4 * MINUTE,
           stalled: [],
           halted: [],
+          causes: [],
         },
         claims: [
           {
@@ -94,6 +96,7 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
           idle_deadline_ms: null,
           stalled: [],
           halted: [],
+          causes: [],
         },
         workers: { live: 0, expected: 1 },
         waiting: {
@@ -170,6 +173,7 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
           idle_deadline_ms: null,
           stalled: [],
           halted: [],
+          causes: [],
         },
         workers: { live: 0, expected: 0 },
         rates: {
