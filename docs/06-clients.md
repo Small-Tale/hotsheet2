@@ -3847,6 +3847,12 @@ tiles cold-mount, at the existing progressive pace of two per turn.
 A grid creates such an instance inert and hidden. If its tile runtime is disposed and the same
 element is later mounted interactively in the drawer, that mount clears the inert state, so
 the terminal can always be focused and typed into (HS2-E2YQMF).
+A tile is inert and always shows the end of the output. xterm 6.0.0 defers a renderer resize
+while the moved instance is not yet visible, but syncs its scroll area only before that resize
+lands. The tile then kept the previous grid's scroll height and sat a few lines above the bottom.
+The runtime therefore re-syncs xterm's viewport after each render (a guarded internal call until
+xterm does this itself), and a tile left above the bottom returns to it on the next frame. That
+correction is tried at most three times per resize or presentation change (HS2-7JS89G).
 
 The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
 

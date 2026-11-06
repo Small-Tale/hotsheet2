@@ -71,20 +71,23 @@ vi.mock('@xterm/xterm', () => ({
     element?: { style: Record<string, string> };
     options: Record<string, unknown>;
     userInputListeners: Array<() => void> = [];
-    _core?: { coreService: { onUserInput: (listener: () => void) => { dispose: () => void } } };
+    // xterm internals the runtime reaches: the user-input signal (HS2-0GZZHV) and the viewport it
+    // re-syncs after each render (HS2-7JS89G).
+    _core: {
+      coreService?: { onUserInput: (listener: () => void) => { dispose: () => void } };
+      _viewport: { _sync: ReturnType<typeof vi.fn> };
+    } = { _viewport: { _sync: vi.fn() } };
     constructor(options: Record<string, unknown> = {}) {
       this.options = { ...options };
       if (allocated.userInputSignal)
-        this._core = {
-          coreService: {
-            onUserInput: (listener) => {
-              this.userInputListeners.push(listener);
-              return {
-                dispose: () => {
-                  this.userInputListeners = this.userInputListeners.filter((other) => other !== listener);
-                },
-              };
-            },
+        this._core.coreService = {
+          onUserInput: (listener) => {
+            this.userInputListeners.push(listener);
+            return {
+              dispose: () => {
+                this.userInputListeners = this.userInputListeners.filter((other) => other !== listener);
+              },
+            };
           },
         };
       allocated.terminals.push(this);
@@ -93,8 +96,20 @@ vi.mock('@xterm/xterm', () => ({
       if (allocated.openElement) this.element = { style: {} };
     }
     loadAddon() {}
-    onRender() {
+    renderHandler?: () => void;
+    onRender(handler?: () => void) {
+      this.renderHandler = handler;
       return { dispose: this.render };
+    }
+    scrollHandler?: () => void;
+    onScroll(handler: () => void) {
+      this.scrollHandler = handler;
+      return { dispose: vi.fn() };
+    }
+    resizeHandler?: () => void;
+    onResize(handler: () => void) {
+      this.resizeHandler = handler;
+      return { dispose: vi.fn() };
     }
     dataHandler?: (value: string) => void;
     onData(handler: (value: string) => void) {
@@ -339,7 +354,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
       'socket failed',
     );
     expect(allocated.terminals[0].dispose).toHaveBeenCalledTimes(1);
-    expect(allocated.terminals[0].render).toHaveBeenCalledTimes(1);
+    // Two render subscriptions, each disposed once: the paint listener and the HS2-7JS89G viewport re-sync.
+    expect(allocated.terminals[0].render).toHaveBeenCalledTimes(2);
     expect(allocated.terminals[0].input).toHaveBeenCalledTimes(1);
     expect(resize[0].disconnect).toHaveBeenCalledTimes(1);
     expect(intersections[0].disconnect).toHaveBeenCalledTimes(1);
@@ -1943,6 +1959,56 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
       },
     };
   }
+
+  it('HS2-7JS89G re-syncs the viewport after each render and returns an inert tile to the bottom, boundedly', () => {
+    const view = mountMovable();
+    view.flush();
+    const terminal = view.terminal as unknown as {
+      _core: { _viewport: { _sync: ReturnType<typeof vi.fn> } };
+      buffer: { active: { baseY: number; viewportY: number } };
+      scrollToBottom: ReturnType<typeof vi.fn>;
+      renderHandler?: () => void;
+      scrollHandler?: () => void;
+      resizeHandler?: () => void;
+    };
+    const sync = terminal._core._viewport._sync;
+    sync.mockClear();
+    terminal.renderHandler!();
+    expect(sync).toHaveBeenCalledTimes(1);
+    // In the drawer a reader may scroll up: their position stays.
+    terminal.scrollToBottom.mockClear();
+    Object.assign(terminal.buffer.active, { viewportY: 4, baseY: 7 });
+    terminal.scrollHandler!();
+    view.flush();
+    expect(terminal.scrollToBottom).not.toHaveBeenCalled();
+    // An inert tile: a stale scroll above the bottom returns to it on the next frame.
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    terminal.scrollToBottom.mockClear();
+    Object.assign(terminal.buffer.active, { viewportY: 4, baseY: 7 });
+    terminal.scrollHandler!();
+    expect(terminal.scrollToBottom).not.toHaveBeenCalled();
+    view.flush();
+    expect(terminal.scrollToBottom).toHaveBeenCalledTimes(1);
+    // If the scroll area cannot move yet, renders retry a bounded number of times, never a loop.
+    for (let round = 0; round < 10; round += 1) {
+      terminal.renderHandler!();
+      view.flush();
+    }
+    expect(terminal.scrollToBottom).toHaveBeenCalledTimes(3);
+    // A resize is a fresh chance.
+    terminal.resizeHandler!();
+    terminal.renderHandler!();
+    view.flush();
+    expect(terminal.scrollToBottom).toHaveBeenCalledTimes(4);
+    // At the bottom nothing is scheduled.
+    Object.assign(terminal.buffer.active, { viewportY: 7 });
+    terminal.resizeHandler!();
+    terminal.renderHandler!();
+    view.flush();
+    expect(terminal.scrollToBottom).toHaveBeenCalledTimes(4);
+    view.dispose();
+  });
 
   it('HS2-RF6YQW never fits a drawer terminal to an element with no layout size', () => {
     const view = mountMovable();

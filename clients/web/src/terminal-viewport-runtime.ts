@@ -109,6 +109,9 @@ function terminalReplacementPayload(value: Uint8Array<ArrayBuffer>): Uint8Array<
   return replacement;
 }
 
+/** Returns-to-bottom an inert tile may try per resize or presentation change (HS2-7JS89G). */
+const TILE_FOLLOW_ATTEMPTS = 3;
+
 function resizeTerminalPreservingScroll(terminal: Terminal, cols: number, rows: number): void {
   if (terminal.cols === cols && terminal.rows === rows) return;
   const buffer = terminal.buffer.active,
@@ -1145,10 +1148,54 @@ function initializeTerminalViewport(
   own(() => {
     element.removeEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
   });
+  // HS2-7JS89G: xterm 6.0.0 defers a renderer resize while its screen is not intersecting (an
+  // instance mid-move between containers), but syncs its viewport scroll area only on the buffer
+  // resize, before that deferred resize lands, and never again. The scroll area kept the previous
+  // grid's height and capped scrolling above the bottom, so a moved tile showed stale rows and
+  // `scrollToBottom` could not move it. Re-sync the viewport after each render; it only rewrites the
+  // scroll dimensions from the current renderer, so it is cheap and idempotent. xterm exposes no
+  // public sync, hence the guarded internal call. Remove it once xterm re-syncs on renderer
+  // dimension changes.
+  const xtermViewport = (terminal as unknown as { _core?: { _viewport?: { _sync?: () => void } } })._core?._viewport;
+  // A tile is inert, so nobody scrolls it: it always shows the end of the output. After a move xterm
+  // can apply the previous container's stale scroll position; once the scroll area is current, the
+  // next frame returns the tile to the bottom. Attempts reset on every resize or presentation change,
+  // so a scroll area that cannot move yet never turns into a render loop.
+  let tileFollowFrame: number | undefined,
+    tileFollowAttempts = 0;
+  const followTileBottom = () => {
+    tileFollowFrame = undefined;
+    if (!tiled || disposed) return;
+    const buffer = terminal.buffer.active;
+    if (buffer.viewportY < buffer.baseY) terminal.scrollToBottom();
+  };
+  const queueTileFollow = () => {
+    if (!tiled || tileFollowFrame !== undefined || tileFollowAttempts >= TILE_FOLLOW_ATTEMPTS) return;
+    const buffer = terminal.buffer.active;
+    if (buffer.viewportY >= buffer.baseY) return;
+    tileFollowAttempts += 1;
+    tileFollowFrame = window.requestAnimationFrame(followTileBottom);
+  };
+  const viewportRender = terminal.onRender(() => {
+      xtermViewport?._sync?.();
+      queueTileFollow();
+    }),
+    viewportScroll = terminal.onScroll(queueTileFollow),
+    viewportResize = terminal.onResize(() => {
+      tileFollowAttempts = 0;
+    });
+  own(() => {
+    viewportRender.dispose();
+    viewportScroll.dispose();
+    viewportResize.dispose();
+    if (tileFollowFrame !== undefined) window.cancelAnimationFrame(tileFollowFrame);
+  });
   // One emulator per terminal (HS2-EYD24K): the owner moves this dedicated viewport into a grid tile and
   // back. In a tile the emulator keeps its socket and scrollback, and scales an 80×24 grid to the frame.
   const tileStyles = ['inset', 'width', 'height', 'overflow', 'transform', 'transformOrigin'] as const;
   const present = (event: Event) => {
+    // A new presentation is a new chance for an inert tile to reach the bottom (HS2-7JS89G).
+    tileFollowAttempts = 0;
     const tile = Boolean((event as CustomEvent<TerminalViewportPresentationDetail | null>).detail?.tile);
     const changed = tile !== tiled;
     parked = false;
