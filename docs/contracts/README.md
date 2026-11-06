@@ -29,7 +29,8 @@ disconnects, the client should use a full refresh or the long-poll replay path
 before trusting a local projection.
 
 This contract is checked against the server routes and representative server
-responses in the repository test suite. The Rust wire DTOs in
+responses in the repository test suite, including the Workers view and integration
+strategy report from a seeded coordination pool (HS2-3KNAPN). The Rust wire DTOs in
 `crates/hotsheet-ticketing/src/wire.rs`, the server route handlers, and current
 tests remain authoritative if this documentation is found to disagree with
 the shipped implementation.

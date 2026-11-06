@@ -17,6 +17,8 @@ export interface RealTicketFixtureContext {
   store: string;
   root: string;
   env: NodeJS.ProcessEnv;
+  /** The isolated fixture `hotsheet-cli` the store was initialised with (HS2-3KNAPN). */
+  cli: string;
 }
 
 /** Real ticket storage, index, and HTTP mutations, isolated from the developer's registry. */
@@ -56,7 +58,7 @@ export async function realTicketServer(
       cwd: root,
       env,
     });
-    await options.seed?.({ store, root, env });
+    await options.seed?.({ store, root, env, cli });
   } catch (error) {
     await rm(directory, fixtureCleanup);
     throw error;

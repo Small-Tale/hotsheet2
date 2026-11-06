@@ -1,14 +1,17 @@
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { expect, test } from '@playwright/test';
 import Ajv2020 from 'ajv/dist/2020.js';
 import WebSocket from 'ws';
 import YAML from 'yaml';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { routeMethods } from '../scripts/sync-openapi-routes.mjs';
 import { realTicketServer } from './real-ticket-server';
 
@@ -269,6 +272,187 @@ test('client contracts accept real ticket and replay responses', async () => {
     expect(replay.events.some((event) => (event as { kind?: string }).kind === 'created')).toBe(true);
   } finally {
     socket?.close();
+    await server.stop();
+  }
+});
+
+/**
+ * HS2-3KNAPN: the WorkerView schema forbids unknown members, so a server field the contract
+ * misses fails every real response. Validate real `/workers` (default and `include_past`) and
+ * `/integration-strategies` responses from a seeded throwaway pool: worker preferences with a
+ * refused request, unmatched tickets, a departed (past) worker, and a batch policy with
+ * circuit-breaker thresholds.
+ */
+test('HS2-3KNAPN real worker view and integration strategy responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<string, { get: { responses: Record<string, { content: Record<string, { schema: object }> }> } }>;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const validator = (path: string) =>
+    ajv.compile({
+      ...openapi.paths[path].get.responses['200'].content['application/json'].schema,
+      components: openapi.components,
+    });
+  const workerView = validator('/checkouts/{reference}/workers');
+  const strategyReport = validator('/checkouts/{reference}/integration-strategies');
+  const run = promisify(execFile);
+  let refused = '';
+  const server = await realTicketServer({
+    seed: async ({ store, root, env, cli }) => {
+      // The pool's identities are explicit; an inherited AI-session identity must not leak in.
+      const seedEnv = {
+        ...withoutGitRepositoryEnv(env),
+        HOTSHEET_WORKER_ID: undefined,
+        HOTSHEET_ACTOR_ROLE: undefined,
+        HOTSHEET_ACTOR_ID: undefined,
+      };
+      const git = (...args: string[]) => run('git', args, { cwd: root, env: seedEnv });
+      const hs = async (...args: string[]) =>
+        (await run(cli, ['-C', store, ...args], { cwd: root, env: seedEnv })).stdout;
+      const pool = (...args: string[]) => hs('coordination', '--project', root, ...args);
+      await git('init', '-q', '-b', 'main');
+      await git('commit', '-q', '--allow-empty', '-m', 'synthetic base');
+      await pool('setup');
+      await pool(
+        'strategy-allow',
+        '--strategy',
+        'batch',
+        '--reason',
+        'contract fixture',
+        '--max-red-batches',
+        '2',
+        '--max-red-minutes',
+        '45',
+      );
+      const slugs: string[] = [];
+      for (const [title, tags] of [
+        ['Glance bug', ['glance']],
+        ['Plain bug', []],
+        ['Client bug', ['client']],
+      ] as const) {
+        const created = await hs('new', '--title', title, '--category', 'bug');
+        const slug = /Created (\S+)/.exec(created)?.[1];
+        if (!slug) throw new Error(`no slug in ${created}`);
+        await hs('edit', slug, '--up-next', ...tags.flatMap((tag) => ['--tag', tag]));
+        slugs.push(slug);
+      }
+      refused = slugs[1];
+      const lease = ['--route', 'human', '--lease-seconds', '3600', '--all-participants-upgraded'];
+      await pool(
+        'register',
+        '--role',
+        'integrator',
+        '--id',
+        'integrator-1',
+        '--session',
+        'int-1',
+        ...lease,
+        '--strategy',
+        'batch',
+      );
+      await pool(
+        'register',
+        '--role',
+        'worker',
+        '--id',
+        'worker-glance',
+        '--session',
+        'w1',
+        ...lease,
+        '--only',
+        'tag:glance',
+        '--prefer',
+        'priority:high',
+      );
+      await pool(
+        'register',
+        '--role',
+        'worker',
+        '--id',
+        'worker-strict',
+        '--session',
+        'w2',
+        ...lease,
+        '--only',
+        'category:feature',
+        '--avoid',
+        'tag:client',
+        '--request',
+        refused,
+      );
+      await pool(
+        'refuse-request',
+        '--id',
+        'integrator-1',
+        '--session',
+        'int-1',
+        '--worker',
+        'worker-strict',
+        '--worker-session',
+        'w2',
+        '--slug',
+        refused,
+        '--reason',
+        'filtered',
+        '--detail',
+        'outside the strict filter',
+      );
+      // Expires into a past worker: the shortest lease the CLI accepts.
+      await pool(
+        'register',
+        '--role',
+        'worker',
+        '--id',
+        'worker-gone',
+        '--session',
+        'w3',
+        '--route',
+        'human',
+        '--lease-seconds',
+        '10',
+        // Its own strict filter, so it never matches the plain or client tickets.
+        '--only',
+        'tag:glance',
+        '--all-participants-upgraded',
+      );
+    },
+  });
+  try {
+    type View = {
+      past_workers: number;
+      integration_strategy: string | null;
+      unmatched_tickets: string[];
+      workers: Array<{ id: string; availability: string; preferences: { refusal?: { slug: string } } | null }>;
+    };
+    const view = (query: string) => server.request<View>(`/checkouts/${server.checkoutId}/workers?wait_ms=0${query}`);
+    const current = await view('');
+    expect(workerView(current), JSON.stringify(workerView.errors)).toBe(true);
+    expect(current.integration_strategy).toBe('batch');
+    expect(current.unmatched_tickets.length).toBeGreaterThan(0);
+    expect(current.workers.find((row) => row.id === 'worker-strict')?.preferences?.refusal?.slug).toBe(refused);
+    expect(current.workers.find((row) => row.id === 'worker-glance')?.preferences).not.toBeNull();
+
+    // Wait on state: the short-lease worker becomes a past worker once its lease expires.
+    await expect
+      .poll(async () => (await view('')).past_workers, { timeout: 30_000, intervals: [500] })
+      .toBeGreaterThan(0);
+    const withPast = await view('&include_past=true');
+    expect(workerView(withPast), JSON.stringify(workerView.errors)).toBe(true);
+    expect(withPast.workers.find((row) => row.id === 'worker-gone')?.availability).toBe('disconnected');
+    const hidden = await view('');
+    expect(workerView(hidden), JSON.stringify(workerView.errors)).toBe(true);
+    expect(hidden.workers.some((row) => row.id === 'worker-gone')).toBe(false);
+
+    const strategies = await server.request<{ policy: { allowed: Array<{ circuit_breaker?: object }> } }>(
+      `/checkouts/${server.checkoutId}/integration-strategies`,
+    );
+    expect(strategyReport(strategies), JSON.stringify(strategyReport.errors)).toBe(true);
+    expect(strategies.policy.allowed[0]?.circuit_breaker).toEqual({ max_red_batches: 2, max_red_minutes: 45 });
+  } finally {
     await server.stop();
   }
 });

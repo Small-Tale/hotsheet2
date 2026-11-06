@@ -537,7 +537,13 @@ receipt. `HS2-TVASVW` covers the direct-poll fallback's connection use.
 HS2-E9AWV8 covers the first versioned client transport contract. The route
 inventory check in `clients/web/tests/contracts.spec.ts` compares every server
 router path and method to OpenAPI, then validates compatibility, ticket, row,
-and replay responses from a real server against the core schemas. The event
+and replay responses from a real server against the core schemas. HS2-3KNAPN
+adds real `/checkouts/{reference}/workers` (default and `include_past`) and
+`/integration-strategies` responses from a seeded throwaway coordination pool:
+worker preferences with a refused request, unmatched tickets, an expired past
+worker, and a batch policy with circuit-breaker thresholds. They are validated
+against `WorkerView` and the strategy report, so an omitted server field such as
+`past_workers` fails CI. The event
 schema also encodes assignment, activity, and turn envelope fields. The route
 inventory includes the checkout legacy-permission discard and guidance endpoints
 (HS2-N44D0P); `clients/web/scripts/sync-openapi-routes.mjs` regenerates
