@@ -144,7 +144,13 @@ export function syncVideoPosters(root: ParentNode, fetcher: Fetcher = fetch): vo
     const videoUrl = video.dataset.videoSourceUrl;
     if (!posterUrl || !videoUrl) continue;
     if (assignedPosters.get(video) === posterUrl) {
-      if (localPosterUrls.has(video)) releaseVideoPreviewSource(video);
+      const localPoster = localPosterUrls.get(video);
+      if (localPoster) {
+        // HS2-E2YQMF: a re-render morphs the rendered `poster` (the server thumbnail URL) back onto
+        // an already hydrated preview. Restore its local poster so a later render cannot undo it.
+        if (video.getAttribute('poster') !== localPoster) video.poster = localPoster;
+        releaseVideoPreviewSource(video);
+      }
       continue;
     }
     assignedPosters.set(video, posterUrl);

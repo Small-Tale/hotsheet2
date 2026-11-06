@@ -863,6 +863,33 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
     dispose();
   });
 
+  it("HS2-E2YQMF clears a grid-created viewport's inert state when it mounts interactively", () => {
+    windowMock.innerWidth = 1440;
+    windowMock.requestAnimationFrame.mockImplementation(() => 1);
+    const attributes = new Map<string, string>([['aria-hidden', 'true']]);
+    // `createDedicatedTerminalTileViewport` makes the element inert and hidden before any runtime mounts.
+    const viewport = {
+      dataset: { displayMode: 'interactive' } as Record<string, string>,
+      style: {},
+      inert: true,
+      classList: { contains: (name: string) => name === 'terminal-viewport--dedicated' },
+      closest: () => null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      setAttribute: (name: string, value: string) => attributes.set(name, value),
+      removeAttribute: (name: string) => attributes.delete(name),
+    } as unknown as HTMLElement;
+    // Its tile runtime was disposed; the drawer now mounts the same element interactively.
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'adopted' });
+    expect(viewport.inert).toBe(false);
+    expect(attributes.has('aria-hidden')).toBe(false);
+    expect(viewport.dataset.presentation).toBeUndefined();
+    dispose();
+    allocated.terminals.length = 0;
+  });
+
   it('releases WebGL while parked, restores it after the first resumed frame, and stops at a closed socket', () => {
     webglAddons.length = 0;
     windowMock.innerWidth = 1440;

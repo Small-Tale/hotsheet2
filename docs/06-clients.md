@@ -2288,6 +2288,8 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   media and never autoplay; once their poster is ready, the client removes and reloads
   their source so later application renders cannot leave a hidden decoder or request alive.
   Loaded posters use revocable local blob URLs so the grid can release its video source.
+  A later render that morphs the rendered server poster URL back onto a hydrated preview gets
+  its local poster restored, without another fetch (HS2-E2YQMF).
   Their poster uses one predictable attachment `thumbnail`
   GET/PUT endpoint backed by a SHA-256 content-addressed host cache. Web clients seek and
   draw a frame with native video/canvas APIs and upload the JPEG during browser uploads;
@@ -3833,6 +3835,9 @@ same instance in the drawer's project grid and in the Workspace Grid. The instan
 places by reparenting; it is never re-mounted, reconnected, or replayed. It sits inside the tile's
 morph-skipped preview placeholder, so a re-render never clobbers it. Only visible and near-visible
 tiles cold-mount, at the existing progressive pace of two per turn.
+A grid creates such an instance inert and hidden. If its tile runtime is disposed and the same
+element is later mounted interactively in the drawer, that mount clears the inert state, so
+the terminal can always be focused and typed into (HS2-E2YQMF).
 
 The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
 

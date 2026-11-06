@@ -1235,6 +1235,14 @@ function initializeTerminalViewport(
         detail: { tile: true },
       }),
     );
+  else if (element.inert) {
+    // HS2-E2YQMF: a grid creates a terminal's dedicated viewport already inert and hidden
+    // (`createDedicatedTerminalTileViewport`). When its tile runtime is disposed and the same element
+    // is later mounted interactively, no tile-to-interactive transition runs, so nothing cleared that
+    // state and the drawer showed a terminal that could not be focused or typed into.
+    element.inert = false;
+    element.removeAttribute('aria-hidden');
+  }
   const focus = () => {
       if (fixedDashboardGrid && element.dataset.geometryReady !== 'true') return;
       focusRequested = false;
