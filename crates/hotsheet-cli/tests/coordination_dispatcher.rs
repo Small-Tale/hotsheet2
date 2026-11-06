@@ -1241,3 +1241,116 @@ fn hs2_twzw7x_full_original_route_replay_survives_authority_and_identity_changes
         "exact active assignment authority",
     );
 }
+
+/// HS2-PWDXB6 (the HS2-M6TZB5 case): with legacy integrator authority, `assign` refused
+/// nothing about open `blocked_by` dependencies, so an Up Next ticket waiting on two Not
+/// Started tickets was offered, accepted and claimed. It is now refused under either
+/// authority, naming every open dependency, until the last one closes.
+#[test]
+fn hs2_pwdxb6_legacy_integrator_assign_refuses_open_dependencies_and_names_them() {
+    let f = Fixture::new();
+    let backend = f.ticket();
+    let service = f.ticket();
+    let dependent = f.ticket();
+    let base = git(&f.project, &["rev-parse", "HEAD"]);
+    register_integrator(&f);
+    assert_eq!(f.run(&["status"]).state.authority, Authority::Integrator);
+    f.run(&[
+        "register",
+        "--role",
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--lease-seconds",
+        "600",
+    ]);
+    // Legacy authority takes no scope.
+    let connection = git_connection_id(&f.store);
+    let native = dependent.id.to_string();
+    let legacy_assign = || {
+        let args = f.coord(&[
+            "assign",
+            "--id",
+            "integrator",
+            "--session",
+            "root-one",
+            "--worker",
+            "worker",
+            "--worker-session",
+            "worker-session",
+            "--operation",
+            "op-dep",
+            "--connection",
+            &connection,
+            "--native-id",
+            &native,
+            "--slug",
+            &dependent.slug,
+            "--base",
+            &base,
+        ]);
+        f.command(&args.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+    };
+    f.cli(&[
+        "edit",
+        &dependent.slug,
+        "--blocked-by",
+        &backend.slug,
+        "--blocked-by",
+        &service.slug,
+        "--up-next",
+    ]);
+    let refusal = legacy_assign();
+    refused(&refusal, "depends on");
+    let stderr = String::from_utf8_lossy(&refusal.stderr);
+    assert!(
+        stderr.contains(&backend.slug) && stderr.contains(&service.slug),
+        "{stderr}"
+    );
+    assert!(stderr.contains("not_started"), "{stderr}");
+    assert!(
+        f.run(&["status"]).state.assignments.is_empty(),
+        "nothing was reserved"
+    );
+    assert!(
+        f.store
+            .read_ticket(&dependent.id)
+            .unwrap()
+            .claimed_by
+            .is_none()
+    );
+
+    f.cli(&[
+        "edit",
+        &backend.slug,
+        "--status",
+        "completed",
+        "--note",
+        "synthetic done",
+    ]);
+    let refusal = legacy_assign();
+    let stderr = String::from_utf8_lossy(&refusal.stderr);
+    refused(&refusal, &service.slug);
+    assert!(
+        !stderr.contains(&backend.slug),
+        "a closed dependency is not named: {stderr}"
+    );
+
+    f.cli(&[
+        "edit",
+        &service.slug,
+        "--status",
+        "completed",
+        "--note",
+        "synthetic done",
+    ]);
+    succeeded(&legacy_assign());
+    assert_eq!(
+        f.run(&["status"]).state.assignments["op-dep"].phase,
+        Phase::Offered
+    );
+}

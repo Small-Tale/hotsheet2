@@ -980,7 +980,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             // serialized reservation boundary, after the current authority is verified, from
             // fresh ticket reads. The evidence author is therefore the active assignment
             // authority: the dispatcher with dispatcher authority, otherwise the integrator.
-            let check: ReservationCheck<'_> = Box::new(move |current, replayed| {
+            let check: ReservationCheck<'_> = Box::new(move |_current, replayed| {
                 let ticket = store.read_ticket(&ticket_id)?;
                 if replayed.is_none() {
                     let tickets = store.list_tickets()?;
@@ -990,9 +990,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                         &checked_worker,
                         time::OffsetDateTime::now_utc(),
                     )?;
-                    if current.authority == Authority::Dispatcher {
-                        claims::dependencies_closed(&ticket, &tickets)?;
-                    }
+                    // Under either authority, as automatic selection does (HS2-PWDXB6).
+                    claims::dependencies_closed(&ticket, &tickets)?;
                 }
                 if let Some((route, note_id)) = &evidence {
                     // New operations require evidence authored by the active assignment

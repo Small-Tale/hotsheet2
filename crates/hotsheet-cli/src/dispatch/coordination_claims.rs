@@ -31,19 +31,35 @@ pub(super) fn assignable(
     Ok(())
 }
 
-/// A dispatcher reserves a ticket only once every `blocked_by` dependency is closed
-/// (HS2-TWZW7X). A dependency missing from this source is unknown, not satisfied.
+/// A new assignment reserves a ticket only once every `blocked_by` dependency is closed,
+/// under either assignment authority (HS2-TWZW7X, HS2-PWDXB6). A dependency missing from this
+/// source is unknown, not satisfied. The refusal names every such dependency.
 pub(super) fn dependencies_closed(ticket: &Ticket, tickets: &[Ticket]) -> Result<()> {
-    for dependency in &ticket.blocked_by {
-        let closed = tickets
-            .iter()
-            .find(|t| t.id == *dependency)
-            .is_some_and(|t| !ops::is_open(t));
-        ensure!(
-            closed,
-            "ticket depends on {dependency}, which is open or not in this source"
-        );
-    }
+    let pending: Vec<String> = ticket
+        .blocked_by
+        .iter()
+        .filter_map(
+            |dependency| match tickets.iter().find(|t| t.id == *dependency) {
+                Some(t) if !ops::is_open(t) => None,
+                Some(t) => {
+                    let status = serde_json::to_value(t.status).unwrap_or_default();
+                    Some(format!(
+                        "{} ({}, {})",
+                        t.slug,
+                        t.id,
+                        status.as_str().unwrap_or("open")
+                    ))
+                }
+                None => Some(format!("{dependency} (not in this source)")),
+            },
+        )
+        .collect();
+    ensure!(
+        pending.is_empty(),
+        "ticket {} depends on {}; close them or remove the dependency before assigning it",
+        ticket.slug,
+        pending.join(", ")
+    );
     Ok(())
 }
 

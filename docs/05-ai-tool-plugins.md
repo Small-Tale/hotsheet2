@@ -2414,9 +2414,12 @@ generation; after an integrator replacement the dispatcher is refused until the 
 generation republishes. In dispatcher mode `assign` additionally requires, under the state
 lock: the published base; a ticket outside the blocked list; at least one declared `--scope`
 path that overlaps neither an in-flight scope nor any pending (not Done, not review-returned)
-assignment's scope, comparing whole path components (or reviewed sections, below); and every `blocked_by` dependency
-closed in the selected source. The existing eligibility, claim, worker-generation,
-stopped-run and unsupported-source checks still apply. Every reservation check runs at one
+assignment's scope, comparing whole path components (or reviewed sections, below). The existing eligibility, claim, worker-generation,
+stopped-run and unsupported-source checks still apply. Under either authority, `assign` also
+requires every `blocked_by` dependency to be closed in the selected source, as automatic
+selection does (HS2-BSYW6F). The refusal names each open or unknown dependency by slug, id and
+status (HS2-PWDXB6). This does not change an exact `claim`, which may re-evaluate a
+`blocked_reason` (HS2-BAK4BC). Every reservation check runs at one
 serialized boundary: under the selected source's ticket transaction and then the
 coordination state lock (the order review returns use), after the caller is verified as the
 current assignment authority, from fresh ticket reads. A concurrent authority switch,
