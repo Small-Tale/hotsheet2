@@ -8746,6 +8746,13 @@ async fn opening_project_does_not_wait_for_ignored_checkout_traversal() {
 
 /// Opening a project monitors its checkout by filesystem events: a working-tree change is
 /// announced over the long-poll stream, while ignored build output is not (HS2-4S9ENS).
+///
+/// HS2-3T6WRJ: the monitor starts before the open's background setup refresh and worklist
+/// regeneration, which write Hot Sheet's own files into the checkout. Those writes are
+/// genuine status changes and are announced whenever they land; under load they landed in the
+/// ignored-output window and failed the test. The refresh is now held until that window, the
+/// worst case, and the fixture ignores every path except the two the test owns, so only the
+/// test's own writes can change the checkout's Git status.
 #[tokio::test]
 async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output() {
     let (_primary, st) = state();
@@ -8761,9 +8768,20 @@ async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output(
             .unwrap()
             .success()
     );
-    std::fs::write(checkout.join(".gitignore"), "target/\n").unwrap();
+    // Ignore everything but the test's own `.gitignore` and `visible.txt`: `target/` stays
+    // ignored build output, and Hot Sheet's setup files cannot change the Git status.
+    std::fs::write(
+        checkout.join(".gitignore"),
+        "*\n!.gitignore\n!visible.txt\n",
+    )
+    .unwrap();
     let registry = tempfile::tempdir().unwrap();
-    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let (st, mut setup) = OpenBackgroundGate::install(
+        st.with_checkout_registry(registry.path().join("checkouts.json")),
+        hotsheet_server::OpenBackgroundWork::SetupRefreshStarted,
+        hotsheet_server::OpenBackgroundWork::SetupRefreshFinished,
+    );
+    let app = app(st);
     let opened = body_json(
         app.clone()
             .oneshot(authed(
@@ -8806,6 +8824,8 @@ async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output(
 
     std::fs::create_dir_all(checkout.join("target/debug")).unwrap();
     std::fs::write(checkout.join("target/debug/artifact"), "build output").unwrap();
+    // Hot Sheet's own setup writes land in the same window.
+    setup.release_and_finish().await;
     tokio::time::sleep(std::time::Duration::from_millis(2_000)).await;
     let polled = poll(cursor).await;
     assert!(
