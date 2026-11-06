@@ -235,7 +235,10 @@ test('pages the workspace grid sidebar by dot, arrow key, and trackpad scroll an
   await expect(triage.getByText('34 minutes')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-ezsqdf-triage-1440.png' });
 
-  // A horizontal trackpad scroll settles on the previous page.
+  // A horizontal trackpad scroll settles on the previous page. The arrow key updates data-page at
+  // once while the viewport is still smooth-scrolling to triage; a wheel delivered mid-animation is
+  // absorbed by that scroll's snap, so wait for the pager to settle first (HS2-24XBNR).
+  await expect.poll(() => pageOffset(pager)).toBeLessThan(1);
   const viewportBox = (await pager.locator('.kui-paged-view__viewport').boundingBox())!;
   await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + 80);
   await page.mouse.wheel(-viewportBox.width, 0);
