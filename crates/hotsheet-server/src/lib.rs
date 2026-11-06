@@ -24,6 +24,7 @@ mod host_health;
 mod hosting;
 mod image_crop_cache;
 pub mod lifecycle;
+pub mod live_record;
 pub mod live_state;
 pub mod mcp_presence;
 pub mod media;

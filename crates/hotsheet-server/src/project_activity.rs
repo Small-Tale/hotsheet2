@@ -14,9 +14,15 @@
 //!
 //! It also keeps each halt's detail and the terminal prompts each worker's session waits at,
 //! from which the live state derives its stuck causes (HS2-EGKKA0, §32.8.4).
+//!
+//! [`ProjectActivity::export`] and [`ProjectActivity::restore`] carry a store's tracker state
+//! across server restarts through the machine-local live-state record (HS2-MHW3SX,
+//! [`crate::live_record`]); [`ProjectActivity::seed_claims`] then reconciles it with the
+//! index, which stays authoritative for claims.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 
 /// How long a store must stay without claims before it counts as stopped, so a worker
@@ -50,7 +56,8 @@ struct Claim {
     expires: OffsetDateTime,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StopReason {
     /// Every claim was released.
     Finished,
@@ -129,6 +136,200 @@ pub struct PromptNote {
 
 /// One prompt as the router reads it from hook state: `(worker, terminal, kind, since)`.
 pub type PromptReport = (String, String, PromptKind, Option<OffsetDateTime>);
+
+/// One store's tracker state as the live-state record persists it (HS2-MHW3SX). Times are
+/// Unix milliseconds. Terminal prompts are not kept: they belong to running sessions and are
+/// read again from hook state.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivityRecord {
+    /// Claims by ticket id, as last observed.
+    #[serde(default)]
+    pub claims: BTreeMap<String, ClaimRecord>,
+    #[serde(default)]
+    pub active_since_ms: Option<i64>,
+    #[serde(default)]
+    pub idle_since_ms: Option<i64>,
+    /// Slugs completed during the open period.
+    #[serde(default)]
+    pub completed: Vec<String>,
+    /// `(slug, worker)` of leases that expired during the open period.
+    #[serde(default)]
+    pub stalled: Vec<(String, String)>,
+    #[serde(default)]
+    pub last_progress_ms: Option<i64>,
+    #[serde(default)]
+    pub idle_reported: bool,
+    #[serde(default)]
+    pub outcome: Option<OutcomeRecord>,
+    /// Halts by worker.
+    #[serde(default)]
+    pub halts: BTreeMap<String, HaltRecord>,
+    /// Last progress write per ticket id inside [`UPDATED_WINDOW`].
+    #[serde(default)]
+    pub updated: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub period_workers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimRecord {
+    pub slug: String,
+    pub worker: String,
+    pub expires_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutcomeRecord {
+    pub reason: StopReason,
+    pub at_ms: i64,
+    #[serde(default)]
+    pub stalled: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HaltRecord {
+    pub message: String,
+    pub at_ms: i64,
+    #[serde(default)]
+    pub terminal: Option<String>,
+    #[serde(default)]
+    pub usage_limit: bool,
+    #[serde(default)]
+    pub resets_at_ms: Option<i64>,
+}
+
+/// A claim as the index holds it when a store is seeded: `expires` may already have passed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeedClaim {
+    pub ticket: String,
+    pub slug: String,
+    pub worker: String,
+    pub expires: OffsetDateTime,
+}
+
+fn to_ms(at: OffsetDateTime) -> i64 {
+    (at.unix_timestamp_nanos() / 1_000_000) as i64
+}
+
+fn from_ms(ms: i64) -> OffsetDateTime {
+    OffsetDateTime::from_unix_timestamp_nanos(i128::from(ms) * 1_000_000)
+        .unwrap_or(OffsetDateTime::UNIX_EPOCH)
+}
+
+impl StoreActivity {
+    fn record(&self, now: OffsetDateTime) -> ActivityRecord {
+        ActivityRecord {
+            claims: self
+                .claims
+                .iter()
+                .map(|(ticket, claim)| {
+                    (
+                        ticket.clone(),
+                        ClaimRecord {
+                            slug: claim.slug.clone(),
+                            worker: claim.worker.clone(),
+                            expires_ms: to_ms(claim.expires),
+                        },
+                    )
+                })
+                .collect(),
+            active_since_ms: self.active_since.map(to_ms),
+            idle_since_ms: self.idle_since.map(to_ms),
+            completed: self.completed.clone(),
+            stalled: self.stalled.clone(),
+            last_progress_ms: self.last_progress.map(to_ms),
+            idle_reported: self.idle_reported,
+            outcome: self.outcome.as_ref().map(|o| OutcomeRecord {
+                reason: o.reason,
+                at_ms: to_ms(o.at),
+                stalled: o.stalled.clone(),
+            }),
+            halts: self
+                .halts
+                .iter()
+                .map(|(worker, halt)| {
+                    (
+                        worker.clone(),
+                        HaltRecord {
+                            message: halt.message.clone(),
+                            at_ms: to_ms(halt.at),
+                            terminal: halt.detail.terminal.clone(),
+                            usage_limit: halt.detail.usage_limit,
+                            resets_at_ms: halt.detail.resets_at.map(to_ms),
+                        },
+                    )
+                })
+                .collect(),
+            updated: self
+                .updated
+                .iter()
+                .filter(|(_, at)| **at + UPDATED_WINDOW > now)
+                .map(|(ticket, at)| (ticket.clone(), to_ms(*at)))
+                .collect(),
+            period_workers: self.period_workers.iter().cloned().collect(),
+        }
+    }
+
+    fn from_record(record: ActivityRecord) -> StoreActivity {
+        StoreActivity {
+            claims: record
+                .claims
+                .into_iter()
+                .map(|(ticket, claim)| {
+                    (
+                        ticket,
+                        Claim {
+                            slug: claim.slug,
+                            worker: claim.worker,
+                            expires: from_ms(claim.expires_ms),
+                        },
+                    )
+                })
+                .collect(),
+            active_since: record.active_since_ms.map(from_ms),
+            idle_since: record.idle_since_ms.map(from_ms),
+            completed: record.completed,
+            stalled: record.stalled,
+            last_progress: record.last_progress_ms.map(from_ms),
+            idle_reported: record.idle_reported,
+            outcome: record.outcome.map(|o| Outcome {
+                reason: o.reason,
+                at: from_ms(o.at_ms),
+                stalled: o.stalled,
+            }),
+            halts: record
+                .halts
+                .into_iter()
+                .map(|(worker, halt)| {
+                    let note = HaltNote {
+                        worker: worker.clone(),
+                        message: halt.message,
+                        at: from_ms(halt.at_ms),
+                        detail: HaltDetail {
+                            terminal: halt.terminal,
+                            usage_limit: halt.usage_limit,
+                            resets_at: halt.resets_at_ms.map(from_ms),
+                        },
+                    };
+                    (worker, note)
+                })
+                .collect(),
+            updated: record
+                .updated
+                .into_iter()
+                .map(|(ticket, ms)| (ticket, from_ms(ms)))
+                .collect(),
+            period_workers: record.period_workers.into_iter().collect(),
+        }
+    }
+
+    fn note_progress_at(&mut self, at: OffsetDateTime) {
+        if self.last_progress.is_none_or(|last| at > last) {
+            self.last_progress = Some(at);
+            self.idle_reported = false;
+        }
+    }
+}
 
 /// The tracker's continuous state word for one store (HS2-JTTQMY). The words match the
 /// notification reasons; `Active` covers the release grace, as notifications do.
@@ -491,6 +692,107 @@ impl ProjectActivity {
             _ => idle_report(activity, idle, now),
         };
         (report, next_check(activity, grace, idle))
+    }
+
+    /// The store's tracker state for the live-state record (HS2-MHW3SX), `None` when the
+    /// tracker has never seen the store. Progress times outside the window are dropped.
+    pub fn export(&self, store: &str, now: OffsetDateTime) -> Option<ActivityRecord> {
+        self.stores.get(store).map(|activity| activity.record(now))
+    }
+
+    /// Restore a store's persisted tracker state (HS2-MHW3SX). Anything the tracker already
+    /// saw for the store in this process is newer and wins: its progress, progress times,
+    /// claims, halts, and workers merge over the record. Call [`Self::seed_claims`] next.
+    pub fn restore(&mut self, store: &str, record: ActivityRecord) {
+        let entry = self.stores.entry(store.to_string()).or_default();
+        let seen = std::mem::replace(entry, StoreActivity::from_record(record));
+        if let Some(at) = seen.last_progress {
+            entry.note_progress_at(at);
+        }
+        for (ticket, at) in seen.updated {
+            let slot = entry.updated.entry(ticket).or_insert(at);
+            *slot = (*slot).max(at);
+        }
+        entry.claims.extend(seen.claims);
+        entry.halts.extend(seen.halts);
+        entry.period_workers.extend(seen.period_workers);
+        if entry.active_since.is_none() {
+            entry.active_since = seen.active_since;
+        }
+    }
+
+    /// Recover progress the tracker missed from what the tickets record themselves
+    /// (HS2-MHW3SX): `(ticket, at)` progress times, such as a note's or a status change's.
+    /// Times inside [`UPDATED_WINDOW`] and not in the future join the per-ticket progress
+    /// times (the later one wins) and may move last progress forward.
+    pub fn recover_updated(
+        &mut self,
+        store: &str,
+        evidence: Vec<(String, OffsetDateTime)>,
+        now: OffsetDateTime,
+    ) {
+        let activity = self.stores.entry(store.to_string()).or_default();
+        for (ticket, at) in evidence {
+            if at > now || at + UPDATED_WINDOW <= now {
+                continue;
+            }
+            let slot = activity.updated.entry(ticket).or_insert(at);
+            *slot = (*slot).max(at);
+            activity.note_progress_at(at);
+        }
+    }
+
+    /// Reconcile the store's claims with `claims`, every claim its index holds, at startup
+    /// (HS2-2MM07G, HS2-MHW3SX). The index wins. A known claim it no longer holds was
+    /// released while the server was down, so the release grace starts now. A known claim
+    /// whose lease lapsed meanwhile keeps its expiry, so the next check reports it stalled.
+    /// A live claim is observed as usual; an expired one the tracker never knew is ignored.
+    /// Returns when [`Self::check`] should next run.
+    pub fn seed_claims(
+        &mut self,
+        store: &str,
+        claims: Vec<SeedClaim>,
+        now: OffsetDateTime,
+    ) -> Option<OffsetDateTime> {
+        let (grace, idle) = (self.grace, self.idle);
+        let activity = self.stores.entry(store.to_string()).or_default();
+        let held: BTreeMap<&str, &SeedClaim> =
+            claims.iter().map(|c| (c.ticket.as_str(), c)).collect();
+        activity.claims.retain(|ticket, known| {
+            held.get(ticket.as_str())
+                .is_some_and(|seed| seed.worker == known.worker)
+        });
+        for seed in &claims {
+            if seed.expires > now {
+                if activity.active_since.is_none() {
+                    activity.active_since = Some(now);
+                    activity.last_progress = Some(now);
+                    activity.idle_reported = false;
+                    activity.outcome = None;
+                    activity.period_workers.clear();
+                }
+                activity.period_workers.insert(seed.worker.clone());
+                activity.idle_since = None;
+                activity.claims.insert(
+                    seed.ticket.clone(),
+                    Claim {
+                        slug: seed.slug.clone(),
+                        worker: seed.worker.clone(),
+                        expires: seed.expires,
+                    },
+                );
+            } else if let Some(known) = activity.claims.get_mut(&seed.ticket) {
+                known.expires = seed.expires;
+            }
+        }
+        activity.drop_orphan_halts();
+        if activity.claims.is_empty()
+            && activity.active_since.is_some()
+            && activity.idle_since.is_none()
+        {
+            activity.idle_since = Some(now);
+        }
+        next_check(activity, grace, idle)
     }
 
     /// Live claims the tracker holds for a store.
@@ -1169,5 +1471,156 @@ mod tests {
         // Resume clears it, as for any halt.
         assert_eq!(p.resumed("w1"), ["s"]);
         assert!(p.live("s", t(7201)).halted.is_empty());
+    }
+
+    fn seed(ticket: &str, worker: &str, expires: i64) -> SeedClaim {
+        SeedClaim {
+            ticket: ticket.into(),
+            slug: format!("HS2-{ticket}"),
+            worker: worker.into(),
+            expires: t(expires),
+        }
+    }
+
+    /// A restart: export at `at`, round-trip through JSON, restore into a fresh tracker.
+    fn restart(p: &ProjectActivity, store: &str, at: i64) -> ProjectActivity {
+        let record = p.export(store, t(at)).expect("the store was seen");
+        let json = serde_json::to_string(&record).unwrap();
+        let mut next = ProjectActivity::default();
+        next.restore(store, serde_json::from_str(&json).unwrap());
+        next
+    }
+
+    #[test]
+    fn hs2_mhw3sx_restart_keeps_progress_times_period_and_halts() {
+        let mut p = ProjectActivity::default();
+        assert_eq!(p.export("s", t(0)), None, "never seen");
+        p.observe("s", progressed(claim("A", "w1", 99_999)), t(0));
+        p.observe("s", progressed(release("B", false)), t(100));
+        p.note_halt_with(
+            "w1",
+            "limit",
+            HaltDetail {
+                terminal: Some("t1".into()),
+                usage_limit: true,
+                resets_at: Some(t(3600)),
+            },
+            t(200),
+        );
+        let before = p.live("s", t(300));
+        let mut q = restart(&p, "s", 300);
+        q.seed_claims("s", vec![seed("A", "w1", 99_999)], t(300));
+        let after = q.live("s", t(300));
+        assert_eq!(after, before, "the restored tracker reads the same");
+        assert_eq!(after.updated, [t(0), t(100)]);
+        assert_eq!(after.word, ActivityWord::Halted);
+        assert_eq!(after.halted[0].detail.resets_at, Some(t(3600)));
+        // The period continues: the claim seen at seed does not restart it.
+        assert_eq!(after.active_since, Some(t(0)));
+        assert_eq!(after.last_progress, Some(t(100)));
+        // Progress times outside the window are not exported.
+        let late = p.export("s", t(3650)).unwrap();
+        assert_eq!(late.updated.len(), 1);
+        // An exported, empty-then-refilled store round-trips too.
+        let mut e = ProjectActivity::default();
+        e.observe("s", claim("A", "w1", 500), t(0));
+        e.observe("s", release("A", false), t(10));
+        e.check("s", t(200));
+        let mut r = restart(&e, "s", 201);
+        r.seed_claims("s", Vec::new(), t(201));
+        assert_eq!(r.live("s", t(201)).word, ActivityWord::Stopped);
+        assert_eq!(r.live("s", t(201)).stopped_at, Some(t(200)));
+        r.observe("s", claim("C", "w2", 9000), t(300));
+        assert_eq!(r.live("s", t(301)).word, ActivityWord::Active);
+    }
+
+    #[test]
+    fn hs2_mhw3sx_seed_claims_reconciles_releases_lapses_and_new_claims() {
+        // Released while the server was down: the grace starts at seed time.
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 99_999), t(0));
+        let mut q = restart(&p, "s", 10);
+        assert_eq!(q.seed_claims("s", Vec::new(), t(1000)), Some(t(1120)));
+        assert_eq!(q.live("s", t(1001)).word, ActivityWord::Active, "grace");
+        let report = q.check("s", t(1120)).0.unwrap();
+        assert_eq!(report.reason, StopReason::Finished);
+        assert_eq!(report.active_since, t(0));
+
+        // Lapsed while down: kept with its expiry, so the next check reports the stall.
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 600), t(0));
+        let mut q = restart(&p, "s", 10);
+        assert_eq!(
+            q.seed_claims("s", vec![seed("A", "w1", 600)], t(5000)),
+            Some(t(600)),
+            "an overdue check runs at once"
+        );
+        assert_eq!(q.live("s", t(5000)).word, ActivityWord::Stalled);
+        let report = q.check("s", t(5000)).0.unwrap();
+        assert_eq!(report.reason, StopReason::Stalled);
+        assert_eq!(report.stalled, [("HS2-A".to_string(), "w1".to_string())]);
+
+        // Taken over by another worker while down: the old claim and its halt go.
+        let mut p = ProjectActivity::default();
+        p.observe("s", claim("A", "w1", 99_999), t(0));
+        p.note_halt("w1", "x", t(5));
+        let mut q = restart(&p, "s", 10);
+        q.seed_claims("s", vec![seed("A", "w2", 99_999)], t(20));
+        let live = q.live("s", t(21));
+        assert_eq!(live.word, ActivityWord::Active);
+        assert!(live.halted.is_empty());
+        assert_eq!(live.expected_workers, 2, "both held a claim this period");
+        // An expired claim the tracker never knew is ignored, as before.
+        let mut fresh = ProjectActivity::default();
+        assert_eq!(
+            fresh.seed_claims("s", vec![seed("Z", "w9", 5)], t(10)),
+            None
+        );
+        assert_eq!(word(&fresh, "s", 11), ActivityWord::Stopped);
+        // Without a record, a live claim starts the period now, as the old seed did.
+        assert_eq!(
+            fresh.seed_claims("s", vec![seed("Y", "w9", 99_999)], t(20)),
+            Some(t(20 + 1800))
+        );
+        assert_eq!(fresh.live("s", t(21)).active_since, Some(t(20)));
+    }
+
+    #[test]
+    fn hs2_mhw3sx_recovery_merges_evidence_and_what_arrived_before_the_seed() {
+        let mut p = ProjectActivity::default();
+        p.observe("s", progressed(release("A", false)), t(0));
+        let record = p.export("s", t(0)).unwrap();
+        let mut q = ProjectActivity::default();
+        // Activity arrived before the store was seeded: it is newer and survives.
+        q.progress("s", t(50));
+        q.restore("s", record);
+        assert_eq!(q.live("s", t(60)).last_progress, Some(t(50)));
+        // Ticket evidence: inside the window joins, too old or future is ignored, and the
+        // later of two times wins.
+        q.recover_updated(
+            "s",
+            vec![
+                ("A".into(), t(30)),
+                ("B".into(), t(40)),
+                ("old".into(), t(-4000)),
+                ("future".into(), t(9999)),
+            ],
+            t(60),
+        );
+        assert_eq!(q.live("s", t(60)).updated, [t(30), t(40)]);
+        q.recover_updated("s", vec![("A".into(), t(10))], t(60));
+        assert_eq!(q.live("s", t(60)).updated, [t(30), t(40)], "kept the later");
+        // Evidence newer than the last progress moves it and re-arms idle reporting.
+        let mut idle = ProjectActivity::default();
+        idle.observe("s", claim("A", "w1", 99_999), t(0));
+        assert_eq!(idle.check("s", t(1800)).0.unwrap().reason, StopReason::Idle);
+        let mut r = restart(&idle, "s", 1900);
+        r.recover_updated("s", vec![("A".into(), t(1950))], t(2000));
+        r.seed_claims("s", vec![seed("A", "w1", 99_999)], t(2000));
+        assert_eq!(r.live("s", t(2001)).word, ActivityWord::Active);
+        assert_eq!(
+            r.check("s", t(1950 + 1800)).0.unwrap().reason,
+            StopReason::Idle
+        );
     }
 }

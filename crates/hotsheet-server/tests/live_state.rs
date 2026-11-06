@@ -742,3 +742,261 @@ async fn hs2_b4eq87_codex_terminal_usage_records_in_its_project_store() {
     );
     call(router, "DELETE", "/terminals/codex-b", None).await;
 }
+
+// ---- HS2-MHW3SX: persisted inputs and the minute rebuild ----------------------------------
+
+/// A bus event for a ticket write, as a server route or the store watcher publishes it.
+fn ticket_event(store: &str, kind: &str, id: &str) -> ChangeEvent {
+    ChangeEvent {
+        live: None,
+        cursor: None,
+        store: store.into(),
+        kind: kind.into(),
+        id: id.into(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    }
+}
+
+/// Route events on a plain thread, as the router's blocking worker does but without a
+/// runtime, so each live-state refresh runs synchronously instead of after the coalescing
+/// delay.
+fn route(state: &AppState, events: Vec<ChangeEvent>) {
+    let state = state.clone();
+    std::thread::spawn(move || {
+        for event in &events {
+            hotsheet_server::notification_router::route_change_event(&state, event);
+        }
+    })
+    .join()
+    .unwrap();
+}
+
+/// [`hotsheet_server::live_state::refresh_at`] on a plain thread.
+fn refresh(state: &AppState, store: &str, now: time::OffsetDateTime) -> Value {
+    let state = state.clone();
+    let store = store.to_string();
+    std::thread::spawn(move || {
+        serde_json::to_value(hotsheet_server::live_state::refresh_at(&state, &store, now).unwrap())
+            .unwrap()
+    })
+    .join()
+    .unwrap()
+}
+
+/// [`hotsheet_server::live_state::refresh_all_at`] on a plain thread.
+fn refresh_all(state: &AppState, now: time::OffsetDateTime) {
+    let state = state.clone();
+    std::thread::spawn(move || hotsheet_server::live_state::refresh_all_at(&state, now))
+        .join()
+        .unwrap();
+}
+
+/// A second server on the same store, as after a restart.
+fn restarted(h: &Harness) -> AppState {
+    let root = h._dir.path().join("demo.hs2");
+    AppState::new(FsStore::open(root).unwrap(), SECRET.into())
+        .unwrap()
+        .with_default_codex_home(h._dir.path().join("no-codex-home"))
+        .with_machine_home(h._dir.path().join("machine-home"))
+        .with_project_idle_grace(Duration::from_millis(300))
+}
+
+fn record_path(h: &Harness) -> std::path::PathBuf {
+    h._dir
+        .path()
+        .join("demo.hs2")
+        .join("metrics")
+        .join("local")
+        .join("live-state.json")
+}
+
+fn updated(live: &Value) -> Vec<i64> {
+    live["rates"]["tickets_updated"]["at_ms"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|at| at.as_i64().unwrap())
+        .collect()
+}
+
+/// The `live_state` snapshots pushed since the last drain.
+fn pushed(bus: &mut tokio::sync::broadcast::Receiver<ChangeEvent>) -> Vec<Value> {
+    let mut live = Vec::new();
+    while let Ok(event) = bus.try_recv() {
+        if event.kind == "live_state" {
+            live.push(serde_json::to_value(event.live.unwrap()).unwrap());
+        }
+    }
+    live
+}
+
+async fn create(router: &axum::Router, title: &str) -> String {
+    let (status, created) = call(router, "POST", "/tickets", Some(json!({"title":title}))).await;
+    assert_eq!(status, StatusCode::CREATED);
+    created["id"].as_str().unwrap().to_string()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_mhw3sx_a_restart_keeps_tickets_updated_baselines_and_ordering() {
+    let h = harness();
+    let router = app(h.state.clone());
+    let first = create(&router, "First").await;
+    let second = create(&router, "Second").await;
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{second}/claim"),
+        Some(json!({"worker":"w1","lease_minutes":30,"eta":"40m"})),
+    )
+    .await;
+    route(
+        &h.state,
+        vec![
+            ticket_event(&h.store_id, "created", &first),
+            ticket_event(&h.store_id, "created", &second),
+            ticket_event(&h.store_id, "claimed", &second),
+        ],
+    );
+    let before = refresh(&h.state, &h.store_id, time::OffsetDateTime::now_utc());
+    assert_eq!(before["state"], "active");
+    assert_eq!(updated(&before).len(), 2, "both new tickets are progress");
+    // The machine-local record holds the inputs, gitignored beside the peak book.
+    let record: Value = serde_json::from_slice(&std::fs::read(record_path(&h)).unwrap()).unwrap();
+    assert_eq!(record["version"], 1);
+    assert_eq!(record["revision"], before["revision"]);
+    assert_eq!(record["epoch_ms"], before["epoch_ms"]);
+    assert!(record["fingerprints"][&first]["hash"].is_u64());
+    assert!(record["fingerprints"][&second]["hash"].is_u64());
+    assert_eq!(record["activity"]["updated"].as_object().unwrap().len(), 2);
+    assert_eq!(record["activity"]["claims"][&second]["worker"], "w1");
+    assert_eq!(record["eta_samples"].as_array().unwrap().len(), 1);
+    let ignore = std::fs::read_to_string(h._dir.path().join("demo.hs2/.gitignore")).unwrap();
+    assert!(ignore.lines().any(|l| l.trim() == "metrics/local/"));
+
+    // Restart: a new server restores the rates, the period, and the runway samples, and
+    // orders its snapshots after the old server's.
+    let restarted = restarted(&h);
+    let router = app(restarted.clone());
+    let after = refresh(&restarted, &h.store_id, time::OffsetDateTime::now_utc());
+    assert_eq!(updated(&after), updated(&before), "tickets updated survive");
+    assert_eq!(
+        after["activity"]["active_since_ms"],
+        before["activity"]["active_since_ms"]
+    );
+    assert_eq!(after["state"], "active");
+    assert_eq!(after["runway"], before["runway"], "ETA samples survive");
+    assert!(after["epoch_ms"].as_i64().unwrap() > before["epoch_ms"].as_i64().unwrap());
+    assert!(after["revision"].as_u64().unwrap() > before["revision"].as_u64().unwrap());
+
+    // The persisted fingerprints are the baseline: a renewal seen by the watcher is not
+    // progress, though the ticket is new enough for the no-baseline fallback to count it.
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{second}/renew"),
+        Some(json!({"worker":"w1","lease_minutes":30})),
+    )
+    .await;
+    route(
+        &restarted,
+        vec![ticket_event(&h.store_id, "changed", &second)],
+    );
+    let renewed = refresh(&restarted, &h.store_id, time::OffsetDateTime::now_utc());
+    assert_eq!(
+        updated(&renewed),
+        updated(&before),
+        "a renewal is not progress"
+    );
+    // The first real edit after the restart is progress, not a baseline.
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{first}"),
+        Some(json!({"note":"Progress after the restart"})),
+    )
+    .await;
+    route(
+        &restarted,
+        vec![ticket_event(&h.store_id, "changed", &first)],
+    );
+    let edited = refresh(&restarted, &h.store_id, time::OffsetDateTime::now_utc());
+    let times = updated(&edited);
+    assert_eq!(times.len(), 2);
+    assert!(
+        times[1] > *updated(&before).iter().max().unwrap(),
+        "the edited ticket moved to now: {times:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_mhw3sx_without_a_record_tickets_updated_recover_from_the_tickets() {
+    let h = harness();
+    let router = app(h.state.clone());
+    let id = create(&router, "Noted").await;
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"note":"A note"})),
+    )
+    .await;
+    route(&h.state, vec![ticket_event(&h.store_id, "created", &id)]);
+    refresh(&h.state, &h.store_id, time::OffsetDateTime::now_utc());
+    std::fs::remove_file(record_path(&h)).unwrap();
+    let restarted = restarted(&h);
+    let now = time::OffsetDateTime::now_utc();
+    let live = refresh(&restarted, &h.store_id, now);
+    let times = updated(&live);
+    assert_eq!(times.len(), 1, "recovered from the ticket's own note");
+    let now_ms = (now.unix_timestamp_nanos() / 1_000_000) as i64;
+    assert!(
+        times[0] <= now_ms && times[0] > now_ms - 60_000,
+        "{times:?}"
+    );
+    // An hour later the recovered time has aged out like any other.
+    let later = refresh(&restarted, &h.store_id, now + time::Duration::minutes(61));
+    assert!(updated(&later).is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_mhw3sx_the_minute_rebuild_decays_a_quiet_store_and_pushes_only_changes() {
+    let h = harness();
+    let router = app(h.state.clone());
+    let mut bus = h.state.subscribe();
+    // The router's minute timer rebuilds every hosted store, starting at once: a snapshot is
+    // pushed although nothing was written since the server started.
+    let router_task =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+    let first = next_live(&mut bus, &h.store_id, |_| true).await;
+    assert_eq!(first["state"], "stopped");
+    router_task.abort();
+    let _ = router_task.await;
+
+    let id = create(&router, "Busy").await;
+    route(&h.state, vec![ticket_event(&h.store_id, "created", &id)]);
+    let now = time::OffsetDateTime::now_utc();
+    let busy = refresh(&h.state, &h.store_id, now);
+    assert_eq!(updated(&busy).len(), 1);
+    let mut bus = h.state.subscribe();
+    // Inside the hour nothing changed: no push.
+    refresh_all(&h.state, now + time::Duration::seconds(60));
+    refresh_all(&h.state, now + time::Duration::seconds(120));
+    assert!(
+        pushed(&mut bus).is_empty(),
+        "an unchanged rebuild pushes nothing"
+    );
+    // After the hour the minute rebuild drops the ticket and pushes the decay to zero.
+    refresh_all(&h.state, now + time::Duration::minutes(61));
+    let decayed = pushed(&mut bus);
+    assert_eq!(decayed.len(), 1);
+    assert!(updated(&decayed[0]).is_empty());
+    assert!(decayed[0]["revision"].as_u64().unwrap() > busy["revision"].as_u64().unwrap());
+    // Once at zero, further minutes push nothing.
+    refresh_all(&h.state, now + time::Duration::minutes(62));
+    refresh_all(&h.state, now + time::Duration::minutes(63));
+    assert!(pushed(&mut bus).is_empty());
+}

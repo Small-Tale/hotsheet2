@@ -30,9 +30,19 @@ use tokio::sync::broadcast::error::RecvError;
 
 use crate::AppState;
 use crate::events::ChangeEvent;
+use crate::live_record::{FingerprintRecord, LiveRecord};
 use crate::project_activity::{
-    ClaimObservation, LiveActivity, ProjectActivity, StopReason, StopReport,
+    ActivityRecord, ClaimObservation, LiveActivity, ProjectActivity, SeedClaim, StopReason,
+    StopReport, UPDATED_WINDOW,
 };
+
+/// Change kinds that only move a claim. Without a fingerprint baseline they count as
+/// progress only when the ticket's own record shows recent progress (HS2-MHW3SX).
+const CLAIM_KINDS: [&str; 4] = ["claimed", "renewed", "released", "assigned"];
+
+/// How recent a ticket's own progress evidence must be for a first sighting without a
+/// baseline to count as progress (HS2-MHW3SX).
+const BASELINE_FALLBACK: time::Duration = time::Duration::minutes(2);
 
 /// Change kinds that mean a ticket file was written.
 /// `renewed` moves a lease expiry; without it a renewed claim would read as stalled.
@@ -71,8 +81,9 @@ pub(crate) struct NotificationDelivery {
     activity_timers: Arc<Mutex<HashMap<String, OffsetDateTime>>>,
     /// Test override of the release grace; configuration applies otherwise.
     grace_override: Option<time::Duration>,
-    /// Last progress fingerprint per `(store, ticket)`, so a claim renewal is not progress.
-    fingerprints: Arc<Mutex<HashMap<(String, String), u64>>>,
+    /// Last progress fingerprint per `(store, ticket)`, so a claim renewal is not progress,
+    /// with when it was seen (Unix ms). Persisted in the live-state record (HS2-MHW3SX).
+    fingerprints: Arc<Mutex<HashMap<(String, String), FingerprintRecord>>>,
 }
 
 impl AppState {
@@ -150,6 +161,9 @@ pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHand
                 }
                 Work::FlushHeld => {
                     flush_held(&state);
+                    // HS2-MHW3SX: rebuild every hosted store's live state once a minute, so
+                    // a quiet project's rates decay; only a changed snapshot is pushed.
+                    crate::live_state::refresh_all(&state);
                 }
             }
         }
@@ -597,15 +611,15 @@ fn now() -> OffsetDateTime {
     OffsetDateTime::now_utc()
 }
 
-fn earliest(a: Option<OffsetDateTime>, b: Option<OffsetDateTime>) -> Option<OffsetDateTime> {
-    match (a, b) {
-        (Some(a), Some(b)) => Some(a.min(b)),
-        (a, b) => a.or(b),
-    }
+/// Seed a store's activity tracker (HS2-2MM07G): restore the persisted live-state record
+/// (HS2-MHW3SX), recover progress times from the tickets themselves, and reconcile claims
+/// with the index, which wins.
+fn seed_activity(state: &AppState, store: &str) {
+    seed_activity_at(state, store, now());
 }
 
-/// Record live claims from a store's index as the activity baseline (HS2-2MM07G).
-fn seed_activity(state: &AppState, store: &str) {
+/// [`seed_activity`] at a given clock. Public so tests can simulate a restart.
+pub fn seed_activity_at(state: &AppState, store: &str, now: OffsetDateTime) {
     let Some(entry) = state.host.get(store) else {
         return;
     };
@@ -619,29 +633,40 @@ fn seed_activity(state: &AppState, store: &str) {
             return;
         }
     };
-    let now = now();
-    let mut next = None;
-    {
-        let mut activity = state.notification_delivery.activity.lock_or_recover();
-        for row in rows {
-            let claim = row.claimed_by.zip(
-                row.claim_lease_expires_at
-                    .as_deref()
-                    .and_then(|at| hotsheet_model::Timestamp::new(at).instant()),
-            );
-            if claim.is_none() {
-                continue;
-            }
-            let observation = ClaimObservation {
-                ticket: row.id,
-                slug: row.slug,
-                claim,
-                completed: false,
-                progressed: false,
-            };
-            next = earliest(next, activity.observe(store, observation, now));
+    let record = LiveRecord::load(&entry.store);
+    if let Some(record) = &record {
+        let mut fingerprints = state.notification_delivery.fingerprints.lock_or_recover();
+        for (ticket, fingerprint) in &record.fingerprints {
+            fingerprints
+                .entry((store.to_string(), ticket.clone()))
+                .or_insert(*fingerprint);
         }
     }
+    let evidence = recent_progress(&entry.store, &rows, now);
+    let claims: Vec<SeedClaim> = rows
+        .into_iter()
+        .filter_map(|row| {
+            let expires = row
+                .claim_lease_expires_at
+                .as_deref()
+                .and_then(|at| hotsheet_model::Timestamp::new(at).instant())?;
+            Some(SeedClaim {
+                ticket: row.id,
+                slug: row.slug,
+                worker: row.claimed_by?,
+                expires,
+            })
+        })
+        .collect();
+    let next = {
+        let mut activity = state.notification_delivery.activity.lock_or_recover();
+        if let Some(persisted) = record.as_ref().and_then(|r| r.activity.clone()) {
+            activity.restore(store, persisted);
+        }
+        activity.recover_updated(store, evidence, now);
+        activity.seed_claims(store, claims, now)
+    };
+    crate::live_state::restore(state, store, record.as_ref());
     state
         .notification_delivery
         .activity_seeded
@@ -650,6 +675,82 @@ fn seed_activity(state: &AppState, store: &str) {
     if let Some(at) = next {
         schedule_activity_check(state, store, at);
     }
+}
+
+/// Progress times the tickets record themselves (HS2-MHW3SX), for tickets the index shows
+/// written inside the updated window: each ticket's latest note, completion, verification,
+/// close, or creation time. Title edits leave no trace, so this is a best-effort floor.
+fn recent_progress(
+    store: &hotsheet_ticketing::FsStore,
+    rows: &[hotsheet_ticketing::wire::TicketRow],
+    now: OffsetDateTime,
+) -> Vec<(String, OffsetDateTime)> {
+    rows.iter()
+        .filter(|row| {
+            row.updated_at
+                .as_deref()
+                .and_then(|at| hotsheet_model::Timestamp::new(at).instant())
+                .is_some_and(|at| at + UPDATED_WINDOW > now)
+        })
+        .filter_map(|row| {
+            let id = Ulid::from_string(&row.id).ok()?;
+            let ticket = store.read_ticket(&id).ok()?;
+            progress_evidence(&ticket).map(|at| (row.id.clone(), at))
+        })
+        .collect()
+}
+
+/// The latest progress a ticket records itself: a note added, a status reached, or its
+/// creation. Claims, renewals, and note edits leave none (HS2-MHW3SX).
+pub fn progress_evidence(ticket: &Ticket) -> Option<OffsetDateTime> {
+    ticket
+        .notes
+        .iter()
+        .map(|note| &note.created_at)
+        .chain(ticket.completed_at.iter())
+        .chain(ticket.verified_at.iter())
+        .chain(ticket.closed_at.iter())
+        .chain(std::iter::once(&ticket.created_at))
+        .filter_map(hotsheet_model::Timestamp::instant)
+        .max()
+}
+
+/// Whether a write with no fingerprint baseline is progress (HS2-MHW3SX): a new ticket is;
+/// a content write is; a claim-only or watcher-observed write is when the ticket's own
+/// record shows progress within [`BASELINE_FALLBACK`].
+fn progressed_without_baseline(kind: &str, ticket: &Ticket, now: OffsetDateTime) -> bool {
+    if kind == "created" {
+        return true;
+    }
+    if kind != "changed" && !CLAIM_KINDS.contains(&kind) {
+        return true;
+    }
+    progress_evidence(ticket).is_some_and(|at| at <= now && at + BASELINE_FALLBACK > now)
+}
+
+/// The store's tracker state and fingerprints for its live-state record (HS2-MHW3SX).
+pub(crate) fn persisted_inputs(
+    state: &AppState,
+    store: &str,
+    now: OffsetDateTime,
+) -> (
+    Option<ActivityRecord>,
+    std::collections::BTreeMap<String, FingerprintRecord>,
+) {
+    let activity = state
+        .notification_delivery
+        .activity
+        .lock_or_recover()
+        .export(store, now);
+    let fingerprints = state
+        .notification_delivery
+        .fingerprints
+        .lock_or_recover()
+        .iter()
+        .filter(|((owner, _), _)| owner == store)
+        .map(|((_, ticket), fingerprint)| (ticket.clone(), *fingerprint))
+        .collect();
+    (activity, fingerprints)
 }
 
 /// Feed one changed ticket's claim to the activity tracker. A period whose grace already
@@ -673,19 +774,35 @@ fn observe_activity(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
         // The index already holds this change, so the seed is the baseline.
         seed_activity(state, &event.store);
     }
-    let now = now();
+    observe_ticket(state, event, &ticket, now())
+}
+
+/// [`observe_activity`] for a ticket already read, at a given clock (tests drive restarts).
+pub fn observe_ticket(
+    state: &AppState,
+    event: &ChangeEvent,
+    ticket: &Ticket,
+    now: OffsetDateTime,
+) -> Vec<Message> {
     let claim = ticket.claimed_by.clone().zip(
         ticket
             .claim_lease_expires_at
             .as_ref()
             .and_then(hotsheet_model::Timestamp::instant),
     );
-    let fingerprint = progress_fingerprint(&ticket);
+    let fingerprint = progress_fingerprint(ticket);
     let previous = state
         .notification_delivery
         .fingerprints
         .lock_or_recover()
-        .insert((event.store.clone(), event.id.clone()), fingerprint);
+        .insert(
+            (event.store.clone(), event.id.clone()),
+            FingerprintRecord {
+                hash: fingerprint,
+                seen_ms: (now.unix_timestamp_nanos() / 1_000_000) as i64,
+            },
+        )
+        .map(|previous| previous.hash);
     let observation = ClaimObservation {
         ticket: event.id.clone(),
         slug: ticket.slug.clone(),
@@ -694,9 +811,13 @@ fn observe_activity(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
             ticket.status,
             hotsheet_model::Status::Completed | hotsheet_model::Status::Verified
         ),
-        // The first sighting has no baseline, except a new ticket, which is a write; a
-        // write that changes the fingerprint is progress, a claim renewal alone is not.
-        progressed: previous.map_or(event.kind == "created", |p| p != fingerprint),
+        // A write that changes the fingerprint is progress, a claim renewal alone is not.
+        // Without a baseline (a ticket the persisted record never saw), the change kind
+        // and the ticket's own record decide (HS2-MHW3SX).
+        progressed: previous.map_or_else(
+            || progressed_without_baseline(&event.kind, ticket, now),
+            |p| p != fingerprint,
+        ),
     };
     let (report, next) = {
         let mut activity = state.notification_delivery.activity.lock_or_recover();
@@ -896,17 +1017,26 @@ fn apply_windows(state: &AppState, config: &NotificationConfig) {
         .set_windows(grace, idle);
 }
 
-/// What counts as progress on a ticket: notes, status, phase, and title. A claim renewal
-/// changes none of them.
-fn progress_fingerprint(ticket: &Ticket) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    ticket.notes.len().hash(&mut hasher);
-    wire(ticket.status).hash(&mut hasher);
-    ticket.started_phase.map(wire).hash(&mut hasher);
-    ticket.title.hash(&mut hasher);
-    ticket.details.len().hash(&mut hasher);
-    hasher.finish()
+/// What counts as progress on a ticket: notes, status, phase, title, and details. A claim
+/// renewal changes none of them. A stable FNV-1a hash, because the live-state record keeps
+/// it across restarts and toolchains (HS2-MHW3SX).
+pub fn progress_fingerprint(ticket: &Ticket) -> u64 {
+    let phase = ticket.started_phase.map(wire).unwrap_or_default();
+    let fields = [
+        ticket.notes.len().to_string(),
+        wire(ticket.status),
+        phase,
+        ticket.title.clone(),
+        ticket.details.len().to_string(),
+    ];
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for field in &fields {
+        for byte in field.bytes().chain(std::iter::once(0x1f)) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    hash
 }
 
 /// A halted terminal: remember the halt for the live state and report every store where its
@@ -1033,6 +1163,86 @@ mod tests {
         message.url = Some("https://elsewhere.test".into());
         link(&mut message, Some("http://hs.test"), &roots);
         assert_eq!(message.url.as_deref(), Some("https://elsewhere.test"));
+    }
+
+    fn ticket(created: &str) -> Ticket {
+        Ticket::new(
+            Ulid::from_string("01M6N3H10PF7JHA3VHWS72N5Z1").unwrap(),
+            "HS2-A",
+            "Title",
+            "task",
+            hotsheet_model::Timestamp::new(created),
+            hotsheet_model::Timestamp::new(created),
+        )
+    }
+
+    fn note(at: &str) -> hotsheet_model::Note {
+        hotsheet_model::Note {
+            id: Ulid::from_string("01M6N3H10PF7JHA3VHWS72N5Z2").unwrap(),
+            kind: hotsheet_model::NoteKind::Regular,
+            kind_explicit: false,
+            created_at: hotsheet_model::Timestamp::new(at),
+            edited_at: hotsheet_model::Timestamp::new(at),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: false,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            actor: None,
+            text: "n".into(),
+        }
+    }
+
+    fn instant(at: &str) -> OffsetDateTime {
+        hotsheet_model::Timestamp::new(at).instant().unwrap()
+    }
+
+    #[test]
+    fn hs2_mhw3sx_fingerprint_is_stable_and_ignores_claims() {
+        let mut t = ticket("2027-01-15T06:00:00Z");
+        // A fixed value: the live-state record keeps it across restarts and toolchains.
+        assert_eq!(progress_fingerprint(&t), 0xf702_c0f8_e458_c977);
+        let base = progress_fingerprint(&t);
+        t.claimed_by = Some("w1".into());
+        assert_eq!(progress_fingerprint(&t), base, "a claim is not progress");
+        t.notes.push(note("2027-01-15T06:10:00Z"));
+        assert_ne!(progress_fingerprint(&t), base);
+        let mut titled = ticket("2027-01-15T06:00:00Z");
+        titled.title = "Other".into();
+        assert_ne!(progress_fingerprint(&titled), base);
+    }
+
+    #[test]
+    fn hs2_mhw3sx_progress_without_a_baseline_follows_kind_and_recent_evidence() {
+        let now = instant("2027-01-15T08:00:00Z");
+        let mut t = ticket("2027-01-15T06:00:00Z");
+        assert_eq!(progress_evidence(&t), Some(instant("2027-01-15T06:00:00Z")));
+        // Creation and content writes are progress; claim-only and watcher writes need
+        // recent evidence.
+        assert!(progressed_without_baseline("created", &t, now));
+        assert!(progressed_without_baseline("updated", &t, now));
+        assert!(progressed_without_baseline("closed", &t, now));
+        for kind in ["changed", "claimed", "renewed", "released", "assigned"] {
+            assert!(!progressed_without_baseline(kind, &t, now), "{kind}");
+        }
+        t.notes.push(note("2027-01-15T07:59:00Z"));
+        assert!(progressed_without_baseline("changed", &t, now));
+        assert!(progressed_without_baseline("renewed", &t, now));
+        // Evidence just outside the fallback window, or in the future, is not.
+        assert!(!progressed_without_baseline(
+            "changed",
+            &t,
+            instant("2027-01-15T08:01:00Z")
+        ));
+        assert!(!progressed_without_baseline(
+            "changed",
+            &t,
+            instant("2027-01-15T07:58:00Z")
+        ));
+        t.closed_at = Some(hotsheet_model::Timestamp::new("2027-01-15T07:59:30Z"));
+        assert_eq!(progress_evidence(&t), Some(instant("2027-01-15T07:59:30Z")));
     }
 
     #[test]

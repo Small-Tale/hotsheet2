@@ -10,12 +10,18 @@
 //! peaks the gauges scale to are computed here and persisted per store.
 //!
 //! A snapshot is rebuilt when something that feeds it happens (a ticket write, activity, a
-//! usage record, a halt, a tracker deadline) and is pushed as one `live_state` change event
-//! only when it changed. Rebuilds are coalesced per store. Nothing here polls.
+//! usage record, a halt, a tracker deadline), and on the router's minute timer so a quiet
+//! store's rates decay (HS2-MHW3SX). It is pushed as one `live_state` change event only when
+//! it changed. Rebuilds are coalesced per store. No client polls.
+//!
+//! The inputs that only live in memory (the tracker, progress fingerprints, ETA samples, and
+//! the revision) are kept in the store's machine-local live-state record
+//! ([`crate::live_record`]) and restored when the store is seeded (HS2-MHW3SX).
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::Json;
@@ -31,6 +37,7 @@ use time::{Duration, OffsetDateTime};
 use crate::AppState;
 use crate::api_error::ApiError;
 use crate::events::ChangeEvent;
+use crate::live_record::{EtaSample, LiveRecord, RECORD_VERSION};
 use crate::project_activity::{ActivityWord, LiveActivity, PromptKind, UPDATED_WINDOW};
 
 /// The change-event kind that carries a [`LiveStoreState`].
@@ -266,7 +273,8 @@ pub struct LiveStateList {
 /// Server-wide live-state registry, one entry per store.
 #[derive(Clone)]
 pub(crate) struct LiveStates {
-    epoch_ms: i64,
+    /// This server's start, raised above any restored record's epoch (HS2-MHW3SX).
+    epoch_ms: Arc<AtomicI64>,
     stores: Arc<Mutex<HashMap<String, StoreLive>>>,
     /// Serializes rebuilds so revisions follow build order.
     building: Arc<Mutex<()>>,
@@ -275,7 +283,7 @@ pub(crate) struct LiveStates {
 impl Default for LiveStates {
     fn default() -> Self {
         LiveStates {
-            epoch_ms: unix_ms(OffsetDateTime::now_utc()),
+            epoch_ms: Arc::new(AtomicI64::new(unix_ms(OffsetDateTime::now_utc()))),
             stores: Arc::default(),
             building: Arc::default(),
         }
@@ -292,6 +300,71 @@ struct StoreLive {
     peaks: Option<PeakBook>,
     /// `(ticket, claimed_at_ms, planned_ms)`, newest last.
     eta_samples: VecDeque<(String, i64, i64)>,
+    /// The persisted record was restored into this entry (HS2-MHW3SX).
+    restored: bool,
+    /// The last record written, with `saved_at_ms` zeroed, so an unchanged one is not
+    /// rewritten.
+    saved: Option<LiveRecord>,
+}
+
+impl LiveStates {
+    fn epoch(&self) -> i64 {
+        self.epoch_ms.load(Ordering::SeqCst)
+    }
+}
+
+/// Restore `store`'s persisted revision, ETA samples, and epoch floor (HS2-MHW3SX). Runs once
+/// per store when the tracker is seeded; revisions continue above the record's, and this
+/// server's epoch is raised above the record's so snapshots order after the old server's even
+/// if the clock stepped back.
+pub(crate) fn restore(state: &AppState, store: &str, record: Option<&LiveRecord>) {
+    let mut stores = state.live_states.stores.lock_or_recover();
+    let entry = stores.entry(store.to_string()).or_default();
+    if entry.restored {
+        return;
+    }
+    entry.restored = true;
+    let Some(record) = record else {
+        return;
+    };
+    entry.revision = entry.revision.max(record.revision);
+    if entry.eta_samples.is_empty() {
+        entry.eta_samples = record
+            .eta_samples
+            .iter()
+            .map(|s| (s.ticket.clone(), s.claimed_at_ms, s.planned_ms))
+            .collect();
+        while entry.eta_samples.len() > ETA_SAMPLES {
+            entry.eta_samples.pop_front();
+        }
+    }
+    let epoch = state.live_states.epoch();
+    if record.epoch_ms >= epoch {
+        state
+            .live_states
+            .epoch_ms
+            .fetch_max(record.epoch_ms + 1, Ordering::SeqCst);
+    }
+}
+
+/// Rebuild every hosted store's snapshot and push the ones that changed (HS2-MHW3SX). The
+/// notification router's minute timer calls it, so rates decay on a quiet store.
+pub fn refresh_all(state: &AppState) {
+    refresh_all_at(state, OffsetDateTime::now_utc());
+}
+
+/// [`refresh_all`] at a given clock (tests).
+pub fn refresh_all_at(state: &AppState, now: OffsetDateTime) {
+    let mut ids: Vec<String> = state
+        .host
+        .locations()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    for id in ids {
+        refresh_at(state, &id, now);
+    }
 }
 
 fn unix_ms(at: OffsetDateTime) -> i64 {
@@ -363,6 +436,7 @@ pub fn refresh_at(state: &AppState, store: &str, now: OffsetDateTime) -> Option<
         }
         changed
     };
+    persist(state, store, now);
     if changed {
         state.emit(ChangeEvent {
             cursor: None,
@@ -378,6 +452,45 @@ pub fn refresh_at(state: &AppState, store: &str, now: OffsetDateTime) -> Option<
         });
     }
     Some(snapshot)
+}
+
+/// Write `store`'s live-state record when its content changed (HS2-MHW3SX).
+fn persist(state: &AppState, store: &str, now: OffsetDateTime) {
+    let Some(entry) = state.host.get(store) else {
+        return;
+    };
+    let (activity, fingerprints) = crate::notification_router::persisted_inputs(state, store, now);
+    let record = {
+        let mut stores = state.live_states.stores.lock_or_recover();
+        let live = stores.entry(store.to_string()).or_default();
+        let mut record = LiveRecord {
+            version: RECORD_VERSION,
+            saved_at_ms: 0,
+            epoch_ms: state.live_states.epoch(),
+            revision: live.revision,
+            activity,
+            fingerprints,
+            eta_samples: live
+                .eta_samples
+                .iter()
+                .map(|(ticket, claimed_at_ms, planned_ms)| EtaSample {
+                    ticket: ticket.clone(),
+                    claimed_at_ms: *claimed_at_ms,
+                    planned_ms: *planned_ms,
+                })
+                .collect(),
+        };
+        record.cap_fingerprints();
+        if live.saved.as_ref() == Some(&record) {
+            return;
+        }
+        record
+    };
+    // Rebuilds are serialized, so no other write of this record runs meanwhile.
+    if record.save(&entry.store, unix_ms(now)) {
+        let mut stores = state.live_states.stores.lock_or_recover();
+        stores.entry(store.to_string()).or_default().saved = Some(record);
+    }
 }
 
 /// Whether `next` differs from `last` enough to push. Last progress and the idle deadline
@@ -413,9 +526,10 @@ pub fn snapshot_all(state: &AppState) -> LiveStateList {
         .map(|(id, _)| id)
         .collect();
     ids.sort();
+    let stores = ids.iter().filter_map(|id| refresh(state, id)).collect();
     LiveStateList {
-        epoch_ms: state.live_states.epoch_ms,
-        stores: ids.iter().filter_map(|id| refresh(state, id)).collect(),
+        epoch_ms: state.live_states.epoch(),
+        stores,
     }
 }
 
@@ -474,7 +588,7 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
         root: entry.store.root().display().to_string(),
         name,
         checkouts,
-        epoch_ms: state.live_states.epoch_ms,
+        epoch_ms: state.live_states.epoch(),
         revision: 0,
         state: combined_word(activity.word, waiting.count),
         activity: facts(&activity),

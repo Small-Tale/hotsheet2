@@ -453,10 +453,42 @@ Main CI status is not part of the snapshot yet (HS2-M8HHEA).
 `live` member is the whole snapshot. It reaches every client on the existing WebSocket or
 long-poll stream and replays by cursor. A rebuild follows a ticket write, activity, a turn,
 a usage record, a halt or resume, a terminal prompt opening or closing, or a tracker deadline (lease expiry, grace end, idle
-window). Rebuilds within 250 ms share one. An unchanged snapshot is not pushed, and a
-last-progress move under 15 seconds alone does not push. `epoch_ms` (server start) and
-`revision` order snapshots across restarts. Clients compute ages and decaying rates from
-the timestamps. A display timer may re-render, but it never requests.
+window). The server also rebuilds every hosted store once a minute, even when nothing
+happened, so a quiet project's rates visibly decay to zero (HS2-MHW3SX). That is a server
+timer; clients still never poll. Rebuilds within 250 ms share one. An unchanged snapshot is
+not pushed, and a last-progress move under 15 seconds alone does not push. `epoch_ms`
+(server start) and `revision` order snapshots across restarts: a restarted server raises its
+epoch above the one its predecessor recorded and continues each store's revision above the
+recorded one, so a clock that stepped back cannot reorder them. Clients compute ages and
+decaying rates from the timestamps. A display timer may re-render, but it never requests.
+
+**Restarts (HS2-MHW3SX).** The inputs that otherwise live only in server memory are kept per
+store in the gitignored, machine-local `metrics/local/live-state.json`, beside the peak book,
+and restored best effort when the store is seeded. The record (`version` 1) holds the
+tracker's state (claims as last seen, the period start, release grace start, completed
+tickets, expired leases, last progress, whether the idle episode was reported, the last
+period's outcome, halts with their cause detail, the per-ticket progress times, and the
+period's workers), each ticket's progress fingerprint with when it was seen (the newest
+5,000), the runway's planned claim durations, and the last `epoch_ms` and `revision`. It is
+rewritten atomically after a rebuild only when its content changed. Terminal prompts are not
+kept; they are read again from hook state.
+
+- **Claims.** The index wins. A recorded claim the index no longer holds was released while
+  the server was down, so the release grace starts at startup. A recorded claim whose lease
+  lapsed meanwhile reads Stalled and is reported once, as if the server had seen it lapse.
+- **Tickets updated.** Recorded progress times survive. For tickets the index shows written
+  in the last hour, the server also reads the ticket's own record (its latest note, its
+  completion, verification, or close time, or its creation) and adds it when it is newer, so
+  edits made while the server was down count, and a missing or unreadable record still
+  recovers most of the rate. Title edits leave no such trace.
+- **First edit after a restart.** The recorded fingerprints are the baseline, so the first
+  edit is progress and a renewal is not. For a ticket without one, a content write
+  (`created`, `updated`, `closed`, `moved`) is progress, and a claim-only or watcher-observed
+  write (`claimed`, `renewed`, `released`, `assigned`, `changed`) is progress only when the
+  ticket's own record shows progress in the last 2 minutes. Fingerprints use a stable
+  FNV-1a hash so they stay valid across builds.
+- An unreadable record or one of another version is ignored, and the store starts as before
+  from its index alone. Token rates need no record: they are re-read from the usage JSONL.
 
 **Reads.** `GET /live-state` returns every hosted store, and `GET /stores/{store_id}/live-state`
 returns one. Clients read them only when a stream connects, reconnects, or overflows. The

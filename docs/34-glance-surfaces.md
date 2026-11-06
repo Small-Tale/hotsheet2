@@ -91,8 +91,15 @@ the app, never every store the server hosts or has ever loaded (HS2-JGW031). Sta
 projects (§34.5).
 
 **Delivery.** The model is pushed over the existing WebSocket change stream with cursor replay. There is no
-fixed-interval polling. Clients compute ages locally from timestamps, and local display timers never issue
-requests.
+fixed-interval client polling. The server rebuilds every project's model at least once a minute and pushes it
+when it changed, so a quiet project decays to zero rather than freezing at its last rate: no progress is an
+important signal (HS2-MHW3SX). Clients compute ages locally from timestamps, and local display timers never
+issue requests.
+
+**Restarts.** A server restart does not zero the model. Tickets updated, the active period, halts, and the
+runway samples are kept per store in machine-local `metrics/local/live-state.json` and restored best effort,
+falling back to what the tickets record themselves (HS2-MHW3SX, [32-notifier-plugins.md](32-notifier-plugins.md)
+§32.8.3).
 
 ## 34.4 Compact-surface rule
 
@@ -287,21 +294,22 @@ HS2-GAJSX9:
 
 ## 34.11 Ticket map
 
-| Requirement                                              | Section    | Ticket     | Depends on              |
-| -------------------------------------------------------- | ---------- | ---------- | ----------------------- |
-| This requirements document                               | all        | HS2-3AA1N7 | none                    |
-| Per-project live state model, rates, 30-day peaks, push  | §34.2–34.3 | HS2-JTTQMY | none                    |
-| Glance gauge, full and bare variants                     | §34.3      | HS2-CVE3SK | none                    |
-| Standby mode                                             | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
-| Project sidebar Live section                             | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
-| Workers view button badge                                | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-170258` |
-| Grid sidebar shared groups, gauge and triage page bodies | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |
-| Grid sidebar paging with floating dots                   | §34.7      | HS2-EZSQDF | HS2-E1AQE8, `KF-0QJ2K3` |
-| Stats Right now tiles and projects table                 | §34.8      | HS2-ERTNJ7 | HS2-JTTQMY, HS2-CVE3SK  |
-| Host health sampler and push channel                     | §34.8      | HS2-DTAVQA | none                    |
-| Stats This Mac cards                                     | §34.8      | HS2-NS0AYR | HS2-DTAVQA, HS2-ERTNJ7  |
-| Stats overnight timeline with persisted transitions      | §34.8      | HS2-9AN4DN | HS2-JTTQMY, HS2-ERTNJ7  |
-| While-you-were-away digest                               | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
-| Stuck causes: usage-limit resume time, awaiting input    | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
-| Standardize the state icons                              | §34.10     | HS2-CSPKQX | none                    |
-| Speedometer gauge request (intake)                       | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |
+| Requirement                                               | Section    | Ticket     | Depends on              |
+| --------------------------------------------------------- | ---------- | ---------- | ----------------------- |
+| This requirements document                                | all        | HS2-3AA1N7 | none                    |
+| Per-project live state model, rates, 30-day peaks, push   | §34.2–34.3 | HS2-JTTQMY | none                    |
+| Live state kept across restarts, minute rebuild and decay | §34.3      | HS2-MHW3SX | HS2-JTTQMY              |
+| Glance gauge, full and bare variants                      | §34.3      | HS2-CVE3SK | none                    |
+| Standby mode                                              | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
+| Project sidebar Live section                              | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
+| Workers view button badge                                 | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-170258` |
+| Grid sidebar shared groups, gauge and triage page bodies  | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |
+| Grid sidebar paging with floating dots                    | §34.7      | HS2-EZSQDF | HS2-E1AQE8, `KF-0QJ2K3` |
+| Stats Right now tiles and projects table                  | §34.8      | HS2-ERTNJ7 | HS2-JTTQMY, HS2-CVE3SK  |
+| Host health sampler and push channel                      | §34.8      | HS2-DTAVQA | none                    |
+| Stats This Mac cards                                      | §34.8      | HS2-NS0AYR | HS2-DTAVQA, HS2-ERTNJ7  |
+| Stats overnight timeline with persisted transitions       | §34.8      | HS2-9AN4DN | HS2-JTTQMY, HS2-ERTNJ7  |
+| While-you-were-away digest                                | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
+| Stuck causes: usage-limit resume time, awaiting input     | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
+| Standardize the state icons                               | §34.10     | HS2-CSPKQX | none                    |
+| Speedometer gauge request (intake)                        | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |
