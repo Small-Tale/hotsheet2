@@ -141,7 +141,9 @@ Metrics can be shared across a team **through git** — no server sync needed:
   **end-to-end codex path** — `CodexTurn` captures usage from
   `thread/tokenUsage/updated`, the drive surfaces it as `TurnEvent::Usage`, and the server
   driving loop records it per turn via `record_priced`
-  attributed to the claimed ticket + session. **Claude** (HS2-TJ8FGR) is now mapped the
+  attributed to the claimed ticket + session, in the ticket's own store. The host's usage
+  sink then touches that store's live state, so its tokens per minute moves at once rather
+  than at the next unrelated refresh (HS2-P37AH7). **Claude** (HS2-TJ8FGR) is now mapped the
   same way — `claude_result_usage` reads the in-band stream-json `result` event's `usage`
   (declared `[metrics] source="claude-usage"`), `ClaudeTurn::usage()` surfaces it, and it
   flows through `TurnEvent::Usage` + the driving-loop recorder unchanged.

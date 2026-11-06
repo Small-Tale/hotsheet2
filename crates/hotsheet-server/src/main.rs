@@ -416,6 +416,10 @@ async fn main() -> Result<()> {
                     state.emit_turn_event(store, connection, ticket, turn_id, tool, event);
                 })
             }),
+            // A driven turn's usage moves its store's tokens per minute now (HS2-P37AH7).
+            usage_sink: Some(hotsheet_server::dist_work_loop::live_state_usage_sink(
+                &state,
+            )),
             worker_sessions: Some(Default::default()),
             persistent_home_root: Some(drive_root.join("workers")),
         };

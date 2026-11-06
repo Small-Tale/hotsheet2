@@ -71,7 +71,8 @@ The rates are:
 
 - **Tokens per minute**, from the metrics usage events ([14-metrics-interface.md](14-metrics-interface.md)) that each
   project's terminals record in that project's own store (HS2-B4EQ87). Claude and Codex
-  terminals record per model response while a turn runs (HS2-SSMDQ1, HS2-CYHAWB).
+  terminals record per model response while a turn runs (HS2-SSMDQ1, HS2-CYHAWB). A turn the server's
+  opt-in driving loop runs moves its ticket store's tokens per minute when the turn's usage is recorded (HS2-P37AH7).
 - **Tickets updated per hour:** distinct tickets with a progress write in the last 60 minutes. **Claim
   renewals do not count**, matching the idle detector (§32.8.1), so a session that only renews looks idle.
 

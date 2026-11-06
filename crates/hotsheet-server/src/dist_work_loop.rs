@@ -208,12 +208,44 @@ pub struct LiveDriveCtx {
     pub activity_sink: Option<ActivitySink>,
     /// Bounded raw turn events for the client transcript/replay stream.
     pub turn_sink: Option<TurnSink>,
+    /// Told the store a driven turn's usage was just recorded in, so the host moves that
+    /// store's live tokens per minute now (HS2-P37AH7, [`live_state_usage_sink`]).
+    pub usage_sink: Option<UsageSink>,
     /// Per-ticket tool session ids retained across Continued work passes, with the session's
     /// cumulative cost after its last pass (the next pass's cost baseline, HS2-4JPDJA).
     pub worker_sessions:
         Option<std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, WorkerSession>>>>,
     /// Durable isolated homes keyed per ticket, so a fresh SafeTrigger can resume Codex.
     pub persistent_home_root: Option<std::path::PathBuf>,
+}
+
+/// Called with the store a driven turn's usage was recorded in (HS2-P37AH7).
+pub type UsageSink = std::sync::Arc<dyn Fn(&FsStore) + Send + Sync + 'static>;
+
+/// The server host's [`UsageSink`]: the recorded store's live state (tokens per minute)
+/// rebuilds and pushes now instead of at the next unrelated refresh (HS2-P37AH7).
+pub fn live_state_usage_sink(state: &crate::AppState) -> UsageSink {
+    let state = state.clone();
+    std::sync::Arc::new(move |store| {
+        crate::live_state::touch(&state, &crate::multistore::store_url_id(store));
+    })
+}
+
+/// Record one driven turn's usage in its ticket's store (cost filled from the price table
+/// when the tool reported none), then tell the host. Best-effort: metrics never fail a drive.
+fn record_turn_usage(
+    ctx: &LiveDriveCtx,
+    store: &FsStore,
+    event: hotsheet_ticketing::metrics::UsageEvent,
+) {
+    match hotsheet_ticketing::metrics::record_priced(store, event) {
+        Ok(()) => {
+            if let Some(sink) = &ctx.usage_sink {
+                sink(store);
+            }
+        }
+        Err(error) => tracing::warn!(%error, "recording driven turn usage failed"),
+    }
 }
 
 pub type ActivitySink =
@@ -429,7 +461,7 @@ fn drive_one_ticket(
             ticket: Some(id.to_string()),
             session: Some(conn),
         };
-        let _ = hotsheet_ticketing::metrics::record_priced(store, event);
+        record_turn_usage(ctx, store, event);
     }
     let after = store.read_ticket(id)?;
     let progressed = after.updated_at != before.updated_at;
@@ -675,6 +707,80 @@ mod tests {
             worker_home(&ctx, &worker_session_key(&store, &Ulid::new())).unwrap(),
             home
         );
+    }
+
+    fn usage(tokens_in: u64, tokens_out: u64) -> hotsheet_ticketing::metrics::UsageEvent {
+        hotsheet_ticketing::metrics::UsageEvent {
+            ts: crate::now().as_str().to_string(),
+            tool: "claude".into(),
+            model: Some("claude-synthetic".into()),
+            tokens_in,
+            tokens_out,
+            cost_usd: Some(0.0),
+            ticket: Some(Ulid::new().to_string()),
+            session: Some("drive-synthetic".into()),
+        }
+    }
+
+    /// HS2-P37AH7: the sink hears each recorded turn once, with the ticket's own store.
+    #[test]
+    fn hs2_p37ah7_recorded_turn_usage_tells_the_usage_sink_its_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init_git(dir.path().join("t.hs2"), &StoreMetadata::new("HS")).unwrap();
+        let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink_heard = heard.clone();
+        let ctx = LiveDriveCtx {
+            usage_sink: Some(std::sync::Arc::new(move |store: &FsStore| {
+                sink_heard.lock().unwrap().push(store.root().to_path_buf());
+            })),
+            ..LiveDriveCtx::default()
+        };
+        record_turn_usage(&ctx, &store, usage(120, 7));
+        assert_eq!(*heard.lock().unwrap(), [store.root().to_path_buf()]);
+        let recorded = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!((recorded[0].tokens_in, recorded[0].tokens_out), (120, 7));
+        // A loop without a host sink still records.
+        record_turn_usage(&LiveDriveCtx::default(), &store, usage(1, 1));
+        assert_eq!(
+            hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+            2
+        );
+        assert_eq!(heard.lock().unwrap().len(), 1);
+    }
+
+    /// HS2-P37AH7: through the host's sink, a driven turn's usage moves the store's live
+    /// tokens per minute without waiting for an unrelated refresh.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hs2_p37ah7_driven_turn_usage_moves_the_store_live_tokens_per_minute() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init_git(dir.path().join("t.hs2"), &StoreMetadata::new("HS")).unwrap();
+        let store_id = crate::multistore::store_url_id(&store);
+        let state = crate::AppState::new(store.clone(), SECRET.into())
+            .unwrap()
+            .with_machine_home(dir.path().join("machine-home"));
+        let mut events = state.subscribe();
+        let ctx = LiveDriveCtx {
+            usage_sink: Some(live_state_usage_sink(&state)),
+            ..LiveDriveCtx::default()
+        };
+        record_turn_usage(&ctx, &store, usage(300, 33));
+        let live = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let event = events.recv().await.expect("change bus open");
+                if event.kind != "live_state" || event.store != store_id {
+                    continue;
+                }
+                let live = serde_json::to_value(event.live.expect("a snapshot")).unwrap();
+                let minutes = live["rates"]["tokens"]["minutes"].as_array().cloned();
+                if minutes.is_some_and(|minutes| minutes.iter().any(|m| m["tokens"] == 333)) {
+                    return live;
+                }
+            }
+        })
+        .await
+        .expect("the store's live tokens per minute moved");
+        assert_eq!(live["store"], store_id);
     }
 
     const SECRET: &str = "test-secret";
