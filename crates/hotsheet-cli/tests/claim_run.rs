@@ -95,6 +95,7 @@ impl Fixture {
             .env("HS2_MFYYJ9_DELAY_MS", delay_ms)
             .env("HS2_MFYYJ9_STARTED", self.root.path().join("started"))
             .env("HS2_MFYYJ9_MARKER", self.root.path().join("completed"))
+            .env("HS2_MFYYJ9_RELEASE", self.root.path().join("release"))
             .env("HS2_MFYYJ9_PROJECT", self.root.path().join("project"))
             .env(
                 "HS2_MFYYJ9_GRANDCHILD_STARTED",
@@ -139,6 +140,26 @@ impl Fixture {
         });
         self.wait_file("locked");
         holder
+    }
+
+    /// Hold the ticket lock until the returned sender sends or is dropped (HS2-K1M08D).
+    fn hold_ticket_lock_until_released(
+        &self,
+    ) -> (std::sync::mpsc::Sender<()>, thread::JoinHandle<()>) {
+        let store = self.store.clone();
+        let marker = self.root.path().join("locked");
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let holder = thread::spawn(move || {
+            store
+                .with_ticket_transaction(|| {
+                    fs::write(marker, "held").unwrap();
+                    let _ = held.recv();
+                    Ok::<(), StoreError>(())
+                })
+                .unwrap();
+        });
+        self.wait_file("locked");
+        (release, holder)
     }
 
     fn init_project(&self) -> String {
@@ -208,6 +229,19 @@ fn claim_run_child() {
             git(&project, &["commit", "-qm", "synthetic late commit"]);
         }
         "fail" => panic!("synthetic child failure"),
+        // HS2-K1M08D: exit only once the test releases it, then mark completion.
+        "release-wait" => {
+            let release = PathBuf::from(std::env::var("HS2_MFYYJ9_RELEASE").unwrap());
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while !release.exists() {
+                assert!(
+                    Instant::now() < deadline,
+                    "the test never released the child"
+                );
+                thread::sleep(Duration::from_millis(20));
+            }
+            fs::write(std::env::var("HS2_MFYYJ9_MARKER").unwrap(), "completed").unwrap();
+        }
         _ => fs::write(std::env::var("HS2_MFYYJ9_MARKER").unwrap(), "completed").unwrap(),
     }
 }
@@ -490,17 +524,29 @@ fn hs2_mfyyj9_held_lock_cannot_revive_expired_attempt_or_allow_grandchild_commit
     assert_eq!(f.ticket().claimed_by.as_deref(), Some("replacement"));
 }
 
+/// HS2-K1M08D: the child exits only after the test holds the ticket lock, and the lock is
+/// held until the guard answers, so the final authority check is the one that waits. A
+/// 6-second lease schedules the first renewal 4 seconds after preflight; with the old
+/// 2-second lease and a timed 700 ms child, a slow child start under load crossed the
+/// 1-second renewal point and that renewal, not the final check, hit the held lock.
 #[test]
 fn hs2_mfyyj9_held_lock_during_final_check_cannot_report_late_success() {
     let f = Fixture::new();
     f.claim("worker");
-    let child = f.guard("worker", "2", "marker", "700");
+    let child = f.guard("worker", "6", "release-wait", "0");
     f.wait_started();
-    let holder = f.hold_ticket_lock(Duration::from_millis(2800));
+    let (release_lock, holder) = f.hold_ticket_lock_until_released();
+    fs::write(f.root.path().join("release"), "release").unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("final authority check failed"));
+    drop(release_lock);
     holder.join().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("final authority check failed"), "{stderr}");
+    assert!(
+        f.root.path().join("completed").exists(),
+        "the child ran to completion"
+    );
     let renews = f
         .ticket()
         .claim_history
