@@ -455,7 +455,8 @@ function shellSidebarPanel() {
     activeCount: 2,
     live: {
       summary: projectLiveSummary([demoLiveState('attention')], DEMO_LIVE_NOW_MS),
-      callouts: hostCallouts(demoHostHealth('disk-warning')),
+      // A normal host: the shell keeps one StateBanner (connection); the Live section demo shows callouts.
+      callouts: hostCallouts(demoHostHealth('normal')),
       expanded: shellLiveExpanded.value,
     },
   });
