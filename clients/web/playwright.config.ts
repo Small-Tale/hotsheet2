@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
 
 import { playwrightServerPort } from './scripts/playwright-port.mjs';
+import { runnerWebkitGuard } from './scripts/playwright-webkit-guard.mjs';
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
 import { isolateAiToolProbes, isolateHostHealthSampler } from './scripts/test-ai-tool-isolation.mjs';
 import { playwrightRetries, quarantineGrepInvert } from './src/test-quarantine';
@@ -15,6 +16,11 @@ lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
 // Fixture servers and CLIs inherit this and never run installed AI tools (HS2-F6R2HQ).
 isolateAiToolProbes();
 isolateHostHealthSampler();
+// Until a machine-wide browser slot pool exists, refuse repeated local WebKit and warn on any local
+// WebKit run: concurrent WebKit across sessions has aborted WindowServer (HS2-CKHSM5, HS2-M6TZB5).
+const webkitGuard = runnerWebkitGuard();
+if (webkitGuard.warn) console.warn(webkitGuard.warn);
+if (webkitGuard.refuse) throw new Error(webkitGuard.refuse);
 
 // A free port per run unless HOTSHEET_WEB_TEST_PORT names one; workers inherit the runner's choice
 // (HS2-6WH4PQ). Readiness still proves this run's own Vite answers (HS2-BJ00D1).

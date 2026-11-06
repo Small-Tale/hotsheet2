@@ -1162,6 +1162,21 @@ Running the full suite with WebKit as its default engine would add a second set 
 1150 tests. It would cost about another four 20-minute shard jobs, before any WebKit-only
 failures are fixed. That proposal is measured separately before CI changes.
 
+**Local WebKit repeat guard (HS2-CKHSM5).** Playwright's macOS WebKit draws in real offscreen
+windows and screenshots through WindowServer. Several local WebKit browsers at once, across agent
+sessions and repositories, have exhausted the system IOSurface limit; WindowServer then aborted and
+logged out the session (HS2-M6TZB5). Until a machine-wide browser slot pool exists (HS2-M6TZB5,
+after HS2-H3WPPY and HS2-FMHH9Y), `playwright.config.ts` runs `scripts/playwright-webkit-guard.mjs`
+once in the runner:
+
+- a local run that combines `--repeat-each` above 1 with WebKit stops before Vite or any browser
+  starts. WebKit means `--browser webkit|all`, or a selected spec that launches WebKit itself; opt-in
+  specs count only when their flag is set.
+- `HOTSHEET_ALLOW_LOCAL_WEBKIT_REPEAT=1` overrides it, when no other session runs WebKit.
+- any local WebKit run prints that no machine-wide pool limits WebKit yet.
+- CI, worker processes and `--list` are unaffected, and a Chromium-only repeat (the usual flake
+  check) proceeds.
+
 **Platform `cfg` branches (HS2-A7X8F5).** The local gate compiles Rust only for its host. On
 macOS a `#[cfg(target_os = "linux")]` or `#[cfg(windows)]` branch is never type-checked, and code
 that only a macOS branch uses can become `dead_code` on Linux (CI run 42115994261). A local
