@@ -479,8 +479,14 @@ pub(crate) async fn connect_terminal_ai(
     // Codex's permission hook names no session. Its ask is still the same agent's session, so
     // it keeps the session (and with it the home, inbox, and rollout watch) its SessionStart
     // reported; replacing it with none stopped that session's usage recording (HS2-SSMDQ1).
+    // After a server restart no connection exists, but a resumed rollout watch still names
+    // the Codex session; the ask reconnects it rather than stopping the watch (HS2-H8BZGY).
+    let permission_ask = body.source == TerminalHookSource::PermissionRequest;
+    let resumed_codex = (permission_ask && agent.as_deref() == Some("codex"))
+        .then(|| super::codex_watch::watched_session(&state, &id))
+        .flatten();
     let session_id = body.session_id.filter(|id| !id.is_empty()).or_else(|| {
-        (body.source == TerminalHookSource::PermissionRequest)
+        permission_ask
             .then(|| {
                 state
                     .terminal_ai_connections
@@ -490,6 +496,7 @@ pub(crate) async fn connect_terminal_ai(
                     .and_then(|previous| previous.session_id.clone())
             })
             .flatten()
+            .or_else(|| resumed_codex.as_ref().map(|(session, _)| session.clone()))
     });
     let checkout_id = match body.checkout_id {
         Some(id) => {
@@ -524,6 +531,11 @@ pub(crate) async fn connect_terminal_ai(
                 .get(&id)
                 .filter(|previous| session_id.is_some() && previous.session_id == session_id)
                 .and_then(|previous| previous.codex_home.clone())
+        })
+        .or_else(|| {
+            resumed_codex
+                .filter(|(session, _)| session_id.as_deref() == Some(session.as_str()))
+                .map(|(_, home)| home.to_string_lossy().into_owned())
         });
     // Likewise the Claude inbox (HS2-M15CHN): only SessionStart reports it.
     let claude_inbox = body
@@ -578,8 +590,11 @@ pub(crate) async fn connect_terminal_ai(
                 ..connection.clone()
             },
         );
-    let (watch_session, watch_home) =
-        (connection.session_id.clone(), connection.codex_home.clone());
+    let (watch_session, watch_home, watch_checkout) = (
+        connection.session_id.clone(),
+        connection.codex_home.clone(),
+        connection.usage_checkout.clone(),
+    );
     let reported = super::reported_session(&connection);
     let changed = state
         .terminal_ai_connections
@@ -594,6 +609,7 @@ pub(crate) async fn connect_terminal_ai(
         watch_session.as_deref(),
         watch_home.as_deref(),
         &reported_at,
+        watch_checkout.as_deref(),
     );
     // Make the session reachable by `POST /connections/{id}/message` (HS2-FKM97G).
     crate::routes::session_messages::register_reported(&state, &id, agent.as_deref(), &reported);

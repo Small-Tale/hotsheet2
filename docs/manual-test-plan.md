@@ -200,7 +200,8 @@ The server follows each Codex terminal session's own rollout under its `CODEX_HO
 1. Open a Codex terminal in Hot Sheet, with no effort and again with an effort selected. From each session, claim one ticket and run a turn with nonzero token use. Confirm the ticket's Timeline lists the Codex model and tokens, once per response, and that a second turn adds only its own responses.
 2. Release the claim from the same session. Confirm the Timeline totals do not change, because release capture skips responses the terminal already recorded.
 3. Start a Codex terminal with an invalid model and send a prompt. Confirm the terminal shows the stopped-on-error notice with the provider message, and that the notice clears once a new turn starts after you switch to a valid model.
-4. With your own `codex app-server` daemon running under the same `CODEX_HOME`, repeat step 1. Confirm the daemon gains no copy of the terminal's thread, for example in its thread list, because Hot Sheet no longer sends `thread/resume`.
+4. Keep a Codex terminal open for several minutes of turns and confirm the project's tokens per hour keeps moving, not only after the first turn (HS2-TWE913). Restart the Hot Sheet server while that terminal stays open (the broker keeps it), run another turn, and confirm its responses are recorded once and the tab still shows Codex as connected after its next permission ask (HS2-H8BZGY).
+5. With your own `codex app-server` daemon running under the same `CODEX_HOME`, repeat step 1. Confirm the daemon gains no copy of the terminal's thread, for example in its thread list, because Hot Sheet no longer sends `thread/resume`.
 
 ### Codex Work claim-release usage (HS2-2K2D7E)
 

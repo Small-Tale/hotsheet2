@@ -170,7 +170,7 @@ use routes::store_scoped::{
 pub use routes::terminals::{
     TerminalAiConnection, TerminalHalt, TerminalHookSource, TerminalQuestion,
     prune_orphaned_terminal_names, release_orphaned_drive_sessions,
-    resume_broker_terminal_sessions, resume_claude_usage_follows,
+    resume_broker_terminal_sessions, resume_claude_usage_follows, resume_codex_session_watches,
 };
 pub(crate) use routes::terminals::{
     answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal_halt,

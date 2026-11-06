@@ -19,6 +19,10 @@
 //! - `token_usage_record {response_id, turn_id, usage {input_tokens, output_tokens}}` counts one
 //!   model response; `input_tokens` already includes its cached subset.
 //!
+//! Codex keeps the rollout open and appends to it. FSEvents reports such a file's change only
+//! when it is closed, so on macOS the rollout itself is followed per write through a kqueue
+//! vnode registration (HS2-TWE913); directory waits and other platforms use `notify`.
+//!
 //! Only those numeric and identifying fields are parsed. Prompts, tool calls, and agent output
 //! in the same file are skipped unread by the typed parser and never logged. The rollout is an
 //! observed local format, not a public contract: an unrecognized or unverified record fails
@@ -364,12 +368,18 @@ pub fn watch_rollout(
     };
     let stopped = Arc::new(AtomicBool::new(false));
     let thread_stopped = stopped.clone();
+    // FSEvents reports a change to a file Codex keeps open only when it closes, so on macOS the
+    // rollout itself is followed per write through kqueue (HS2-TWE913).
+    #[cfg(target_os = "macos")]
+    let append_wake = wake.clone();
     // Starting a native stream (FSEventStreamStart) can take seconds under load, so even the
     // first subscription happens on the watcher's own thread, off the hook's request path.
     std::thread::spawn(move || {
         let mut watcher = watcher;
         let mut current = None;
         let mut settle_at: Option<Instant> = None;
+        #[cfg(target_os = "macos")]
+        let mut _appends: Option<crate::vnode_watch::VnodeWatch> = None;
         loop {
             // A home that vanished or cannot be watched ends the watch; the terminal keeps
             // its last known state. A new subscription looks again at once, and once more
@@ -379,6 +389,15 @@ pub fn watch_rollout(
                 match subscribe(&mut watcher, &mut current) {
                     Err(_) => return,
                     Ok(true) => {
+                        #[cfg(target_os = "macos")]
+                        if let Some(Target::Rollout(path)) = &current {
+                            let wake = append_wake.clone();
+                            // Without it the FSEvents subscription still reports closes.
+                            _appends = crate::vnode_watch::VnodeWatch::start(path, move || {
+                                let _ = wake.send(Wake::Changed);
+                            })
+                            .ok();
+                        }
                         settle_at = Some(Instant::now() + STREAM_SETTLE);
                         continue;
                     }
@@ -662,6 +681,34 @@ mod tests {
             signals.recv_timeout(Duration::from_secs(10)),
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
         );
+    }
+
+    /// HS2-TWE913: a rollout that already exists when the watch starts (a resumed session, or
+    /// a watch resumed after a server restart) keeps reporting appends long after the one
+    /// settle read, from filesystem notifications alone.
+    #[test]
+    fn hs2_twe913_an_existing_rollout_reports_appends_after_the_settle_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("codex-home");
+        let day = home.join("sessions/2026/11/05");
+        std::fs::create_dir_all(&day).unwrap();
+        let rollout = day.join(format!("rollout-2026-11-05T00-00-00-{SESSION}.jsonl"));
+        let mut file = File::create(&rollout).unwrap();
+        writeln!(file, "{}", meta(SESSION)).unwrap();
+        writeln!(file, "{}", started("2026-11-05T01:00:00Z", "t1")).unwrap();
+        file.flush().unwrap();
+        let (tx, signals) = channel();
+        let _watch = watch_rollout(&home, SESSION, at("2026-11-05T00:00:00Z"), move |batch| {
+            let _ = tx.send(batch);
+        })
+        .unwrap();
+        assert_eq!(next(&signals), [RolloutSignal::Resumed]);
+        std::thread::sleep(STREAM_SETTLE + Duration::from_secs(1));
+        for turn in ["t2", "t3"] {
+            writeln!(file, "{}", started("2026-11-05T01:01:00Z", turn)).unwrap();
+            file.flush().unwrap();
+            assert_eq!(next(&signals), [RolloutSignal::Resumed], "turn {turn}");
+        }
     }
 
     #[test]

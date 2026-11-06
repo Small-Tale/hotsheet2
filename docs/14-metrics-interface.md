@@ -194,7 +194,8 @@ metrics reroute-bootstrap-usage` previews moving them; `--apply` moves them. It 
   session reported takes its snapshot at its first response. Only responses recorded after the
   report count. The session key is `codex-work:<session>:<response_id>`, shared with
   claim-release capture below. One file-locked, checkpointed write path deduplicates both, so
-  a response is recorded at most once even when both paths see it. This covers every Hot Sheet
+  a response is recorded at most once even when both paths see it, including the re-read of a
+  watch a restarted server resumes from its persisted report time (HS2-H8BZGY). This covers every Hot Sheet
   Codex launch kind (`--no-daemon`, HS2-4J7WCV). It replaces the retired per-turn daemon thread
   watch (HS2-MN865E), and sessions that watch recorded under their bare id stay excluded from
   release capture. Subagent threads write their own rollouts and are not counted (HS2-R3Y8Z7).

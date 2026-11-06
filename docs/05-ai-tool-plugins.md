@@ -1831,7 +1831,18 @@ session and cannot belong to another tab.
   file exists, it waits on `sessions/` (or on the home until `sessions/` appears). It then
   watches the file itself and reads only appended, complete lines. Each change of
   subscription is followed by one settle read 3 seconds later, because a native stream
-  (FSEvents) can start after a write it should have reported. Nothing polls.
+  (FSEvents) can start after a write it should have reported. Nothing polls. Codex keeps the
+  rollout open while it appends, and FSEvents reports such a change only when the file is
+  closed, so on macOS the rollout itself is followed per write through a kqueue vnode
+  registration (HS2-TWE913); Linux inotify already reports each write.
+- **Restart.** Codex reports its session only at `SessionStart`, and the broker keeps the
+  terminal alive across a server restart. Each watch therefore persists its terminal, session
+  id, Codex home, report time, and usage checkout (no credential, no rollout content) in
+  `${HOTSHEET_HOME}/codex-usage/<terminal>.json`. At startup the server resumes the watches of
+  terminals the broker kept alive from the original report time and drops the other records.
+  A resumed watch needs no new report: Codex's permission ask, which names no session,
+  reconnects the watched session instead of stopping it (HS2-H8BZGY, HS2-TWE913). A session
+  that began before its server persisted a watch stays unwatched until Codex restarts.
 - **Mapping.** An `event_msg` `task_complete` that carries `error` records the same terminal halt
   as `StopFailure`:
   - `error_type` is `error.codex_error_info` (the variant name, for example `server_overloaded`).

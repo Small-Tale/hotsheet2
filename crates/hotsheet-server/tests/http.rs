@@ -2615,6 +2615,201 @@ async fn hs2_cyhawb_an_in_process_codex_rollout_halts_resumes_and_records_ticket
     send("DELETE", "/terminals/watched", None).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_h8bzgy_a_restarted_server_resumes_a_codex_rollout_watch_and_records_responses_once() {
+    // HS2-H8BZGY / HS2-TWE913: Codex reports its session only at SessionStart, and the broker
+    // keeps the terminal alive across a server restart. The watch persists under the machine
+    // home, a restarted server resumes it, responses written while it was down are recorded
+    // once, and Codex's sessionless permission ask reconnects the session instead of stopping
+    // the watch.
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, metrics, ops};
+    use std::io::Write as _;
+    use time::format_description::well_known::Rfc3339;
+    const SESSION: &str = "01a1a950-0000-7000-8000-0000000000b8";
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(dir.path().join("store.hs2"), &StoreMetadata::new("HS")).unwrap();
+    let machine_home = dir.path().join("machine-home");
+    let server = || {
+        AppState::new(store.clone(), SECRET.into())
+            .unwrap()
+            .with_default_codex_home(dir.path().join("no-codex-home"))
+            .with_machine_home(&machine_home)
+    };
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-11-06T00:00:00Z"),
+        NewTicket {
+            title: "Codex terminal work".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::claim(
+        &store,
+        &ticket.id,
+        &Timestamp::new("2026-11-06T00:00:00Z"),
+        Timestamp::new("2099-01-01T00:00:00Z"),
+        &hotsheet_aitools::session_worker_id("codex", "kept"),
+        None,
+    )
+    .unwrap();
+    let call = |router: axum::Router, method: &'static str, uri: &'static str, body: String| async move {
+        router
+            .oneshot(authed(method, uri, Some(&body)))
+            .await
+            .unwrap()
+    };
+    let recorded = || {
+        let mut responses: Vec<String> = metrics::read_raw(&store)
+            .unwrap()
+            .into_iter()
+            .filter(|event| event.tool == "codex")
+            .inspect(|event| assert_eq!(event.ticket, Some(ticket.id.to_string())))
+            .filter_map(|event| event.session)
+            .collect();
+        responses.sort();
+        responses
+    };
+    let key = |response: &str| format!("codex-work:{SESSION}:{response}");
+    let until = |want: usize| {
+        let recorded = &recorded;
+        async move {
+            for _ in 0..250 {
+                if recorded().len() >= want {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            panic!("expected {want} Codex responses, got {:?}", recorded());
+        }
+    };
+    let live = |offset: i64| {
+        (time::OffsetDateTime::now_utc() + time::Duration::seconds(offset))
+            .format(&Rfc3339)
+            .unwrap()
+    };
+    let usage_line = |ts: String, response: &str| {
+        format!(
+            "{}\n",
+            serde_json::json!({"timestamp": ts, "type": "token_usage_record", "payload": {
+                "response_id": response, "turn_id": "t1", "root_turn_id": "t1",
+                "usage": {"input_tokens": 100, "output_tokens": 5}}})
+        )
+    };
+    let day = home.path().join("sessions/2026/11/06");
+    std::fs::create_dir_all(&day).unwrap();
+    let mut rollout =
+        std::fs::File::create(day.join(format!("rollout-2026-11-06T00-00-00-{SESSION}.jsonl")))
+            .unwrap();
+    let mut append = |text: String| {
+        rollout.write_all(text.as_bytes()).unwrap();
+        rollout.flush().unwrap();
+    };
+    append(format!(
+        "{}\n",
+        serde_json::json!({"timestamp": "2026-11-06T00:00:00Z", "type": "session_meta",
+            "payload": {"id": SESSION, "originator": "codex-tui"}})
+    ));
+    let terminal = r#"{"command":"cat","id":"kept"}"#.to_owned();
+    let persisted = machine_home.join("codex-usage").join("kept.json");
+
+    // The first server watches the reported session and persists the watch.
+    let first = app(server());
+    call(first.clone(), "POST", "/terminals", terminal.clone()).await;
+    let connect = serde_json::json!({
+        "agent": "codex", "session_id": SESSION, "codex_home": home.path(),
+    })
+    .to_string();
+    assert_eq!(
+        call(
+            first.clone(),
+            "POST",
+            "/terminals/kept/ai-connection",
+            connect
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert!(persisted.is_file());
+    let record = std::fs::read_to_string(&persisted).unwrap();
+    assert!(record.contains(SESSION));
+    assert!(
+        !record.contains("secret") && !record.contains("token"),
+        "{record}"
+    );
+    append(usage_line(live(1), "resp_1"));
+    until(1).await;
+    assert_eq!(recorded(), [key("resp_1")]);
+    // The server stops. In process its watch would outlive the router, so end it here; the
+    // record a stopped server leaves behind is restored below.
+    call(
+        first.clone(),
+        "DELETE",
+        "/terminals/kept/ai-connection",
+        String::new(),
+    )
+    .await;
+    assert!(!persisted.exists());
+    drop(first);
+
+    // Codex keeps working while no server is up.
+    append(usage_line(live(2), "resp_2"));
+
+    // The restarted server resumes the watch of the terminal the broker kept alive. The
+    // response from before the restart is re-read but not counted again.
+    let restarted = server();
+    let second = app(restarted.clone());
+    // The broker kept the terminal alive; in process it is reopened before the resume, which
+    // runs at startup against the broker's live list.
+    call(second.clone(), "POST", "/terminals", terminal).await;
+    std::fs::write(&persisted, &record).unwrap();
+    hotsheet_server::resume_codex_session_watches(&restarted, &["kept".to_owned()]);
+    until(2).await;
+    assert_eq!(recorded(), [key("resp_1"), key("resp_2")]);
+    // Past the watch's one settle read, so only change notifications report it (HS2-TWE913).
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+    append(usage_line(live(3), "resp_3"));
+    until(3).await;
+
+    // Codex's permission hook names no session; it reconnects the watched one.
+    assert_eq!(
+        call(
+            second.clone(),
+            "POST",
+            "/terminals/kept/ai-connection",
+            r#"{"agent":"codex","source":"permission_request"}"#.to_owned(),
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let listed =
+        body_json(call(second.clone(), "GET", "/terminals/kept", String::new()).await).await;
+    assert_eq!(listed["ai_connection"]["agent"], "codex", "{listed}");
+    append(usage_line(live(4), "resp_4"));
+    until(4).await;
+    assert_eq!(
+        recorded(),
+        [key("resp_1"), key("resp_2"), key("resp_3"), key("resp_4")]
+    );
+    assert!(persisted.is_file(), "the reconnect keeps the watch");
+
+    // The terminal ends: the watch and its record go away.
+    call(second.clone(), "DELETE", "/terminals/kept", String::new()).await;
+    assert!(!persisted.exists());
+
+    // A record of a terminal that did not survive is dropped at startup.
+    std::fs::write(&persisted, record).unwrap();
+    hotsheet_server::resume_codex_session_watches(&server(), &[]);
+    assert!(!persisted.exists());
+}
+
 #[tokio::test]
 async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim() {
     let (dir, state) = state();

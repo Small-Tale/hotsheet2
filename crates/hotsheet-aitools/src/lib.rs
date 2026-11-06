@@ -48,6 +48,8 @@ pub mod session_push;
 pub mod spawn;
 pub mod system;
 pub mod tool_progress;
+#[cfg(target_os = "macos")]
+mod vnode_watch;
 
 pub use acp::{AcpDrive, AcpSession, AcpStdio, usage as acp_usage, validate_opencode_transcript};
 pub use appserver::AppServerDrive;

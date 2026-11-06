@@ -850,10 +850,12 @@ pub async fn resume_broker_terminal_sessions(state: &AppState) {
         .filter(|info| info.alive)
         .map(|info| info.id.clone())
         .collect();
-    // Keep recording the Claude usage of sessions that outlived the server (HS2-SSMDQ1).
+    // Keep recording the Claude and Codex usage of sessions that outlived the server
+    // (HS2-SSMDQ1, HS2-H8BZGY).
     let resume_state = state.clone();
     let _ = tokio::task::spawn_blocking(move || {
         super::claude_usage::resume_claude_usage_follows(&resume_state, &alive);
+        super::codex_watch::resume_codex_session_watches(&resume_state, &alive);
     })
     .await;
     for info in terminals.into_iter().filter(|info| info.alive) {
