@@ -4569,6 +4569,67 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
 }
 
 #[test]
+fn hs2_8qj6w3_prefix_reads_and_sets_the_prefix_for_new_tickets_only() {
+    let store = tempfile::tempdir().unwrap();
+    hs(store.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let read = |args: &[&str]| -> serde_json::Value {
+        let output = hs(store.path())
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&output).unwrap()
+    };
+    assert_eq!(
+        read(&["prefix", "--json"]),
+        serde_json::json!({"ticket_prefix": "HS", "changed": false})
+    );
+    hs(store.path())
+        .args(["new", "--title", "Before the change"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Created HS-"));
+
+    assert_eq!(
+        read(&["prefix", "acme", "--json"]),
+        serde_json::json!({"ticket_prefix": "ACME", "changed": true})
+    );
+    // Idempotent: the same prefix again reports no change.
+    assert_eq!(
+        read(&["prefix", "ACME", "--json"]),
+        serde_json::json!({"ticket_prefix": "ACME", "changed": false})
+    );
+    hs(store.path())
+        .args(["prefix", "A-1"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("invalid ticket prefix"));
+    hs(store.path())
+        .args(["new", "--title", "After the change"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Created ACME-"));
+    // The earlier ticket keeps the slug it was created with.
+    let listed = String::from_utf8(
+        hs(store.path())
+            .args(["ls"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    )
+    .unwrap();
+    assert!(listed.contains("HS-"), "{listed}");
+    assert!(listed.contains("ACME-"), "{listed}");
+}
+
+#[test]
 fn compatibility_reports_created_and_selected_store_schemas_headlessly() {
     let store = tempfile::tempdir().unwrap();
     hs(store.path())

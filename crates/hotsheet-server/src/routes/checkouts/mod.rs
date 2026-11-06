@@ -467,6 +467,16 @@ pub(crate) struct CheckoutSourceColorBody {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct CheckoutSourceTicketPrefixBody {
+    ticket_prefix: String,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct CheckoutSourceTicketPrefixResponse {
+    ticket_prefix: String,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct RelinkGitSourceBody {
     path: String,
     #[serde(default)]
@@ -550,6 +560,42 @@ pub(crate) async fn set_checkout_source_color(
         .set_source_color(&reference, &connection_id, &body.color)
         .map(Json)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+/// Change the prefix new tickets in one of this checkout's Git sources use (HS2-8QJ6W3).
+/// Existing tickets keep their slugs; the store commits its metadata change. Only a Git
+/// source linked to this checkout is accepted, and an invalid prefix is a 400.
+pub(crate) async fn set_checkout_source_ticket_prefix(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+    Json(body): Json<CheckoutSourceTicketPrefixBody>,
+) -> Result<Json<CheckoutSourceTicketPrefixResponse>, ApiError> {
+    let lookup = state.clone();
+    let metadata = tokio::task::spawn_blocking(move || {
+        let (_, entry) = checkout_entries(&lookup, &reference)?
+            .into_iter()
+            .find(|(id, _)| *id == connection_id)
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "this project has no Git ticket source with that id",
+                )
+            })?;
+        entry
+            .store
+            .set_ticket_prefix(&body.ticket_prefix)
+            .map_err(ApiError::from)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("ticket prefix task failed: {error}"),
+        )
+    })??;
+    Ok(Json(CheckoutSourceTicketPrefixResponse {
+        ticket_prefix: metadata.ticket_prefix,
+    }))
 }
 
 pub(crate) async fn set_checkout_default_source(

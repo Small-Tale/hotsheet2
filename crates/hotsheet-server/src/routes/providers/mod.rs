@@ -139,6 +139,7 @@ pub(crate) async fn list_checkout_providers(
                 .map(|info| info.provider_descriptor(is_default))
                 .or_else(|| {
                     metadata_only.then(|| hotsheet_ticketing::ProviderDescriptor {
+                        ticket_prefix: None,
                         connection_id: source.connection_id.clone(),
                         provider: "git".into(),
                         display_name: "Git tickets".into(),

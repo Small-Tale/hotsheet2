@@ -621,6 +621,40 @@ describe('ticket source surfaces', () => {
     expect(recovered).toContain('The former repository identity could not be verified.');
   });
 
+  it('edits a git source ticket prefix that saves on commit, only for a readable store (HS2-8QJ6W3)', () => {
+    const source = {
+      connectionId: 'git-local',
+      name: 'HS2 git tickets',
+      provider: 'git',
+      locator: '/work/demo.hs2',
+      default: true,
+      ticketPrefix: 'HS2',
+    };
+    const render = (editing: typeof source & { identityMismatch?: boolean; storeUnavailable?: boolean }) =>
+      String(
+        TicketSourceSetupDialog({
+          project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
+          providerConnections: [],
+          editingProviderId: source.connectionId,
+          editingGitSource: editing,
+          navigation: 'none',
+        }),
+      );
+    const markup = render(source);
+    expect(markup).toMatch(/<form[^>]*id="git-source-ticket-prefix-form"[^>]*data-action="set-git-ticket-prefix"/);
+    expect(markup).toMatch(/<input[^>]*name="git-ticket-prefix"[^>]*value="HS2"/);
+    expect(markup).toContain('Ticket Prefix');
+    expect(markup).toContain('maxlength="16"');
+    expect(markup).toContain(
+      'New tickets are named HS2-7F3K9Q; existing tickets keep their names. Saves when you leave the field.',
+    );
+    // The prefix lives below the location form and above the color picker.
+    expect(markup.indexOf('name="git-store-path"')).toBeLessThan(markup.indexOf('name="git-ticket-prefix"'));
+    expect(markup.indexOf('name="git-ticket-prefix"')).toBeLessThan(markup.indexOf('name="project-source-color"'));
+    for (const unreadable of [{ identityMismatch: true }, { storeUnavailable: true }, { ticketPrefix: '' }])
+      expect(render({ ...source, ...unreadable })).not.toContain('name="git-ticket-prefix"');
+  });
+
   it('lists machine-wide accounts with their sources and projects under App Settings → Accounts (HS2-SM9PM8)', () => {
     const accounts = [
         {

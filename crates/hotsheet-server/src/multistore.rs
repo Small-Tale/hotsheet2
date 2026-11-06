@@ -194,6 +194,7 @@ impl HostedStore {
     pub fn provider_descriptor(&self, is_default: bool) -> hotsheet_ticketing::ProviderDescriptor {
         hotsheet_ticketing::ProviderDescriptor {
             color: None,
+            ticket_prefix: (!self.prefix.is_empty()).then(|| self.prefix.clone()),
             unverified_recovery: false,
             identity_review_required: false,
             identity_mismatch: false,

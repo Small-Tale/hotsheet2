@@ -3812,6 +3812,96 @@ test('changes a sole project source color in settings and inspector while cards 
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
 });
 
+test('changes a git source ticket prefix through the real server on Enter and blur, refusing a bad one (HS2-8QJ6W3)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const realProviders = () =>
+        server.request<Array<{ connection_id: string; provider: string; ticket_prefix?: string }>>('/providers'),
+      gitId = (await realProviders()).find((item) => item.provider === 'git')!.connection_id;
+    expect((await realProviders()).find((item) => item.connection_id === gitId)?.ticket_prefix).toBe('HS2');
+    await mockProject(page);
+    const writes: string[] = [];
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route(
+      '**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/sources/*/ticket-prefix',
+      async (route) => {
+        const connection = new URL(route.request().url()).pathname.split('/').at(-2)!;
+        writes.push(route.request().postData() ?? '');
+        const response = await route.fetch({
+          url: `${server.url}/checkouts/${server.checkoutId}/sources/${connection}/ticket-prefix`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    await page.locator(`[data-source-row][data-source-id="${gitId}"]`).click();
+    const editor = page.locator('[data-ticket-source-setup-dialog] [data-component="git-source-editor"]'),
+      field = editor.locator('input[name="git-ticket-prefix"]');
+    await expect(field).toHaveValue('HS2');
+    await expect(editor).toContainText(
+      'New tickets are named HS2-7F3K9Q; existing tickets keep their names. Saves when you leave the field.',
+    );
+
+    // Typing alone never writes; Enter commits and the field resyncs from the server.
+    await field.fill('hot');
+    expect(writes).toEqual([]);
+    await field.press('Enter');
+    await expect(page.locator('.app-toast')).toContainText('New tickets will be named HOT-….');
+    await expect(field).toHaveValue('HOT');
+    expect(writes).toEqual([JSON.stringify({ ticket_prefix: 'HOT' })]);
+    // Wide → medium → narrow → wide: the field stays inside the dialog at every size.
+    for (const [width, height, label] of [
+      [1280, 900, 'wide'],
+      [900, 900, 'medium'],
+      [390, 844, 'narrow'],
+      [1280, 900, 'wide-again'],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect(field).toBeInViewport();
+      const box = (await field.boundingBox())!,
+        dialog = (await editor.boundingBox())!;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(dialog.x + dialog.width + 1);
+      await page.screenshot({
+        path: `target/visual-captures/hs2-8qj6w3-git-source-prefix-${label}.png`,
+        animations: 'disabled',
+      });
+    }
+    expect((await realProviders()).find((item) => item.connection_id === gitId)?.ticket_prefix).toBe('HOT');
+
+    // A refused prefix is reported inline and never reaches the server.
+    await field.fill('H-1');
+    await field.press('Enter');
+    await expect(editor.getByRole('alert')).toContainText('Use 2 to 16 letters or digits, starting with a letter.');
+    expect(writes).toHaveLength(1);
+
+    // Leaving the field commits too, and an unchanged value writes nothing.
+    await field.fill('acme');
+    await editor.getByText('Location').first().click();
+    await expect(field).toHaveValue('ACME');
+    expect(writes).toEqual([JSON.stringify({ ticket_prefix: 'HOT' }), JSON.stringify({ ticket_prefix: 'ACME' })]);
+    await field.press('Enter');
+    expect(writes).toHaveLength(2);
+    expect((await realProviders()).find((item) => item.connection_id === gitId)?.ticket_prefix).toBe('ACME');
+  } finally {
+    await page.goto('about:blank').catch(() => undefined);
+    await server.stop();
+  }
+});
+
 test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, HS2-EFBAPC) @ci-smoke', async ({
   page,
 }, testInfo) => {

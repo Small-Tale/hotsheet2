@@ -27597,6 +27597,101 @@ async fn same_path_legacy_replacement_needs_review_before_checkout_reads() {
 /// HS2-3SCH1K: a checkout's provider list holds only the sources it links, marked default by
 /// the checkout's own default source, even though the connection catalog is machine-wide.
 #[tokio::test]
+async fn hs2_8qj6w3_checkout_git_source_prefix_changes_new_tickets_only() {
+    let home = tempfile::tempdir().unwrap();
+    let (primary, st) = state();
+    let project = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st
+        .with_machine_home(home.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":project.path(),"alias":"app","stores":[primary.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let providers = || {
+        let app = app.clone();
+        async move {
+            body_json(
+                app.oneshot(authed("GET", "/checkouts/app/providers", None))
+                    .await
+                    .unwrap(),
+            )
+            .await
+        }
+    };
+    let create = |title: &'static str| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(authed(
+                    "POST",
+                    "/checkouts/app/tickets",
+                    Some(&serde_json::json!({"title":title}).to_string()),
+                ))
+                .await
+                .unwrap();
+            assert!(response.status().is_success(), "{}", response.status());
+            body_json(response).await["slug"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    let listed = providers().await;
+    let git_id = listed[0]["connection_id"].as_str().unwrap().to_owned();
+    let before = listed[0]["ticket_prefix"].as_str().unwrap().to_owned();
+    let old_slug = create("Before").await;
+    assert!(old_slug.starts_with(&format!("{before}-")), "{old_slug}");
+
+    let put = |connection: String, prefix: &'static str| {
+        let app = app.clone();
+        async move {
+            app.oneshot(authed(
+                "PUT",
+                &format!("/checkouts/app/sources/{connection}/ticket-prefix"),
+                Some(&serde_json::json!({"ticket_prefix":prefix}).to_string()),
+            ))
+            .await
+            .unwrap()
+        }
+    };
+    let changed = put(git_id.clone(), "acme").await;
+    assert_eq!(changed.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(changed).await,
+        serde_json::json!({"ticket_prefix":"ACME"})
+    );
+    let listed = providers().await;
+    assert_eq!(listed[0]["ticket_prefix"], "ACME");
+    assert_eq!(listed[0]["display_name"], "ACME git tickets");
+    assert!(create("After").await.starts_with("ACME-"));
+    // The earlier ticket keeps the slug it was created with.
+    let tickets = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/app/tickets", None))
+            .await
+            .unwrap(),
+    )
+    .await
+    .to_string();
+    assert!(tickets.contains(&old_slug), "{tickets}");
+
+    assert_eq!(
+        put(git_id.clone(), "A-1").await.status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        put("not-a-source".into(), "ZED").await.status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(providers().await[0]["ticket_prefix"], "ACME");
+}
+
+#[tokio::test]
 async fn checkout_providers_list_only_linked_sources_with_the_checkout_default() {
     let home = tempfile::tempdir().unwrap();
     let (primary, st) = state();

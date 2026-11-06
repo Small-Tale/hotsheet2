@@ -112,7 +112,7 @@ use routes::checkouts::{
     list_checkouts, open_checkout_code_review, open_checkout_repository_review, open_project,
     prewarm_corrupt_tickets, register_checkout, relink_checkout_git_source, remove_checkout_route,
     remove_checkout_source, resolve_checkout, set_checkout_default_source,
-    set_checkout_source_color,
+    set_checkout_source_color, set_checkout_source_ticket_prefix,
 };
 use routes::claims::{
     claim_checkout_next_ticket, claim_checkout_ticket, claim_next_ticket, claim_ticket,
@@ -1492,6 +1492,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/sources/{connection_id}/relink",
             patch(relink_checkout_git_source),
+        )
+        .route(
+            "/checkouts/{reference}/sources/{connection_id}/ticket-prefix",
+            put(set_checkout_source_ticket_prefix),
         )
         .route(
             "/checkouts/{reference}/default-source",

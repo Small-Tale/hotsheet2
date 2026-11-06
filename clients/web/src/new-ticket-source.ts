@@ -14,6 +14,8 @@ export interface TicketSourceChoice {
   identityReviewRequired?: boolean;
   identityMismatch?: boolean;
   storeUnavailable?: boolean;
+  /** A Git source's prefix for new ticket slugs (HS2-8QJ6W3). */
+  ticketPrefix?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export function projectTicketSources(descriptors: readonly ProviderDescriptor[])
       identityReviewRequired: item.identity_review_required,
       identityMismatch: item.identity_mismatch,
       storeUnavailable: item.store_unavailable,
+      ticketPrefix: item.ticket_prefix,
     })),
   };
 }

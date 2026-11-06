@@ -36,6 +36,8 @@ export interface ProjectTicketSource {
   identityReviewRequired?: boolean;
   identityMismatch?: boolean;
   storeUnavailable?: boolean;
+  /** A Git source's prefix for new ticket slugs, edited in the source's editor (HS2-8QJ6W3). */
+  ticketPrefix?: string;
   /** Other projects that share this source (attached headlessly with `checkout add-source`). */
   sharedWith?: readonly string[];
 }

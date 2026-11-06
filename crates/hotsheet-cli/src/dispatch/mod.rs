@@ -62,6 +62,7 @@ impl Cmd {
             | Bootstrap { .. }
             | Link { .. }
             | ActivateFormat { .. }
+            | Prefix { .. }
             | Compatibility { .. }
             | Import { .. }
             | Checkout { .. }

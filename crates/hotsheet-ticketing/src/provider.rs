@@ -70,6 +70,9 @@ pub struct ProviderDescriptor {
     /// A recorded Git source cannot be verified because its path is missing or unreadable.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub store_unavailable: bool,
+    /// A Git source's display prefix for new ticket slugs (HS2-8QJ6W3); other providers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket_prefix: Option<String>,
     pub capabilities: ProviderCapabilities,
 }
 
@@ -1522,6 +1525,7 @@ impl GitProvider {
 impl TicketProvider for GitProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
+            ticket_prefix: None,
             color: None,
             unverified_recovery: false,
             identity_review_required: false,
@@ -3275,6 +3279,7 @@ mod tests {
         impl TicketProvider for Failing {
             fn descriptor(&self) -> ProviderDescriptor {
                 ProviderDescriptor {
+                    ticket_prefix: None,
                     color: None,
                     unverified_recovery: false,
                     identity_review_required: false,

@@ -92,7 +92,8 @@ pub use settings::{
 };
 pub use store::{
     AtomicAttachment, CorruptTicket, FsStore, STORE_METADATA_FILE, STORE_SCHEMA_VERSION,
-    StoreError, StoreListing, StoreMetadata, flush_background_commits, recover_ticket_identity,
+    StoreError, StoreListing, StoreMetadata, flush_background_commits, normalize_ticket_prefix,
+    recover_ticket_identity,
 };
 pub use sync::{SyncReport, sync_once};
 pub use wire::{ApiNote, ApiTicket, TicketRow};

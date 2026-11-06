@@ -49,6 +49,7 @@ export type TicketSourceScenario =
   | 'authorized-existing-default'
   | 'editing'
   | 'editing-shared'
+  | 'editing-git'
   | 'removing'
   | 'busy'
   | 'remote';
@@ -84,6 +85,19 @@ export function KeyboardSettingsDemo() {
 export function TicketSourceSetupDialogDemo() {
   const scenario = ticketSourceScenario.value,
     editing = ['editing', 'editing-shared', 'removing', 'busy'].includes(scenario),
+    // HS2-8QJ6W3: a Git source's editor, with its ticket prefix.
+    gitSource =
+      scenario === 'editing-git'
+        ? {
+            connectionId: 'git-demo',
+            name: 'HS2 git tickets',
+            provider: 'git',
+            locator: '/work/demo.hs2',
+            default: true,
+            color: '#3b82f6',
+            ticketPrefix: 'HS2',
+          }
+        : undefined,
     connection = {
       id: 'github-main',
       provider: 'github',
@@ -109,10 +123,15 @@ export function TicketSourceSetupDialogDemo() {
         <TicketSourceSetupDialog
           project={{ id: 'demo', root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
           providerKind={
-            scenario === 'root' || scenario === 'remote' ? undefined : scenario === 'jira-account' ? 'jira' : 'github'
+            scenario === 'root' || scenario === 'remote' || scenario === 'editing-git'
+              ? undefined
+              : scenario === 'jira-account'
+                ? 'jira'
+                : 'github'
           }
           providerConnections={editing ? [connection] : []}
-          editingProviderId={editing ? connection.id : undefined}
+          editingProviderId={editing ? connection.id : gitSource?.connectionId}
+          editingGitSource={gitSource}
           removingProviderId={scenario === 'removing' ? connection.id : undefined}
           accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
           chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}

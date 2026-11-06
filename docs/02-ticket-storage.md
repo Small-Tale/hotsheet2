@@ -133,7 +133,11 @@ Three layers of "which store," from machine to human:
 - **`ticketPrefix`** (per store, in `hotsheet-store.json` — §2.3) — the **at-a-glance
   human signal.** Give each store its own prefix and a slug _shows_ its store:
   `HS-7F3K9Q` lives in the team backlog, `SEC-2M8XQ1` in the security store. This is
-  the cheapest "which repo is this?" cue there is.
+  the cheapest "which repo is this?" cue there is. The prefix can be changed later
+  (Settings → Ticket sources → the Git source, or `hotsheet-cli prefix <PREFIX>`); only
+  tickets created afterwards use it, because each ticket records its slug at creation, so
+  existing references stay valid (HS2-8QJ6W3). A prefix is 2 to 16 letters or digits
+  starting with a letter.
 
 **Store membership is _positional_, not a frontmatter field.** The store a ticket
 belongs to is simply _the store whose `tickets/` directory physically contains its

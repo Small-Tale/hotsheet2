@@ -142,6 +142,23 @@ fn deserialize_store_schema<'de, D: Deserializer<'de>>(deserializer: D) -> Resul
     }
 }
 
+/// Validate and upcase a ticket display prefix (HS2-8QJ6W3): 2 to 16 ASCII letters or
+/// digits starting with a letter, the shape the clients link as a slug
+/// (`[A-Z][A-Z0-9]{1,15}-…`). Surrounding whitespace is ignored.
+pub fn normalize_ticket_prefix(prefix: &str) -> Result<String, StoreError> {
+    let upper = prefix.trim().to_ascii_uppercase();
+    let valid = (2..=16).contains(&upper.len())
+        && upper.starts_with(|c: char| c.is_ascii_uppercase())
+        && upper
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    if valid {
+        Ok(upper)
+    } else {
+        Err(StoreError::InvalidTicketPrefix(prefix.trim().to_owned()))
+    }
+}
+
 impl StoreMetadata {
     /// Default metadata for a new store with the given display prefix.
     pub fn new(ticket_prefix: impl Into<String>) -> Self {
@@ -194,6 +211,8 @@ pub enum StoreError {
     Metadata(#[from] serde_json::Error),
     #[error("invalid Hot Sheet store instance id '{0}'")]
     InvalidStoreIdentity(String),
+    #[error("invalid ticket prefix '{0}': use 2 to 16 letters or digits, starting with a letter")]
+    InvalidTicketPrefix(String),
     #[error(
         "This {format} was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (found {found}, supported through {supported})."
     )]
@@ -582,6 +601,27 @@ impl FsStore {
             write_file_atomically(&path, format!("{json}\n").as_bytes())?;
             self.autocommit_paths("Initialize Hot Sheet store identity", &[path])?;
             Ok(id)
+        })
+    }
+
+    /// Change the display prefix that slugs of tickets created from now on use
+    /// (HS2-8QJ6W3). Existing tickets keep the slug recorded when they were created, so
+    /// references to them stay valid. The prefix is upcased and validated, every other
+    /// metadata field (including the store identity) is preserved, and the change is
+    /// committed with the store. Setting the current prefix again writes nothing.
+    pub fn set_ticket_prefix(&self, prefix: &str) -> Result<StoreMetadata, StoreError> {
+        let prefix = normalize_ticket_prefix(prefix)?;
+        self.with_ticket_transaction(|| {
+            let mut metadata = self.metadata()?;
+            if metadata.ticket_prefix == prefix {
+                return Ok(metadata);
+            }
+            let path = self.root.join(STORE_METADATA_FILE);
+            metadata.ticket_prefix = prefix.clone();
+            let json = serde_json::to_string_pretty(&metadata)?;
+            write_file_atomically(&path, format!("{json}\n").as_bytes())?;
+            self.autocommit_paths(&format!("Set ticket prefix to {prefix}"), &[path])?;
+            Ok(metadata)
         })
     }
 
@@ -2936,6 +2976,104 @@ mod tests {
         assert_eq!(
             git_stdout(dir.path(), &["status", "--porcelain"]).unwrap_or_default(),
             ""
+        );
+    }
+
+    #[test]
+    fn hs2_8qj6w3_ticket_prefix_accepts_only_linkable_prefixes() {
+        for (input, expected) in [("hs2", "HS2"), (" Acme ", "ACME"), ("AB", "AB")] {
+            assert_eq!(normalize_ticket_prefix(input).unwrap(), expected);
+        }
+        assert_eq!(
+            normalize_ticket_prefix("A234567890123456").unwrap(),
+            "A234567890123456"
+        );
+        for invalid in ["", "A", "2HS", "HS-2", "HS 2", "HÖT", "A2345678901234567"] {
+            assert!(
+                matches!(
+                    normalize_ticket_prefix(invalid),
+                    Err(StoreError::InvalidTicketPrefix(_))
+                ),
+                "{invalid:?} must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_8qj6w3_set_ticket_prefix_commits_metadata_and_keeps_existing_slugs() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let before = store.metadata().unwrap();
+        let old = crate::ops::create(
+            &store,
+            ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+            &before.ticket_prefix,
+            Timestamp::new("2026-11-06T00:00:00Z"),
+            crate::ops::NewTicket {
+                title: "Before".into(),
+                ..crate::ops::NewTicket::default()
+            },
+        )
+        .unwrap();
+
+        let changed = store.set_ticket_prefix("hot").unwrap();
+        assert_eq!(changed.ticket_prefix, "HOT");
+        // Only the prefix changes; the store identity and layout stay as they were.
+        assert_eq!(
+            StoreMetadata {
+                ticket_prefix: before.ticket_prefix.clone(),
+                ..changed.clone()
+            },
+            before
+        );
+        assert_eq!(store.metadata().unwrap(), changed);
+        assert_eq!(git_stdout(dir.path(), &["status", "--short"]).unwrap(), "");
+        assert_eq!(
+            git_stdout(dir.path(), &["log", "-1", "--pretty=%s"])
+                .unwrap()
+                .trim(),
+            "Set ticket prefix to HOT"
+        );
+        let commits = git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap();
+
+        // Repeating the same prefix is a no-op, and a refused prefix writes nothing.
+        assert_eq!(store.set_ticket_prefix("HOT").unwrap(), changed);
+        assert!(matches!(
+            store.set_ticket_prefix("H-OT"),
+            Err(StoreError::InvalidTicketPrefix(_))
+        ));
+        assert_eq!(
+            git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap(),
+            commits
+        );
+        assert_eq!(store.metadata().unwrap(), changed);
+
+        // The existing ticket keeps its recorded slug; a new one uses the new prefix.
+        let reread = store.read_ticket(&old.id).unwrap();
+        assert_eq!(reread.slug, old.slug);
+        assert!(
+            reread
+                .slug
+                .starts_with(&format!("{}-", before.ticket_prefix))
+        );
+        let new = crate::ops::create(
+            &store,
+            ulid("01ARZ3NDEKTSV4RRFFQ69G5FAW"),
+            &store.metadata().unwrap().ticket_prefix,
+            Timestamp::new("2026-11-06T00:00:01Z"),
+            crate::ops::NewTicket {
+                title: "After".into(),
+                ..crate::ops::NewTicket::default()
+            },
+        )
+        .unwrap();
+        assert!(new.slug.starts_with("HOT-"));
+
+        // Changing back works the same way.
+        assert_eq!(
+            store.set_ticket_prefix(&before.ticket_prefix).unwrap(),
+            before
         );
     }
 

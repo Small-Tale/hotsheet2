@@ -40,6 +40,7 @@ const previewScenarioChoices: readonly SelectChoice[] = [
   { value: 'authorized-existing-default', label: 'GitHub Authorized, Existing Default' },
   { value: 'editing', label: "Editing This Project's Source" },
   { value: 'editing-shared', label: 'Editing a Shared Source' },
+  { value: 'editing-git', label: 'Editing a Git Source' },
   { value: 'removing', label: 'Confirm Removal' },
   { value: 'busy', label: 'Saving Connection' },
   { value: 'remote', label: 'Back Up Repository' },
@@ -330,6 +331,27 @@ export function TicketSourceSetupDialog({
             )}
           </List>
         </form>
+        {editingGit.ticketPrefix && !editingGit.identityMismatch && !editingGit.storeUnavailable ? (
+          // HS2-8QJ6W3: saves on Enter or when the field loses focus, never while typing.
+          <form id="git-source-ticket-prefix-form" {...PROJECT_LIFECYCLE_ACTIONS.setGitTicketPrefix.attrs}>
+            <TextField
+              name="git-ticket-prefix"
+              type="text"
+              label="Ticket Prefix"
+              value={editingGit.ticketPrefix}
+              required
+              maxLength={16}
+              autocapitalize="characters"
+              autocorrect="off"
+              autocomplete="off"
+              spellcheck={false}
+              disabled={providerBusy}
+              hint={`New tickets are named ${editingGit.ticketPrefix}-7F3K9Q; existing tickets keep their names. Saves when you leave the field.`}
+            />
+          </form>
+        ) : (
+          <></>
+        )}
         {providerError ? (
           <Text tone="danger" role="alert" wrap="anywhere" flush>
             {providerError}

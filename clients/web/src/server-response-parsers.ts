@@ -517,8 +517,11 @@ const project = shape<{ id: string; alias: string }>('project', { id: isString, 
 export const parseProviderDescriptor = shape<ProviderDescriptor>(
   'provider',
   { connection_id: isString, provider: isString, display_name: isString, locator: isString, capabilities: isObject },
-  { default: isBoolean, color: isString },
+  { default: isBoolean, color: isString, ticket_prefix: isString },
 );
+
+/** `PUT /checkouts/{reference}/sources/{connection_id}/ticket-prefix` (HS2-8QJ6W3). */
+export const parseTicketPrefix = shape<{ ticket_prefix: string }>('ticket prefix', { ticket_prefix: isString });
 
 const advisoryClaim = shape<AdvisoryClaimStatus['projection']['claims'][number]>('advisory claim', {
   worker: isString,

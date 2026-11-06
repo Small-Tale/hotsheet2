@@ -28,6 +28,7 @@ import type { PermissionAutomation } from '../permission-notifications';
 import { openedProjectYieldsToSelection } from '../project-activation';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
 import { insertTabByRank, replaceTabInPlace } from '../tab-order';
+import { normalizeTicketPrefix } from '../ticket-prefix';
 import { customTicketViewKey, type TicketView } from '../ticket-views';
 import { dismissHs1CleanupPrompt, hs1MigrationPromptDismissed, saveActiveProjectRoot } from '../workspace-session';
 
@@ -727,6 +728,32 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     );
   }
 
+  /**
+   * Save the edited Git source's ticket prefix from its form (HS2-8QJ6W3), on Enter or when the
+   * field loses focus. An unchanged or invalid value never reaches the server.
+   */
+  async function setProjectGitTicketPrefix(form: HTMLFormElement) {
+    const id = providerEditingId.value,
+      raw = new FormData(form).get('git-ticket-prefix'),
+      current = defaultProviders.value[dependencies.project()?.id ?? '']?.sources.find(
+        (item) => item.connectionId === id,
+      )?.ticketPrefix;
+    if (!id || typeof raw !== 'string') return;
+    const result = normalizeTicketPrefix(raw);
+    if ('error' in result) {
+      providerSettingsError.value = result.error;
+      return;
+    }
+    if (result.prefix === current) {
+      providerSettingsError.value = '';
+      return;
+    }
+    await changeProjectSources(
+      (client, project) => client.setCheckoutSourceTicketPrefix(project.id, id, result.prefix),
+      `New tickets will be named ${result.prefix}-….`,
+    );
+  }
+
   async function relinkProjectGitSource(form: HTMLFormElement) {
     const current = ticketSourceSetupProject.value ?? dependencies.project(),
       id = providerEditingId.value,
@@ -1264,6 +1291,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     setProjectDefaultSource,
     setProjectSourceColor,
     relinkProjectGitSource,
+    setProjectGitTicketPrefix,
     requestProviderRemoval,
     cancelProviderRemoval,
     removeExternalProvider,

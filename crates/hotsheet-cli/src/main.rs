@@ -133,6 +133,15 @@ enum Cmd {
         #[arg(long)]
         acknowledge_pre_release_breakage: bool,
     },
+    /// Show this store's ticket prefix, or change the prefix new tickets use (HS2-8QJ6W3).
+    /// Existing tickets keep their slugs. Repeating the current prefix changes nothing.
+    Prefix {
+        /// New prefix: 2 to 16 letters or digits, starting with a letter (upcased).
+        prefix: Option<String>,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Report the formats this CLI creates and can open (for headless compatibility checks).
     Compatibility {
         /// Emit machine-readable JSON.

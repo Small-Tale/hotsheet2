@@ -42,6 +42,8 @@ export interface ProjectLifecycleInteractionsDependencies {
   readonly ticketSourceRemoteError: Signal<string>;
   readonly connectCreatedGitRemote: (form: HTMLFormElement) => Promise<void>;
   readonly relinkProjectGitSource: (form: HTMLFormElement) => Promise<void>;
+  /** Save the edited Git source's ticket prefix (HS2-8QJ6W3). */
+  readonly setProjectGitTicketPrefix: (form: HTMLFormElement) => Promise<void>;
   readonly createProjectGitSource: (custom?: boolean) => Promise<void>;
   readonly chooseProjectPath: (button: Element) => Promise<void>;
   readonly recoverUnhealthyProjectServer: () => Promise<void>;
@@ -83,6 +85,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     ticketSourceRemoteError,
     connectCreatedGitRemote,
     relinkProjectGitSource,
+    setProjectGitTicketPrefix,
     createProjectGitSource,
     chooseProjectPath,
     recoverUnhealthyProjectServer,
@@ -331,6 +334,19 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     delegate(document.body, 'submit', PROJECT_LIFECYCLE_ACTIONS.relinkGitSource.selector, (event, target) => {
       event.preventDefault();
       void relinkProjectGitSource(target as HTMLFormElement);
+    }),
+  );
+  // HS2-8QJ6W3: the prefix saves on Enter (submit) or when the field commits on blur (change);
+  // typing alone never writes.
+  lifetime.add(
+    delegate(document.body, 'submit', PROJECT_LIFECYCLE_ACTIONS.setGitTicketPrefix.selector, (event, target) => {
+      event.preventDefault();
+      void setProjectGitTicketPrefix(target as HTMLFormElement);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', PROJECT_LIFECYCLE_ACTIONS.setGitTicketPrefix.selector, (_event, target) => {
+      void setProjectGitTicketPrefix(target as HTMLFormElement);
     }),
   );
   lifetime.add(

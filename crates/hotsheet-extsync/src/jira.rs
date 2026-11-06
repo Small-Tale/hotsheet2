@@ -52,6 +52,7 @@ impl JiraConfig {
     // HS2-FG7ZMF: metadata discovery shares live capabilities without constructing an adapter.
     pub(crate) fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
+            ticket_prefix: None,
             color: None,
             unverified_recovery: false,
             identity_review_required: false,

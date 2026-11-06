@@ -32,6 +32,7 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   dismissTicketSourceSetup: action('dismiss-ticket-source-setup'),
   submitGitSourceRelink: action('submit-git-source-relink'),
   relinkGitSource: action('relink-git-source'),
+  setGitTicketPrefix: action('set-git-ticket-prefix'),
   submitTicketStoreRemote: action('submit-ticket-store-remote'),
   connectTicketStoreRemote: action('connect-ticket-store-remote'),
   backTicketStoreRemote: action('back-ticket-store-remote'),

@@ -79,6 +79,7 @@ import {
   parseTerminalName,
   parseTerminalRead,
   parseTerminalSettings,
+  parseTicketPrefix,
   parseTicketRow,
   parseTicketUsage,
   parseToolConnection,
@@ -301,6 +302,8 @@ export interface ProviderDescriptor {
   identity_mismatch?: boolean;
   /** The linked Git store path is missing or its metadata cannot be read. */
   store_unavailable?: boolean;
+  /** A Git source's display prefix for new ticket slugs (HS2-8QJ6W3); other providers omit it. */
+  ticket_prefix?: string;
   capabilities: Capabilities;
 }
 
@@ -1668,6 +1671,13 @@ export class Api {
       parseCheckout,
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/color`,
       { method: 'PATCH', body: JSON.stringify({ color }) },
+    );
+  /** Change the prefix new tickets in a Git source use; existing tickets keep their slugs (HS2-8QJ6W3). */
+  setCheckoutSourceTicketPrefix = (checkout: string, connectionId: string, ticketPrefix: string) =>
+    this.parsed(
+      parseTicketPrefix,
+      `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/ticket-prefix`,
+      { method: 'PUT', body: JSON.stringify({ ticket_prefix: ticketPrefix }) },
     );
   relinkCheckoutGitSource = (checkout: string, connectionId: string, path: string, reviewUnverifiedRecovery = false) =>
     this.parsed(

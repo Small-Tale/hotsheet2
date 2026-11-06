@@ -3364,6 +3364,64 @@ paths:
         required: true
         schema:
           type: string
+  /checkouts/{reference}/sources/{connection_id}/ticket-prefix:
+    put:
+      operationId: set_checkout_source_ticket_prefix
+      description: Change the prefix that new tickets in this checkout's Git source use (HS2-8QJ6W3). Existing tickets keep their slugs; the store commits its metadata.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSourceTicketPrefix'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutSourceTicketPrefix'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
   /checkouts/{reference}/default-source:
     put:
       operationId: set_checkout_default_source
@@ -15310,6 +15368,15 @@ components:
         color:
           type: string
       additionalProperties: false
+    CheckoutSourceTicketPrefix:
+      type: object
+      required:
+        - ticket_prefix
+      properties:
+        ticket_prefix:
+          type: string
+          pattern: '^ *[A-Za-z][A-Za-z0-9]{1,15} *$'
+      additionalProperties: false
     CheckoutDefaultSource:
       type: object
       properties:
@@ -16671,6 +16738,9 @@ components:
           type: boolean
         store_unavailable:
           type: boolean
+        ticket_prefix:
+          type: string
+          description: A Git source's display prefix for new ticket slugs (HS2-8QJ6W3); other providers omit it.
         capabilities:
           $ref: '#/components/schemas/ProviderCapabilities'
       additionalProperties: false

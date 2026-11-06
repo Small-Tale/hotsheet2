@@ -137,6 +137,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           identityReviewRequired: source.identityReviewRequired,
           identityMismatch: source.identityMismatch,
           storeUnavailable: source.storeUnavailable,
+          ticketPrefix: source.ticketPrefix,
           sharedWith: (connection?.projects ?? [])
             .filter((project) => project.id !== current.id)
             .map((project) => project.alias),

@@ -929,6 +929,13 @@ preview/download, server directory browser) are separate design work.
   explains restoration or removal and keeps the remove action available; the
   unverified-legacy review choice is hidden while the store cannot be verified
   (HS2-N4X1WG).
+  The Git dialog also edits the store's **Ticket Prefix** below Location (HS2-8QJ6W3). It
+  saves when the field loses focus or on Enter, never while typing; an unchanged value
+  writes nothing, and a prefix that is not 2 to 16 letters or digits starting with a letter
+  is refused inline without a request. The change applies to tickets created afterwards:
+  existing tickets keep their slugs. A source without its own name is listed as
+  "<PREFIX> git tickets", so that name follows the new prefix. The field is hidden while
+  the store is unavailable or its identity mismatches.
   Icon color belongs to the project and defaults to Gray (`#6b7280`); there is no
   Transparent source-color option (HS2-XKEHAK, HS2-H1FZNV).
   The trailing **Remove from this project** action opens the connection editor at an

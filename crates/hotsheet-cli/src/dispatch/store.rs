@@ -41,6 +41,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::ActivateFormat {
             acknowledge_pre_release_breakage,
         } => activate_format(path, acknowledge_pre_release_breakage),
+        Cmd::Prefix { prefix, json } => ticket_prefix(path, prefix.as_deref(), json),
         Cmd::Compatibility { json } => compatibility(path, json),
         Cmd::Import {
             file,
@@ -105,6 +106,30 @@ fn activate_format(path: &Path, acknowledged: bool) -> Result<()> {
         "Activated store format {}.",
         hotsheet_ticketing::STORE_SCHEMA_VERSION
     );
+    Ok(())
+}
+
+/// Read or set the store's ticket prefix through the same store operation the server's
+/// Settings route uses (HS2-8QJ6W3).
+fn ticket_prefix(path: &Path, prefix: Option<&str>, json: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let before = store.metadata()?.ticket_prefix;
+    let after = match prefix {
+        Some(prefix) => store.set_ticket_prefix(prefix)?.ticket_prefix,
+        None => before.clone(),
+    };
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({ "ticket_prefix": after, "changed": after != before })
+        );
+    } else if after == before {
+        println!("Ticket prefix: {after}");
+    } else {
+        println!(
+            "Ticket prefix changed from {before} to {after}. Existing tickets keep their slugs."
+        );
+    }
     Ok(())
 }
 
