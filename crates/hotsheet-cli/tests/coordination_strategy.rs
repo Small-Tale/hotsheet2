@@ -219,3 +219,26 @@ fn hs2_ney1qh_serial_integrator_next_and_a_waiting_worker_keep_todays_dispatch()
         Some(IntegrationStrategy::Serial)
     );
 }
+
+/// HS2-6A1MEQ: the breaker thresholds set the batch and the ci-staged breaker, each recorded
+/// on its own strategy entry, so the help must not call them batch-only.
+#[test]
+fn hs2_6a1meq_strategy_allow_help_names_both_breaker_strategies() {
+    let f = Fixture::new();
+    let out = output(&f, &["strategy-allow", "--help"]);
+    assert!(out.status.success());
+    let help = String::from_utf8_lossy(&out.stdout);
+    for flag in ["--max-red-batches", "--max-red-minutes"] {
+        let line = help
+            .lines()
+            .skip_while(|line| !line.contains(flag))
+            .nth(1)
+            .unwrap_or_else(|| panic!("{flag} has no description in:\n{help}"));
+        assert!(line.contains("Batch and ci-staged"), "{flag}: {line}");
+    }
+    assert!(!help.contains("Batch only"), "{help}");
+    assert!(
+        help.contains("ci-staged only"),
+        "the staging branch stays ci-staged only"
+    );
+}

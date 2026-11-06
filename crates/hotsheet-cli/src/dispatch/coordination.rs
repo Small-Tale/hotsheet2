@@ -222,12 +222,12 @@ enum CoordinationCmd {
         strategy: IntegrationStrategy,
         #[arg(long)]
         reason: String,
-        /// Batch only: consecutive red batches that make the integrator fall back to
-        /// serial (default 2; HS2-9G0M3V).
+        /// Batch and ci-staged: consecutive red batches that make the integrator fall back
+        /// to serial, recorded per strategy (default 2; HS2-9G0M3V, HS2-GT57BQ).
         #[arg(long)]
         max_red_batches: Option<u32>,
-        /// Batch only: minutes main may stay red before falling back to serial
-        /// (default 120; HS2-9G0M3V).
+        /// Batch and ci-staged: minutes main may stay red before falling back to serial,
+        /// recorded per strategy (default 120; HS2-9G0M3V, HS2-GT57BQ).
         #[arg(long)]
         max_red_minutes: Option<u32>,
         /// ci-staged only: the integration branch batches are pushed to before main
