@@ -154,7 +154,11 @@ export async function routeProjectChangeSocket(
   server: { url: string; secret: string; checkoutId?: string },
   projectId = 'demo-checkout',
 ): Promise<void> {
-  const path = new RegExp(`/__hotsheet/project-api/${projectId}/ws/sync(?:\\?.*)?$`);
+  // HS2-9A9G83: this route replaces the Vite terminal/sync bridge for the test, so it must not read
+  // as a `project-api/*/ws` route hook of that bridge in the gate's exercise index (HS2-N7EY18);
+  // as a fixture hook it would select all of providers.spec for every bridge change.
+  const prefix = ['', '__hotsheet', 'project-api', projectId].join('/');
+  const path = new RegExp(`${prefix}/ws/sync(?:\\?.*)?$`);
   await page.routeWebSocket(path, (route) => {
     const incoming = new URL(route.url()),
       target = new URL('/ws/sync', server.url);
