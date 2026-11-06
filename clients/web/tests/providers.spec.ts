@@ -15970,7 +15970,10 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
     queueLabel = queue.locator('.kui-list-item__label'),
     viewsTitle = sidebar.getByRole('heading', { name: 'Views', exact: true }),
     viewActionLayer = sidebar.getByRole('button', { name: 'Add view' }),
-    hideLayer = sidebar.locator('.kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
+    // The collapse toggle's group; the Standby group precedes it (HS2-EQVZTZ).
+    hideLayer = sidebar
+      .locator('.kui-pane__header > .kui-toolbar .kui-toolbar-control-group')
+      .filter({ has: page.getByRole('button', { name: 'Hide Project Sidebar' }) }),
     chat = sidebar.getByRole('button', { name: 'Open Codex Conversation' });
   const boxes = await Promise.all(
     [sidebar, queue, queueIcon, queueLabel, viewsTitle, viewActionLayer, hideLayer, chat].map((locator) =>

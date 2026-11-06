@@ -1946,6 +1946,50 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "standby-screen",
+      "name": "StandbyScreen",
+      "kind": "component",
+      "purpose": "The idle-entered standby night display: dark-red tokens/min gauge, tickets updated in the last hour, clock, dim project strip, freshness line, and amber problem callouts (HS2-EQVZTZ).",
+      "useWhen": [
+        "Hot Sheet shows its standby night display over the pushed live state."
+      ],
+      "avoidWhen": [
+        "A surface the user works in; standby is an ambient display that exits on any input."
+      ],
+      "publicClasses": [
+        "standby-screen"
+      ],
+      "publicTokens": [],
+      "source": "src/components/standby-screen.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "standby-settings",
+      "name": "StandbySettings",
+      "kind": "component",
+      "purpose": "Machine-wide standby idle entry switch and threshold in App Settings → General (HS2-EQVZTZ).",
+      "useWhen": [
+        "Hot Sheet needs the machine-wide standby settings."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific StandbySettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/standby-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "stats-dashboard",
       "name": "StatsDashboard",
       "kind": "component",

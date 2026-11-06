@@ -2062,6 +2062,11 @@ pub fn app(state: AppState) -> Router {
             get(host_health::routes::get_host_health_thresholds)
                 .put(host_health::routes::put_host_health_thresholds),
         )
+        // Machine-wide standby settings (HS2-EQVZTZ): idle entry on/off and its threshold.
+        .route(
+            "/standby-settings",
+            get(routes::standby::get_standby_settings).put(routes::standby::put_standby_settings),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,

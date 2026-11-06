@@ -45,6 +45,11 @@
   --hs-standby-gauge-fill: #7a0d0d;
   --hs-standby-gauge-tick: #3a0606;
   --hs-standby-gauge-needle: #9a1212;
+  /* The faintest standby text (the freshness line while live), and the amber that only a problem
+     earns: an alert callout, its project's row, and a dropped stream (HS2-EQVZTZ, approved in m5). */
+  --hs-standby-text-faint: #3d0707;
+  --hs-standby-alert: #ffa733;
+  --hs-standby-alert-quiet: #c97a1c;
   /* Media annotations keep vivid strokes over either light or dark source pixels. */
   --hs-annotation-blue: #5ca8ff;
   --hs-annotation-red: #ff626b;

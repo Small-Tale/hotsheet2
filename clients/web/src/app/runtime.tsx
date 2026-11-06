@@ -136,6 +136,7 @@ import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createSettingsSurface } from '../features/settings-surface';
 import { createSidebarSurface } from '../features/sidebar-surface';
+import { createStandbyController } from '../features/standby';
 import { createStatsGlanceController } from '../features/stats-glance';
 import { createTerminalDashboardController } from '../features/terminal-dashboard';
 import { createTerminalDrawerController } from '../features/terminal-drawer';
@@ -4050,6 +4051,35 @@ export async function startHotSheetWebClient() {
   effect(() => {
     if (liveStates.states.value.size > 0 || liveClockTimer.running()) liveClockTimer.sync();
   });
+  // Standby (HS2-EQVZTZ): the idle-entered night display over the same live state; its settings are
+  // machine-wide on the server the active project talks to.
+  const standby = createStandbyController({
+    liveStates,
+    api: () => {
+      const current = project();
+      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+    },
+    entryPoint: () => {
+      const current = project();
+      return {
+        mode: shellMode.peek(),
+        project: current && { id: current.id, name: current.name },
+        statsProjectId: statsProjectId.peek(),
+        projectName: (id) => projects.peek().find((item) => item.id === id)?.name,
+      };
+    },
+  });
+  let standbySettingsServer: string | undefined;
+  effect(() => {
+    const current = project();
+    if (!current) return;
+    const server = new URL(current.apiPath, window.location.href).origin;
+    if (server === standbySettingsServer) return;
+    standbySettingsServer = server;
+    queueMicrotask(() => {
+      void standby.refreshSettings();
+    });
+  });
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
@@ -4080,6 +4110,7 @@ export async function startHotSheetWebClient() {
     loadRepositorySize,
     liveStates,
     hostHealth,
+    onStreamHealth: standby.streamHealth,
   });
   const {
     feedbackDelivery,
@@ -4730,6 +4761,7 @@ export async function startHotSheetWebClient() {
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
+    standbySettings: () => ({ settings: standby.settings.value, message: standby.settingsMessage.value }),
     keyboardShortcutOverrides,
     capturingShortcutId,
     appleShortcutPlatform,
@@ -5275,6 +5307,7 @@ export async function startHotSheetWebClient() {
   });
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
   wireDialogStack(appRoot);
+  const disposeStandby = standby.wire();
   toastHost.className = 'app-toast-stack';
   (toastHost as HTMLElement & { placement: string }).placement = 'bottom-end';
   document.body.append(toastHost);
@@ -5948,6 +5981,13 @@ export async function startHotSheetWebClient() {
     openCommandHistory,
     completePointerDetailsFinish,
     schedulePointerDetailsFinish,
+    standby: {
+      enter: standby.enter,
+      exit: standby.exit,
+      saveSettings: (form) => {
+        void standby.saveSettings(form);
+      },
+    },
     get repositoryFileSelectionAnchor() {
       return repositoryController.repositoryFileSelectionAnchor;
     },
@@ -6231,6 +6271,7 @@ export async function startHotSheetWebClient() {
       terminalOperationsSurface.dispose();
       liveStates.reset();
       liveClockTimer.stop();
+      disposeStandby();
       announcerController.dispose();
       terminalDashboardController.dispose();
     },

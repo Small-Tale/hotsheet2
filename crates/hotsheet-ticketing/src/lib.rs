@@ -44,6 +44,7 @@ pub mod roster;
 pub mod saved_views;
 pub mod secrets;
 pub mod settings;
+pub mod standby;
 pub mod store;
 pub mod store_git;
 pub mod sync;

@@ -24,6 +24,7 @@ import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-setting
 import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
+import { StandbySettings, type StandbySettingsProps } from './standby-settings';
 import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
 import {
   AccountsSettings,
@@ -62,7 +63,8 @@ export interface SettingsWorkspaceProps {
     legacy?: PermissionRulesSettingsProps['legacy'];
   };
   columns: { hideVerified: boolean };
-  general: { showLoadingActivity: boolean };
+  /** App Settings → General; `standby` is the machine-wide standby section (HS2-EQVZTZ). */
+  general: { showLoadingActivity: boolean; standby?: StandbySettingsProps };
   keyboard: KeyboardSettingsProps;
 }
 
@@ -168,12 +170,15 @@ export function SettingsWorkspace({
             />
           )}
           {category === 'general' && (
-            <Checkbox
-              action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
-              checked={general.showLoadingActivity}
-              hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
-              label="Show loading activity"
-            />
+            <>
+              <Checkbox
+                action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
+                checked={general.showLoadingActivity}
+                hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
+                label="Show loading activity"
+              />
+              {general.standby && <StandbySettings {...general.standby} />}
+            </>
           )}
           {category === 'keyboard' && <KeyboardSettings {...keyboard} />}
         </List>

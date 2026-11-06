@@ -88,6 +88,7 @@ import {
   parseTrashSettings,
   type ResponseParser,
 } from './server-response-parsers';
+import { parseStandbySettings, type StandbySettingsView } from './standby';
 import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
 import { parseWorkerView } from './worker-view-model';
@@ -2230,6 +2231,10 @@ export class Api {
   hostHealthThresholds = () => this.parsed(parseHostHealthThresholds, '/host-health/thresholds');
   saveHostHealthThresholds = (value: HostHealthConfiguredThresholds) =>
     this.parsed(parseHostHealthThresholds, '/host-health/thresholds', { method: 'PUT', body: JSON.stringify(value) });
+  /** Machine-wide standby settings (HS2-EQVZTZ). */
+  standbySettings = () => this.parsed(parseStandbySettings, '/standby-settings');
+  saveStandbySettings = (value: StandbySettingsView['configured']) =>
+    this.parsed(parseStandbySettings, '/standby-settings', { method: 'PUT', body: JSON.stringify(value) });
   // Notifier plugins (HS2-DPBJJA): machine-wide channels, rules, and delivery log.
   notifiers = () => this.parsed(parseNotifierList, '/notifiers');
   notificationConfig = () => this.parsed(parseNotificationConfig, '/notification-config');

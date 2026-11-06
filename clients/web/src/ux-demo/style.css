@@ -79,6 +79,18 @@ body[data-resizing-project-sidebar='true'] {
   inline-size: remify(264px);
   max-inline-size: 100%;
 }
+/* A screen-sized stage for the standby display (HS2-EQVZTZ): a 1440x900 desktop or a 390x844
+   phone at its real size, zoomed to fit the example, so its viewport-relative text matches. */
+.demo-standby-frame {
+  inline-size: remify(1440px);
+  block-size: remify(900px);
+  zoom: 0.5;
+}
+.demo-standby-frame[data-orientation='portrait'] {
+  inline-size: remify(390px);
+  block-size: remify(844px);
+  zoom: 0.75;
+}
 /* A phone-sized screen inside the framed CatalogExample: contain: paint makes it the containing
    block for the fixed focus surface and backdrop. */
 .terminal-drawer-focus-demo__stage {

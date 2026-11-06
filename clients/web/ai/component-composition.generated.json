@@ -5884,6 +5884,143 @@
       }
     },
     {
+      "key": "hotsheet-web:standby-screen",
+      "package": "hotsheet-web",
+      "id": "standby-screen",
+      "name": "StandbyScreen",
+      "kind": "component",
+      "purpose": "The idle-entered standby night display: dark-red tokens/min gauge, tickets updated in the last hour, clock, dim project strip, freshness line, and amber problem callouts (HS2-EQVZTZ).",
+      "publicExports": [
+        {
+          "name": "StandbyScreen"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/standby-screen.tsx",
+        "src/standby.ts",
+        "src/features/standby.tsx"
+      ],
+      "source": "src/components/standby-screen.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "component",
+        "behaviors": [
+          "landscape-hero-row",
+          "portrait-stack"
+        ]
+      },
+      "layout": {
+        "roles": [
+          "feedback"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "none",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The whole surface is the exit target; any key exits and never reaches the app beneath."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "standby-screen",
+        "publicClasses": [
+          "standby-screen"
+        ],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/standby-screen.tsx",
+        "composition": "src/components/standby-screen.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:standby-settings",
+      "package": "hotsheet-web",
+      "id": "standby-settings",
+      "name": "StandbySettings",
+      "kind": "component",
+      "purpose": "Machine-wide standby idle entry switch and threshold in App Settings → General (HS2-EQVZTZ).",
+      "publicExports": [
+        {
+          "name": "StandbySettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/standby-settings.tsx"
+      ],
+      "source": "src/components/standby-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/standby-settings.tsx",
+        "composition": "src/components/standby-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:stats-dashboard",
       "package": "hotsheet-web",
       "id": "stats-dashboard",

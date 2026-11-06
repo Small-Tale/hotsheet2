@@ -9835,6 +9835,64 @@ fn host_health_thresholds_are_set_headlessly_as_validated_machine_wide_settings(
 }
 
 #[test]
+fn standby_settings_are_set_headlessly_as_validated_machine_wide_settings() {
+    // HS2-EQVZTZ headless parity with PUT /standby-settings and App Settings → General.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    for (key, value) in [("standby.enabled", "false"), ("standby.idle_minutes", "30")] {
+        hs(p)
+            .env("HOTSHEET_HOME", home.path())
+            .args(["settings", "set", key, value])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("global (machine-wide)"));
+    }
+    let global: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(home.path().join("settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(global["standby.enabled"], false);
+    assert_eq!(global["standby.idle_minutes"], 30);
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "get", "standby.idle_minutes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("30"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "set",
+            "standby.idle_minutes",
+            "5",
+            "--scope",
+            "local",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("machine-wide"));
+    for (key, value, message) in [
+        ("standby.idle_minutes", "0", "from 1 to 1440"),
+        ("standby.enabled", "maybe", "true or false"),
+        ("standby.nope", "1", "unknown standby setting"),
+    ] {
+        hs(p)
+            .env("HOTSHEET_HOME", home.path())
+            .args(["settings", "set", key, value])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(message));
+    }
+    let global: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(home.path().join("settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(global["standby.idle_minutes"], 30);
+    assert!(global.get("standby.nope").is_none());
+}
+
+#[test]
 fn terminal_limits_are_set_headlessly_as_validated_machine_wide_settings() {
     // HS2-Y5DYC0 headless parity with App Settings → Terminal memory.
     let dir = tempfile::tempdir().unwrap();

@@ -507,6 +507,17 @@ scrolling inside a column is not hijacked by the horizontal snap, that tapping a
 opens the inspector overlay, and that rotating the device re-snaps to a column. Playwright
 covers wheel/trackpad snapping in Chromium; real touch momentum is manual.
 
+### Standby on a real phone or tablet (HS2-EQVZTZ)
+
+On a **physical phone and tablet** (iOS Safari, the installed PWA, and Android Chrome), open a
+project and tap the moon beside the sidebar toggle. The screen must stay on past the device's
+auto-lock time (Screen Wake Lock), go dark-red on black, and show only that project. Switch to
+another app and back: standby is still showing and the screen still stays on. Tap anywhere: the
+app returns and the device sleeps normally again. Leave a desktop in standby overnight with
+reduced motion off and confirm the layout has wandered a few pixels (burn-in drift) without
+clipping. Playwright covers entry, exit, scope, alerts, freshness, and layout; real wake-lock
+grants and long-run drift are manual.
+
 ### Mobile keyboard leaves the app at its origin (HS2-BCA512)
 
 On a **physical iPhone** (Safari and the installed PWA), open an image attachment, choose

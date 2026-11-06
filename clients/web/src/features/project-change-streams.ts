@@ -70,6 +70,11 @@ export interface ProjectChangeStreamsDependencies {
    */
   hostHealth?: Pick<HostHealthResource, 'applyEvents' | 'resync'>;
   /**
+   * A project's change stream (re)established continuity or delivered (`true`), failed or dropped
+   * (`false`), or was stopped (`undefined`). Standby's freshness line reads it (HS2-EQVZTZ).
+   */
+  onStreamHealth?: (projectId: string, live: boolean | undefined) => void;
+  /**
    * Run every project's transport in the shared change-stream worker (HS2-SH9179). Off by default;
    * defaults to the `hotsheet.change-stream-worker` local setting. The main-thread stream remains
    * the fallback whenever the worker is disabled, unavailable, version-skewed, or crash-looping.
@@ -84,6 +89,21 @@ export interface ProjectChangeStreamsDependencies {
 /** Local setting that opts this browser into the shared change-stream worker (HS2-SH9179). */
 export const CHANGE_STREAM_WORKER_SETTING = 'hotsheet.change-stream-worker';
 export const CHANGE_STREAM_SHARED_WORKER_SETTING = 'hotsheet.change-stream-shared-worker';
+
+/**
+ * Keep a stream handler's own failure out of the transport's `onError`, which reports only a
+ * dropped or failed connection (standby's freshness, HS2-EQVZTZ). Handler failures were never
+ * reported before that hook existed, so containing them keeps their behavior.
+ */
+function contained<A extends unknown[]>(handler: (...args: A) => Promise<void>): (...args: A) => Promise<void> {
+  return async (...args) => {
+    try {
+      await handler(...args);
+    } catch {
+      // Each handler's own refresh reports or retries its failure; the stream itself is healthy.
+    }
+  };
+}
 
 export function changeStreamWorkerEnabled(): boolean {
   try {
@@ -196,6 +216,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     loadRepositorySize,
     liveStates,
     hostHealth,
+    onStreamHealth,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
   const ticketRefresh = createProjectChangeRefresh<Project>(
@@ -272,6 +293,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         projectChangeStreams.delete(id);
         ticketRefresh.cancel(id);
         removeClientNotifications?.(id);
+        onStreamHealth?.(id, undefined);
       }
     for (const [id, timer] of repositoryRefreshTimers)
       if (!live.has(id)) {
@@ -291,7 +313,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           // Event-driven state reconciles when the stream (re)establishes continuity rather than
           // on a polling timer (HS2-NKCXW4): permissions on every resync, drive connections only
           // after an outage or overflow (opening the project already loaded them).
-          onResync: async (reason) => {
+          onResync: contained(async (reason) => {
+            onStreamHealth?.(current.id, true);
             await Promise.all([
               refreshPermissions(current.id),
               ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
@@ -301,8 +324,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
             ]);
-          },
-          refresh: async () => {
+          }),
+          refresh: contained(async () => {
             // The transport delivers individual WebSocket events. Scheduling without waiting
             // lets a dense sequence share one collection read per project (HS2-B5SJMJ).
             ticketRefresh.schedule(current);
@@ -312,8 +335,13 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               await loadConfidenceReport(current);
             if (shellMode.peek() === 'stats' && (!statsProjectId.peek() || statsProjectId.peek() === current.id))
               await loadAnalytics?.(current);
+          }),
+          // Only the transport reports here: the handlers contain their own failures.
+          onError: () => {
+            onStreamHealth?.(current.id, false);
           },
-          onEvents: async (response) => {
+          onEvents: contained(async (response) => {
+            onStreamHealth?.(current.id, true);
             liveStates?.applyEvents(response.events);
             void hostHealth?.applyEvents(response.events);
             const acceptedTurns = new Set(turnStreamEvents(response));
@@ -391,7 +419,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             // The server's background sync pushed a ticket store past a size limit: reload the
             // report so the shell banner updates without polling (HS2-KKFEY5).
             if (containsRepositorySizeChange(response, current.id)) void loadRepositorySize(current);
-          },
+          }),
         });
         projectChangeStreams.set(current.id, stop);
       }

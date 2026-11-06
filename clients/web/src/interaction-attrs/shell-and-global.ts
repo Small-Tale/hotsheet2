@@ -9,6 +9,10 @@ import { action } from 'kerfjs/actions';
 export const SHELL_AND_GLOBAL_ACTIONS = {
   toggleTicketInspector: action('toggle-ticket-inspector'),
   toggleProjectSidebar: action('toggle-project-sidebar'),
+  /** Standby (HS2-EQVZTZ): the moon button, the night display itself, and its settings. */
+  enterStandby: action('enter-standby'),
+  exitStandby: action('exit-standby'),
+  saveStandbySettings: action('save-standby-settings'),
 } as const;
 
 /**

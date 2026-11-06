@@ -263,6 +263,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/stats-this-mac.ts    # Stats This Mac card model (HS2-NS0AYR): server-host disk, memory, CPU, power, plus network/thermal only when degraded; unsupported/unavailable never show values; rendered by components/stats-this-mac.tsx from the runtime's host-health resource
     src/project-live-summary.ts # Project sidebar Live section numbers: linked-store summary, compact chips, host callouts; rendered by components/project-live-section.tsx (HS2-F788GW)
     src/grid-sidebar-live.ts # Grid sidebar gauge/triage numbers per project group from live state, state words, hover titles, need order (HS2-E1AQE8)
+    src/standby.ts           # Standby (HS2-EQVZTZ): /standby-settings contract + parser, scope by entry point, display model from live state (rows, amber alerts), clock/freshness labels, request-free idle timer
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
@@ -315,6 +316,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows; explicit local feedback-dismissal intent and response-append retry routing (HS2-VBFSZJ)
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
+      standby.tsx            # Standby controller (HS2-EQVZTZ): settings load/save, idle and forced entry, key/click exit, top-layer display root, change-stream freshness with reconnect grace, Wake Lock on touch devices
       notification-settings.ts # App Settings → Notifications controller: notifiers, channels, rules, deliveries, editors, and every change through the notifier REST admin routes (HS2-DPBJJA)
       terminal-viewports.ts   # Observed viewport identity, one live instance moved between drawer and grid tiles (HS2-EYD24K), progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
@@ -436,6 +438,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/tab-cycle.ts # Pure next/previous wrap-around cycling over an ordered tab-id list, shared by the project-tab and drawer-tab keyboard shortcuts (HS2-9SHYWD)
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
     src/components/terminal-memory-settings.tsx # App Settings → Terminal memory: history, server replay buffer, and warm-terminal limit selects with memory-derived defaults (HS2-Y5DYC0)
+    src/components/standby-screen.tsx # Standby night display: dark-red gauge, SVG clock and count numerals, project strip, amber callouts, freshness line; top-layer overlay or inline catalog stage (HS2-EQVZTZ)
+    src/components/standby-settings.tsx # App Settings → General → Standby: idle entry switch and threshold (HS2-EQVZTZ)
     src/components/notification-settings.tsx # App Settings → Notifications: delivery options, channel and rule ListActionRows with menus, recent deliveries ValueTable (HS2-DPBJJA)
     src/components/notification-channel-dialog.tsx # Add/edit channel DialogSurface with fields generated from the notifier settings schema; write-only credentials (HS2-DPBJJA)
     src/components/notification-rule-dialog.tsx # Add/edit rule DialogSurface: events, channels, filters, severity, cooldown (HS2-DPBJJA)
@@ -606,6 +610,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/host_health.rs     #   Machine-wide host health threshold keys (host_health.*), defaults, ranges, CLI parse and stored-value guards (HS2-DTAVQA)
+      src/standby.rs         #   Machine-wide standby keys (standby.enabled, standby.idle_minutes), defaults, CLI parse and stored-value guards (HS2-EQVZTZ)
       src/terminal_limits.rs #   Machine-wide terminal limit keys (terminal.history_lines / replay_bytes / warm_terminals), ranges, memory-tier defaults, and replay-from-history sizing (HS2-Y5DYC0)
       src/settings_locks.rs  #   Bounded ${HOTSHEET_HOME}/settings-locks: path-recording locks, identity-checked acquire, hourly prune of vanished targets (HS2-MZ1TMH)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
@@ -692,6 +697,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/project_activity.rs #  pure claim-derived per-store activity tracker: active → released + grace → stopped, unrenewed lease → stalled; claims held without progress → idle, a halted worker session → halted (HS2-P57XHV); router arms one timer per store (HS2-2MM07G); `live()` reads the continuous word (halted/stalled/may-be-stuck/active/stopped), last outcome, halts, per-ticket progress times, and period workers (HS2-JTTQMY); halt detail (terminal, usage limit, reset) and per-worker terminal prompts re-synced by the router (HS2-EGKKA0)
       src/live_state.rs      #   per-store live snapshot for glance surfaces: tracker word + Waiting on you, live claims, workers, runway, token and tickets-updated rates with 30-day peaks (`metrics/local/live-peaks.json`); coalesced change-detected `live_state` events; `GET /live-state`, `GET /stores/{store_id}/live-state` (HS2-JTTQMY, docs/32 §32.8.3); `activity.causes` usage-limit pauses and awaiting-input prompts (HS2-EGKKA0, §32.8.4)
       src/stuck_causes.rs    #   pure stuck-cause classification: usage-limit error types per tool and zone-free reset times from halt messages, unknown otherwise (HS2-EGKKA0, docs/32 §32.8.4)
+      src/routes/standby.rs  #  GET/PUT /standby-settings: machine-wide standby settings with CLI parity (HS2-EQVZTZ)
       src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-link-base, /notification-project-timing, /notification-channels/{id}[/secrets/{field}|/test|/trust], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
       tests/notification_delivery.rs # E2E: admin routes + real bus events through the running router to a fake ntfy transport
       src/tts.rs             #   server-owned TTS provider boundary and macOS say-to-WAV adapter; no provider secrets on client wire (HS2-5PSQJQ)

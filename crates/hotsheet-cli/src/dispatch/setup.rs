@@ -1408,7 +1408,12 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             let terminal_limit = hotsheet_ticketing::terminal_limits::is_terminal_limit_key(&key);
             // Host health thresholds are machine-wide too (HS2-DTAVQA), with REST parity.
             let host_health = hotsheet_ticketing::host_health::is_host_health_key(&key);
-            let scope = match (parse_scope(&scope)?, terminal_limit || host_health) {
+            // Standby settings are machine-wide as well (HS2-EQVZTZ), with REST parity.
+            let standby = hotsheet_ticketing::standby::is_standby_key(&key);
+            let scope = match (
+                parse_scope(&scope)?,
+                terminal_limit || host_health || standby,
+            ) {
                 (Some(Scope::Global) | None, true) => Scope::Global,
                 (Some(_), true) => bail!("{key} is machine-wide; use --scope global"),
                 (scope, false) => scope.unwrap_or(Scope::Shared),
@@ -1419,8 +1424,13 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             if host_health {
                 hotsheet_ticketing::host_health::parse_threshold(&key, &value)?;
             }
-            // Parse as JSON (numbers/bools/arrays/objects), else store the raw string.
-            let parsed = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
+            // Parse as JSON (numbers/bools/arrays/objects), else store the raw string. A standby
+            // value is stored exactly as its validator typed it.
+            let parsed = if standby {
+                hotsheet_ticketing::standby::parse_setting(&key, &value)?
+            } else {
+                serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value))
+            };
             settings.set(&key, parsed, scope)?;
             if matches!(
                 key.as_str(),

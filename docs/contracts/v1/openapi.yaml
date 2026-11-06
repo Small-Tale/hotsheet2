@@ -10359,6 +10359,91 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ConfiguredHostHealthThresholds'
+  /standby-settings:
+    get:
+      operationId: get_standby_settings
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandbySettingsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_standby_settings
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandbySettingsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfiguredStandbySettings'
   /health:
     get:
       operationId: health
@@ -17726,6 +17811,49 @@ components:
           $ref: '#/components/schemas/ConfiguredHostHealthThresholds'
         effective:
           $ref: '#/components/schemas/HostHealthThresholds'
+      additionalProperties: false
+    StandbySettings:
+      type: object
+      description: Effective machine-wide standby settings (HS2-EQVZTZ).
+      required:
+        - enabled
+        - idle_minutes
+      properties:
+        enabled:
+          type: boolean
+        idle_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+      additionalProperties: false
+    ConfiguredStandbySettings:
+      type: object
+      description: Explicit machine-wide standby settings; null or missing means the default. Unknown names are rejected.
+      properties:
+        enabled:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        idle_minutes:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+      additionalProperties: false
+    StandbySettingsView:
+      type: object
+      required:
+        - defaults
+        - configured
+        - effective
+      properties:
+        defaults:
+          $ref: '#/components/schemas/StandbySettings'
+        configured:
+          $ref: '#/components/schemas/ConfiguredStandbySettings'
+        effective:
+          $ref: '#/components/schemas/StandbySettings'
       additionalProperties: false
     HostHealthLevel:
       enum:

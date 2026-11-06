@@ -1,0 +1,262 @@
+/* The standby night display (HS2-EQVZTZ) is an app-owned ambient visualization: Kerf has no
+   screensaver surface and its tones cannot be this dark, so every color comes from the
+   `--hs-standby-*` tokens (dark red on solid black; amber only for problems). The layout follows
+   the approved mocks m4/m5 (landscape) and m6 (portrait), measured on the surface itself so the UX
+   catalog can stage it at any size. */
+.standby-screen {
+  container: standby / size;
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--hs-standby-text-quiet);
+  background: var(--hs-standby-background);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+/* The app overlay covers the whole viewport in the top layer. */
+.standby-screen[data-presentation='overlay'] {
+  position: fixed;
+  inset: 0;
+  inline-size: 100vw;
+  block-size: 100dvh;
+  max-inline-size: none;
+  max-block-size: none;
+}
+.standby-screen[data-presentation='overlay']:focus {
+  outline: none;
+}
+.standby-screen::backdrop {
+  background: var(--hs-standby-background);
+}
+.standby-screen[data-presentation='inline'] {
+  inline-size: 100%;
+  block-size: 100%;
+}
+.standby-screen__content {
+  /* Placed by inset rather than padded, so the bordered callouts inside keep the only content inset. */
+  position: absolute;
+  inset: max(remify(48px), env(safe-area-inset-top)) max(remify(64px), env(safe-area-inset-right))
+    max(remify(24px), env(safe-area-inset-bottom)) max(remify(64px), env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: remify(24px);
+  /* Burn-in drift: the whole layout wanders a few pixels over twenty minutes so no OLED pixel
+     holds the same glyph all night. */
+  animation: standby-screen-drift 1200s ease-in-out infinite alternate;
+}
+@keyframes standby-screen-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(remify(-16px), remify(8px));
+  }
+  50% {
+    transform: translate(remify(8px), remify(16px));
+  }
+  75% {
+    transform: translate(remify(16px), remify(-8px));
+  }
+  100% {
+    transform: translate(remify(-8px), remify(-16px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .standby-screen__content {
+    animation: none;
+  }
+}
+.standby-screen__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: remify(24px);
+}
+.standby-screen__clock-group {
+  display: flex;
+  flex-direction: column;
+  gap: remify(8px);
+}
+/* The clock and the count outgrow the typography scale, so they are SVG numerals sized by height
+   from the screen, the way the gauge sizes its dial. */
+.standby-screen__numeral {
+  display: block;
+  overflow: visible;
+  inline-size: auto;
+  fill: currentColor;
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+}
+.standby-screen__clock {
+  display: block;
+  color: var(--hs-standby-text);
+}
+.standby-screen__clock .standby-screen__numeral {
+  block-size: clamp(remify(40px), 7cqb, remify(72px));
+}
+.standby-screen__scope {
+  font-size: var(--wa-font-size-l);
+}
+.standby-screen__hint {
+  font-size: var(--wa-font-size-m);
+  text-align: end;
+}
+/* The hero takes the height the callouts and strip leave and sizes the gauge and count from that
+   box, so many projects or a short window shrink them instead of overlapping the clock. */
+.standby-screen__hero {
+  container: standby-hero / size;
+  display: flex;
+  flex: 1;
+  min-block-size: remify(160px);
+  align-items: center;
+  justify-content: center;
+  gap: 6cqi;
+}
+.standby-screen__gauge {
+  inline-size: min(40cqi, 110cqb);
+}
+.standby-screen__count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: remify(8px);
+}
+.standby-screen__count-value {
+  display: block;
+  color: var(--hs-standby-text);
+}
+.standby-screen__count-value .standby-screen__numeral {
+  block-size: min(14cqi, 50cqb);
+}
+.standby-screen__count-label {
+  font-size: clamp(var(--wa-font-size-l), 2vw, var(--wa-font-size-2xl));
+}
+.standby-screen__alerts {
+  display: flex;
+  flex-direction: column;
+  gap: remify(16px);
+}
+/* Only a problem gets brightness: the amber callout (m5). */
+.standby-screen__alert {
+  display: flex;
+  align-items: center;
+  gap: remify(16px);
+  padding: remify(16px) remify(24px);
+  border: remify(2px) solid var(--hs-standby-alert);
+  border-radius: remify(16px);
+  color: var(--hs-standby-alert);
+}
+.standby-screen__alert-icon {
+  flex: none;
+  font-size: var(--wa-font-size-3xl);
+  line-height: 1;
+}
+.standby-screen__alert-text,
+.standby-screen__row-text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.standby-screen__alert-title {
+  font-size: clamp(var(--wa-font-size-xl), 2.2vw, var(--wa-font-size-2xl));
+}
+.standby-screen__alert-detail {
+  color: var(--hs-standby-alert-quiet);
+  font-size: clamp(var(--wa-font-size-m), 1.4vw, var(--wa-font-size-l));
+}
+.standby-screen__strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(remify(240px), 1fr));
+  gap: remify(16px) remify(24px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.standby-screen__row {
+  display: flex;
+  align-items: center;
+  gap: remify(12px);
+  min-inline-size: 0;
+  /* The strip is a list for its semantics only; rows align with the callout above. */
+  margin: 0;
+  font-size: clamp(var(--wa-font-size-m), 1.6vw, var(--wa-font-size-xl));
+}
+.standby-screen__row[data-alert='true'] {
+  color: var(--hs-standby-alert);
+}
+.standby-screen__row-icon {
+  flex: none;
+  font-size: var(--wa-font-size-larger);
+  line-height: 1;
+}
+.standby-screen__row-title {
+  font-weight: 500;
+}
+.standby-screen__row-detail {
+  font-size: var(--wa-font-size-smaller);
+  overflow-wrap: anywhere;
+}
+.standby-screen__freshness {
+  display: flex;
+  align-self: flex-end;
+  align-items: center;
+  gap: remify(8px);
+  margin: 0;
+  color: var(--hs-standby-text-faint);
+  font-size: var(--wa-font-size-s);
+}
+/* A dropped stream is a problem: a frozen screen must never look healthy. */
+.standby-screen__freshness[data-live='false'] {
+  color: var(--hs-standby-alert);
+}
+.standby-screen__freshness-dot {
+  inline-size: 0.6em;
+  block-size: 0.6em;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* Portrait (a phone, m6): the gauge stacks over the count and the strip becomes one column. */
+@container standby (orientation: portrait) {
+  .standby-screen__content {
+    inset-inline: max(remify(24px), env(safe-area-inset-left)) max(remify(24px), env(safe-area-inset-right));
+  }
+  .standby-screen__hero {
+    flex-direction: column;
+    gap: remify(16px);
+  }
+  .standby-screen__gauge {
+    inline-size: min(85cqi, 55cqb);
+  }
+  .standby-screen__count {
+    align-items: center;
+  }
+  .standby-screen__count-value .standby-screen__numeral {
+    block-size: min(40cqi, 25cqb);
+  }
+  .standby-screen__strip {
+    grid-template-columns: 1fr;
+  }
+  /* A phone's text steps stay fixed rather than following the viewport width. */
+  .standby-screen__count-label,
+  .standby-screen__alert-title {
+    font-size: var(--wa-font-size-l);
+  }
+  .standby-screen__row,
+  .standby-screen__alert-detail {
+    font-size: var(--wa-font-size-m);
+  }
+  .standby-screen__alert-icon {
+    font-size: var(--wa-font-size-2xl);
+  }
+}
+@container standby (orientation: portrait) and (max-width: 600px) {
+  .standby-screen__hint {
+    display: none;
+  }
+}

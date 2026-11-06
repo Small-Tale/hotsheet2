@@ -354,6 +354,19 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   (docs/34-glance-surfaces.md §34.4). Like `ProjectSummary`, it is a native button that opens the
   group's statistics. Before live state arrives the gauges rest at zero with no glyph.
 
+- `StandbyScreen` — **demo built** (`components/standby-screen.tsx`, HS2-EQVZTZ; mocks `m4`–`m6` on
+  HS2-CT5EWR; [34-glance-surfaces.md](34-glance-surfaces.md) §34.5): the standby night display.
+  Solid black, a very large dark-red `GlanceGauge` for tokens/min, the count of tickets updated in
+  the last 60 minutes, a clock, a dim per-project strip, and a freshness line. Only problems
+  brighten: Stalled, Halted, and Waiting on you get an amber callout and an amber strip row, and a
+  dropped change stream turns the freshness line amber. The clock and count are SVG numerals sized
+  to the screen; the layout stacks in portrait (`m6`). In the app it is a manual-popover `<dialog>`
+  lifted into the top layer, and the whole surface is the `exit-standby` target; `inline` stages it
+  in the catalog. It drifts a few pixels over 20 minutes against burn-in, except under reduced
+  motion. Kerf has no ambient display and its tones cannot be this dark, so it is app-owned and
+  colours only from `--hs-standby-*`. The demo's settings pick a scenario (all clear, a stalled
+  project, one project, connection lost, no live state) and orientation.
+
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain
@@ -2401,6 +2414,9 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   The `provider-icon` UX demo shows every kind at both sizes.
 - `ToolPluginSettings`
 - `NotificationSettings`
+- `StandbySettings` — **demo built** (HS2-EQVZTZ): App Settings → General → Standby. A Kerf
+  `Checkbox` turns idle entry on or off and a `Select` picks the idle threshold (presets plus any
+  value set from the CLI); both save at once to the machine-wide `PUT /standby-settings`.
 - `TerminalSettings`
 - `AppearanceSettings`
 

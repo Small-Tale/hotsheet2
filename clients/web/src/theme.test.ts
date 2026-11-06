@@ -119,6 +119,9 @@ describe('shared client theme', () => {
       '--hs-standby-gauge-fill',
       '--hs-standby-gauge-tick',
       '--hs-standby-gauge-needle',
+      '--hs-standby-text-faint',
+      '--hs-standby-alert',
+      '--hs-standby-alert-quiet',
     ];
     // CommandNavigation sets its palette color inline (`--command-color: var(--hs-command-<palette>)`),
     // so the palette tokens are referenced from TSX rather than CSS (HS2-SAXCMZ).

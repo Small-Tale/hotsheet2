@@ -21,6 +21,7 @@ const streams = vi.hoisted(() => ({
   onEvents: new Map<string, (response: unknown) => Promise<void>>(),
   onResync: new Map<string, (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>>(),
   refresh: new Map<string, () => Promise<void>>(),
+  onError: new Map<string, (reason: unknown) => void>(),
 }));
 vi.mock('../project-change-poll', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../project-change-poll')>()),
@@ -29,12 +30,14 @@ vi.mock('../project-change-poll', async (importOriginal) => ({
     onEvents: (response: unknown) => Promise<void>;
     onResync: (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>;
     refresh: () => Promise<void>;
+    onError?: (reason: unknown) => void;
   }) => {
     const id = (options.client as unknown as { origin: string }).origin;
     streams.started.push(id);
     streams.onEvents.set(id, options.onEvents);
     streams.onResync.set(id, options.onResync);
     streams.refresh.set(id, options.refresh);
+    if (options.onError) streams.onError.set(id, options.onError);
     return () => streams.stopped.push(id);
   },
 }));
@@ -364,6 +367,56 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     await vi.advanceTimersByTimeAsync(60 * 60_000);
     expect(hostHealth.resync).toHaveBeenCalledTimes(2);
     expect(hostHealth.applyEvents).toHaveBeenCalledTimes(1);
+    owner.dispose();
+  });
+
+  it('change streams: report each stream health for standby freshness, not handler failures (HS2-EQVZTZ)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      health: [string, boolean | undefined][] = [],
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        // A resync whose own reads fail leaves the connection healthy.
+        refreshPermissions: vi.fn(() => Promise.reject(new Error('permissions unavailable'))),
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        onStreamHealth: (id, live) => {
+          health.push([id, live]);
+        },
+      });
+    owner.syncProjectChangeStreams();
+    await expect(streams.onResync.get('/api/a')!('initial')).resolves.toBeUndefined();
+    streams.onError.get('/api/a')!(new Error('Project change WebSocket closed.'));
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'updated', id: 'x' }] });
+    streams.onError.get('/api/b')!(new Error('offline'));
+    projects.value = [project('a')];
+    owner.syncProjectChangeStreams();
+    expect(health).toEqual([
+      ['a', true],
+      ['a', false],
+      ['a', true],
+      ['b', false],
+      ['b', undefined],
+    ]);
     owner.dispose();
   });
 

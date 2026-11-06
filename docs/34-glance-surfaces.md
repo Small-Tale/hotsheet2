@@ -98,7 +98,7 @@ duration goes in the hover title and the accessible name, never on the face. For
 34 minutes" is the title of a May be stuck glyph, not visible text. Chips and rows appear only when they
 have something to say. The full-width callout for likely-critical conditions (§34.1) is the one exception.
 
-## 34.5 Standby (HS2-EQVZTZ, design only)
+## 34.5 Standby (HS2-EQVZTZ, shipped)
 
 The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
 `m5-standby-attention-desktop`, `m6-standby-phone-project`.
@@ -116,6 +116,32 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
 - **Devices:** request a Screen Wake Lock on phones and tablets, drift content slowly against OLED burn-in,
   and respect `prefers-reduced-motion`.
 - **Requests:** standby issues no requests of its own; it renders the pushed live state model.
+
+**As shipped.**
+
+- **Settings.** `standby.enabled` (default on) and `standby.idle_minutes` (default 15, 1–1440) are
+  machine-wide settings on the server's host. Clients read and write them with `GET`/`PUT
+/standby-settings`. `hotsheet-cli settings set standby.<name> <value>` validates the value and
+  always writes the global scope. In the app they are App Settings → General → Standby.
+- **Idle entry.** Idle means no pointer, key, wheel, or touch input. One local timer counts it and
+  never makes a request.
+- **Moon button.** It sits directly before the left rail's collapse toggle. While the rail is
+  collapsed, it moves with the toggle into the workspace toolbar.
+- **Exit.** A click or tap anywhere on the display exits. Any key also exits, and the app beneath
+  never receives that key.
+- **Scope.** A project tab, or one project's Stats page, shows that project. All Projects Stats and
+  the workspace grid show all projects.
+- **Freshness.** The freshness line reads the health of each project's change stream. A dropped
+  stream turns the line amber ("connection lost · last update …") once it has stayed down past a
+  20-second reconnect grace. A failed refresh after an event is not a dropped stream.
+- **Layout.** Strip rows stay in name order, so a problem lights up in place and never moves.
+- **Devices and motion.**
+  - On touch devices, standby holds a Screen Wake Lock and takes it again when the page becomes
+    visible.
+  - The layout drifts a few pixels over 20 minutes, unless the user prefers reduced motion.
+  - Portrait screens stack the gauge over the count.
+- **Rendering.** The display is a manual-popover `<dialog>`. The top-layer watcher keeps it above
+  every surface, including an open modal.
 
 ## 34.6 Project sidebar Live section (HS2-F788GW shipped; HS2-6B9S7P design only)
 

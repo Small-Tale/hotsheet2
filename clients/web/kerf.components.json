@@ -8533,6 +8533,132 @@
         "avoidWhen": ["A single live rate stands alone; use GlanceGauge."],
         "documentation": "../../docs/ux-components.md"
       }
+    },
+    {
+      "id": "standby-screen",
+      "name": "StandbyScreen",
+      "kind": "component",
+      "purpose": "The idle-entered standby night display: dark-red tokens/min gauge, tickets updated in the last hour, clock, dim project strip, freshness line, and amber problem callouts (HS2-EQVZTZ).",
+      "source": "src/components/standby-screen.tsx",
+      "publicExports": [
+        {
+          "name": "StandbyScreen"
+        }
+      ],
+      "sourceLinks": ["src/components/standby-screen.tsx", "src/standby.ts", "src/features/standby.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "component",
+          "behaviors": ["landscape-hero-row", "portrait-stack"]
+        },
+        "layout": {
+          "roles": ["feedback"],
+          "geometry": {
+            "margin": "none",
+            "border": "none",
+            "padding": "self"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": "standby-screen",
+        "publicClasses": ["standby-screen"],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": ["The whole surface is the exit target; any key exits and never reaches the app beneath."]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/standby-screen.tsx",
+        "composition": "src/components/standby-screen.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet shows its standby night display over the pushed live state."],
+        "avoidWhen": ["A surface the user works in; standby is an ambient display that exits on any input."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "standby-settings",
+      "name": "StandbySettings",
+      "kind": "component",
+      "purpose": "Machine-wide standby idle entry switch and threshold in App Settings → General (HS2-EQVZTZ).",
+      "source": "src/components/standby-settings.tsx",
+      "publicExports": [
+        {
+          "name": "StandbySettings"
+        }
+      ],
+      "sourceLinks": ["src/components/standby-settings.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/standby-settings.tsx",
+        "composition": "src/components/standby-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the machine-wide standby settings."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific StandbySettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
     }
   ]
 }

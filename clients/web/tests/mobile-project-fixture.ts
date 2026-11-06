@@ -86,6 +86,12 @@ export async function openDemoProject(
     buildRevision?: () => string;
     /** Simulates the selected client host build. */
     hostRevision?: () => string;
+    /** Glance live state (HS2-EQVZTZ), shaped like `GET /live-state`. */
+    liveState?: () => unknown;
+    /** Machine-wide standby settings (HS2-EQVZTZ): `GET` answers `get()`, `PUT` answers `put(body)`. */
+    standbySettings?: { get: () => unknown; put?: (body: unknown) => unknown };
+    /** Fail `/ws/poll`, as when the server is unreachable. */
+    pollDown?: () => boolean;
   } = {},
 ) {
   let repositoryInitialized = false;
@@ -176,6 +182,16 @@ export async function openDemoProject(
       return route.fulfill({ json: { items: [], next_cursor: null } });
     if (path.endsWith('/ai-tools') && populated.aiTools) return route.fulfill({ json: populated.aiTools });
     if (path.endsWith('/ai-settings') && populated.aiSettings) return route.fulfill({ json: populated.aiSettings });
+    if (path.endsWith('/live-state') && populated.liveState) return route.fulfill({ json: populated.liveState() });
+    if (path.endsWith('/standby-settings') && populated.standbySettings)
+      return route.fulfill({
+        json:
+          request.method() === 'PUT' && populated.standbySettings.put
+            ? populated.standbySettings.put(request.postDataJSON())
+            : populated.standbySettings.get(),
+      });
+    if (path.endsWith('/ws/poll') && populated.pollDown?.())
+      return route.fulfill({ status: 503, json: { error: 'Server unavailable' } });
     if (path.endsWith('/ws/poll'))
       return route.fulfill({
         json: { cursor: Number(url.searchParams.get('since') ?? 0), events: [], overflow: false },

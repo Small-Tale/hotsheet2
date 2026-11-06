@@ -58,6 +58,8 @@ export interface SettingsSurfaceDependencies {
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
   showLoadingActivity: Readable<boolean>;
+  /** App Settings → General → Standby (HS2-EQVZTZ). */
+  standbySettings?: () => NonNullable<Props['general']['standby']>;
   keyboardShortcutOverrides: Readable<Props['keyboard']['overrides']>;
   capturingShortcutId: Readable<Props['keyboard']['capturingId']>;
   appleShortcutPlatform: boolean;
@@ -113,6 +115,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
+    standbySettings,
     keyboardShortcutOverrides,
     capturingShortcutId,
     appleShortcutPlatform,
@@ -210,7 +213,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           },
         }}
         columns={{ hideVerified: hideVerifiedColumn() }}
-        general={{ showLoadingActivity: showLoadingActivity.value }}
+        general={{ showLoadingActivity: showLoadingActivity.value, standby: standbySettings?.() }}
         keyboard={{
           overrides: keyboardShortcutOverrides.value,
           capturingId: capturingShortcutId.value,

@@ -40,6 +40,7 @@ import { demoModule as repositoryStatus } from './repository-status-demo';
 import { demoModule as searchScopeToolbar } from './search-scope-toolbar-demo';
 import { demoModule as select } from './select-demo';
 import { demoModule as setupSettings } from './setup-settings-demo';
+import { demoModule as standby } from './standby-demo';
 import { demoModule as statsDashboard } from './stats-dashboard-demo';
 import { demoModule as statsProjectsTable } from './stats-projects-table-demo';
 import { demoModule as statsRightNow } from './stats-right-now-demo';
@@ -117,6 +118,7 @@ export const demoModules: readonly DemoModule[] = [
   statsThisMac,
   projectLiveSection,
   gridSidebar,
+  standby,
 ];
 
 const entries = new Map<string, DemoEntry>();

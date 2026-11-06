@@ -12,7 +12,9 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen } from 'lucide';
 
 import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
+import { SHELL_AND_GLOBAL_ACTIONS } from '../interaction-attrs/shell-and-global';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import { STANDBY_ICON } from '../live-state-icons';
 import { WORKSPACE_TOOLBAR_LABEL } from '../workspace-toolbar-visibility';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
@@ -89,6 +91,8 @@ export interface AppShellProps {
   /** `framed` (default) draws the shell as a bordered window at a desktop size floor, as the UX demo
    * stages it; `viewport` fills its container edge to edge, as the application root renders it. */
   presentation?: 'framed' | 'viewport';
+  /** Show the Standby (moon) button beside the left rail's collapse toggle (HS2-EQVZTZ). */
+  standbyControl?: boolean;
   /** Draw the work area's focus ring. Off while a top-layer overlay that the work area hosts (the
    * magnified terminal) has focus, so the ring never shows through that overlay's scrim. */
   workAreaFocusRing?: boolean;
@@ -143,16 +147,41 @@ export function AppShell({
   terminalDrawerContentOverflow = 'clip',
   presentation = 'framed',
   workAreaFocusRing = true,
+  standbyControl = false,
 }: AppShellProps) {
   const sidePanelPresentation = mobile ? 'overlay' : 'inline';
   const terminalDrawerExpanded = mode === 'project' && Boolean(terminalDrawer) && terminalDrawerVisible;
   // Stats keeps both rails as the user left them on wide layouts (HS2-MGQDY2); a phone shows the
   // stats page alone, since its rails are overlays that would cover it.
   const railsAllowed = !gridFullscreen && !(mobile && mode === 'stats');
+  const sidebarPanel = sidebar ? workbenchSidebarPanel(sidebar) : undefined;
   const leftRail: WorkbenchStaticPanel | undefined =
-    railsAllowed && sidebar
+    railsAllowed && sidebarPanel
       ? {
-          ...workbenchSidebarPanel(sidebar),
+          ...sidebarPanel,
+          // The moon sits beside the collapse toggle, which the Workbench keeps last (approved in m1), and
+          // moves with it into the workspace toolbar while the rail is collapsed. A phone keeps it in the
+          // overlay rail: its one-row workspace toolbar has no room to spare (HS2-RDFY4A search width).
+          toolbar:
+            standbyControl && sidebarPanel.toolbar
+              ? {
+                  ...sidebarPanel.toolbar,
+                  // An array keeps the group's relocation annotation visible to the Workbench.
+                  trailing: [
+                    sidebarPanel.toolbar.trailing,
+                    <ToolbarControlGroup appearance="borderless" single label="Standby" relocateOnCollapse={!mobile}>
+                      <button
+                        type="button"
+                        {...SHELL_AND_GLOBAL_ACTIONS.enterStandby.attrs}
+                        aria-label="Enter Standby"
+                        title="Enter standby"
+                      >
+                        <LucideIcon {...STANDBY_ICON} />
+                      </button>
+                    </ToolbarControlGroup>,
+                  ],
+                }
+              : sidebarPanel.toolbar,
           // Rail names stay distinct from the landmarks inside them (the panel's content, the inspector).
           label: mode === 'terminals' ? 'Operations rail' : 'Sidebar rail',
           collapsed: !sidebarVisible,
