@@ -3,6 +3,8 @@ import './worker-columns.css';
 import { Badge } from '@kerfjs/ui/badge';
 import { ColumnTrack } from '@kerfjs/ui/column-track';
 import { px } from '@kerfjs/ui/css-values';
+import { Disclosure } from '@kerfjs/ui/disclosure';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
@@ -14,9 +16,14 @@ import {
   integrationStrategyLabel,
   mergeWorkerViews,
   qualifiedWorkerTicket,
+  type WorkerCoverage,
+  workerCoverage,
+  type WorkerCoverageItem,
+  type WorkerCoverageSource,
   workerGroups,
   workerPreferenceChips,
   workerRequestStatus,
+  type WorkerSourceError,
   type WorkerTicketDetails,
   workerTicketOperationKey,
   type WorkerView,
@@ -29,9 +36,65 @@ export interface WorkerColumnsProps {
   ticketRow: (ticket: WireTicketRow) => TicketRowProps;
   selectedQualifiedId?: string;
   loading: boolean;
-  sourceErrors: readonly string[];
-  unsupportedSources: readonly string[];
+  /** Git sources whose worker view failed to load. */
+  sourceErrors: readonly WorkerSourceError[];
+  /** The project's ticket sources; undefined while they are not loaded. */
+  sources: readonly WorkerCoverageSource[] | undefined;
   layout: 'grid' | 'paged';
+}
+
+const sourceCount = (count: number) => `${count} ${count === 1 ? 'source' : 'sources'}`;
+
+/** One plain line per source: why its workers are not shown (HS2-7WE7CQ). */
+function coverageLine(item: WorkerCoverageItem): string {
+  if (item.reason === 'load_failed')
+    return `${item.name}: ${(item.message ?? 'could not be loaded').replace(/[.\s]+$/u, '')}`;
+  if (item.reason === 'failed_read') return `${item.name}: its settings could not be read`;
+  if (item.reason === 'unobserved') return `${item.name}: not watched by this project's worker pool`;
+  return `${item.name}: worker coordination is not available for this provider`;
+}
+
+/**
+ * HS2-7WE7CQ: real failures get a warning banner; sources that cannot be covered by design, and
+ * explicit unknowns, sit in a collapsed disclosure. Neither says a worker is missing or that
+ * ticket access failed: only that source's workers, claims and assignments are not shown.
+ */
+function WorkerCoverageSummary({ coverage }: { coverage: WorkerCoverage }) {
+  const unknowns = [
+    ...(coverage.sourcesUnknown ? ["Ticket sources haven't loaded, so coverage is unknown."] : []),
+    ...(coverage.connectionUnknown ? ['Live connection status is unknown for some workers.'] : []),
+  ];
+  const notes = coverage.notes.map(coverageLine),
+    hidden = coverage.notes.length;
+  return (
+    <div class="worker-columns__coverage" data-worker-coverage="">
+      {coverage.problems.length > 0 && (
+        <StateBanner
+          tone="warning"
+          urgency="status"
+          copyLayout="stacked"
+          title="Workers Not Shown for Some Sources"
+          detail={`${coverage.problems.map(coverageLine).join('. ')}. Tickets are unaffected.`}
+          rootAttributes={{ 'data-worker-coverage-problems': '' }}
+        />
+      )}
+      {notes.length + unknowns.length > 0 && (
+        <Disclosure
+          title={hidden > 0 ? `Workers not shown for ${sourceCount(hidden)}` : 'Worker coverage unknown'}
+          detail="Tickets are unaffected"
+          rootAttributes={{ 'data-worker-coverage-notes': '' }}
+        >
+          <List gap="xs">
+            {[...notes, ...unknowns].map((line) => (
+              <Text variant="p" tone="quiet" size="compact" flush>
+                {line}
+              </Text>
+            ))}
+          </List>
+        </Disclosure>
+      )}
+    </div>
+  );
 }
 
 function workerAvailability(worker: ReturnType<typeof mergeWorkerViews>[number]): string {
@@ -120,14 +183,16 @@ export function WorkerColumns({
   selectedQualifiedId,
   loading,
   sourceErrors,
-  unsupportedSources,
+  sources,
   layout,
 }: WorkerColumnsProps) {
-  const workers = mergeWorkerViews(views);
-  const uncovered = [
-    ...new Set([...views.flatMap((view) => view.uncovered_sources), ...unsupportedSources, ...sourceErrors]),
-  ];
-  const coverageUnknown = views.some((view) => !view.connection_coverage) || unsupportedSources.length > 0;
+  const workers = mergeWorkerViews(views),
+    coverage = workerCoverage(views, sources, sourceErrors),
+    coverageIncomplete =
+      coverage.problems.length > 0 ||
+      coverage.notes.length > 0 ||
+      coverage.sourcesUnknown ||
+      coverage.connectionUnknown;
   return (
     <section
       class="worker-columns"
@@ -139,18 +204,7 @@ export function WorkerColumns({
       aria-multiselectable="false"
       aria-label="Project Workers"
     >
-      {(uncovered.length > 0 || coverageUnknown) && (
-        <div class="worker-columns__coverage">
-          <StateBanner
-            tone="info"
-            urgency="status"
-            title="Some Workers May Be Missing"
-            detail={
-              uncovered.length ? `Coverage unavailable for ${uncovered.join(', ')}.` : 'Connection coverage is unknown.'
-            }
-          />
-        </div>
-      )}
+      {coverageIncomplete && <WorkerCoverageSummary coverage={coverage} />}
       {workers.length > 0 ? (
         <ColumnTrack layout={layout === 'grid' ? 'scroll' : 'paged'} minColumnWidth={px(250)} peek={px(24)}>
           {workers.map((worker) => (
@@ -233,7 +287,7 @@ export function WorkerColumns({
         <div class="worker-columns__zero" role="status">
           {loading
             ? 'Loading workers…'
-            : sourceErrors.length || coverageUnknown
+            : coverageIncomplete
               ? 'Worker availability is unknown.'
               : 'No workers are registered for this project.'}
         </div>

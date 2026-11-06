@@ -12,6 +12,13 @@ export function WorkerColumnsCatalogDemo() {
       <CatalogExample label="Phone" viewport={{ width: 'compact', height: 'app', frame: 'solid', overflow: 'hidden' }}>
         <DemoWorkerColumns layout="paged" />
       </CatalogExample>
+      {/* HS2-7WE7CQ: a failed read in the banner; unsupported and unobserved sources in the disclosure. */}
+      <CatalogExample
+        label="Coverage Gaps"
+        viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}
+      >
+        <DemoWorkerColumns coverage="gaps" />
+      </CatalogExample>
     </>
   );
 }

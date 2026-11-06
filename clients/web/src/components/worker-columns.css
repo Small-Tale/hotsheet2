@@ -8,7 +8,12 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 .worker-columns__coverage {
+  /* The coverage row can hold a problem banner and a details disclosure (HS2-7WE7CQ). */
+  display: grid;
+  /* Long source names wrap instead of widening the workspace on a phone (HS2-7WE7CQ). */
+  min-width: 0;
   padding: var(--kui-space-xs);
+  gap: var(--kui-space-xs);
 }
 .worker-columns__column {
   display: grid;

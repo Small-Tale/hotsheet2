@@ -83,12 +83,26 @@ export interface WorkerRow {
   matching?: WorkerMatching | null;
 }
 
+/** HS2-83KFB5: why a ticket source's workers are not shown. */
+export type WorkerCoverageReason = 'unsupported' | 'failed_read' | 'unobserved';
+
+/** One uncovered ticket source, keyed by connection id (HS2-83KFB5). */
+export interface WorkerCoverageGap {
+  connection_id: string;
+  name: string;
+  provider: string;
+  reason: WorkerCoverageReason;
+  details: string[];
+}
+
 export interface WorkerView {
   cursor: string;
   project_id: string;
   source_id: string;
   workers: WorkerRow[];
   uncovered_sources: string[];
+  /** Absent from servers older than HS2-83KFB5; `uncovered_sources` is the fallback. */
+  coverage_gaps?: WorkerCoverageGap[];
   connection_coverage: boolean;
 }
 
@@ -253,6 +267,20 @@ export function integrationStrategyLabel(strategy: string): string {
   return `${name} integration`;
 }
 
+const COVERAGE_REASONS: readonly WorkerCoverageReason[] = ['unsupported', 'failed_read', 'unobserved'];
+function coverageGap(value: unknown): WorkerCoverageGap {
+  const item = record(value),
+    reason = string(item.reason);
+  if (!(COVERAGE_REASONS as readonly string[]).includes(reason)) throw new ServerResponseShapeError('worker view');
+  return {
+    connection_id: string(item.connection_id),
+    name: string(item.name),
+    provider: string(item.provider),
+    reason: reason as WorkerCoverageReason,
+    details: array(item.details, string),
+  };
+}
+
 /** A malformed 2xx response is an explicit unavailable state, never an empty worker list. */
 export function parseWorkerView(value: unknown): WorkerView {
   const item = record(value);
@@ -262,6 +290,7 @@ export function parseWorkerView(value: unknown): WorkerView {
     source_id: string(item.source_id),
     workers: array(item.workers, worker),
     uncovered_sources: array(item.uncovered_sources, string),
+    ...(item.coverage_gaps === undefined ? {} : { coverage_gaps: array(item.coverage_gaps, coverageGap) }),
     connection_coverage:
       typeof item.connection_coverage === 'boolean'
         ? item.connection_coverage
@@ -425,3 +454,88 @@ export function workerGroups(worker: WorkerRow, now = Date.now() / 1000): Worker
 }
 
 export type WorkerTicketDetails = Record<string, TicketRow | undefined>;
+
+/** A ticket source the Workers view knows about, from the project's provider descriptors. */
+export interface WorkerCoverageSource {
+  connectionId: string;
+  name: string;
+  provider: string;
+}
+
+/** A Git source whose worker view could not be loaded. */
+export interface WorkerSourceError {
+  connectionId: string;
+  name: string;
+  message: string;
+}
+
+/** One source in the Workers coverage summary, listed once by its human-readable name. */
+export interface WorkerCoverageItem {
+  connectionId: string;
+  name: string;
+  reason: WorkerCoverageReason | 'load_failed';
+  message?: string;
+}
+
+export interface WorkerCoverage {
+  /** Failed reads and failed loads: they may recover and deserve attention. */
+  problems: WorkerCoverageItem[];
+  /** Unsupported by design or not observed by this pool: expected, not alarming. */
+  notes: WorkerCoverageItem[];
+  /** The project's ticket sources are not loaded, so coverage cannot be judged. */
+  sourcesUnknown: boolean;
+  /** A view reported live connection observation as unknown. */
+  connectionUnknown: boolean;
+}
+
+const COVERAGE_RANK: Record<WorkerCoverageItem['reason'], number> = {
+  load_failed: 0,
+  failed_read: 1,
+  unobserved: 2,
+  unsupported: 3,
+};
+
+/**
+ * HS2-7WE7CQ: one entry per uncovered ticket source, by connection id and human-readable name. It
+ * merges every view's `coverage_gaps`, the project's non-Git sources (known before any view loads)
+ * and failed view loads; the most serious reason wins. An older server without `coverage_gaps`
+ * falls back to `uncovered_sources`, so coverage is never shown as complete when it is not.
+ */
+export function workerCoverage(
+  views: readonly WorkerView[],
+  sources: readonly WorkerCoverageSource[] | undefined,
+  errors: readonly WorkerSourceError[],
+): WorkerCoverage {
+  const byId = new Map<string, WorkerCoverageItem>(),
+    nameOf = (id: string) => sources?.find((source) => source.connectionId === id)?.name ?? id,
+    add = (item: WorkerCoverageItem) => {
+      const previous = byId.get(item.connectionId);
+      if (!previous || COVERAGE_RANK[item.reason] < COVERAGE_RANK[previous.reason]) byId.set(item.connectionId, item);
+    };
+  // Server gaps first, so their names win over the client's at equal rank.
+  for (const view of views)
+    if (view.coverage_gaps)
+      for (const gap of view.coverage_gaps)
+        add({ connectionId: gap.connection_id, name: gap.name, reason: gap.reason });
+    else
+      for (const id of view.uncovered_sources)
+        add({
+          connectionId: id,
+          name: nameOf(id),
+          reason: sources?.find((source) => source.connectionId === id && source.provider !== 'git')
+            ? 'unsupported'
+            : 'unobserved',
+        });
+  // Non-Git sources are known before any view loads (and when every view load fails).
+  for (const source of sources ?? [])
+    if (source.provider !== 'git') add({ connectionId: source.connectionId, name: source.name, reason: 'unsupported' });
+  for (const error of errors)
+    add({ connectionId: error.connectionId, name: error.name, reason: 'load_failed', message: error.message });
+  const items = [...byId.values()];
+  return {
+    problems: items.filter((item) => item.reason === 'load_failed' || item.reason === 'failed_read'),
+    notes: items.filter((item) => item.reason === 'unsupported' || item.reason === 'unobserved'),
+    sourcesUnknown: sources === undefined,
+    connectionUnknown: views.some((view) => !view.connection_coverage),
+  };
+}

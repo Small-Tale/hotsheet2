@@ -75,12 +75,15 @@ describe('HS2-E9SR7R Workers composition', () => {
         selectedQualifiedId: 'two:same',
         loading: false,
         sourceErrors: [],
-        unsupportedSources: [],
+        sources: [],
         layout: 'grid',
       }),
     );
     expect(markup).toContain('data-component="column-track"');
-    expect(markup).toContain('Some Workers May Be Missing');
+    // An older server without coverage_gaps still reports the uncovered source (HS2-7WE7CQ).
+    expect(markup).toContain('Workers not shown for 1 source');
+    expect(markup).toContain("GitHub Issues: not watched by this project's worker pool");
+    expect(markup).not.toContain('May Be Missing');
     expect(markup).toContain('data-worker-ticket="one:same"');
     expect(markup).toContain('data-worker-ticket="two:same"');
     expect(markup).toContain('data-ticket-qualified-id="two:same"');
@@ -101,7 +104,7 @@ describe('HS2-E9SR7R Workers composition', () => {
         ticketRow: row,
         loading: false,
         sourceErrors: [],
-        unsupportedSources: [],
+        sources: [],
         layout: 'grid',
       }),
     );
@@ -114,7 +117,7 @@ describe('HS2-E9SR7R Workers composition', () => {
         ticketRow: row,
         loading: false,
         sourceErrors: [],
-        unsupportedSources: [],
+        sources: [],
         layout: 'grid',
       }),
     );
@@ -146,7 +149,7 @@ describe('HS2-E9SR7R Workers composition', () => {
           ticketRow: row,
           loading: false,
           sourceErrors: [],
-          unsupportedSources: [],
+          sources: [],
           layout: 'grid',
         }),
       );
@@ -176,12 +179,118 @@ describe('HS2-E9SR7R Workers composition', () => {
   });
 
   it('pages the phone layout and keeps unknown separate from a genuine zero-worker state', () => {
-    const base = { details: {}, ticketRow: row, sourceErrors: [], unsupportedSources: [], layout: 'paged' as const };
+    const base = { details: {}, ticketRow: row, sourceErrors: [], sources: [], layout: 'paged' as const };
     const loading = String(WorkerColumns({ ...base, views: [], loading: true }));
     const empty = String(WorkerColumns({ ...base, views: [], loading: false }));
     expect(loading).toContain('Loading workers');
     expect(empty).toContain('No workers are registered');
-    const unavailable = String(WorkerColumns({ ...base, views: [], loading: false, unsupportedSources: ['Jira'] }));
+    const unavailable = String(
+      WorkerColumns({
+        ...base,
+        views: [],
+        loading: false,
+        sources: [{ connectionId: 'jira-eng', name: 'Jira ENG', provider: 'jira' }],
+      }),
+    );
     expect(unavailable).toContain('Worker availability is unknown');
+  });
+
+  describe('HS2-7WE7CQ source coverage', () => {
+    const render = (props: Partial<Parameters<typeof WorkerColumns>[0]>) =>
+      String(
+        WorkerColumns({
+          views: [],
+          details: {},
+          ticketRow: row,
+          loading: false,
+          sourceErrors: [],
+          sources: [],
+          layout: 'grid',
+          ...props,
+        }),
+      );
+    const gapView = (gaps: NonNullable<WorkerView['coverage_gaps']>, connectionCoverage = true): WorkerView => ({
+      ...view,
+      workers: [],
+      connection_coverage: connectionCoverage,
+      uncovered_sources: gaps.map((gap) => gap.connection_id),
+      coverage_gaps: gaps,
+    });
+    const github = {
+      connectionId: 'github-small-tale-hotsheet2',
+      name: 'GitHub Small-Tale/hotsheet2',
+      provider: 'github',
+    };
+
+    it('lists a GitHub source once by name, collapsed, without alarming chrome', () => {
+      const markup = render({
+        views: [
+          gapView([
+            {
+              connection_id: github.connectionId,
+              name: github.name,
+              provider: 'github',
+              reason: 'unsupported',
+              details: [],
+            },
+          ]),
+        ],
+        sources: [{ connectionId: 'git-local', name: 'HS2 git tickets', provider: 'git' }, github],
+      });
+      expect(markup.match(/GitHub Small-Tale\/hotsheet2/g)).toHaveLength(1);
+      expect(markup).not.toContain('github-small-tale-hotsheet2');
+      expect(markup).toContain('Workers not shown for 1 source');
+      expect(markup).toContain('worker coordination is not available for this provider');
+      expect(markup).toContain('Tickets are unaffected');
+      expect(markup).toContain('data-worker-coverage-notes');
+      expect(markup).not.toContain('data-worker-coverage-problems');
+      expect(markup).not.toMatch(/<details[^>]*\sopen/);
+    });
+
+    it('puts real failures in a warning banner and expected gaps in the disclosure', () => {
+      const markup = render({
+        views: [
+          gapView([
+            {
+              connection_id: 'git-archive',
+              name: 'Archive git tickets',
+              provider: 'git',
+              reason: 'failed_read',
+              details: [],
+            },
+            {
+              connection_id: 'git-shared',
+              name: 'Shared git tickets',
+              provider: 'git',
+              reason: 'unobserved',
+              details: [],
+            },
+          ]),
+        ],
+        sources: [github],
+        sourceErrors: [{ connectionId: 'git-other', name: 'Other git tickets', message: 'Server unavailable.' }],
+      });
+      expect(markup).toContain('data-worker-coverage-problems');
+      expect(markup).toContain('Workers Not Shown for Some Sources');
+      expect(markup).toContain(
+        'Archive git tickets: its settings could not be read. Other git tickets: Server unavailable. Tickets are unaffected.',
+      );
+      expect(markup).toContain('Workers not shown for 2 sources');
+      expect(markup).toContain("Shared git tickets: not watched by this project's worker pool");
+      expect(markup).toContain('GitHub Small-Tale/hotsheet2: worker coordination is not available');
+      expect(markup).toContain('Worker availability is unknown.');
+    });
+
+    it('keeps explicit unknowns visible and shows nothing when coverage is complete', () => {
+      expect(render({ sources: undefined })).toContain("Ticket sources haven't loaded, so coverage is unknown.");
+      expect(render({ views: [gapView([], false)] })).toContain('Live connection status is unknown for some workers.');
+      expect(render({ views: [gapView([], false)] })).toContain('Worker coverage unknown');
+      const complete = render({
+        views: [gapView([])],
+        sources: [{ connectionId: 'git-local', name: 'HS2 git tickets', provider: 'git' }],
+      });
+      expect(complete).not.toContain('data-worker-coverage');
+      expect(complete).toContain('No workers are registered for this project.');
+    });
   });
 });

@@ -254,7 +254,13 @@ import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
 import { createTurnClock } from '../turn-clock';
 import { createWorkerTicketRefresh } from '../worker-ticket-refresh';
-import { qualifiedWorkerTicket, type WorkerTicketDetails, type WorkerView } from '../worker-view-model';
+import {
+  qualifiedWorkerTicket,
+  type WorkerCoverageSource,
+  type WorkerSourceError,
+  type WorkerTicketDetails,
+  type WorkerView,
+} from '../worker-view-model';
 import { startWorkerViewStream } from '../worker-view-stream';
 import {
   loadWorkspacePreferences,
@@ -306,8 +312,9 @@ export async function startHotSheetWebClient() {
     selectedTicket = signal<FullTicket | null>(null);
   const workerViews = signal<Record<string, WorkerView>>({}),
     workerDetails = signal<WorkerTicketDetails>({}),
-    workerErrors = signal<Record<string, string>>({}),
-    workerUnsupportedSources = signal<string[]>([]),
+    workerErrors = signal<Record<string, WorkerSourceError>>({}),
+    // HS2-7WE7CQ: the project's sources for Workers coverage; undefined while not loaded.
+    workerSources = signal<WorkerCoverageSource[] | undefined>(undefined),
     workerLoading = signal(false);
   const { corruptRecovery, revealCorruptTicket, queueCorruptTicketRepair } = createCorruptTicketRecoveryController({
     project: () => project(),
@@ -1468,11 +1475,11 @@ export async function startHotSheetWebClient() {
     workerViews.value = {};
     workerDetails.value = {};
     workerErrors.value = {};
-    workerUnsupportedSources.value = sources
-      ? sources.filter((source) => source.provider !== 'git').map((source) => source.name)
-      : current && viewMode.value === 'workers'
-        ? ['Ticket sources unavailable']
-        : [];
+    workerSources.value = sources?.map((source) => ({
+      connectionId: source.connectionId,
+      name: source.name,
+      provider: source.provider,
+    }));
     workerLoading.value = false;
     if (!key || !current || !sources) return;
     const pending = new Set(gitSources);
@@ -1524,7 +1531,11 @@ export async function startHotSheetWebClient() {
         workerLoading.value = pending.size > 0;
         workerErrors.value = {
           ...workerErrors.value,
-          [source]: `${sources.find((item) => item.connectionId === source)?.name ?? source}: ${reason instanceof Error ? reason.message : String(reason)}`,
+          [source]: {
+            connectionId: source,
+            name: sources.find((item) => item.connectionId === source)?.name ?? source,
+            message: reason instanceof Error ? reason.message : String(reason),
+          },
         };
       },
     });
@@ -4990,7 +5001,7 @@ export async function startHotSheetWebClient() {
     workerViews,
     workerDetails,
     workerErrors,
-    workerUnsupportedSources,
+    workerSources,
     workerLoading,
     selectedTicketQualifiedId: () => selectedTicket.value?.qualified_id,
   });

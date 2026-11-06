@@ -5,6 +5,7 @@ import {
   mergeWorkerViews,
   parseWorkerView,
   qualifiedWorkerTicket,
+  workerCoverage,
   workerGroups,
   workerPreferenceChips,
   workerRequestStatus,
@@ -241,5 +242,82 @@ describe('HS2-E9SR7R worker view projection', () => {
       'assignment:git:same:blocked-op',
       'claim:git:same',
     ]);
+  });
+});
+
+describe('HS2-7WE7CQ worker coverage', () => {
+  const gap = (connection_id: string, reason: 'unsupported' | 'failed_read' | 'unobserved', name = connection_id) => ({
+    connection_id,
+    name,
+    provider: reason === 'unsupported' ? 'github' : 'git',
+    reason,
+    details: [],
+  });
+  const withGaps = (source_id: string, gaps: ReturnType<typeof gap>[]): WorkerView => ({
+    ...view(source_id, []),
+    uncovered_sources: gaps.map((item) => item.connection_id),
+    coverage_gaps: gaps,
+  });
+
+  it('parses coverage gaps, tolerates older servers, and refuses an unknown reason', () => {
+    const parsed = parseWorkerView(withGaps('s', [gap('github-a', 'unsupported', 'GitHub a/b')]));
+    expect(parsed.coverage_gaps).toEqual([gap('github-a', 'unsupported', 'GitHub a/b')]);
+    expect(parseWorkerView(view('s', [])).coverage_gaps).toBeUndefined();
+    expect(() =>
+      parseWorkerView({ ...view('s', []), coverage_gaps: [{ ...gap('x', 'unobserved'), reason: 'missing' }] }),
+    ).toThrow('invalid worker view');
+  });
+
+  it('lists each source once by name, the most serious reason winning across views', () => {
+    const coverage = workerCoverage(
+      [
+        withGaps('git-a', [gap('github-a', 'unsupported', 'GitHub a/b'), gap('git-b', 'unobserved', 'B tickets')]),
+        withGaps('git-c', [gap('git-b', 'failed_read', 'B tickets'), gap('github-a', 'unsupported', 'GitHub a/b')]),
+      ],
+      [
+        { connectionId: 'git-a', name: 'A tickets', provider: 'git' },
+        { connectionId: 'github-a', name: 'Client name for a/b', provider: 'github' },
+      ],
+      [{ connectionId: 'git-d', name: 'D tickets', message: 'Server unavailable' }],
+    );
+    expect(coverage.problems).toEqual([
+      { connectionId: 'git-b', name: 'B tickets', reason: 'failed_read' },
+      { connectionId: 'git-d', name: 'D tickets', reason: 'load_failed', message: 'Server unavailable' },
+    ]);
+    // The server's name wins over the client's at equal rank; no id-only duplicate.
+    expect(coverage.notes).toEqual([{ connectionId: 'github-a', name: 'GitHub a/b', reason: 'unsupported' }]);
+    expect(coverage).toMatchObject({ sourcesUnknown: false, connectionUnknown: false });
+  });
+
+  it('a load error outranks a gap for the same source, in either order', () => {
+    const error = { connectionId: 'git-b', name: 'B tickets', message: 'boom' };
+    const coverage = workerCoverage([withGaps('git-a', [gap('git-b', 'unobserved', 'B tickets')])], [], [error]);
+    expect(coverage.problems).toEqual([{ ...error, reason: 'load_failed' }]);
+    expect(coverage.notes).toEqual([]);
+  });
+
+  it('reports non-Git sources before any view loads, and falls back to uncovered ids on older servers', () => {
+    const sources = [
+      { connectionId: 'git-a', name: 'A tickets', provider: 'git' },
+      { connectionId: 'jira-eng', name: 'Jira ENG', provider: 'jira' },
+    ];
+    expect(workerCoverage([], sources, []).notes).toEqual([
+      { connectionId: 'jira-eng', name: 'Jira ENG', reason: 'unsupported' },
+    ]);
+    const legacy = { ...view('git-a', []), uncovered_sources: ['jira-eng', 'git-z'] };
+    expect(workerCoverage([legacy], sources, []).notes).toEqual([
+      { connectionId: 'jira-eng', name: 'Jira ENG', reason: 'unsupported' },
+      { connectionId: 'git-z', name: 'git-z', reason: 'unobserved' },
+    ]);
+  });
+
+  it('keeps unloaded sources and unknown connection coverage explicit', () => {
+    expect(workerCoverage([], undefined, [])).toEqual({
+      problems: [],
+      notes: [],
+      sourcesUnknown: true,
+      connectionUnknown: false,
+    });
+    expect(workerCoverage([{ ...view('git-a', []), connection_coverage: false }], [], []).connectionUnknown).toBe(true);
   });
 });

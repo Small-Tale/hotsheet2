@@ -254,7 +254,17 @@ preview/download, server directory browser) are separate design work.
   still appears under each other worker that holds it.
   If a source or tool cannot be observed, say that coverage is
   unknown rather than showing zero workers. Keep idle workers visible and give a
-  genuine zero-worker state. Ticket activation opens the existing inspector; this
+  genuine zero-worker state.
+  Coverage lists each uncovered ticket source once, by name, merging the server's
+  `coverage_gaps`, the project's non-Git sources and failed worker-view loads by
+  connection id (HS2-7WE7CQ). A failed read or failed load is a warning banner,
+  **Workers Not Shown for Some Sources**, naming each source with its problem. A source
+  that cannot support coordination by design, one this pool does not watch, unloaded
+  ticket sources, and unknown live connection status sit in a collapsed **Workers not
+  shown for N sources** disclosure, one plain line each. Both say tickets are
+  unaffected; neither claims a worker is missing. An older server without
+  `coverage_gaps` falls back to `uncovered_sources`, so coverage never reads as
+  complete when it is not. Ticket activation opens the existing inspector; this
   monitoring view adds no launch, stop, or message actions.
   The integrator card adds an outline badge naming the session's recorded
   integration strategy (for example **Serial integration**) when the server reports

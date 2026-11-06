@@ -385,6 +385,115 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   expect(patches[0]).toMatchObject({ details: 'Unsaved worker details', expected_token: 'local-remote' });
 });
 
+test('lists each uncovered Workers source once by name, with failures apart from expected gaps (HS2-7WE7CQ)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const sources = [
+    { connection_id: 'git-local', provider: 'git', display_name: 'Demo git tickets', locator: project.stores[0] },
+    { connection_id: 'git-other', provider: 'git', display_name: 'Other git tickets', locator: '/work/other.hs2' },
+    {
+      connection_id: 'github-small-tale-hotsheet2',
+      provider: 'github',
+      display_name: 'GitHub Small-Tale/hotsheet2',
+      locator: 'Small-Tale/hotsheet2',
+    },
+  ];
+  await page.route('**/__hotsheet/project-api/demo-checkout/providers', (route) =>
+    route.fulfill({
+      json: sources.map((source, index) => ({
+        ...source,
+        default: index === 0,
+        capabilities: gitProviderCapabilities,
+      })),
+    }),
+  );
+  // The server's real coverage shape (HS2-83KFB5): the GitHub source by id with its name, and a
+  // store whose metadata could not be read. The other Git source's worker view itself fails.
+  const gaps = [
+    {
+      connection_id: 'github-small-tale-hotsheet2',
+      name: 'GitHub Small-Tale/hotsheet2',
+      provider: 'github',
+      reason: 'unsupported',
+      details: ['provider_unsupported'],
+    },
+    { connection_id: 'git-archive', name: 'Archive git tickets', provider: 'git', reason: 'failed_read', details: [] },
+  ];
+  let cursor = 'coverage-1';
+  const waiters = new Set<() => void>();
+  await page.route('**/checkouts/demo-checkout/workers?*', async (route) => {
+    const request = new URL(route.request().url()),
+      source = request.searchParams.get('connection_id');
+    if (source === 'git-other')
+      return route.fulfill({ status: 500, json: { error: 'Worker coordination is unavailable.' } });
+    if (request.searchParams.get('after') === cursor) await new Promise<void>((resolve) => waiters.add(resolve));
+    await route.fulfill({
+      json: {
+        cursor,
+        project_id: project.id,
+        source_id: source,
+        workers: [],
+        uncovered_sources: gaps.map((gap) => gap.connection_id),
+        coverage_gaps: gaps,
+        connection_coverage: true,
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workers' }).click();
+  const columns = page.locator('.worker-columns'),
+    problems = columns.locator('[data-worker-coverage-problems]'),
+    notes = columns.locator('details[data-worker-coverage-notes]');
+  // Real failures: one warning banner, each source named once, ticket access unaffected.
+  await expect(problems).toContainText('Workers Not Shown for Some Sources');
+  await expect(problems).toContainText('Archive git tickets: its settings could not be read');
+  await expect(problems).toContainText('Other git tickets: Worker coordination is unavailable. Tickets');
+  await expect(problems).toContainText('Tickets are unaffected.');
+  // Expected gaps: a collapsed disclosure naming the GitHub source once, never by its id.
+  await expect(notes).toContainText('Workers not shown for 1 source');
+  await expect(notes).toHaveJSProperty('open', false);
+  await expect(columns).not.toContainText('github-small-tale-hotsheet2');
+  await expect(columns).not.toContainText('May Be Missing');
+  await expect(columns.locator('.worker-columns__zero')).toHaveText('Worker availability is unknown.');
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-7we7cq-workers-coverage-collapsed-wide.png',
+    animations: 'disabled',
+  });
+  await notes.locator('summary').click();
+  await expect(notes).toHaveJSProperty('open', true);
+  const line = notes.getByText('GitHub Small-Tale/hotsheet2: worker coordination is not available for this provider');
+  await expect(line).toBeVisible();
+  expect(await columns.getByText('GitHub Small-Tale/hotsheet2', { exact: false }).count()).toBe(1);
+  // A new worker snapshot re-renders the view without closing the opened details.
+  cursor = 'coverage-2';
+  for (const resolve of waiters) resolve();
+  waiters.clear();
+  await expect.poll(() => waiters.size).toBeGreaterThan(0);
+  await expect(notes).toHaveJSProperty('open', true);
+  await expect(line).toBeVisible();
+  for (const [width, height, label] of [
+    [1440, 900, 'wide'],
+    [900, 900, 'medium'],
+    [390, 844, 'narrow'],
+    [1440, 900, 'wide-again'],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(problems).toBeInViewport();
+    await expect(line).toBeInViewport();
+    await page.screenshot({
+      path: `target/visual-captures/hs2-7we7cq-workers-coverage-${label}.png`,
+      animations: 'disabled',
+    });
+    const banner = (await problems.boundingBox())!,
+      column = (await columns.boundingBox())!;
+    expect(banner.x + banner.width).toBeLessThanOrEqual(column.x + column.width + 1);
+  }
+});
+
 test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9SR7R)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer({

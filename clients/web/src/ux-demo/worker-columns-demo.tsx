@@ -1,7 +1,7 @@
 import type { TicketRow as WireTicketRow } from '../api';
 import type { TicketRowProps } from '../components/ticket-row';
 import { WorkerColumns } from '../components/worker-columns';
-import type { WorkerRow, WorkerTicket, WorkerView } from '../worker-view-model';
+import type { WorkerCoverageSource, WorkerRow, WorkerTicket, WorkerView } from '../worker-view-model';
 import { collectionTickets } from './ticket-collections-demo';
 
 function demoTicket(ticket: TicketRowProps): WireTicketRow {
@@ -60,8 +60,33 @@ function worker(
   };
 }
 
+/** HS2-7WE7CQ: a GitHub source the server names by id and the client by name, plus real gaps. */
+const DEMO_SOURCES: WorkerCoverageSource[] = [
+  { connectionId: 'demo', name: 'Demo git tickets', provider: 'git' },
+  { connectionId: 'github-small-tale-hotsheet2', name: 'GitHub Small-Tale/hotsheet2', provider: 'github' },
+  { connectionId: 'git-archive', name: 'Archive git tickets', provider: 'git' },
+  { connectionId: 'git-shared', name: 'Shared git tickets', provider: 'git' },
+];
+const DEMO_COVERAGE_GAPS: NonNullable<WorkerView['coverage_gaps']> = [
+  {
+    connection_id: 'github-small-tale-hotsheet2',
+    name: 'GitHub Small-Tale/hotsheet2',
+    provider: 'github',
+    reason: 'unsupported',
+    details: [],
+  },
+  { connection_id: 'git-archive', name: 'Archive git tickets', provider: 'git', reason: 'failed_read', details: [] },
+  { connection_id: 'git-shared', name: 'Shared git tickets', provider: 'git', reason: 'unobserved', details: [] },
+];
+
 /** Synthetic approved-shape specimen, also composed inside the real demo shell. */
-export function DemoWorkerColumns({ layout = 'grid' }: { layout?: 'grid' | 'paged' }) {
+export function DemoWorkerColumns({
+  layout = 'grid',
+  coverage = 'complete',
+}: {
+  layout?: 'grid' | 'paged';
+  coverage?: 'complete' | 'gaps';
+}) {
   const originals = collectionTickets.value.slice(0, 4),
     rows = originals.map(demoTicket);
   const details = Object.fromEntries(rows.map((row) => [row.qualified_id, row]));
@@ -83,7 +108,8 @@ export function DemoWorkerColumns({ layout = 'grid' }: { layout?: 'grid' | 'page
     cursor: 'demo',
     project_id: 'demo',
     source_id: 'demo',
-    uncovered_sources: [],
+    uncovered_sources: coverage === 'gaps' ? DEMO_COVERAGE_GAPS.map((gap) => gap.connection_id) : [],
+    ...(coverage === 'gaps' ? { coverage_gaps: DEMO_COVERAGE_GAPS } : {}),
     connection_coverage: true,
     workers: [
       worker('Integrator', 'integrator', rows[0] ? [assignment(rows[0], 'integrating', true)] : [], []),
@@ -113,7 +139,7 @@ export function DemoWorkerColumns({ layout = 'grid' }: { layout?: 'grid' | 'page
       ticketRow={(row) => originals.find((item) => item.slug === row.slug)!}
       loading={false}
       sourceErrors={[]}
-      unsupportedSources={[]}
+      sources={coverage === 'gaps' ? DEMO_SOURCES : DEMO_SOURCES.slice(0, 1)}
       layout={layout}
     />
   );

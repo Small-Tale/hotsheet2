@@ -17,7 +17,7 @@ import type { PermissionHistoryItem, PermissionItem } from '../permission-notifi
 import { BOARD_COLUMN_PAGE_SIZE } from '../project-ticket-refresh';
 import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
 import { type TicketScope, type TicketView } from '../ticket-views';
-import type { WorkerTicketDetails, WorkerView } from '../worker-view-model';
+import type { WorkerCoverageSource, WorkerSourceError, WorkerTicketDetails, WorkerView } from '../worker-view-model';
 
 /** Live application bindings createWorkspaceSurface reads (HS2-K0VC2C). */
 export interface WorkspaceSurfaceDependencies {
@@ -56,8 +56,9 @@ export interface WorkspaceSurfaceDependencies {
   workspaceSearchActive: () => boolean;
   workerViews: Signal<Record<string, WorkerView>>;
   workerDetails: Signal<WorkerTicketDetails>;
-  workerErrors: Signal<Record<string, string>>;
-  workerUnsupportedSources: Signal<string[]>;
+  workerErrors: Signal<Record<string, WorkerSourceError>>;
+  /** HS2-7WE7CQ: the project's ticket sources for Workers coverage; undefined while not loaded. */
+  workerSources: Signal<WorkerCoverageSource[] | undefined>;
   workerLoading: Signal<boolean>;
   selectedTicketQualifiedId: () => string | undefined;
   /** The search's scope: the selected view, or All Tickets (HS2-4J6764). */
@@ -106,7 +107,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     workerViews,
     workerDetails,
     workerErrors,
-    workerUnsupportedSources,
+    workerSources,
     workerLoading,
     selectedTicketQualifiedId,
     searchScope,
@@ -174,7 +175,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
             selectedQualifiedId: selectedTicketQualifiedId(),
             loading: workerLoading.value,
             sourceErrors: Object.values(workerErrors.value),
-            unsupportedSources: workerUnsupportedSources.value,
+            sources: workerSources.value,
             layout: viewportMobile.value ? 'paged' : 'grid',
           },
         };

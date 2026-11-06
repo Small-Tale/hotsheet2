@@ -2377,7 +2377,8 @@ connection id. Its `name` is the connection's own name, else its provider descri
 `details` carries the metadata-only reason codes. A gap means that source's workers, claims and
 assignments are not shown; it never means ticket access failed or that a worker is known to
 be missing. `connection_coverage: false` stays the separate, explicit unknown for live
-connection observation. The Workers view presentation is HS2-7WE7CQ.
+connection observation. The Workers view presents these as described in
+[06](06-clients.md) (HS2-7WE7CQ).
 HS2-3ETJ26 owns provider-native query, claim-verification, and genuine event adapters.
 Its native claim and authenticated event/setup prerequisites are HS2-BPKM76 and
 HS2-SGQ183. Additive `source_support` snapshot entries expose registry-only implementation
