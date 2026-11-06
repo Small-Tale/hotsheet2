@@ -168,11 +168,15 @@ mod tests {
         }
         drop(watch);
         writeln!(file, "after").unwrap();
-        // The stopped thread released its callback.
-        assert_eq!(
-            changes.recv_timeout(Duration::from_secs(5)),
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
-        );
+        // The stopped thread released its callback. A notification for the last append may
+        // still be buffered from before the drop (HS2-QXJHE9); nothing may arrive after it.
+        let ended = loop {
+            match changes.recv_timeout(Duration::from_secs(5)) {
+                Ok(()) => {}
+                Err(error) => break error,
+            }
+        };
+        assert_eq!(ended, std::sync::mpsc::RecvTimeoutError::Disconnected);
     }
 
     #[test]
