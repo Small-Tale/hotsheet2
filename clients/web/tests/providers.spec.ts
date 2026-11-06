@@ -20,7 +20,7 @@ import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
-import { realTicketServer } from './real-ticket-server';
+import { realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
@@ -29,6 +29,7 @@ test('routes live server notices into the project inbox and bell (HS2-ZP869N)', 
   const server = await realTicketServer();
   try {
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/notifications**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',
@@ -1245,6 +1246,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
       .poll(async () => (await server.request<Array<{ cwd?: string }>>('/terminals'))[0]?.cwd)
       .toBe('/work/demo');
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/terminals**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',
@@ -9249,6 +9251,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       .poll(async () => (await server.request<Array<{ cwd?: string }>>('/terminals'))[0]?.cwd)
       .toBe('/work/demo');
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/terminals**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',
@@ -9292,6 +9295,8 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       )[0],
     ).toMatchObject({ last_hook_report: { source: 'session_start' } });
   } finally {
+    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
@@ -9333,6 +9338,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
       .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
       .toBe('/work/demo');
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/terminals**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',
@@ -9434,6 +9440,8 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     await expect(projectAttention).toHaveCount(0);
     expect((await server.request<Array<{ halt?: unknown }>>('/terminals'))[0].halt).toBeUndefined();
   } finally {
+    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
@@ -9490,6 +9498,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
       .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
       .toBe('/work/demo');
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/terminals**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',
@@ -9628,6 +9637,8 @@ test('recovers a missing Codex connection when its interactive permission hook r
     expect((await server.request<Array<{ ai_connection?: unknown }>>('/terminals'))[0].ai_connection).toBeUndefined();
   } finally {
     clearInterval(mcpHeartbeat);
+    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
@@ -9736,6 +9747,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     // Only project discovery is a fixture; the terminal list, the PTY, its size arbiter, and every
     // attach stream are the real server's.
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/terminals**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',
@@ -9842,6 +9854,8 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     await dialog.getByRole('button', { name: 'Cancel' }).click();
   } finally {
     for (const upstream of upstreams) upstream.close();
+    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
@@ -10827,6 +10841,7 @@ test('shares a terminal rename with other devices and restores it through the re
   // the `terminal_renamed` change event that reaches the other device are the real server's.
   const openOnRealServer = async (page: Page) => {
     await mockProject(page);
+    await routeProjectChangeSocket(page, server);
     for (const pattern of [
       '**/__hotsheet/project-api/demo-checkout/terminals**',
       '**/__hotsheet/project-api/demo-checkout/ws/poll*',

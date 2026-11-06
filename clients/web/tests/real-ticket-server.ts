@@ -7,6 +7,9 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import type { Page } from '@playwright/test';
+import WebSocket from 'ws';
+
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { assertFixtureCli, assertFixtureServer } from '../scripts/test-fixture-capabilities.mjs';
 
@@ -136,4 +139,51 @@ export async function realTicketServer(
     await stop();
     throw error;
   }
+}
+
+/**
+ * Route a mocked project's change WebSocket to this real server (HS2-B3Z8DS). Tests that mock the
+ * project as `demo-checkout` and proxy only its HTTP routes left `/ws/sync` to reach the shared
+ * Vite bridge, which has no session for the mocked project (or another test's stale one), so it
+ * refused the upgrade (1006). The page then ran on its long-poll fallback, and under parallel load
+ * events such as a terminal halt arrived late. Pipe the socket to the same server the HTTP proxy
+ * uses, so the page receives live events the way a real bridge session does.
+ */
+export async function routeProjectChangeSocket(
+  page: Page,
+  server: { url: string; secret: string; checkoutId?: string },
+  projectId = 'demo-checkout',
+): Promise<void> {
+  const path = new RegExp(`/__hotsheet/project-api/${projectId}/ws/sync(?:\\?.*)?$`);
+  await page.routeWebSocket(path, (route) => {
+    const incoming = new URL(route.url()),
+      target = new URL('/ws/sync', server.url);
+    target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:';
+    target.searchParams.set('secret', server.secret);
+    if (server.checkoutId) target.searchParams.set('checkout', server.checkoutId);
+    const client = incoming.searchParams.get('client');
+    if (client) target.searchParams.set('client', client);
+    const upstream = new WebSocket(target),
+      pending: Array<string | Buffer> = [];
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close();
+      void route.close();
+    };
+    route.onMessage((message) => {
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(message);
+      else pending.push(message);
+    });
+    route.onClose(close);
+    upstream.on('open', () => {
+      for (const message of pending.splice(0)) upstream.send(message);
+    });
+    upstream.on('message', (data: Buffer, binary) => {
+      if (!closed) route.send(binary ? data : data.toString('utf8'));
+    });
+    upstream.on('close', close);
+    upstream.on('error', close);
+  });
 }

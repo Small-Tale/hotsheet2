@@ -1528,6 +1528,13 @@ artifacts: copies of binaries built with the same feature, kept outside a shared
 so another worktree's rebuild cannot replace them during a run. They pass the same
 capability check. Tests that intentionally use real native credentials stay explicit opt-ins
 (`desktop:test:native`).
+A test that mocks the project (`demo-checkout`) and proxies its HTTP routes to a real
+ticket server also routes the change WebSocket there with `routeProjectChangeSocket`
+(HS2-B3Z8DS). Otherwise `/ws/sync` reaches the shared Vite bridge, which has no session
+for the mocked project and refuses it (1006). The page then runs only on its long-poll
+fallback, so under parallel load live events such as a terminal halt arrived late. Such a
+test calls `page.unrouteAll({ behavior: 'ignoreErrors' })` before stopping the server, so
+the fallback poll that follows the socket's close does not fail the test.
 
 ### Local Playwright parallelism and timeouts
 
