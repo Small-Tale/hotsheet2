@@ -31851,6 +31851,46 @@ test('keeps the new-ticket composer open when it is opened right after a project
   await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toBeVisible();
 });
 
+/**
+ * HS2-V94A8M: Playwright's `networkidle` (no request for 500 ms), minus the change stream's long
+ * poll. A live page keeps that genuine long poll open (HS2-AZ11V9), so `networkidle` never comes.
+ * Tracking starts when this is called, so start it before releasing the work being awaited.
+ */
+function trackNetworkQuietExceptChangePolls(page: Page) {
+  const isChangePoll = (url: string) => {
+    const path = new URL(url).pathname;
+    return path.endsWith('/ws/poll') || path.endsWith('/change-mux/poll');
+  };
+  const inFlight = new Set<import('@playwright/test').Request>();
+  const started = (request: import('@playwright/test').Request) => {
+    if (!isChangePoll(request.url())) inFlight.add(request);
+  };
+  const done = (request: import('@playwright/test').Request) => inFlight.delete(request);
+  page.on('request', started);
+  page.on('requestfinished', done);
+  page.on('requestfailed', done);
+  return {
+    async quiet(quietMs = 500) {
+      let quietSince = Date.now();
+      try {
+        await expect
+          .poll(
+            () => {
+              if (inFlight.size) quietSince = Date.now();
+              return Date.now() - quietSince >= quietMs;
+            },
+            { message: 'requests other than the change long poll settle', intervals: [50] },
+          )
+          .toBe(true);
+      } finally {
+        page.off('request', started);
+        page.off('requestfinished', done);
+        page.off('requestfailed', done);
+      }
+    },
+  };
+}
+
 test('keeps a ticket selected right after a project tab switch when the session restore lands (HS2-VDJJEY)', async ({
   page,
 }) => {
@@ -31904,8 +31944,10 @@ test('keeps a ticket selected right after a project tab switch when the session 
   // Releasing the refresh runs the restore of the parked (empty) selection; it must keep the user's choice.
   await expect.poll(() => pending.has('demo')).toBe(true);
   holdRefreshes = false;
+  // Wait for the restore the release starts to finish its requests; the change long poll stays open.
+  const network = trackNetworkQuietExceptChangePolls(page);
   await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
-  await page.waitForLoadState('networkidle');
+  await network.quiet();
   await expect(inspector.getByText(row.title).first()).toBeVisible();
   await expect(inspector.getByText('Select a ticket to see and edit its details')).toHaveCount(0);
 });

@@ -18,6 +18,17 @@ describe('web ESLint policy', () => {
     expect(config).not.toMatch(/\b(?:hookTimeout|testTimeout|maxWorkers)\b/);
   });
 
+  it('HS2-V94A8M never waits for networkidle in browser tests while the change long poll stays open', () => {
+    // A live page always has a change poll in flight (HS2-AZ11V9), so `networkidle` never arrives.
+    const tests = new URL('../tests/', import.meta.url);
+    const offenders = readdirSync(tests)
+      .filter((name) => name.endsWith('.ts'))
+      .filter((name) =>
+        /networkidle/.test(readFileSync(new URL(name, tests), 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '')),
+      );
+    expect(offenders).toEqual([]);
+  });
+
   it('HS2-N9X6D5 keeps browser fixture timers for measured windows and cadence only', () => {
     const read = (name: string) => readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8');
     const stable = read('stable-dev.e2e.test.mjs');

@@ -1962,7 +1962,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   transport took that empty page for a full window and slept out the rest of its retry
   window, up to 30 s, without polling, so a terminal halt could appear many seconds late
   (HS2-AZ11V9). An empty page that returns well before its timeout (a server that ignores
-  it) still resolves, so this never becomes a tight loop. Origin-scoped Web Locks
+  it) still resolves, so this never becomes a tight loop. A page therefore always has a
+  change poll in flight: browser tests never wait for Playwright's `networkidle`. They wait on
+  the state they need, or on the other requests settling with the `/ws/poll` and
+  `/__hotsheet/change-mux/poll` long polls excluded (HS2-V94A8M). Origin-scoped Web Locks
   share those four slots across independent tabs and workers, including when SharedWorker
   is unavailable. A closed tab releases its locks. Browsers without Web Locks use paced
   zero-wait polls, keeping HTTP connections brief for ordinary API work (HS2-GDF4ZJ).
