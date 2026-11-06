@@ -10690,27 +10690,43 @@ test('shows every host-only control disabled in the remote-device demo states (H
   ] as const) {
     await page.goto(`/ux-demo?component=${component}`);
     const fileMenu = page.locator('[data-action="open-repository-file-menu-trigger"]').first(),
-      usesFileMenu = component === 'repository-status-popover' || component === 'change-evidence-dialog';
-    const reasons = async () => {
-      if (usesFileMenu) {
-        await page.keyboard.press('Escape');
-        await setDemoSettingsOpen(page, false);
-        await fileMenu.click();
-      }
-      return reasonsIn(page.locator('body'));
+      usesFileMenu = component === 'repository-status-popover' || component === 'change-evidence-dialog',
+      // HS2-5WXJNG: the conversation demo opens its modal dialog a microtask after mount, a device
+      // change, and Reset. A blind Escape can land before it opens; the modal then makes the
+      // settings pane inert and intercepts clicks. Wait for the open state, close, and wait for closed.
+      conversation = page.locator('dialog[data-key="ai-conversation"]');
+    const closeConversation = async () => {
+      await expect(conversation, component).toHaveAttribute('open', '');
+      await page.keyboard.press('Escape');
+      await expect(conversation, component).not.toHaveAttribute('open');
     };
-    if (component === 'ai-conversation') await page.keyboard.press('Escape');
+    // HS2-5WXJNG: mount the file menu with one real click and wait for its items, then poll only
+    // reads. The device switch re-renders the mounted items with their disabled reason; Reset
+    // clears the menu, so it is mounted again before the host check. Re-pressing Escape and
+    // re-clicking inside a poll raced the menu's own open and close under load.
+    const fileActions = page.locator('[data-context-menu="repository-file"] [data-repository-file-action="open"]');
+    const mountFileMenu = async () => {
+      await setDemoSettingsOpen(page, false);
+      await fileMenu.click();
+      await expect(fileActions, component).toHaveCount(1);
+    };
+    const reasons = () => reasonsIn(page.locator('body'));
+    if (component === 'ai-conversation') await closeConversation();
+    if (usesFileMenu) await mountFileMenu();
     expect(await reasons(), component).not.toMatch(remoteReason);
     const control = await setDevice(component, name, 'remote');
     await expect.poll(reasons, component).toMatch(remoteReason);
-    await page.keyboard.press('Escape');
+    if (component === 'ai-conversation') await closeConversation();
+    else await page.keyboard.press('Escape');
     await setDemoSettingsOpen(page, true);
     await page
       .getByRole('complementary', { name: `${name} Settings` })
       .getByRole('button', { name: 'Reset' })
       .click();
     await expect(control, component).toHaveJSProperty('value', 'host');
-    if (component === 'ai-conversation' || component === 'hs1-migration-dialog') await page.keyboard.press('Escape');
+    if (component === 'ai-conversation') await closeConversation();
+    if (component === 'hs1-migration-dialog') await page.keyboard.press('Escape');
+    if (usesFileMenu) await mountFileMenu();
     await expect.poll(reasons, component).not.toMatch(remoteReason);
   }
 
