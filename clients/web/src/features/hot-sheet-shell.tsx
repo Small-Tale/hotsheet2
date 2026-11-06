@@ -183,6 +183,9 @@ export interface HotSheetShellDependencies {
   ticketViewTitle: (view: TicketScope) => string;
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
+  /** The project strip's tabs overflow, so its New ticket launcher shows the compact "Ticket…" label
+   * (HS2-RNR35H); `wireProjectTabActionFit` measures it. */
+  projectTabActionCompact: Signal<boolean>;
   workspaceSearchModel: SearchFieldModel;
   guidanceSearchModel: SearchFieldModel;
   workspaceSurfaceProps: () => WorkspaceSurfaceProps;
@@ -270,6 +273,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     ticketViewTitle,
     viewMode,
     viewportMobile,
+    projectTabActionCompact,
     workspaceSearchModel,
     guidanceSearchModel,
     workspaceSurfaceProps,
@@ -593,7 +597,13 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
           />
         }
-        projectTabAction={viewportMobile.value ? undefined : headingAction}
+        projectTabAction={
+          viewportMobile.value
+            ? undefined
+            : projectTabActionCompact.value && headingAction?.kind === 'new-ticket'
+              ? ticketViewActionSpec(selectedView.value, canCreate, 'Ticket…', 'compact')
+              : headingAction
+        }
         banner={
           <>
             <CompatibilityBannerSurface

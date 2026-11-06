@@ -15915,7 +15915,8 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await expect(outgoingGhost).toHaveCount(0);
   await expect(moved).toHaveCount(0);
   await clear();
-  await page.getByRole('button', { name: 'New ticket…' }).click();
+  // At 1024px with the inspector open the strip's launcher reads `Ticket…` (HS2-RNR35H).
+  await page.locator('[data-component="quick-ticket-composer-launcher"]').click();
   await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Animated incoming ticket');
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const incoming = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEW001"]'),
@@ -30404,6 +30405,70 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(0);
   await expect(inspector).toContainText('Select a ticket to see and edit its details');
   await page.screenshot({ path: 'target/visual-captures/hotsheet-zero-selection-placeholder.png' });
+});
+
+// HS2-RNR35H: at the narrowest desktop width with the inspector open, the project strip's New ticket
+// launcher yields its full label so the lone project tab and its badge are not scrolled out of view.
+test('HS2-RNR35H compacts the project strip launcher so the project tab fits the narrow board header', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector).toContainText('Select a ticket to see and edit its details');
+  await page.getByLabel('Columns View').click();
+  const strip = page.locator('[data-component="project-tab-bar"]'),
+    tabs = strip.locator('.kui-tab-bar__tabs'),
+    tab = strip.locator('[data-tab-kind="project"]'),
+    launcher = strip.locator('[data-component="quick-ticket-composer-launcher"]');
+  const fits = () =>
+    tabs.evaluate((element) => ({
+      overflow: element.scrollWidth - element.clientWidth,
+      tabInside:
+        element.querySelector('[data-tab-kind="project"]')!.getBoundingClientRect().right <=
+        element.getBoundingClientRect().right + 0.5,
+    }));
+  await expect(launcher).toHaveText('New ticket…');
+  await page.screenshot({ path: 'target/visual-captures/hs2-rnr35h-board-wide.png' });
+  for (const pass of ['first', 'second']) {
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await expect(launcher).toHaveText('Ticket…');
+    await expect(launcher).toHaveAttribute('data-size', 'compact');
+    await expect.poll(fits).toEqual({ overflow: 0, tabInside: true });
+    await expect(tab).toBeVisible();
+    if (pass === 'first') {
+      await strip.screenshot({ path: 'target/visual-captures/hs2-rnr35h-strip-1024.png' });
+      await page.screenshot({ path: 'target/visual-captures/hs2-rnr35h-board-1024.png' });
+      // Closing the inspector gives the strip room again, so the full label returns.
+      await inspector.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+      await expect(launcher).toHaveText('New ticket…');
+      await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+      await expect(launcher).toHaveText('Ticket…');
+    }
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await expect(launcher).toHaveText('New ticket…');
+    await expect.poll(fits).toEqual({ overflow: 0, tabInside: true });
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rnr35h-board-1280.png' });
+  // Phone widths replace the strip's tabs with the project Select and drop the launcher from it.
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(launcher).toHaveCount(0);
+  await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  await expect(page.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+  // The rails slide out as overlays; capture the settled phone layout, not the slide.
+  await page.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
+  await page.screenshot({ path: 'target/visual-captures/hs2-rnr35h-board-800.png' });
 });
 
 test('drops ticket selection across ticket views but preserves it across view modes', async ({ page }) => {

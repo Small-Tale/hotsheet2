@@ -184,6 +184,7 @@ import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
 import { projectLiveSummary, workersLive } from '../project-live-summary';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
+import { wireProjectTabActionFit } from '../project-tab-action-fit';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
   appendUniqueTicketRows,
@@ -3111,6 +3112,8 @@ export async function startHotSheetWebClient() {
     coarsePointer.value = event.matches;
   });
   const viewportMobile = signal(isMobileViewport(window.innerWidth)),
+    // Measured by wireProjectTabActionFit: the project tabs overflow the strip (HS2-RNR35H).
+    projectTabActionCompact = signal(false),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
   function setInspectorVisible(visible: boolean) {
@@ -5119,6 +5122,7 @@ export async function startHotSheetWebClient() {
     ticketViewTitle,
     viewMode,
     viewportMobile,
+    projectTabActionCompact,
     workspaceSearchModel,
     guidanceSearchModel,
     workspaceSurfaceProps,
@@ -5349,6 +5353,9 @@ export async function startHotSheetWebClient() {
   const disposeGridSidebarPages = terminalOperationsSurface.wire(appRoot);
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
+  const disposeProjectTabActionFit = wireProjectTabActionFit(appRoot, (compact) => {
+    projectTabActionCompact.value = compact;
+  });
 
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);
@@ -6258,6 +6265,7 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       disposeToolbarVisibility();
+      disposeProjectTabActionFit();
       disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);
       toastPresentation.dispose();
