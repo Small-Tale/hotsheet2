@@ -17,8 +17,9 @@ export default defineConfig({
       reporter: ['text', 'lcov'],
       include: ['src/**/*.mjs'],
       exclude: ['src/introspect.mjs'],
-      // Conservative starting floors under the current numbers (export.mjs ~80% lines);
-      // raise them as the exporter gains tests.
+      // Conservative floors under the current numbers; raise them as the exporter gains tests.
+      // HS2-XKYSVK: Vitest 4's AST-aware v8 remapping measures the same suite stricter than
+      // Vitest 3 did (export.mjs 75.9% lines, 68.2% branches, 70.0% functions, was 80.7/77.5/79.2).
       thresholds: { lines: 70, functions: 70, branches: 60 },
     },
   },

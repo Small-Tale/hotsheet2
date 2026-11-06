@@ -1585,7 +1585,9 @@ not a measured secret-get count. No UI or manual/live-provider validation is cla
 - Rust line coverage: `cargo llvm-cov`; CI uploads `rust-coverage-lcov` and enforces
   the current line floor.
 - Migrator line/branch/function coverage: `npm run test:coverage` in `migrator/`; CI
-  uploads `migrator-coverage-lcov` and enforces Vitest thresholds.
+  uploads `migrator-coverage-lcov` and enforces Vitest thresholds. Since Vitest 4
+  (HS2-XKYSVK) its AST-aware v8 remapping reports the same suite lower: `export.mjs`
+  75.9% lines, 68.2% branches and 70.0% functions, so the function floor has no headroom.
 - Feature double coverage: this matrix, gated by `npm run`-free
   `node scripts/check-test-coverage.mjs` in CI.
 - Manual-only behavior: [manual-test-plan.md](manual-test-plan.md).
