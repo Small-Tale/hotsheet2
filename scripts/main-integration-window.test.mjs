@@ -17,7 +17,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
-import { acceptedHooksPath, readWindow, verifyMainPush } from './main-integration-window.mjs';
+import { acceptedHooksPath, gateDiagnostics, readWindow, verifyMainPush } from './main-integration-window.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = (program, args, cwd, env = withoutGitRepositoryEnv(process.env), input) =>
@@ -37,7 +37,7 @@ if [ "$verify" -eq 1 ]; then test -f "$marker"; exit; fi
 if [ -f "$marker" ]; then exit 0; fi
 printf 'gate\\n' >> "$HS2_TEST_GATE_LOG"
 if [ -n "\${HS2_TEST_HOLD:-}" ]; then
-  touch "$HS2_TEST_STARTED"
+  printf '%s\\n' "$$" > "$HS2_TEST_STARTED"
   while [ -f "$HS2_TEST_HOLD" ]; do sleep 0.1; done
 fi
 if [ -f "$HS2_TEST_FAIL" ]; then exit 1; fi
@@ -170,7 +170,11 @@ test('HS2-W110HQ release or replacement after lookup preserves one immutable res
       let lookups = 0;
       const snapshot = readWindow(f.repo, (repo, args) => {
         lookups++;
-        const result = spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
+        const result = spawnSync('git', args, {
+          cwd: repo,
+          env: withoutGitRepositoryEnv(process.env),
+          encoding: 'utf8',
+        });
         assert.equal(result.status, 0, result.stderr);
         if (next) run('git', ['update-ref', ref, next, oid], repo);
         else run('git', ['update-ref', '-d', ref, oid], repo);
@@ -351,7 +355,11 @@ test('HS2-BYDMV4 a new owner between unresolved lookup and existence requires a 
       let queries = 0;
       const read = () =>
         readWindow(f.repo, (repo, args) => {
-          const result = spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
+          const result = spawnSync('git', args, {
+            cwd: repo,
+            env: withoutGitRepositoryEnv(process.env),
+            encoding: 'utf8',
+          });
           if (++queries === 1) {
             assert.equal(result.status, 1);
             assert.equal(result.stderr, '');
@@ -510,7 +518,13 @@ finally { Date.now = originalNow; }
     );
     assert.equal(run('git', ['rev-parse', ref], f.repo), oid);
     assert.equal(existsSync(env.HS2_TEST_GATE_LOG), false);
-    assert.equal(spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], { cwd: f.remote, env: withoutGitRepositoryEnv(process.env) }).status, 2);
+    assert.equal(
+      spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], {
+        cwd: f.remote,
+        env: withoutGitRepositoryEnv(process.env),
+      }).status,
+      2,
+    );
   } finally {
     f.dispose();
   }
@@ -588,7 +602,13 @@ finally { Date.now = originalNow; }
       assert.equal(readFileSync(marker, 'utf8'), '');
     assert.equal(run('git', ['rev-parse', ref], f.repo), oid);
     assert.equal(existsSync(env.HS2_TEST_GATE_LOG), false);
-    assert.equal(spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], { cwd: f.remote, env: withoutGitRepositoryEnv(process.env) }).status, 2);
+    assert.equal(
+      spawnSync('git', ['show-ref', '--exists', 'refs/heads/main'], {
+        cwd: f.remote,
+        env: withoutGitRepositoryEnv(process.env),
+      }).status,
+      2,
+    );
   } finally {
     f.dispose();
   }
@@ -903,14 +923,135 @@ test(
       const result = await running.completed;
       assert.notEqual(result.code, 0, result.output);
       assert.match(result.output, /heartbeat stopped the push/);
+      // HS2-RY0ZMX: the gate's own stop names this window and the heartbeat, not `failed (null)`.
+      assert.match(result.output, /check\.sh was stopped by SIGTERM from this window because the heartbeat failed/);
+      assert.match(result.output, /Gate processes running when it stopped:/);
       // The deletion can land before the ownership read or during the renewal's compare-and-swap.
-    assert.match(result.output, /reservation ref is missing|changed during renewal/);
+      assert.match(result.output, /reservation ref is missing|changed during renewal/);
       assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), remoteBase);
     } finally {
       rmSync(hold, { force: true });
       if (running?.child.exitCode === null)
         try {
           process.kill(-running.child.pid, 'SIGTERM');
+        } catch {
+          /* exited */
+        }
+      f.dispose();
+    }
+  },
+);
+
+test('HS2-RY0ZMX gate diagnostics list other gates and windows, never this push, with the load', () => {
+  const listing = [
+    `${process.pid} 00:05 node scripts/main-integration-window.mjs push origin main`,
+    '4101 12:30 node scripts/local-gate.mjs --ticket HS2-SYNTHETIC',
+    '4102 01:02 bash scripts/check.sh',
+    '4103 03:00 node unrelated.mjs',
+    `4104 00:01 node scripts/local-gate.mjs ${'x'.repeat(300)}`,
+  ].join('\n');
+  const text = gateDiagnostics(() => ({ status: 0, stdout: `${listing}\n` }));
+  const lines = text.split('\n');
+  assert.equal(lines[0], 'Gate processes running when it stopped:');
+  assert.ok(lines.includes('  4101 12:30 node scripts/local-gate.mjs --ticket HS2-SYNTHETIC'));
+  assert.ok(lines.includes('  4102 01:02 bash scripts/check.sh'));
+  assert.ok(!text.includes('unrelated.mjs'));
+  assert.ok(!text.includes(`${process.pid} 00:05`), 'the push itself is not reported as another gate');
+  assert.ok(lines.some((line) => line.startsWith('  4104 ') && line.length === 202 && line.endsWith('…')));
+  assert.match(lines.at(-1), /^load average \(1, 5, 15 min\): \d+\.\d{2} \d+\.\d{2} \d+\.\d{2}$/);
+  assert.match(
+    gateDiagnostics(() => ({ status: 0, stdout: '4103 03:00 node unrelated.mjs\n' })),
+    /stopped:\n {2}none\n/,
+  );
+  assert.match(
+    gateDiagnostics(() => ({ status: 1, stdout: '' })),
+    /\(process list unavailable\)/,
+  );
+});
+
+/** The held gate's pid, which also leads its process group (`child()` spawns it detached). */
+async function heldGatePid(f, running) {
+  await waitForFile(f.env.HS2_TEST_STARTED, running);
+  for (;;) {
+    const pid = Number(readFileSync(f.env.HS2_TEST_STARTED, 'utf8').trim());
+    if (pid > 0) return pid;
+    await new Promise((done) => setTimeout(done, 50));
+  }
+}
+
+for (const signal of ['SIGTERM', 'SIGINT'])
+  test(
+    `HS2-RY0ZMX a ${signal} to the push names itself as the reason the gate stopped`,
+    { timeout: 60_000 },
+    async () => {
+      const f = fixture();
+      let running;
+      const hold = resolve(f.root, 'hold');
+      try {
+        run('bash', ['scripts/push.sh'], f.repo, f.env);
+        const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+        commit(f.repo, `signal-${signal}`, f.env);
+        put(hold, 'hold');
+        running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
+        await heldGatePid(f, running);
+        // An agent tool ending a long foreground command signals the push's own group, not the
+        // separately detached gate group: only the push's handler can stop the gate.
+        process.kill(-running.child.pid, signal);
+        const result = await running.completed;
+        assert.notEqual(result.code, 0, result.output);
+        assert.match(result.output, new RegExp(`push received ${signal} and stopped its gate`));
+        assert.match(result.output, /bash scripts\/check\.sh was stopped by SIGTERM from this window/);
+        assert.doesNotMatch(result.output, /failed \(null\)/);
+        assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), remoteBase);
+        assert.equal(
+          spawnSync('git', ['show-ref', '--exists', 'refs/hotsheet/main-integration-window'], {
+            cwd: f.repo,
+            env: withoutGitRepositoryEnv(process.env),
+          }).status,
+          2,
+          'the stopped push releases its reservation',
+        );
+      } finally {
+        rmSync(hold, { force: true });
+        if (running?.child.exitCode === null)
+          try {
+            process.kill(-running.child.pid, 'SIGKILL');
+          } catch {
+            /* exited */
+          }
+        f.dispose();
+      }
+    },
+  );
+
+test(
+  'HS2-RY0ZMX a gate killed from outside the window is reported as an external signal with running gates',
+  { timeout: 60_000 },
+  async () => {
+    const f = fixture();
+    let running;
+    const hold = resolve(f.root, 'hold');
+    try {
+      run('bash', ['scripts/push.sh'], f.repo, f.env);
+      const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+      commit(f.repo, 'external', f.env);
+      put(hold, 'hold');
+      running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
+      const gate = await heldGatePid(f, running);
+      process.kill(-gate, 'SIGKILL');
+      const result = await running.completed;
+      assert.notEqual(result.code, 0, result.output);
+      assert.match(result.output, /bash scripts\/check\.sh was stopped by SIGKILL from outside this window/);
+      assert.doesNotMatch(result.output, /heartbeat stopped the push|push received/);
+      // The diagnostic names what else was running so the next occurrence can be attributed.
+      assert.match(result.output, /Gate processes running when it stopped:/);
+      assert.match(result.output, /load average/);
+      assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), remoteBase);
+    } finally {
+      rmSync(hold, { force: true });
+      if (running?.child.exitCode === null)
+        try {
+          process.kill(-running.child.pid, 'SIGKILL');
         } catch {
           /* exited */
         }

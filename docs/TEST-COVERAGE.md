@@ -353,7 +353,10 @@ assignment, expiry and standalone decisions, and
 `scripts/main-integration-window.test.mjs` for two-worktree serialization,
 stale-owner recovery, a remote writer before and during the gate, local HEAD
 changes during the gate, pool-file immutability, ticket phase boundaries, and a lost
-reservation that stops the gate with its named reason (HS2-RXYJ6G). These are
+reservation that stops the gate with its named reason (HS2-RXYJ6G). They also cover a
+SIGTERM or SIGINT sent to the push, and an external SIGKILL sent to the gate's process
+group: each signalled gate names its source, followed by the other running gates and the
+load (HS2-RY0ZMX). These are
 synthetic local Git tests, including a selection-keyed full receipt in the push hook;
 real multi-machine throughput remains measured by the integration
 baseline and CI. `docs/12-code-organization-and-testing.md` records the local

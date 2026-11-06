@@ -857,9 +857,24 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   ref, replaced owner, expired lease, gone process, or changed phase) instead of only the
   gate's exit (HS2-RXYJ6G). Running `scripts/check.sh` first and then the wrapper reuses its
   exact receipt and keeps the reservation short.
+  Every signalled gate names who stopped it (HS2-RY0ZMX). One message covers each source:
+  - the heartbeat: `… was stopped by SIGTERM from this window because the heartbeat failed: …`;
+  - a SIGINT or SIGTERM sent to the push itself: `Main integration push received SIGTERM and stopped its gate`;
+  - a deadline or output limit;
+  - a signal from outside the window: `… was stopped by SIGKILL from outside this window`.
+
+  Each one is followed by the other local gates and integration windows still running, from
+  any worktree, and the load average. Before HS2-RY0ZMX, all of these printed the same
+  `bash scripts/check.sh failed (null):`. That is exactly what the two 2026-11-04 stops
+  reported, and a SIGTERM to the push reproduces it. An agent tool that ends a long
+  foreground command at its timeout sends such a signal, and a full or browser-profile gate
+  can run past 30 minutes, longer still beside another worktree's gate. Run the push as a
+  background command, or pre-run `scripts/check.sh` in the background, so that no tool
+  timeout bounds the window.
   The pre-push hook checks the live reservation before and after exact receipt
   verification. Direct main pushes without the reservation fail; other branch pushes keep
   their previous gate behavior. A dirty tree cannot produce an exact-input receipt.
+
 - **Batch push (HS2-9G0M3V):** A batch integrator, allowed by the project's recorded
   strategy policy, pushes several integrated handoffs once. Its command is
   `scripts/push.sh origin main --integrator-id <id> --integrator-session <generation>

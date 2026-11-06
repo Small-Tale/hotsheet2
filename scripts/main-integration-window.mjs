@@ -4,6 +4,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { loadavg } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMainPushArgs, validStagingBranch } from './main-integration-options.mjs';
@@ -33,7 +34,12 @@ function git(repo, args, input) {
 }
 
 function gitResult(repo, args) {
-  return spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8', timeout: 10_000 });
+  return spawnSync('git', args, {
+    cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
 }
 
 function commonDir(repo) {
@@ -286,9 +292,7 @@ export function authorizeMainState(state, value, projectId, sourceId, now, ledge
         fence.length !== members.size ||
         !fence.every(
           (item) =>
-            members.has(item.id) &&
-            item.phase === 'integrating' &&
-            (item.handoff?.kind === 'code' || item.commit),
+            members.has(item.id) && item.phase === 'integrating' && (item.handoff?.kind === 'code' || item.commit),
         )
       )
         throw new Error('Assignments are not exactly the integrating code handoffs of the open batch');
@@ -332,7 +336,12 @@ function authority(repo, value) {
   return authorizeMainState(state, value, projectId, sourceId, Math.floor(Date.now() / 1000), ledger);
 }
 
-async function child(repo, program, args, { env = withoutGitRepositoryEnv(process.env), signal, output = false, timeoutMs } = {}) {
+async function child(
+  repo,
+  program,
+  args,
+  { env = withoutGitRepositoryEnv(process.env), signal, output = false, timeoutMs } = {},
+) {
   return new Promise((done, reject) => {
     if (signal?.aborted) {
       reject(new Error('Integration command canceled before launch'));
@@ -348,7 +357,10 @@ async function child(repo, program, args, { env = withoutGitRepositoryEnv(proces
     let stderr = '';
     let failure;
     let killTimer;
-    const stop = () => {
+    // HS2-RY0ZMX: why this window signalled the child, so a signalled exit names its cause.
+    let stoppedBy;
+    const stop = (reason) => {
+      stoppedBy ??= typeof reason === 'string' ? reason : String(signal?.reason ?? 'the push was canceled');
       if (processChild.pid && processChild.exitCode === null) {
         try {
           process.kill(-processChild.pid, 'SIGTERM');
@@ -369,33 +381,45 @@ async function child(repo, program, args, { env = withoutGitRepositoryEnv(proces
       timeoutMs &&
       setTimeout(() => {
         failure = new Error(`${program} ${args[0]} exceeded ${timeoutMs} ms`);
-        stop();
+        stop(`it exceeded ${timeoutMs} ms`);
       }, timeoutMs);
     if (output) {
       processChild.stdout.on('data', (chunk) => {
         if (stdout.length <= 1024 * 1024) stdout += chunk;
         if (stdout.length > 1024 * 1024 && !failure) {
           failure = new Error('Command output exceeded 1 MiB');
-          stop();
+          stop('its output exceeded 1 MiB');
         }
       });
       processChild.stderr.on('data', (chunk) => {
         if (stderr.length <= 1024 * 1024) stderr += chunk;
         if (stderr.length > 1024 * 1024 && !failure) {
           failure = new Error('Command error output exceeded 1 MiB');
-          stop();
+          stop('its error output exceeded 1 MiB');
         }
       });
     }
-    signal?.addEventListener('abort', stop, { once: true });
+    const onAbort = () => stop();
+    signal?.addEventListener('abort', onAbort, { once: true });
     processChild.once('error', reject);
-    processChild.once('close', (code) => {
+    processChild.once('close', (code, exitSignal) => {
       if (deadline) clearTimeout(deadline);
       if (killTimer) clearTimeout(killTimer);
-      signal?.removeEventListener('abort', stop);
+      signal?.removeEventListener('abort', onAbort);
       if (failure) reject(failure);
       else if (code === 0 && !signal?.aborted) done(stdout.trim());
-      else reject(new Error(`${program} ${args[0]} failed (${code}): ${stderr.trim()}`));
+      else if (exitSignal) {
+        // HS2-RY0ZMX: a signalled exit used to read `failed (null)`, which hid whether this window
+        // (heartbeat, a signal to the push, a deadline) or something outside it stopped the child.
+        const error = new Error(
+          `${program} ${args[0]} was stopped by ${exitSignal} ${
+            stoppedBy ? `from this window because ${stoppedBy}` : 'from outside this window'
+          }${stderr.trim() ? `: ${stderr.trim()}` : ''}`,
+        );
+        error.exitSignal = exitSignal;
+        error.external = !stoppedBy;
+        reject(error);
+      } else reject(new Error(`${program} ${args[0]} failed (${code}): ${stderr.trim()}`));
     });
   });
 }
@@ -449,7 +473,9 @@ async function preflight(repo, value, signal) {
   if (staged && !isAncestor(repo, staged, value.head)) {
     await ensureCommit(repo, value.remote, staged, value.target, signal);
     if (!isAncestor(repo, staged, value.head) && tip && isAncestor(repo, staged, tip))
-      throw new Error(`Remote ${value.target} is ${staged}, which main contains; the staged commit must descend from it`);
+      throw new Error(
+        `Remote ${value.target} is ${staged}, which main contains; the staged commit must descend from it`,
+      );
   }
   return staged;
 }
@@ -523,6 +549,32 @@ export function acceptedHooksPath(repo, hooks) {
   return owners.some((owner) => real(owner) === configured);
 }
 
+/**
+ * HS2-RY0ZMX: what else was running when a gate was signalled, for attributing the next stop. It
+ * lists other local gates and integration windows, which may run from any worktree of this
+ * repository, and the load average. Read-only; it never signals anything.
+ */
+export function gateDiagnostics(list = () => spawnSync('ps', ['-axo', 'pid=,etime=,command='], { encoding: 'utf8' })) {
+  const result = list();
+  const lines =
+    result.status === 0
+      ? result.stdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => /local-gate\.mjs|scripts\/check\.sh|main-integration-window\.mjs/.test(line))
+          .filter((line) => Number(line.split(/\s+/, 1)[0]) !== process.pid)
+          .map((line) => `  ${line.length > 200 ? `${line.slice(0, 199)}…` : line}`)
+      : ['  (process list unavailable)'];
+  const load = loadavg()
+    .map((value) => value.toFixed(2))
+    .join(' ');
+  return [
+    'Gate processes running when it stopped:',
+    ...(lines.length ? lines : ['  none']),
+    `load average (1, 5, 15 min): ${load}`,
+  ].join('\n');
+}
+
 export async function pushMain(repo, args) {
   const options = parseMainPushArgs(args);
   options.sourceStore = resolve(options.sourceStore ?? repo);
@@ -531,7 +583,13 @@ export async function pushMain(repo, args) {
   let window = await acquire(repo, options);
   const token = window.value.token;
   const control = new AbortController();
-  const onSignal = () => control.abort();
+  // HS2-RY0ZMX: an agent tool that ends a long foreground command at its timeout, or an interrupt,
+  // signals this push; record it so the stopped gate is not mistaken for a heartbeat failure.
+  let receivedSignal;
+  const onSignal = (name) => {
+    receivedSignal ??= name;
+    control.abort(`the push received ${name}`);
+  };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   let heartbeatError;
@@ -541,7 +599,7 @@ export async function pushMain(repo, args) {
       authority(repo, window.value);
     } catch (error) {
       heartbeatError = error;
-      control.abort();
+      control.abort(`the heartbeat failed: ${error.message}`);
     }
   }, heartbeatMs);
   const check = () => {
@@ -616,8 +674,22 @@ export async function pushMain(repo, args) {
   } catch (error) {
     // HS2-RXYJ6G: a heartbeat failure aborts the gate, whose own exit (often a null code) would
     // otherwise hide the reason the reservation stopped.
+    const diagnostics = error?.exitSignal ? `\n${gateDiagnostics()}` : '';
     if (heartbeatError && error !== heartbeatError)
-      throw new Error(`Main integration heartbeat stopped the push: ${heartbeatError.message}`, { cause: error });
+      throw new Error(
+        `Main integration heartbeat stopped the push: ${heartbeatError.message}\n${error.message}${diagnostics}`,
+        {
+          cause: error,
+        },
+      );
+    if (receivedSignal)
+      throw new Error(
+        `Main integration push received ${receivedSignal} and stopped its gate. A tool timeout or interrupt ends a ` +
+          'foreground push: run scripts/check.sh first, then the push (it reuses the exact receipt), or run the push ' +
+          `as a background command (docs/12-code-organization-and-testing.md, local push gate).\n${error.message}${diagnostics}`,
+        { cause: error },
+      );
+    if (diagnostics) throw new Error(`${error.message}${diagnostics}`, { cause: error });
     throw error;
   } finally {
     clearInterval(heartbeat);
