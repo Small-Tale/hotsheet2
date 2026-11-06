@@ -334,13 +334,37 @@ export class ChangePollMultiplexer {
     this.drainDirect();
   }
 
+  /**
+   * HS2-AZ11V9: a direct poll is capped at `DIRECT_POLL_TIMEOUT_MS` only so queued projects take
+   * turns. An empty page from that capped poll is not the end of the caller's long poll: the
+   * transport treats an early empty page as the server having held its whole window and then
+   * sleeps out the rest of its retry window, up to 30 s, without polling, so an event in that
+   * gap (a terminal halt) arrived late. Keep polling until the caller's deadline instead.
+   * A poll that came back well before its timeout (a server that ignores the timeout) still
+   * resolves, so this can never become a tight request loop.
+   */
+  private continueDirectPoll(entry: Pending, page: PollResponse, started: number, timeout: number): boolean {
+    const now = this.now();
+    return (
+      entry.since !== undefined &&
+      page.events.length === 0 &&
+      !page.overflow &&
+      page.cursor === entry.since &&
+      timeout > 0 &&
+      (now - started) * 2 >= timeout &&
+      entry.deadline - now > 0 &&
+      !entry.signal?.aborted
+    );
+  }
+
   private drainDirect() {
     if (this.modeValue !== 'direct') return;
     for (const entry of this.pending.values()) {
       if (this.directActive.size >= DIRECT_POLL_MAX_IN_FLIGHT) break;
       if (this.directActive.has(entry)) continue;
       this.directActive.add(entry);
-      const timeout = Math.min(DIRECT_POLL_TIMEOUT_MS, Math.max(0, Math.ceil(entry.deadline - this.now())));
+      const started = this.now(),
+        timeout = Math.min(DIRECT_POLL_TIMEOUT_MS, Math.max(0, Math.ceil(entry.deadline - started)));
       void Promise.resolve()
         .then(() =>
           this.directSlots
@@ -352,10 +376,16 @@ export class ChangePollMultiplexer {
         .then(
           (page) => {
             this.directActive.delete(entry);
-            if (this.pending.get(entry.key) === entry)
-              this.settle(entry, () => {
-                entry.resolve(page);
-              });
+            if (this.pending.get(entry.key) === entry) {
+              if (this.continueDirectPoll(entry, page, started, timeout)) {
+                // Rotate: the project goes behind the others waiting for a slot.
+                this.pending.delete(entry.key);
+                this.pending.set(entry.key, entry);
+              } else
+                this.settle(entry, () => {
+                  entry.resolve(page);
+                });
+            }
             this.drainDirect();
           },
           (reason: unknown) => {

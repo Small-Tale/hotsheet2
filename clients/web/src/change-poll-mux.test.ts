@@ -434,6 +434,74 @@ describe('ChangePollMultiplexer', () => {
     expect(m.waiting()).toEqual([]);
   });
 
+  // HS2-AZ11V9: the 1 s rotation cap must not end the caller's long poll early.
+  it('keeps a direct long poll open until its deadline across empty capped polls, then delivers an event', async () => {
+    const bridge = fakeBridge();
+    let clock = 0;
+    const m = mux(bridge.fetcher, { now: () => clock });
+    const calls: Array<{ since?: number; timeout?: number; resolve(page: PollResponse): void }> = [];
+    const direct: ChangePollFn = (since, _signal, timeout) =>
+      new Promise((resolve) => calls.push({ since, timeout, resolve }));
+    const poll = m.poll('a', direct, 4, undefined, 8_000);
+    await tick();
+    bridge.calls[0].respondRaw(new Response('missing', { status: 404 }));
+    await tick();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].timeout).toBe(DIRECT_POLL_TIMEOUT_MS);
+    // The server held the capped poll for its whole second and found nothing.
+    clock += DIRECT_POLL_TIMEOUT_MS;
+    calls[0].resolve(page(4));
+    await tick();
+    expect(calls).toHaveLength(2);
+    expect(calls[1].since).toBe(4);
+    expect(m.waiting()).toHaveLength(1);
+    // An event inside the caller's window is delivered at once.
+    clock += 300;
+    calls[1].resolve(page(5, ['terminal_halted']));
+    await expect(poll).resolves.toEqual(page(5, ['terminal_halted']));
+    expect(m.waiting()).toEqual([]);
+  });
+
+  it('resolves an empty direct page that returned well before its timeout, so it cannot loop', async () => {
+    const bridge = fakeBridge();
+    let clock = 0;
+    const m = mux(bridge.fetcher, { now: () => clock });
+    const calls: Array<{ resolve(page: PollResponse): void }> = [];
+    const direct: ChangePollFn = () => new Promise((resolve) => calls.push({ resolve }));
+    const poll = m.poll('a', direct, 4, undefined, 8_000);
+    await tick();
+    bridge.calls[0].respondRaw(new Response('missing', { status: 404 }));
+    await tick();
+    // An older server that ignores the timeout answers at once.
+    clock += 20;
+    calls[0].resolve(page(4));
+    await expect(poll).resolves.toEqual(page(4));
+    expect(calls).toHaveLength(1);
+  });
+
+  it('resolves an empty direct page once the caller deadline has passed', async () => {
+    const bridge = fakeBridge();
+    let clock = 0;
+    const m = mux(bridge.fetcher, { now: () => clock });
+    const calls: Array<{ timeout?: number; resolve(page: PollResponse): void }> = [];
+    const direct: ChangePollFn = (_since, _signal, timeout) =>
+      new Promise((resolve) => calls.push({ timeout, resolve }));
+    const poll = m.poll('a', direct, 4, undefined, 1_500);
+    await tick();
+    bridge.calls[0].respondRaw(new Response('missing', { status: 404 }));
+    await tick();
+    clock += DIRECT_POLL_TIMEOUT_MS;
+    calls[0].resolve(page(4));
+    await tick();
+    // The second capped poll asks only for the 500 ms the caller has left.
+    expect(calls).toHaveLength(2);
+    expect(calls[1].timeout).toBe(500);
+    clock += 500;
+    calls[1].resolve(page(4));
+    await expect(poll).resolves.toEqual(page(4));
+    expect(calls).toHaveLength(2);
+  });
+
   it('an idle set of projects holds exactly one request per window', async () => {
     const bridge = fakeBridge();
     const m = mux(bridge.fetcher);

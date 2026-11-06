@@ -1956,7 +1956,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   older server behind a new bridge surfaces as that project's own error, as before. Direct
   fallback in the page, dedicated worker, and shared worker admits at most four browser
   polls at once per origin and caps each one at one second; queued projects rotate in
-  arrival order, while abort and supersede remove obsolete work. Origin-scoped Web Locks
+  arrival order, while abort and supersede remove obsolete work. A capped poll that held
+  its second and came back empty is not the end of the caller's long poll: the project
+  re-queues behind the others and keeps polling until its own deadline. Before, the
+  transport took that empty page for a full window and slept out the rest of its retry
+  window, up to 30 s, without polling, so a terminal halt could appear many seconds late
+  (HS2-AZ11V9). An empty page that returns well before its timeout (a server that ignores
+  it) still resolves, so this never becomes a tight loop. Origin-scoped Web Locks
   share those four slots across independent tabs and workers, including when SharedWorker
   is unavailable. A closed tab releases its locks. Browsers without Web Locks use paced
   zero-wait polls, keeping HTTP connections brief for ordinary API work (HS2-GDF4ZJ).
