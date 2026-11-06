@@ -1,5 +1,6 @@
+use super::contract::CoverageGapReason;
 use super::contract::SourceConfiguration;
-use super::source_support::reports;
+use super::source_support::{coverage_gaps, reports};
 use super::*;
 use hotsheet_ticketing::{ProviderConfigRegistry, ProviderConnection};
 use serde_json::json;
@@ -171,4 +172,121 @@ fn hs2_fg7zmf_snapshot_metadata_is_additive_and_never_changes_state_or_covers_so
     );
     assert_eq!(bytes, fs::read(c.directory.join("state.json")).unwrap());
     assert_eq!(c.state().unwrap().version, 3);
+}
+
+/// HS2-83KFB5: each uncovered source appears once, by its human-readable name, with a reason
+/// that separates unsupported-by-design, failed reads and unobserved sources.
+#[test]
+fn hs2_83kfb5_coverage_gaps_name_each_source_once_with_a_reason() {
+    let path = tempfile::tempdir().unwrap();
+    let github = connection("github-synthetic", "github");
+    let mut named = connection("jira-named", "jira");
+    named.name = Some("Synthetic Jira".into());
+    let mut broken = connection("github-broken", "github");
+    broken.settings = json!({});
+    broken.locator = String::new();
+    let other_git = tempfile::tempdir().unwrap();
+    let linked = checkout(vec![
+        // The same GitHub source linked by the checkout and configured in providers.json.
+        checkouts::TicketSource {
+            connection_id: github.id.clone(),
+            provider: github.provider.clone(),
+            locator: github.locator.clone(),
+        },
+        checkouts::TicketSource {
+            connection_id: "git-other".into(),
+            provider: "git".into(),
+            locator: other_git
+                .path()
+                .join("other.hs2")
+                .to_string_lossy()
+                .into_owned(),
+        },
+        checkouts::TicketSource {
+            connection_id: "gitlab-unconfigured".into(),
+            provider: "gitlab".into(),
+            locator: "synthetic/unconfigured".into(),
+        },
+    ]);
+    let connections = vec![github.clone(), named, broken];
+    let checkouts = vec![linked];
+    let support = reports(Some("selected"), path.path(), &connections, &checkouts);
+    let mut store_ids = std::collections::BTreeMap::new();
+    store_ids.insert(
+        "store-hash".to_owned(),
+        "/synthetic/stores/extra.hs2".to_owned(),
+    );
+    let uncovered: Vec<String> = [
+        "git-other",
+        "github-broken",
+        "github-synthetic",
+        "gitlab-unconfigured",
+        "jira-named",
+        "store-hash",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let gaps = coverage_gaps(&uncovered, &support, &connections, &checkouts, &store_ids);
+    let by_id = |id: &str| gaps.iter().find(|gap| gap.connection_id == id).unwrap();
+    assert_eq!(
+        gaps.len(),
+        uncovered.len(),
+        "one entry per uncovered source: {gaps:#?}"
+    );
+    assert_eq!(
+        gaps.iter()
+            .filter(|gap| gap.connection_id == "github-synthetic")
+            .count(),
+        1
+    );
+    let github_gap = by_id("github-synthetic");
+    assert_eq!(github_gap.name, "GitHub synthetic/app");
+    assert_eq!(github_gap.reason, CoverageGapReason::Unsupported);
+    assert!(
+        github_gap
+            .details
+            .iter()
+            .any(|d| d == "native_claims_unsupported")
+    );
+    assert_eq!(by_id("jira-named").name, "Synthetic Jira");
+    assert_eq!(by_id("jira-named").reason, CoverageGapReason::Unsupported);
+    let broken_gap = by_id("github-broken");
+    assert_eq!(broken_gap.reason, CoverageGapReason::FailedRead);
+    assert!(
+        broken_gap
+            .details
+            .iter()
+            .any(|d| d == "provider_descriptor_unavailable")
+    );
+    // A linked provider with no configuration cannot be read; it is not "unsupported".
+    let unconfigured = by_id("gitlab-unconfigured");
+    assert_eq!(unconfigured.reason, CoverageGapReason::FailedRead);
+    assert_eq!(unconfigured.name, "GitLab synthetic/unconfigured");
+    let git_gap = by_id("git-other");
+    assert_eq!(
+        git_gap.reason,
+        CoverageGapReason::FailedRead,
+        "its path does not exist yet"
+    );
+    assert_eq!(git_gap.name, "other.hs2");
+    let store_gap = by_id("store-hash");
+    assert_eq!(store_gap.reason, CoverageGapReason::Unobserved);
+    assert_eq!(store_gap.name, "extra.hs2");
+    // Once the other Git source exists, it is a supported source this pool does not observe.
+    std::fs::create_dir_all(other_git.path().join("other.hs2")).unwrap();
+    let support = reports(Some("selected"), path.path(), &connections, &checkouts);
+    let gaps = coverage_gaps(&uncovered, &support, &connections, &checkouts, &store_ids);
+    let git_gap = gaps
+        .iter()
+        .find(|gap| gap.connection_id == "git-other")
+        .unwrap();
+    assert_eq!(git_gap.reason, CoverageGapReason::Unobserved);
+    assert!(
+        git_gap
+            .details
+            .iter()
+            .any(|d| d == "additional_local_source_not_observed")
+    );
+    // Nothing uncovered, nothing reported.
+    assert!(coverage_gaps(&[], &support, &connections, &checkouts, &store_ids).is_empty());
 }

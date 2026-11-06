@@ -50,10 +50,10 @@ use sha2::{Digest, Sha256};
 
 pub use authority::{CAPABILITIES, Capabilities};
 pub use contract::{
-    Assignment, AssignmentTransition, Authority, HandoffEvidence, IntegrationReport,
-    IntegrationSuspension, NextPlanEntry, Phase, PlanEvent, PlanEventKind, PlannedTicket,
-    PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State, TransitionActor, TransitionKind,
-    WaitRequest,
+    Assignment, AssignmentTransition, Authority, CoverageGap, CoverageGapReason, HandoffEvidence,
+    IntegrationReport, IntegrationSuspension, NextPlanEntry, Phase, PlanEvent, PlanEventKind,
+    PlannedTicket, PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State, TransitionActor,
+    TransitionKind, WaitRequest,
 };
 pub use preferences::{
     PreferenceRequest, RefusalReason, RequestRefusal, TicketFilter, WorkerMatch, WorkerPreferences,

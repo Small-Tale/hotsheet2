@@ -316,6 +316,33 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
       const pool = (...args: string[]) => hs('coordination', '--project', root, ...args);
       await git('init', '-q', '-b', 'main');
       await git('commit', '-q', '--allow-empty', '-m', 'synthetic base');
+      // HS2-83KFB5: an external source coordination cannot cover by design, and one whose
+      // metadata cannot be read, so the views carry real coverage gaps. No secret resolves.
+      await writeFile(
+        join(store, 'providers.json'),
+        JSON.stringify({
+          connections: [
+            {
+              id: 'github-contract',
+              provider: 'github',
+              locator: 'synthetic/contract',
+              name: null,
+              default: false,
+              disabled: false,
+              settings: { api_base: 'http://127.0.0.1:9', credential: { secret: 'must-not-resolve' } },
+            },
+            {
+              id: 'gitlab-unreadable',
+              provider: 'gitlab',
+              locator: '',
+              name: null,
+              default: false,
+              disabled: false,
+              settings: {},
+            },
+          ],
+        }),
+      );
       await pool('setup');
       await pool(
         'strategy-allow',
@@ -426,6 +453,8 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
       past_workers: number;
       integration_strategy: string | null;
       unmatched_tickets: string[];
+      uncovered_sources: string[];
+      coverage_gaps: Array<{ connection_id: string; name: string; reason: string }>;
       workers: Array<{ id: string; availability: string; preferences: { refusal?: { slug: string } } | null }>;
     };
     const view = (query: string) => server.request<View>(`/checkouts/${server.checkoutId}/workers?wait_ms=0${query}`);
@@ -435,6 +464,13 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
     expect(current.unmatched_tickets.length).toBeGreaterThan(0);
     expect(current.workers.find((row) => row.id === 'worker-strict')?.preferences?.refusal?.slug).toBe(refused);
     expect(current.workers.find((row) => row.id === 'worker-glance')?.preferences).not.toBeNull();
+    // HS2-83KFB5: every uncovered source appears once in coverage_gaps, named, with a reason.
+    expect(current.coverage_gaps.map((gap) => gap.connection_id).sort()).toEqual([...current.uncovered_sources].sort());
+    expect(current.coverage_gaps.find((gap) => gap.connection_id === 'github-contract')).toMatchObject({
+      name: 'GitHub synthetic/contract',
+      reason: 'unsupported',
+    });
+    expect(current.coverage_gaps.find((gap) => gap.connection_id === 'gitlab-unreadable')?.reason).toBe('failed_read');
 
     // Wait on state: the short-lease worker becomes a past worker once its lease expires.
     await expect

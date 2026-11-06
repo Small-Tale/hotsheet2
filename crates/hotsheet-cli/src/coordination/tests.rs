@@ -899,6 +899,13 @@ fn hs2_76vmyg_additional_enabled_sources_prevent_false_drained() {
         )
         .unwrap();
     assert_eq!(c.snapshot(NOW).unwrap().uncovered_sources, ["other-source"]);
+    // HS2-83KFB5: the source configured in providers.json and linked by the checkout is
+    // reported once, by name, as unsupported by design; the selected Git source is covered.
+    let gaps = c.snapshot(NOW).unwrap().coverage_gaps;
+    assert_eq!(gaps.len(), 1, "{gaps:?}");
+    assert_eq!(gaps[0].connection_id, "other-source");
+    assert_eq!(gaps[0].name, "GitHub synthetic/project");
+    assert_eq!(gaps[0].reason, CoverageGapReason::Unsupported);
     assert!(c.finish("i", "generation-1", NOW, "drained").is_err());
     source.disabled = true;
     registry.save(&[source]).unwrap();

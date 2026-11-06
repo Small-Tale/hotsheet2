@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::contract::{
-    HandoffEvidence, IntegrationSuspension, PlanEvent, PlannedTicket, SourceSupport,
+    CoverageGap, HandoffEvidence, IntegrationSuspension, PlanEvent, PlannedTicket, SourceSupport,
 };
 use super::{
     Authority, Coordinator, IntegrationStrategy, Phase, ReturnRoute, Role, Snapshot, WorkerMatch,
@@ -96,6 +96,9 @@ pub struct WorkerView {
     pub plan_revision: u64,
     pub plan_events: Vec<PlanEvent>,
     pub uncovered_sources: Vec<String>,
+    /// `uncovered_sources`, one entry each with a name and reason (HS2-83KFB5).
+    #[serde(default)]
+    pub coverage_gaps: Vec<CoverageGap>,
     pub source_support: Vec<SourceSupport>,
     /// A headless read has no host connection registry to inspect.
     pub connection_coverage: bool,
@@ -420,6 +423,7 @@ impl WorkerView {
             plan_revision: state.plan_revision,
             plan_events: state.plan_events.clone(),
             uncovered_sources,
+            coverage_gaps: snapshot.coverage_gaps.clone(),
             source_support: snapshot.source_support.clone(),
             connection_coverage,
             past_workers,
@@ -580,6 +584,7 @@ mod tests {
             local_queue: Some(Vec::new()),
             queue_support: "selected_local_source_only".into(),
             uncovered_sources: vec!["external-b".into()],
+            coverage_gaps: Vec::new(),
             live_claims: Vec::new(),
             source_support: Vec::new(),
             planned: Vec::new(),

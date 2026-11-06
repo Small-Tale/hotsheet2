@@ -392,6 +392,10 @@ pub struct Snapshot {
     pub local_queue: Option<Vec<QueueEntry>>,
     pub queue_support: String,
     pub uncovered_sources: Vec<String>,
+    /// `uncovered_sources`, one entry each with a name and reason (HS2-83KFB5). Default
+    /// permits reading snapshots from older CLI executables.
+    #[serde(default)]
+    pub coverage_gaps: Vec<CoverageGap>,
     pub live_claims: Vec<LiveClaim>,
     /// Metadata-only implementation support, never remote availability or claim evidence.
     /// Default permits reading snapshots from older CLI executables (HS2-FG7ZMF).
@@ -430,6 +434,30 @@ pub enum SourceConfiguration {
     Missing,
     Invalid,
     Reconfigured,
+}
+
+/// Why one ticket source's workers, claims and assignments are absent from this view
+/// (HS2-83KFB5). It never means ticket access failed or that a worker is known to be missing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CoverageGapReason {
+    /// The provider has no coordination support by design (no native claims or events).
+    Unsupported,
+    /// Its configuration or metadata could not be read or validated now; it may recover.
+    FailedRead,
+    /// A source coordination could support that this pool does not observe.
+    Unobserved,
+}
+
+/// One uncovered source, once, keyed by connection id with its human-readable name
+/// (HS2-83KFB5). `details` are the metadata-only reason codes from [`SourceSupport`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoverageGap {
+    pub connection_id: String,
+    pub name: String,
+    pub provider: String,
+    pub reason: CoverageGapReason,
+    pub details: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -482,6 +510,7 @@ mod snapshot_compatibility_tests {
             "integration_strategy",
             "worker_matches",
             "unmatched_tickets",
+            "coverage_gaps",
         ] {
             encoded.as_object_mut().unwrap().remove(field);
         }

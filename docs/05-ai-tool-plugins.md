@@ -2364,6 +2364,20 @@ kept running; an ended Codex Work/app turn is not resurrected (HS2-4H7D8D).
 Queue observation and claim/handoff verification initially support the selected local
 Git source. `local_queue: null` means an unsupported provider query path, never empty;
 enabled additional sources appear in `uncovered_sources` and prevent `drained`.
+The additive `coverage_gaps` list in the snapshot, `coordination status`/`workers` and
+`GET /checkouts/{reference}/workers` reports each of those sources once (HS2-83KFB5), keyed by
+connection id. Its `name` is the connection's own name, else its provider descriptor name
+(`GitHub owner/repo`), else the provider and locator, or a local store's directory. Its
+`reason` is one of:
+
+- `unsupported`: the provider has no coordination by design;
+- `failed_read`: missing, invalid or mismatched configuration or metadata, which may recover;
+- `unobserved`: a Git source or store this pool does not observe.
+
+`details` carries the metadata-only reason codes. A gap means that source's workers, claims and
+assignments are not shown; it never means ticket access failed or that a worker is known to
+be missing. `connection_coverage: false` stays the separate, explicit unknown for live
+connection observation. The Workers view presentation is HS2-7WE7CQ.
 HS2-3ETJ26 owns provider-native query, claim-verification, and genuine event adapters.
 Its native claim and authenticated event/setup prerequisites are HS2-BPKM76 and
 HS2-SGQ183. Additive `source_support` snapshot entries expose registry-only implementation

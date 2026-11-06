@@ -119,6 +119,8 @@ impl Coordinator {
             &connections,
             &checkouts,
         );
+        // Store-only links are named by their directory in the coverage gaps (HS2-83KFB5).
+        let mut store_ids = std::collections::BTreeMap::new();
         for checkout in &checkouts {
             for source in &checkout.sources {
                 if disabled.contains(&source.connection_id) {
@@ -133,12 +135,21 @@ impl Coordinator {
             }
             for store in &checkout.stores {
                 if Path::new(&store).canonicalize().ok().as_ref() != Some(&self.source) {
-                    uncovered_sources.push(format!("{:x}", Sha256::digest(store.as_bytes())));
+                    let id = format!("{:x}", Sha256::digest(store.as_bytes()));
+                    store_ids.insert(id.clone(), store.to_string());
+                    uncovered_sources.push(id);
                 }
             }
         }
         uncovered_sources.sort();
         uncovered_sources.dedup();
+        let coverage_gaps = super::source_support::coverage_gaps(
+            &uncovered_sources,
+            &source_support,
+            &connections,
+            &checkouts,
+            &store_ids,
+        );
         let queue_support = if local_queue.is_some() {
             "selected_local_source_only; uncovered_sources require provider-specific query/claim/event adapters"
         } else {
@@ -214,6 +225,7 @@ impl Coordinator {
             local_queue,
             queue_support,
             uncovered_sources,
+            coverage_gaps,
             live_claims,
             source_support,
             planned,

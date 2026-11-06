@@ -5,7 +5,7 @@ use std::path::Path;
 
 use hotsheet_ticketing::{ProviderCapabilities, ProviderConnection, checkouts::Checkout};
 
-use super::contract::{SourceConfiguration, SourceSupport};
+use super::contract::{CoverageGap, CoverageGapReason, SourceConfiguration, SourceSupport};
 
 impl super::Coordinator {
     /// Explain an existing foreign-source rejection without resolving its tickets or secrets.
@@ -174,4 +174,101 @@ pub(super) fn reports(
         reports.insert(selected.to_owned(), report);
     }
     reports.into_values().collect()
+}
+
+fn provider_label(provider: &str) -> String {
+    match provider {
+        "github" => "GitHub".into(),
+        "gitlab" => "GitLab".into(),
+        "jira" => "Jira".into(),
+        "git" => "Git".into(),
+        other => other.to_owned(),
+    }
+}
+
+fn last_component(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or_else(|| path.to_owned(), str::to_owned)
+}
+
+/// One entry per uncovered source, in `uncovered` order (HS2-83KFB5). Names come from the
+/// connection's own name, else its provider descriptor (`GitHub owner/repo`), else the
+/// provider and locator; an unlinked local store is named by its directory. Metadata only.
+pub(super) fn coverage_gaps(
+    uncovered: &[String],
+    reports: &[SourceSupport],
+    connections: &[ProviderConnection],
+    checkouts: &[Checkout],
+    store_ids: &BTreeMap<String, String>,
+) -> Vec<CoverageGap> {
+    uncovered
+        .iter()
+        .map(|id| {
+            if let Some(store) = store_ids.get(id) {
+                return CoverageGap {
+                    connection_id: id.clone(),
+                    name: last_component(store),
+                    provider: "git".into(),
+                    reason: CoverageGapReason::Unobserved,
+                    details: vec!["additional_local_store_not_observed".into()],
+                };
+            }
+            let report = reports.iter().find(|report| &report.connection_id == id);
+            let connection = connections.iter().find(|connection| &connection.id == id);
+            let source = checkouts
+                .iter()
+                .flat_map(|checkout| &checkout.sources)
+                .find(|source| &source.connection_id == id);
+            let provider = report
+                .map(|report| report.provider.clone())
+                .or_else(|| connection.map(|c| c.provider.clone()))
+                .or_else(|| source.map(|s| s.provider.clone()))
+                .unwrap_or_else(|| "unknown".into());
+            let name = connection
+                .and_then(|c| c.name.clone().filter(|name| !name.trim().is_empty()))
+                .or_else(|| {
+                    connection
+                        .and_then(|c| hotsheet_extsync::descriptor(c).ok())
+                        .map(|descriptor| descriptor.display_name)
+                })
+                .or_else(|| {
+                    let locator = connection
+                        .map(|c| &c.locator)
+                        .or(source.map(|s| &s.locator))?;
+                    Some(if provider == "git" {
+                        last_component(locator)
+                    } else {
+                        format!("{} {locator}", provider_label(&provider))
+                    })
+                })
+                .unwrap_or_else(|| id.clone());
+            let reason = match report {
+                Some(report)
+                    if matches!(
+                        report.configuration,
+                        SourceConfiguration::Missing
+                            | SourceConfiguration::Invalid
+                            | SourceConfiguration::Reconfigured
+                    ) =>
+                {
+                    CoverageGapReason::FailedRead
+                }
+                Some(report) if report.provider == "git" => CoverageGapReason::Unobserved,
+                Some(_) => CoverageGapReason::Unsupported,
+                None => CoverageGapReason::Unobserved,
+            };
+            CoverageGap {
+                connection_id: id.clone(),
+                name,
+                provider,
+                reason,
+                details: report.map_or_else(
+                    || vec!["source_metadata_unknown".into()],
+                    |report| report.reasons.clone(),
+                ),
+            }
+        })
+        .collect()
 }

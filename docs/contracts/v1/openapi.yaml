@@ -16239,6 +16239,36 @@ components:
         base:
           type: string
       additionalProperties: false
+    WorkerCoverageGap:
+      description: One uncovered ticket source (HS2-83KFB5). It never means ticket access failed or that a worker is known to be missing.
+      type: object
+      required:
+        - connection_id
+        - name
+        - provider
+        - reason
+        - details
+      properties:
+        connection_id:
+          type: string
+        name:
+          description: The connection's own name, else its provider descriptor name, else the provider and locator; a local store's directory.
+          type: string
+        provider:
+          type: string
+        reason:
+          description: unsupported - the provider has no coordination by design; failed_read - its configuration or metadata could not be read now; unobserved - a source coordination could support that this pool does not observe.
+          type: string
+          enum:
+            - unsupported
+            - failed_read
+            - unobserved
+        details:
+          description: Metadata-only reason codes, as in source_support.
+          type: array
+          items:
+            type: string
+      additionalProperties: false
     WorkerSourceSupport:
       type: object
       required:
@@ -16328,6 +16358,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkerSourceSupport'
+        coverage_gaps:
+          description: Each uncovered source once, named, with why its workers, claims and assignments are absent (HS2-83KFB5).
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerCoverageGap'
         connection_coverage:
           type: boolean
         past_workers:
