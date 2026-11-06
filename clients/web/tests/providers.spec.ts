@@ -1835,7 +1835,10 @@ async function mockProject(
     ...(Object.keys(sourceColors).length ? { source_colors: sourceColors } : {}),
     ...(unverifiedGitSourceId ? { unverified_store_sources: { [unverifiedGitSourceId]: '/work/demo.hs2' } } : {}),
   });
-  await page.route('**/*', async (route) => {
+  // Only the app's own API is mocked; Vite modules and assets bypass interception. Routing `**/*` sent
+  // about 770 module requests per page load through Playwright and slowed the load event under
+  // load (HS2-K221R0).
+  await page.route('**/__hotsheet/**', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       // The checkout API accepts both native and qualified ticket routes; use the native fixture
