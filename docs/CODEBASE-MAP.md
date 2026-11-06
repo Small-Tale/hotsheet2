@@ -243,6 +243,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .githooks/{pre-commit,pre-push} # Staged whitespace/format check and main reservation plus exact-receipt enforcement (HS2-CD3D2T, HS2-BND42N)
   package.json, gitgist.config.json # Root repository tooling: pinned gitgist and Rulesync 38.0.0; commit:msg / commit:msg:offline drafting; provider, fallback, and generated-file exclusions (HS2-VA97HW; tests: scripts/gitgist-tooling.test.mjs)
   scripts/check-rulesync-generation.mjs # AGENTS.md must equal the pinned Rulesync regeneration of guidance/rulesync/project-selection.json + the local rule; CI runs --fetch (HS2-VA97HW; tests: check-rulesync-generation.test.mjs)
+  scripts/browser-engines.mjs # Source-derived browser engines per Playwright command: CI matrix (pinned to docs/12 table), gate plan/receipt `browserCoverage`, and the "Browser engines in this run" job summary from a merged report (HS2-HW6VED; tests: browser-engines.test.mjs)
   scripts/playwright-retries.mjs # browser-full job summary + warnings for Playwright tests that passed only on a retry (HS2-8YHY6V; tests: playwright-retries.test.mjs + fixtures/playwright-retries/)
   scripts/check-test-quarantine.mjs # CI check: flaky-test quarantine markers match docs/test-quarantine.md rows (HS2-3PX1E4)
   .config/nextest.toml       # nextest profile: JUnit report at target/nextest/default/junit.xml for test-profile (HS2-3PX1E4)
@@ -827,7 +828,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   test-projects/             # full-binary E2E harnesses (not in-process unit tests)
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
-  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage (Linux x86_64 only per commit, HS2-WSE3FJ; ephemeral Linux Secret Service for encrypted permission tests) · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards + merged report (HS2-D95TXJ) · migrator lint/coverage
+  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage (Linux x86_64 only per commit, HS2-WSE3FJ; ephemeral Linux Secret Service for encrypted permission tests) · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards (Chromium default; WebKit only in launching specs, HS2-HW6VED) + merged report (HS2-D95TXJ) · migrator lint/coverage
   .github/scripts/free-runner-disk.sh # Removes unused preinstalled toolchains and logs `df -h /` before the check/coverage jobs restore their bounded Swatinem/rust-cache (HS2-CTC6BA; tests: platform-matrix.test.mjs)
   .github/scripts/with-secret-service.sh # Disposable headless Linux Secret Service and smoke probe around CI Rust/browser test commands (HS2-1S4QEX)
   .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)

@@ -73,6 +73,7 @@ export const ROOT_TOOLING_TESTS = [
   'integration-batch',
   'macos-dev-signing',
   'platform-matrix',
+  'browser-engines',
 ];
 const rootTestCommand = (names) => `node --test ${names.map((name) => `scripts/${name}.test.mjs`).join(' ')}`;
 

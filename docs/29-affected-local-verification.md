@@ -44,6 +44,17 @@ mandatory runs. CI continues
 its full regression. No measured edit-to-green saving is attributed to this
 preview until those runs exist.
 
+## Browser engines in gate evidence (HS2-HW6VED)
+
+Every selected and deferred Playwright stage in `--plan` output and in the receipt carries
+its actual engines, files and grep under `browserCoverage`, together with the CI browser
+matrix. A passing gate prints `Browser engines run locally: …` and, for deferred browser
+stages, `Browser engines deferred to CI: …`. The default engine is Chromium. WebKit appears
+only for `--browser=webkit` commands and for specs that launch it themselves. A handoff
+quotes these lines rather than describing focused WebKit coverage as a full engine matrix.
+The matrix and its measurements are in
+[12-code-organization-and-testing.md](12-code-organization-and-testing.md#browser-engine-matrix-hs2-hw6ved).
+
 ## Browser specs that exercise a changed module (HS2-N7EY18, HS2-R1D0S5)
 
 Browser selection used to pick specs from path keywords (`terminal`, `timeline`,

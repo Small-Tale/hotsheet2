@@ -962,8 +962,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `linux-x86_64` (`ubuntu-latest`), `linux-arm64` (`ubuntu-24.04-arm`), `windows-x86_64`
   (`windows-latest`), `windows-arm64` (`windows-11-arm`) and `macos-arm64` (`macos-latest`).
   Each target runs fmt, `cargo lint`, `cargo nextest run --all-features`, web
-  lint/typecheck/unit/build, migrator lint and coverage, and the whole Playwright suite
-  (Chromium and WebKit) after the isolated fixture build. Every suite runs even when an
+  lint/typecheck/unit/build, migrator lint and coverage, and the whole Playwright suite after
+  the isolated fixture build. That suite runs in Chromium; WebKit runs only in the specs that
+  launch it (see the browser engine matrix, HS2-HW6VED). Every suite runs even when an
   earlier one fails, and each target uploads its JUnit and JSON reports and Playwright
   failure output as `platform-reports-<target>`. Windows targets install dav1d from vcpkg
   with the `x64-windows-static-md` or `arm64-windows-static-md` triplet and keep the
@@ -1047,7 +1048,8 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   for its own failure or file a prioritized bug for an independent failure. No local
   last-green file or repeated per-ticket full-suite run is needed.
 - **Full browser suite in CI (HS2-D95TXJ).** The `browser-full` job runs all Playwright
-  specs (Chromium plus the WebKit-launching specs) in four parallel shards. Each shard
+  specs in Chromium, plus WebKit inside the specs that launch it, in four parallel shards
+  (browser engine matrix, HS2-HW6VED). Each shard
   runs `--shard=<i>/4 --fully-parallel --workers=2 --reporter=blob`. Test-level sharding
   keeps the large `providers.spec.ts` from serializing one shard; the suite has no serial
   or `beforeAll`-coupled tests. `browser-full-report` merges the shard blobs into one HTML
@@ -1087,8 +1089,8 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   that keeps flaking is quarantined ([test-quarantine.md](test-quarantine.md)). Retries never
   replace a fix.
   A separate bounded WebKit job runs the inspector popup-anchor regression marked
-  `@ci-webkit` (HS2-HASXWP), covering the Safari engine without delaying the main
-  Chromium gate.
+  `@ci-webkit` (HS2-HASXWP) in WebKit as the default engine. That is 5 tests, not a
+  WebKit run of the suite.
 - The `check` job also validates the feature double-coverage matrix. Its validator accepts
   formatter-padded Markdown cells, ignores table separators, and checks every feature row
   and evidence reference, including rejecting rows outside the matrix markers. Repository guidance
@@ -1098,6 +1100,52 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   real multi-device terminal-sizing focus handoff (iOS↔macOS), mTLS enrollment / QR
   pairing across devices, native-client UX, long-term GitHub custom-ref behavior —
   migrated to automation as we can.
+
+#### Browser engine matrix (HS2-HW6VED)
+
+`clients/web/playwright.config.ts` declares no `projects` and no `browserName`, so every
+Playwright command without `--browser` runs its tests in Chromium. WebKit runs only where a
+command passes `--browser=webkit`, or where a spec launches WebKit itself with
+`webkit.launch()`. Those specs open WebKit for some of their tests and still run in Chromium as
+their default. A Chromium full suite is not a WebKit full suite, and the `@ci-webkit` group is
+not a WebKit matrix. `scripts/browser-engines.mjs` derives the matrix below from the checked-in
+workflows, Playwright config, `package.json` scripts and spec sources.
+`scripts/browser-engines.test.mjs` fails when this table and the workflows disagree.
+Environment opt-in profilers (`firefox-pty-profile`, `real-pty-profile`,
+`terminal-replay-profile` and `webkit-memory`) skip in every row.
+
+<!-- browser-engine-matrix:begin -->
+
+| Workflow        | Job            | Default engine | Selection                                              | Spec-launched engines                                                          |
+| --------------- | -------------- | -------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `ci.yml`        | `webkit-popup` | webkit         | native-prompt-replacements, providers; grep @ci-webkit | none                                                                           |
+| `ci.yml`        | `check`        | chromium       | providers; grep @ci-smoke                              | none                                                                           |
+| `ci.yml`        | `browser-full` | chromium       | all specs                                              | webkit: browser-draft-files, browser-ids-lan, terminal-replay, terminal-safari |
+| `platforms.yml` | `core`         | chromium       | all specs                                              | webkit: browser-draft-files, browser-ids-lan, terminal-replay, terminal-safari |
+
+<!-- browser-engine-matrix:end -->
+
+Gate evidence reports the same facts. `scripts/check.sh --plan` and each receipt carry
+`browserCoverage`: the engines, files and grep of every selected and deferred Playwright stage,
+plus this CI matrix. A passing gate prints `Browser engines run locally: …` and, when browser
+stages are deferred, `Browser engines deferred to CI: …`. `browser-full-report` and each
+Platforms core target append "Browser engines in this run" to the job summary from the merged
+Playwright JSON report. It lists the tests run and skipped per default engine and the run tests
+in WebKit-launching files. A handoff or completion note quotes these lines. It does not write
+"full WebKit coverage" unless a row above runs WebKit as the default engine over all specs.
+
+Measured on 2026-11-06 at `1e1aa8b50`, with `npx playwright test --list` and CI run
+`42186865719`:
+
+- The default suite lists 1152 tests in 92 files.
+- WebKit reaches at most 20 of them: 15 tests in the four WebKit-launching files and the 5
+  `@ci-webkit` tests. That is about 1.7% of the suite.
+- Each `browser-full` shard took 17 to 22 minutes, including setup, and the `webkit-popup`
+  job took about 5 minutes.
+
+Running the full suite with WebKit as its default engine would add a second set of roughly
+1150 tests. It would cost about another four 20-minute shard jobs, before any WebKit-only
+failures are fixed. That proposal is measured separately before CI changes.
 
 ### 12.7.7 AI-tool integration testing (the HS1 Codex pain, designed out)
 

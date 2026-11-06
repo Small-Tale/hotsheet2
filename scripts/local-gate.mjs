@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
 import { exerciseIndexForRepo } from './gate-browser-exercise.mjs';
+import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engines.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
@@ -236,6 +237,29 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       (stage) => ![...files].some((file) => stage.command.startsWith(`npx playwright test ${quote(file)} --grep `)),
     ),
   ];
+}
+
+/**
+ * HS2-HW6VED: the engines the selected and deferred Playwright stages actually run, and the CI
+ * browser matrix that covers what is deferred. A handoff quotes these facts instead of
+ * describing a focused WebKit group, or a Chromium full suite, as a full engine matrix. Evidence
+ * only: it never changes a check's key or selection. A repository without the web client or
+ * workflows reports `null`.
+ */
+export function browserEvidence(repo, selected, deferred) {
+  if (![join('clients/web', 'playwright.config.ts'), ...WORKFLOWS].every((path) => existsSync(join(repo, path))))
+    return null;
+  const local = gateBrowserCoverage(selected, repo);
+  const ci = ciBrowserMatrix(repo).map(({ workflow, job, defaultEngine, engines, files, grep, specLaunched }) => ({
+    workflow,
+    job,
+    defaultEngine,
+    engines,
+    files,
+    grep,
+    specLaunched,
+  }));
+  return { local, deferred: gateBrowserCoverage(deferred, repo), ci };
 }
 
 /** HS2-A4HD9X: only directly changed packages receive their measured baseline. */
@@ -536,6 +560,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     ...budgeted,
     profile,
     checks,
+    browserCoverage: browserEvidence(repo, checks, budgeted.deferred),
     key,
     cache: join(common, 'hotsheet-local-gate'),
     tools,
@@ -675,6 +700,7 @@ export function runGate(options = {}) {
       profile: before.profile,
       selected: before.checks.map((stage) => stage.command),
       deferred: before.deferred.map((stage) => stage.command),
+      browserCoverage: before.browserCoverage,
       results,
     }),
   );
@@ -688,6 +714,12 @@ export function runGate(options = {}) {
   log(
     `Local ${before.mode} gate passed for tree ${before.tree}; actual ${Date.now() - gateStarted}ms, budget ${budgetLabel}${before.floorOverBudget ? ' (mandatory floor exceeded budget)' : ''}`,
   );
+  // HS2-HW6VED: the engine facts a handoff quotes; the full CI matrix is in the receipt and --plan.
+  if (before.browserCoverage) {
+    log(`Browser engines run locally: ${before.browserCoverage.local.summary}`);
+    if (before.browserCoverage.deferred.stages.length)
+      log(`Browser engines deferred to CI: ${before.browserCoverage.deferred.summary}`);
+  }
   return 0;
 }
 

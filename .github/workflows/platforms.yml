@@ -306,6 +306,12 @@ jobs:
         working-directory: clients/web
         run: node ../../scripts/playwright-retries.mjs playwright-report.json --summary "$GITHUB_STEP_SUMMARY"
 
+      # HS2-HW6VED: record the engines this run actually used, not the ones a handoff assumes.
+      - name: Browser engines in this run
+        if: ${{ !cancelled() && steps.playwright.outcome != 'skipped' }}
+        working-directory: clients/web
+        run: node ../../scripts/browser-engines.mjs --report playwright-report.json --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Slowest browser tests
         if: ${{ !cancelled() && steps.playwright.outcome != 'skipped' }}
         working-directory: clients/web
