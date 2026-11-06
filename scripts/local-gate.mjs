@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
-import { exerciseIndexForRepo } from './gate-browser-exercise.mjs';
+import { exerciseIndexForRepo, withSpecimenInventory } from './gate-browser-exercise.mjs';
 import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engines.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { platformCfgForRepo } from './platform-cfg.mjs';
@@ -37,6 +37,16 @@ export function parseToolVersion(command, output) {
   if (!version) throw new Error(`Toolchain version unavailable: ${command}`);
   return version;
 }
+/** A path's text at a revision, or null when it does not exist there (a new file). */
+const gitText = (repo, args) => {
+  const result = spawnSync('git', args, {
+    cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return result.status === 0 ? result.stdout : null;
+};
 const git = (repo, args) => {
   const result = spawnSync('git', args, {
     cwd: repo,
@@ -477,7 +487,14 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
       selected.mode === 'full' || profile?.browser === true,
       testTitles['clients/web/tests/providers.spec.ts'] ?? [],
       testTitles,
-      exerciseIndexForRepo(repo, state.changes),
+      withSpecimenInventory(exerciseIndexForRepo(repo, state.changes), {
+        changes: state.changes,
+        readBase: (path) => (state.base ? gitText(repo, ['show', `${state.base}:${path}`]) : null),
+        readWorking: (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), 'utf8') : null),
+        demoSpec: existsSync(join(repo, 'clients/web/tests/ux-demo.spec.ts'))
+          ? readFileSync(join(repo, 'clients/web/tests/ux-demo.spec.ts'), 'utf8')
+          : null,
+      }),
     ),
   ];
   if (profile?.browser && affected.some((stage) => stage.command.startsWith('npx playwright test '))) {

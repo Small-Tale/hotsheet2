@@ -407,3 +407,46 @@ export function exerciseIndexForRepo(repo, changes) {
   );
   return exerciseIndex(changes, { sources, specs });
 }
+
+/** HS2-B42XMS: the Kerf `CatalogExample` specimens a demo source renders. */
+export function catalogSpecimenCount(source) {
+  return (source.match(/<CatalogExample\b/g) ?? []).length;
+}
+
+/**
+ * The demo-spec tests that pin each entry's specimen count: those titled after `CatalogExample`
+ * (HS2-Z3FMEZ). Found by title, so a renamed or added inventory test needs no edit here.
+ */
+export function specimenInventoryTitles(specText) {
+  const titles = [];
+  for (const match of specText.matchAll(/^test\((['"`])((?:\\.|(?!\1)[^\\])*?)\1/gm))
+    if (match[2].includes('CatalogExample')) titles.push(match[2].replace(/\\(.)/g, '$1'));
+  return titles;
+}
+
+/**
+ * HS2-B42XMS escape: adding or removing a demo specimen changes the counts the inventory test
+ * pins, yet a single-word entry id (`list`, `toolbar`) never matches that test's literals, and
+ * CI 40807614449 caught such a change only after push. When a changed demo file's specimen count
+ * differs from the base, add the inventory titles to the demo selection. `readBase`/`readWorking`
+ * return a path's text or null; a whole-file demo selection already covers the inventory.
+ */
+export function withSpecimenInventory(index, { changes, readBase, readWorking, demoSpec }) {
+  if (index.files.includes(DEMO_SPEC)) return index;
+  const changed = changes.filter(
+    (path) => UX_DEMO.test(path) && /\.tsx?$/.test(path) && !isTest(path) && !DEMO_AGGREGATOR.test(path),
+  );
+  const moved = changed.filter(
+    (path) => catalogSpecimenCount(readBase(path) ?? '') !== catalogSpecimenCount(readWorking(path) ?? ''),
+  );
+  const titles = moved.length ? specimenInventoryTitles(demoSpec ?? '') : [];
+  if (!titles.length) return index;
+  return {
+    ...index,
+    demoTitles: [...new Set([...index.demoTitles, ...titles])].sort(),
+    reasons: [
+      ...index.reasons,
+      `HS2-B42XMS: ${moved.join(', ')} changes its CatalogExample specimen count, so the catalog specimen inventory runs`,
+    ],
+  };
+}

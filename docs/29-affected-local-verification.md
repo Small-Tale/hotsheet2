@@ -147,6 +147,16 @@ declarations, and about 194 demo test declarations.
 | `ux-demo/list-demo.tsx`                    | 2, 0              | 2 files plus 1 demo title, 0     |
 | `ux-demo/registry.ts`                      | 2, 0              | 3 (whole `ux-demo.spec.ts`), 0   |
 
+**Catalog specimen counts (HS2-B42XMS).** The `ux-demo` inventory test (titled after
+`CatalogExample`, HS2-Z3FMEZ) pins each catalog entry's specimen count. A changed demo file selects
+the tests that open its entries. An entry id with a hyphen also matches the inventory's
+`['entry-id', count]` literal, but a single-word id (`list`, `toolbar`) does not. When a changed
+`ux-demo` file renders a different number of `<CatalogExample` specimens than its base (added,
+removed, new or deleted file), the plan therefore adds the inventory title to the `ux-demo` grep.
+Edits that keep the count, aggregators and test files add nothing, and other demo flows stay
+deferred. Measured on 2026-11-07: the planning check took about 20 ms, and the inventory test ran
+in 9.2 s in Chromium, including Vite startup.
+
 ## Scoped repository-wide checks (HS2-3ZJBRM)
 
 The local stage catalog now runs repository-wide Prettier and `cargo fmt`

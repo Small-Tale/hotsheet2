@@ -15,7 +15,16 @@ import {
   runGate,
   smokeStages,
 } from './local-gate.mjs';
-import { demoEntryIds, exerciseIndex, exerciseIndexForRepo, ownHooks, routeHooks } from './gate-browser-exercise.mjs';
+import {
+  catalogSpecimenCount,
+  demoEntryIds,
+  exerciseIndex,
+  exerciseIndexForRepo,
+  ownHooks,
+  routeHooks,
+  specimenInventoryTitles,
+  withSpecimenInventory,
+} from './gate-browser-exercise.mjs';
 import { profileFromTags } from './gate-ticket-profile.mjs';
 import {
   changedLines,
@@ -1154,4 +1163,101 @@ test('HS2-A7X8F5 the gate plan, receipt and output name platform cfg code deferr
   f.git('update-ref', 'refs/remotes/origin/main', 'HEAD~1');
   const shared = prepare(f.repo, undefined, false, f.options.versions);
   assert.deepEqual(shared.platformCfg.files, []);
+});
+
+const INVENTORY = 'labels converted demo specimens through Kerf CatalogExample, not app-owned stages (HS2-Z3FMEZ)';
+
+test('HS2-B42XMS a changed specimen count adds the catalog specimen inventory', () => {
+  assert.equal(catalogSpecimenCount('<CatalogExample a/>\n<CatalogExample\n b/> <CatalogExamples/>'), 2);
+  const realSpec = readFileSync(new URL('../clients/web/tests/ux-demo.spec.ts', import.meta.url), 'utf8');
+  assert.deepEqual(specimenInventoryTitles(realSpec), [INVENTORY]);
+  const empty = { files: [], providerTitles: [], providerWhole: false, demoTitles: ['other demo test'], reasons: [] };
+  const texts = {
+    base: { 'clients/web/src/ux-demo/list-demo.tsx': '<CatalogExample/><CatalogExample/>' },
+    work: {
+      'clients/web/src/ux-demo/list-demo.tsx': '<CatalogExample/><CatalogExample/><CatalogExample/>',
+      'clients/web/src/ux-demo/new-demo.tsx': '<CatalogExample/>',
+      'clients/web/src/ux-demo/same-demo.tsx': '<CatalogExample/>',
+      'clients/web/src/ux-demo/catalog.ts': '<CatalogExample/>',
+    },
+  };
+  texts.base['clients/web/src/ux-demo/same-demo.tsx'] = '<CatalogExample/> edited';
+  const run = (changes, index = empty) =>
+    withSpecimenInventory(index, {
+      changes,
+      readBase: (path) => texts.base[path] ?? null,
+      readWorking: (path) => texts.work[path] ?? null,
+      demoSpec: realSpec,
+    });
+  // An added specimen in a single-word entry's demo selects the inventory beside other titles.
+  const added = run(['clients/web/src/ux-demo/list-demo.tsx']);
+  assert.deepEqual(added.demoTitles, [INVENTORY, 'other demo test'].sort());
+  assert.match(
+    added.reasons.at(-1),
+    /HS2-B42XMS: clients\/web\/src\/ux-demo\/list-demo\.tsx changes its CatalogExample/,
+  );
+  // A new demo file counts from zero; a removed one counts to zero.
+  assert.ok(run(['clients/web/src/ux-demo/new-demo.tsx']).demoTitles.includes(INVENTORY));
+  texts.base['clients/web/src/ux-demo/gone-demo.tsx'] = '<CatalogExample/>';
+  assert.ok(run(['clients/web/src/ux-demo/gone-demo.tsx']).demoTitles.includes(INVENTORY));
+  // An edit that keeps the count, an aggregator, a test file and non-demo code add nothing.
+  for (const path of [
+    'clients/web/src/ux-demo/same-demo.tsx',
+    'clients/web/src/ux-demo/catalog.ts',
+    'clients/web/src/ux-demo/list-demo.test.ts',
+    'clients/web/src/components/list.tsx',
+  ])
+    assert.equal(run([path]), empty, path);
+  // A whole-file demo selection already runs the inventory.
+  const whole = { ...empty, files: ['tests/ux-demo.spec.ts'], demoTitles: [] };
+  assert.equal(run(['clients/web/src/ux-demo/list-demo.tsx'], whole), whole);
+});
+
+test('HS2-B42XMS planning selects the inventory when a single-word demo entry gains a specimen', (t) => {
+  const f = fixture(t);
+  const demo = (count) =>
+    [
+      "import { CatalogExample } from '@kerfjs/ui';",
+      'export const demoModule = {',
+      '  entries: {',
+      '    list: { render: () => null },',
+      '  },',
+      '};',
+      ...Array.from(
+        { length: count },
+        (_, index) => `export const Specimen${index} = <CatalogExample label="s${index}" />;`,
+      ),
+      '',
+    ].join('\n');
+  f.put('clients/web/src/ux-demo/list-demo.tsx', demo(2));
+  f.put(
+    'clients/web/tests/ux-demo.spec.ts',
+    [
+      "import { test } from '@playwright/test';",
+      `test('${INVENTORY}', async () => {`,
+      "  const examples = [['list', 2]];",
+      '});',
+      "test('opens the list entry', async ({ page }) => {",
+      "  await page.goto('/ux-demo?component=list');",
+      '});',
+      '',
+    ].join('\n'),
+  );
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'demo base');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const demoStage = (p) => p.checks.find((stage) => stage.command.includes("'tests/ux-demo.spec.ts' --grep"));
+  // An edit that keeps the specimen count runs only the tests that open the entry.
+  f.put('clients/web/src/ux-demo/list-demo.tsx', demo(2).replace('s0', 'renamed'));
+  f.git('commit', '--quiet', '-am', 'same count');
+  const same = prepare(f.repo, undefined, false, f.options.versions);
+  assert.ok(demoStage(same), same.checks.map((stage) => stage.command).join('\n'));
+  assert.ok(!demoStage(same).command.includes('CatalogExample'));
+  // Adding a specimen also runs the inventory that pins each entry's count.
+  f.put('clients/web/src/ux-demo/list-demo.tsx', demo(3));
+  f.git('commit', '--quiet', '-am', 'one more specimen');
+  const added = prepare(f.repo, undefined, false, f.options.versions);
+  assert.ok(demoStage(added).command.includes('Kerf CatalogExample'), demoStage(added).command);
+  assert.ok(demoStage(added).command.includes('opens the list entry'));
+  assert.ok(added.checks.every((stage) => !/'tests\/ux-demo\.spec\.ts'(?! --grep)/.test(stage.command)));
 });
