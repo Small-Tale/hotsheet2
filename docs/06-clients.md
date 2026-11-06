@@ -518,7 +518,11 @@ preview/download, server directory browser) are separate design work.
   Vite writes from racing snapshot cleanup. Stable-dev browser checks allow the snapshot
   copy a bounded 30-second readiness window under full-suite I/O load, fail immediately if
   the launcher exits, and include its captured output in timeout and early-exit diagnostics
-  (HS2-2D5CXN).
+  (HS2-2D5CXN). Before the lazy terminal-runtime check imports `terminal-viewport-runtime`
+  in the browser, it waits on the module graph's readiness. It fetches that module and every
+  same-origin module it statically imports, including the pre-bundled `@xterm` deps, until each
+  answers 2xx. A browser import that still fails reports the failed requests and the launcher
+  output, not only "Failed to fetch dynamically imported module" (HS2-SJDJ7E).
 
 - **Startup delivery budget.** Vite development intentionally serves the source module
   graph as separate requests: a cold local profile on 2026-09-03 loaded 175 scripts

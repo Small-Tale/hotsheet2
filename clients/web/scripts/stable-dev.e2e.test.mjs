@@ -106,6 +106,72 @@ async function waitForSource(url, { child, output = () => '', timeoutMs = 30_000
   });
 }
 
+/** Same-origin static imports in a Vite-served module: `from "/…"` and bare `import "/…"`. */
+function staticModuleImports(source) {
+  const urls = new Set();
+  for (const match of source.matchAll(
+    /(?:^|[;\s])(?:import|export)\s[^'"`;]*?from\s*(['"])(\/[^'"]+)\1|(?:^|[;\s])import\s*(['"])(\/[^'"]+)\3/gm,
+  ))
+    urls.add(match[2] ?? match[4]);
+  return [...urls];
+}
+
+/**
+ * HS2-SJDJ7E: wait until a module and every same-origin module it statically imports answer 2xx,
+ * so the browser's first `import()` lands on Vite's warm transform and optimized-dependency
+ * caches instead of a cold graph under load. Polls response state (like `waitForSource`); a
+ * graph that never becomes ready fails with the exact URL and status.
+ */
+async function waitForModuleGraph(origin, entry, { child, output = () => '', timeoutMs = 30_000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  const ready = new Set();
+  const pending = [entry];
+  let last = '';
+  while (pending.length) {
+    const path = pending[0];
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Module graph not ready after ${timeoutMs}ms at ${path}: ${last}\nStable dev output:\n${output()}`,
+      );
+    if (child && (child.exitCode !== null || child.signalCode !== null))
+      throw new Error(`Stable dev exited while warming ${path}.\n${output()}`);
+    try {
+      const response = await fetch(new URL(path, origin));
+      const text = await response.text();
+      if (response.ok) {
+        pending.shift();
+        ready.add(path);
+        for (const imported of staticModuleImports(text))
+          if (!ready.has(imported) && !pending.includes(imported) && ready.size + pending.length < 2_000)
+            pending.push(imported);
+        continue;
+      }
+      last = `HTTP ${response.status} ${text.slice(0, 200)}`;
+    } catch (error) {
+      last = String(error);
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return ready.size;
+}
+
+it('HS2-SJDJ7E reads only static same-origin imports from Vite-served modules', () => {
+  const served = [
+    'import { Terminal } from "/node_modules/.vite/deps/@xterm_xterm.js?v=1a2b";',
+    'import "/src/terminal.css";',
+    "export { mount } from '/src/terminal-mount.ts';",
+    'import RefreshRuntime from "https://cdn.example.invalid/x.js";',
+    'const later = import("/src/lazy-panel.ts");',
+    'import {\n  a,\n  b,\n} from "/src/multi-line.ts";',
+  ].join('\n');
+  expect(staticModuleImports(served).sort()).toEqual([
+    '/node_modules/.vite/deps/@xterm_xterm.js?v=1a2b',
+    '/src/multi-line.ts',
+    '/src/terminal-mount.ts',
+    '/src/terminal.css',
+  ]);
+});
+
 it('serves the startup snapshot until the stable dev process restarts', async () => {
   const fixture = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-e2e-'));
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
@@ -487,11 +553,28 @@ it.concurrent(
       });
       await page.goto(`http://127.0.0.1:${port}/`);
       expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+      // HS2-SJDJ7E: under full gate load the browser's first import of a cold graph once failed with
+      // "Failed to fetch dynamically imported module". Wait on the graph's readiness, not a timer.
+      const warmed = await waitForModuleGraph(`http://127.0.0.1:${port}`, '/src/terminal-viewport-runtime.ts', {
+        child,
+        output,
+      });
+      expect(warmed).toBeGreaterThan(1);
+      const failures = [];
+      page.on('requestfailed', (request) => failures.push(`failed ${request.url()}: ${request.failure()?.errorText}`));
+      page.on('response', (response) => {
+        if (response.status() >= 400) failures.push(`HTTP ${response.status()} ${response.url()}`);
+      });
       // Trigger the same dynamic import the terminal viewport uses, pulling in the xterm dependencies.
       // Passed as a string so Vitest's SSR transform can't rewrite the browser-side import() call.
-      const runtimeExports = await page.evaluate(
-        "import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())",
-      );
+      const runtimeExports = await page
+        .evaluate("import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())")
+        .catch((error) => {
+          // Name the request that failed, which the browser's TypeError does not.
+          throw new Error(
+            `${error.message}\nRequests: ${failures.join('; ') || 'none failed'}\nStable dev output:\n${output().slice(-4000)}`,
+          );
+        });
       expect(runtimeExports).toContain('mountTerminalViewportRuntime');
       // HS2-N9X6D5: a lazy import can schedule a late reload, so observe its absence.
       const lateReloadObservationMs = 1_000;
