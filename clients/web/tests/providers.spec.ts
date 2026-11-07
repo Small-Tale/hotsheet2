@@ -23945,6 +23945,85 @@ for (const [server, content] of [
     await expect(line).toHaveCount(0);
   });
 
+// HS2-80HD7K: Stop's reply is the interrupt's *accepted* snapshot (still busy). When the turn's end reaches
+// the app over the change stream first, applying that reply would put the ended turn back in progress.
+test('keeps a stopped turn ended when its interrupt reply arrives after the turn end (HS2-80HD7K)', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = window.fetch.bind(window);
+    const state = window as unknown as { __interruptReplyConsumed?: boolean };
+    // Resolves once the composer's progress line is gone: the app applied the turn's end.
+    const turnEnded = () =>
+      new Promise<void>((resolve) => {
+        const ended = () => !document.querySelector('.ai-conversation__composer .ai-conversation__turn-progress');
+        if (ended()) {
+          resolve();
+          return;
+        }
+        const observer = new MutationObserver(() => {
+          if (!ended()) return;
+          observer.disconnect();
+          resolve();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      });
+    window.fetch = async (input, init) => {
+      const response = await original(input, init);
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!url.endsWith('/interrupt')) return response;
+      const body = await response.text();
+      await turnEnded();
+      const held = new Response(body, { status: response.status, headers: response.headers });
+      const text = held.text.bind(held);
+      held.text = async () => {
+        const value = await text();
+        state.__interruptReplyConsumed = true;
+        return value;
+      };
+      return held;
+    };
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const host = drawer.locator('[data-component="ai-conversation"]'),
+    composer = host.getByRole('textbox', { name: 'Message Codex' });
+  await composer.fill('Run the long test suite.');
+  await composer.press('Enter');
+  const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
+  await expect(line).toHaveAttribute('data-state', 'tool');
+  await drawer
+    .getByRole('group', { name: 'Codex Conversation Actions' })
+    .getByRole('button', { name: 'Stop Codex' })
+    .click();
+  await page
+    .getByRole('alertdialog', { name: 'Stop the active Codex turn?' })
+    .getByRole('button', { name: 'Stop Turn' })
+    .click();
+  // The turn end applied first; the held reply is released only after that, then read by the app.
+  await page.waitForFunction(() => (window as { __interruptReplyConsumed?: boolean }).__interruptReplyConsumed);
+  // Two frames after the app read the reply: its state update and the render it schedules have run.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+  await expect(line).toHaveCount(0);
+  await expect(composer).toBeEnabled();
+});
+
 for (const [server, content] of [
   ['ahead of', 'Run the long suite on a server ahead.'],
   ['behind', 'Run the long suite on a server behind.'],

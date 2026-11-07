@@ -26,6 +26,7 @@ import {
 } from '../conversation-persistence';
 import { createConversationRenderScheduler } from '../conversation-render-scheduler';
 import { syncConversationScroll } from '../conversation-scroll';
+import { mergeInterruptReply } from '../drive-interrupt-reply';
 import type { Project } from '../interactions/types';
 import {
   type DrawerAIChat,
@@ -447,12 +448,11 @@ export function createDriveConversationsController(dependencies: DriveConversati
     if (!stop) return;
     try {
       const updated = await new Api(current.apiPath).interruptToolTurn(connectionId);
+      // The reply is the accepted (still busy) snapshot; a turn end applied meanwhile is newer (HS2-80HD7K).
       if (project()?.id === current.id)
         driveConnectionsByProject.value = {
           ...driveConnectionsByProject.value,
-          [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
-            .filter((item) => item.id !== updated.id)
-            .concat(updated),
+          [current.id]: mergeInterruptReply(driveConnectionsByProject.value[current.id] ?? [], updated),
         };
     } catch (reason) {
       updateConversation(connectionId, (state) => ({

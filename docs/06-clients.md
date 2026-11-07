@@ -1921,7 +1921,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   On server restart, the client pairs that history with the server's durable newest-first session catalog and recreates
   each latest connection/session before restoring eligible drawer tabs; corrupt local entries or
   one unavailable provider are isolated instead of discarding other conversations (HS2-YHQCS2).
-  Stop appears only for a busy connection advertising `interrupt`; Enter sends and
+  Stop appears only for a busy connection advertising `interrupt`. Stop's reply is the interrupt's
+  accepted, still-busy snapshot; it applies only while the stored connection is busy on that turn, so a
+  turn end that reached the client first is not put back in progress (HS2-80HD7K). Enter sends and
   Shift+Enter adds a line. Up and Down browse the conversation's own previously sent messages
   like a shell history: Up recalls only while the caret is on the composer's first line (or
   the composer is empty) and Down only on its last line, with no selection, modifier, or IME
