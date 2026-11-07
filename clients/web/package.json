@@ -23,7 +23,7 @@
     "format": "node scripts/format-sources.mjs --write && cargo fmt --all --manifest-path ../../Cargo.toml",
     "format:check": "node scripts/format-sources.mjs --check && cargo fmt --all --check --manifest-path ../../Cargo.toml",
     "format:sources:check": "node scripts/format-sources.mjs --check",
-    "lint:web": "eslint . --max-warnings 0 && npm run catalog:check && npm run ui:doctor",
+    "lint:web": "node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js . --max-warnings 0 && npm run catalog:check && npm run ui:doctor",
     "lint": "npm run format:check && npm run lint:web",
     "catalog:check": "kerf-component-catalog --check",
     "ui:doctor": "kerf-ui-doctor --full",

@@ -29,6 +29,17 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-3TWWWD bounds the type-aware ESLint heap so it does not depend on machine memory', () => {
+    // Typed linting of the client peaks near 3.3 GB and needs about 2.5 GB of heap. Node's default
+    // heap limit is derived from RAM, so the 7 GB macOS runner aborted at about 2 GB. Pin an explicit,
+    // cross-platform bound on the one ESLint invocation.
+    const lint = packageJson.scripts['lint:web'];
+    expect(lint).toMatch(
+      /^node --max-old-space-size=4096 node_modules\/eslint\/bin\/eslint\.js \. --max-warnings 0 &&/,
+    );
+    expect(Object.values(packageJson.scripts).filter((script) => /\beslint(?:\.js)? \./.test(script))).toEqual([lint]);
+  });
+
   it('HS2-N9X6D5 keeps browser fixture timers for measured windows and cadence only', () => {
     const read = (name: string) => readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8');
     const stable = read('stable-dev.e2e.test.mjs');

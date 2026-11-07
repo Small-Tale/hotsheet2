@@ -156,7 +156,7 @@ describe('Kerf application UI profile', () => {
     ).scripts;
     expect(scripts.lint.split('&&').map((step) => step.trim())).toEqual(['npm run format:check', 'npm run lint:web']);
     expect(scripts['lint:web'].split('&&').map((step) => step.trim())).toEqual([
-      'eslint . --max-warnings 0',
+      'node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js . --max-warnings 0',
       'npm run catalog:check',
       'npm run ui:doctor',
     ]);

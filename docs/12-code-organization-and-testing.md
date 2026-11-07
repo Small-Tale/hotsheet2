@@ -146,6 +146,12 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   loading keeps its default hook budget under CI load (HS2-7KXGMC). Every real input
   and invalid source still runs its complete proof under the default per-test budget
   (HS2-2SPPTQ); the fast unit command includes that policy project.
+- `lint:web` runs ESLint as `node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js`
+  (HS2-3TWWWD). Type-aware linting of the client peaks near 3.3 GB resident and needs
+  between 2 and 2.5 GB of heap, while Node derives its default heap limit from RAM: the
+  7 GB macOS runner aborted with `JavaScript heap out of memory`. The explicit bound makes
+  the result independent of machine memory without narrowing any rule; the `HS2-3TWWWD`
+  policy test pins it.
 - Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
   HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
