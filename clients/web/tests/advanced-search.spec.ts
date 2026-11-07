@@ -1,4 +1,26 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+/**
+ * Wait until the layout's finite animations (the rail-collapse transition after a resize) have
+ * finished, so a capture shows the settled layout rather than a half-slid one (HS2-P2YPTS,
+ * HS2-2GCMY1). Each read waits two frames first, so a transition that the resize schedules for the
+ * next render is already running when it is counted.
+ */
+async function settleRunningAnimations(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+          ).length;
+      }),
+    )
+    .toBe(0);
+}
 
 const base = {
   connection_id: 'git',
@@ -347,6 +369,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     .poll(() => searchGroup.evaluate((node) => node.getBoundingClientRect().height))
     .toBeGreaterThan(single.group.height);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await settleRunningAnimations(page);
   await page.screenshot({ path: 'target/visual-captures/hs2-mz9dmf-inline-search-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
@@ -381,6 +404,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-vx1v88-search-token-chips-wide.png', fullPage: true });
   await page.setViewportSize({ width: 680, height: 720 });
+  await settleRunningAnimations(page);
   await page.screenshot({ path: 'target/visual-captures/hs2-vx1v88-search-token-chips-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.getByRole('button', { name: 'Clear search' }).click();
@@ -407,19 +431,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(blockedChip).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // Capture after the rail-collapse transition settles, not mid-flight.
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          document
-            .getAnimations()
-            .filter(
-              (animation) =>
-                animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
-            ).length,
-      ),
-    )
-    .toBe(0);
+  await settleRunningAnimations(page);
   await page.screenshot({ path: 'target/visual-captures/hs2-2gcmy1-is-blocked-chip-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1800, height: 800 });
   await expect(blockedChip).toBeVisible();
