@@ -25770,8 +25770,78 @@ test('releases video resources and event work after repeated gallery playback cy
   await page.screenshot({ path: 'target/visual-captures/hs2-3f7n4p-after-three-cycles-narrow.png', fullPage: true });
 });
 
+// HS2-P63DWP: the returned wait resolves with the media time of the first presented frame near the
+// target, or, once the element settles on the target (`seeked`, not seeking, readyState >=
+// HAVE_CURRENT_DATA) and two rendering opportunities pass without a callback (a paused element under
+// software decode may present without one), with its settled current time. Awaiting the arm call
+// guarantees the watcher is installed before the caller starts the seek: an un-awaited
+// `locator.evaluate` can lose the race to the seek under load, and a paused element then never
+// presents or seeks again. No fixed wall-clock window: the only bound is the test's own deadline, so a
+// slow decoder gets the whole test budget.
+async function armSettledSeekFrame(
+  video: Locator,
+  targetMs: number,
+  toleranceMs: number,
+  deadline: number,
+): Promise<() => Promise<number>> {
+  type Watched = HTMLVideoElement & { hs2SettledSeekFrame?: Promise<number> };
+  await video.evaluate(
+    (node, { targetMs, toleranceMs, budgetMs }) => {
+      const element = node as Watched,
+        seen: number[] = [],
+        seeks: number[] = [];
+      element.hs2SettledSeekFrame = new Promise<number>((resolve, reject) => {
+        let active = true;
+        const near = (seconds: number) => Math.abs(seconds * 1000 - targetMs) < toleranceMs,
+          finish = (mediaTime: number) => {
+            if (!active) return;
+            active = false;
+            window.clearTimeout(timeout);
+            element.removeEventListener('seeked', onSeeked);
+            resolve(mediaTime);
+          },
+          watch = () => {
+            element.requestVideoFrameCallback((_now, metadata) => {
+              if (!active) return;
+              seen.push(metadata.mediaTime);
+              if (near(metadata.mediaTime)) finish(metadata.mediaTime);
+              else watch();
+            });
+          },
+          settled = () => !element.seeking && element.readyState >= 2 && near(element.currentTime),
+          onSeeked = () => {
+            seeks.push(element.currentTime);
+            if (!settled()) return;
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                if (settled()) finish(element.currentTime);
+              }),
+            );
+          },
+          timeout = window.setTimeout(() => {
+            active = false;
+            element.removeEventListener('seeked', onSeeked);
+            reject(
+              new Error(
+                `seek to ${targetMs} ms never settled: presented ${seen.join(', ')}; seeked ${seeks.join(', ')}; ` +
+                  `readyState ${element.readyState}, seeking ${element.seeking}, currentTime ${element.currentTime}`,
+              ),
+            );
+          }, budgetMs);
+        element.addEventListener('seeked', onSeeked);
+        watch();
+      });
+      // The waiting evaluate reports a rejection; keep an early one from surfacing as unhandled.
+      element.hs2SettledSeekFrame.catch(() => undefined);
+    },
+    { targetMs, toleranceMs, budgetMs: Math.max(1_000, deadline - Date.now()) },
+  );
+  return () => video.evaluate((node) => (node as Watched).hs2SettledSeekFrame!);
+}
+
 test('keeps decoded video seeks responsive across repeated real playback sessions', async ({ page }) => {
   test.setTimeout(90_000);
+  const deadline = Date.now() + test.info().timeout - 15_000;
   await mockProject(page);
   await page.goto('/');
   const bytes = Buffer.from(
@@ -25857,24 +25927,7 @@ test('keeps decoded video seeks responsive across repeated real playback session
     await expect.poll(async () => Number(await scrubber.getAttribute('max'))).toBeGreaterThan(1_500);
     const duration = Number(await scrubber.getAttribute('max')),
       target = Math.round(duration * (cycle % 2 === 0 ? 0.78 : 0.28)),
-      presented = video.evaluate(
-        (node, targetMs) =>
-          new Promise<number>((resolve, reject) => {
-            const timeout = window.setTimeout(() => {
-                reject(new Error('latest seek frame was not decoded'));
-              }, 8_000),
-              watch = () => {
-                (node as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
-                  if (Math.abs(metadata.mediaTime * 1000 - targetMs) < 180) {
-                    window.clearTimeout(timeout);
-                    resolve(metadata.mediaTime);
-                  } else watch();
-                });
-              };
-            watch();
-          }),
-        target,
-      );
+      presented = await armSettledSeekFrame(video, target, 180, deadline);
     await scrubber.evaluate(
       (node, values) => {
         const input = node as HTMLInputElement;
@@ -25886,7 +25939,7 @@ test('keeps decoded video seeks responsive across repeated real playback session
       },
       [Math.round(duration * 0.12), Math.round(duration * 0.55), target],
     );
-    expect(Math.abs((await presented) * 1000 - target)).toBeLessThan(180);
+    expect(Math.abs((await presented()) * 1000 - target)).toBeLessThan(180);
     await expect
       .poll(() =>
         video.evaluate((node, value) => Math.abs((node as HTMLVideoElement).currentTime * 1000 - value), target),
@@ -27086,6 +27139,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   page,
 }) => {
   test.setTimeout(60_000);
+  const deadline = Date.now() + test.info().timeout - 15_000;
   await mockProject(page);
   const reportedVideoPath = process.env.HOTSHEET_MEDIA_TEST_VIDEO,
     reportedVideo = reportedVideoPath ? readFileSync(reportedVideoPath) : undefined,
@@ -27221,38 +27275,15 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   await expect.poll(async () => Number(await scrubber.getAttribute('max'))).toBeGreaterThan(2500);
   const durationMs = Number(await scrubber.getAttribute('max'));
   const decodedFrameNear = (targetMs: number, toleranceMs: number) =>
-    video.evaluate(
-      (node, { targetMs, toleranceMs }) =>
-        new Promise<number>((resolve, reject) => {
-          let active = true;
-          const seen: number[] = [],
-            timeout = window.setTimeout(() => {
-              active = false;
-              reject(new Error(`paused seek did not present ${targetMs} ms; saw ${seen.join(', ')}`));
-            }, 5000),
-            watch = () => {
-              (node as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
-                if (!active) return;
-                seen.push(metadata.mediaTime);
-                if (Math.abs(metadata.mediaTime * 1000 - targetMs) < toleranceMs) {
-                  active = false;
-                  window.clearTimeout(timeout);
-                  resolve(metadata.mediaTime);
-                } else watch();
-              });
-            };
-          watch();
-        }),
-      { targetMs, toleranceMs },
-    );
+    armSettledSeekFrame(video, targetMs, toleranceMs, deadline);
   if (reportedVideo) {
     await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
     const firstFrame = await video.screenshot();
     for (const fraction of [0.9, 0.2, 0.72, 0.35]) {
       const targetMs = Math.round(durationMs * fraction),
-        presented = decodedFrameNear(targetMs, 150);
+        presented = await decodedFrameNear(targetMs, 150);
       await scrubber.fill(String(targetMs));
-      expect(Math.abs((await presented) * 1000 - targetMs)).toBeLessThan(150);
+      expect(Math.abs((await presented()) * 1000 - targetMs)).toBeLessThan(150);
     }
     const soughtFrame = await video.screenshot();
     expect(Buffer.compare(firstFrame, soughtFrame)).not.toBe(0);
@@ -27264,19 +27295,19 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   if (reportedVideo) {
     // A multi-step pointer move issues several seeks. Its first decoded frame can belong
     // to an intermediate pointer position, so wait for the final target frame.
-    const decoded = decodedFrameNear(Math.round(durationMs * 0.2), 180);
+    const decoded = await decodedFrameNear(Math.round(durationMs * 0.2), 180);
     await page.mouse.move(scrubberBox.x + scrubberBox.width * 0.2, scrubberBox.y + scrubberBox.height / 2, {
       steps: 8,
     });
     const playhead = Number(await scrubber.inputValue());
-    expect(Math.abs((await decoded) * 1000 - playhead)).toBeLessThan(180);
+    expect(Math.abs((await decoded()) * 1000 - playhead)).toBeLessThan(180);
     heldFrameA = await video.screenshot();
-    const nextDecoded = decodedFrameNear(Math.round(durationMs * 0.8), 180);
+    const nextDecoded = await decodedFrameNear(Math.round(durationMs * 0.8), 180);
     await page.mouse.move(scrubberBox.x + scrubberBox.width * 0.8, scrubberBox.y + scrubberBox.height / 2, {
       steps: 8,
     });
     const nextPlayhead = Number(await scrubber.inputValue());
-    expect(Math.abs((await nextDecoded) * 1000 - nextPlayhead)).toBeLessThan(180);
+    expect(Math.abs((await nextDecoded()) * 1000 - nextPlayhead)).toBeLessThan(180);
     expect(Buffer.compare(heldFrameA, await video.screenshot())).not.toBe(0);
     await gallery.screenshot({ path: test.info().outputPath('hs2-ewztq9-native-held-scrub-wide.png') });
   }
