@@ -151,16 +151,27 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     headers.delete('content-length');
     return new Response(await upstream.arrayBuffer(), { status: upstream.status, headers });
   });
-  const handle = getRequestListener(host.fetch),
-    listener = createServer((request, response) => {
+  const handle = getRequestListener(host.fetch);
+  // HS2-J0Q11X: each launch needs a fresh browser origin. Two IPv4 listeners give two origins by port.
+  // A `localhost` origin resolved to ::1 first, where another process's dual-stack listener on the
+  // same port number could take the connection (ERR_CONNECTION_RESET under full-suite load).
+  const listeners = [0, 1].map(() =>
+    createServer((request, response) => {
       void handle(request, response);
-    });
-  await new Promise<void>((resolve) => {
-    listener.listen(0, '127.0.0.1', resolve);
-  });
-  const address = listener.address();
-  if (!address || typeof address === 'string') throw new Error('Synthetic bridge did not bind a TCP port.');
-  const appOrigin = `http://127.0.0.1:${String(address.port)}`;
+    }),
+  );
+  const origins = await Promise.all(
+    listeners.map(async (listener) => {
+      await new Promise<void>((resolve, reject) => {
+        listener.once('error', reject);
+        listener.listen(0, '127.0.0.1', resolve);
+      });
+      const address = listener.address();
+      if (!address || typeof address === 'string') throw new Error('Synthetic bridge did not bind a TCP port.');
+      return `http://127.0.0.1:${String(address.port)}`;
+    }),
+  );
+  const appOrigin = origins[0];
   await context.route('**/__hotsheet/projects/open', (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
@@ -232,12 +243,11 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     async launch(page?: Page) {
       await page?.close();
       bridge = desktopStorageBridge(preferences);
-      const origin = new URL(appOrigin);
-      // Alternate loopback hosts so every launch is a different browser origin.
-      origin.hostname = launches++ % 2 ? 'localhost' : '127.0.0.1';
+      // Alternate listener ports so every launch is a different browser origin.
+      const origin = origins[launches++ % 2];
       const next = await context.newPage();
       await next.setViewportSize({ width: 1280, height: 900 });
-      await next.goto(origin.href);
+      await next.goto(`${origin}/`);
       return next;
     },
     storedSession: async (projectId = server.checkoutId) =>
@@ -257,13 +267,17 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     rememberedProjects,
     async stop() {
       stopping = true;
-      listener.closeAllConnections();
-      await new Promise<void>((resolve, reject) => {
-        listener.close((reason) => {
-          if (reason) reject(reason);
-          else resolve();
-        });
-      });
+      await Promise.all(
+        listeners.map(async (listener) => {
+          listener.closeAllConnections();
+          await new Promise<void>((resolve, reject) => {
+            listener.close((reason) => {
+              if (reason) reject(reason);
+              else resolve();
+            });
+          });
+        }),
+      );
       await server.stop();
       await rm(appData, { recursive: true, force: true });
     },
