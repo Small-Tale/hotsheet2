@@ -26419,6 +26419,18 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
     notes = gallery.getByRole('complementary', { name: 'Annotation Notes' });
   await expect(notes).toBeVisible();
   await expect.poll(async () => (await stage.boundingBox())?.width).toBeGreaterThan(900);
+  // HS2-4S024J: after the phone-width round trip the rails animate back and the image refits, so a
+  // baseline read too early was ~2 px short. Take it once animations end and two reads agree.
+  await settledAnimations(gallery);
+  let lastBoxes = '';
+  await expect
+    .poll(async () => {
+      const boxes = JSON.stringify([await stage.boundingBox(), await media.boundingBox()]),
+        stable = boxes === lastBoxes;
+      lastBoxes = boxes;
+      return stable;
+    })
+    .toBe(true);
   const stageBeforeSelection = (await stage.boundingBox())!,
     mediaBeforeSelection = (await media.boundingBox())!;
   await gallery.getByRole('button', { name: 'Add rectangle' }).click();
