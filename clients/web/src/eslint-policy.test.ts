@@ -40,6 +40,15 @@ describe('web ESLint policy', () => {
     expect(Object.values(packageJson.scripts).filter((script) => /\beslint(?:\.js)? \./.test(script))).toEqual([lint]);
   });
 
+  it('HS2-TY5JHN bounds the type-aware Kerf UI doctor heap the same way', () => {
+    // After HS2-3TWWWD the macOS runner's ESLint passed and the next type-aware step, the Kerf UI
+    // doctor, aborted at the same RAM-derived ~2 GB default heap. Pin the same explicit bound.
+    expect(packageJson.scripts['ui:doctor']).toBe(
+      'node --max-old-space-size=4096 node_modules/@kerfjs/ui/doctor/cli.mjs --full',
+    );
+    expect(Object.values(packageJson.scripts).filter((script) => /\bkerf-ui-doctor\b/.test(script))).toEqual([]);
+  });
+
   it('HS2-N9X6D5 keeps browser fixture timers for measured windows and cadence only', () => {
     const read = (name: string) => readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8');
     const stable = read('stable-dev.e2e.test.mjs');

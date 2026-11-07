@@ -161,7 +161,8 @@ describe('Kerf application UI profile', () => {
       'npm run ui:doctor',
     ]);
     expect(scripts['format:sources:check']).toBe('node scripts/format-sources.mjs --check');
-    expect(scripts['ui:doctor']).toBe('kerf-ui-doctor --full');
+    // HS2-TY5JHN: the doctor runs through node with an explicit heap bound.
+    expect(scripts['ui:doctor']).toBe('node --max-old-space-size=4096 node_modules/@kerfjs/ui/doctor/cli.mjs --full');
     expect(scripts).not.toHaveProperty('css:ownership');
   });
 });

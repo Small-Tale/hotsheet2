@@ -2828,7 +2828,8 @@ Browser evaluation remains disabled unless a developer explicitly supplies a tru
 URL, for example `npm run ui:doctor -- --browser-url http://127.0.0.1:4173`.
 
 `npm run ui:doctor` is the repeatable local and CI gate: since HS2-Z44YPD (Kerf 5.0.0-beta.69) it is
-the plain `kerf-ui-doctor --full` command, with `"failOn": "warning"` in `.kerf-ui-doctor.json`, so any
+the doctor's `--full` command (run through `node --max-old-space-size=4096` since HS2-TY5JHN, so its
+type-aware stages do not hit Node's RAM-derived default heap on small CI runners), with `"failOn": "warning"` in `.kerf-ui-doctor.json`, so any
 active error, review finding, or warning fails it (`KF-6S5EKX`). The interim wrapper script from
 HS2-6PD4FS is gone. Known, tracked gaps are not budgeted; they are documented `suppressions` in
 `.kerf-ui-doctor.json`, each with a rationale naming the Kerf ticket whose adoption removes it.

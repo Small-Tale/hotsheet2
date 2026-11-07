@@ -166,7 +166,7 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   stages and selects the web-only ESLint, catalog, and doctor stage from its
   declared web and catalog-documentation inputs. `npm run lint` still runs both
   formatting and web lint for direct package use and CI.
-- The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`), which enforces
+- The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`, run through `node --max-old-space-size=4096` since HS2-TY5JHN), which enforces
   component CSS ownership between the app's own components. A stylesheet may style only the class
   blocks its component renders, plus the native and raw Web Awesome elements it authors, and a
   module renders only its own class blocks (HS2-TM6K9V). The doctor runs strict component
