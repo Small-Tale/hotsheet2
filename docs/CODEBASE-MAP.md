@@ -419,6 +419,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/archive-load-more.spec.ts # Real-server regression: rows appended by Load more survive a concurrent change's list refresh (HS2-9DF0DA)
     tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models, rail labels share one edge, and the per-model breakdown table sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
+    src/change-read-gap.ts # Read-to-handshake continuity (HS2-SQKJYG): ticket-read `X-Hotsheet-Change-Cursor` stamps per API base and the one-shot gap replay a stream runs when a read was stamped below its first handshake
     src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks, the HS2-WHW3M1 client-build relay), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)
     src/change-stream-worker-runtime.ts # Worker-side runtime: one transport per open project, worker poll client, open/close/ack handling; accepts shared socket/poll pools (HS2-SH9179, HS2-NP7R42)
     src/change-stream.worker.ts # Dedicated module-worker entry for the shared change stream (HS2-SH9179)

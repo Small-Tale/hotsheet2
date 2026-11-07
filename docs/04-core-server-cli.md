@@ -542,6 +542,10 @@ Responsibilities:
   both transports. A caught-up long poll blocks; after wake it snapshots the whole
   available span and its exact cursor atomically, so a burst cannot be skipped and an
   idle client cannot form a tight request loop.
+  Every authenticated HTTP response carries `X-Hotsheet-Change-Cursor`, the replay
+  cursor read before its handler ran (HS2-SQKJYG). A change after that cursor may be
+  missing from the response, so a client whose read was stamped below its stream's
+  handshake cursor replays `since=<stamp>` for exactly that gap instead of reading again.
   The browser's development bridge proxies a credential-free project-scoped
   `/ws/sync` URL to this authenticated loopback endpoint, keeping the server secret
   outside browser JavaScript. The web client handshakes and closes the WebSocket

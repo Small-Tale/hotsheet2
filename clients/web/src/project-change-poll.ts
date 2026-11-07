@@ -25,9 +25,10 @@ export interface ProjectChangePollOptions {
    * Continuity was (re)established without a replayable gap: the first handshake, a fresh
    * handshake after an outage, or an overflowed replay. Event-driven state that is not
    * ticket rows (pending permissions, drive connections) reconciles here instead of on a
-   * timer (HS2-NKCXW4). Never called for a failed request, so an error cannot loop it.
+   * timer (HS2-NKCXW4). Never called for a failed request, so an error cannot loop it. `cursor` is
+   * the replay position continuity was established at (HS2-SQKJYG).
    */
-  onResync?(reason: ProjectChangeResync): Promise<void> | void;
+  onResync?(reason: ProjectChangeResync, cursor: number): Promise<void> | void;
   onError?(reason: unknown): void;
   retryMs?: number;
   maxRetryMs?: number;
@@ -70,9 +71,9 @@ const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void>
 
 const wasAborted = (signal: AbortSignal): boolean => signal.aborted;
 
-const resync = async (options: ProjectChangePollOptions, reason: ProjectChangeResync) => {
+const resync = async (options: ProjectChangePollOptions, reason: ProjectChangeResync, cursor: number) => {
   try {
-    await options.onResync?.(reason);
+    await options.onResync?.(reason, cursor);
   } catch (error) {
     options.onError?.(error);
   }
@@ -125,10 +126,10 @@ export interface ProjectChangeTransportOptions {
  */
 export function createProjectChangeConsumer(options: ProjectChangePollOptions, signal: AbortSignal): ProjectChangeSink {
   return {
-    resync: (reason) => resync(options, reason),
+    resync: (reason, cursor) => resync(options, reason, cursor),
     deliver: async (response, forceRefresh) => {
       if (wasAborted(signal)) return;
-      if (response.overflow) await resync(options, 'overflow');
+      if (response.overflow) await resync(options, 'overflow', response.cursor);
       if (wasAborted(signal)) return;
       if (response.events.length && options.onEvents)
         await options.onEvents(response).catch((reason: unknown) => {

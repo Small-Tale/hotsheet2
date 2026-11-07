@@ -1,4 +1,5 @@
 import { browserRandomId } from './browser-id';
+import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from './change-read-gap';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
@@ -1568,6 +1569,11 @@ export class Api {
         throw new ApiHttpError(errorMessageOf(failure) ?? `${response.status}`, response.status, errorCodeOf(failure));
       }
       onResponse?.(response);
+      // The change cursor this read was served at bounds what the stream must replay (HS2-SQKJYG).
+      if (isTicketCollectionRead(init.method ?? 'GET', path)) {
+        const cursor = responseChangeCursor(response.headers);
+        if (cursor !== undefined) ticketReadCursors.note(this.origin, cursor);
+      }
       return response.status === 204 ? undefined : await responseJsonBody(response);
     } finally {
       // After the body is read, so the timing covers the whole response (HS2-ZGBQ5Q).

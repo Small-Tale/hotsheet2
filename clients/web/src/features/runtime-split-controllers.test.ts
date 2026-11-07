@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CheckoutTicketQuery, TicketRow } from '../api';
+import { ticketReadCursors } from '../change-read-gap';
 import type { ProjectCloseDialogState } from '../components/project-close-dialog';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { InlineSearchToken } from '../inline-search';
@@ -23,7 +24,7 @@ const streams = vi.hoisted(() => ({
   started: [] as string[],
   stopped: [] as string[],
   onEvents: new Map<string, (response: unknown) => Promise<void>>(),
-  onResync: new Map<string, (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>>(),
+  onResync: new Map<string, (reason: 'initial' | 'reconnect' | 'overflow', cursor?: number) => Promise<void>>(),
   refresh: new Map<string, () => Promise<void>>(),
   onError: new Map<string, (reason: unknown) => void>(),
 }));
@@ -32,7 +33,7 @@ vi.mock('../project-change-poll', async (importOriginal) => ({
   startProjectChangeStream: (options: {
     client: { origin?: string };
     onEvents: (response: unknown) => Promise<void>;
-    onResync: (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>;
+    onResync: (reason: 'initial' | 'reconnect' | 'overflow', cursor?: number) => Promise<void>;
     refresh: () => Promise<void>;
     onError?: (reason: unknown) => void;
   }) => {
@@ -259,6 +260,91 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     });
     await streams.onEvents.get('/api/a')!({ events: [{ kind: 'permission_asked', id: '3' }] });
     expect(refreshPermissions.mock.calls).toEqual([['a'], ['b'], ['b'], ['a']]);
+    owner.dispose();
+  });
+
+  it('change streams: a ticket read stamped before the first handshake replays only its gap, never re-reads idle (HS2-SQKJYG)', async () => {
+    const projects = signal([project('a'), project('b'), project('c')]),
+      noop = vi.fn(async () => undefined),
+      refreshed: string[] = [],
+      barrier = createRefreshBarrier(),
+      acknowledgements = new LocalTicketChangeAcknowledgements(),
+      polls: string[] = [],
+      log: Record<string, unknown[]> = {
+        '/api/a': [{ cursor: 4, kind: 'updated', store: 's', id: 'A2', slug: 'A2' }],
+        '/api/c': [{ cursor: 9, kind: 'created', store: 's', id: 'C2', slug: 'C2' }],
+      };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string) => {
+        polls.push(input);
+        const base = input.slice(0, input.indexOf('/ws/poll'));
+        return new Response(JSON.stringify({ cursor: 10, events: log[base] ?? [], overflow: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+    // `a` and `c` loaded their tickets before their streams started; `b` is a cold tab.
+    ticketReadCursors.note('/api/a', 3);
+    ticketReadCursors.note('/api/c', 8);
+    const owner = createProjectChangeStreamsController({
+      projects,
+      project: () => projects.value[0],
+      shellMode: signal('project'),
+      statsProjectId: signal(undefined),
+      localTicketMutationBarrier: barrier,
+      localTicketChangeAcknowledgements: acknowledgements,
+      projectTabRefresh: {
+        request: vi.fn(async (target: Project) => {
+          refreshed.push(target.id);
+        }),
+      },
+      turnStreamEvents: () => [],
+      conversationPersistence: { flush: vi.fn() } as never,
+      updateConversation: vi.fn(),
+      conversationForActivity: vi.fn(),
+      refreshDriveConnections: noop,
+      refreshPermissions: noop,
+      serverResolvedPermission: vi.fn(),
+      permissionRulesChanged: vi.fn(),
+      applyTerminalRenamed: vi.fn(),
+      refreshTerminalDashboard: noop,
+      refreshProviderOutbox: noop,
+      refreshCommands: noop,
+      refreshCustomViews: noop,
+      refreshRepositoryStatus: noop,
+      loadConfidenceReport: noop,
+      loadRepositorySize: noop,
+    });
+    owner.syncProjectChangeStreams();
+    // `c`'s gap holds only this client's own acknowledged create: it never reconciles.
+    acknowledgements.acknowledge('c', { store: 's', id: 'C2', kind: 'created' });
+    // A local mutation in flight holds `a`'s reconcile until it settles, like any stream refresh.
+    const release = barrier.begin();
+    await streams.onResync.get('/api/a')!('initial', 5);
+    await streams.onResync.get('/api/b')!('initial', 5);
+    await streams.onResync.get('/api/c')!('initial', 9);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(polls.map((url) => url.replace(/&client=.*/u, ''))).toEqual([
+      '/api/a/ws/poll?timeout_ms=0&since=3',
+      '/api/c/ws/poll?timeout_ms=0&since=8',
+    ]);
+    expect(refreshed).toEqual([]);
+    release();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(refreshed).toEqual(['a']);
+    // Idle and later reads at or after the handshake: no replay and no read, ever.
+    ticketReadCursors.note('/api/a', 5);
+    ticketReadCursors.note('/api/b', 7);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(polls).toHaveLength(2);
+    expect(refreshed).toEqual(['a']);
+    // A reconnect reconciles through the transport's forced delivery, not a replay.
+    await streams.onResync.get('/api/b')!('reconnect', 20);
+    ticketReadCursors.note('/api/b', 6);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(polls).toHaveLength(2);
     owner.dispose();
   });
 

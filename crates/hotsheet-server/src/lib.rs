@@ -2075,6 +2075,12 @@ pub fn app(state: AppState) -> Router {
             "/standby-settings",
             get(routes::standby::get_standby_settings).put(routes::standby::put_standby_settings),
         )
+        // Inside authentication: an authenticated response names the change cursor it was
+        // served at, so a client can replay what its read may have missed (HS2-SQKJYG).
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            events::stamp_change_cursor,
+        ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,

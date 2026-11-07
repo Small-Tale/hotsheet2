@@ -3,6 +3,7 @@ import type { Signal } from 'kerfjs';
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
 import { type ActivityEvent, Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
 import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
+import { createHandshakeGapReconciler, ticketReadCursors } from '../change-read-gap';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
 import { createChangeWebSocketMultiplexers } from '../change-ws-mux';
 import { noteHostClientBuild } from '../client-update-notice';
@@ -326,18 +327,41 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
       }
     for (const current of projects.value)
       if (!projectChangeStreams.has(current.id)) {
-        const stop = startStream(current, {
+        const shouldRefresh = (response: PollResponse) =>
+          containsTicketChange({
+            ...response,
+            events: localTicketChangeAcknowledgements.unacknowledged(current.id, response.events),
+          });
+        const refresh = contained(async () => {
+          // The transport delivers individual WebSocket events. Scheduling without waiting
+          // lets a dense sequence share one collection read per project (HS2-B5SJMJ).
+          ticketRefresh.schedule(current);
+          await refreshProviderOutbox(current);
+          // Ticket changes can complete, reopen, or verify: keep an open calibration current.
+          if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id) await loadConfidenceReport(current);
+          if (shellMode.peek() === 'stats' && (!statsProjectId.peek() || statsProjectId.peek() === current.id))
+            await loadAnalytics?.(current);
+        });
+        // A ticket read stamped before the first handshake may miss changes the stream never
+        // delivers: replay only that gap, and reconcile only for a ticket change (HS2-SQKJYG).
+        const handshakeGap = createHandshakeGapReconciler({
+          replay: (since) => new Api(current.apiPath).pollEvents(since, undefined, 0),
+          reconcile: async (page) => {
+            if (!page.overflow && !shouldRefresh(page)) return;
+            await localTicketMutationBarrier.wait();
+            await refresh();
+          },
+        });
+        const unfollowTicketReads = ticketReadCursors.follow(current.apiPath, handshakeGap.read);
+        const stopStream = startStream(current, {
           client: new Api(current.apiPath),
           beforeRefresh: () => localTicketMutationBarrier.wait(),
-          shouldRefresh: (response) =>
-            containsTicketChange({
-              ...response,
-              events: localTicketChangeAcknowledgements.unacknowledged(current.id, response.events),
-            }),
+          shouldRefresh,
           // Event-driven state reconciles when the stream (re)establishes continuity rather than
           // on a polling timer (HS2-NKCXW4): permissions on every resync, drive connections only
           // after an outage or overflow (opening the project already loaded them).
-          onResync: contained(async (reason) => {
+          onResync: contained(async (reason, cursor) => {
+            if (reason === 'initial') handshakeGap.handshake(cursor);
             onStreamHealth?.(current.id, true);
             await Promise.all([
               refreshPermissions(current.id),
@@ -349,17 +373,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
             ]);
           }),
-          refresh: contained(async () => {
-            // The transport delivers individual WebSocket events. Scheduling without waiting
-            // lets a dense sequence share one collection read per project (HS2-B5SJMJ).
-            ticketRefresh.schedule(current);
-            await refreshProviderOutbox(current);
-            // Ticket changes can complete, reopen, or verify: keep an open calibration current.
-            if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id)
-              await loadConfidenceReport(current);
-            if (shellMode.peek() === 'stats' && (!statsProjectId.peek() || statsProjectId.peek() === current.id))
-              await loadAnalytics?.(current);
-          }),
+          refresh,
           // Only the transport reports here: the handlers contain their own failures.
           onError: () => {
             onStreamHealth?.(current.id, false);
@@ -445,7 +459,11 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             if (containsRepositorySizeChange(response, current.id)) void loadRepositorySize(current);
           }),
         });
-        projectChangeStreams.set(current.id, stop);
+        projectChangeStreams.set(current.id, () => {
+          stopStream();
+          handshakeGap.stop();
+          unfollowTicketReads();
+        });
       }
   }
   /**

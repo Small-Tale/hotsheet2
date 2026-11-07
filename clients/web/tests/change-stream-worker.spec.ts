@@ -91,6 +91,8 @@ async function installProjects(page: Page) {
   const eventsAfter = (projectId: string, since: number) =>
     (log.get(projectId) ?? []).filter((item) => item.cursor > since);
   const ticketLoads = new Map<string, number>();
+  // Projects whose stream handshake (a poll without `since`) is held until the test releases it (HS2-SQKJYG).
+  const handshakeGates = new Map<string, { arrived: boolean; open: Promise<void>; release: () => void }>();
   await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, (socket) => {
     const projectId = decodeURIComponent(new URL(socket.url()).pathname.match(/project-api\/([^/]+)/)?.[1] ?? '');
     sockets.set(projectId, [...(sockets.get(projectId) ?? []), socket]);
@@ -127,6 +129,13 @@ async function installProjects(page: Page) {
             },
           })
           .catch(() => undefined);
+      const gate = sinceParam === null ? handshakeGates.get(projectId) : undefined;
+      if (gate) {
+        gate.arrived = true;
+        await gate.open;
+        handshakeGates.delete(projectId);
+        return respond();
+      }
       // A genuine long poll: an idle request stays pending until an event or its bounded timeout.
       if (sinceParam === null || timeout === 0 || eventsAfter(projectId, Number(sinceParam)).length) return respond();
       await new Promise<void>((resolve) => {
@@ -172,7 +181,11 @@ async function installProjects(page: Page) {
     if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
     if (path.endsWith('/tickets') && request.method() === 'GET') {
       ticketLoads.set(projectId!, (ticketLoads.get(projectId!) ?? 0) + 1);
-      return route.fulfill({ json: ticketPage(tickets) });
+      // Like the server, name the change cursor the read was served at (HS2-SQKJYG).
+      return route.fulfill({
+        json: ticketPage(tickets),
+        headers: { 'x-hotsheet-change-cursor': String(cursor.get(projectId!) ?? 1) },
+      });
     }
     if (!path.startsWith('/__hotsheet/')) return route.continue();
     return route.fulfill({ status: 404, json: { error: `Unhandled ${request.method()} ${path}` } });
@@ -190,7 +203,17 @@ async function installProjects(page: Page) {
     sockets.get(projectId)?.at(-1)?.send(JSON.stringify(change));
     for (const waiting of held.get(projectId) ?? []) waiting.finish();
   };
-  return { rows, emit, polls, sockets, socketFor, cursor, ticketLoads, held };
+  /** Hold a project's next stream handshake; `arrived` reports it is pending, `release` answers it. */
+  const holdHandshake = (projectId: string) => {
+    let release!: () => void;
+    const open = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gate = { arrived: false, open, release };
+    handshakeGates.set(projectId, gate);
+    return { arrived: () => gate.arrived, release };
+  };
+  return { rows, emit, polls, sockets, socketFor, cursor, ticketLoads, held, holdHandshake };
 }
 
 async function openBothProjects(page: Page) {
@@ -318,6 +341,58 @@ const enableWorker = (page: Page) =>
     // can exceed the bundled worker's 2 s ready timeout and silently fall back to main-thread streams.
     // These scenarios are about a worker that did start, so wait for its real `ready` (HS2-5598QK).
     localStorage.setItem('hotsheet.change-stream-worker-ready-timeout-ms', '30000');
+  });
+
+for (const mode of ['main-thread', 'worker'] as const)
+  test(`a ${mode} stream applies a change made between the ticket load and its handshake (HS2-SQKJYG)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    if (mode === 'worker') await enableWorker(page);
+    const workers: Worker[] = [];
+    page.on('worker', (worker) => workers.push(worker));
+    const fixture = await installProjects(page);
+    const beta = projects.beta.id,
+      handshake = fixture.holdHandshake(beta);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Add Project' }).click();
+    await expect(page.locator('[data-ticket-slug="HS2-BETA01"]')).toBeVisible();
+    // Beta's tickets were read and its stream's handshake is pending: the window is open.
+    await expect.poll(handshake.arrived).toBe(true);
+    const loadsBefore = fixture.ticketLoads.get(beta) ?? 0;
+    fixture.rows[beta] = [...fixture.rows[beta], row('BETA02', 'Beta second')];
+    fixture.emit(beta, 'created', 'HS2-BETA02');
+    // The handshake answers with the cursor that already includes the change, so the stream never
+    // delivers it: the read's stamp (1) is below the handshake (2), and only that gap is replayed.
+    handshake.release();
+    await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
+    await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toHaveCount(1);
+    expect(fixture.polls.filter((poll) => poll.startsWith(`${beta}?timeout_ms=0&since=1&`))).toHaveLength(1);
+    if (mode === 'worker') {
+      expect(streamWorkers(workers)).toHaveLength(1);
+      expect([...fixture.sockets.values()].flat(), 'the worker owns the streams').toEqual([]);
+    } else expect(streamWorkers(workers)).toEqual([]);
+    // Reconciled once; idle time reads no tickets and holds a bounded number of change polls.
+    expect((fixture.ticketLoads.get(beta) ?? 0) - loadsBefore).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() =>
+        fixture.polls.some(
+          (poll) => poll.startsWith(`${beta}?`) && new URLSearchParams(poll.slice(poll.indexOf('?') + 1)).has('since'),
+        ),
+      )
+      .toBe(true);
+    const idleLoads = new Map(fixture.ticketLoads),
+      idlePolls = fixture.polls.length;
+    await page.waitForTimeout(3_000);
+    expect(fixture.ticketLoads).toEqual(idleLoads);
+    expect(fixture.polls.length - idlePolls).toBeLessThanOrEqual(8);
+    // A later change still arrives exactly once: the reconcile did not disturb the cursor.
+    fixture.rows[beta] = [...fixture.rows[beta], row('BETA03', 'Beta third')];
+    fixture.emit(beta, 'created', 'HS2-BETA03');
+    await expect(page.locator('[data-ticket-slug="HS2-BETA03"]')).toBeVisible();
+    await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toHaveCount(1);
   });
 
 test('a crashed worker restarts and replays from the last applied cursor without duplicates', async ({ page }) => {

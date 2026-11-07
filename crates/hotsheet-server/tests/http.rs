@@ -32041,3 +32041,90 @@ async fn hs2_x4rz73_removing_a_checkout_refuses_while_open_and_repeats_cleanly()
     .await;
     assert_eq!(reopened["checkout"]["id"], id.as_str());
 }
+
+/// HS2-SQKJYG: an authenticated response names the change cursor it was served at, so a
+/// client whose change stream handshook later replays exactly the gap instead of re-reading.
+#[tokio::test]
+async fn hs2_sqkjyg_responses_carry_the_change_cursor_they_were_served_at() {
+    let (_dir, state) = state();
+    let router = app(state);
+    let stamp = |response: &axum::response::Response| -> u64 {
+        response
+            .headers()
+            .get("x-hotsheet-change-cursor")
+            .expect("authenticated responses carry the change cursor")
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    let first = router
+        .clone()
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let loaded_at = stamp(&first);
+
+    // A change lands after the read and before the stream's handshake.
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"in the gap"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(created.status().is_success());
+    let handshake = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let handshake_cursor = handshake["cursor"].as_u64().unwrap();
+    assert!(handshake_cursor > loaded_at);
+
+    // Replaying from the read's stamp returns the gap's ticket change.
+    let replay = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/ws/poll?since={loaded_at}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let events = replay["events"].as_array().unwrap();
+    assert!(
+        events.iter().any(|event| event["kind"] == "created"),
+        "replay since the read's stamp carries the gap's change: {replay}"
+    );
+
+    // A later read is stamped at or after the handshake, so it has no gap.
+    let later = router
+        .clone()
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    assert!(stamp(&later) >= handshake_cursor);
+
+    // An unauthenticated response carries nothing.
+    let rejected = router
+        .oneshot(
+            Request::builder()
+                .uri("/tickets")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    assert!(rejected.headers().get("x-hotsheet-change-cursor").is_none());
+}

@@ -1966,6 +1966,17 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   workspace. The existing local-mutation barrier,
   acknowledgement suppression, overflow recovery, and event consumers receive the same
   `PollResponse` batches regardless of which transport delivered them.
+  **Read-to-handshake continuity (HS2-SQKJYG).** A project's ticket reads and its stream's
+  first handshake run in either order, and the handshake only reports the current cursor.
+  Each ticket-collection read records the server's `X-Hotsheet-Change-Cursor` stamp. When
+  the first handshake's cursor is above the lowest stamp of a read made before it, or a
+  read that finishes later was stamped below it, the stream owner replays that span once
+  with a zero-wait `/ws/poll?since=<stamp>` and schedules the ordinary change refresh only
+  when the span holds an unacknowledged ticket change (or the replay overflowed or failed).
+  An idle start, where the stamp equals the handshake cursor, issues no extra request and
+  no second ticket read, so paged and continuation state stays as loaded. The check runs on
+  the main thread off the `initial` resync, so worker and main-thread streams share it; a
+  server without the header keeps the earlier behavior.
   **Multiplexed long-poll (HS2-6W1NNF).** A local bridge that serves
   `POST /__hotsheet/change-mux/poll` advertises it as `changeMuxPath` in its project-open
   response. Every project with that path then sends its `/ws/poll` requests through one

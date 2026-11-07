@@ -170,6 +170,26 @@ pub(crate) fn next_index_repair_delay(current: Duration, still_pending: bool) ->
     }
 }
 
+/// Response header carrying the change cursor a request was served at (HS2-SQKJYG).
+pub(crate) const CHANGE_CURSOR_HEADER: &str = "x-hotsheet-change-cursor";
+
+/// Stamp each authenticated response with the long-poll cursor read before its handler ran
+/// (HS2-SQKJYG). A change after that cursor may be missing from the response, so a client that
+/// read tickets at cursor `n` and handshook its change stream at a later cursor replays
+/// `since=n` for exactly the changes its read may not include, instead of reading again.
+pub(crate) async fn stamp_change_cursor(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let cursor = state.event_cursor();
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert(CHANGE_CURSOR_HEADER, axum::http::HeaderValue::from(cursor));
+    response
+}
+
 impl AppState {
     pub(crate) fn emit(&self, event: ChangeEvent) {
         emit_change(&self.event_log, &self.events, event);
