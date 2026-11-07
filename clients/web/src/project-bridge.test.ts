@@ -54,6 +54,7 @@ import {
   serverNeedsOwnership,
   serverNeedsSelectedBuild,
   ServerOwnedByPinnedHostError,
+  serverWaitDelayMs,
   setupRefreshNotices,
   storeNeedsServerUpgrade,
   superviseServer,
@@ -1323,11 +1324,22 @@ describe('machine server supervision', () => {
   const running = { pid: 42, url: 'http://127.0.0.1:8787', secret: 'private', started_at: '2026-09-10T01:00:00Z' };
   const replacement = { ...running, pid: 43, started_at: '2026-09-10T02:00:00Z' };
 
+  /** A fake clock: each wait advances time by its backoff delay, so deadlines run instantly. */
+  function clock() {
+    let time = 0;
+    return {
+      now: () => time,
+      wait: vi.fn(async (attempt = 0) => {
+        time += serverWaitDelayMs(attempt);
+      }),
+    };
+  }
+
   it('reuses a healthy discovered server without launching another process', async () => {
     const launch = vi.fn(),
       probe = vi.fn().mockResolvedValue(true);
     await expect(
-      superviseServer({ discover: vi.fn().mockResolvedValue(running), probe, launch, wait: vi.fn() }, 1),
+      superviseServer({ discover: vi.fn().mockResolvedValue(running), probe, launch, wait: vi.fn() }),
     ).resolves.toEqual(running);
     expect(probe).toHaveBeenCalledWith(running, 0);
     expect(launch).not.toHaveBeenCalled();
@@ -1336,7 +1348,7 @@ describe('machine server supervision', () => {
   it('numbers probe attempts so only the first check of a supervision call is patient (HS2-TANE0V)', async () => {
     const probe = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     await expect(
-      superviseServer({ discover: vi.fn().mockResolvedValue(running), probe, launch: vi.fn(), wait: vi.fn() }, 3),
+      superviseServer({ discover: vi.fn().mockResolvedValue(running), probe, launch: vi.fn(), wait: vi.fn() }),
     ).resolves.toEqual(running);
     expect(probe.mock.calls.map((call) => call[1])).toEqual([0, 1, 2]);
   });
@@ -1348,7 +1360,7 @@ describe('machine server supervision', () => {
         launched = true;
       });
     await expect(
-      superviseServer({ discover, probe: vi.fn().mockResolvedValue(true), launch, wait: vi.fn() }, 2),
+      superviseServer({ discover, probe: vi.fn().mockResolvedValue(true), launch, wait: vi.fn() }),
     ).resolves.toEqual(replacement);
     expect(launch).toHaveBeenCalledOnce();
 
@@ -1359,12 +1371,102 @@ describe('machine server supervision', () => {
           discover: vi.fn().mockResolvedValue(running),
           probe: vi.fn().mockResolvedValue(false),
           launch: unsafeLaunch,
-          wait: vi.fn(),
+          ...clock(),
         },
-        2,
+        { registeredDeadlineMs: 200 },
       ),
     ).rejects.toThrow(/registered but unhealthy.*preserved/i);
     expect(unsafeLaunch).not.toHaveBeenCalled();
+  });
+
+  it('waits past the old fixed probe budget for a slow launched server to register (HS2-JC8B2Z)', async () => {
+    const fake = clock();
+    let registerAt: number | undefined;
+    const launch = vi.fn(async () => {
+        registerAt = fake.now() + 30_000;
+      }),
+      // The lock is held from launch until registration: the server is starting.
+      starting = vi.fn(async () => registerAt !== undefined && fake.now() < registerAt),
+      discover = vi.fn(async () => (registerAt !== undefined && fake.now() >= registerAt ? replacement : undefined)),
+      probe = vi.fn(async () => true);
+    await expect(superviseServer({ discover, probe, launch, starting, ...fake })).resolves.toEqual(replacement);
+    expect(launch).toHaveBeenCalledOnce();
+    expect(fake.now()).toBeGreaterThanOrEqual(30_000);
+    // Backoff keeps a 30 s start to about one check per second, not 300 checks.
+    expect(fake.wait.mock.calls.length).toBeLessThan(45);
+  });
+
+  it('keeps probing a registered launched server that is slow to answer /health (HS2-JC8B2Z)', async () => {
+    const fake = clock(),
+      probe = vi.fn(async () => fake.now() >= 25_000);
+    await expect(
+      superviseServer({
+        discover: vi.fn(async () => (fake.now() > 0 ? replacement : undefined)),
+        probe,
+        launch: vi.fn(),
+        ...fake,
+      }),
+    ).resolves.toEqual(replacement);
+    expect(fake.now()).toBeGreaterThanOrEqual(25_000);
+  });
+
+  it('ends the wait when the launched server exits and no other server is starting (HS2-JC8B2Z)', async () => {
+    const fake = clock();
+    await expect(
+      superviseServer({
+        discover: vi.fn(async () => undefined),
+        probe: vi.fn(),
+        launch: vi.fn(),
+        starting: vi.fn(async () => false),
+        launchedExit: () => (fake.now() >= 300 ? 'exit code 1' : undefined),
+        ...fake,
+      }),
+    ).rejects.toThrow(/exited \(exit code 1\) before it registered, after \d+\.\d s.*server\.log/);
+    expect(fake.now()).toBeLessThan(2_000);
+  });
+
+  it('keeps waiting when the launched server lost the lock to a server that is still starting (HS2-JC8B2Z)', async () => {
+    const fake = clock();
+    await expect(
+      superviseServer({
+        discover: vi.fn(async () => (fake.now() >= 15_000 ? replacement : undefined)),
+        probe: vi.fn(async () => true),
+        launch: vi.fn(),
+        starting: vi.fn(async () => true),
+        launchedExit: () => 'exit code 1',
+        ...fake,
+      }),
+    ).resolves.toEqual(replacement);
+  });
+
+  it('names the phase and elapsed time when a launched server never becomes ready (HS2-JC8B2Z)', async () => {
+    await expect(
+      superviseServer(
+        {
+          discover: vi.fn(async () => undefined),
+          probe: vi.fn(),
+          launch: vi.fn(),
+          starting: vi.fn(async () => true),
+          ...clock(),
+        },
+        { startDeadlineMs: 5_000 },
+      ),
+    ).rejects.toThrow(/Timed out waiting for a healthy Hot Sheet server after \d+\.\d s \(starting/);
+    await expect(
+      superviseServer(
+        {
+          discover: vi.fn().mockResolvedValueOnce(undefined).mockResolvedValue(replacement),
+          probe: vi.fn(async () => false),
+          launch: vi.fn(),
+          ...clock(),
+        },
+        { startDeadlineMs: 5_000 },
+      ),
+    ).rejects.toThrow(/after \d+\.\d s \(registered \(pid 43\) but not yet answering \/health\)/);
+  });
+
+  it('backs off from 100 ms to at most 1 s between readiness checks (HS2-JC8B2Z)', () => {
+    expect([0, 1, 2, 5, 6, 20].map(serverWaitDelayMs)).toEqual([100, 150, 225, 759, 1_000, 1_000]);
   });
 
   it('waits for an accepted quiescent restart to relinquish discovery before supervising its replacement', async () => {

@@ -1028,9 +1028,13 @@ export function parseInstanceInfo(value: unknown): InstanceInfo | undefined {
   return value as unknown as InstanceInfo;
 }
 
+function storeInstanceId(canonicalStore: string): string {
+  return createHash('sha256').update(canonicalStore).digest('hex').slice(0, 16);
+}
+
 async function instanceFor(store: string): Promise<InstanceInfo | undefined> {
   const canonical = await realpath(store);
-  const id = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
+  const id = storeInstanceId(canonical);
   try {
     const info = parseInstanceInfo(
       parseJson(await readFile(resolve(hotsheetHome(), 'instances', `${id}.json`), 'utf8')),
@@ -1043,12 +1047,50 @@ async function instanceFor(store: string): Promise<InstanceInfo | undefined> {
   }
 }
 
+/** Whether a live process holds the store's writer lock: a server that has claimed the store
+ * but has not registered yet (HS2-JC8B2Z). The lock file holds the holder's pid as text. */
+async function storeLockHeld(store: string): Promise<boolean> {
+  try {
+    const canonical = await realpath(store),
+      text = await readFile(resolve(hotsheetHome(), 'instances', `${storeInstanceId(canonical)}.lock`), 'utf8'),
+      pid = Number(text.trim());
+    if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface ServerSupervisorPlatform {
   discover(): Promise<InstanceInfo | undefined>;
   /** `attempt` is 0 for the first health check of a supervision call and increases per retry. */
   probe(instance: InstanceInfo, attempt: number): Promise<boolean>;
   launch(): Promise<void>;
-  wait(): Promise<void>;
+  /** Pause before the next readiness check; `attempt` lets the platform back off. */
+  wait(attempt?: number): Promise<void>;
+  /** Whether a live process holds the store's writer lock without having registered yet. */
+  starting?(): Promise<boolean>;
+  /** How the process this platform launched ended (for example `exit code 1`); undefined while it runs. */
+  launchedExit?(): string | undefined;
+  now?(): number;
+}
+
+/** A launched machine server's whole startup budget (HS2-JC8B2Z). A debug server on a loaded
+ * machine can take tens of seconds to open its index and register; the supervisor waits on its
+ * registration and a healthy probe, and ends early when the launched process exits with no
+ * other server starting. This deadline only bounds a server that never becomes ready. */
+export const SERVER_START_DEADLINE_MS = 90_000;
+
+/** How long an already-registered server we did not launch may stay unhealthy before the
+ * supervisor reports it as unhealthy instead of waiting (HS2-JC8B2Z). */
+export const REGISTERED_SERVER_HEALTH_DEADLINE_MS = 20_000;
+
+export interface SuperviseServerOptions {
+  /** Deadline for a server this call launched or found starting. */
+  startDeadlineMs?: number;
+  /** Deadline for a registered server that was unhealthy from the first check. */
+  registeredDeadlineMs?: number;
 }
 
 export class UnhealthyManagedServerError extends Error {
@@ -1068,10 +1110,27 @@ function sameInstance(left: InstanceInfo | undefined, right: InstanceInfo | unde
   );
 }
 
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
 /** Discover and health-check the machine server, launching only after its registered process
  * is gone. This is safe under concurrent clients: the server writer lock remains the final
- * join-don't-collide boundary. Calls are event-driven by project open/API/WS reconnects. */
-export async function superviseServer(platform: ServerSupervisorPlatform, maxAttempts = 80): Promise<InstanceInfo> {
+ * join-don't-collide boundary. Calls are event-driven by project open/API/WS reconnects.
+ *
+ * Readiness is the server's own signal, its instance registration plus a healthy probe, not a
+ * fixed attempt count (HS2-JC8B2Z). Waiting ends when the launched process exits while no other
+ * process holds the store lock, or at a generous overall deadline; each failure names the phase
+ * and the elapsed time. */
+export async function superviseServer(
+  platform: ServerSupervisorPlatform,
+  {
+    startDeadlineMs = SERVER_START_DEADLINE_MS,
+    registeredDeadlineMs = REGISTERED_SERVER_HEALTH_DEADLINE_MS,
+  }: SuperviseServerOptions = {},
+): Promise<InstanceInfo> {
+  const now = (): number => platform.now?.() ?? Date.now(),
+    started = now();
   const first = await platform.discover();
   let probes = 0;
   if (first && (await platform.probe(first, probes++))) return first;
@@ -1080,17 +1139,40 @@ export async function superviseServer(platform: ServerSupervisorPlatform, maxAtt
     await platform.launch();
     launched = true;
   }
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    await platform.wait();
+  // A registered server we did not launch keeps the short budget unless it goes away and a
+  // replacement has to start.
+  let deadline = started + (launched ? startDeadlineMs : registeredDeadlineMs);
+  let phase = launched
+    ? 'waiting for the launched server to register'
+    : 'waiting for the registered server to answer /health';
+  for (let attempt = 0; now() < deadline; attempt += 1) {
+    await platform.wait(attempt);
     const current = await platform.discover();
-    if (current && (await platform.probe(current, probes++))) return current;
-    if (!current && !launched) {
+    if (current) {
+      if (await platform.probe(current, probes++)) return current;
+      phase = `registered (pid ${current.pid}) but not yet answering /health`;
+      continue;
+    }
+    if (!launched) {
       await platform.launch();
       launched = true;
+      deadline = Math.max(deadline, now() + startDeadlineMs);
+      phase = 'waiting for the launched server to register';
+      continue;
     }
+    if (await platform.starting?.()) {
+      phase = 'starting (the store lock is held but the server has not registered)';
+      continue;
+    }
+    const exit = platform.launchedExit?.();
+    if (exit)
+      throw new Error(
+        `The Hot Sheet server exited (${exit}) before it registered, after ${seconds(now() - started)}, and no other server is starting. Its log is ${serverLogPath()}.`,
+      );
+    phase = 'waiting for the launched server to register';
   }
   if (first && !launched) throw new UnhealthyManagedServerError(first);
-  throw new Error('Timed out waiting for a healthy Hot Sheet server.');
+  throw new Error(`Timed out waiting for a healthy Hot Sheet server after ${seconds(now() - started)} (${phase}).`);
 }
 
 export interface ServerHealthProbeOptions {
@@ -1204,10 +1286,14 @@ export const SERVER_LOG_MAX_BYTES = 8 * 1024 * 1024;
  * where the time went. One rotation keeps the file bounded. The log is diagnostic only: a home
  * that cannot hold it falls back to discarding stderr rather than failing the launch.
  */
+export function serverLogPath(home: string = hotsheetHome()): string {
+  return resolve(home, 'logs', 'server.log');
+}
+
 export function openServerLog(home: string = hotsheetHome(), maxBytes = SERVER_LOG_MAX_BYTES): number | 'ignore' {
   try {
-    const directory = resolve(home, 'logs'),
-      path = resolve(directory, 'server.log');
+    const path = serverLogPath(home),
+      directory = dirname(path);
     mkdirSync(directory, { recursive: true });
     try {
       if (statSync(path).size > maxBytes) renameSync(path, `${path}.old`);
@@ -1223,10 +1309,14 @@ export function openServerLog(home: string = hotsheetHome(), maxBytes = SERVER_L
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
+  let exited: string | undefined;
   return {
     discover: () => instanceFor(store),
     probe: createServerHealthProbe(store),
+    starting: () => storeLockHeld(store),
+    launchedExit: () => exited,
     launch: async () => {
+      exited = undefined;
       if (!(await exists(binary)))
         throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
       const log = openServerLog();
@@ -1244,6 +1334,10 @@ function serverPlatform(store: string): ServerSupervisorPlatform {
                 : process.env,
           });
           child.once('error', reject);
+          // A launched server that exits before registering ends the wait early (HS2-JC8B2Z).
+          child.once('exit', (code, signal) => {
+            exited = signal ? `signal ${signal}` : `exit code ${String(code)}`;
+          });
           child.once('spawn', () => {
             child.unref();
             resolveLaunch();
@@ -1254,8 +1348,14 @@ function serverPlatform(store: string): ServerSupervisorPlatform {
         if (typeof log === 'number') closeSync(log);
       }
     },
-    wait: () => new Promise((resolveWait) => setTimeout(resolveWait, 100)),
+    wait: (attempt = 0) => new Promise((resolveWait) => setTimeout(resolveWait, serverWaitDelayMs(attempt))),
   };
+}
+
+/** Startup readiness backoff (HS2-JC8B2Z): 100 ms at first so a fast start is seen at once,
+ * growing by half each check to at most 1 s, so a slow start costs about one check a second. */
+export function serverWaitDelayMs(attempt: number): number {
+  return Math.min(1_000, Math.round(100 * 1.5 ** Math.max(0, attempt)));
 }
 
 async function ensureServer(store: string): Promise<InstanceInfo> {

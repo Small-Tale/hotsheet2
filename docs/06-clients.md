@@ -1233,7 +1233,13 @@ preview/download, server directory browser) are separate design work.
   mistaken for a dead one, while retries keep a 750 ms limit so a hung registered process is
   still reported promptly. An instance (same pid, URL, and start time) verified healthy in the
   last 10 s is reused without another request, so a burst of project opens or reconnects does
-  not re-probe; a failed forward forgets that verification before re-supervising (HS2-TANE0V). Safe
+  not re-probe; a failed forward forgets that verification before re-supervising (HS2-TANE0V).
+  Startup readiness is the server's own signal, its instance registration plus a healthy
+  probe, checked with a 100 ms to 1 s backoff rather than a fixed attempt count. A server that
+  holds the store's writer lock but has not registered counts as starting. The wait ends early
+  when the launched process exits and no other process holds the lock, and otherwise at 90 s
+  for a launched or starting server, or 20 s for an already-registered server that stays
+  unhealthy. Each failure names the phase and the elapsed time (HS2-JC8B2Z). Safe
   GET/HEAD requests retry after recovery, while ambiguous writes return an explicit 503
   instead of risking duplicate mutation. Compatible old servers may be upgraded through
   their authenticated quiescence/restart capabilities; the bridge waits for the old
