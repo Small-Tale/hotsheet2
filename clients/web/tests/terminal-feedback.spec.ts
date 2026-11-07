@@ -1264,6 +1264,23 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
     viewport.evaluate((node) =>
       Number.parseFloat(node.querySelector<HTMLElement>('.scrollbar.vertical .slider')?.style.top ?? 'NaN'),
     );
+  // HS2-DPQA8N: touch momentum keeps scrolling after the gesture ends, so a baseline read as soon
+  // as a poll passes is stale (locally it kept moving by up to 162 px). Read it once the slider has
+  // held still for several frames.
+  const settledSliderTop = (viewport: import('@playwright/test').Locator) =>
+    viewport.evaluate(async (node) => {
+      const read = () =>
+        Number.parseFloat(node.querySelector<HTMLElement>('.scrollbar.vertical .slider')?.style.top ?? 'NaN');
+      let previous = read(),
+        stable = 0;
+      for (let frame = 0; frame < 600 && stable < 10; frame += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const next = read();
+        stable = next === previous ? stable + 1 : 0;
+        previous = next;
+      }
+      return previous;
+    });
   const swipe = async (viewport: import('@playwright/test').Locator, from: number, to: number) => {
     const box = (await viewport.boundingBox())!,
       x = box.x + box.width / 2;
@@ -1279,17 +1296,15 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   };
   await expect.poll(() => sliderTop(dedicated)).toBeGreaterThan(0);
-  const bottom = await sliderTop(dedicated);
+  const bottom = await settledSliderTop(dedicated);
   // A tap does not scroll.
   await swipe(dedicated, 0.5, 0.5);
-  await page.waitForTimeout(300);
-  expect(await sliderTop(dedicated)).toBe(bottom);
+  expect(await settledSliderTop(dedicated)).toBe(bottom);
   // Dragging down reveals older scrollback; dragging back up returns toward the newest output.
   await swipe(dedicated, 0.3, 0.8);
   await expect.poll(() => sliderTop(dedicated)).toBeLessThan(bottom - 50);
   await expect(dedicated.locator('.xterm-rows')).toContainText('scrollback line');
-  const scrolledUp = await sliderTop(dedicated);
-  await page.waitForTimeout(600);
+  const scrolledUp = await settledSliderTop(dedicated);
   await swipe(dedicated, 0.8, 0.3);
   await expect.poll(() => sliderTop(dedicated)).toBeGreaterThan(scrolledUp + 50);
   await page.screenshot({ path: test.info().outputPath('hs2-kfbrsb-dedicated-scrolled.png') });
@@ -1312,7 +1327,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
       socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
   });
   await expect.poll(() => sliderTop(magnifiedViewport)).toBeGreaterThan(0);
-  const magnifiedBottom = await sliderTop(magnifiedViewport);
+  const magnifiedBottom = await settledSliderTop(magnifiedViewport);
   await swipe(magnifiedViewport, 0.3, 0.8);
   await expect.poll(() => sliderTop(magnifiedViewport)).toBeLessThan(magnifiedBottom - 20);
   await page.screenshot({ path: test.info().outputPath('hs2-kfbrsb-magnified-scrolled.png') });
