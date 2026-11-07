@@ -792,6 +792,10 @@ test('HS2-B8M0QB opens an empty source-check dialog from the toolbar at wide and
 });
 
 test('Project guidance reviews a changed source revision before refreshing its pin', async ({ page }) => {
+  // Four full app loads (open, then reloads for reopen, host upgrade, and build upgrade). A routed page has no
+  // HTTP cache, so each load refetches the whole dev module graph (about 770 requests); under a
+  // loaded machine one load takes 8-20 s and the default 60 s budget ran out mid-reload (HS2-VTFD6S).
+  test.setTimeout(120_000);
   let buildRevision = 'build-a';
   let hostRevision = 'host-a';
   await openDemoProject(page, false, 1, undefined, undefined, {
