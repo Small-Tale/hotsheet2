@@ -218,6 +218,18 @@ async function openProject(page: Page) {
   await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
 }
 
+/**
+ * Wait for the app that a Reload started. A routed page has no HTTP cache, so the new document
+ * refetches the whole dev module graph (about 770 requests). Under load that outlasts one expect
+ * timeout, so wait for the document's load event within the test's budget before looking for the
+ * app's first heading (HS2-6NBE3N).
+ */
+async function reloadedApp(page: Page, navigation: Promise<unknown>) {
+  await navigation;
+  await page.waitForLoadState('load');
+  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
+}
+
 const loadedBuild = (page: Page) => page.locator(META).getAttribute('content');
 
 test('a host restart onto a newer client raises the notice, and Reload loads the new bundle (HS2-KPJWBK)', async ({
@@ -265,8 +277,7 @@ test('a host restart onto a newer client raises the notice, and Reload loads the
   const answersBeforeReload = host.answers;
   const navigation = page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame());
   await notice.getByRole('button', { name: 'Reload' }).click();
-  await navigation;
-  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
+  await reloadedApp(page, navigation);
   expect(await loadedBuild(page)).toBe('bundle-0123456789abcdef');
   // The reloaded page subscribes again and hears the build it now runs: no notice.
   await expect.poll(() => host.answers, { timeout: 30_000 }).toBeGreaterThan(answersBeforeReload);
@@ -351,8 +362,7 @@ async function reloadWithOpenDraft(page: Page, host: Awaited<ReturnType<typeof i
   await expect.poll(() => host.patches).toEqual([draft]);
   host.patchGate = undefined;
   release();
-  await navigation;
-  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
+  await reloadedApp(page, navigation);
   expect(await loadedBuild(page)).toBe('bundle-2222222222222222');
 }
 
