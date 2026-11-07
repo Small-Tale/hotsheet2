@@ -32124,7 +32124,14 @@ test('switches already-open projects from cache within one frame and rejects sta
           const input = args[0],
             url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
           // Name each early request so a regression says which route jumped the paint (HS2-8YHY6V).
-          if (url.includes('/__hotsheet/project-api/') && !state.__projectSwitchPainted)
+          // The change stream's long poll is not a refresh: with no change multiplexer here, each open
+          // project's direct poll rotates about once a second whatever the user does, so a rotation
+          // can start inside the switch frame by chance (HS2-PR03G5).
+          if (
+            url.includes('/__hotsheet/project-api/') &&
+            !new URL(url, location.href).pathname.endsWith('/ws/poll') &&
+            !state.__projectSwitchPainted
+          )
             state.__projectRefreshBeforePaint!.push(url);
           return nativeFetch(...args);
         };
