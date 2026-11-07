@@ -32771,6 +32771,23 @@ test('counts permission automation only while its popup is visible', async ({ pa
     }),
   );
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  // HS2-4MSAQC: Settings → Permissions loads remembered answers when it opens, and that result
+  // re-renders the app. One known answer gives the test a settled state to wait for before it
+  // counts render passes, so a slow response cannot land inside the measured countdown tick.
+  await page.route('**/permissions/rules', (route) =>
+    route.fulfill({
+      json: [
+        {
+          project: `checkout:${project.id}`,
+          tool: 'WebFetch',
+          action: rememberedActionKey('https://rules-loaded.test'),
+          exact_action: 'https://rules-loaded.test',
+          decision: 'allow',
+          scope: 'always',
+        },
+      ],
+    }),
+  );
   await page.route('**/permissions/8', (route) => {
     answers += 1;
     pending = [];
@@ -32790,8 +32807,10 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   for (const name of ['Deny', 'Allow This AI Session', 'Always Allow', 'Allow Once', 'Ignore', 'Pause Notifications'])
-    await expect(popup.getByRole('button', { name, exact: true })).toBeVisible();
-  await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-phone.png' });
+    await expect(phonePermissionPopup(page).getByRole('button', { name, exact: true })).toBeVisible();
+  // HS2-4MSAQC (HS2-NESKN3 shape): the phone shell renders the popup in its viewport-overlay slot,
+  // a new element, so capture that copy rather than a handle to the wide one being removed.
+  await phonePermissionPopup(page).screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   // An installed clock keeps following wall time, so exact m:ss text races slow local runs (and a
   // short delay could silently auto-allow mid-test). Use a 60s delay and assert the countdown only
@@ -32813,6 +32832,7 @@ test('counts permission automation only while its popup is visible', async ({ pa
   // the Select with a dispatched trigger click; pointer reachability is tracked separately.
   await automation.locator('.kui-select__trigger').dispatchEvent('click');
   await expect(automation).toHaveAttribute('open', '');
+  await expect(page.locator('[data-component="permission-rules-settings"]')).toContainText('https://rules-loaded.test');
   await resetRenderMetrics(page);
   const beforeTick = await countdownSeconds();
   await page.clock.fastForward(1_000);
