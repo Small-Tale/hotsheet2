@@ -11,7 +11,11 @@ import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { replaceTicketSearch } from '../ticket-search-model';
 import type { TicketView } from '../ticket-views';
-import { createProjectChangeStreamsController } from './project-change-streams';
+import {
+  CHANGE_STREAM_WORKER_READY_TIMEOUT_SETTING,
+  changeStreamWorkerReadyTimeoutMs,
+  createProjectChangeStreamsController,
+} from './project-change-streams';
 import { createProjectCloseController } from './project-close';
 import { createWorkspaceSearchController, type SidebarSearchCounts } from './workspace-search';
 
@@ -192,6 +196,27 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     owner.dispose();
     await vi.advanceTimersByTimeAsync(1000);
     expect(refreshTab).toHaveBeenCalledTimes(2);
+  });
+
+  it('change streams: a development build reads the worker ready timeout setting, production ignores it (HS2-5598QK)', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+    });
+    expect(changeStreamWorkerReadyTimeoutMs(true)).toBeUndefined();
+    store.set(CHANGE_STREAM_WORKER_READY_TIMEOUT_SETTING, '30000');
+    expect(changeStreamWorkerReadyTimeoutMs(true)).toBe(30_000);
+    expect(changeStreamWorkerReadyTimeoutMs(false)).toBeUndefined();
+    for (const invalid of ['0', '-5', '1.5', 'soon', '']) {
+      store.set(CHANGE_STREAM_WORKER_READY_TIMEOUT_SETTING, invalid);
+      expect(changeStreamWorkerReadyTimeoutMs(true), invalid).toBeUndefined();
+    }
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('storage blocked');
+      },
+    });
+    expect(changeStreamWorkerReadyTimeoutMs(true)).toBeUndefined();
   });
 
   it('change streams: permission events and resyncs refresh only their own project', async () => {

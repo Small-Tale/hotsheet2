@@ -204,17 +204,25 @@ async function openBothProjects(page: Page) {
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
 }
 
-test('follows two projects through the shared change-stream worker during switching and search', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+/** Open both projects with their streams in one dedicated change-stream worker. */
+async function openBothProjectsInWorker(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('hotsheet.change-stream-worker', 'true');
     localStorage.setItem('hotsheet.change-stream-shared-worker', 'false');
+    // See `enableWorker` (HS2-5598QK).
+    localStorage.setItem('hotsheet.change-stream-worker-ready-timeout-ms', '30000');
   });
   const workers: string[] = [];
   page.on('worker', (worker) => workers.push(worker.url()));
   const fixture = await installProjects(page);
   await openBothProjects(page);
   await expect.poll(() => workers.filter((url) => url.includes('change-stream')).length).toBe(1);
+  return fixture;
+}
+
+test('follows two projects through the shared change-stream worker during switching and search', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixture = await openBothProjectsInWorker(page);
 
   // Sustained activity on both projects, interleaved with switching and searching.
   for (let index = 0; index < 20; index += 1) {
@@ -239,6 +247,22 @@ test('follows two projects through the shared change-stream worker during switch
   await page.getByRole('button', { name: 'Clear search' }).click();
   // The worker owns every change transport: the main thread opened no change socket of its own.
   expect([...fixture.sockets.values()].flat()).toEqual([]);
+});
+
+// Split from the switching scenario so neither long flow nears the test budget under heavy parallel load (HS2-5598QK).
+test('the shared change-stream worker idles on bounded long polls and stops a closed project', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixture = await openBothProjectsInWorker(page);
+  // Both streams follow a cursor before the idle baseline, so their handshakes are not counted as idle polls.
+  await expect
+    .poll(() =>
+      [projects.alpha.id, projects.beta.id].every((id) =>
+        fixture.polls.some(
+          (poll) => poll.startsWith(`${id}?`) && new URLSearchParams(poll.slice(poll.indexOf('?') + 1)).has('since'),
+        ),
+      ),
+    )
+    .toBe(true);
 
   // Idle: the worker's streams sit on pending long polls (this fixture refuses the worker's
   // socket upgrade), so the idle request rate stays bounded instead of looping.
@@ -290,6 +314,10 @@ const enableWorker = (page: Page) =>
   page.addInitScript(() => {
     localStorage.setItem('hotsheet.change-stream-worker', 'true');
     localStorage.setItem('hotsheet.change-stream-shared-worker', 'false');
+    // The dev server compiles the worker's module graph on demand, which under heavy parallel load
+    // can exceed the bundled worker's 2 s ready timeout and silently fall back to main-thread streams.
+    // These scenarios are about a worker that did start, so wait for its real `ready` (HS2-5598QK).
+    localStorage.setItem('hotsheet.change-stream-worker-ready-timeout-ms', '30000');
   });
 
 test('a crashed worker restarts and replays from the last applied cursor without duplicates', async ({ page }) => {

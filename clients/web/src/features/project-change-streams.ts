@@ -86,6 +86,14 @@ export interface ProjectChangeStreamsDependencies {
   serverClocks?: ServerClocks;
 }
 
+/**
+ * Development builds only: how long the change-stream worker may take to report ready before the
+ * host falls back to main-thread streams (HS2-5598QK). Vite compiles the worker's module graph on
+ * demand, which under heavy parallel test load can exceed the 2 s a bundled worker needs, so
+ * worker-mode browser tests set this explicitly. Production builds ignore it.
+ */
+export const CHANGE_STREAM_WORKER_READY_TIMEOUT_SETTING = 'hotsheet.change-stream-worker-ready-timeout-ms';
+
 /** Local setting that opts this browser into the shared change-stream worker (HS2-SH9179). */
 export const CHANGE_STREAM_WORKER_SETTING = 'hotsheet.change-stream-worker';
 export const CHANGE_STREAM_SHARED_WORKER_SETTING = 'hotsheet.change-stream-shared-worker';
@@ -119,6 +127,17 @@ export function changeStreamSharedWorkerEnabled(): boolean {
     return localStorage.getItem(CHANGE_STREAM_SHARED_WORKER_SETTING) !== 'false';
   } catch {
     return true;
+  }
+}
+
+/** The worker ready timeout a development build was told to use, or undefined for the default (HS2-5598QK). */
+export function changeStreamWorkerReadyTimeoutMs(development = import.meta.env.DEV): number | undefined {
+  if (!development) return undefined;
+  try {
+    const value = Number(localStorage.getItem(CHANGE_STREAM_WORKER_READY_TIMEOUT_SETTING) ?? '');
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -238,6 +257,10 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   const webSocketMultiplexerFor = createChangeWebSocketMultiplexers(undefined, noteHostClientBuild);
   const changeMuxUrl = (current: Project): string | undefined =>
     current.changeMuxPath ? new URL(current.changeMuxPath, location.href).href : undefined;
+  const readyTimeout = () => {
+    const readyTimeoutMs = changeStreamWorkerReadyTimeoutMs();
+    return readyTimeoutMs === undefined ? {} : { readyTimeoutMs };
+  };
   const startStream = (current: Project, directOptions: ProjectChangeStreamOptions): (() => void) => {
     const muxUrl = changeMuxUrl(current);
     const project = changeMuxTarget(current.apiPath, '')?.project ?? current.id;
@@ -259,6 +282,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     workerHost ??= createChangeStreamWorkerHost({
       createWorker: dependencies.createChangeStreamWorker ?? createBundledChangeStreamWorker,
       clientId: CHANGE_STREAM_CLIENT_ID,
+      ...readyTimeout(),
       // The worker owns the bridge socket, so it relays the announced build (HS2-WHW3M1).
       onClientBuild: noteHostClientBuild,
     });

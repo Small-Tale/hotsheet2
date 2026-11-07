@@ -2028,8 +2028,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   transports; `hotsheet.change-stream-shared-worker=false` also selects this mode.
   The worker posts only validated, ordered, coalesced change events. The main thread applies
   them through the same consumer. A
-  version mismatch, an unavailable worker, or repeated crashes fall back to this
-  main-thread stream; a crash restart replays from the last applied cursor
+  version mismatch, an unavailable worker, a worker that does not report ready within 2 s, or
+  repeated crashes fall back to this main-thread stream; a crash restart replays from the last
+  applied cursor. Development builds only read `hotsheet.change-stream-worker-ready-timeout-ms`
+  to wait longer for a worker that Vite compiles on demand; worker-mode browser tests set it
+  (HS2-5598QK)
   ([22](22-ui-responsiveness-profile.md#shared-change-stream-worker-prototype)).
   While the dialog is closed, streamed transcript/activity state remains retained but the
   conversation surface is not mounted and does not subscribe the application root to those
