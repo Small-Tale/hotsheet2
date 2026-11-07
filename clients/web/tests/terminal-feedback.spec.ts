@@ -384,27 +384,27 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
-  const dedicatedViewport = drawer.locator('[data-display-mode="interactive"]'),
-    initialGrid = await dedicatedViewport.getAttribute('data-grid-size');
+  const dedicatedViewport = drawer.locator('[data-display-mode="interactive"]');
   await expect(dedicatedViewport).toHaveAttribute('data-renderer', 'dom');
   await expect(dedicatedViewport.locator('.xterm-screen .xterm-rows')).toBeVisible();
+  // HS2-X6NDY5: the viewport mounts before its xterm runtime opens and fits it, so read its grid
+  // only once the first fit is published. A slow macOS runner read null here and Playwright then
+  // took that null as the matcher options ("reading 'timeout'").
+  await expect(dedicatedViewport).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(dedicatedViewport).toHaveAttribute('data-grid-size', /^\d+x\d+$/);
+  const initialGrid = (await dedicatedViewport.getAttribute('data-grid-size'))!;
   await doubleClickDrawerRail(page, drawer);
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            resolve();
-          }),
-        ),
-      ),
-  );
-  await expect(dedicatedViewport).not.toHaveAttribute('data-grid-size', initialGrid!);
-  await expect(dedicatedViewport).toHaveAttribute(
-    'data-pty-size',
-    (await dedicatedViewport.getAttribute('data-grid-size')) ?? '',
-  );
+  // The maximized drawer refits to a new grid and the PTY follows it; wait for both to settle.
+  await expect
+    .poll(async () => {
+      const [grid, pty] = await Promise.all([
+        dedicatedViewport.getAttribute('data-grid-size'),
+        dedicatedViewport.getAttribute('data-pty-size'),
+      ]);
+      return grid !== initialGrid && grid === pty;
+    })
+    .toBe(true);
   await expect(dedicatedViewport).toHaveAttribute('data-sizing-focus', 'true');
   const dedicatedInput = drawer.getByRole('textbox', { name: 'Terminal input' });
   await expect(dedicatedInput).toBeFocused();
