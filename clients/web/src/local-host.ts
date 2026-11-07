@@ -323,6 +323,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   for (const variable of Object.keys(HOST_BINARIES)) {
     if (process.env[variable]) selected[variable] = process.env[variable];
   }
+  // Announce the selection before the snapshot copies several hundred megabytes of binaries, so a
+  // slow start shows which phase it is in (HS2-SNH42P).
+  console.log(
+    'HOTSHEET_SERVER_BIN' in release && release.HOTSHEET_SERVER_BIN.includes('/target/release/')
+      ? `Using release Hot Sheet binaries (${release.HOTSHEET_SERVER_BIN}).`
+      : 'Using debug Hot Sheet binaries; run `npm run server:rebuild:release` for a faster server.',
+  );
   const snapshot = snapshotLocalHostArtifacts(
     fileURLToPath(new URL('../dist', import.meta.url)),
     selected,
@@ -332,11 +339,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.env,
     snapshot.environment,
     mcpBinaryEnvironment(developmentRepositoryRoot(), selected.HOTSHEET_SERVER_BIN),
-  );
-  console.log(
-    'HOTSHEET_SERVER_BIN' in release && release.HOTSHEET_SERVER_BIN.includes('/target/release/')
-      ? `Using release Hot Sheet binaries (${release.HOTSHEET_SERVER_BIN}).`
-      : 'Using debug Hot Sheet binaries; run `npm run server:rebuild:release` for a faster server.',
   );
   let server: Server;
   try {

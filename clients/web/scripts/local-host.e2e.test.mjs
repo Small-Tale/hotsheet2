@@ -40,18 +40,58 @@ async function availablePort() {
   return address.port;
 }
 
-async function waitForHost(url, child, output) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch {
-      /* not listening yet */
-    }
-    if (child.exitCode !== null) throw new Error(`Local host exited early.\n${output()}`);
-    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-  }
-  throw new Error(`Timed out waiting for ${url}.\n${output()}`);
+/**
+ * Which startup phase a host that has not announced readiness is in (HS2-SNH42P). The host prints
+ * its binary selection before it snapshots the binaries, then its ready line once it listens.
+ */
+function hostStartupPhase(output) {
+  if (!/Using (release|debug) Hot Sheet binaries/u.test(output))
+    return 'loading the host module or selecting binaries (no selection line yet)';
+  return 'snapshotting the launch artifacts or binding its listener (selection printed, no ready line)';
+}
+
+/**
+ * Wait for the host's own readiness signal: the ready line it prints once its listener accepts
+ * connections and its client URL is published (HS2-SNH42P). A cold CI disk can take longer than any
+ * fixed deadline to copy the debug binaries, so only the host exiting or the test's own timeout
+ * (`signal`) ends the wait, and either failure names the startup phase and elapsed time.
+ */
+async function waitForHost(url, child, output, signal) {
+  const ready = `Hot Sheet production client on ${url}`,
+    started = Date.now(),
+    stream = child.stdout;
+  const describe = () =>
+    `${((Date.now() - started) / 1000).toFixed(1)} s after spawn, pid ${String(child.pid)}, ` +
+    `while ${hostStartupPhase(output())}.\n${output()}`;
+  await new Promise((resolveReady, reject) => {
+    const settle = (error) => {
+      stream.off('data', check);
+      child.off('exit', exited);
+      signal?.removeEventListener('abort', aborted);
+      if (error) reject(error);
+      else resolveReady();
+    };
+    // The caller's own `data` listener appended this chunk to the output first.
+    const check = () => {
+        if (output().includes(ready)) settle();
+      },
+      exited = (code, exitSignal) =>
+        settle(new Error(`Local host for ${url} exited (${String(code ?? exitSignal)}) ${describe()}`)),
+      aborted = () => {
+        const error = new Error(`Local host for ${url} was not ready ${describe()}`);
+        // A timed-out test reports only its timeout; keep the cause in the test's output too.
+        console.error(error.message);
+        settle(error);
+      };
+    stream.on('data', check);
+    child.once('exit', exited);
+    signal?.addEventListener('abort', aborted, { once: true });
+    if (child.exitCode !== null || child.signalCode !== null) exited(child.exitCode, child.signalCode);
+    else if (signal?.aborted) aborted();
+    else check();
+  });
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Local host announced ${url} but answered ${String(response.status)}.`);
 }
 
 /** Live fixture processes, including the broker whose socket lives under /tmp. */
@@ -200,7 +240,7 @@ afterAll(async () => {
 // Keep the large process fixture readable while changing only its scheduling (HS2-XSP0GJ).
 it.concurrent(
   'serves the production client and the local bridge without Vite',
-  async () => {
+  async ({ signal }) => {
     const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-home-')),
       port = await availablePort(),
       origin = `http://127.0.0.1:${port}`;
@@ -245,11 +285,10 @@ it.concurrent(
       child.stdout.on('data', (chunk) => (log += chunk));
       child.stderr.on('data', (chunk) => (log += chunk));
       browser = await chromium.launch();
-      await waitForHost(`${origin}/`, child, () => log);
-      // The HTTP listener may be ready before the child stdout chunk reaches us.
-      await expect.poll(() => log).toContain(`Hot Sheet production client on ${origin}/`);
-      // HS2-D2JQ9A: the host says which server build it launches (release when one is built).
-      await expect.poll(() => log).toMatch(/Using (release|debug) Hot Sheet binaries/);
+      await waitForHost(`${origin}/`, child, () => log, signal);
+      // HS2-D2JQ9A: the host says which server build it launches (release when one is built), and it
+      // says so before its ready line, which waitForHost has already seen (HS2-SNH42P).
+      expect(log).toMatch(/Using (release|debug) Hot Sheet binaries/);
       // A second pinned host later in this test needs the same build after the working outputs are gone.
       otherBuildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-other-'));
       await cp(buildRoot, otherBuildRoot, { recursive: true });
@@ -466,7 +505,7 @@ it.concurrent(
       );
       other.stdout.on('data', (chunk) => (log += chunk));
       other.stderr.on('data', (chunk) => (log += chunk));
-      await waitForHost(`${otherOrigin}/`, other, () => log);
+      await waitForHost(`${otherOrigin}/`, other, () => log, signal);
       const mismatched = await fetch(`${otherOrigin}/__hotsheet/projects/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -528,7 +567,7 @@ it.concurrent(
 // Keep the large process fixture readable while changing only its scheduling (HS2-XSP0GJ).
 it.concurrent(
   'keeps the pinned host on its own machine server across dev hosts and rebuild stops',
-  async () => {
+  async ({ signal }) => {
     const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-owner-')),
       runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-owner-runtime-')),
       pinnedPort = await availablePort(),
@@ -621,7 +660,7 @@ it.concurrent(
         },
       );
       capture(pinned);
-      await waitForHost(`${pinnedOrigin}/`, pinned, () => log);
+      await waitForHost(`${pinnedOrigin}/`, pinned, () => log, signal);
       const adopted = await openThrough(pinnedOrigin, project, ticketStore);
       expect(adopted.status, JSON.stringify(adopted.body)).toBe(201);
       expect(adopted.body.serverBuildNotice).toBeUndefined();
