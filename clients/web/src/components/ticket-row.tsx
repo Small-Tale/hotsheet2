@@ -4,7 +4,7 @@ import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SummaryRow } from '@kerfjs/ui/summary-row';
-import { CircleAlert, Star } from 'lucide';
+import { Bot, CircleAlert, Star } from 'lucide';
 
 import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
@@ -68,6 +68,11 @@ export interface TicketRowProps {
    * Shown as the compact pill among the row's other pills; ignored for any other status.
    */
   latestConfidence?: number;
+  /**
+   * Accessible label of an AI-created ticket (HS2-9FPHWY, from `aiCreatorLabel`): the title loses its
+   * `<strong>` emphasis and a quiet Lucide `bot` glyph leads the tags. Absent keeps the prominent summary.
+   */
+  aiCreatorLabel?: string;
   pendingOperationCount?: number;
   pendingSyncState?: 'queued' | 'sending' | 'rate_limited' | 'needs_attention';
   cutPending?: boolean;
@@ -139,6 +144,12 @@ export function TicketRow(raw: TicketRowProps) {
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
   const confidence = ticketRowConfidence(props);
+  // An AI-created ticket's quiet creator glyph leads its tags, wrapping with them (HS2-9FPHWY).
+  const aiCreator = props.aiCreatorLabel ? (
+    <span class="ticket-list-row__ai-creator" role="img" aria-label={props.aiCreatorLabel} title={props.aiCreatorLabel}>
+      <LucideIcon icon={Bot} name="bot" size={14.4} />
+    </span>
+  ) : undefined;
   const rail =
     indicator === 'needs-review'
       ? 'pop'
@@ -232,7 +243,15 @@ export function TicketRow(raw: TicketRowProps) {
                 <LucideIcon icon={priority.icon} name={priority.name} size="s" />
               </span>
             </span>
-            <strong title={props.title}>{props.title}</strong>
+            {props.aiCreatorLabel ? (
+              <span class="ticket-list-row__title" title={props.title}>
+                {props.title}
+              </span>
+            ) : (
+              <strong class="ticket-list-row__title" title={props.title}>
+                {props.title}
+              </strong>
+            )}
           </span>
         }
         metadata={
@@ -293,10 +312,13 @@ export function TicketRow(raw: TicketRowProps) {
             )}
             {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
             {confidence !== undefined && <ConfidenceBadge value={confidence} />}
-            {props.tags.length > 0 && (
+            {props.tags.length > 0 ? (
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-row-tags': 'true' }}>
+                {aiCreator}
                 {props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}
               </Row>
+            ) : (
+              aiCreator
             )}
           </>
         }

@@ -1031,7 +1031,7 @@ describe('project session close (HS2-ARJ9J1)', () => {
   });
 });
 
-describe('withHumanActor (HS2-XF81CJ)', () => {
+describe('withHumanActor (HS2-XF81CJ, HS2-9FPHWY)', () => {
   it('adds the human actor only to actor-aware ticket mutations', () => {
     const body = JSON.stringify({ status: 'completed' });
     const human = (path: string, method: string) =>
@@ -1040,10 +1040,14 @@ describe('withHumanActor (HS2-XF81CJ)', () => {
     expect(human('/checkouts/c/tickets/HS2-1/close', 'POST').actor).toEqual({ role: 'human' });
     expect(human('/checkouts/c/batch', 'POST').actor).toEqual({ role: 'human' });
     expect(human('/tickets/HS2-1?store=x', 'PATCH').actor).toEqual({ role: 'human' });
+    // A create records its creator (HS2-9FPHWY) on every create route.
+    expect(human('/checkouts/c/tickets', 'POST').actor).toEqual({ role: 'human' });
+    expect(human('/checkouts/c/tickets?source=local', 'POST').actor).toEqual({ role: 'human' });
+    expect(human('/providers/p/tickets', 'POST').actor).toEqual({ role: 'human' });
     for (const [path, method] of [
       ['/checkouts/c/tickets/HS2-1/attachments/a', 'PUT'],
       ['/checkouts/c/tickets/HS2-1/notes/n', 'PATCH'],
-      ['/checkouts/c/tickets', 'POST'],
+      ['/checkouts/c/tickets', 'GET'],
       ['/checkouts/c/settings', 'PATCH'],
     ] as const)
       expect(human(path, method).actor, `${method} ${path}`).toBeUndefined();

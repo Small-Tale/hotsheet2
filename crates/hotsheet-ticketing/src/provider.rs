@@ -572,6 +572,9 @@ pub struct ProviderDraft {
     pub up_next: bool,
     pub blocked_by: Vec<String>,
     pub transfer: Option<TransferProvenance>,
+    /// Who is creating the ticket (HS2-9FPHWY). Providers that can record it store it as the
+    /// ticket's creator; `None` is an unspecified caller.
+    pub created_by: Option<hotsheet_model::NoteActor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1663,7 +1666,7 @@ impl TicketProvider for GitProvider {
                 message: "transfer operation id is already associated with another source".into(),
             });
         }
-        let ticket = ops::create(
+        let ticket = ops::create_by(
             &self.store,
             ctx.generated_id,
             &prefix,
@@ -1678,6 +1681,7 @@ impl TicketProvider for GitProvider {
                 up_next: draft.up_next,
                 blocked_by,
             },
+            draft.created_by,
         )?;
         if let Some(transfer) = draft.transfer {
             self.store.with_ticket_transaction(|| {
@@ -2408,6 +2412,8 @@ pub fn copy_between(
             operation_id: operation_id.into(),
             source: source.clone(),
         }),
+        // A copy or move keeps the original creator, as pasted notes keep their authors.
+        created_by: ticket.created_by,
     };
     let created = destination.create(
         MutationContext {
@@ -2586,6 +2592,7 @@ mod tests {
             up_next: false,
             blocked_by,
             transfer: None,
+            created_by: None,
         }
     }
 
@@ -2709,6 +2716,7 @@ mod tests {
                         up_next: false,
                         blocked_by: vec![],
                         transfer: None,
+                        created_by: None,
                     },
                 )
                 .unwrap();
@@ -2899,6 +2907,7 @@ mod tests {
                         up_next,
                         blocked_by: vec![],
                         transfer: None,
+                        created_by: None,
                     },
                 )
                 .unwrap();
@@ -2948,6 +2957,7 @@ mod tests {
                         up_next: false,
                         blocked_by: vec![],
                         transfer: None,
+                        created_by: None,
                     },
                 )
                 .unwrap();
@@ -2986,6 +2996,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3085,6 +3096,7 @@ mod tests {
                     up_next: true,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3152,6 +3164,7 @@ mod tests {
                     up_next: true,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3207,6 +3220,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3262,6 +3276,7 @@ mod tests {
                     up_next: true,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3590,6 +3605,7 @@ mod tests {
                     up_next: true,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3734,6 +3750,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3803,6 +3820,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3863,6 +3881,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -3951,6 +3970,7 @@ mod tests {
             up_next: false,
             blocked_by: vec![],
             transfer: None,
+            created_by: None,
         };
         source
             .create(ctx(source_id, "2026-08-26T03:00:00Z"), draft())
@@ -4138,6 +4158,57 @@ mod tests {
     }
 
     #[test]
+    fn hs2_9fphwy_copy_keeps_the_original_creator() {
+        use hotsheet_model::{AttachmentActorRole, NoteActor};
+        let (_source_dir, source) = git_provider();
+        let (_dest_dir, dest) = git_provider();
+        let dest = GitProvider::new("destination", dest.store.clone());
+        let creator = NoteActor {
+            role: AttachmentActorRole::Ai,
+            id: Some("claude-1".into()),
+        };
+        let source_id = Ulid::new();
+        let created = source
+            .create(
+                ctx(source_id, "2026-08-26T03:00:00Z"),
+                ProviderDraft {
+                    title: "agent filed".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    status: Status::NotStarted,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                    created_by: Some(creator.clone()),
+                },
+            )
+            .unwrap();
+        assert_eq!(created.created_by, Some(creator.clone()));
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry.register(Arc::new(dest)).unwrap();
+        let outcome = copy_between(
+            &registry,
+            TicketRef {
+                connection_id: "local".into(),
+                native_id: source_id.to_string(),
+            },
+            "destination",
+            "creator-copy",
+            Timestamp::new("2026-08-26T03:03:00Z"),
+        )
+        .unwrap();
+        let copied = registry
+            .get("destination")
+            .unwrap()
+            .get(&outcome.destination.native_id)
+            .unwrap();
+        assert_eq!(copied.created_by, Some(creator));
+    }
+
+    #[test]
     fn copy_preserves_structured_rating_and_remaps_note_target() {
         use hotsheet_model::{AiFeedbackRating, AttachmentActorRole, NoteActor};
         let (_source_dir, source) = git_provider();
@@ -4157,6 +4228,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -4346,6 +4418,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -4435,6 +4508,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -4477,6 +4551,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();
@@ -4551,6 +4626,7 @@ mod tests {
                         up_next: false,
                         blocked_by: vec![],
                         transfer: None,
+                        created_by: None,
                     },
                 )
                 .unwrap();

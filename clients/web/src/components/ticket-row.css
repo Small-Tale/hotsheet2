@@ -21,12 +21,12 @@
   align-items: start;
   gap: var(--kui-space-xs);
 }
-.ticket-list-row__identity strong {
+.ticket-list-row__title {
   display: inline;
   white-space: normal;
 }
-.ticket-list-row-container:has(> [data-status='completed']) .ticket-list-row__identity strong,
-.ticket-list-row-container:has(> [data-status='verified']) .ticket-list-row__identity strong {
+.ticket-list-row-container:has(> [data-status='completed']) .ticket-list-row__title,
+.ticket-list-row-container:has(> [data-status='verified']) .ticket-list-row__title {
   color: var(--wa-color-neutral-on-quiet);
   text-decoration: line-through;
 }
@@ -102,6 +102,12 @@
   height: remify(16.8px);
   color: var(--hs-ticket-state-up-next);
   flex: none;
+}
+/* An AI-created ticket's creator glyph (HS2-9FPHWY) is as quiet as the inactive Up Next star beside it. */
+.ticket-list-row__ai-creator {
+  display: inline-flex;
+  flex: none;
+  color: var(--wa-color-neutral-border-loud);
 }
 .ticket-list-row__owner {
   display: inline-block;

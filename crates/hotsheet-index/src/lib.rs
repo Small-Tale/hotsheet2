@@ -19,8 +19,9 @@ use sha2::{Digest, Sha256};
 /// Bump to force a full rebuild on open when the on-disk schema is stale. A change to
 /// a derived column such as `feedback_needed` also bumps it: rows keyed by an unchanged
 /// content hash are never re-derived, and an older process sharing the file would keep
-/// writing the old projection (21: explicit note kinds, HS2-4ZFB8K).
-const SCHEMA_VERSION: i64 = 21;
+/// writing the old projection (21: explicit note kinds, HS2-4ZFB8K; 22: the ticket
+/// creator column, HS2-9FPHWY).
+const SCHEMA_VERSION: i64 = 22;
 
 /// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
 const GIT_OWNER_META: &str = "git_owner";
@@ -78,6 +79,7 @@ CREATE TABLE tickets (
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
   blocked_reason  TEXT,
   legacy_number   TEXT,
+  created_by_json TEXT,
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
   has_media_annotation INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
@@ -499,8 +501,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -513,7 +515,7 @@ impl Index {
              content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
              legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
              latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase,\
-             started_phase_since=excluded.started_phase_since",
+             started_phase_since=excluded.started_phase_since,created_by_json=excluded.created_by_json",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -529,6 +531,7 @@ impl Index {
                 hotsheet_ticketing::ops::latest_confidence(t).map(|score| i64::from(score.get())),
                 t.started_phase.as_ref().map(enum_str),
                 hotsheet_ticketing::phase_timing::started_phase_since(t).map(|at| at.as_str().to_string()),
+                t.created_by.as_ref().and_then(|actor| serde_json::to_string(actor).ok()),
             ],
         )?;
 
@@ -1219,7 +1222,8 @@ impl Index {
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since,\
-             (t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id)) \
+             (t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id)),\
+             t.created_by_json \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1247,6 +1251,9 @@ impl Index {
                     blocked_by: json_vec(r.get::<_, String>(9)?),
                     blocked_reason: r.get(10)?,
                     created_at: r.get(11)?,
+                    created_by: r
+                        .get::<_, Option<String>>(30)?
+                        .and_then(|json| serde_json::from_str(&json).ok()),
                     updated_at: r.get(12)?,
                     completed_at: r.get(13)?,
                     verified_at: r.get(14)?,

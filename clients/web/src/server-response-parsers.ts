@@ -35,6 +35,7 @@ import type {
   LiveStateList,
   LiveStoreState,
   MessageConnectionReceipt,
+  NoteActor,
   NotificationChannel,
   NotificationChannelRemoval,
   NotificationConfig,
@@ -610,6 +611,9 @@ const projectTicketRef = shape<ProjectTicketRef>('project ticket reference', {
   native_id: isString,
 });
 
+/** A recorded actor such as a ticket's creator (HS2-9FPHWY): a role and an optional stable id. */
+const actor = shape<NoteActor>('actor', { role: isString }, { id: isString });
+
 const rowOptional: Record<string, Check> = {
   id: isString,
   title: isString,
@@ -621,6 +625,7 @@ const rowOptional: Record<string, Check> = {
   blocked_by: isStringArray,
   follow_ups: listOf(projectTicketRef.check),
   claim_count: isNumber,
+  created_by: actor.check,
   notes: listOf(note.check),
 };
 const fullTicketRequired: Record<string, Check> = {

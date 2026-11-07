@@ -3855,6 +3855,91 @@ async fn create_extracts_leading_title_tags_over_http() {
     );
 }
 
+/// HS2-9FPHWY: a create records its actor as the ticket's creator on the store route and
+/// the provider route, every list and get carries it, and an unspecified caller leaves it
+/// unknown rather than guessing.
+#[tokio::test]
+async fn hs2_9fphwy_create_records_the_creating_actor() {
+    let (_dir, state) = state();
+    let app = app(state);
+    let post = |uri: String, body: &'static str| {
+        let app = app.clone();
+        async move { app.oneshot(authed("POST", &uri, Some(body))).await.unwrap() }
+    };
+    let ai = post(
+        "/tickets".into(),
+        r#"{"title":"Filed by an agent","actor":{"role":"ai","id":"claude-1"}}"#,
+    )
+    .await;
+    assert_eq!(ai.status(), StatusCode::CREATED);
+    let ai = body_json(ai).await;
+    assert_eq!(
+        ai["created_by"],
+        serde_json::json!({"role":"ai","id":"claude-1"})
+    );
+    let unknown = body_json(post("/tickets".into(), r#"{"title":"No actor"}"#).await).await;
+    assert!(unknown.get("created_by").is_none());
+
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap().to_owned();
+    let human = body_json(
+        post(
+            format!("/providers/{connection}/tickets"),
+            r#"{"title":"Filed by a person","actor":{"role":"human"}}"#,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(human["created_by"], serde_json::json!({"role":"human"}));
+    let fetched = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/providers/{connection}/tickets/{}",
+                    human["id"].as_str().unwrap()
+                ),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(fetched["created_by"], human["created_by"]);
+
+    let rows = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/tickets?fields=slug,created_by", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let creator = |slug: &serde_json::Value| {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["slug"] == *slug)
+            .unwrap()
+            .get("created_by")
+            .cloned()
+    };
+    assert_eq!(creator(&ai["slug"]), Some(ai["created_by"].clone()));
+    assert_eq!(creator(&unknown["slug"]), None);
+
+    let invalid = post(
+        "/tickets".into(),
+        r#"{"title":"Bad actor","actor":{"role":"robot"}}"#,
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+}
+
 struct FakeGitHub {
     responses: Mutex<VecDeque<HttpResponse>>,
     requests: Mutex<Vec<serde_json::Value>>,

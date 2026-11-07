@@ -153,6 +153,7 @@ fn reply_order_round_trip(provider: Arc<dyn TicketProvider>, name: &str, categor
                 up_next: false,
                 blocked_by: vec![],
                 transfer: None,
+                created_by: None,
             },
         )
         .unwrap();

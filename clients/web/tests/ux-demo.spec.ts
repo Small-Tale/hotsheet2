@@ -3129,6 +3129,27 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await setConfidence('25');
   await expect(confidencePill).toHaveText('25%');
   await expect(confidencePill).toHaveAttribute('data-band', 'unverified');
+  // HS2-9FPHWY: an AI creator quiets the title and leads the tags with a bot glyph; a person does not.
+  const creator = inspector.locator('kui-select[name="creator"]');
+  const creatorGlyph = row.getByRole('img', { name: 'Created by AI (Claude)' });
+  const setCreator = (value: string) =>
+    creator.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  await expect(creator).toHaveJSProperty('value', 'unknown');
+  await expect(row.locator('strong.ticket-list-row__title')).toHaveCount(1);
+  await expect(creatorGlyph).toHaveCount(0);
+  await setCreator('ai');
+  await expect(row.locator('strong.ticket-list-row__title')).toHaveCount(0);
+  await expect(row.locator('span.ticket-list-row__title')).toHaveText('Fix selection synchronization');
+  await expect(creatorGlyph.locator('[data-lucide="bot"]')).toHaveCount(1);
+  await expect(row.locator('[data-row-tags]').getByRole('img', { name: 'Created by AI (Claude)' })).toHaveCount(1);
+  await setCreator('human');
+  await expect(row.locator('strong.ticket-list-row__title')).toHaveCount(1);
+  await expect(creatorGlyph).toHaveCount(0);
+  await setCreator('ai');
+  await expect(creatorGlyph).toHaveCount(1);
   const feedbackNeeded = inspector.locator('input[type="checkbox"][name="feedback-needed"]');
   await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await feedbackNeeded.click();
@@ -3192,6 +3213,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(confidence).toHaveJSProperty('value', 'none');
   await expect(confidencePill).toHaveCount(0);
+  await expect(creator).toHaveJSProperty('value', 'unknown');
+  await expect(creatorGlyph).toHaveCount(0);
+  await expect(row.locator('strong.ticket-list-row__title')).toHaveCount(1);
   await expect(row).toContainText('Build the first client ticket list');
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
@@ -3219,6 +3243,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   // A started row never shows a score, even when one is set.
   await setConfidence('94');
   await expect(confidencePill).toHaveCount(0);
+  await setCreator('ai');
+  await expect(creatorGlyph).toHaveCount(1);
+  await expect(row.locator('span.ticket-list-row__title')).toHaveText('Post-reset edit works');
   await row.focus();
   await page.keyboard.press('Enter');
   await expect(row).toHaveAttribute('data-selected', 'true');
@@ -3275,7 +3302,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
       return Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
     }),
     row
-      .locator('.ticket-list-row__identity strong')
+      .locator('.ticket-list-row__identity .ticket-list-row__title')
       .evaluate((node) =>
         [...node.getClientRects()].map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
       ),
@@ -3295,7 +3322,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
     await row
       .locator('.ticket-list-row__identity > *')
       .evaluateAll((elements) => elements.map((element) => element.className || element.tagName.toLowerCase())),
-  ).toEqual(['ticket-list-row__slug', 'ticket-list-row__priority', 'strong']);
+  ).toEqual(['ticket-list-row__slug', 'ticket-list-row__priority', 'ticket-list-row__title']);
   expect(titleLineBoxes.length).toBeGreaterThan(1);
   for (const line of titleLineBoxes) {
     expect(line.x + line.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
@@ -4269,7 +4296,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   });
   expect(columnTitleMetrics.maxHeight / columnTitleMetrics.lineHeight).toBeCloseTo(4, 1);
   const longColumnRow = board.locator('[data-ticket-slug="HS2-SG1BKJ"]');
-  const longColumnTitle = longColumnRow.locator('.ticket-list-row__identity strong');
+  const longColumnTitle = longColumnRow.locator('.ticket-list-row__identity .ticket-list-row__title');
   await longColumnRow.scrollIntoViewIfNeeded();
   // The long title wraps inside the column's four-line clamp; the exact count follows the catalog stage width.
   const longColumnLines = await longColumnTitle.evaluate((node) => node.getClientRects().length);

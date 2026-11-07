@@ -146,6 +146,7 @@ pub fn ensure_provider_ticket(
             up_next: true,
             blocked_by: vec![],
             transfer: None,
+            created_by: None,
         },
     )?;
     Ok(ticket.slug)

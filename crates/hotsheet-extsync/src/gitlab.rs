@@ -434,6 +434,7 @@ impl GitLabProvider {
             attachments,
             warnings: vec![],
             auto_context: vec![],
+            created_by: None,
         }
     }
 
@@ -1651,6 +1652,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();

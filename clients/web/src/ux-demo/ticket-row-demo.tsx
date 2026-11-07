@@ -7,12 +7,13 @@ import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
-import type { StartedPhase } from '../api';
+import type { NoteActor, StartedPhase } from '../api';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
 import { CorruptTicketRow } from '../components/corrupt-ticket-row';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+import { aiCreatorLabel } from '../ticket-creator';
 import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
@@ -41,6 +42,14 @@ const TICKET_ROW_CONFIDENCE_CHOICES: SelectChoice[] = [
   { value: '25', label: '25% (Largely Unverified)' },
 ];
 
+/** Recorded creators the demo exposes (HS2-9FPHWY); only an AI creator changes the summary. */
+export type TicketRowCreator = 'unknown' | 'human' | 'ai';
+export const TICKET_ROW_CREATOR: Record<TicketRowCreator, NoteActor | undefined> = {
+  unknown: undefined,
+  human: { role: 'human' },
+  ai: { role: 'ai', id: 'claude' },
+};
+
 export const ticketRowSettings = {
   title: signal('Build the first client ticket list'),
   status: signal<TicketStatus>('started'),
@@ -58,6 +67,7 @@ export const ticketRowSettings = {
   phaseEstimate: signal<TicketRowPhaseEstimate>('estimate'),
   /** Derived completion confidence; shown only for completed/verified rows (HS2-A0Q6G6). */
   confidence: signal<string>('none'),
+  creator: signal<TicketRowCreator>('unknown'),
   categoryIcon: signal('sparkles'),
   categoryColor: signal('#3b82f6'),
   showSourceIcon: signal(true),
@@ -82,6 +92,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.claimEta.value = 'estimate';
   ticketRowSettings.phaseEstimate.value = 'estimate';
   ticketRowSettings.confidence.value = 'none';
+  ticketRowSettings.creator.value = 'unknown';
   ticketRowSettings.categoryIcon.value = 'sparkles';
   ticketRowSettings.categoryColor.value = '#3b82f6';
   ticketRowSettings.showSourceIcon.value = true;
@@ -101,6 +112,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         'claim-eta': ticketRowSettings.claimEta.value,
         'phase-estimate': ticketRowSettings.phaseEstimate.value,
         confidence: ticketRowSettings.confidence.value,
+        creator: ticketRowSettings.creator.value,
         'category-color': ticketRowSettings.categoryColor.value,
         agent: ticketRowSettings.agentName.value,
       },
@@ -167,6 +179,7 @@ export function TicketRowDemo() {
             updatedLabel: ticketRowSettings.updatedLabel.value,
             latestConfidence:
               ticketRowSettings.confidence.value === 'none' ? undefined : Number(ticketRowSettings.confidence.value),
+            aiCreatorLabel: aiCreatorLabel(TICKET_ROW_CREATOR[ticketRowSettings.creator.value]),
           })}
         </div>
       </CatalogExample>
@@ -273,6 +286,16 @@ export function TicketRowSettings() {
         value={ticketRowSettings.confidence.value}
         choices={TICKET_ROW_CONFIDENCE_CHOICES}
       />
+      <Select
+        name="creator"
+        label="Created By"
+        value={ticketRowSettings.creator.value}
+        choices={[
+          { value: 'unknown', label: 'Unknown' },
+          { value: 'human', label: 'Person' },
+          { value: 'ai', label: 'AI (Claude)' },
+        ]}
+      />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -361,6 +384,9 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
           break;
         case 'confidence':
           ticketRowSettings.confidence.value = control.value;
+          break;
+        case 'creator':
+          ticketRowSettings.creator.value = control.value as TicketRowCreator;
           break;
         case null:
           break;

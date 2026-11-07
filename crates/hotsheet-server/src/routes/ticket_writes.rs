@@ -87,6 +87,8 @@ pub(crate) fn do_create(
     }
     let prefix = entry.store.metadata()?.ticket_prefix;
     let status = initial_status(req.status.as_deref())?;
+    let created_by =
+        hotsheet_ticketing::actor::note_actor(parse_actor(req.actor.as_ref())?.as_ref());
     // Index-backed blocker lookups (HS2-HEKMKH).
     let blocked_by = ops::resolve_blockers_with(None, &req.blocked_by.unwrap_or_default(), |n| {
         entry.resolve(n)
@@ -101,7 +103,7 @@ pub(crate) fn do_create(
         up_next: req.up_next.unwrap_or(false),
         blocked_by,
     };
-    let ticket = ops::create(&entry.store, Ulid::new(), &prefix, now(), new)?;
+    let ticket = ops::create_by(&entry.store, Ulid::new(), &prefix, now(), new, created_by)?;
     state.changed_in(entry, "created", &ticket);
     api_ticket(entry, &ticket)
 }

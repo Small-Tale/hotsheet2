@@ -213,6 +213,7 @@ import { BulkTicketMutationSequencer } from '../ticket-bulk-operations';
 import { loadLastTicketCategory } from '../ticket-category-preference';
 import { type DuplicateTarget } from '../ticket-close';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
+import { aiCreatorLabel } from '../ticket-creator';
 import { parseTicketDeepLink, type TicketDeepLink, ticketDeepLinkRoot } from '../ticket-deep-link';
 import { loadTicketEditorSizes } from '../ticket-editor-size';
 import {
@@ -3197,6 +3198,7 @@ export async function startHotSheetWebClient() {
     agentName: ticket.worker_label || ticket.claimed_by || 'AI',
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
+    aiCreatorLabel: aiCreatorLabel(ticket.created_by),
     pendingOperationCount: ticket.pending_operation_ids?.length ?? 0,
     pendingSyncState: pendingOperations(ticket.pending_operation_ids).some((item) => item.state === 'needs_attention')
       ? 'needs_attention'

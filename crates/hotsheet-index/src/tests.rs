@@ -816,6 +816,35 @@ fn fts_matches_prefixes_across_identity_and_content() {
 }
 
 #[test]
+fn hs2_9fphwy_list_rows_carry_the_recorded_creator() {
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let mut ticket = store.read_ticket(&id).unwrap();
+    // Unknown creator: the row omits it, matching the serverless projection.
+    ix.upsert(&ticket, "first.md", "no-creator").unwrap();
+    let row = |ix: &Index| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+    };
+    assert_eq!(row(&ix).created_by, None);
+
+    ticket.created_by = Some(hotsheet_model::NoteActor {
+        role: hotsheet_model::AttachmentActorRole::Ai,
+        id: Some("claude-1".into()),
+    });
+    ix.upsert(&ticket, "first.md", "with-creator").unwrap();
+    let indexed = row(&ix);
+    assert_eq!(indexed.created_by, ticket.created_by);
+    assert_eq!(
+        serde_json::to_value(&indexed).unwrap()["created_by"],
+        serde_json::to_value(hotsheet_ticketing::wire::TicketRow::from(&ticket)).unwrap()["created_by"]
+    );
+}
+
+#[test]
 fn fts_and_resolution_find_a_retained_legacy_number() {
     // HS2-4H2ZR1: an imported ticket keeps its HS1 number so old references (in text or a
     // navigate-to-ref) resolve/search against the new ticket.
@@ -2276,7 +2305,7 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
         .collect::<Vec<_>>();
     assert_eq!(
         (SCHEMA_VERSION, projection),
-        (21, vec![true, true, false, true, false]),
+        (22, vec![true, true, false, true, false]),
         "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
     );
 }

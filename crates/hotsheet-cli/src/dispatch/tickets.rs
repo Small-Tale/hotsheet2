@@ -26,7 +26,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
     let actor = ctx.actor.as_ref();
     match cmd {
-        Cmd::New(args) => cmd_new(path, args),
+        Cmd::New(args) => cmd_new(actor, path, args),
         Cmd::LinkFollowUp { source, target } => cmd_link_follow_up(path, &source, &target),
         Cmd::Ls { filters } => cmd_ls(path, &filters),
         Cmd::Show { id } => cmd_show(path, &id),
@@ -106,7 +106,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     }
 }
 
-pub(crate) fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
+pub(crate) fn cmd_new(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    path: &PathBuf,
+    args: NewArgs,
+) -> Result<()> {
     let NewArgs {
         title,
         title_flag,
@@ -151,7 +155,7 @@ pub(crate) fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
     } else {
         None
     };
-    let ticket = ops::create(
+    let ticket = ops::create_by(
         &store,
         Ulid::new(),
         &prefix,
@@ -166,6 +170,7 @@ pub(crate) fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
             up_next,
             blocked_by,
         },
+        hotsheet_ticketing::actor::note_actor(actor),
     )?;
     println!(
         "Created {} ({})",

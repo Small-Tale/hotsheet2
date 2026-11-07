@@ -2749,8 +2749,17 @@ mod core_backend {
                             .unwrap_or(false),
                         blocked_by,
                     };
-                    let t = ops::create(&self.store, (self.mint)(), &prefix, (self.now)(), new)
-                        .map_err(store_err)?;
+                    let created_by =
+                        hotsheet_ticketing::actor::note_actor(body_actor(body)?.as_ref());
+                    let t = ops::create_by(
+                        &self.store,
+                        (self.mint)(),
+                        &prefix,
+                        (self.now)(),
+                        new,
+                        created_by,
+                    )
+                    .map_err(store_err)?;
                     let mut result = self.api(&t)?;
                     if let Some((source_store, source_id)) = follow_up_source {
                         let project_id = self.checkout.as_ref().unwrap().id.clone();
@@ -4172,6 +4181,31 @@ mod tests {
             created["qualified_id"],
             format!("{connection}:{}", created["id"].as_str().unwrap())
         );
+    }
+
+    #[test]
+    fn hs2_9fphwy_corebackend_create_records_the_calling_actor() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title":"agent filed", "actor_role":"ai", "actor_id":"claude-1"}),
+        );
+        assert_eq!(created["created_by"], json!({"role":"ai","id":"claude-1"}));
+        let fetched = call(
+            &backend,
+            "hotsheet_get",
+            json!({"id": created["slug"].clone()}),
+        );
+        assert_eq!(fetched["created_by"], created["created_by"]);
+        let rows = call(&backend, "hotsheet_query", json!({}));
+        let row = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["slug"] == created["slug"])
+            .unwrap();
+        assert_eq!(row["created_by"], created["created_by"]);
     }
 
     #[test]

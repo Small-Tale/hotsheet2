@@ -692,6 +692,11 @@ pub struct Ticket {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
     pub created_at: Timestamp,
+    /// Who created the ticket (HS2-9FPHWY): the acting role and optional stable id of the
+    /// creating mutation, in the note-authorship vocabulary. Write-once; absent on tickets
+    /// created before it existed or by an unspecified caller, which clients treat as unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<NoteActor>,
     pub updated_at: Timestamp,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<Timestamp>,

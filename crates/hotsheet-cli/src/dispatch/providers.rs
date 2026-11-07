@@ -66,11 +66,19 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         } => cmd_provider_new(
             path,
             &connection,
-            title,
-            category,
-            &priority,
-            details.unwrap_or_default(),
-            tags,
+            ProviderDraft {
+                title,
+                category,
+                priority: parse_priority(&priority)?,
+                status: Status::NotStarted,
+                details: details.unwrap_or_default(),
+                tags,
+                up_next: false,
+                blocked_by: vec![],
+                transfer: None,
+                // The creating actor is recorded as the ticket's creator (HS2-9FPHWY).
+                created_by: hotsheet_ticketing::actor::note_actor(actor),
+            },
         ),
         Cmd::ProviderEdit {
             connection,
@@ -828,32 +836,13 @@ pub(crate) fn cmd_provider_remove(path: &Path, connection: &str, json: bool) -> 
     Ok(())
 }
 
-pub(crate) fn cmd_provider_new(
-    path: &Path,
-    connection: &str,
-    title: String,
-    category: String,
-    priority: &str,
-    details: String,
-    tags: Vec<String>,
-) -> Result<()> {
-    let priority = parse_priority(priority)?;
+pub(crate) fn cmd_provider_new(path: &Path, connection: &str, draft: ProviderDraft) -> Result<()> {
     let ticket = configured_provider(path, connection)?.create(
         MutationContext {
             now: now_ts(),
             generated_id: Ulid::new(),
         },
-        ProviderDraft {
-            title,
-            category,
-            priority,
-            status: Status::NotStarted,
-            details,
-            tags,
-            up_next: false,
-            blocked_by: vec![],
-            transfer: None,
-        },
+        draft,
     )?;
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())

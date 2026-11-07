@@ -457,6 +457,42 @@ describe('TicketRow', () => {
     expect(css).toContain('text-decoration: line-through');
   });
 
+  it('quiets an AI-created summary with a regular-weight title and a bot glyph before its tags (HS2-9FPHWY)', () => {
+    const ticket: TicketRowProps = {
+      slug: 'HS2-AI',
+      title: 'Agent filed',
+      status: 'not_started',
+      priority: 'default',
+      category: 'task',
+      tags: ['client'],
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const human = String(TicketRow({ ...ticket, presentation }));
+      expect(human).toContain('<strong class="ticket-list-row__title" title="Agent filed">Agent filed</strong>');
+      expect(human).not.toContain('ticket-list-row__ai-creator');
+      expect(human).not.toContain('data-lucide="bot"');
+
+      const ai = String(TicketRow({ ...ticket, presentation, aiCreatorLabel: 'Created by AI (Claude)' }));
+      expect(ai).toContain('<span class="ticket-list-row__title" title="Agent filed">Agent filed</span>');
+      expect(ai).not.toContain('<strong');
+      expect(ai).toContain(
+        'class="ticket-list-row__ai-creator" role="img" aria-label="Created by AI (Claude)" title="Created by AI (Claude)"',
+      );
+      expect(ai).toContain('data-lucide="bot"');
+      // The glyph leads the tags list inside it, so it wraps with the tags at narrow widths.
+      expect(ai.indexOf('data-row-tags')).toBeLessThan(ai.indexOf('ticket-list-row__ai-creator'));
+      expect(ai.indexOf('ticket-list-row__ai-creator')).toBeLessThan(ai.indexOf('>client<'));
+      // A ticket without tags still shows the glyph on its metadata line.
+      expect(String(TicketRow({ ...ticket, presentation, tags: [], aiCreatorLabel: 'Created by AI' }))).toContain(
+        'aria-label="Created by AI"',
+      );
+    }
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    // The quiet glyph uses an existing gray token; the weight comes only from the title element.
+    expect(css).toMatch(/\.ticket-list-row__ai-creator \{[^}]*color: var\(--wa-color-neutral-border-loud\);/u);
+    expect(css).not.toMatch(/font-weight:\s*(?:normal|400|300)/u);
+  });
+
   it('keeps a selected cut row visibly pending while Kerf shows its selection', () => {
     const markup = String(
       TicketRow({

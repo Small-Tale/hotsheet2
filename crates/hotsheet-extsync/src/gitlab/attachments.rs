@@ -1007,6 +1007,7 @@ mod tests {
                     up_next: false,
                     blocked_by: vec![],
                     transfer: None,
+                    created_by: None,
                 },
             )
             .unwrap();

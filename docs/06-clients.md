@@ -4786,6 +4786,20 @@ Note authorship comes from the note's recorded `actor` (HS2-32QDZ3):
   marks its own updates, closes, and batches as human (HS2-XF81CJ).
 - **System or unrecorded notes** show "Hot Sheet".
 
+Ticket summaries distinguish AI-created tickets (HS2-9FPHWY). The shared `TicketRow` reads the
+ticket's recorded `created_by` through `aiCreatorLabel` (`src/ticket-creator.ts`), so list rows
+and column cards, at every width, follow one rule:
+
+- **AI-created** (`created_by.role` is `ai`): the title renders as plain text instead of
+  `<strong>`, the same regular-or-strong choice Kerf `Text` exposes as `weight`. A light gray
+  Lucide `bot` glyph leads the tags list and wraps with it. It has the accessible name and
+  tooltip "Created by AI", plus the tool when the creator id names one, for example "Created by
+  AI (Claude)".
+- **Human, Hot Sheet, or unknown creators** keep the prominent bold title and no glyph. Tickets
+  created before the field existed, by unspecified callers, or in external trackers have no
+  recorded creator, so they are never shown as AI-created.
+- **This client** marks the tickets it creates as human.
+
 AI-authored notes, narration items, and activity summaries use the shared `AIContentLabel`;
 attribution is persistent rather than hover-only and is repeated in the containing artifact's
 accessible name. In the conversation transcript, the side and color of each bubble identify

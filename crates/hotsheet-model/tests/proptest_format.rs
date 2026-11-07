@@ -103,6 +103,27 @@ fn arb_shared_note_kind() -> impl Strategy<Value = NoteKind> {
     ]
 }
 
+/// An optional recorded actor (note author, HS2-32QDZ3; ticket creator, HS2-9FPHWY), with
+/// and without an id, including non-ASCII ids.
+fn arb_opt_actor() -> impl Strategy<Value = Option<hotsheet_model::NoteActor>> {
+    prop_oneof![
+        Just(None),
+        (
+            prop_oneof![
+                Just(hotsheet_model::AttachmentActorRole::Human),
+                Just(hotsheet_model::AttachmentActorRole::Ai),
+                Just(hotsheet_model::AttachmentActorRole::System),
+            ],
+            prop_oneof![
+                Just(None),
+                "[a-z0-9-]{1,30}".prop_map(Some),
+                Just(Some("Dana Ö <dana@example.com>".to_string())),
+            ],
+        )
+            .prop_map(|(role, id)| Some(hotsheet_model::NoteActor { role, id })),
+    ]
+}
+
 fn arb_note() -> impl Strategy<Value = Note> {
     // Note text is non-empty after trimming, but otherwise permits multiline Markdown
     // and canonical marker lookalikes.
@@ -123,22 +144,7 @@ fn arb_note() -> impl Strategy<Value = Note> {
             (0u64..=100).prop_map(|value| Some(Confidence::new(value).unwrap()))
         ],
         // HS2-32QDZ3: note authorship, with and without an id (including non-ASCII).
-        prop_oneof![
-            Just(None),
-            (
-                prop_oneof![
-                    Just(hotsheet_model::AttachmentActorRole::Human),
-                    Just(hotsheet_model::AttachmentActorRole::Ai),
-                    Just(hotsheet_model::AttachmentActorRole::System),
-                ],
-                prop_oneof![
-                    Just(None),
-                    "[a-z0-9-]{1,30}".prop_map(Some),
-                    Just(Some("Dana Ö <dana@example.com>".to_string())),
-                ],
-            )
-                .prop_map(|(role, id)| Some(hotsheet_model::NoteActor { role, id })),
-        ],
+        arb_opt_actor(),
         prop_oneof![
             "[!-~][ -~\n]{0,80}".prop_map(|s| s.trim().to_string()),
             Just("# heading\n<!-- hotsheet:note:end -->\n## later".to_string()),
@@ -200,7 +206,14 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
         any::<bool>(),
         body(),
     );
-    let times = (arb_ts(), arb_ts(), arb_opt_ts(), arb_opt_ts(), arb_opt_ts());
+    let times = (
+        arb_ts(),
+        arb_ts(),
+        arb_opt_ts(),
+        arb_opt_ts(),
+        arb_opt_ts(),
+        arb_opt_actor(),
+    );
     let close_coord = (
         arb_close_reason(),
         option::of(prop_oneof![
@@ -228,7 +241,7 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
     (core, times, close_coord, collections).prop_map(
         |(
             (id, slug, title, category, priority, status, up_next, details),
-            (created_at, updated_at, completed_at, verified_at, closed_at),
+            (created_at, updated_at, completed_at, verified_at, closed_at, created_by),
             (
                 close_reason,
                 duplicate_of,
@@ -247,6 +260,7 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
             t.status = status;
             t.up_next = up_next;
             t.details = details;
+            t.created_by = created_by;
             t.completed_at = completed_at;
             t.verified_at = verified_at;
             t.closed_at = closed_at;

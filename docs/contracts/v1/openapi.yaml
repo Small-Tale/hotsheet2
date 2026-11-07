@@ -13640,6 +13640,8 @@ components:
             - type: 'null'
         legacy_number:
           type: string
+        created_by:
+          $ref: '#/components/schemas/Actor'
         claim_count:
           type: integer
         latest_confidence:
@@ -13826,6 +13828,8 @@ components:
             - type: 'null'
         legacy_number:
           type: string
+        created_by:
+          $ref: '#/components/schemas/Actor'
         claim_count:
           type: integer
         claim_history:
@@ -13960,6 +13964,8 @@ components:
         follow_up_to:
           type: string
           description: Qualified source ticket reference on checkout creation (HS2-2Z11A5).
+        actor:
+          $ref: '#/components/schemas/Actor'
       additionalProperties: false
     Actor:
       type: object
@@ -14424,6 +14430,8 @@ components:
             - type: 'null'
         legacy_number:
           type: string
+        created_by:
+          $ref: '#/components/schemas/Actor'
         claim_count:
           type: integer
         claim_history:
@@ -14613,6 +14621,8 @@ components:
             - type: 'null'
         legacy_number:
           type: string
+        created_by:
+          $ref: '#/components/schemas/Actor'
         claim_count:
           type: integer
         claim_history:
@@ -14898,6 +14908,8 @@ components:
             - type: 'null'
         legacy_number:
           type: string
+        created_by:
+          $ref: '#/components/schemas/Actor'
         claim_count:
           type: integer
         claim_history:

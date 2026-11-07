@@ -61,6 +61,10 @@ pub struct ApiTicket {
     pub follow_up_link_error: Option<String>,
     pub blocked_reason: Option<String>,
     pub created_at: String,
+    /// Who created the ticket (HS2-9FPHWY): `{"role":"human|ai|system","id":...}`. Omitted
+    /// when unknown (older tickets, unspecified callers, and external providers).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<hotsheet_model::NoteActor>,
     pub updated_at: String,
     pub completed_at: Option<String>,
     pub verified_at: Option<String>,
@@ -276,6 +280,7 @@ impl ApiTicket {
             follow_up_link_error: None,
             blocked_reason: t.blocked_reason.clone(),
             created_at: t.created_at.as_str().to_string(),
+            created_by: t.created_by.clone(),
             updated_at: t.updated_at.as_str().to_string(),
             completed_at: ts(&t.completed_at),
             verified_at: ts(&t.verified_at),
@@ -403,6 +408,9 @@ pub struct TicketRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
     pub created_at: Option<String>,
+    /// Who created the ticket (HS2-9FPHWY); omitted when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<hotsheet_model::NoteActor>,
     pub updated_at: Option<String>,
     pub completed_at: Option<String>,
     pub verified_at: Option<String>,
@@ -461,6 +469,7 @@ impl From<&Ticket> for TicketRow {
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             blocked_reason: t.blocked_reason.clone(),
             created_at: Some(t.created_at.as_str().to_string()),
+            created_by: t.created_by.clone(),
             updated_at: Some(t.updated_at.as_str().to_string()),
             completed_at: ts(&t.completed_at),
             verified_at: ts(&t.verified_at),
@@ -507,6 +516,7 @@ impl From<&ApiTicket> for TicketRow {
             blocked_by: t.blocked_by.clone(),
             blocked_reason: t.blocked_reason.clone(),
             created_at: Some(t.created_at.clone()),
+            created_by: t.created_by.clone(),
             updated_at: Some(t.updated_at.clone()),
             completed_at: t.completed_at.clone(),
             verified_at: t.verified_at.clone(),
@@ -610,6 +620,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "connection_id",
     "copied_from",
     "created_at",
+    "created_by",
     "details",
     "duplicate_of",
     "feedback_needed",
@@ -779,6 +790,39 @@ mod tests {
             serde_json::to_value(ApiTicket::from(&imported)).unwrap()["legacy_number"],
             "HS-1234"
         );
+    }
+
+    #[test]
+    fn hs2_9fphwy_creator_is_on_every_wire_shape_and_omitted_when_unknown() {
+        let plain = ticket();
+        for json in [
+            serde_json::to_value(TicketRow::from(&plain)).unwrap(),
+            serde_json::to_value(ApiTicket::from(&plain)).unwrap(),
+        ] {
+            assert!(json.get("created_by").is_none());
+        }
+
+        let mut filed = ticket();
+        filed.created_by = Some(hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("codex-1".into()),
+        });
+        let expected = serde_json::json!({ "role": "ai", "id": "codex-1" });
+        let api = ApiTicket::from(&filed);
+        for json in [
+            serde_json::to_value(TicketRow::from(&filed)).unwrap(),
+            serde_json::to_value(TicketRow::compact(&filed)).unwrap(),
+            serde_json::to_value(&api).unwrap(),
+            serde_json::to_value(TicketRow::compact_from_api(&api)).unwrap(),
+        ] {
+            assert_eq!(json["created_by"], expected);
+        }
+        let projected = provider_list_rows(
+            std::slice::from_ref(&api),
+            true,
+            &["slug".into(), "created_by".into()],
+        );
+        assert_eq!(projected[0]["created_by"], expected);
     }
 
     #[test]

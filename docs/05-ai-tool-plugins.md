@@ -691,13 +691,18 @@ The actor is also recorded (HS2-32QDZ3):
 - **What is stamped:** the author of every note appended through the git provider, and of
   the status-transition activity an edit or a completed close produces. It is stored as
   the `actor:` / `actor_id_hex:` note-marker tokens and exposed as `ApiNote.actor`.
+- **Ticket creator (HS2-9FPHWY):** a create through the CLI (`new`, `provider-new`), the
+  server's ticket and provider create routes, or MCP `hotsheet_create` records its actor as
+  the ticket's write-once `created_by` frontmatter, exposed as `created_by` on full tickets
+  and list rows and printed by `show`. An unspecified caller leaves it absent (unknown).
+  External providers report none.
 - **What is not stamped:** claim-driven Started transitions stay unattributed; the claim
   history already names the worker. Editing a note keeps its original author.
 - **External trackers** attribute comments to their own authenticated account, so Hot
   Sheet does not write a separate actor trailer there.
 
 **The web client is a human actor (HS2-XF81CJ).** It adds `actor: {"role":"human"}` to
-the bodies of the actor-aware ticket routes: update, close, and batch. A checkout batch
+the bodies of the actor-aware ticket routes: create (HS2-9FPHWY), update, close, and batch. A checkout batch
 applies its single top-level `actor` to every update that does not name its own.
 
 - **Effect:** people are recorded as the authors of their notes and status changes, and are

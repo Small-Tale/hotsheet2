@@ -651,13 +651,26 @@ pub fn resolve_blockers_with(
     Ok(ids)
 }
 
-/// Create + write a ticket with a caller-minted id, at time `now`.
+/// Create + write a ticket with a caller-minted id, at time `now`, with no recorded creator.
 pub fn create(
     store: &FsStore,
     id: Ulid,
     prefix: &str,
     now: Timestamp,
     new: NewTicket,
+) -> Result<Ticket, StoreError> {
+    create_by(store, id, prefix, now, new, None)
+}
+
+/// [`create`], recording who created the ticket (HS2-9FPHWY). `None` is an unspecified
+/// caller and leaves the creator unknown; it is never assumed to be a person or an AI.
+pub fn create_by(
+    store: &FsStore,
+    id: Ulid,
+    prefix: &str,
+    now: Timestamp,
+    new: NewTicket,
+    created_by: Option<hotsheet_model::NoteActor>,
 ) -> Result<Ticket, StoreError> {
     let new = normalize_new_ticket_input(new);
     let mut t = Ticket::new(
@@ -675,6 +688,7 @@ pub fn create(
     t.tags = new.tags;
     t.up_next = new.up_next && t.status.is_active();
     t.blocked_by = new.blocked_by;
+    t.created_by = created_by;
     store.write_ticket_committing(&t)?;
     Ok(t)
 }
@@ -3006,6 +3020,52 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn hs2_9fphwy_create_records_the_creator_once_and_edits_keep_it() {
+        let (_dir, store) = store();
+        let unknown = titled(&store, "No creator");
+        assert_eq!(store.read_ticket(&unknown.id).unwrap().created_by, None);
+
+        let ai = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("claude-1".into()),
+        };
+        let created = create_by(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("2026-10-15T00:00:00Z"),
+            NewTicket {
+                title: "Filed by an agent".into(),
+                ..Default::default()
+            },
+            Some(ai.clone()),
+        )
+        .unwrap();
+        assert_eq!(created.created_by, Some(ai.clone()));
+        assert_eq!(
+            store.read_ticket(&created.id).unwrap().created_by,
+            Some(ai.clone())
+        );
+
+        // A later human edit is not a creation: the recorded creator stays.
+        let edited = update(
+            &store,
+            &created.id,
+            ts("2026-10-15T01:00:00Z"),
+            TicketPatch {
+                title: Some("Retitled by a person".into()),
+                actor: Some(hotsheet_model::NoteActor {
+                    role: hotsheet_model::AttachmentActorRole::Human,
+                    id: None,
+                }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(edited.created_by, Some(ai));
     }
 
     #[test]

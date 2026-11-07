@@ -126,6 +126,8 @@ pub(crate) fn do_provider_create(
     }
     let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
     let status = initial_status(req.status.as_deref())?;
+    let created_by =
+        hotsheet_ticketing::actor::note_actor(parse_actor(req.actor.as_ref())?.as_ref());
     let provider = provider_for(state, connection_id)?;
     let new = ops::normalize_new_ticket_input(NewTicket {
         title: req.title,
@@ -153,6 +155,7 @@ pub(crate) fn do_provider_create(
                 up_next: new.up_next,
                 blocked_by: req.blocked_by.unwrap_or_default(),
                 transfer: None,
+                created_by,
             },
         )
         .map_err(provider_transfer_error)

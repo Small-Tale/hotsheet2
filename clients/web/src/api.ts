@@ -685,6 +685,8 @@ export interface TicketRow {
   latest_confidence?: number;
   claim_history?: ClaimEvent[];
   created_at?: string;
+  /** Who created the ticket (HS2-9FPHWY); absent when unknown (older tickets, external providers). */
+  created_by?: NoteActor;
   updated_at?: string;
   completed_at?: string;
   closed_at?: string;
@@ -1464,7 +1466,9 @@ export const CHANGE_STREAM_CLIENT_ID =
 export function isActorAwareRequest(method: string, path: string): boolean {
   const pathname = path.split('?')[0];
   if (method === 'PATCH') return /\/tickets\/[^/]+$/u.test(pathname);
-  if (method === 'POST') return /\/tickets\/[^/]+\/close$/u.test(pathname) || pathname.endsWith('/batch');
+  // A ticket create records its actor as the ticket's creator (HS2-9FPHWY).
+  if (method === 'POST')
+    return pathname.endsWith('/tickets') || /\/tickets\/[^/]+\/close$/u.test(pathname) || pathname.endsWith('/batch');
   return false;
 }
 

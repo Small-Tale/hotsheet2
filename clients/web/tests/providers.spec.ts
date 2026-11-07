@@ -16359,7 +16359,14 @@ test('serves the repository Quality commands from a real server and queues Every
     await expect
       .poll(() => ticketCreates)
       .toEqual([
-        { title: 'Everything', details: everything.prompt, category: 'task', priority: 'highest', up_next: true },
+        {
+          title: 'Everything',
+          details: everything.prompt,
+          category: 'task',
+          priority: 'highest',
+          up_next: true,
+          actor: { role: 'human' },
+        },
       ]);
   } finally {
     await server.stop();
@@ -16415,6 +16422,7 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
         category: 'task',
         priority: 'highest',
         up_next: true,
+        actor: { role: 'human' },
       },
     ]);
   expect(commandRuns).toEqual([]);
@@ -35318,6 +35326,114 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     const timeline = inspector.locator('[data-component="ticket-timeline"]');
     await expect(timeline).toContainText('Started');
     await expect(timeline).not.toContainText('AI-generated');
+  } finally {
+    await server.stop();
+  }
+});
+
+test('quiets AI-created ticket summaries in the real list and column views (HS2-9FPHWY)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const create = (title: string, actor?: { role: string; id?: string }) =>
+      server.request<FullTicket>('/tickets', 'POST', { title, category: 'task', tags: ['client'], actor });
+    const agentFiled = await create('Agent filed follow-up', { role: 'ai', id: 'claude-session-1' });
+    const personFiled = await create('Person filed request', { role: 'human' });
+    const unknownFiled = await create('Legacy ticket without a creator');
+    expect(agentFiled.created_by).toEqual({ role: 'ai', id: 'claude-session-1' });
+    expect(unknownFiled.created_by).toBeUndefined();
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+
+    let view = page.locator('[data-component="ticket-list"]');
+    const summary = (slug: string) => view.locator(`[data-ticket-slug="${slug}"]`);
+    const expectSummaries = async () => {
+      const agent = summary(agentFiled.slug);
+      await expect(agent.locator('.ticket-list-row__title')).toHaveText('Agent filed follow-up');
+      await expect(agent.locator('strong.ticket-list-row__title')).toHaveCount(0);
+      const agentWeight = await agent
+        .locator('.ticket-list-row__title')
+        .evaluate((node) => Number(getComputedStyle(node).fontWeight));
+      const glyph = agent.getByRole('img', { name: 'Created by AI (Claude)' });
+      await expect(glyph).toBeVisible();
+      await expect(glyph).toHaveAttribute('title', 'Created by AI (Claude)');
+      await expect(glyph.locator('[data-lucide="bot"]')).toHaveCount(1);
+      // The glyph leads the tags list, centered on the first tag's line.
+      await expect(agent.locator('[data-row-tags]').getByRole('img', { name: 'Created by AI (Claude)' })).toHaveCount(
+        1,
+      );
+      const [glyphBox, tagBox] = await Promise.all([
+        glyph.boundingBox(),
+        agent.locator('[data-row-tags]').getByText('client', { exact: true }).boundingBox(),
+      ]);
+      expect(glyphBox!.width).toBeGreaterThan(0);
+      expect(glyphBox!.x + glyphBox!.width).toBeLessThanOrEqual(tagBox!.x + 1);
+      expect(Math.abs(glyphBox!.y + glyphBox!.height / 2 - (tagBox!.y + tagBox!.height / 2))).toBeLessThanOrEqual(4);
+      for (const slug of [personFiled.slug, unknownFiled.slug]) {
+        const prominent = summary(slug);
+        await expect(prominent.locator('strong.ticket-list-row__title')).toHaveCount(1);
+        await expect(prominent.getByRole('img', { name: /Created by AI/u })).toHaveCount(0);
+        const weight = await prominent
+          .locator('.ticket-list-row__title')
+          .evaluate((node) => Number(getComputedStyle(node).fontWeight));
+        expect(weight).toBeGreaterThan(agentWeight);
+      }
+    };
+
+    await expect(summary(agentFiled.slug)).toBeVisible();
+    await expectSummaries();
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-9fphwy-list-wide.png' });
+    // The same summary contract holds through narrow and back to wide.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(summary(agentFiled.slug)).toBeVisible();
+    await expectSummaries();
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-9fphwy-list-narrow.png' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectSummaries();
+
+    await page.getByLabel('Columns View').click();
+    view = page.locator('[data-component="ticket-board"]');
+    await expect(view).toBeVisible();
+    await expect(summary(agentFiled.slug)).toBeVisible();
+    await expectSummaries();
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-9fphwy-columns-wide.png' });
+
+    // A ticket a person creates in this client is recorded as human-created and stays prominent.
+    await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
+    const composer = page.getByRole('dialog', { name: 'Create ticket' });
+    await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Typed by a person');
+    await composer.getByRole('button', { name: 'Create ticket', exact: true }).click();
+    await expect(composer).toBeHidden();
+    await expect
+      .poll(async () => {
+        const rows = await server.request<Array<{ title: string; created_by?: unknown }>>(
+          '/tickets?fields=title,created_by',
+        );
+        return rows.find((row) => row.title === 'Typed by a person')?.created_by;
+      })
+      .toEqual({ role: 'human' });
   } finally {
     await server.stop();
   }

@@ -229,6 +229,10 @@ pub(crate) struct CreateReq {
     pub(crate) blocked_by: Option<Vec<String>>,
     /// Qualified source ticket when this creation is an explicit follow-up.
     pub(crate) follow_up_to: Option<String>,
+    /// Who is creating the ticket (HS2-9FPHWY), recorded as its `created_by`. Absent is
+    /// unspecified, never assumed human or AI.
+    #[serde(default)]
+    pub(crate) actor: Option<ActorReq>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

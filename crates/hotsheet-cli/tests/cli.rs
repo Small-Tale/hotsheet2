@@ -11390,6 +11390,70 @@ fn provider_disable_blocks_provider_access_until_enabled() {
     run(&["provider-disable", "missing"]).assert().failure();
 }
 
+/// HS2-9FPHWY: `new` records its actor (flag or `HOTSHEET_ACTOR_ROLE`) as the ticket's
+/// creator, `show` prints it, and an unspecified caller leaves it unknown.
+#[test]
+fn hs2_9fphwy_new_records_the_creating_actor() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let created = |out: assert_cmd::assert::Assert| {
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        stdout.split_whitespace().nth(1).unwrap().to_string()
+    };
+    let by_flag = created(
+        hs(p)
+            .args([
+                "--actor-role",
+                "ai",
+                "--actor-id",
+                "codex-1",
+                "new",
+                "Agent filed",
+            ])
+            .assert()
+            .success(),
+    );
+    let by_env = created(
+        hs(p)
+            .env("HOTSHEET_ACTOR_ROLE", "human")
+            .args(["new", "Person filed"])
+            .assert()
+            .success(),
+    );
+    let unknown = new_ticket(p, "Unspecified");
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let creator = |slug: &str| {
+        hotsheet_ticketing::ops::resolve(&store, slug)
+            .unwrap()
+            .unwrap()
+            .created_by
+    };
+    let ai = creator(&by_flag).unwrap();
+    assert_eq!(ai.role, hotsheet_model::AttachmentActorRole::Ai);
+    assert_eq!(ai.id.as_deref(), Some("codex-1"));
+    assert_eq!(
+        creator(&by_env).unwrap().role,
+        hotsheet_model::AttachmentActorRole::Human
+    );
+    assert_eq!(creator(&unknown), None);
+
+    // `show` prints the creator headlessly; an unknown creator prints nothing.
+    hs(p)
+        .args(["show", &by_flag])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created_by:\n  role: ai\n  id: codex-1\n",
+        ));
+    hs(p)
+        .args(["show", &unknown])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created_by").not());
+}
+
 /// HS2-RD4M29: an `ai` actor (flag or `HOTSHEET_ACTOR_ROLE`) cannot complete a ticket
 /// without a confidence score; humans, `system`, and unspecified callers are never held to
 /// it. The refusal is AI-actionable and writes nothing.

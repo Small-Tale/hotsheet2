@@ -40,6 +40,7 @@ const KNOWN_KEYS: &[&str] = &[
     "follow_ups",
     "blocked_reason",
     "created_at",
+    "created_by",
     "updated_at",
     "completed_at",
     "verified_at",
@@ -901,6 +902,45 @@ mod tests {
             parse_file(&rewritten).unwrap().legacy_number.as_deref(),
             Some("HS-1234")
         );
+    }
+
+    #[test]
+    fn creator_is_optional_typed_and_round_trips_hs2_9fphwy() {
+        // Absent on every ticket written before HS2-9FPHWY: nothing is emitted, so existing
+        // files stay byte-identical across a canonical rewrite.
+        let plain = sample();
+        let canonical = to_file_string(&plain);
+        assert!(!canonical.contains("created_by"));
+        assert_eq!(parse_file(&canonical).unwrap().created_by, None);
+
+        for (role, id, yaml) in [
+            (
+                AttachmentActorRole::Ai,
+                Some("claude-1"),
+                "created_by:\n  role: ai\n  id: claude-1\n",
+            ),
+            (
+                AttachmentActorRole::Human,
+                None,
+                "created_by:\n  role: human\n",
+            ),
+        ] {
+            let mut t = sample();
+            t.created_by = Some(NoteActor {
+                role,
+                id: id.map(str::to_string),
+            });
+            let text = to_file_string(&t);
+            assert!(text.contains(yaml), "{text}");
+            // The creator sits beside the creation time, not among the unknown keys.
+            assert!(
+                text.find("created_at:").unwrap() < text.find("created_by:").unwrap()
+                    && text.find("created_by:").unwrap() < text.find("updated_at:").unwrap()
+            );
+            let parsed = parse_file(&text).unwrap();
+            assert_eq!(parsed, t);
+            assert!(!parsed.extra.contains_key("created_by"));
+        }
     }
 
     #[test]

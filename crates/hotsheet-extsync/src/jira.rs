@@ -613,6 +613,7 @@ impl JiraProvider {
             attachments: vec![],
             warnings: vec![],
             auto_context: vec![],
+            created_by: None,
         }
     }
 

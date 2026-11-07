@@ -192,6 +192,14 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         &theirs.created_at,
         ours_wins,
     );
+    // Write-once creator (HS2-9FPHWY): only creation sets it, so the side that recorded it
+    // is the side that changed it from base.
+    m.created_by = pick3(
+        &base.created_by,
+        &ours.created_by,
+        &theirs.created_by,
+        ours_wins,
+    );
     m.updated_at = if ours_wins {
         ours.updated_at.clone()
     } else {
@@ -417,6 +425,32 @@ mod tests {
         assert!(merged.follow_ups.contains(&target("one")));
         assert!(merged.follow_ups.contains(&target("two")));
         assert!(merged.follow_ups.contains(&target("shared")));
+    }
+
+    #[test]
+    fn hs2_9fphwy_creator_survives_an_edit_on_the_other_side() {
+        let creator = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("codex-1".into()),
+        };
+        let mut base = base_ticket();
+        base.created_by = Some(creator.clone());
+        // Theirs edits an unrelated field; ours keeps the creator untouched.
+        let mut theirs = base.clone();
+        theirs.title = "renamed".into();
+        theirs.updated_at = ts("2026-08-19T02:00:00Z");
+        let merged = merge_tickets(&base, &base.clone(), &theirs).ticket;
+        assert_eq!(merged.created_by, Some(creator.clone()));
+        assert_eq!(merged.title, "renamed");
+
+        // Whichever side recorded the creator keeps it against a side unchanged from base.
+        let unknown = base_ticket();
+        let mut recorded = unknown.clone();
+        recorded.created_by = Some(creator.clone());
+        let merged = merge_tickets(&unknown, &recorded, &unknown).ticket;
+        assert_eq!(merged.created_by, Some(creator.clone()));
+        let merged = merge_tickets(&unknown, &unknown, &recorded).ticket;
+        assert_eq!(merged.created_by, Some(creator));
     }
 
     #[test]
