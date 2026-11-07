@@ -28,7 +28,7 @@ import type { PermissionAutomation } from '../permission-notifications';
 import { openedProjectYieldsToSelection } from '../project-activation';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
 import { insertTabByRank, replaceTabInPlace } from '../tab-order';
-import { normalizeTicketPrefix } from '../ticket-prefix';
+import { normalizeTicketPrefix, ticketPrefixSavedMessage } from '../ticket-prefix';
 import { customTicketViewKey, type TicketView } from '../ticket-views';
 import { dismissHs1CleanupPrompt, hs1MigrationPromptDismissed, saveActiveProjectRoot } from '../workspace-session';
 
@@ -750,7 +750,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
     await changeProjectSources(
       (client, project) => client.setCheckoutSourceTicketPrefix(project.id, id, result.prefix),
-      `New tickets will be named ${result.prefix}-….`,
+      ticketPrefixSavedMessage(result.prefix),
     );
   }
 

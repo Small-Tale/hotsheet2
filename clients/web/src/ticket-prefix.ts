@@ -10,3 +10,16 @@ export function normalizeTicketPrefix(input: string): { prefix: string } | { err
   const prefix = input.trim().toUpperCase();
   return /^[A-Z][A-Z0-9]{1,15}$/.test(prefix) ? { prefix } : { error: TICKET_PREFIX_RULE };
 }
+
+/**
+ * An example slug for a prefix (HS2-7Z5SCH), so the field hint and the saved toast show the same
+ * complete name instead of an elided `HOT-…`.
+ */
+export function ticketPrefixExampleSlug(prefix: string): string {
+  return `${prefix}-7F3K9Q`;
+}
+
+/** The toast shown after a Git source's ticket prefix is saved (HS2-7Z5SCH). */
+export function ticketPrefixSavedMessage(prefix: string): string {
+  return `Ticket prefix set to ${prefix}. New tickets are named ${ticketPrefixExampleSlug(prefix)}.`;
+}

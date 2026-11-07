@@ -3859,7 +3859,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
     await field.fill('hot');
     expect(writes).toEqual([]);
     await field.press('Enter');
-    await expect(page.locator('.app-toast')).toContainText('New tickets will be named HOT-….');
+    await expect(page.locator('.app-toast')).toHaveText('Ticket prefix set to HOT. New tickets are named HOT-7F3K9Q.');
     await expect(field).toHaveValue('HOT');
     expect(writes).toEqual([JSON.stringify({ ticket_prefix: 'HOT' })]);
     // Wide → medium → narrow → wide: the field stays inside the dialog at every size.

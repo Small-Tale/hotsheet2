@@ -17,6 +17,7 @@ import type { ProviderAccount, ProviderConnection } from '../api';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+import { ticketPrefixExampleSlug } from '../ticket-prefix';
 import { ContentTransition } from './content-transition';
 import { ProviderIcon } from './provider-icon';
 import {
@@ -346,7 +347,7 @@ export function TicketSourceSetupDialog({
               autocomplete="off"
               spellcheck={false}
               disabled={providerBusy}
-              hint={`New tickets are named ${editingGit.ticketPrefix}-7F3K9Q; existing tickets keep their names. Saves when you leave the field.`}
+              hint={`New tickets are named ${ticketPrefixExampleSlug(editingGit.ticketPrefix)}; existing tickets keep their names. Saves when you leave the field.`}
             />
           </form>
         ) : (
