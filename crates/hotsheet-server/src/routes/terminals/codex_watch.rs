@@ -125,19 +125,40 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                 || terminal_target(&signal_state, &signal_id, persisted_checkout.as_deref());
             // Responses grouped by the store their turn records into, in arrival order.
             let mut batches: Vec<(FsStore, Vec<(String, metrics::UsageEvent)>)> = Vec::new();
+            // Signals apply in rollout order: the usage read before a halt or resume is
+            // recorded before that terminal state changes, so whoever observes the halt
+            // also sees the turn's usage (HS2-8G979N).
+            let flush = |batches: &mut Vec<(FsStore, Vec<(String, metrics::UsageEvent)>)>| {
+                for (store, responses) in batches.drain(..) {
+                    if let Err(error) = metrics::codex_work::record_session_responses(
+                        &store,
+                        &signal_session,
+                        responses,
+                    ) {
+                        tracing::warn!(%error, "recording Codex terminal usage failed");
+                    }
+                    // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
+                    let store_id = crate::multistore::store_url_id(&store);
+                    crate::live_state::touch(&signal_state, &store_id);
+                }
+            };
             for signal in signals {
                 match signal {
                     RolloutSignal::Halted {
                         error_type,
                         message,
-                    } => record_terminal_halt(
-                        &signal_state,
-                        &signal_id,
-                        Some(error_type),
-                        Some(message),
-                        Some("codex".to_owned()),
-                    ),
+                    } => {
+                        flush(&mut batches);
+                        record_terminal_halt(
+                            &signal_state,
+                            &signal_id,
+                            Some(error_type),
+                            Some(message),
+                            Some("codex".to_owned()),
+                        );
+                    }
                     RolloutSignal::Resumed => {
+                        flush(&mut batches);
                         clear_terminal_halt_on_resume(&signal_state, &signal_id);
                         turn_target = Some(target());
                     }
@@ -164,17 +185,7 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                     }
                 }
             }
-            for (store, responses) in batches {
-                if let Err(error) = metrics::codex_work::record_session_responses(
-                    &store,
-                    &signal_session,
-                    responses,
-                ) {
-                    tracing::warn!(%error, "recording Codex terminal usage failed");
-                }
-                // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
-                crate::live_state::touch(&signal_state, &crate::multistore::store_url_id(&store));
-            }
+            flush(&mut batches);
         },
     );
     // No Codex home, or it cannot be watched: nothing to follow.

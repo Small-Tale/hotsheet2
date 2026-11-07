@@ -2570,6 +2570,8 @@ async fn hs2_cyhawb_an_in_process_codex_rollout_halts_resumes_and_records_ticket
     assert_eq!(halted["error_type"], "server_overloaded");
     assert_eq!(halted["message"], "Synthetic overload.");
     assert_eq!(halted["agent"], "codex");
+    // HS2-8G979N: the watch applies signals in rollout order, so an observed halt implies the
+    // usage written before it is already recorded; this read deliberately does not wait.
     let recorded = usage();
     assert_eq!(recorded.len(), 1, "{recorded:?}");
     assert_eq!(
