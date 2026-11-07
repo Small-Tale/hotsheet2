@@ -1440,7 +1440,8 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   const settled = async () => {
     for (const rail of [sidebar, inspector])
       await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
-        await Promise.all(node.getAnimations().map((animation) => animation.finished));
+        // A cancelled animation's `finished` rejects; it is settled, not a failure (HS2-QVHFMX).
+        await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
       });
   };
   // How much of each rail's panel content is on screen (0 when fully slid out).

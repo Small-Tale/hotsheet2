@@ -27,7 +27,10 @@ async function settledChoiceGeometry(choice: Locator) {
     let previous = read(),
       stable = 0;
     for (let frame = 0; frame < 240 && stable < 3; frame += 1) {
-      await Promise.all(roots.flatMap((root) => root.getAnimations()).map((animation) => animation.finished));
+      // A cancelled animation's `finished` rejects; it is settled, not a failure (HS2-QVHFMX).
+      await Promise.all(
+        roots.flatMap((root) => root.getAnimations()).map((animation) => animation.finished.catch(() => undefined)),
+      );
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const next = read();
       stable = JSON.stringify(next) === JSON.stringify(previous) ? stable + 1 : 0;
@@ -56,6 +59,36 @@ test('opens the Drive options popup above its anchor (KF-MXM1SH, HS2-S97ETV)', a
     ).toBeGreaterThanOrEqual(0);
     await page.screenshot({ path: test.info().outputPath(`hs2-s97etv-drive-options-catalog-${width}.png`) });
   }
+});
+
+// HS2-QVHFMX: hovering the next submenu cancels the outgoing menu's animation, and a cancelled
+// animation's `finished` rejects with an AbortError (the macOS Platforms flake at line 101). The
+// probe animation cancels itself as the helper reads `finished`, forcing that order every time.
+test('settles submenu choice geometry past a cancelled animation (HS2-QVHFMX)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=drive-options-menu');
+  const menu = page.locator('[data-context-menu="drive-options"]');
+  await menu.locator(TOP_ITEMS).filter({ hasText: 'Model' }).hover();
+  const choice = menu
+    .getByRole('menu', { name: 'Model', exact: true })
+    .locator(':scope > .kui-popup-menu__item')
+    .first();
+  await expect(choice).toBeVisible();
+  await choice.evaluate((node) => {
+    const animation = node.animate([{ opacity: 1 }, { opacity: 0.99 }], { duration: 60_000 }),
+      finished = animation.finished;
+    Object.defineProperty(animation, 'finished', {
+      get() {
+        queueMicrotask(() => {
+          animation.cancel();
+        });
+        return finished;
+      },
+    });
+  });
+  const geometry = await settledChoiceGeometry(choice);
+  expect(geometry.width).toBeGreaterThan(0);
+  expect(geometry.labelInset).toBeGreaterThan(geometry.iconInset);
 });
 
 test('uses one disclosure and aligned icon-label choices at wide and narrow sizes', async ({ page }) => {

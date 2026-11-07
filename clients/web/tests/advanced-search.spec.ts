@@ -213,7 +213,8 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
         };
       });
   await searchGroup.evaluate(async (node) => {
-    await Promise.all(node.getAnimations().map((animation) => animation.finished));
+    // A cancelled animation's `finished` rejects; it is settled, not a failure (HS2-QVHFMX).
+    await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
   });
   const single = await geometry();
   expect(Number.parseFloat(single.radius)).toBeGreaterThan(16);

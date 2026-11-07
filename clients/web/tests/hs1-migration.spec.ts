@@ -241,7 +241,10 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect(dialog).toContainText('tickets, notes, attachments, settings, and AI-tool setup');
   await expect(dialog.getByRole('textbox', { name: 'Ticket Repository Folder' })).toHaveValue('/work/legacy.hs2');
   await dialog.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    // A cancelled animation's `finished` rejects; it is settled, not a failure (HS2-QVHFMX).
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   await page.screenshot({ path: testInfo.outputPath('hs1-import-wide.png'), fullPage: true, animations: 'disabled' });
   await page.setViewportSize({ width: 520, height: 720 });
