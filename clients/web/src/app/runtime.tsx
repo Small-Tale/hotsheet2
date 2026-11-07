@@ -938,7 +938,9 @@ export async function startHotSheetWebClient() {
     projectSessionDirtyDuringRestore = false,
     projectSessionInteractionVersion = 0,
     // The selection an activation applied; a different array later means the user selected since (HS2-VDJJEY).
-    activationTicketSelection: string[] | undefined;
+    activationTicketSelection: string[] | undefined,
+    // The section tabs when an activation began; a different tab later means the user chose one (HS2-KBM5QK).
+    activationSectionTabs: { inspector: InspectorTab; reader: InspectorTab } | undefined;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
@@ -2831,6 +2833,7 @@ export async function startHotSheetWebClient() {
         selectedTicket.value = null;
         selectedTicketSlugs.value = selection;
         activationTicketSelection = selection;
+        activationSectionTabs = { inspector: inspectorTab.value, reader: readerTab.value };
         ticketSelectionAnchor = selection[0];
         error.value = '';
         refreshError.value = '';
@@ -2965,8 +2968,13 @@ export async function startHotSheetWebClient() {
         stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
       // Search was restored during activation; a delayed network refresh must not undo a new edit.
       searchMatchKeys.value = undefined;
-      inspectorTab.value = stored.inspectorTab;
-      readerTab.value = stored.readerTab;
+      // A section tab the user chose during the activation's async refresh window wins over the parked
+      // session too; resetting it left the clicked tab focused but unselected (HS2-KBM5QK).
+      const tabsAtActivation = activationSectionTabs;
+      activationSectionTabs = undefined;
+      if (!tabsAtActivation || inspectorTab.value === tabsAtActivation.inspector)
+        inspectorTab.value = stored.inspectorTab;
+      if (!tabsAtActivation || readerTab.value === tabsAtActivation.reader) readerTab.value = stored.readerTab;
       if (!composerOpenedByUser && canRestoreComposer) {
         composerExpanded.value = false;
         composerTitle.value = stored.composer.title;

@@ -32333,6 +32333,72 @@ test('keeps a ticket selected right after a project tab switch when the session 
   await expect(inspector.getByText('Select a ticket to see and edit its details')).toHaveCount(0);
 });
 
+test('keeps an inspector tab chosen during a held activation refresh when the session restore lands (HS2-KBM5QK)', async ({
+  page,
+}) => {
+  let holdRefreshes = false;
+  const pending = new Map<string, import('@playwright/test').Route>();
+  await mockProject(page);
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    if (root === '/work/other')
+      return route.fulfill({
+        status: 201,
+        json: {
+          ...project,
+          id: 'other-checkout',
+          root,
+          name: 'other',
+          apiPath: '/__hotsheet/project-api/other-checkout',
+        },
+      });
+    return route.fulfill({ status: 201, json: project });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const other = new URL(route.request().url()).pathname.includes('/other-checkout/');
+    if (holdRefreshes && !other) {
+      pending.set('demo', route);
+      return;
+    }
+    return route.fulfill({ json: ticketsJson(route.request(), other ? [] : [row, notStartedRow]) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  // Park the demo project with a selected ticket on the Info tab, then switch away.
+  await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${row.slug}"]`).first().click();
+  const inspector = page.locator('#app-right-rail'),
+    tabs = inspector.getByRole('tablist', { name: 'Ticket Inspector Sections' }),
+    attachmentsTab = tabs.getByRole('tab', { name: 'Attachments' });
+  await expect(tabs.getByRole('tab', { name: 'Info' })).toHaveAttribute('aria-selected', 'true');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).some((key) => (localStorage.getItem(key) ?? '').includes('"inspectorTab":"info"')),
+      ),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  // Switch back with the activation refresh (and so the delayed session restore) held, then pick a tab.
+  holdRefreshes = true;
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${row.slug}"]`).first().click();
+  await attachmentsTab.click();
+  await expect(attachmentsTab).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => pending.has('demo')).toBe(true);
+  holdRefreshes = false;
+  // Releasing the refresh runs the restore of the parked Info tab; it must keep the user's choice.
+  const network = trackNetworkQuietExceptChangePolls(page);
+  await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
+  await network.quiet();
+  await expect(attachmentsTab).toHaveAttribute('aria-selected', 'true');
+  await expect(attachmentsTab).toBeFocused();
+  await expect(inspector.locator('[data-inspector-tab="attachments"]')).toHaveAttribute('data-selected', 'true');
+});
+
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
   page,
 }) => {
