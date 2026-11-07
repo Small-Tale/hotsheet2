@@ -3940,6 +3940,59 @@ async fn hs2_9fphwy_create_records_the_creating_actor() {
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
 }
 
+/// HS2-JAJY53: a create through the default provider route indexes and announces the
+/// ticket like `POST /tickets`, so an immediate indexed list includes it and change
+/// consumers receive one `created` event for it.
+#[tokio::test]
+async fn hs2_jajy53_default_provider_create_is_indexed_and_announced() {
+    let (_dir, state) = state();
+    let mut events = state.subscribe();
+    let app = app(state);
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap().to_owned();
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/providers/{connection}/tickets"),
+            Some(r#"{"title":"Created through the provider route"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+
+    let rows = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/tickets?fields=slug", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["slug"] == created["slug"]),
+        "indexed list omits the provider-route create: {rows}"
+    );
+
+    let event = loop {
+        let event = events.try_recv().expect("a change event for the create");
+        if event.slug == created["slug"].as_str().unwrap() {
+            break event;
+        }
+    };
+    assert_eq!(event.kind, "created");
+    assert_eq!(event.id, created["native_id"].as_str().unwrap());
+}
+
 struct FakeGitHub {
     responses: Mutex<VecDeque<HttpResponse>>,
     requests: Mutex<Vec<serde_json::Value>>,

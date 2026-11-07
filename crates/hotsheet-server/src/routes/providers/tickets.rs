@@ -139,7 +139,7 @@ pub(crate) fn do_provider_create(
         up_next: req.up_next.unwrap_or(false),
         blocked_by: Vec::new(),
     });
-    provider
+    let created = provider
         .create(
             MutationContext {
                 now: now(),
@@ -158,7 +158,11 @@ pub(crate) fn do_provider_create(
                 created_by,
             },
         )
-        .map_err(provider_transfer_error)
+        .map_err(provider_transfer_error)?;
+    // A hosted git create indexes and announces the ticket like `POST /tickets`, so an
+    // immediate indexed list and change-event consumers see it (HS2-JAJY53).
+    reindex_hosted_provider_change(state, connection_id, &created.native_id, "created");
+    Ok(created)
 }
 
 pub(crate) async fn update_provider_ticket(
@@ -497,6 +501,17 @@ pub(crate) fn provider_timing_headers(
 /// derived `latest_confidence` column depends on it, HS2-RD4M29). External providers are
 /// authoritative remotely and have no local index row.
 fn reindex_hosted_provider_write(state: &AppState, connection_id: &str, native_id: &str) {
+    reindex_hosted_provider_change(state, connection_id, native_id, "updated");
+}
+
+/// Reindex and broadcast one hosted git provider-route write under `kind` (`created` or
+/// `updated`); a no-op for external providers.
+fn reindex_hosted_provider_change(
+    state: &AppState,
+    connection_id: &str,
+    native_id: &str,
+    kind: &str,
+) {
     let Some(entry) = state.host.get(connection_id) else {
         return;
     };
@@ -504,7 +519,7 @@ fn reindex_hosted_provider_write(state: &AppState, connection_id: &str, native_i
         return;
     };
     if let Ok(ticket) = entry.store.read_ticket(&id) {
-        state.changed_in(&entry, "updated", &ticket);
+        state.changed_in(&entry, kind, &ticket);
     }
 }
 
