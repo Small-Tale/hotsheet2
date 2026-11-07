@@ -1104,6 +1104,33 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
     dispose();
   });
 
+  it('keeps a gesture-mounted dashboard preview claim passive (HS2-5APRKK, HS2-1YX5VS)', () => {
+    // Opening a phone's Workspace Grid mounts this read-only preview under the user's click. That
+    // click did not open the terminal, so the preview must not take PTY sizing from the device a
+    // human last used; its claims stay passive like a drawer tile's (HS2-JQCGQF).
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/150.0', userActivation: { isActive: true } });
+    allocated.openElement = true;
+    const runFrames = captureFrames(),
+      { viewport } = previewElement('dashboard-80x24'),
+      dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'phone-tile' }),
+      sent: string[] = [];
+    giveScreen(allocated.terminals[0]);
+    const socket = sockets[0] as unknown as EventTarget & { readyState: number; send: (value: string) => void };
+    socket.send = (value: string) => sent.push(value);
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+    runFrames();
+    intersections.at(-1)!.callback([{ isIntersecting: true }]);
+    runFrames();
+    const claims = sent
+      .map((value) => JSON.parse(value) as { resize?: { focus: boolean; visible: boolean; interacting: boolean } })
+      .flatMap((message) => (message.resize ? [message.resize] : []));
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.at(-1)).toMatchObject({ focus: true, visible: true });
+    expect(claims.every((claim) => !claim.interacting)).toBe(true);
+    dispose();
+  });
+
   it('scales a static (demo) TerminalPreview canvas to its frame and tracks resizes', () => {
     allocated.openElement = true;
     const runFrames = captureFrames(),

@@ -524,8 +524,12 @@ function initializeTerminalViewport(
     answeringQueries = true,
     // Replayed chunks xterm has not finished parsing; a reply emitted meanwhile answers a past query.
     replayParses = 0,
-    // Set while a user gesture that mounted this viewport may still claim PTY sizing (HS2-1YX5VS).
-    gestureClaim = terminalGestureClaimAtMount(typeof navigator === 'undefined' ? undefined : navigator, Date.now());
+    // Set while a user gesture that mounted this viewport may still claim PTY sizing (HS2-1YX5VS). A
+    // scaled preview is never opened by that gesture: a phone's Workspace Grid card mounts under the
+    // click that opened the grid, and like a drawer tile it spends no mount gesture (HS2-5APRKK).
+    gestureClaim = scaledPreview
+      ? undefined
+      : terminalGestureClaimAtMount(typeof navigator === 'undefined' ? undefined : navigator, Date.now());
   own(() => {
     disposed = true;
     if (reconnect !== undefined) window.clearTimeout(reconnect);
