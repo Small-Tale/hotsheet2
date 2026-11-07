@@ -300,34 +300,53 @@ test('a crashed worker restarts and replays from the last applied cursor without
   const fixture = await installProjects(page);
   await openBothProjects(page);
   await expect.poll(() => streamWorkers(workers).length).toBe(1);
+  const sinceOf = (projectId: string) =>
+    fixture.polls
+      .filter((poll) => poll.startsWith(`${projectId}?`))
+      .map((poll) => new URLSearchParams(poll.slice(poll.indexOf('?') + 1)).get('since'));
+  const loads = (projectId: string) => fixture.ticketLoads.get(projectId) ?? 0;
+  // A worker that has spawned may not have subscribed yet: a change published before a project's stream
+  // handshake is not part of this scenario (HS2-4FGEQ5), so wait until both streams follow a cursor.
+  await expect
+    .poll(() => [projects.alpha.id, projects.beta.id].every((id) => sinceOf(id).some((since) => since !== null)))
+    .toBe(true);
   fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
   fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
   const applied = { alpha: fixture.cursor.get(projects.alpha.id)!, beta: fixture.cursor.get(projects.beta.id)! };
+  // The scenario needs a worker that became ready: one that misses the host's ready timeout falls back to
+  // main-thread sockets for good, and crashing it would test nothing (HS2-4FGEQ5).
+  expect([...fixture.sockets.values()].flat(), 'the worker still owns both streams before the crash').toEqual([]);
 
   await crashWorker(streamWorkers(workers)[0]);
   // A change published while the worker is down must be replayed by its replacement.
   fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
   fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
   await expect.poll(() => streamWorkers(workers).length).toBe(2);
-  const sinceOf = (projectId: string) =>
-    fixture.polls
-      .filter((poll) => poll.startsWith(`${projectId}?`))
-      .map((poll) => new URLSearchParams(poll.slice(poll.indexOf('?') + 1)).get('since'));
   // The restarted worker resumes each project from what the main thread already applied.
   await expect.poll(() => sinceOf(projects.alpha.id)).toContain(String(applied.alpha));
   await expect.poll(() => sinceOf(projects.beta.id)).toContain(String(applied.beta));
   await page.getByRole('tab', { name: 'Beta' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toHaveCount(1);
+  // Selecting a project tab reloads its tickets once. Its rows are already rendered, so wait for that
+  // reload itself before taking the baseline; on a slow runner it otherwise lands after the baseline and
+  // is charged to the next change (HS2-4FGEQ5).
+  const beforeSwitch = loads(projects.alpha.id);
   await page.getByRole('tab', { name: 'Alpha' }).click();
+  await expect.poll(() => loads(projects.alpha.id)).toBeGreaterThan(beforeSwitch);
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toHaveCount(1);
   // Replay repeats nothing: one new change costs at most one ticket reload.
-  const alphaLoads = fixture.ticketLoads.get(projects.alpha.id) ?? 0;
+  const alphaLoads = loads(projects.alpha.id);
   fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA3', 'Alpha third')];
   fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA3');
   await expect(page.locator('[data-ticket-slug="HS2-ALPHA3"]')).toBeVisible();
-  await page.waitForTimeout(500);
-  expect((fixture.ticketLoads.get(projects.alpha.id) ?? 0) - alphaLoads).toBeLessThanOrEqual(1);
+  // A later change is the settle point: a project's deliveries apply in order, so once it renders, any
+  // repeated ALPHA3 delivery has already been applied and counted. Two changes, at most two reloads.
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA4', 'Alpha fourth')];
+  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA4');
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA4"]')).toBeVisible();
+  expect(loads(projects.alpha.id) - alphaLoads).toBeLessThanOrEqual(2);
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA3"]')).toHaveCount(1);
   // Still worker-owned: the main thread never opened its own change socket.
   expect([...fixture.sockets.values()].flat()).toEqual([]);
 });
