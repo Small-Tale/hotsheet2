@@ -78,7 +78,7 @@ function KeyGroup({
   return (
     <span class="terminal-key-bar__group" role="group" aria-label={label}>
       <FloatingToolbar placement="inline" label={label}>
-        <ToolbarControlGroup shape="pill" size="compact" density="tight" content={content}>
+        <ToolbarControlGroup shape="pill" size="compact" density="compact" content={content}>
           {children}
         </ToolbarControlGroup>
       </FloatingToolbar>

@@ -25,9 +25,11 @@ import '@kerfjs/ui/document.css';
 import '../hot-sheet-tokens.css';
 import './style.css';
 
+import { wirePinnablePopover } from '@kerfjs/ui/surface-scaffold';
 import { revealCatalogEntry, wireCatalog } from '@kerfjs/ui/wire-catalog';
 import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
 import { wireForms } from '@kerfjs/ui/wire-forms';
+import { wireOverlaySheets } from '@kerfjs/ui/wire-overlay-sheets';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
@@ -72,6 +74,9 @@ demoListeners.add(wireToolbarVisibility(root));
 demoListeners.add(wireScrollDividers(root, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] }));
 demoListeners.add(wireChoiceChips(root));
 demoListeners.add(wireForms(root));
+demoListeners.add(wireOverlaySheets(root));
+for (const surface of root.querySelectorAll<HTMLElement>('[data-component="pinnable-popover-surface"]'))
+  demoListeners.add(wirePinnablePopover(surface));
 demoListeners.add(wireTextFields(root));
 demoListeners.add(wireWorkspaceToolbarVisibility(root));
 demoListeners.add(wireTicketRailToolbarVisibility(root));

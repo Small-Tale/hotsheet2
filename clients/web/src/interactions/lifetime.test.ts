@@ -65,16 +65,24 @@ describe('kerfjs/scope createScope (the interaction lifetime contract)', () => {
     const scope = createScope();
     const signal = scope.signal;
     const first = vi.fn();
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
     scope.add(first);
     scope.add(() => {
       throw new Error('broken teardown');
     });
-    expect(() => {
-      scope.dispose();
-    }).not.toThrow();
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(signal.aborted).toBe(true);
-    expect(scope.size).toBe(0);
+    try {
+      expect(() => {
+        scope.dispose();
+      }).not.toThrow();
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(signal.aborted).toBe(true);
+      expect(scope.size).toBe(0);
+      expect(reportError).toHaveBeenCalledOnce();
+      expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: 'broken teardown' }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('aborts the signal only after every disposer ran', () => {

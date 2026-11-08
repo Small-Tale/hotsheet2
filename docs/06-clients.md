@@ -1343,9 +1343,10 @@ preview/download, server directory browser) are separate design work.
   Repository field is that same Combobox before the repository list arrives: it has no
   suggestions while the list loads and gains them when the list arrives, so a path typed
   while the list loads keeps its text, focus, and caret, and that typed path is what the form
-  submits (HS2-52BEHN). GitLab and Jira keep a plain TextField. The default-source
-  checkbox carries its help text below the label. Removal confirmation puts its explanation
-  above the footer actions at narrow and wide widths. The UX demo's selector sits inside
+  submits (HS2-52BEHN). An open suggestion list remains open and re-filters when the
+  repository list arrives (HS2-2055AY, KF-YA45PW). GitLab and Jira keep a plain TextField.
+  The default-source checkbox carries its help text below the label. Removal confirmation
+  puts its explanation above the footer actions at narrow and wide widths. The UX demo's selector sits inside
   the open modal and previews source choice, sign-in, authorized, editing, removal, busy,
   and remote-backup states (HS2-7FYYN9).
   The GitHub form also offers an optional writable assets repository, folder, and branch for
@@ -1558,7 +1559,7 @@ preview/download, server directory browser) are separate design work.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.124 (HS2-6ABCVC, HS2-T8SPNP, HS2-GAJSX9). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.126 (HS2-2055AY). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   Since beta.124 (KF-JPE38T, `KUI-L303`) the client renders no raw `<form>`: forms are Kerf `Form`, and
   both entry points install `wireForms` so a submission never navigates the page (HS2-GAJSX9).

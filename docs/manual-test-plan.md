@@ -827,6 +827,15 @@ repository on GitHub, use Refresh list and confirm the repository is offered and
 link changes to Add another account or organization. Repeat for a configured Enterprise
 origin; without its slug map, confirm operator instructions and no guessed public App URL.
 
+### Repository suggestions after an asynchronous list (HS2-2055AY)
+
+In a rebuilt real app with synthetic repositories, open Connect GitHub Issues and type
+a path while the repository list is loading. Leave the suggestion list open, deliver
+the list, and confirm the list stays open with the typed-path create option. Edit the
+path to match a newly loaded repository and confirm the matching option is offered;
+restore the typed path and submit it. Inspect the open list at wide, medium, phone,
+then wide again without clipped options or lost focus.
+
 ## Remote registry foundation (HS2-1Y45MZ)
 
 Use only disposable homes and synthetic issued device credentials. Read `remote identity` on the peer, then `remote register` with its explicit server id and a private credential bundle file. Confirm `remote list` works while the peer is stopped, reports stale cached observations and never exposes secrets or paths. `remote checkouts` must withhold usable checkouts on outage, identity change, invalid certificates and local revocation. Restart with the same home and renew a server leaf under the same CA: discovery must recover without review. Replace the machine home or CA: discovery must fail until `remote review` explicitly supplies the old revision/identity and new pairing material. Repeat registration and revocation, try a stale review revision, and confirm the authenticated service and `hotsheet_remotes` tool observe the same machine registry. Test remote device revocation separately from local registry revocation.

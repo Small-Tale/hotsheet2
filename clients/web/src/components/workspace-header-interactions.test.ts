@@ -19,7 +19,10 @@ vi.mock('kerfjs', async (original) => ({
 const handler = (event: string) => registrations.find((item) => item.event === event)!.handle;
 const overflow = (dataset: Record<string, string>) => {
   const item = { dataset };
-  handler('kui-menu-select')({ detail: { item } }, {});
+  const dispatchEvent = vi.fn();
+  handler('kui-menu-select')({ target: { dispatchEvent }, detail: { item } }, {});
+  // HS2-2055AY: close before a synchronous host update can replace the selected menu.
+  expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'kui-popup-menu-close-request' }));
   return item;
 };
 

@@ -1,3 +1,4 @@
+import { closePopupMenu, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -43,6 +44,8 @@ export function wireWorkspaceHeaderActions(root: HTMLElement, bindings: Workspac
     delegate(root, 'kui-menu-select', '[data-workspace-overflow]', (event) => {
       const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item,
         { workspaceOverflowAction: action, viewMode, workspaceSort } = item.dataset;
+      // A host update can replace the menu before Kerf's post-event close runs (HS2-2055AY).
+      closePopupMenu(event.target as PopupMenuElement);
       if (action === 'toggle-selected-up-next') bindings.toggleSelectedUpNext();
       else if (action === 'open-selected-ticket-actions') bindings.openSelectedTicketActions(item);
       else if (action === 'open-workspace-search') bindings.openSearch();

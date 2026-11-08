@@ -10,6 +10,12 @@ promise, types a path, and releases the list. It then checks that the input node
 focus, and caret survive a wide-to-narrow-to-wide pass, and that Connect provider posts the
 typed locator.
 
+HS2-2055AY upgrades the pinned Kerf client packages to beta.126 (KF-YA45PW).
+The same real-app provider case checks at 1280 and 390 px that the open Repository
+list stays visible after the asynchronous list arrives, retains its typed-path
+create option, and filters newly loaded matching repositories. It also exercises
+wide-to-medium-to-narrow-to-wide resizing with the typed path intact.
+
 HS2-RS96EJ names the phone terminal's ellipsis toggle **More terminal keys**, keeping
 Shift in that expanded group. `clients/web/src/components/terminal-key-bar.test.ts`
 pins the label, ordinary and expanded groups, and Shift presence. The shipped

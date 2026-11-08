@@ -11,9 +11,11 @@ import '@kerfjs/ui/webawesome.css';
 import './hot-sheet-tokens.css';
 import './style.css';
 
+import { wirePinnablePopover } from '@kerfjs/ui/surface-scaffold';
 import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
 import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
 import { wireForms } from '@kerfjs/ui/wire-forms';
+import { wireOverlaySheets } from '@kerfjs/ui/wire-overlay-sheets';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
@@ -46,3 +48,7 @@ void wireChoiceChips(appRoot);
 void wireTextFields(appRoot);
 // Kerf Form's required wiring (beta.124, KF-JPE38T): a Form submission never navigates the page.
 void wireForms(appRoot);
+// Kerf's surface-scaffold wiring contract also covers resizable sheets and pinnable overlays.
+void wireOverlaySheets(appRoot);
+for (const surface of appRoot.querySelectorAll<HTMLElement>('[data-component="pinnable-popover-surface"]'))
+  void wirePinnablePopover(surface);

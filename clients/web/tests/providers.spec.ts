@@ -4218,8 +4218,12 @@ for (const width of [1280, 390])
     await repository.pressSequentially('small-tale/typed-path');
     await page.screenshot({ path: test.info().outputPath(`hs2-52behn-typed-while-loading-${width}.png`) });
     const inputNode = await repository.elementHandle();
+    // HS2-2055AY: the typed path opens the listbox on its create option while the list loads.
+    await expect(form.locator('#provider-setup-repository-listbox')).toBeVisible();
+    await expect(form.getByRole('option', { name: 'Use “small-tale/typed-path”' })).toBeVisible();
     releaseList();
-    await expect(form.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(3);
+    // Three loaded repositories plus the still-open typed-path create option.
+    await expect(form.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(4);
     await expect(form.getByText('3 repositories available.')).toBeVisible();
     // The same field stays mounted: the typed path, focus, and caret survive the list arriving.
     expect(await inputNode.evaluate((node) => node.isConnected)).toBe(true);
@@ -4229,6 +4233,15 @@ for (const width of [1280, 390])
       'small-tale/typed-path'.length,
     );
     await expect(repository).toHaveAttribute('placeholder', 'Search your repositories…');
+    // HS2-2055AY: the re-render that delivers the list must not close the open suggestion listbox.
+    await expect(form.locator('#provider-setup-repository-listbox')).toBeVisible();
+    await expect(repository).toHaveAttribute('aria-expanded', 'true');
+    await expect(form.getByRole('option', { name: 'Use “small-tale/typed-path”' })).toBeVisible();
+    await repository.fill('small-tale/ho');
+    await expect(form.getByRole('option', { name: 'small-tale/hotsheet2' })).toBeVisible();
+    await expect(form.getByRole('option', { name: 'small-tale/secondary' })).toBeHidden();
+    await repository.fill('small-tale/typed-path');
+    await expect(form.getByRole('option', { name: 'Use “small-tale/typed-path”' })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`hs2-52behn-typed-after-list-${width}.png`) });
     // The typed path also survives the wide-to-narrow-to-wide transition.
     for (const size of [900, 390, width]) {
@@ -31837,7 +31850,9 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await page.keyboard.press('Home');
   await expect.poll(() => overflowStar.evaluate((item) => item.matches(':focus'))).toBe(true);
   await page.keyboard.press('Enter');
+  await expect(menuOpener(overflow)).toHaveAttribute('aria-expanded', 'false');
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBeGreaterThanOrEqual(1);
+  await expect(overflowStar).toHaveAttribute('data-workspace-overflow-state', 'all');
   await trigger.click();
   const overflowMore = overflow.locator('[data-workspace-overflow-action="open-selected-ticket-actions"]');
   await expect(overflowMore).toBeVisible();

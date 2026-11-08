@@ -203,8 +203,8 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    // HS2-E0H7S0: install native close after parent readiness; HS2-GAJSX9: Kerf Form's wireForms (+3).
-    expect(main.split('\n')).toHaveLength(49);
+    // HS2-2055AY: Kerf beta.126 adds page-lifetime overlay wiring to the bounded browser entry.
+    expect(main.split('\n')).toHaveLength(55);
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
@@ -230,6 +230,8 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
     expect(main).toContain('void wireTextFields(appRoot);');
     // Kerf Form's required page-lifetime wiring (beta.124, KF-JPE38T, HS2-GAJSX9).
     expect(main).toContain('void wireForms(appRoot);');
+    expect(main).toContain('void wireOverlaySheets(appRoot);');
+    expect(main).toContain('void wirePinnablePopover(surface);');
     expect(main).not.toMatch(/\b(?:signal|mount|effect|wire\w+Interactions)\s*\(/);
     expect(runtime).not.toMatch(/from ['"][^'"]*\/main['"]/);
   });
