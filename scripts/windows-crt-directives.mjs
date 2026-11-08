@@ -96,6 +96,25 @@ export function memberIdentity(member) {
   return { version: 1, sha256: createHash('sha256').update(canonical).digest('hex') };
 }
 
+/** Identifier-only shape of a member spelling; no path component enters the report (HS2-6W1S76). */
+export function memberSpelling(member) {
+  const raw = member
+    .replace(/^\/\d+\s+/, '')
+    .trim()
+    .replaceAll('\\', '/');
+  const kind = /^[a-z]:\//i.test(raw)
+    ? 'drive_absolute'
+    : raw.startsWith('//')
+      ? 'unc_absolute'
+      : raw.startsWith('/')
+        ? 'posix_absolute'
+        : raw.includes('/')
+          ? 'relative_path'
+          : 'basename';
+  const segments = posix.normalize(raw).split('/').filter(Boolean).length;
+  return { kind, segments };
+}
+
 function walk(directory, accept, found = [], depth = 0) {
   if (depth > 8 || !existsSync(directory)) return found;
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -151,6 +170,7 @@ export function summarize(results) {
           kind: result.kind,
           member: member.member,
           ...(member.memberIdentity ? { memberIdentity: member.memberIdentity } : {}),
+          ...(member.memberSpelling ? { memberSpelling: member.memberSpelling } : {}),
           runtimeLibrary: member.runtimeLibrary,
         });
       }
@@ -237,6 +257,7 @@ function run({ argv, env, dumpbin }) {
     const requests = crtRequests(parseDirectives(scan.stdout, path)).map((request) => ({
       ...request,
       memberIdentity: memberIdentity(request.member),
+      memberSpelling: memberSpelling(request.member),
       member: identity(request.member, roots),
     }));
     return { artifact, kind, bytes: statSync(path).size, requests };

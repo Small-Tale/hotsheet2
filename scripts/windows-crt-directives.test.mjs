@@ -12,6 +12,7 @@ import {
   identity,
   main,
   memberIdentity,
+  memberSpelling,
   parseDirectives,
   summarize,
 } from './windows-crt-directives.mjs';
@@ -99,6 +100,13 @@ test('HS2-9E879K preserves complete private member identity before display sanit
   assert.notDeepEqual(first, memberIdentity('C:/build/b/thread.obj'));
   assert.notDeepEqual(first, memberIdentity('thread.obj'));
   assert.doesNotMatch(JSON.stringify(first), /build|thread|C:/);
+});
+
+test('HS2-6W1S76 reports only a private member spelling shape', () => {
+  assert.deepEqual(memberSpelling('/0     C:\\build\\a\\thread.obj'), { kind: 'drive_absolute', segments: 4 });
+  assert.deepEqual(memberSpelling('C__build_a_thread.obj'), { kind: 'basename', segments: 1 });
+  assert.deepEqual(memberSpelling('src\\thread.obj'), { kind: 'relative_path', segments: 2 });
+  assert.doesNotMatch(JSON.stringify(memberSpelling('C:\\private\\name.obj')), /private|name|C:/);
 });
 
 test('HS2-1R2RGQ bounds cached candidates to native outputs and the selected vcpkg triplet', () => {
@@ -218,6 +226,7 @@ test('HS2-1R2RGQ reports requesting members and fails when every artifact is unr
     assert.equal(report.ticket, 'HS2-1R2RGQ');
     assert.equal(report.scanned, 1);
     assert.deepEqual(report.requesters.MSVCRTD[0].memberIdentity, memberIdentity(parseDirectives(ARCHIVE)[0].member));
+    assert.deepEqual(report.requesters.MSVCRTD[0].memberSpelling, { kind: 'drive_absolute', segments: 11 });
     assert.deepEqual(report.results[0].requests[0].memberIdentity, report.requesters.MSVCRTD[0].memberIdentity);
     assert.doesNotMatch(JSON.stringify(report), new RegExp(repo.replaceAll('\\', '\\\\')), 'no machine-local paths');
     const unreadable = main({

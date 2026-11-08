@@ -10,7 +10,7 @@ import { dirname, join, posix, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
-import { identity, memberIdentity } from './windows-crt-directives.mjs';
+import { identity, memberIdentity, memberSpelling } from './windows-crt-directives.mjs';
 
 /** Bounds on every list kept in the report, so a verbose link can never produce an unbounded artifact. */
 export const LIMITS = { searched: 200, archives: 200, defaultlibs: 100, matches: 500 };
@@ -125,6 +125,12 @@ const normalized = (value) => posix.normalize(value.replaceAll('\\', '/')).toLow
 const qualifiedArchive = (value) => /^(target|vcpkg|repo)\/.+/.test(normalized(value));
 const exactMember = (value) =>
   value?.version === 1 && typeof value.sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.sha256);
+const safeSpelling = (value) =>
+  value &&
+  ['drive_absolute', 'unc_absolute', 'posix_absolute', 'relative_path', 'basename'].includes(value.kind) &&
+  Number.isInteger(value.segments) &&
+  value.segments >= 1 &&
+  value.segments <= 256;
 
 /** Libraries searched, members loaded, default libraries processed, and LNK4098 emissions. */
 export function parseVerboseLink(text) {
@@ -190,6 +196,9 @@ export function correlate(candidates, loaded) {
         kind: candidate.kind,
         member: candidate.member,
         ...(direct ? { memberIdentity: { version: 1, sha256: candidate.memberIdentity.sha256 } } : {}),
+        ...(safeSpelling(candidate.memberSpelling) ? { candidateMemberSpelling: candidate.memberSpelling } : {}),
+        ...(exactMember(entry.memberIdentity) ? { selectedMemberIdentity: entry.memberIdentity } : {}),
+        ...(safeSpelling(entry.memberSpelling) ? { selectedMemberSpelling: entry.memberSpelling } : {}),
         loadedArchive: entry.archive,
         match: direct ? 'exact' : byName.length === 1 ? 'basename' : 'ambiguous',
       });
@@ -211,6 +220,7 @@ export function directiveCandidates(report) {
           ...(exactMember(requester.memberIdentity)
             ? { memberIdentity: { version: 1, sha256: requester.memberIdentity.sha256 } }
             : {}),
+          ...(safeSpelling(requester.memberSpelling) ? { memberSpelling: requester.memberSpelling } : {}),
         });
   return candidates;
 }
@@ -334,6 +344,7 @@ export function run({ argv, env, cargo }) {
     entries.map((entry) => ({
       archive: identity(posix.normalize(entry.archive.replaceAll('\\', '/')), normalizedRoots),
       memberIdentity: memberIdentity(entry.member),
+      memberSpelling: memberSpelling(entry.member),
       member: identity(entry.member, roots),
     }));
   const loaded = selectedMembers(parsed.loaded);

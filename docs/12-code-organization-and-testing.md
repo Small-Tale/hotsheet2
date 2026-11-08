@@ -761,6 +761,12 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   exact match records also retain the allowlisted digest so the two reports can be audited without a raw path;
   distinct directories with the same member basename stay distinct. Legacy, absent or malformed
   identities remain advisory. No raw member path, Cargo package id or target source path is persisted.
+  HS2-6W1S76 adds an identifier-only `memberSpelling` shape (absolute drive, absolute UNC,
+  absolute POSIX, relative path or basename, plus segment count) to directive requesters. The
+  bounded advisory match entries carry that producer shape alongside the selected member's
+  spelling shape and digest, even when the match is only by basename. This distinguishes a
+  producer/consumer spelling mismatch from an exact identity without promoting weak evidence
+  to confirmation; no path component or raw selected name is retained.
   The report is identifier and metric only,
   with relative identities, bounded lists with totals and validated run provenance, and no raw
   linker log. It follows the same fresh lifecycle: an explicit failure for a missing, unreadable or

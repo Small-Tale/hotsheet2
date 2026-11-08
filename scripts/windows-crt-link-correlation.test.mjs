@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { correlate, LIMITS, linkCommand, linkerText, main, parseVerboseLink } from './windows-crt-link-correlation.mjs';
-import { memberIdentity } from './windows-crt-directives.mjs';
+import { memberIdentity, memberSpelling } from './windows-crt-directives.mjs';
 
 // HS2-9E879K: synthetic fixtures only. Paths are invented Windows-shaped strings; no real build log,
 // machine path or credential is copied.
@@ -91,6 +91,7 @@ const directiveReport = (overrides = {}) => ({
         kind: 'vcpkg-debug',
         member: 'lib.c.obj',
         memberIdentity: memberIdentity('C:\\build\\dav1d\\src\\lib.c.obj'),
+        memberSpelling: memberSpelling('C:\\build\\dav1d\\src\\lib.c.obj'),
         runtimeLibrary: ['MDd_DynamicDebug'],
       },
       {
@@ -98,6 +99,7 @@ const directiveReport = (overrides = {}) => ({
         kind: 'vcpkg-debug',
         member: 'picture.c.obj',
         memberIdentity: memberIdentity('C:\\build\\dav1d\\src\\picture.c.obj'),
+        memberSpelling: memberSpelling('C:\\build\\dav1d\\src\\picture.c.obj'),
         runtimeLibrary: [],
       },
       { artifact: 'target/debug/build/libavif-sys-1/out/lib/avif.lib', kind: 'build-script-lib', member: 'write.obj' },
@@ -416,6 +418,39 @@ test('HS2-9E879K distinguishes same-basename members and rejects malformed membe
   }
 });
 
+test('HS2-6W1S76 retains bounded selected identity and spelling shape without confirming a basename match', (t) => {
+  const producer = 'C:\\build\\dav1d\\src\\lib.c.obj';
+  const red = fixture(t, {
+    stdout: cargoStream(`Loaded ${DEBUG_DAV1D}(lib.c.obj)\nLINK : warning LNK4098: defaultlib 'MSVCRTD' conflicts`),
+  });
+  assert.equal(red.report.currentLinkConfirmed, false);
+  const advisory = red.report.candidateMatches.kept.find((match) => match.member === 'lib.c.obj');
+  assert.equal(advisory.match, 'basename');
+  assert.deepEqual(advisory.candidateMemberSpelling, { kind: 'drive_absolute', segments: 5 });
+  assert.deepEqual(advisory.selectedMemberSpelling, { kind: 'basename', segments: 1 });
+  assert.deepEqual(advisory.selectedMemberIdentity, memberIdentity('lib.c.obj'));
+  assert.notDeepEqual(advisory.selectedMemberIdentity, memberIdentity(producer));
+  assert.doesNotMatch(JSON.stringify(red.report), /C:\\\\build|dav1d\\\\src/);
+
+  const green = fixture(t, {
+    stdout: cargoStream(`Loaded ${DEBUG_DAV1D}(${producer})\nLINK : warning LNK4098: defaultlib 'MSVCRTD' conflicts`),
+  });
+  assert.equal(green.report.currentLinkConfirmed, true);
+  const confirmed = green.report.currentLinkMatches.kept.find((match) => match.member === 'lib.c.obj');
+  assert.deepEqual(confirmed.selectedMemberIdentity, memberIdentity(producer));
+  assert.deepEqual(confirmed.selectedMemberSpelling, { kind: 'drive_absolute', segments: 5 });
+});
+
+test('HS2-6W1S76 rejects malformed producer spelling metadata from an input report', (t) => {
+  const directives = directiveReport();
+  directives.requesters.MSVCRTD[0].memberSpelling = { kind: 'C:/private', segments: 5 };
+  const result = fixture(t, { directives });
+  assert.equal(result.report.currentLinkConfirmed, true, 'untrusted shape does not change exact digest evidence');
+  const match = result.report.candidateMatches.kept.find((entry) => entry.member === 'lib.c.obj');
+  assert.equal(match.candidateMemberSpelling, undefined);
+  assert.doesNotMatch(JSON.stringify(result.report), /C:\/private/);
+});
+
 test('HS2-9E879K retains the exact matched digest for same-archive same-basename report audit', (t) => {
   const first = memberIdentity('C:/build/a/thread.obj'),
     second = memberIdentity('C:/build/b/thread.obj'),
@@ -544,7 +579,10 @@ test('HS2-9E879K correlates after the directive report in the native job, unmask
     'correlation follows the directive report',
   );
   const correlation = job.indexOf('Correlate CRT candidates with one current affected link');
-  const steps = job.slice(correlation, job.indexOf('- name:', job.indexOf('path: target/crt-directives/link-correlation.json')));
+  const steps = job.slice(
+    correlation,
+    job.indexOf('- name:', job.indexOf('path: target/crt-directives/link-correlation.json')),
+  );
   assert.equal(steps.match(/if: \$\{\{ !cancelled\(\) && matrix\.os == 'windows' \}\}/g)?.length, 2);
   assert.match(steps, /CC: cl/);
   assert.match(steps, /name: windows-crt-link-correlation-\$\{\{ matrix\.target \}\}/);
