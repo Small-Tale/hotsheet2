@@ -476,6 +476,8 @@ test('keeps each failed root and recovery identity, then recovers the selected t
 
 test('defers inactive setup and migration prompts until their tab is activated', async ({ page }) => {
   const fixture = await startupFixture(page, ['alpha', 'beta', 'gamma'], 'beta');
+  const alphaOpening = gate();
+  fixture.pending.set('alpha', alphaOpening);
   fixture.projects.set('alpha', { ...projectFor('alpha'), stores: [], needsTicketSetup: true });
   fixture.projects.set('gamma', {
     ...projectFor('gamma'),
@@ -489,9 +491,14 @@ test('defers inactive setup and migration prompts until their tab is activated',
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   const setup = page.locator('[data-component="ticket-source-setup-dialog"]');
   const migration = page.locator('[data-component="hs1-migration-dialog"]');
+  const pendingAlpha = page.locator('[data-tab-kind="project"][data-project-id="pending:/work/alpha"]');
+  const loadedTab = (id: string) => page.locator(`[data-tab-kind="project"][data-project-id="${id}"]`).getByRole('tab');
+  await expect(pendingAlpha).toBeVisible();
   await expect(setup).toBeHidden();
   await expect(migration).toBeHidden();
-  await page.getByRole('tab', { name: /^alpha/ }).click();
+  alphaOpening.release();
+  await expect(pendingAlpha).toHaveCount(0);
+  await loadedTab('alpha').click();
   await expect(setup).toHaveJSProperty('open', true);
   await expect(setup.getByRole('button', { name: 'Connect GitHub Issues' })).toBeVisible();
   await expect(page.locator('[data-component="quick-ticket-composer"]')).not.toHaveAttribute('open', '');
@@ -499,7 +506,7 @@ test('defers inactive setup and migration prompts until their tab is activated',
   await page.keyboard.press('Escape');
   await expect(setup).toBeHidden();
   await page.keyboard.press('Escape');
-  await page.getByRole('tab', { name: /^gamma/ }).click();
+  await loadedTab('gamma').click();
   await expect(migration).toHaveJSProperty('open', true);
   await expect(migration.getByRole('button', { name: 'Not Now' })).toBeVisible();
   await expect(setup).toBeHidden();
