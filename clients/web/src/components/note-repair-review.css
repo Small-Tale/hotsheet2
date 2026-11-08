@@ -1,0 +1,18 @@
+.note-repair-review {
+  padding: var(--kui-space-s);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+}
+
+.note-repair-review__comparison {
+  display: grid;
+  gap: var(--kui-space-xs);
+}
+
+.note-repair-review__comparison pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-block-size: 8rem;
+  overflow: auto;
+}

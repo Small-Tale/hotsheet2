@@ -8,9 +8,22 @@ import { rem, uiColor } from '@kerfjs/ui/css-values';
 import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
-import { Activity, CircleAlert, FilePenLine, MessageSquareText, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide';
+import {
+  Activity,
+  CircleAlert,
+  FilePenLine,
+  MessageSquareText,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
@@ -32,6 +45,8 @@ export interface NoteCardProps {
   title?: string;
   editable?: boolean;
   deletable?: boolean;
+  /** Stored ticket notes expose the same repair action by button, pointer, and keyboard. */
+  repairable?: boolean;
   editing?: boolean;
   /** The edit open on this FEEDBACK NEEDED prompt is an explicit Edit Note, not a reply draft (HS2-ZXGEFE). */
   editingPrompt?: boolean;
@@ -363,6 +378,7 @@ export function NoteCard({
   title,
   editable = true,
   deletable = true,
+  repairable = false,
   editing = false,
   editingPrompt = false,
   responseDraft = false,
@@ -413,6 +429,8 @@ export function NoteCard({
       class={`note-card${editorOpen ? ' note-card--editing' : ''}`}
       data-component="note-card"
       data-note-id={id}
+      data-repairable={repairable ? 'true' : undefined}
+      tabIndex={repairable ? 0 : undefined}
       data-kind={kind}
       data-density={density === 'compact' ? 'compact' : undefined}
       data-confidence={confidence !== undefined ? String(confidence) : undefined}
@@ -446,6 +464,22 @@ export function NoteCard({
           </Text>
         </strong>
         <Row className="note-card__header-end" vAlign="middle" gap="2xs">
+          {repairable && !responseRemoved && (
+            <PopupMenu
+              label="Note Actions"
+              icon={<LucideIcon icon={MoreHorizontal} name="more-horizontal" />}
+              size="compact"
+              rootAttributes={{ 'data-note-actions-menu': '', 'data-note-id': id }}
+              items={[
+                {
+                  label: 'AI Fix This Note',
+                  action: INSPECTOR_AND_EDITOR_ACTIONS.repairNote.value,
+                  icon: <LucideIcon icon={Sparkles} name="sparkles" />,
+                  attributes: { 'data-note-id': id },
+                },
+              ]}
+            />
+          )}
           {(editPrompt || (!editorOpen && deletable)) && (
             <span class="note-card__actions">
               {editPrompt && (

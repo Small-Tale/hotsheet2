@@ -3549,6 +3549,74 @@
       }
     },
     {
+      "key": "hotsheet-web:note-repair-review",
+      "package": "hotsheet-web",
+      "id": "note-repair-review",
+      "name": "NoteRepairReview",
+      "kind": "component",
+      "purpose": "Human review of a note-level AI repair proposal with deterministic findings, before and after text, unsupported changes, and explicit acceptance.",
+      "publicExports": [
+        {
+          "name": "NoteRepairReview"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/note-repair-review.tsx"
+      ],
+      "source": "src/components/note-repair-review.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "note-repair-review"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "note-repair-review"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/note-repair-review.tsx",
+        "composition": "src/components/note-repair-review.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:notification-card",
       "package": "hotsheet-web",
       "id": "notification-card",

@@ -1762,6 +1762,23 @@ pub fn edit_note_with_metadata(
         if kind_change.is_none() && text.is_none() && edit.confidence.is_none() {
             return Ok(ticket);
         }
+        // HS2-5E8Y9R: a reviewed repair of AI-authored metadata has the same durable
+        // human provenance as a text repair, while the original actor remains intact.
+        if (kind_change.is_some()
+            || edit
+                .confidence
+                .is_some_and(|confidence| confidence != note.confidence))
+            && edit
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human)
+            && note
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
+        {
+            note.human_edited = true;
+        }
         if let Some(text) = text {
             let legacy_distillation =
                 note.actor.is_none() && note.text.contains("hotsheet:activity-distillation:v1:");
@@ -5039,6 +5056,136 @@ mod tests {
         assert!(reverted.human_edited);
         assert_eq!(reverted.actor, Some(ai));
         assert!(store.read_ticket(&id).unwrap().notes[0].human_edited);
+    }
+
+    #[test]
+    fn hs2_5e8y9r_human_kind_repair_preserves_ai_actor_and_marks_review() {
+        let (_dir, store) = store();
+        let id = Ulid::new();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+        let note_id = Ulid::new();
+        let ai = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("synthetic-session".into()),
+        };
+        add_note_with_metadata(
+            &store,
+            &id,
+            note_id,
+            ts("t1"),
+            NoteKind::Regular,
+            NoteMetadataInput {
+                actor: Some(ai.clone()),
+                ..Default::default()
+            },
+            "FEEDBACK NEEDED: choose an option".into(),
+        )
+        .unwrap();
+        let unchanged = edit_note_with_metadata(
+            &store,
+            &id,
+            &note_id,
+            ts("t2"),
+            NoteEditInput {
+                kind: None,
+                text: None,
+                confidence: Some(None),
+                actor: Some(hotsheet_model::NoteActor {
+                    role: hotsheet_model::AttachmentActorRole::Human,
+                    id: None,
+                }),
+                allow_feedback_prompt_edit: false,
+            },
+        )
+        .unwrap();
+        assert!(
+            !unchanged
+                .notes
+                .iter()
+                .find(|note| note.id == note_id)
+                .unwrap()
+                .human_edited
+        );
+        let repaired = edit_note_with_metadata(
+            &store,
+            &id,
+            &note_id,
+            ts("t2"),
+            NoteEditInput {
+                kind: Some(NoteKind::FeedbackNeeded),
+                text: None,
+                confidence: None,
+                actor: Some(hotsheet_model::NoteActor {
+                    role: hotsheet_model::AttachmentActorRole::Human,
+                    id: None,
+                }),
+                allow_feedback_prompt_edit: false,
+            },
+        )
+        .unwrap();
+        let note = repaired
+            .notes
+            .iter()
+            .find(|note| note.id == note_id)
+            .unwrap();
+        assert_eq!(note.actor, Some(ai));
+        assert!(note.human_edited);
+        assert!(note.feedback_request);
+        assert_eq!(note.kind, NoteKind::FeedbackNeeded);
+    }
+
+    #[test]
+    fn hs2_5e8y9r_human_confidence_repair_marks_ai_note_only_when_changed() {
+        let (_dir, store) = store();
+        let id = Ulid::new();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+        let note_id = Ulid::new();
+        let ai = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("synthetic-session".into()),
+        };
+        add_note_with_metadata(
+            &store,
+            &id,
+            note_id,
+            ts("t1"),
+            NoteKind::Regular,
+            NoteMetadataInput {
+                actor: Some(ai.clone()),
+                confidence: Some(Confidence::new(70).unwrap()),
+                ..Default::default()
+            },
+            "Synthetic completion".into(),
+        )
+        .unwrap();
+        let edit = |confidence| {
+            edit_note_with_metadata(
+                &store,
+                &id,
+                &note_id,
+                ts("t2"),
+                NoteEditInput {
+                    kind: None,
+                    text: None,
+                    confidence: Some(confidence),
+                    actor: Some(hotsheet_model::NoteActor {
+                        role: hotsheet_model::AttachmentActorRole::Human,
+                        id: None,
+                    }),
+                    allow_feedback_prompt_edit: false,
+                },
+            )
+            .unwrap()
+            .notes
+            .into_iter()
+            .find(|note| note.id == note_id)
+            .unwrap()
+        };
+        assert!(!edit(Some(Confidence::new(70).unwrap())).human_edited);
+        let changed = edit(Some(Confidence::new(80).unwrap()));
+        assert!(changed.human_edited);
+        assert_eq!(changed.confidence, Some(Confidence::new(80).unwrap()));
+        assert_eq!(changed.actor, Some(ai));
     }
 
     #[test]

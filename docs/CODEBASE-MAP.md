@@ -363,6 +363,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/components/note-card.tsx # Kind-specific NoteCard (re-exports ConfidenceBadge for older imports)
+    src/components/note-repair-review.tsx + src/note-repair-proposal.ts # AI repair preview and strict note-level proposal parsing for the existing conversation/update flow (HS2-5E8Y9R)
     src/components/priority-presentation.ts # Shared ticket priority labels, Lucide icons, and --hs-priority-* tokens read by TicketRow and TicketPrioritySelect
     src/components/ticket-row.tsx # TicketList/board/Workers ticket summary composed from Kerf SummaryRow (beta.112): option/drag root, state rail, title/trailing meta, metadata, and list-edge selection; app CSS owns ticket identity/action details (HS2-9Y3V3T, HS2-E9SR7R)
     src/components/worker-columns.tsx # Production Workers workspace columns and cards using Kerf ColumnTrack and shared TicketRow; model and cursor transport live in worker-view-model.ts and worker-view-stream.ts (HS2-E9SR7R); worker-ticket-refresh.ts coalesces detail reads across cursors, local-save barriers and ordinary refresh invalidation, and reconciles exact qualified inspector selection through the existing draft owner (HS2-J118P3)

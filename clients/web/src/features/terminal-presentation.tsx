@@ -1,4 +1,5 @@
 import type { Signal } from 'kerfjs';
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 import {
   conversationError,
@@ -89,6 +90,7 @@ export interface TerminalPresentationDependencies {
     'aiToolLabel' | 'conversationAiSelection' | 'aiToolOptions' | 'aiTools' | 'effectiveDriveSelection'
   >;
   permissions: Pick<ReturnType<typeof createPermissionsController>, 'pendingPermissions' | 'permissionPopupSurface'>;
+  noteRepairSidecar?: () => SafeHtml | undefined;
   /** Server-clock estimate for remote clients' turn timing (HS2-GA5ASE); defaults to the shared one. */
   serverClocks?: Pick<ServerClocks, 'now'>;
 }
@@ -358,7 +360,9 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     if (!connection) return null;
     const state = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION,
       selection = conversationAiSelection(connectionId),
-      descriptor = selection.descriptor;
+      descriptor = selection.descriptor,
+      permissionSidecar = permissionPopupSurface(),
+      repairSidecar = dependencies.noteRepairSidecar?.();
     return (
       <AIConversationSurface
         conversation={{
@@ -381,7 +385,13 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           totalUsage: conversationUsage(state),
           error: conversationError(state, connection),
           feedbackAvailable: canGiveFeedback(),
-          sidecar: permissionPopupSurface(),
+          sidecar:
+            permissionSidecar || repairSidecar ? (
+              <>
+                {permissionSidecar}
+                {repairSidecar}
+              </>
+            ) : undefined,
           providerId: connection.tool,
           providers: aiToolOptions(),
           canChangeProvider: aiTools.value.length > 1,

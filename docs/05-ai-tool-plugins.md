@@ -2925,6 +2925,13 @@ server setup and graphical Project guidance installs or refreshes all three in
 their tool skill directories; disabled-tool cleanup removes only managed copies.
 A newer or equal-version customized role file is preserved and diagnosed.
 
+The first-party Claude and Codex manifests also install the focused `note-repair`
+skill (HS2-5E8Y9R). It tells a configured AI conversation to propose one
+note-level JSON change for human review, never to mutate the ticket directly or
+answer a feedback request. Headless setup and graphical guidance use the same
+manifest-declared skill path; the repository mirrors are byte-checked in plugin
+tests.
+
 The dispatcher reviews the whole queue and reserves only independently ready
 qualified tickets at the integrator's published safe base. It rechecks open
 dependencies independently of the visible `--unblocked` filter (HS2-BSYW6F),

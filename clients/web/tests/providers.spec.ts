@@ -2335,6 +2335,21 @@ async function mockProject(
           ...(body.permission_mode ? { permission_mode: body.permission_mode } : {}),
         };
       toolConnections = toolConnections.map((item) => (item.id === id ? running : item));
+      if (typeof body.content === 'string' && body.content.startsWith('Use the note-repair skill')) {
+        const prompt = body.content as string;
+        const context = JSON.parse(prompt.slice(prompt.indexOf('\n\n') + 2)) as { note: { id: string } };
+        const proposal = JSON.stringify({
+          note_id: context.note.id,
+          kind: 'feedback_needed',
+          explanation: 'Correct the synthetic prompt type.',
+        });
+        turnEvent(running, { type: 'output', content: proposal, truncated: false }, body.turn_id);
+        const idle = { ...running, busy: false };
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        turnEvent(idle, { type: 'done', reason: 'completed' }, body.turn_id);
+        driveEvent(idle);
+        return route.fulfill({ status: 202, json: { ...running, turn_id: body.turn_id } });
+      }
       if (body.content === 'Fail this turn.' || body.content === 'Retry successfully.') {
         driveEvent(running);
         const failed = body.content === 'Fail this turn.',
@@ -37861,6 +37876,91 @@ test('counts AI chat replies that settle while the page is hidden and reads them
   await setPageVisibility('visible');
   await expect(badge).toHaveCount(0);
   await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+});
+
+test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real server', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic note repair' });
+    const text = 'FEEDBACK NEEDED: choose a synthetic option.\n\nCHOICE: Which option?\n- Option A\n- Option B';
+    const withNote = await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+      note: text,
+      note_kind: 'regular',
+      actor: { role: 'ai', id: 'synthetic-session' },
+    });
+    const note = withNote.notes[0];
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const inspector = page.locator('#app-right-rail');
+    const card = inspector.locator(`article[data-note-id="${note.id}"]`);
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await expect(page.getByRole('menuitem', { name: 'AI Fix This Note' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await card.focus();
+    await page.keyboard.press('Shift+F10');
+    await expect(page.getByRole('menuitem', { name: 'AI Fix This Note' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await card.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'AI Fix This Note' }).click();
+    const review = page.locator('[data-component="note-repair-review"]');
+    await expect(review).toContainText('Correct the synthetic prompt type.');
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1100],
+      ['narrow', 390],
+      ['returned-wide', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(review).toBeVisible();
+      await page.screenshot({ path: test.info().outputPath(`hs2-5e8y9r-${label}.png`) });
+    }
+    expect((await server.request<FullTicket>(`/tickets/${created.id}`)).notes[0].kind).toBe('regular');
+    await review.getByRole('button', { name: 'Apply Repair' }).click();
+    await expect(review).toHaveCount(0);
+    const repaired = (await server.request<FullTicket>(`/tickets/${created.id}`)).notes.find(
+      (item) => item.id === note.id,
+    )!;
+    expect(repaired.kind).toBe('feedback_needed');
+    expect(repaired.feedback_request).toBe(true);
+    expect(repaired.actor).toEqual({ role: 'ai', id: 'synthetic-session' });
+    expect(repaired.human_edited).toBe(true);
+    await expect(inspector.locator(`article[data-note-id="${note.id}"]`)).toContainText('Feedback needed');
+    await page.keyboard.press('Escape');
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const reader = page.getByRole('dialog').locator('[data-component="ticket-inspector"]');
+    const repairedCard = reader.locator(`article[data-note-id="${note.id}"]`);
+    await expect(repairedCard.getByRole('grid', { name: 'Feedback Choices' })).toBeVisible();
+    await repairedCard.focus();
+    await page.keyboard.press('ContextMenu');
+    await expect(page.getByRole('menuitem', { name: 'AI Fix This Note' })).toBeVisible();
+  } finally {
+    await server.stop();
+  }
 });
 
 test('preserves explicit note kinds and infers omitted UI requests through the real server (HS2-CV5NMC)', async ({

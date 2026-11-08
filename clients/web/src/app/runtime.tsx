@@ -40,6 +40,8 @@ import {
   type GuidanceRulePreview,
   type GuidanceSourceReview,
   type GuidanceSourceUpdate,
+  type Note,
+  type NoteDoctorReport,
   type PollResponse,
   type ProviderOutboxOperation,
   type RulesyncUpdateReport,
@@ -65,6 +67,7 @@ import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
+import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { projectRestoreTabId } from '../components/project-restore-error';
@@ -178,6 +181,7 @@ import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import { sendSystemNotification, shouldUseSystemNotification } from '../native-notifications';
 import { type ProjectTicketSources, resolveNewTicketSource } from '../new-ticket-source';
+import { parseNoteRepairProposal, previewNoteRepair } from '../note-repair-proposal';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
@@ -4799,6 +4803,155 @@ export async function startHotSheetWebClient() {
     terminalGroups,
     hostHealth,
   });
+  type NoteRepairSession = {
+    note: Note;
+    ticket: FullTicket;
+    projectId: string;
+    frameId?: string;
+    connectionId: string;
+    firstResponseIndex: number;
+    report: NoteDoctorReport;
+    applying?: boolean;
+    message?: string;
+  };
+  const noteRepairSession = signal<NoteRepairSession | undefined>(undefined);
+  async function beginNoteRepair(noteId: string, frame?: TicketReaderFrame) {
+    const ticket = frame?.ticket ?? selectedTicket.peek(),
+      owner = frame ? projects.peek().find((item) => item.id === frame.projectId) : project(),
+      note = ticket?.notes.find((item) => item.id === noteId);
+    if (!ticket || !note || !owner) return;
+    try {
+      const report = await new Api(owner.apiPath).checkoutTicketNoteDoctor(owner.id, ticket.slug, noteId);
+      await openSidebarConversation();
+      const connectionId = conversationConnectionId.peek();
+      if (!conversationOpen.peek() || !connectionId) throw new Error('The configured AI conversation could not open.');
+      const firstResponseIndex = Object.hasOwn(conversationStates.peek(), connectionId)
+        ? conversationStates.peek()[connectionId].messages.length
+        : 0;
+      noteRepairSession.value = {
+        note,
+        ticket,
+        projectId: owner.id,
+        frameId: frame?.id,
+        connectionId,
+        firstResponseIndex,
+        report,
+      };
+      const context = {
+        ticket: { slug: ticket.slug, title: ticket.title, status: ticket.status, details: ticket.details },
+        note: {
+          id: note.id,
+          kind: note.kind,
+          text: note.text,
+          summary: note.summary,
+          confidence: note.confidence,
+          response_to: note.response_to,
+        },
+        nearby_notes: ticket.notes
+          .filter((item) => item.id !== note.id)
+          .slice(-12)
+          .map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            text: item.text,
+            response_to: item.response_to,
+          })),
+        doctor_findings: report.findings,
+      };
+      setConversationDraft(
+        `Use the note-repair skill to inspect one Hot Sheet note. Do not call tools or change any data. Return one JSON proposal only, with note_id and changed note-level fields, for human review. Do not answer a feedback prompt or change the person's decision.\n\n${JSON.stringify(context)}`,
+      );
+      await sendConversationTurn();
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      noteRepairSession.value = undefined;
+    }
+  }
+  function currentNoteRepairTicket(session: NoteRepairSession) {
+    return session.frameId
+      ? linkedReaderStack.peek().find((frame) => frame.id === session.frameId)?.ticket
+      : selectedTicket.peek();
+  }
+  function noteRepairResult(session: NoteRepairSession) {
+    const state = Object.hasOwn(conversationStates.value, session.connectionId)
+      ? conversationStates.value[session.connectionId]
+      : undefined;
+    const response = state?.messages
+      .slice(session.firstResponseIndex)
+      .filter((item) => item.role === 'assistant' && item.status === 'completed')
+      .at(-1)?.content;
+    if (!response) return { response: undefined, preview: undefined, issue: state?.error };
+    try {
+      const proposal = parseNoteRepairProposal(response, session.note.id);
+      const capabilities = session.frameId
+        ? linkedReaderStack.peek().find((frame) => frame.id === session.frameId)?.capabilities
+        : capabilitiesFor(session.ticket.connection_id);
+      return {
+        response,
+        preview: previewNoteRepair(
+          proposal,
+          session.note,
+          capabilities ?? ({} as Capabilities),
+          session.ticket.concurrency_token,
+          session.ticket.notes,
+        ),
+        issue: session.message,
+      };
+    } catch (reason) {
+      return { response, preview: undefined, issue: reason instanceof Error ? reason.message : String(reason) };
+    }
+  }
+  function noteRepairSidecar() {
+    const session = noteRepairSession.value;
+    if (!session || !conversationOpen.value || conversationConnectionId.value !== session.connectionId)
+      return undefined;
+    const { response, preview, issue } = noteRepairResult(session),
+      current = currentNoteRepairTicket(session),
+      stale =
+        !current ||
+        current.qualified_id !== session.ticket.qualified_id ||
+        current.concurrency_token !== session.ticket.concurrency_token;
+    return (
+      <NoteRepairReview
+        noteId={session.note.id}
+        report={session.report}
+        before={session.note.text}
+        beforeKind={session.note.kind}
+        response={response}
+        preview={preview}
+        issue={issue}
+        stale={stale}
+        applying={session.applying}
+      />
+    );
+  }
+  async function applyNoteRepair() {
+    const session = noteRepairSession.peek();
+    if (!session || session.applying) return;
+    const current = currentNoteRepairTicket(session),
+      top = linkedReaderStack.peek().at(-1);
+    if (
+      !current ||
+      current.qualified_id !== session.ticket.qualified_id ||
+      current.concurrency_token !== session.ticket.concurrency_token ||
+      (session.frameId && top?.id !== session.frameId)
+    ) {
+      noteRepairSession.value = { ...session, message: 'The ticket changed. Start a fresh repair.' };
+      return;
+    }
+    const { preview } = noteRepairResult(session);
+    if (!preview?.changed || preview.unavailable.length) return;
+    noteRepairSession.value = { ...session, applying: true };
+    const saved = await updateSelected(preview.patch);
+    if (saved) {
+      noteRepairSession.value = undefined;
+      showToast('Note repair applied.');
+    } else
+      noteRepairSession.value = {
+        ...session,
+        message: 'The repair could not be saved. Review the current ticket and retry.',
+      };
+  }
   const { workspaceTerminalGroups, globalWorkspaceSurfaceProps, projectTerminalDrawerProps, aiConversationSurface } =
     createTerminalPresentation({
       projects,
@@ -4847,6 +5000,7 @@ export async function startHotSheetWebClient() {
       },
       ai: aiConfigurationController,
       permissions: permissionsController,
+      noteRepairSidecar,
     });
   const { ticketViewTitle, ticketViewActionSpec, ticketContextMenuSurface } = createTicketViewSurface({
     canStageNewTicketAttachments,
@@ -5760,6 +5914,11 @@ export async function startHotSheetWebClient() {
     aiFeedbackDialog,
     confirmation,
     updateSelected,
+    beginNoteRepair,
+    applyNoteRepair,
+    dismissNoteRepair: () => {
+      noteRepairSession.value = undefined;
+    },
     dismissFeedbackRequest,
     runCommand,
     commandDialogId,

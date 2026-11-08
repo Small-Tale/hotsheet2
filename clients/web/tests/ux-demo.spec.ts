@@ -3339,8 +3339,8 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
   // Eight comfortable cards, the compact-density pair, two unsent-response states,
-  // and two long-code overflow fixtures (HS2-VBFSZJ).
-  await expect(notes).toHaveCount(14);
+  // two long-code overflow fixtures (HS2-VBFSZJ), and one stored repair action (HS2-5E8Y9R).
+  await expect(notes).toHaveCount(15);
   for (const id of ['compact-regular', 'compact-activity']) {
     const compact = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
     await expect(compact).toHaveAttribute('data-density', 'compact');

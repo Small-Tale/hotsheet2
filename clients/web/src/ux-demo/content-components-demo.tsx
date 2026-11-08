@@ -12,6 +12,7 @@ import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-
 import { MarkdownPreview, type MarkdownPreviewProps } from '../components/markdown-preview';
 import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-card';
 import { NoteComposer } from '../components/note-composer';
+import { NoteRepairReview } from '../components/note-repair-review';
 import {
   wireMarkdownDetailsEditor,
   wireNoteComposer,
@@ -194,7 +195,47 @@ export function NoteCardDemo() {
           <NoteCard id="long-feedback" kind="feedback_needed" author="Codex" time="Now" body={longCode} readerMode />
         </List>
       </CatalogExample>
+      <CatalogExample label="Stored Note Actions" viewport={{ layout: 'flex-column' }}>
+        <NoteCard
+          id="repairable-note"
+          kind="regular"
+          author="Codex"
+          time="Now"
+          body="FEEDBACK NEEDED: choose a synthetic option"
+          repairable
+        />
+      </CatalogExample>
     </>
+  );
+}
+
+export function NoteRepairReviewDemo() {
+  return (
+    <CatalogExample label="Reviewed AI Proposal" viewport={{ layout: 'flex-column' }}>
+      <NoteRepairReview
+        noteId="synthetic-note"
+        report={{
+          ticket_id: 'synthetic-ticket',
+          findings: [
+            {
+              id: 'explicit_regular_feedback_marker',
+              note_id: 'synthetic-note',
+              description: 'A regular note contains a feedback request marker.',
+              proposed_operation: 'note_kind feedback_needed',
+            },
+          ],
+        }}
+        before="FEEDBACK NEEDED: choose a synthetic option"
+        beforeKind="regular"
+        response="{}"
+        preview={{
+          proposal: { note_id: 'synthetic-note', kind: 'feedback_needed', explanation: 'Correct the note type.' },
+          unavailable: [],
+          patch: { note_id: 'synthetic-note', note_kind: 'feedback_needed' },
+          changed: true,
+        }}
+      />
+    </CatalogExample>
   );
 }
 
@@ -799,6 +840,7 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'note-card': { catalogExamples: true, Demo: NoteCardDemo },
+    'note-repair-review': { catalogExamples: true, Demo: NoteRepairReviewDemo },
     'note-composer': { catalogExamples: true, Demo: NoteComposerDemo },
     'ticket-reader': { catalogExamples: true, Demo: TicketReaderDemo },
     'markdown-editor': {

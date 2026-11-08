@@ -36,6 +36,7 @@ import type {
   LiveStoreState,
   MessageConnectionReceipt,
   NoteActor,
+  NoteDoctorReport,
   NotificationChannel,
   NotificationChannelRemoval,
   NotificationConfig,
@@ -927,6 +928,17 @@ export const parseTicketUsage = shape<TicketUsage>('ticket usage', {
 export const parseDuplicateBacklinks = shape<DuplicateBacklinkResponse>('duplicate backlinks', {
   backlinks: listOf(isObject),
   inaccessible_projects: listOf(isObject),
+});
+
+const noteDoctorFinding = shape<NoteDoctorReport['findings'][number]>('note doctor finding', {
+  id: isString,
+  note_id: isString,
+  description: isString,
+  proposed_operation: isString,
+});
+export const parseNoteDoctorReport = shape<NoteDoctorReport>('note doctor report', {
+  ticket_id: isString,
+  findings: listOf(noteDoctorFinding.check),
 });
 
 export const parseFilePath = shape<{ path: string }>('file path', { path: isString });

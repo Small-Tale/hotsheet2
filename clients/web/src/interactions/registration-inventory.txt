@@ -405,6 +405,11 @@ inspector-and-editor	wireFeedbackChoices	document.body
 inspector-and-editor	wireNoteEditor	document.body
 inspector-and-editor	delegate	document.body	'click'	'[data-action="dismiss-feedback"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="delete-note"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="repair-note"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="apply-note-repair"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="dismiss-note-repair"]'
+inspector-and-editor	delegate	document.body	'contextmenu'	'[data-component="note-card"][data-repairable="true"]'
+inspector-and-editor	delegate	document.body	'keydown'	'[data-component="note-card"][data-repairable="true"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="load-next-ticket-page"]'
 inspector-and-editor	wireBlockedReasonEditor	document.body
 inspector-and-editor	delegate	document.body	'pointerup'	'textarea[name="markdown-source"], textarea[name="blocked-reason"], textarea[name="note-body"], textarea[name="new-ticket-details"]'

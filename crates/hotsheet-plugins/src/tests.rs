@@ -711,8 +711,8 @@ fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
             include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
         ),
     ];
-    assert_eq!(codex.additional_skills().len(), roles.len());
-    assert_eq!(claude.additional_skills().len(), roles.len());
+    assert_eq!(codex.additional_skills().len(), roles.len() + 1); // HS2-5E8Y9R note repair
+    assert_eq!(claude.additional_skills().len(), roles.len() + 1);
     for (name, source, codex_mirror, claude_mirror) in roles {
         assert_eq!(codex_mirror, source, "Codex {name} mirror drifted");
         assert_eq!(
@@ -728,6 +728,17 @@ fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
                 .expect("declared role skill");
             assert_eq!(body, expected, "{} {target} source drifted", plugin.id());
         }
+    }
+    let codex_repair = include_str!("../../../.agents/skills/note-repair/SKILL.md");
+    let claude_repair = include_str!("../../../.claude/skills/note-repair/SKILL.md");
+    assert_eq!(codex_repair, claude_repair);
+    for plugin in [&codex, &claude] {
+        let (_, body) = plugin
+            .additional_skills()
+            .into_iter()
+            .find(|(target, _)| target.ends_with("/note-repair/SKILL.md"))
+            .expect("HS2-5E8Y9R note repair installed by headless setup");
+        assert_eq!(body, codex_repair);
     }
 
     let flatten = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");

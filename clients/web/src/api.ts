@@ -49,6 +49,7 @@ import {
   parseLiveStateList,
   parseLiveStoreState,
   parseMessageConnectionReceipt,
+  parseNoteDoctorReport,
   parseNotificationChannel,
   parseNotificationChannelRemoval,
   parseNotificationConfig,
@@ -433,6 +434,10 @@ export interface Note {
   /** Who wrote the note, when recorded (HS2-32QDZ3). */
   actor?: NoteActor;
   text: string;
+}
+export interface NoteDoctorReport {
+  ticket_id: string;
+  findings: Array<{ id: string; note_id: string; description: string; proposed_operation: string }>;
 }
 /** What happened after one completion (HS2-Q1WCCY). */
 export type CalibrationOutcome = 'verified' | 'reopened' | 'pending';
@@ -1947,6 +1952,11 @@ export class Api {
   checkoutTicket = (checkout: string, id: string) =>
     this.parsed(parseStoredTicket, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(
       (ticket) => ({ store: ticket.store, ticket }),
+    );
+  checkoutTicketNoteDoctor = (checkout: string, id: string, noteId: string) =>
+    this.parsed(
+      parseNoteDoctorReport,
+      `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/note-doctor?note=${encodeURIComponent(noteId)}`,
     );
   advisoryClaimStatus = (checkout: string, connection: string, nativeId: string) =>
     this.parsed(parseAdvisoryClaimStatus, this.advisoryClaimPath(checkout, connection, nativeId));

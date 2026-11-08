@@ -191,8 +191,8 @@ to the copied source note ID. A destination without structured feedback capabili
 rejects such a copy before creating a partial ticket.
 
 An AI-authored note gains `human_edited: true` in its marker when an explicit human
-actor persists different text. The original `actor:` stays unchanged. Unchanged saves,
-metadata-only edits, and AI edits do not set the token. Once set, it records that a
+actor persists different text or changes its kind or confidence (HS2-5E8Y9R). The original `actor:` stays unchanged. Unchanged saves,
+AI edits, and edits to other metadata do not set the token. Once set, it records that a
 human edited the note even if a later edit restores the original text. Older notes
 without the token are treated as not marked.
 

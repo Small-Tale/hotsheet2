@@ -6,6 +6,18 @@ import { describe, expect, it } from 'vitest';
 import { ConfidenceBadge, confidenceBand, NoteCard, NoteEditor, RespondToFeedbackButton } from './note-card';
 
 describe('NoteCard', () => {
+  it('HS2-5E8Y9R exposes a visible repair action on stored cards without hiding the kind', () => {
+    const markup = String(
+      NoteCard({ id: 'synthetic-note', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body', repairable: true }),
+    );
+    expect(markup).toContain('data-repairable="true"');
+    expect(markup).toContain('data-note-actions-menu');
+    expect(markup).toContain('AI Fix This Note');
+    expect(markup).toContain('Note</span>');
+    expect(String(NoteCard({ id: 'demo', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }))).not.toContain(
+      'AI Fix This Note',
+    );
+  });
   it.each([
     ['regular', 'message-square-text', 'Note'],
     ['status', 'refresh-cw', 'Status update'],

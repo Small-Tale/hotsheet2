@@ -1172,6 +1172,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "note-repair-review",
+      "name": "NoteRepairReview",
+      "kind": "component",
+      "purpose": "Human review of a note-level AI repair proposal with deterministic findings, before and after text, unsupported changes, and explicit acceptance.",
+      "useWhen": [
+        "Hot Sheet previews a focused AI note repair for explicit human acceptance."
+      ],
+      "avoidWhen": [
+        "The action is not a note-level repair."
+      ],
+      "publicClasses": [
+        "note-repair-review"
+      ],
+      "publicTokens": [],
+      "source": "src/components/note-repair-review.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "notification-card",
       "name": "NotificationCard",
       "kind": "component",

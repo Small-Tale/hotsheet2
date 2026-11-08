@@ -31,6 +31,7 @@ additional = [
   { target = ".claude/skills/hotsheet-dispatcher/SKILL.md", source = "hotsheet-dispatcher.md" },
   { target = ".claude/skills/hotsheet-integrator/SKILL.md", source = "hotsheet-integrator.md" },
   { target = ".claude/skills/hotsheet-worker/SKILL.md", source = "hotsheet-worker.md" },
+  { target = ".claude/skills/note-repair/SKILL.md", source = "note-repair.md" },
 ]
 
 [mcp]

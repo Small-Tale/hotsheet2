@@ -1,3 +1,4 @@
+import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { type OverlayHandle } from 'kerfjs/overlay';
 import { createScope } from 'kerfjs/scope';
@@ -113,6 +114,9 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly newNoteDraft: Signal<string>;
   readonly scheduleProjectSessionPersistence: () => void;
   readonly updateSelected: (patch: Record<string, unknown>) => Promise<boolean>;
+  readonly beginNoteRepair: (noteId: string, frame?: TicketReaderFrame) => Promise<void>;
+  readonly applyNoteRepair: () => Promise<void>;
+  readonly dismissNoteRepair: () => void;
   readonly feedbackResponseDrafts: FeedbackResponseDrafts;
   readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
   readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
@@ -194,6 +198,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     newNoteDraft,
     scheduleProjectSessionPersistence,
     updateSelected,
+    beginNoteRepair,
+    applyNoteRepair,
+    dismissNoteRepair,
     dismissFeedbackRequest,
     feedbackResponseDrafts,
     readerNoteAutosave,
@@ -1280,6 +1287,42 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         return;
       }
       deleteWorkspaceNote(data(target).noteId);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.repairNote.selector, (_event, target) => {
+      const noteId = data(target).noteId;
+      if (noteId) void beginNoteRepair(noteId, linkedReaderFrame(target));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.applyNoteRepair.selector, () => {
+      void applyNoteRepair();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.dismissNoteRepair.selector, () => {
+      dismissNoteRepair();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'contextmenu', '[data-component="note-card"][data-repairable="true"]', (event, target) => {
+      const menu = target.querySelector<HTMLElement>('[data-note-actions-menu]');
+      if (!menu) return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      openPopupMenuAt(menu, pointer.clientX, pointer.clientY);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', '[data-component="note-card"][data-repairable="true"]', (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'ContextMenu' && !(keyboard.shiftKey && keyboard.key === 'F10')) return;
+      const menu = target.querySelector<HTMLElement>('[data-note-actions-menu]');
+      if (!menu) return;
+      event.preventDefault();
+      const rect = target.getBoundingClientRect();
+      openPopupMenuAt(menu, rect.left + 20, rect.top + 20);
     }),
   );
   lifetime.add(

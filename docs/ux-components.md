@@ -1818,6 +1818,8 @@ icons; structural separators do not require icons.
   `density="compact"` selects the tighter 11.2px/8px inset and 9.6px radius used for every
   kind in the TicketNotes list, while the default `comfortable` density keeps the canonical
   card inset; the demo shows both (HS2-7RY5GK);
+  stored cards include a visible Kerf PopupMenu action button and share its repair
+  action with right-click and keyboard context opening (HS2-5E8Y9R);
   a single click (or Enter/Space) on an editable note enters its controlled, blur-flushed
   autosaving editor, while links and controls inside the note keep their own action
   (HS2-H1K9YY).
@@ -1825,6 +1827,9 @@ icons; structural separators do not require icons.
   variants) and the full-width `RespondToFeedbackButton` beside `FeedbackPrompt`, so
   `TicketInfoPanel`'s marked-description feedback composes them instead of rendering
   NoteCard's private classes (HS2-3X404M).
+- `NoteRepairReview` — **demo built** with deterministic findings, before/after text,
+  note metadata, unavailable-operation reasons, and explicit Apply or Reject actions
+  in the AI conversation sidecar (HS2-5E8Y9R).
   In reader mode, regular/status notes remain directly editable, while feedback-needed
   and feedback-draft notes always render their Respond/Submit editor style. Each uppercase
   `CHOICE` block in a feedback-needed note (several per note, HS2-83YCDP) becomes Markdown-capable Kerf multi-select

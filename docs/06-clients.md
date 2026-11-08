@@ -4534,6 +4534,16 @@ it's shown, **not how the view was opened** (HS1's inconsistency: the same note
 rendered as an editable feedback form when opened via "Provide feedback" but
 read-only when opened via the reader icon). In HS2 there is **one reader mode**, and:
 
+Stored note cards in the sidebar and ticket reader offer the same **AI fix this note**
+action from a visible overflow button, right-click, the Context Menu key, and
+Shift+F10 (HS2-5E8Y9R). The client requests deterministic note-doctor findings,
+opens the project's configured AI conversation with focused ticket context, and
+shows the returned note-level proposal beside the transcript. A human reviews the
+before and after text, kind, confidence, and any unavailable operation before
+accepting. The update uses the ticket's optimistic token; a changed ticket needs
+a fresh proposal. The proposal cannot create a response or alter ticket-wide
+fields. Providers that cannot apply a proposed operation explain it in the preview.
+
 Note cards use the canonical spacing ladder: a 16px card inset, 8px between ordinary
 card regions, and 4px inside connected icon/metadata and inline-feedback clusters. The
 quieter Activity variant uses an 8px block / 16px inline inset with 4px between its
@@ -4554,7 +4564,7 @@ separate `feedback_needed` exchange.
 The disclosure and its expanded notes sit directly in the parent note flow without a
 second outlined or padded container; only later feedback notes have separators.
 
-When a human changes the saved text of an AI-authored note, the note and reader keep
+When a human changes the saved text or kind/confidence metadata of an AI-authored note, the note and reader keep
 the original AI attribution and add **edited by human** beside it. The label is read
 with the attribution for assistive technology. Opening and closing the editor or
 saving identical text leaves it absent. It remains after repeat edits and a revert

@@ -220,7 +220,7 @@ export const demoCatalog: DemoCategory[] = [
       {
         id: 'notes',
         name: 'Notes and activity',
-        demos: [cataloged('note-composer'), cataloged('note-card')],
+        demos: [cataloged('note-composer'), cataloged('note-card'), cataloged('note-repair-review')],
       },
     ],
   },
