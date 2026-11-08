@@ -92,6 +92,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             allow_literal_backslash_n,
             note_kind,
             note_summary,
+            clear_note_summary,
             response_to,
             note_confidence,
             clear_note_confidence,
@@ -102,10 +103,15 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 anyhow::bail!("--response-to requires --note or --note-file");
             }
             let note_confidence = confidence_change(note_confidence, clear_note_confidence);
+            let note_summary = if clear_note_summary {
+                Some(None)
+            } else {
+                note_summary.map(Some)
+            };
             validate_note_modifiers(
                 &note,
                 note_kind.as_ref(),
-                note_summary.as_ref(),
+                note_summary.as_ref().map(Option::as_ref),
                 note_confidence,
                 edit_note.as_ref(),
             )?;
@@ -862,6 +868,12 @@ pub(crate) fn cmd_provider_edit(
     {
         bail!("provider connection '{connection}' does not support note_kind_edit");
     }
+    if input.edit_note.is_some()
+        && input.note_summary.is_some()
+        && !provider.descriptor().capabilities.note_kind_edit
+    {
+        bail!("provider connection '{connection}' does not support note_summary_edit");
+    }
     if input.edit_note.is_some() && !provider.supports_note_edit() {
         bail!("provider connection '{connection}' does not support note editing");
     }
@@ -899,6 +911,7 @@ pub(crate) fn cmd_provider_edit(
         let edit = ops::NoteEditInput {
             kind: input.note_kind,
             text: input.note,
+            summary: input.note_summary,
             confidence: input.note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
             allow_feedback_prompt_edit: false,
@@ -925,7 +938,7 @@ pub(crate) fn cmd_provider_edit(
             ops::NoteMetadataInput {
                 kind_explicit: input.note_kind.is_some(),
                 human_edited: false,
-                summary: input.note_summary,
+                summary: input.note_summary.flatten(),
                 confidence: input.note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
                 ai_feedback: None,
@@ -1852,7 +1865,7 @@ pub(crate) struct ProviderEditInput {
     expected_token: Option<String>,
     note: Option<String>,
     note_kind: Option<NoteKind>,
-    note_summary: Option<String>,
+    note_summary: Option<Option<String>>,
     response_to: Option<String>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,

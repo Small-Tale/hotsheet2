@@ -1662,6 +1662,7 @@ pub fn edit_note(
         NoteEditInput {
             kind: None,
             text: Some(text),
+            summary: None,
             confidence: None,
             actor: None,
             allow_feedback_prompt_edit: false,
@@ -1677,6 +1678,8 @@ pub struct NoteEditInput {
     pub kind: Option<NoteKind>,
     /// Replacement Markdown text.
     pub text: Option<String>,
+    /// `Some(Some(summary))` sets the timeline headline; `Some(None)` clears it.
+    pub summary: Option<Option<String>>,
     /// `Some(Some(score))` sets the completion confidence; `Some(None)` clears it.
     pub confidence: Option<Option<Confidence>>,
     /// Actor making this edit; only an explicit human actor can mark AI text edited.
@@ -1690,7 +1693,10 @@ pub struct NoteEditInput {
 impl NoteEditInput {
     /// Whether the edit changes nothing.
     pub fn is_empty(&self) -> bool {
-        self.text.is_none() && self.confidence.is_none() && self.kind.is_none()
+        self.text.is_none()
+            && self.summary.is_none()
+            && self.confidence.is_none()
+            && self.kind.is_none()
     }
 }
 
@@ -1759,12 +1765,20 @@ pub fn edit_note_with_metadata(
                 note.feedback_request = kind == NoteKind::FeedbackNeeded;
                 (previous, kind)
             });
-        if kind_change.is_none() && text.is_none() && edit.confidence.is_none() {
+        if kind_change.is_none()
+            && text.is_none()
+            && edit.summary.is_none()
+            && edit.confidence.is_none()
+        {
             return Ok(ticket);
         }
         // HS2-5E8Y9R: a reviewed repair of AI-authored metadata has the same durable
         // human provenance as a text repair, while the original actor remains intact.
         if (kind_change.is_some()
+            || edit
+                .summary
+                .as_ref()
+                .is_some_and(|summary| summary != &note.summary)
             || edit
                 .confidence
                 .is_some_and(|confidence| confidence != note.confidence))
@@ -1805,6 +1819,9 @@ pub fn edit_note_with_metadata(
         }
         if let Some(confidence) = edit.confidence {
             note.confidence = confidence;
+        }
+        if let Some(summary) = edit.summary {
+            note.summary = summary;
         }
         note.edited_at = now.clone();
         if let Some((previous, kind)) = kind_change {
@@ -5037,6 +5054,7 @@ mod tests {
                 NoteEditInput {
                     kind: None,
                     text: text.map(str::to_owned),
+                    summary: None,
                     confidence: None,
                     actor,
                     allow_feedback_prompt_edit: false,
@@ -5089,6 +5107,7 @@ mod tests {
             NoteEditInput {
                 kind: None,
                 text: None,
+                summary: None,
                 confidence: Some(None),
                 actor: Some(hotsheet_model::NoteActor {
                     role: hotsheet_model::AttachmentActorRole::Human,
@@ -5114,6 +5133,7 @@ mod tests {
             NoteEditInput {
                 kind: Some(NoteKind::FeedbackNeeded),
                 text: None,
+                summary: None,
                 confidence: None,
                 actor: Some(hotsheet_model::NoteActor {
                     role: hotsheet_model::AttachmentActorRole::Human,
@@ -5132,6 +5152,59 @@ mod tests {
         assert!(note.human_edited);
         assert!(note.feedback_request);
         assert_eq!(note.kind, NoteKind::FeedbackNeeded);
+    }
+
+    #[test]
+    fn hs2_q0gwxt_summary_set_and_clear_preserve_ai_authorship() {
+        let (_dir, store) = store();
+        let id = Ulid::new();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+        let note_id = Ulid::new();
+        let ai = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("synthetic-session".into()),
+        };
+        add_note_with_metadata(
+            &store,
+            &id,
+            note_id,
+            ts("t1"),
+            NoteKind::Activity,
+            NoteMetadataInput {
+                actor: Some(ai.clone()),
+                ..Default::default()
+            },
+            "Completed synthetic work".into(),
+        )
+        .unwrap();
+        for (value, expected) in [
+            (
+                Some("Revised headline".to_owned()),
+                Some("Revised headline"),
+            ),
+            (None, None),
+        ] {
+            let ticket = edit_note_with_metadata(
+                &store,
+                &id,
+                &note_id,
+                ts("t2"),
+                NoteEditInput {
+                    summary: Some(value),
+                    actor: Some(hotsheet_model::NoteActor {
+                        role: hotsheet_model::AttachmentActorRole::Human,
+                        id: None,
+                    }),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let note = ticket.notes.iter().find(|note| note.id == note_id).unwrap();
+            assert_eq!(note.summary.as_deref(), expected);
+            assert_eq!(note.actor, Some(ai.clone()));
+            assert!(note.human_edited);
+            assert_eq!(note.text, "Completed synthetic work");
+        }
     }
 
     #[test]
@@ -5167,6 +5240,7 @@ mod tests {
                 NoteEditInput {
                     kind: None,
                     text: None,
+                    summary: None,
                     confidence: Some(confidence),
                     actor: Some(hotsheet_model::NoteActor {
                         role: hotsheet_model::AttachmentActorRole::Human,
@@ -5211,6 +5285,7 @@ mod tests {
             NoteEditInput {
                 kind: None,
                 text: Some("Human summary".into()),
+                summary: None,
                 confidence: None,
                 actor: Some(hotsheet_model::NoteActor {
                     role: hotsheet_model::AttachmentActorRole::Human,

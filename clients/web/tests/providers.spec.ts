@@ -37963,6 +37963,127 @@ test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real
   }
 });
 
+test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic metadata edit' });
+    const withActivity = await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+      note: 'Completed synthetic work',
+      note_kind: 'activity',
+      note_summary: 'First headline',
+      note_confidence: 80,
+      actor: { role: 'ai', id: 'synthetic-session' },
+    });
+    const activity = withActivity.notes[0];
+    const withRegular = await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+      note: 'FEEDBACK NEEDED: choose one.\n\nCHOICE: Which?\n- A\n- B',
+      note_kind: 'regular',
+    });
+    const regular = withRegular.notes.find((note) => note.id !== activity.id)!;
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const card = page.locator(`#app-right-rail article[data-note-id="${activity.id}"]`);
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit Timeline Summary' }).click();
+    const summary = page.getByRole('dialog', { name: 'Edit timeline summary' });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1100],
+      ['narrow', 390],
+      ['returned-wide', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(summary).toBeVisible();
+      await expect(summary).toHaveCSS('opacity', '1');
+      await page.waitForTimeout(180);
+      await page.screenshot({ path: test.info().outputPath(`hs2-q0gwxt-${label}.png`) });
+    }
+    await summary.getByRole('textbox', { name: 'Timeline Summary' }).fill('Corrected headline');
+    await summary.getByRole('button', { name: 'Save' }).click();
+    await expect(summary).toHaveCount(0);
+    let updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === activity.id)).toMatchObject({
+      summary: 'Corrected headline',
+      human_edited: true,
+      actor: { role: 'ai', id: 'synthetic-session' },
+    });
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit Timeline Summary' }).click();
+    await page
+      .getByRole('dialog', { name: 'Edit timeline summary' })
+      .getByRole('textbox', { name: 'Timeline Summary' })
+      .fill('');
+    await page.getByRole('dialog', { name: 'Edit timeline summary' }).getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog', { name: 'Edit timeline summary' })).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === activity.id)?.summary).toBeUndefined();
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
+    const confidence = page.getByRole('dialog', { name: 'Correct confidence' });
+    await confidence.getByRole('spinbutton', { name: 'Confidence' }).fill('65');
+    await confidence.getByRole('button', { name: 'Save' }).click();
+    await expect(confidence).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === activity.id)?.confidence).toBe(65);
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
+    await page
+      .getByRole('dialog', { name: 'Correct confidence' })
+      .getByRole('spinbutton', { name: 'Confidence' })
+      .fill('');
+    await page.getByRole('dialog', { name: 'Correct confidence' }).getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog', { name: 'Correct confidence' })).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === activity.id)?.confidence).toBeUndefined();
+    await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
+    await page.setViewportSize({ width: 390, height: 800 });
+    const readerCard = page.getByRole('dialog').locator(`article[data-note-id="${regular.id}"]`);
+    await readerCard.focus();
+    await page.keyboard.press('ContextMenu');
+    await page.getByRole('menuitem', { name: /Change Type/ }).click();
+    const kind = page.getByRole('dialog', { name: 'Change note type' });
+    const kindSelect = kind.locator('[name="note-metadata-kind"]');
+    await kindSelect.locator('.kui-select__trigger').click();
+    await kindSelect.locator('.kui-select__option[data-value="feedback_needed"]').click();
+    await expect(kindSelect.locator('.kui-select__trigger')).toHaveAttribute('aria-expanded', 'false');
+    await page.screenshot({ path: test.info().outputPath('hs2-q0gwxt-narrow-kind.png') });
+    await kind.getByRole('button', { name: 'Save' }).click();
+    await expect(kind).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === regular.id)).toMatchObject({
+      kind: 'feedback_needed',
+      feedback_request: true,
+    });
+    await expect(readerCard.getByRole('grid', { name: 'Feedback Choices' })).toBeVisible();
+  } finally {
+    await server.stop();
+  }
+});
+
 test('preserves explicit note kinds and infers omitted UI requests through the real server (HS2-CV5NMC)', async ({
   page,
 }) => {

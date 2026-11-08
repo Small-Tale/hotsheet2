@@ -25,6 +25,7 @@ import { ConversationExportDialog } from '../components/conversation-export-dial
 import { Hs1MigrationDialog } from '../components/hs1-migration';
 import type { ManualModelDialogState } from '../components/manual-model-dialog';
 import { ManualModelDialog } from '../components/manual-model-dialog';
+import { NoteMetadataDialog, type NoteMetadataDialogState } from '../components/note-metadata-dialog';
 import { type NotificationView } from '../components/notification-navigation';
 import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
@@ -84,6 +85,7 @@ export interface HotSheetAppDependencies {
   activeTicketCollectionKey: () => string;
   aiConversationSurface: () => SafeHtml | null;
   aiFeedbackDialog: Signal<AiFeedbackDialogState | undefined>;
+  noteMetadataDialog: Signal<NoteMetadataDialogState | undefined>;
   /** The shared in-app confirmation (HS2-6S1346). */
   confirmation: ConfirmationWorkflow;
   appRoot: HTMLElement;
@@ -233,6 +235,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     activeTicketCollectionKey,
     aiConversationSurface,
     aiFeedbackDialog,
+    noteMetadataDialog,
     confirmation,
     appRoot,
     appTabContextMenu,
@@ -471,6 +474,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <ManualModelDialog state={manualModelDialog.value} />
         <AiLaunchDialog state={aiLaunchDialog.value} />
         <AiFeedbackDialog state={aiFeedbackDialog.value} />
+        <NoteMetadataDialog state={noteMetadataDialog.value} />
         {migration && (
           <Hs1MigrationDialog
             projectName={migration.name}

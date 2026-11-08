@@ -313,16 +313,28 @@ pub(crate) fn do_provider_update(
             format!("provider connection '{connection_id}' does not support note editing"),
         ));
     }
-    if req.note_id.is_some() && req.note_summary.is_some() {
+    if req.note_id.is_some()
+        && req.note_summary.is_some()
+        && !provider.descriptor().capabilities.note_kind_edit
+    {
         return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "note_summary is only valid when appending a note",
+            StatusCode::CONFLICT,
+            format!("provider connection '{connection_id}' does not support note summary editing"),
         ));
     }
-    if req.note_summary.is_some() && req.note.as_deref().is_none_or(str::is_empty) {
+    if req.note_id.is_none()
+        && req.note_summary.is_some()
+        && req.note.as_deref().is_none_or(str::is_empty)
+    {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "note_summary requires a non-empty note",
+        ));
+    }
+    if req.note_id.is_none() && req.note_summary == Some(None) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "cannot clear a newly appended note summary",
         ));
     }
     if req.response_to.is_some()
@@ -408,6 +420,7 @@ pub(crate) fn do_provider_update(
     let edit = ops::NoteEditInput {
         kind: req.note_kind,
         text: note,
+        summary: note_summary.clone(),
         confidence: confidence_change,
         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
         allow_feedback_prompt_edit,
@@ -447,7 +460,7 @@ pub(crate) fn do_provider_update(
                     ops::NoteMetadataInput {
                         kind_explicit: req.note_kind.is_some(),
                         human_edited: false,
-                        summary: note_summary,
+                        summary: note_summary.flatten(),
                         confidence: note_confidence,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                         ai_feedback: None,

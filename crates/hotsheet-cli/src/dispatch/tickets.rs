@@ -1014,6 +1014,7 @@ pub(crate) fn cmd_edit(
         let edit = ops::NoteEditInput {
             kind: note_kind,
             text: note,
+            summary: note_summary,
             confidence: note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
             allow_feedback_prompt_edit: false,
@@ -1034,7 +1035,7 @@ pub(crate) fn cmd_edit(
             ops::NoteMetadataInput {
                 kind_explicit: note_kind.is_some(),
                 human_edited: false,
-                summary: note_summary,
+                summary: note_summary.flatten(),
                 confidence: note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
                 ai_feedback: None,
@@ -1392,8 +1393,11 @@ pub(crate) struct TicketEditArgs {
     #[arg(long)]
     note_kind: Option<String>,
     /// Concise plain-text timeline headline for an activity/status note.
-    #[arg(long, conflicts_with = "edit_note")]
+    #[arg(long, conflicts_with = "clear_note_summary")]
     note_summary: Option<String>,
+    /// Clear an existing note's timeline headline.
+    #[arg(long, requires = "edit_note", conflicts_with = "note_summary")]
+    clear_note_summary: bool,
     /// Feedback request note ULID answered by this note.
     #[arg(long, conflicts_with = "edit_note")]
     response_to: Option<String>,
@@ -1515,7 +1519,7 @@ pub(crate) struct TicketEdit {
     no_up_next: bool,
     note: Option<String>,
     note_kind: Option<NoteKind>,
-    note_summary: Option<String>,
+    note_summary: Option<Option<String>>,
     response_to: Option<String>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
@@ -1529,10 +1533,15 @@ impl TicketEdit {
             anyhow::bail!("--response-to requires --note or --note-file");
         }
         let note_confidence = confidence_change(args.note_confidence, args.clear_note_confidence);
+        let note_summary = if args.clear_note_summary {
+            Some(None)
+        } else {
+            args.note_summary.map(Some)
+        };
         validate_note_modifiers(
             &note,
             args.note_kind.as_ref(),
-            args.note_summary.as_ref(),
+            note_summary.as_ref().map(Option::as_ref),
             note_confidence,
             args.edit_note.as_ref(),
         )?;
@@ -1553,7 +1562,7 @@ impl TicketEdit {
             no_up_next: args.no_up_next,
             note,
             note_kind: args.note_kind.as_deref().map(parse_note_kind).transpose()?,
-            note_summary: args.note_summary,
+            note_summary,
             response_to: args.response_to,
             note_confidence,
             edit_note: args.edit_note,

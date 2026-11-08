@@ -254,8 +254,11 @@ enum Cmd {
         #[arg(long)]
         note_kind: Option<String>,
         /// Concise plain-text timeline headline for an activity/status note.
-        #[arg(long, conflicts_with = "edit_note")]
+        #[arg(long, conflicts_with = "clear_note_summary")]
         note_summary: Option<String>,
+        /// Clear the timeline headline of the note named by --edit-note.
+        #[arg(long, requires = "edit_note", conflicts_with = "note_summary")]
+        clear_note_summary: bool,
         /// Provider-native feedback request note id answered by this note.
         #[arg(long, conflicts_with = "edit_note")]
         response_to: Option<String>,
@@ -1323,7 +1326,7 @@ fn confidence_change(
 fn validate_note_modifiers(
     note: &Option<String>,
     note_kind: Option<&String>,
-    note_summary: Option<&String>,
+    note_summary: Option<Option<&String>>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<&String>,
 ) -> Result<()> {
@@ -1335,12 +1338,14 @@ fn validate_note_modifiers(
     if note.is_some() {
         return Ok(());
     }
-    if (note_kind.is_some() && edit_note.is_none()) || note_summary.is_some() {
+    if (note_kind.is_some() && edit_note.is_none())
+        || (note_summary.is_some() && edit_note.is_none())
+    {
         bail!("--note-kind and --note-summary require --note or --note-file");
     }
     match (
         edit_note.is_some(),
-        note_confidence.is_some() || note_kind.is_some(),
+        note_confidence.is_some() || note_kind.is_some() || note_summary.is_some(),
     ) {
         (true, false) => bail!(
             "--edit-note requires --note, --note-file, --note-confidence, or \

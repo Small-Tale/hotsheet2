@@ -1820,6 +1820,8 @@ icons; structural separators do not require icons.
   card inset; the demo shows both (HS2-7RY5GK);
   stored cards include a visible Kerf PopupMenu action button and share its repair
   action with right-click and keyboard context opening (HS2-5E8Y9R);
+  the same menu offers explicit type, activity/status summary, and confidence
+  correction dialogs with provider capability reasons (HS2-Q0GWXT);
   a single click (or Enter/Space) on an editable note enters its controlled, blur-flushed
   autosaving editor, while links and controls inside the note keep their own action
   (HS2-H1K9YY).
@@ -1830,6 +1832,8 @@ icons; structural separators do not require icons.
 - `NoteRepairReview` — **demo built** with deterministic findings, before/after text,
   note metadata, unavailable-operation reasons, and explicit Apply or Reject actions
   in the AI conversation sidecar (HS2-5E8Y9R).
+- `NoteMetadataDialog` — **demo built** for explicit stored-note type, timeline
+  summary, and confidence correction (HS2-Q0GWXT).
   In reader mode, regular/status notes remain directly editable, while feedback-needed
   and feedback-draft notes always render their Respond/Submit editor style. Each uppercase
   `CHOICE` block in a feedback-needed note (several per note, HS2-83YCDP) becomes Markdown-capable Kerf multi-select

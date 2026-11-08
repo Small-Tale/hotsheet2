@@ -1849,6 +1849,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         time: ago(note.created_at),
         body: note.text,
         repairable: true,
+        storedKind: note.kind,
+        metadataEditable: Boolean(
+          capabilitiesFor(ticket.connection_id)?.note_edit && capabilitiesFor(ticket.connection_id)?.note_kind_edit,
+        ),
+        confidenceEditable: Boolean(
+          capabilitiesFor(ticket.connection_id)?.note_edit && capabilitiesFor(ticket.connection_id)?.note_confidence,
+        ),
+        hasLinkedResponses: ticket.notes.some((item) => item.response_to === note.id),
         aiAuthored,
         humanEdited: note.human_edited,
         aiTool,

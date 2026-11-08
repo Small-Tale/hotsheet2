@@ -176,16 +176,19 @@ pub(crate) fn do_update_with_ticket(
     {
         return Err(ApiError::not_found(&format!("note {note_id}")));
     }
-    if edit_note_id.is_some() && req.note_summary.is_some() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "note_summary is only valid when appending a note",
-        ));
-    }
-    if req.note_summary.is_some() && req.note.as_deref().is_none_or(str::is_empty) {
+    if edit_note_id.is_none()
+        && req.note_summary.is_some()
+        && req.note.as_deref().is_none_or(str::is_empty)
+    {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "note_summary requires a non-empty note",
+        ));
+    }
+    if edit_note_id.is_none() && req.note_summary == Some(None) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "cannot clear a newly appended note summary",
         ));
     }
     if req.response_to.is_some()
@@ -249,6 +252,7 @@ pub(crate) fn do_update_with_ticket(
             let edit = ops::NoteEditInput {
                 kind: req.note_kind,
                 text: note_text_edit,
+                summary: req.note_summary,
                 confidence: confidence_change,
                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                 allow_feedback_prompt_edit: req.edit_feedback_prompt,
@@ -270,7 +274,7 @@ pub(crate) fn do_update_with_ticket(
                 ops::NoteMetadataInput {
                     kind_explicit: req.note_kind.is_some(),
                     human_edited: false,
-                    summary: req.note_summary,
+                    summary: req.note_summary.flatten(),
                     confidence: confidence_change.flatten(),
                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                     ai_feedback: None,

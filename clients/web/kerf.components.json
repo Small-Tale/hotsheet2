@@ -4232,6 +4232,42 @@
       }
     },
     {
+      "id": "note-metadata-dialog",
+      "name": "NoteMetadataDialog",
+      "kind": "component",
+      "purpose": "Explicit human correction of a stored note's type, timeline summary, or confidence.",
+      "source": "src/components/note-metadata-dialog.tsx",
+      "publicExports": [{ "name": "NoteMetadataDialog" }],
+      "sourceLinks": ["src/components/note-metadata-dialog.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["controls"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["note-metadata-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["note-metadata-dialog"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/note-metadata-dialog.tsx",
+        "composition": "src/components/note-metadata-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["A person corrects a stored note's type, summary, or confidence."],
+        "avoidWhen": ["The note is being composed or its body is being edited."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "note-card",
       "name": "NoteCard",
       "kind": "component",

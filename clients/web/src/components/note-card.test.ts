@@ -18,6 +18,31 @@ describe('NoteCard', () => {
       'AI Fix This Note',
     );
   });
+  it('HS2-Q0GWXT keeps manual metadata actions visible with provider and response reasons', () => {
+    const base = {
+      id: 'synthetic-note',
+      kind: 'activity' as const,
+      author: 'AI',
+      time: 'Now',
+      body: 'Body',
+      repairable: true,
+    };
+    const enabled = String(NoteCard({ ...base, metadataEditable: true, confidenceEditable: true }));
+    expect(enabled).toContain('Change Type (Activity)');
+    expect(enabled).toContain('Edit Timeline Summary');
+    expect(enabled).toContain('Correct Confidence');
+    expect(enabled).toContain('data-mode="summary"');
+    const unavailable = String(NoteCard(base));
+    expect(unavailable).toContain('This source cannot edit note summaries.');
+    expect(unavailable).toContain('This source cannot edit note confidence.');
+    const confidenceOnly = String(NoteCard({ ...base, confidenceEditable: true }));
+    expect(confidenceOnly).toContain('This source cannot change note metadata.');
+    expect(confidenceOnly).not.toContain('This source cannot edit note confidence.');
+    const answered = String(NoteCard({ ...base, metadataEditable: true, hasLinkedResponses: true }));
+    expect(answered).toContain('A linked response exists; review the response before changing this type.');
+    const regular = String(NoteCard({ ...base, storedKind: 'regular', metadataEditable: true }));
+    expect(regular).toContain('Only activity and status notes have timeline summaries.');
+  });
   it.each([
     ['regular', 'message-square-text', 'Note'],
     ['status', 'refresh-cw', 'Status update'],

@@ -132,6 +132,7 @@ describe('UX demo catalog', () => {
       'note-composer',
       'note-card',
       'note-repair-review',
+      'note-metadata-dialog',
       'ai-conversation',
       'ai-content-label',
       'ai-feedback-dialog',

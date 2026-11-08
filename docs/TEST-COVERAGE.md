@@ -1992,6 +1992,12 @@ discard flow remains covered by its existing real-router test.
 - Unit: `clients/web/src/note-repair-proposal.test.ts` covers scope, parsing, kind capability, response safety, and no-op; `clients/web/src/components/note-card.test.ts` covers menu presentation; `crates/hotsheet-ticketing/src/ops.rs # hs2_5e8y9r_human_kind_repair_preserves_ai_actor_and_marks_review` covers feedback request semantics and provenance; `crates/hotsheet-plugins/src/tests.rs` pins headless repair skill installation.
 - End to end: `clients/web/tests/providers.spec.ts # HS2-5E8Y9R` opens the sidebar menu, accepts a synthetic AI proposal, and verifies the real server's note kind, feedback request, and provenance. Reader and responsive review are checked in the ticket's visual QA.
 
+### Explicit stored-note metadata correction (HS2-Q0GWXT)
+
+- Behavior: stored-note menus expose type, activity/status timeline summary, and confidence corrections with provider capability reasons. Blank summary or confidence clears that value. Linked responses block type changes; correcting an unanswered feedback request updates its derived state. Saves require the current optimistic token and retain the original actor and response links.
+- Unit: `crates/hotsheet-ticketing/src/ops.rs # hs2_q0gwxt_summary_set_and_clear_preserve_ai_authorship` checks set/clear and human-edit provenance; `clients/web/src/components/note-card.test.ts` checks menu availability; `clients/web/src/components/note-metadata-dialog.test.ts` checks all three dialog modes.
+- End to end: `crates/hotsheet-server/tests/http.rs # update_can_append_edit_and_preserve_repeated_activity` and `crates/hotsheet-cli/tests/cli.rs # edit_can_append_and_edit_an_activity_note` check the nullable summary edit contract; `clients/web/tests/providers.spec.ts # HS2-Q0GWXT` drives sidebar and reader corrections through the real server, including summary set/clear, confidence set/clear, feedback request state, CHOICE rendering, and wide/medium/narrow/returned-wide captures.
+
 ### Needs-review marker and details agreement (HS2-4ZFB8K)
 
 - Behavior: the list and column Needs review marker reads the index's cached `feedback_needed`, while details derive it live from the ticket. The index schema is bumped (21) whenever that derivation changes, so a stale row or an older process sharing the file cannot keep an explicit Regular note that mentions the marker flagged after HS2-CV5NMC.

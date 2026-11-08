@@ -1172,6 +1172,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "note-metadata-dialog",
+      "name": "NoteMetadataDialog",
+      "kind": "component",
+      "purpose": "Explicit human correction of a stored note's type, timeline summary, or confidence.",
+      "useWhen": [
+        "A person corrects a stored note's type, summary, or confidence."
+      ],
+      "avoidWhen": [
+        "The note is being composed or its body is being edited."
+      ],
+      "publicClasses": [
+        "note-metadata-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/note-metadata-dialog.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "note-repair-review",
       "name": "NoteRepairReview",
       "kind": "component",

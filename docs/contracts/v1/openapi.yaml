@@ -14235,7 +14235,10 @@ components:
             Explicit kind on append, or intentional kind correction with note_id. Omitted append kinds retain legacy
             inference; omitted edit kinds remain unchanged. feedback_draft cannot replace a persisted kind.
         note_summary:
-          type: string
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Set or clear the existing note summary with note_id; omitted edits leave it unchanged.
         response_to:
           type: string
         note_confidence:
@@ -14910,7 +14913,10 @@ components:
             Explicit kind on append, or intentional kind correction with note_id. Omitted append kinds retain legacy
             inference; omitted edit kinds remain unchanged. feedback_draft cannot replace a persisted kind.
         note_summary:
-          type: string
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Set or clear the existing note summary with note_id; omitted edits leave it unchanged.
         response_to:
           type: string
         note_confidence:
@@ -15196,7 +15202,9 @@ components:
                   - feedback_draft
                   - status
               note_summary:
-                type: string
+                anyOf:
+                  - type: string
+                  - type: 'null'
               response_to:
                 type: string
               note_confidence:

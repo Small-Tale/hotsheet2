@@ -280,7 +280,7 @@ fn base_tools_list() -> Value {
                 "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; explicit selection wins inference; omitted append kind retains legacy inference; with note_id intentionally corrects kind (feedback_draft refused)"),
-                "note_summary": str_prop("optional concise plain-text timeline headline"),
+                "note_summary": { "type": ["string", "null"], "description": "concise plain-text timeline headline; with note_id, null clears the existing summary" },
                 "response_to": str_prop("feedback request note id answered by this appended note"),
                 "note_confidence": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note. With note_id it corrects that note's score (note text optional), and null clears it" },
                 "note_id": str_prop("existing note ULID to edit instead of appending")
@@ -2977,16 +2977,25 @@ mod core_backend {
                     {
                         return Err(not_found(&format!("note {note_id}")));
                     }
-                    if edit_note_id.is_some() && body.get("note_summary").is_some() {
-                        return Err(bad_request(
-                            "note_summary is only valid when appending a note",
-                        ));
-                    }
-                    if body.get("note_summary").is_some()
+                    if edit_note_id.is_none()
+                        && body.get("note_summary").is_some()
                         && str_field(body, "note").is_none_or(|note| note.is_empty())
                     {
                         return Err(bad_request("note_summary requires a non-empty note"));
                     }
+                    if edit_note_id.is_none()
+                        && body.get("note_summary").is_some_and(Value::is_null)
+                    {
+                        return Err(bad_request("cannot clear a newly appended note summary"));
+                    }
+                    let note_summary = match body.get("note_summary") {
+                        None => None,
+                        Some(Value::Null) => Some(None),
+                        Some(Value::String(summary)) => Some(Some(summary.clone())),
+                        Some(_) => {
+                            return Err(bad_request("note_summary must be a string or null"));
+                        }
+                    };
                     if body.get("response_to").is_some()
                         && (edit_note_id.is_some()
                             || str_field(body, "note").is_none_or(|note| note.is_empty()))
@@ -3063,6 +3072,7 @@ mod core_backend {
                             let edit = ops::NoteEditInput {
                                 kind: new_note_kind,
                                 text: note_text.clone(),
+                                summary: note_summary.clone(),
                                 confidence: confidence_change,
                                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                                 allow_feedback_prompt_edit: false,

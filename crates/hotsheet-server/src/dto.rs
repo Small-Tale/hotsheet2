@@ -266,8 +266,9 @@ pub(crate) struct UpdateReq {
     /// Explicit appended-note kind, or intentional correction of `note_id`.
     /// Omission preserves legacy inference on append and the current kind on edit.
     pub(crate) note_kind: Option<NoteKind>,
-    /// Optional concise plain-text headline used by timeline presentations.
-    pub(crate) note_summary: Option<String>,
+    /// Set, clear with JSON null on an existing note, or leave the timeline headline unchanged.
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    pub(crate) note_summary: Option<Option<String>>,
     /// Request note id answered by the appended note.
     pub(crate) response_to: Option<String>,
     /// Optional AI completion confidence (integer 0-100) on the appended note

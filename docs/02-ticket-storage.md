@@ -402,6 +402,8 @@ should the fix also cover the dashboard dedicated view?
     their marker as the forward-compatible `summary_hex:` token. It is the concise
     Timeline headline; the Markdown body remains the full record in Notes. Missing
     summaries are valid for old files and external providers.
+    A note edit may set, keep, or clear the summary without rewriting the body;
+    omission keeps it, while explicit null clears it (HS2-Q0GWXT).
     Any note may carry an optional integer `confidence` (0-100) — the author's
     self-reported completion confidence (HS2-DWTJ43) — as the forward-compatible
     `confidence: NN` marker token. The ticket's _current_ confidence is **derived at

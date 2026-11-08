@@ -17236,6 +17236,51 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
     let created_at = progress["created_at"].as_str().unwrap();
     assert_eq!(progress["edited_at"], created_at);
 
+    // HS2-Q0GWXT: omitted, set, and explicit null have distinct edit meanings.
+    let summary_edit =
+        serde_json::json!({"note_id":note_id,"note_summary":"Investigation complete"});
+    let summary_set = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(&summary_edit.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        summary_set["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == note_id)
+            .unwrap()["summary"],
+        "Investigation complete"
+    );
+    let summary_clear = serde_json::json!({"note_id":note_id,"note_summary":null});
+    let summary_cleared = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(&summary_clear.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        summary_cleared["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == note_id)
+            .unwrap()["summary"]
+            .is_null()
+    );
+
     let edit = serde_json::json!({"note":"completed initial investigation","note_id":note_id});
     let edited = body_json(
         app.clone()

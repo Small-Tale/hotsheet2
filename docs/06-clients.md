@@ -4544,6 +4544,14 @@ accepting. The update uses the ticket's optimistic token; a changed ticket needs
 a fresh proposal. The proposal cannot create a response or alter ticket-wide
 fields. Providers that cannot apply a proposed operation explain it in the preview.
 
+The same stored-note menu offers explicit **Change type**, **Edit timeline summary**
+for activity and status notes, and **Correct confidence** (HS2-Q0GWXT). Each opens
+a confirmation dialog; an empty summary or confidence clears that value. A type
+change that closes an unanswered feedback request is called out before saving,
+and a request with linked responses cannot change type. Unsupported provider
+actions stay visible with a reason. Saves use the optimistic token and retain the
+original author and response links.
+
 Note cards use the canonical spacing ladder: a 16px card inset, 8px between ordinary
 card regions, and 4px inside connected icon/metadata and inline-feedback clusters. The
 quieter Activity variant uses an 8px block / 16px inline inset with 4px between its

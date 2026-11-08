@@ -67,6 +67,7 @@ import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
+import type { NoteMetadataDialogState, NoteMetadataMode } from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
@@ -4815,6 +4816,90 @@ export async function startHotSheetWebClient() {
     message?: string;
   };
   const noteRepairSession = signal<NoteRepairSession | undefined>(undefined);
+  const noteMetadataDialog = signal<NoteMetadataDialogState | undefined>(undefined);
+  function beginNoteMetadataEdit(noteId: string, mode: NoteMetadataMode, frame?: TicketReaderFrame) {
+    const ticket = frame?.ticket ?? selectedTicket.peek(),
+      note = ticket?.notes.find((item) => item.id === noteId),
+      owner = frame ? projects.peek().find((item) => item.id === frame.projectId) : project();
+    if (!ticket || !note || !owner || !ticket.concurrency_token) return;
+    const capabilities = frame ? frame.capabilities : capabilitiesFor(ticket.connection_id);
+    if (
+      !capabilities.note_edit ||
+      (mode === 'confidence' ? !capabilities.note_confidence : !capabilities.note_kind_edit)
+    )
+      return;
+    const hasResponses = ticket.notes.some((item) => item.response_to === noteId);
+    if (mode === 'kind' && hasResponses) return;
+    if (mode === 'summary' && note.kind !== 'activity' && note.kind !== 'status') return;
+    noteMetadataDialog.value = {
+      noteId,
+      ticketId: ticket.qualified_id,
+      projectId: owner.id,
+      frameId: frame?.id,
+      token: ticket.concurrency_token,
+      mode,
+      kind: note.kind,
+      summary: note.summary,
+      confidence: note.confidence,
+      hasResponses,
+    };
+  }
+  async function saveNoteMetadata(form: HTMLFormElement) {
+    const state = noteMetadataDialog.peek();
+    if (!state || state.submitting) return;
+    const ticket = state.frameId
+      ? linkedReaderStack.peek().find((frame) => frame.id === state.frameId)?.ticket
+      : selectedTicket.peek();
+    if (!ticket || ticket.qualified_id !== state.ticketId || ticket.concurrency_token !== state.token) {
+      noteMetadataDialog.value = { ...state, error: 'The ticket changed. Close and reopen this editor.' };
+      return;
+    }
+    const patch: Record<string, unknown> = {
+      note_id: state.noteId,
+      expected_token: state.token,
+      actor: { role: 'human' },
+    };
+    if (state.mode === 'kind') {
+      const kind = form.querySelector<HTMLSelectElement>('[name="note-metadata-kind"]')?.value;
+      if (!kind || !['regular', 'activity', 'status', 'feedback_needed'].includes(kind)) return;
+      if (kind === state.kind) {
+        noteMetadataDialog.value = undefined;
+        return;
+      }
+      patch.note_kind = kind;
+    } else if (state.mode === 'summary') {
+      const summary = form.querySelector<HTMLInputElement>('[name="note-metadata-summary"]')?.value.trim() ?? '';
+      if (summary === (state.summary ?? '')) {
+        noteMetadataDialog.value = undefined;
+        return;
+      }
+      patch.note_summary = summary || null;
+    } else {
+      const raw = form.querySelector<HTMLInputElement>('[name="note-metadata-confidence"]')?.value.trim() ?? '';
+      if (raw && (!/^\d{1,3}$/u.test(raw) || Number(raw) > 100)) {
+        noteMetadataDialog.value = { ...state, error: 'Enter a whole number from 0 to 100.' };
+        return;
+      }
+      if ((raw ? Number(raw) : undefined) === state.confidence) {
+        noteMetadataDialog.value = undefined;
+        return;
+      }
+      patch.note_confidence = raw ? Number(raw) : null;
+    }
+    noteMetadataDialog.value = { ...state, submitting: true, error: undefined };
+    try {
+      if (state.frameId) {
+        const frame = linkedReaderStack.peek().find((item) => item.id === state.frameId);
+        if (!frame) throw new Error('The ticket reader closed.');
+        const result = await new Api(frame.apiPath).updateCheckoutTicket(state.projectId, state.ticketId, patch);
+        replaceLinkedReaderFrame(state.frameId, (current) => ({ ...current, ticket: result.ticket }));
+      } else if (!(await updateSelected(patch))) throw new Error('The note could not be saved.');
+      noteMetadataDialog.value = undefined;
+      showToast('Note details updated.');
+    } catch (reason) {
+      noteMetadataDialog.value = { ...state, error: reason instanceof Error ? reason.message : String(reason) };
+    }
+  }
   async function beginNoteRepair(noteId: string, frame?: TicketReaderFrame) {
     const ticket = frame?.ticket ?? selectedTicket.peek(),
       owner = frame ? projects.peek().find((item) => item.id === frame.projectId) : project(),
@@ -5357,6 +5442,7 @@ export async function startHotSheetWebClient() {
     activeTicketCollectionKey,
     aiConversationSurface,
     aiFeedbackDialog,
+    noteMetadataDialog,
     confirmation,
     appRoot,
     appTabContextMenu,
@@ -5918,6 +6004,11 @@ export async function startHotSheetWebClient() {
     applyNoteRepair,
     dismissNoteRepair: () => {
       noteRepairSession.value = undefined;
+    },
+    beginNoteMetadataEdit,
+    saveNoteMetadata,
+    dismissNoteMetadata: () => {
+      noteMetadataDialog.value = undefined;
     },
     dismissFeedbackRequest,
     runCommand,

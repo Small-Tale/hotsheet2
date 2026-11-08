@@ -5,6 +5,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { Api, type CodeReview, type FullTicket } from '../api';
 import { boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
+import type { NoteMetadataMode } from '../components/note-metadata-dialog';
 import { codeReviewTarget } from '../components/ticket-code-review';
 import {
   wireMarkdownDetailsEditor,
@@ -117,6 +118,9 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly beginNoteRepair: (noteId: string, frame?: TicketReaderFrame) => Promise<void>;
   readonly applyNoteRepair: () => Promise<void>;
   readonly dismissNoteRepair: () => void;
+  readonly beginNoteMetadataEdit: (noteId: string, mode: NoteMetadataMode, frame?: TicketReaderFrame) => void;
+  readonly saveNoteMetadata: (form: HTMLFormElement) => Promise<void>;
+  readonly dismissNoteMetadata: () => void;
   readonly feedbackResponseDrafts: FeedbackResponseDrafts;
   readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
   readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
@@ -201,6 +205,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     beginNoteRepair,
     applyNoteRepair,
     dismissNoteRepair,
+    beginNoteMetadataEdit,
+    saveNoteMetadata,
+    dismissNoteMetadata,
     dismissFeedbackRequest,
     feedbackResponseDrafts,
     readerNoteAutosave,
@@ -1303,6 +1310,30 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.dismissNoteRepair.selector, () => {
       dismissNoteRepair();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.selector, (_event, target) => {
+      const noteId = data(target).noteId,
+        mode = data(target).mode;
+      if (noteId && (mode === 'kind' || mode === 'summary' || mode === 'confidence'))
+        beginNoteMetadataEdit(noteId, mode, linkedReaderFrame(target));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.saveNoteMetadata.selector, (event, target) => {
+      event.preventDefault();
+      void saveNoteMetadata(target as HTMLFormElement);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelNoteMetadata.selector, () => {
+      dismissNoteMetadata();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'wa-hide', INSPECTOR_AND_EDITOR_TARGETS.noteMetadataDialog.selector, () => {
+      dismissNoteMetadata();
     }),
   );
   lifetime.add(

@@ -12,6 +12,7 @@ import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-
 import { MarkdownPreview, type MarkdownPreviewProps } from '../components/markdown-preview';
 import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-card';
 import { NoteComposer } from '../components/note-composer';
+import { NoteMetadataDialog } from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
 import {
   wireMarkdownDetailsEditor,
@@ -233,6 +234,25 @@ export function NoteRepairReviewDemo() {
           unavailable: [],
           patch: { note_id: 'synthetic-note', note_kind: 'feedback_needed' },
           changed: true,
+        }}
+      />
+    </CatalogExample>
+  );
+}
+
+export function NoteMetadataDialogDemo() {
+  return (
+    <CatalogExample label="Timeline Summary Correction">
+      <NoteMetadataDialog
+        state={{
+          noteId: 'synthetic-note',
+          ticketId: 'synthetic-ticket',
+          projectId: 'synthetic-project',
+          token: 'synthetic-token',
+          mode: 'summary',
+          kind: 'activity',
+          summary: 'Verified the synthetic result',
+          hasResponses: false,
         }}
       />
     </CatalogExample>
@@ -841,6 +861,7 @@ export const demoModule: DemoModule = {
   entries: {
     'note-card': { catalogExamples: true, Demo: NoteCardDemo },
     'note-repair-review': { catalogExamples: true, Demo: NoteRepairReviewDemo },
+    'note-metadata-dialog': { catalogExamples: true, Demo: NoteMetadataDialogDemo },
     'note-composer': { catalogExamples: true, Demo: NoteComposerDemo },
     'ticket-reader': { catalogExamples: true, Demo: TicketReaderDemo },
     'markdown-editor': {

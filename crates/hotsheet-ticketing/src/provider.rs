@@ -1938,6 +1938,7 @@ impl TicketProvider for GitProvider {
             ops::NoteEditInput {
                 kind: None,
                 text: Some(text),
+                summary: None,
                 confidence: None,
                 actor: None,
                 allow_feedback_prompt_edit: false,
@@ -1956,6 +1957,12 @@ impl TicketProvider for GitProvider {
             return Err(ProviderError::Unsupported {
                 connection_id: self.connection_id.clone(),
                 capability: "note_kind_edit",
+            });
+        }
+        if edit.summary.is_some() && !self.capabilities().note_kind_edit {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "note_summary_edit",
             });
         }
         if edit.confidence.is_some() && !self.supports_note_confidence() {
@@ -3703,6 +3710,7 @@ mod tests {
                 ops::NoteEditInput {
                     kind: None,
                     text: Some("preserve this edited note".into()),
+                    summary: None,
                     confidence: None,
                     actor: Some(hotsheet_model::NoteActor {
                         role: hotsheet_model::AttachmentActorRole::Human,
@@ -4112,6 +4120,7 @@ mod tests {
                 crate::ops::NoteEditInput {
                     kind: None,
                     text: None,
+                    summary: None,
                     confidence: Some(Some(Confidence::new(10).unwrap())),
                     actor: None,
                     allow_feedback_prompt_edit: false,
@@ -4135,6 +4144,7 @@ mod tests {
                     crate::ops::NoteEditInput {
                         kind: None,
                         text: text.map(str::to_owned),
+                        summary: None,
                         confidence,
                         actor: None,
                         allow_feedback_prompt_edit: false,

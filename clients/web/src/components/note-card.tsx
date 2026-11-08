@@ -47,6 +47,13 @@ export interface NoteCardProps {
   deletable?: boolean;
   /** Stored ticket notes expose the same repair action by button, pointer, and keyboard. */
   repairable?: boolean;
+  /** Provider supports note metadata writes; unsupported actions stay visible with a reason. */
+  metadataEditable?: boolean;
+  /** Provider supports confidence correction independently of kind correction. */
+  confidenceEditable?: boolean;
+  /** Persisted kind, which can differ from the presented kind after an answer. */
+  storedKind?: NoteKind;
+  hasLinkedResponses?: boolean;
   editing?: boolean;
   /** The edit open on this FEEDBACK NEEDED prompt is an explicit Edit Note, not a reply draft (HS2-ZXGEFE). */
   editingPrompt?: boolean;
@@ -379,6 +386,10 @@ export function NoteCard({
   editable = true,
   deletable = true,
   repairable = false,
+  metadataEditable = false,
+  confidenceEditable = false,
+  storedKind = kind,
+  hasLinkedResponses = false,
   editing = false,
   editingPrompt = false,
   responseDraft = false,
@@ -476,6 +487,35 @@ export function NoteCard({
                   action: INSPECTOR_AND_EDITOR_ACTIONS.repairNote.value,
                   icon: <LucideIcon icon={Sparkles} name="sparkles" />,
                   attributes: { 'data-note-id': id },
+                },
+                {
+                  label: `Change Type (${presentations[storedKind].label})`,
+                  action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
+                  attributes: { 'data-note-id': id, 'data-mode': 'kind' },
+                  disabled: !metadataEditable || hasLinkedResponses,
+                  disabledReason: !metadataEditable
+                    ? 'This source cannot change note metadata.'
+                    : hasLinkedResponses
+                      ? 'A linked response exists; review the response before changing this type.'
+                      : undefined,
+                },
+                {
+                  label: 'Edit Timeline Summary',
+                  action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
+                  attributes: { 'data-note-id': id, 'data-mode': 'summary' },
+                  disabled: !metadataEditable || (storedKind !== 'activity' && storedKind !== 'status'),
+                  disabledReason: !metadataEditable
+                    ? 'This source cannot edit note summaries.'
+                    : storedKind !== 'activity' && storedKind !== 'status'
+                      ? 'Only activity and status notes have timeline summaries.'
+                      : undefined,
+                },
+                {
+                  label: 'Correct Confidence',
+                  action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
+                  attributes: { 'data-note-id': id, 'data-mode': 'confidence' },
+                  disabled: !confidenceEditable,
+                  disabledReason: !confidenceEditable ? 'This source cannot edit note confidence.' : undefined,
                 },
               ]}
             />

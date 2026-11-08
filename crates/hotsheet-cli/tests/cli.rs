@@ -7898,6 +7898,50 @@ fn edit_can_append_and_edit_an_activity_note() {
         edited_activity.summary.as_deref(),
         Some("Started flicker investigation")
     );
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &note_id,
+            "--note-summary",
+            "Verified outcome",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+            .notes
+            .iter()
+            .find(|note| note.id.to_string() == note_id)
+            .unwrap()
+            .summary
+            .as_deref(),
+        Some("Verified outcome")
+    );
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &note_id,
+            "--clear-note-summary",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+            .notes
+            .iter()
+            .find(|note| note.id.to_string() == note_id)
+            .unwrap()
+            .summary,
+        None
+    );
 }
 
 #[test]

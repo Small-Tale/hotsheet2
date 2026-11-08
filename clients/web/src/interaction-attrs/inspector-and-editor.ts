@@ -24,6 +24,9 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   dismissFeedback: action('dismiss-feedback'),
   deleteNote: action('delete-note'),
   repairNote: action('repair-note'),
+  editNoteMetadata: action('edit-note-metadata'),
+  saveNoteMetadata: action('save-note-metadata'),
+  cancelNoteMetadata: action('cancel-note-metadata'),
   applyNoteRepair: action('apply-note-repair'),
   dismissNoteRepair: action('dismiss-note-repair'),
   editFeedbackPrompt: action('edit-feedback-prompt'),
@@ -65,4 +68,5 @@ export const INSPECTOR_AND_EDITOR_TARGETS = {
   ticketReaderDialog: attr('data-reader-dialog', ''),
   ticketInspectorHeader: attr('data-component', 'ticket-inspector-header'),
   ticketInspectorBody: attr('data-component', 'ticket-inspector-body'),
+  noteMetadataDialog: attr('data-key', 'note-metadata-dialog'),
 } as const;
