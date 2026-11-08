@@ -42,6 +42,10 @@ mod routes;
 pub mod source_revision;
 pub mod stuck_causes;
 pub mod sync_loop;
+#[cfg(unix)]
+pub mod terminal_broker;
+#[cfg(not(unix))]
+#[path = "terminal_broker_windows.rs"]
 pub mod terminal_broker;
 mod terminal_names;
 pub mod tls;

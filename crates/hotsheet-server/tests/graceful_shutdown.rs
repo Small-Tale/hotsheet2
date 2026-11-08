@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: Unix signal and process-group fixture.
+
 //! Real `hotsheet-server` binary: a stop is bounded even with long-lived connections open
 //! (HS2-W1KJR4). A held permission hook is cancelled with 503, a stuck request cannot keep
 //! the process past its drain deadline, a second stop signal forces exit immediately, and

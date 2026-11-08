@@ -6,6 +6,10 @@ in **early implementation** — the Rust core, CLI, server, index, MCP shim, and
 AI-tool plugins are built; see [CODEBASE-MAP.md](CODEBASE-MAP.md) for what exists.
 These documents remain the source of truth for what we are building and why.
 
+**Windows terminal status (HS2-2TD7M7):** the server uses in-process PTYs on
+Windows; Unix keeps detached broker persistence across server restarts. Windows
+server and credential-cache execution awaits fresh native Platforms verification.
+
 **Phone terminal keys (HS2-RS96EJ):** the expanded key group uses an ellipsis control labelled More terminal keys
 because it includes Shift and clipboard actions as well as function and navigation
 keys. See [client behavior](06-clients.md) §6.

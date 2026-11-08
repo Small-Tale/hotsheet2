@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: Unix process-group fixture.
+
 //! HS2-Y0PAEM: a real server start prunes index files left by older schema generations
 //! from the machine index dir, but never one another process still holds open.
 

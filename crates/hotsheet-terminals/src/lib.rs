@@ -15,6 +15,7 @@
 
 pub mod bootstrap;
 pub mod broker;
+#[cfg(unix)]
 pub mod broker_socket;
 pub mod busy;
 pub mod env;
@@ -33,8 +34,10 @@ pub use bootstrap::BootstrapHealth;
 pub use broker::{
     BrokerClient, BrokerPushState, BrokerStream, BrokerStreamReader, BrokerStreamWriter,
     BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest, Response as BrokerResponse,
-    SocketCleanup, StreamIn, StreamOut, run_broker_process, serve_broker, serve_broker_with_idle,
+    SocketCleanup, StreamIn, StreamOut, run_broker_process,
 };
+#[cfg(unix)]
+pub use broker::{serve_broker, serve_broker_with_idle};
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
 pub use input_queue::INPUT_BUDGET_BYTES;

@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: Unix process-group fixture.
+
 //! Real `hotsheet-server` binaries: an explicit `--stop` leaves a machine server owned by
 //! the pinned production host (`--launcher local-host-snapshot`) running unless `--force`,
 //! while servers launched by dev hosts or the CLI stop as before (HS2-9AWEX5).

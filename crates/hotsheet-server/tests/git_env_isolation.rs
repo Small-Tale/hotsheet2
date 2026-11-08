@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: Unix process-group fixture.
+
 //! HS2-RRD417: the real `hotsheet-server` binary started under an inherited git
 //! repository environment (as from a git hook, `git rebase --exec`, or `git bisect run`)
 //! must commit ticket writes only to its own store. `GIT_DIR`, `GIT_WORK_TREE`,

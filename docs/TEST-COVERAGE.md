@@ -1,5 +1,16 @@
 # Feature Coverage Matrix
 
+HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
+manager on Windows. `hotsheet-server/src/main.rs #
+hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out` and
+`hotsheet-server/src/terminal_broker_windows.rs #
+hs2_2td7m7_windows_broker_is_explicitly_unsupported` pin the platform boundary;
+`hotsheet-server/tests/windows_terminal_fallback.rs` checks a real Windows
+server/PTY request path. Unix broker suites remain the regression gate. The
+existing Windows managed-cache and account tests run in `Platforms` once the
+server crate compiles; fresh native Windows results are required before this
+ticket closes.
+
 HS2-K2NSCE: `scripts/windows-crt-directives.test.mjs` counts every archive
 basename, including objects without CRT directives, and checks that only a
 numeric multiplicity reaches the report. `scripts/windows-crt-link-correlation.test.mjs`

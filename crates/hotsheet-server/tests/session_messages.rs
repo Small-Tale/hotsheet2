@@ -210,6 +210,7 @@ fn connection(list: &serde_json::Value, id: &str) -> serde_json::Value {
         .unwrap_or(serde_json::Value::Null)
 }
 
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 #[tokio::test]
 async fn a_broker_terminal_keeps_its_push_session_across_a_server_restart() {
     let store_dir = tempfile::tempdir().unwrap();

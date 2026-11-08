@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: cat and detached Unix socket broker fixtures.
+
 //! Live terminal-attach WebSocket E2E (HS2-XTTTMV): boot a real server, open a `cat`
 //! terminal over HTTP, attach over a WebSocket, and prove the stream — the scrollback replays,
 //! input the viewer sends is forwarded to the PTY, and `cat`'s echo streams back as output.
