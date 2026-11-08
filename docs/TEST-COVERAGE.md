@@ -5,7 +5,8 @@ against synthetic repaired note shapes and verifies decision context and note
 filtering. `hotsheet-cli/tests/cli.rs` and `hotsheet-mcp/src/lib.rs` exercise
 the JSON report through real Git stores. `hotsheet-server/tests/http.rs` checks
 the authenticated route, note filter, and read-only behavior. Both server routes
-call the same pure report function.
+call the same pure report function. `clients/web/tests/contracts.spec.ts` pins
+their concrete OpenAPI paths and response schema (CI repair after run 42504706229).
 
 HS2-52BEHN keeps a typed GitHub repository path when the repository list loads.
 `clients/web/src/components/ticket-source-surfaces.test.ts` checks that the Repository

@@ -1178,6 +1178,41 @@ paths:
         required: true
         schema:
           type: string
+  /tickets/{id}/note-doctor:
+    get:
+      operationId: get_ticket_note_doctor
+      parameters:
+        - name: note
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      responses:
+        '200':
+          description: Deterministic, read-only findings for one ticket or note.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteDoctorReport'
+        '400':
+          description: Invalid note id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Ticket or note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /tickets/{id}/notes/{note_id}:
     delete:
       operationId: delete_ticket_note
@@ -4702,6 +4737,52 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UpdateTicket'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/note-doctor:
+    get:
+      operationId: get_checkout_ticket_note_doctor
+      parameters:
+        - name: note
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      responses:
+        '200':
+          description: Deterministic, read-only findings for a Git ticket or note.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteDoctorReport'
+        '400':
+          description: Invalid note id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Ticket or note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The source provider does not support note diagnostics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     parameters:
       - name: reference
         in: path
@@ -12788,6 +12869,38 @@ components:
           schema:
             $ref: '#/components/schemas/Ticket'
   schemas:
+    NoteDoctorFinding:
+      type: object
+      required:
+        - id
+        - note_id
+        - description
+        - proposed_operation
+      properties:
+        id:
+          type: string
+        note_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        description:
+          type: string
+        proposed_operation:
+          type: string
+      additionalProperties: false
+    NoteDoctorReport:
+      type: object
+      required:
+        - ticket_id
+        - findings
+      properties:
+        ticket_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/NoteDoctorFinding'
+      additionalProperties: false
     TargetRef:
       type: object
       required:
