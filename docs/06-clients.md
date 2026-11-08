@@ -1000,7 +1000,7 @@ preview/download, server directory browser) are separate design work.
   | Project | Commands        | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                           | this project, machine   |
   | Project | Lifecycle       | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                                       | this project, committed |
   | Project | Terminals       | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                                     | this project, machine   |
-  | Project | Permissions     | `localStorage hotsheet.project.{id}.permission-automation`                                               | this project, browser   |
+  | Project | Permissions     | `/checkouts/{id}/permission-automation` (`Scope::Local`)                                                 | this project, machine   |
   | Project | Column view     | `localStorage hotsheet.project.{id}.hide-verified-column`                                                | this project, browser   |
   | App     | General         | `localStorage hotsheet.show-loading-activity`                                                            | every project, browser  |
   | App     | Accounts        | `/accounts` (credential names from `providers.json` + `keys.json`)                                       | every project, machine  |
@@ -3207,9 +3207,16 @@ group of Allow for This Chat, Always Allow, and primary Allow Once choices. With
 support the final choice is simply Allow. Ignore sits at the bottom left, Pause Notifications
 at the bottom right, and the auto-decision countdown with its stop control at the bottom
 center. At phone width the decisions stack while every action stays reachable (HS2-WEMN20).
-Per-project localStorage settings can turn
+Per-project settings in the gitignored `.hotsheet2/settings.local.json` can turn
 on auto-Allow or auto-Deny after 5 or 15 seconds or 1/2/5/15/60 minutes
-(HS2-0XF17D). The default remains 1 minute. Auto-Allow alone also
+(HS2-0XF17D, HS2-QAGSJK). The setting key is `permissions.automation`, with an
+`action` of `off`, `allow`, or `deny` and a `delayMs` from the supported list. The
+headless equivalent is `hotsheet-cli settings set permissions.automation
+'{"action":"allow","delayMs":5000}' --scope local` from the project. Existing
+browser choices migrate once, only when the local setting is absent and the
+server accepts the write; the browser record is then removed. A failed read or
+invalid value leaves automation Off. Clearing browser site data no longer erases
+the project-local choice. The default remains 1 minute. Auto-Allow alone also
 offers **0 seconds** (HS2-EBGCGW): each arriving request (and every presented pending request
 when the setting is chosen) is allowed once before anything renders, so its popup never
 appears, while the decision still goes through the same server route and is recorded in

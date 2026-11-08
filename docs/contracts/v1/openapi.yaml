@@ -3367,7 +3367,9 @@ paths:
   /checkouts/{reference}/sources/{connection_id}/ticket-prefix:
     put:
       operationId: set_checkout_source_ticket_prefix
-      description: Change the prefix that new tickets in this checkout's Git source use (HS2-8QJ6W3). Existing tickets keep their slugs; the store commits its metadata.
+      description:
+        Change the prefix that new tickets in this checkout's Git source use (HS2-8QJ6W3). Existing tickets keep
+        their slugs; the store commits its metadata.
       responses:
         '200':
           description: Server-owned response.
@@ -8379,7 +8381,8 @@ paths:
   /live-state:
     get:
       operationId: list_live_states
-      description: Every hosted store's live snapshot for glance surfaces (HS2-JTTQMY). The same snapshot is pushed as a `live_state` change event whenever it changes.
+      description: Every hosted store's live snapshot for glance surfaces (HS2-JTTQMY). The same snapshot is pushed as a
+        `live_state` change event whenever it changes.
       responses:
         '200':
           description: Server-owned response.
@@ -10680,9 +10683,8 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     put:
       operationId: put_integration_strategies
-      description:
-        Replace the policy through the same validated write as the coordination strategy commands. A live integrator
-        keeps its recorded strategy.
+      description: Replace the policy through the same validated write as the coordination strategy commands. A live
+        integrator keeps its recorded strategy.
       requestBody:
         required: true
         content:
@@ -12672,6 +12674,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GithubConnectionRecoveryResult'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/permission-automation:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_checkout_permission_automation
+      responses:
+        '200':
+          description: Project-local automatic permission choice, or safe Off default.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionAutomationSettings'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_checkout_permission_automation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionAutomation'
+      responses:
+        '200':
+          description: Saved project-local automatic permission choice.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionAutomationSettings'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/permission-automation/migrate:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: migrate_checkout_permission_automation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionAutomation'
+      responses:
+        '200':
+          description: Existing choice or newly migrated legacy browser choice.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionAutomationSettings'
         default:
           description: The request failed.
           content:
@@ -15387,7 +15460,7 @@ components:
       properties:
         ticket_prefix:
           type: string
-          pattern: '^ *[A-Za-z][A-Za-z0-9]{1,15} *$'
+          pattern: ^ *[A-Za-z][A-Za-z0-9]{1,15} *$
       additionalProperties: false
     CheckoutDefaultSource:
       type: object
@@ -15517,13 +15590,13 @@ components:
                 type: string
                 minLength: 1
                 maxLength: 100
-                pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+                pattern: ^[A-Za-z0-9][A-Za-z0-9._/-]*$
             additionalProperties: false
       additionalProperties: false
     IntegrationCircuitBreaker:
       description:
-        Batch and ci-staged thresholds, recorded per strategy (HS2-9G0M3V, HS2-GT57BQ). Either limit trips the breaker
-        and the integrator falls back to serial. Absent means 2 consecutive red batches or 120 red minutes.
+        Batch and ci-staged thresholds, recorded per strategy (HS2-9G0M3V, HS2-GT57BQ). Either limit trips the
+        breaker and the integrator falls back to serial. Absent means 2 consecutive red batches or 120 red minutes.
       type: object
       required:
         - max_red_batches
@@ -16066,7 +16139,7 @@ components:
     WorkerTicketFilter:
       description: A preference filter; matching ignores ASCII case (HS2-6WFCZR).
       type: string
-      pattern: '^(tag:.+|category:.+|priority:(highest|high|default|low|lowest)|tier:T[0-9])$'
+      pattern: ^(tag:.+|category:.+|priority:(highest|high|default|low|lowest)|tier:T[0-9])$
     WorkerRefusalReason:
       type: string
       enum:
@@ -16319,7 +16392,9 @@ components:
           type: string
       additionalProperties: false
     WorkerCoverageGap:
-      description: One uncovered ticket source (HS2-83KFB5). It never means ticket access failed or that a worker is known to be missing.
+      description:
+        One uncovered ticket source (HS2-83KFB5). It never means ticket access failed or that a worker is known to
+        be missing.
       type: object
       required:
         - connection_id
@@ -16331,12 +16406,16 @@ components:
         connection_id:
           type: string
         name:
-          description: The connection's own name, else its provider descriptor name, else the provider and locator; a local store's directory.
+          description:
+            The connection's own name, else its provider descriptor name, else the provider and locator; a local
+            store's directory.
           type: string
         provider:
           type: string
         reason:
-          description: unsupported - the provider has no coordination by design; failed_read - its configuration or metadata could not be read now; unobserved - a source coordination could support that this pool does not observe.
+          description:
+            unsupported - the provider has no coordination by design; failed_read - its configuration or metadata could
+            not be read now; unobserved - a source coordination could support that this pool does not observe.
           type: string
           enum:
             - unsupported
@@ -17211,7 +17290,9 @@ components:
       additionalProperties: false
     LiveStateList:
       type: object
-      required: [epoch_ms, stores]
+      required:
+        - epoch_ms
+        - stores
       properties:
         epoch_ms:
           type: integer
@@ -17221,38 +17302,74 @@ components:
             $ref: '#/components/schemas/LiveStoreState'
     LiveWord:
       type: string
-      enum: [active, stopped, may_be_stuck, stalled, halted, waiting_on_you]
+      enum:
+        - active
+        - stopped
+        - may_be_stuck
+        - stalled
+        - halted
+        - waiting_on_you
     LiveCause:
       type: object
       description: A stuck cause of a worker holding a live claim in the store (HS2-EGKKA0).
-      required: [kind, worker, terminal, since_ms, resets_at_ms, prompt]
+      required:
+        - kind
+        - worker
+        - terminal
+        - since_ms
+        - resets_at_ms
+        - prompt
       properties:
         kind:
           type: string
-          enum: [usage_limit, awaiting_input]
+          enum:
+            - usage_limit
+            - awaiting_input
         worker:
           type: string
         terminal:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
           description: The Hot Sheet terminal the session runs in; null when unknown.
         since_ms:
           type: integer
           description: When the halt was reported or the prompt appeared.
         resets_at_ms:
-          type: [integer, 'null']
-          description: usage_limit only. When the tool said the limit resets; null when it stated no reset that needs no time-zone guess (unknown).
+          type:
+            - integer
+            - 'null'
+          description:
+            usage_limit only. When the tool said the limit resets; null when it stated no reset that needs no time-zone
+            guess (unknown).
         prompt:
           description: awaiting_input only. Which terminal prompt the session waits at; null for usage_limit.
           anyOf:
             - type: string
-              enum: [permission, question]
+              enum:
+                - permission
+                - question
             - type: 'null'
       additionalProperties: false
     LiveStoreState:
       type: object
-      description: One store's live state (HS2-JTTQMY, docs/32-notifier-plugins.md §32.8.3). Times are Unix milliseconds; clients compute ages and decaying rates locally.
+      description:
+        One store's live state (HS2-JTTQMY, docs/32-notifier-plugins.md §32.8.3). Times are Unix milliseconds;
+        clients compute ages and decaying rates locally.
       required:
-        [store, root, name, checkouts, epoch_ms, revision, state, activity, claims, workers, waiting, runway, rates]
+        - store
+        - root
+        - name
+        - checkouts
+        - epoch_ms
+        - revision
+        - state
+        - activity
+        - claims
+        - workers
+        - waiting
+        - runway
+        - rates
       properties:
         store:
           type: string
@@ -17273,23 +17390,41 @@ components:
           $ref: '#/components/schemas/LiveWord'
         activity:
           type: object
-          required: [word, active_since_ms, stopped_at_ms, last_progress_ms, idle_deadline_ms, stalled, halted, causes]
+          required:
+            - word
+            - active_since_ms
+            - stopped_at_ms
+            - last_progress_ms
+            - idle_deadline_ms
+            - stalled
+            - halted
+            - causes
           properties:
             word:
               $ref: '#/components/schemas/LiveWord'
             active_since_ms:
-              type: [integer, 'null']
+              type:
+                - integer
+                - 'null'
             stopped_at_ms:
-              type: [integer, 'null']
+              type:
+                - integer
+                - 'null'
             last_progress_ms:
-              type: [integer, 'null']
+              type:
+                - integer
+                - 'null'
             idle_deadline_ms:
-              type: [integer, 'null']
+              type:
+                - integer
+                - 'null'
             stalled:
               type: array
               items:
                 type: object
-                required: [slug, worker]
+                required:
+                  - slug
+                  - worker
                 properties:
                   slug:
                     type: string
@@ -17299,7 +17434,10 @@ components:
               type: array
               items:
                 type: object
-                required: [worker, message, at_ms]
+                required:
+                  - worker
+                  - message
+                  - at_ms
                 properties:
                   worker:
                     type: string
@@ -17309,14 +17447,24 @@ components:
                     type: integer
             causes:
               type: array
-              description: Why held claims are not moving, as the tools report it (HS2-EGKKA0, §32.8.4). Usage-limit pauses first, then terminal prompts, each oldest first.
+              description:
+                Why held claims are not moving, as the tools report it (HS2-EGKKA0, §32.8.4). Usage-limit pauses first,
+                then terminal prompts, each oldest first.
               items:
                 $ref: '#/components/schemas/LiveCause'
         claims:
           type: array
           items:
             type: object
-            required: [ticket, slug, title, worker, phase, claimed_at_ms, lease_expires_at_ms, eta_at_ms]
+            required:
+              - ticket
+              - slug
+              - title
+              - worker
+              - phase
+              - claimed_at_ms
+              - lease_expires_at_ms
+              - eta_at_ms
             properties:
               ticket:
                 type: string
@@ -17327,16 +17475,24 @@ components:
               worker:
                 type: string
               phase:
-                type: [string, 'null']
+                type:
+                  - string
+                  - 'null'
               claimed_at_ms:
-                type: [integer, 'null']
+                type:
+                  - integer
+                  - 'null'
               lease_expires_at_ms:
                 type: integer
               eta_at_ms:
-                type: [integer, 'null']
+                type:
+                  - integer
+                  - 'null'
         workers:
           type: object
-          required: [live, expected]
+          required:
+            - live
+            - expected
           properties:
             live:
               type: integer
@@ -17346,7 +17502,9 @@ components:
               minimum: 0
         waiting:
           type: object
-          required: [count, tickets]
+          required:
+            - count
+            - tickets
           properties:
             count:
               type: integer
@@ -17355,7 +17513,11 @@ components:
               type: array
               items:
                 type: object
-                required: [ticket, slug, title, reason]
+                required:
+                  - ticket
+                  - slug
+                  - title
+                  - reason
                 properties:
                   ticket:
                     type: string
@@ -17365,23 +17527,34 @@ components:
                     type: string
                   reason:
                     type: string
-                    enum: [feedback, review]
+                    enum:
+                      - feedback
+                      - review
         runway:
           type: object
-          required: [ready, estimate_ms]
+          required:
+            - ready
+            - estimate_ms
           properties:
             ready:
               type: integer
               minimum: 0
             estimate_ms:
-              type: [integer, 'null']
+              type:
+                - integer
+                - 'null'
         rates:
           type: object
-          required: [tokens, tickets_updated]
+          required:
+            - tokens
+            - tickets_updated
           properties:
             tokens:
               type: object
-              required: [window_minutes, minutes, peak_per_minute]
+              required:
+                - window_minutes
+                - minutes
+                - peak_per_minute
               properties:
                 window_minutes:
                   type: integer
@@ -17389,7 +17562,9 @@ components:
                   type: array
                   items:
                     type: object
-                    required: [start_ms, tokens]
+                    required:
+                      - start_ms
+                      - tokens
                     properties:
                       start_ms:
                         type: integer
@@ -17400,7 +17575,10 @@ components:
                   type: number
             tickets_updated:
               type: object
-              required: [window_minutes, at_ms, peak_per_hour]
+              required:
+                - window_minutes
+                - at_ms
+                - peak_per_hour
               properties:
                 window_minutes:
                   type: integer
@@ -17771,6 +17949,35 @@ components:
         inherit_global_shell_history:
           type: boolean
       additionalProperties: false
+    PermissionAutomation:
+      type: object
+      required:
+        - action
+        - delayMs
+      properties:
+        action:
+          type: string
+          enum: [off, allow, deny]
+        delayMs:
+          type: integer
+          enum: [0, 5000, 15000, 60000, 120000, 300000, 900000, 3600000]
+      additionalProperties: false
+    PermissionAutomationSettings:
+      type: object
+      required:
+        - configured
+        - action
+        - delayMs
+      properties:
+        configured:
+          type: boolean
+        action:
+          type: string
+          enum: [off, allow, deny]
+        delayMs:
+          type: integer
+          enum: [0, 5000, 15000, 60000, 120000, 300000, 900000, 3600000]
+      additionalProperties: false
     TrashSettings:
       type: object
       required:
@@ -17978,7 +18185,8 @@ components:
         - warning
         - critical
     HostHealthStatus:
-      description: A signal's status; unsupported (no reader on this platform) and unavailable (the reader failed) never produce a callout.
+      description: A signal's status; unsupported (no reader on this platform) and unavailable (the reader failed) never
+        produce a callout.
       enum:
         - normal
         - warning
@@ -18213,7 +18421,8 @@ components:
       additionalProperties: false
     HostHealthSnapshot:
       type: object
-      description: The server host's latest evaluated health sample (HS2-DTAVQA). Crossings and coarse changes push as host_health change events, and clients re-read this on each one and on resync.
+      description: The server host's latest evaluated health sample (HS2-DTAVQA). Crossings and coarse changes push as
+        host_health change events, and clients re-read this on each one and on resync.
       required:
         - host
         - sampled_at

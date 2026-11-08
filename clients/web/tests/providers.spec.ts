@@ -1673,6 +1673,7 @@ async function mockProject(
   linkedSource = false,
   legacyUnverifiedAtFirst = false,
 ) {
+  let storedAutomation: { action: 'off' | 'allow' | 'deny'; delayMs: number } | undefined;
   let rows: TicketRow[] = [
     { ...row, feedback_needed: Boolean(primaryFeedbackNeeded) },
     backlogRow,
@@ -1968,6 +1969,21 @@ async function mockProject(
         status: 201,
         json: ticketSourceConfigured ? opened : { ...opened, stores: [], needsTicketSetup: true },
       });
+    }
+    if (path.endsWith('/permission-automation') && request.method() === 'GET')
+      return route.fulfill({
+        json: {
+          configured: storedAutomation !== undefined,
+          ...(storedAutomation ?? { action: 'off', delayMs: 60_000 }),
+        },
+      });
+    if (path.endsWith('/permission-automation') && request.method() === 'PUT') {
+      storedAutomation = request.postDataJSON() as typeof storedAutomation;
+      return route.fulfill({ json: { configured: true, ...storedAutomation } });
+    }
+    if (path.endsWith('/permission-automation/migrate') && request.method() === 'POST') {
+      storedAutomation ??= request.postDataJSON() as typeof storedAutomation;
+      return route.fulfill({ json: { configured: true, ...storedAutomation } });
     }
     if (path === '/__hotsheet/projects/setup-git' && request.method() === 'POST') {
       const body = request.postDataJSON(),
@@ -33197,7 +33213,13 @@ test('persists and restores per-project permission automation Settings', async (
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.permission-automation')))
+    .poll(() =>
+      page.evaluate(async () => {
+        const response = await fetch('/__hotsheet/project-api/demo-checkout/permission-automation');
+        const { action, delayMs } = await response.json();
+        return JSON.stringify({ action, delayMs });
+      }),
+    )
     .toBe('{"action":"deny","delayMs":120000}');
   await page.getByLabel('List View').click();
   await page.getByLabel('Settings View').click();
@@ -33269,7 +33291,12 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await page.getByRole('button', { name: 'Permissions' }).click();
   const action = page.locator('kui-select[name="permission-automation-action"]'),
     delay = page.locator('kui-select[name="permission-automation-delay"]'),
-    stored = () => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'));
+    stored = () =>
+      page.evaluate(async () => {
+        const response = await fetch('/__hotsheet/project-api/demo-checkout/permission-automation');
+        const { action, delayMs } = await response.json();
+        return JSON.stringify({ action, delayMs });
+      });
   const setValue = (locator: typeof action, value: string) =>
     locator.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;

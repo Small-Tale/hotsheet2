@@ -54,7 +54,7 @@ export interface ProjectLifecycleDependencies {
   activateOpenProject: (projectId: string) => ProjectActivation | undefined;
   /** Bumped on every explicit project-tab selection, so an in-flight open can yield to it (HS2-YVBGW3). */
   projectSelectionGeneration?: () => number;
-  loadPermissionAutomation: (projectId: string) => PermissionAutomation;
+  loadPermissionAutomation: (project: Project) => Promise<PermissionAutomation>;
   setPermissionAutomation: (projectId: string, automation: PermissionAutomation) => void;
   startPermissionUpdates: () => void;
   syncProjectChangeStreams: () => void;
@@ -207,7 +207,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       ...hideVerifiedByProject.value,
       [value.id]: localStorage.getItem(`hotsheet.project.${value.id}.hide-verified-column`) === 'true',
     };
-    dependencies.setPermissionAutomation(value.id, dependencies.loadPermissionAutomation(value.id));
+    dependencies.setPermissionAutomation(value.id, await dependencies.loadPermissionAutomation(value));
     defaultProviders.value = {
       ...defaultProviders.value,
       [value.id]: projectTicketSources(descriptors),

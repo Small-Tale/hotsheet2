@@ -9159,6 +9159,54 @@ fn settings_shared_and_local_scopes() {
 }
 
 #[test]
+fn hs2_qagsjk_headless_permission_automation_is_local_and_validated() {
+    let project = tempfile::tempdir().unwrap();
+    hs(project.path()).args(["init"]).assert().success();
+    hs(project.path())
+        .args([
+            "settings",
+            "set",
+            "permissions.automation",
+            r#"{"action":"allow","delayMs":5000}"#,
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("local (gitignored)"));
+    hs(project.path())
+        .args(["settings", "get", "permissions.automation"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"action\":\"allow\""));
+    hs(project.path())
+        .args([
+            "settings",
+            "set",
+            "permissions.automation",
+            r#"{"action":"deny","delayMs":0}"#,
+        ])
+        .assert()
+        .failure();
+    hs(project.path())
+        .args([
+            "settings",
+            "set",
+            "permissions.automation",
+            r#"{"action":"off","delayMs":60000}"#,
+            "--scope",
+            "shared",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("project-local"));
+    assert!(
+        project
+            .path()
+            .join(".hotsheet2/settings.local.json")
+            .exists()
+    );
+}
+
+#[test]
 fn simultaneous_cli_settings_writers_keep_each_key() {
     let project = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();

@@ -1421,8 +1421,17 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
     let settings = settings_for_cli(store, cwd);
     match cmd {
         SettingsCmd::Get { key, scope } => {
-            let value = match parse_scope(&scope)? {
+            let requested_scope = parse_scope(&scope)?;
+            if key == hotsheet_ticketing::permission_automation::SETTING
+                && !matches!(requested_scope, None | Some(Scope::Local))
+            {
+                bail!("{key} is project-local; use --scope local");
+            }
+            let value = match requested_scope {
                 Some(s) => settings.get(&key, s)?,
+                None if key == hotsheet_ticketing::permission_automation::SETTING => {
+                    settings.get(&key, Scope::Local)?
+                }
                 None => settings.get_effective(&key)?,
             };
             match value {
@@ -1438,12 +1447,17 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             let host_health = hotsheet_ticketing::host_health::is_host_health_key(&key);
             // Standby settings are machine-wide as well (HS2-EQVZTZ), with REST parity.
             let standby = hotsheet_ticketing::standby::is_standby_key(&key);
+            let permission_automation = key == hotsheet_ticketing::permission_automation::SETTING;
             let scope = match (
                 parse_scope(&scope)?,
                 terminal_limit || host_health || standby,
             ) {
                 (Some(Scope::Global) | None, true) => Scope::Global,
                 (Some(_), true) => bail!("{key} is machine-wide; use --scope global"),
+                (Some(Scope::Local) | None, false) if permission_automation => Scope::Local,
+                (Some(_), false) if permission_automation => {
+                    bail!("{key} is project-local; use --scope local")
+                }
                 (scope, false) => scope.unwrap_or(Scope::Shared),
             };
             if terminal_limit {
@@ -1459,6 +1473,9 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             } else {
                 serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value))
             };
+            if permission_automation {
+                hotsheet_ticketing::permission_automation::parse(parsed.clone())?;
+            }
             settings.set(&key, parsed, scope)?;
             if matches!(
                 key.as_str(),

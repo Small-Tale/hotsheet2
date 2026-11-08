@@ -3,7 +3,7 @@ import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from 
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
-import type { PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
+import type { PermissionAutomation, PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -56,6 +56,7 @@ import {
   parseNotificationProjectTiming,
   parseNotificationRule,
   parseNotifierList,
+  parsePermissionAutomationSettings,
   parsePermissionDecision,
   parsePermissionRequest,
   parsePermissionRule,
@@ -2194,6 +2195,17 @@ export class Api {
       },
     );
   permissions = () => this.parsed(parsePermissionRequest.list, '/permissions');
+  permissionAutomation = () => this.parsed(parsePermissionAutomationSettings, '/permission-automation');
+  savePermissionAutomation = (value: PermissionAutomation) =>
+    this.parsed(parsePermissionAutomationSettings, '/permission-automation', {
+      method: 'PUT',
+      body: JSON.stringify(value),
+    });
+  migratePermissionAutomation = (value: PermissionAutomation) =>
+    this.parsed(parsePermissionAutomationSettings, '/permission-automation/migrate', {
+      method: 'POST',
+      body: JSON.stringify(value),
+    });
   /** `onResponse` sees the response before its body is parsed (its `Date` samples the server clock). */
   activeToolConnections = (onResponse?: (response: Response) => void) =>
     this.parsed(parseToolConnection.list, '/connections', {}, true, onResponse);

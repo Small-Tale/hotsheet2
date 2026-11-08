@@ -1810,6 +1810,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `tests/permission-automation-delay.spec.ts` uses real Settings controls, reload, reset and further edits, and an isolated real server request for both automatic outcomes. `providers.spec.ts` retains immediate-approval and action-switch regressions.
 - Visual: Inspected the real Settings delay menu at 1440, 900, 390, and 1440 pixels after resize; the selected 5-second option remains visible and readable.
 
+### Project-local permission automation persistence (HS2-QAGSJK)
+
+- Behavior: A validated automatic decision and delay live in the gitignored project-local settings file. An absent setting defaults Off, a legacy browser choice migrates only when no local choice exists, and later browser site-data clearing preserves the server-owned value.
+- Unit: `crates/hotsheet-ticketing/src/permission_automation.rs` checks supported values, local-only writes, and conditional migration; `clients/web/src/features/controllers.test.ts` checks browser migration, reload, and failed-migration fallback.
+- End to end: `crates/hotsheet-server/tests/http.rs # source_free_checkout_settings_round_trip_under_the_project_root` covers authenticated GET/PUT/migrate, invalid delay, and file scope; `clients/web/tests/permission-automation-delay.spec.ts` exercises the actual Settings controls, reload, fresh browser origin, cross-window updates, failed-write rollback, and automatic decisions through the real server.
+- Manual: In an isolated project/browser, set Auto-Allow, clear browser site data, reopen the project, and confirm the project-local choice remains while a different project stays Off.
+
 ### Exact remembered permission review (HS2-CA5MSD)
 
 - Behavior: Authenticated rule reads reveal the exact action, tool, project/chat reach, lifetime, decision, and exact match type. A remembered approval requires a separate preview and confirmation. Settings supports action copy and revoke, and a missing key or invalid encrypted file locks the list and prevents durable automatic answers.

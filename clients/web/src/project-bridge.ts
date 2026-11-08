@@ -1824,6 +1824,8 @@ export function projectScopedServerPath(projectId: string, path: string): string
       pathname === '/command-runs' ||
       pathname === '/views' ||
       pathname === '/terminal-settings' ||
+      pathname === '/permission-automation' ||
+      pathname === '/permission-automation/migrate' ||
       // AI tool defaults are per project (HS2-SW5S13).
       pathname === '/ai-settings' ||
       // A project addresses only the ticket sources its checkout links (HS2-3SCH1K) and owns

@@ -7948,6 +7948,78 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
         .await
         .unwrap();
     assert_eq!(terminals.status(), StatusCode::OK);
+    let automation_path = format!("/checkouts/{checkout_id}/permission-automation");
+    let automation_default = body_json(
+        application
+            .clone()
+            .oneshot(authed("GET", &automation_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(automation_default["configured"], false);
+    assert_eq!(automation_default["action"], "off");
+    let migrated = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("{automation_path}/migrate"),
+                Some(r#"{"action":"allow","delayMs":5000}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(migrated["action"], "allow");
+    let saved = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &automation_path,
+                Some(r#"{"action":"deny","delayMs":15000}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(saved["action"], "deny");
+    let stale_migration = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("{automation_path}/migrate"),
+                Some(r#"{"action":"allow","delayMs":5000}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(stale_migration["action"], "deny");
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &automation_path,
+                Some(r#"{"action":"deny","delayMs":0}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+    );
+    let local_settings: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(checkout.join(".hotsheet2/settings.local.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(local_settings["permissions.automation"]["action"], "deny");
+    let shared_settings: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(checkout.join(".hotsheet2/settings.json")).unwrap())
+            .unwrap();
+    assert!(shared_settings.get("permissions.automation").is_none());
     let trash_default = body_json(
         application
             .clone()

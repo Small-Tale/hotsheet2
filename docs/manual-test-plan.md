@@ -947,3 +947,14 @@ this operator checklist has not been run with real paired devices.
    atomic old/new persistence, quota exhaustion with existing-key disable, and
    interleaved delayed success/failure/review/unbind/revoke. Equal/backward clocks
    never revive an obsolete proof. No target ticket/AI/grant operation is dispatched.
+
+## Project-local permission automation after browser reset (HS2-QAGSJK)
+
+Use an isolated test project and browser profile. Set Project Settings → Permissions to
+Auto-Allow after 5 seconds, confirm the gitignored `.hotsheet2/settings.local.json`
+contains `permissions.automation`, then clear that browser profile's site data. Reopen
+the project and confirm Settings still shows Auto-Allow after 5 seconds and a synthetic
+permission request follows it. Open a second project with no setting and confirm it
+stays Off. Change the first project from another window and confirm the original
+window updates. Repeat with a denied local-file write: the UI must restore the last
+saved choice and show an error, without approving a request from an unsaved choice.

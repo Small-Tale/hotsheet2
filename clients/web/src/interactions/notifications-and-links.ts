@@ -2,6 +2,8 @@ import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { Api } from '../api';
+import { browserRandomId } from '../browser-id';
 import type { createClientNotifications } from '../client-notifications';
 import { type NotificationView } from '../components/notification-navigation';
 import { wireNotificationSettings } from '../components/notification-settings-interactions';
@@ -123,6 +125,9 @@ export interface NotificationAndLinkInteractionsDependencies {
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNotificationAndLinkInteractions(dependencies: NotificationAndLinkInteractionsDependencies) {
   const lifetime = createScope();
+  const confirmedAutomation = new Map<string, PermissionAutomation>(),
+    automationWrites = new Map<string, Promise<void>>(),
+    automationVersions = new Map<string, number>();
   const {
     notificationView,
     project,
@@ -236,12 +241,61 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
             'off') as PermissionAutomation['action'],
           delayMs = Number(document.querySelector<Control>('[name="permission-automation-delay"]')?.value ?? 60_000),
           next = parsePermissionAutomation({ action, delayMs });
+        if (!automationWrites.has(current.id))
+          confirmedAutomation.set(
+            current.id,
+            permissionAutomationByProject.value[current.id] ?? { action: 'off', delayMs: 60_000 },
+          );
+        const version = (automationVersions.get(current.id) ?? 0) + 1;
+        automationVersions.set(current.id, version);
         permissionTimer.hide();
         dependencies.permissionCountdown = undefined;
-        permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [current.id]: next };
-        localStorage.setItem(`hotsheet.project.${current.id}.permission-automation`, JSON.stringify(next));
+        // While a write is in flight, no unsaved policy may automatically answer a
+        // request. This also stops an old Allow immediately when turning it Off.
+        permissionAutomationByProject.value = {
+          ...permissionAutomationByProject.value,
+          [current.id]: { action: 'off', delayMs: next.delayMs },
+        };
         updatePermissionTimer();
         permissionRevision.value += 1;
+        const prior = automationWrites.get(current.id) ?? Promise.resolve();
+        const write = prior
+          .catch(() => {})
+          .then(async () => {
+            const saved = await new Api(current.apiPath).savePermissionAutomation(next);
+            confirmedAutomation.set(current.id, parsePermissionAutomation(saved));
+            if (automationVersions.get(current.id) === version) {
+              permissionAutomationByProject.value = {
+                ...permissionAutomationByProject.value,
+                [current.id]: parsePermissionAutomation(saved),
+              };
+              updatePermissionTimer();
+              permissionRevision.value += 1;
+            }
+            // Browser storage carries only a revision notice; the choice itself is
+            // in the project-local file (HS2-QAGSJK). Storage events skip this window.
+            try {
+              localStorage.setItem(
+                'hotsheet.permission-automation-revision',
+                JSON.stringify({ projectId: current.id, revision: browserRandomId() }),
+              );
+            } catch {
+              /* A blocked browser store cannot roll back a successful server write. */
+            }
+          })
+          .catch((error: unknown) => {
+            if (automationVersions.get(current.id) !== version) return;
+            const restored = confirmedAutomation.get(current.id)!;
+            permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [current.id]: restored };
+            updatePermissionTimer();
+            permissionRevision.value += 1;
+            dependencies.error.value =
+              error instanceof Error ? error.message : 'Could not save automatic permission decision.';
+          });
+        automationWrites.set(current.id, write);
+        void write.finally(() => {
+          if (automationWrites.get(current.id) === write) automationWrites.delete(current.id);
+        });
       },
     ),
   );

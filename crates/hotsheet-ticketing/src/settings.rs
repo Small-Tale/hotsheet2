@@ -360,7 +360,7 @@ impl Settings {
     /// Set a key in a scope (read-modify-write). Writing a local key also ensures the
     /// local file is gitignored.
     pub fn set(&self, key: &str, value: Value, scope: Scope) -> Result<(), SettingsError> {
-        Self::validate_set_value(key, &value)?;
+        Self::validate_set_value(key, &value, scope)?;
         let _lock = self.lock_scope(scope)?;
         let mut map = self.map(scope)?;
         map.insert(key.to_string(), value);
@@ -377,7 +377,7 @@ impl Settings {
         scope: Scope,
         matches: impl FnOnce(Option<&Value>) -> bool,
     ) -> Result<bool, SettingsError> {
-        Self::validate_set_value(key, &value)?;
+        Self::validate_set_value(key, &value, scope)?;
         let _global_lock = self.lock_scope(Scope::Global)?;
         let _shared_lock = self.lock_scope(Scope::Shared)?;
         let _local_lock = self.lock_scope(Scope::Local)?;
@@ -391,7 +391,16 @@ impl Settings {
         Ok(true)
     }
 
-    fn validate_set_value(key: &str, value: &Value) -> Result<(), SettingsError> {
+    fn validate_set_value(key: &str, value: &Value, scope: Scope) -> Result<(), SettingsError> {
+        if key == crate::permission_automation::SETTING {
+            if scope != Scope::Local {
+                return Err(invalid_value(
+                    key,
+                    "automatic permission decisions must be project-local",
+                ));
+            }
+            crate::permission_automation::parse(value.clone())?;
+        }
         if key == TRASH_CLEANUP_DAYS_SETTING {
             parse_trash_cleanup_days(value.clone())?;
         }

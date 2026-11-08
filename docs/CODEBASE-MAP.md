@@ -921,7 +921,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `hotsheet-settings*.json` files beside linked git stores, and schema-marked
   `<project-root>/.hotsheet/settings*.json` files (unmarked ones belong to HS1 and are
   ignored), are read-through migration inputs. The core-validated key here is
-  `trash_cleanup_days` (Shared, positive whole days, default 30); other keys are owned by
+  `trash_cleanup_days` (Shared, positive whole days, default 30); `permissions.automation`
+  is a validated Local-only automatic permission choice exposed through the checkout API
+  (HS2-QAGSJK). Other keys are owned by
   their modules (for example `commands`, `views` in `hotsheet-ticketing/src/saved_views.rs`, `terminal.names`). See
   `settings.rs::Settings`.
 - **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata

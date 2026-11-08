@@ -95,9 +95,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   ],
   lifecycle: [{ control: 'Trash retention', server: '/checkouts/{project}/trash-settings' }],
   terminals: [{ control: 'Use global shell history', server: '/terminal-settings' }],
-  permissions: [
-    { control: 'Automatic decision and delay', browser: 'hotsheet.project.{project}.permission-automation' },
-  ],
+  permissions: [{ control: 'Automatic decision and delay', server: '/permission-automation' }],
   columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
   general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
   accounts: [{ control: 'Sign-ins and sign out', server: '/accounts' }],

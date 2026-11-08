@@ -3,6 +3,7 @@ import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
+import { browserRandomId } from '../browser-id';
 import {
   rememberedPermissionPreview,
   setRememberedPermissionPreview,
@@ -18,6 +19,7 @@ import {
 import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
 import { beginInteractionTiming } from '../interaction-performance';
 import type { Project } from '../interactions/types';
+import { isRecord } from '../json-value';
 import {
   loadNotificationsPaused,
   notificationsPausedFromStorageEvent,
@@ -61,12 +63,40 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       return [];
     }
   }
-  function loadPermissionAutomation(projectId: string) {
+  async function loadPermissionAutomation(project: Project): Promise<PermissionAutomation> {
+    const key = `hotsheet.project.${project.id}.permission-automation`;
     try {
-      return parsePermissionAutomation(
-        JSON.parse(localStorage.getItem(`hotsheet.project.${projectId}.permission-automation`) || 'null'),
-      );
+      const api = new Api(project.apiPath),
+        stored = await api.permissionAutomation();
+      if (stored.configured) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          /* The server value still wins. */
+        }
+        return parsePermissionAutomation(stored);
+      }
+      const legacy = localStorage.getItem(key);
+      if (legacy === null) return DEFAULT_PERMISSION_AUTOMATION;
+      const raw: unknown = JSON.parse(legacy),
+        choice = parsePermissionAutomation(raw);
+      // Do not turn malformed browser data into a newly persisted automatic policy.
+      if (!isRecord(raw) || raw.action !== choice.action || raw.delayMs !== choice.delayMs)
+        return DEFAULT_PERMISSION_AUTOMATION;
+      const migrated = await api.migratePermissionAutomation(choice);
+      try {
+        localStorage.removeItem(key);
+        localStorage.setItem(
+          'hotsheet.permission-automation-revision',
+          JSON.stringify({ projectId: project.id, revision: browserRandomId() }),
+        );
+      } catch {
+        /* Migration succeeded even when legacy browser cleanup is unavailable. */
+      }
+      return parsePermissionAutomation(migrated);
     } catch {
+      // A failed read or migration leaves the safe Off default. Keep the old browser
+      // value for a later migration attempt after server access recovers.
       return DEFAULT_PERMISSION_AUTOMATION;
     }
   }
@@ -238,9 +268,37 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       const interval = window.setInterval(updatePermissionTimer, 1_000);
       permissionTimerInterval = interval;
       // Another window paused or resumed; follow it without writing the key back.
+      const automationRevisions = new Map<string, number>();
       const sync = (event: StorageEvent) => {
         const paused = notificationsPausedFromStorageEvent(event);
         if (paused !== undefined) setNotificationsPaused(paused, false);
+        if (event.key !== 'hotsheet.permission-automation-revision' || !event.newValue) return;
+        let stored: unknown;
+        try {
+          stored = JSON.parse(event.newValue);
+        } catch {
+          return;
+        }
+        if (!isRecord(stored) || typeof stored.projectId !== 'string') return;
+        const projectId = stored.projectId;
+        const project = projects.peek().find((item) => item.id === projectId);
+        if (!project) return;
+        const revision = (automationRevisions.get(projectId) ?? 0) + 1;
+        automationRevisions.set(projectId, revision);
+        void new Api(project.apiPath)
+          .permissionAutomation()
+          .then((saved) => {
+            if (automationRevisions.get(projectId) !== revision) return;
+            permissionAutomationByProject.value = {
+              ...permissionAutomationByProject.value,
+              [projectId]: saved.configured ? parsePermissionAutomation(saved) : DEFAULT_PERMISSION_AUTOMATION,
+            };
+            updatePermissionTimer();
+            permissionRevision.value += 1;
+          })
+          .catch(() => {
+            /* Keep the last known choice until the next event or reload. */
+          });
       };
       window.addEventListener('storage', sync);
       lifetime.add(() => {

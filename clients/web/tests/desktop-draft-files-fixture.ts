@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 
 import type { FullTicket } from '../src/api';
 import { DESKTOP_DRAFT_FILES_DIRECTORY, desktopStorageBridge } from '../src/desktop-storage-bridge';
+import { projectScopedServerPath } from '../src/project-bridge';
 import { expectProjectSidebarLayout } from './project-sidebar-layout';
 import { realTicketServer } from './real-ticket-server';
 
@@ -101,7 +102,9 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     // manufacture an empty upload. Keep the browser-to-server body on real HTTP, just
     // like the recovery bridge, while retaining this fixture's owned faults and gates.
     if (url.pathname.startsWith('/__hotsheet/project-api/')) {
-      const path = url.pathname.replace(/^\/__hotsheet\/project-api\/[^/]+/u, '');
+      const path = url.pathname.replace(/^\/__hotsheet\/project-api\/[^/]+/u, ''),
+        projectId = url.pathname.split('/')[3],
+        serverPath = path.startsWith('/permission-automation') ? projectScopedServerPath(projectId, path) : path;
       if (apiFault(request.method, path)) {
         await apiGate(request.method, path);
         return context.json({ error: 'Synthetic operation rejected.' }, 500);
@@ -121,7 +124,7 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
         headers.set('X-Hotsheet-Secret', server.secret);
         headers.delete('host');
         headers.delete('content-length');
-        const response = await fetch(`${server.url}${path}${url.search}`, {
+        const response = await fetch(`${server.url}${serverPath}${url.search}`, {
           method: request.method,
           headers,
           ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.arrayBuffer() }),

@@ -14,11 +14,68 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use hotsheet_model::Ulid;
 use hotsheet_sync::LockExt;
+use hotsheet_ticketing::permission_automation::{self, PermissionAutomation};
 use hotsheet_ticketing::{FsStore, Settings};
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+#[derive(Serialize)]
+pub(crate) struct PermissionAutomationResponse {
+    configured: bool,
+    #[serde(flatten)]
+    value: PermissionAutomation,
+}
+
+/// HS2-QAGSJK: the project-local setting survives browser site-data clearing.
+pub(crate) async fn get_checkout_permission_automation(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<PermissionAutomationResponse>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    let stored = settings
+        .get(
+            permission_automation::SETTING,
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let configured = stored.is_some();
+    let value = stored
+        .and_then(|raw| permission_automation::parse(raw).ok())
+        .unwrap_or_default();
+    Ok(Json(PermissionAutomationResponse { configured, value }))
+}
+
+pub(crate) async fn put_checkout_permission_automation(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(value): Json<PermissionAutomation>,
+) -> Result<Json<PermissionAutomationResponse>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    permission_automation::save(&settings, value)
+        .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+    Ok(Json(PermissionAutomationResponse {
+        configured: true,
+        value,
+    }))
+}
+
+pub(crate) async fn migrate_checkout_permission_automation(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(value): Json<PermissionAutomation>,
+) -> Result<Json<PermissionAutomationResponse>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    permission_automation::migrate_if_absent(&settings, value)
+        .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+    let stored = permission_automation::configured(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(PermissionAutomationResponse {
+        configured: stored.is_some(),
+        value: stored.unwrap_or_default(),
+    }))
+}
 
 #[derive(Deserialize)]
 pub(crate) struct LegacyPermissionQuery {

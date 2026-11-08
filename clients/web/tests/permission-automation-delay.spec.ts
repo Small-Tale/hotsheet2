@@ -10,6 +10,11 @@ for (const action of ['allow', 'deny'] as const) {
     const app = await desktopApp(context, baseURL!);
     try {
       const page = await app.launch();
+      expect(
+        await app.server.request<{ configured: boolean; action: string }>(
+          `/checkouts/${app.server.checkoutId}/permission-automation`,
+        ),
+      ).toMatchObject({ configured: false, action: 'off' });
       await page.clock.install();
       await openNewTicket(page, true);
       await dialog(page).getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -20,11 +25,12 @@ for (const action of ['allow', 'deny'] as const) {
       await openSettings();
       const decision = page.locator('kui-select[name="permission-automation-action"]'),
         delay = page.locator('kui-select[name="permission-automation-delay"]'),
-        stored = () =>
-          page.evaluate(
-            (key) => localStorage.getItem(key),
-            `hotsheet.project.${app.server.checkoutId}.permission-automation`,
-          ),
+        stored = async () => {
+          const saved = await app.server.request<{ configured: boolean; action: string; delayMs: number }>(
+            `/checkouts/${app.server.checkoutId}/permission-automation`,
+          );
+          return saved.configured ? JSON.stringify({ action: saved.action, delayMs: saved.delayMs }) : null;
+        },
         choose = async (control: typeof decision, label: string) => {
           await control.getByRole('combobox').click();
           await control.getByRole('option', { name: label, exact: true }).click();
@@ -37,6 +43,23 @@ for (const action of ['allow', 'deny'] as const) {
       await openSettings();
       await expect(decision).toHaveJSProperty('value', action);
       await expect(delay).toHaveJSProperty('value', '5000');
+      // A fresh desktop origin has no browser record for this project. Its choice
+      // comes from the project-local file through the real checkout route.
+      await app.projectRemembered();
+      const freshOrigin = await app.launch();
+      expect(
+        await freshOrigin.evaluate(
+          (key) => localStorage.getItem(key),
+          `hotsheet.project.${app.server.checkoutId}.permission-automation`,
+        ),
+      ).toBeNull();
+      await freshOrigin.getByLabel('Settings View').click();
+      await freshOrigin.getByRole('button', { name: 'Permissions', exact: true }).click();
+      await expect(freshOrigin.locator('kui-select[name="permission-automation-action"]')).toHaveJSProperty(
+        'value',
+        action,
+      );
+      await freshOrigin.close();
       // Reset and edit again through the actual controls, preserving the chosen delay.
       await choose(decision, 'Off');
       await expect(delay.getByRole('combobox')).toBeDisabled();
@@ -62,7 +85,7 @@ for (const action of ['allow', 'deny'] as const) {
                   animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity,
               ),
           );
-          await page.screenshot({ path: `target/visual-captures/hs2-0xf17d-${name}.png` });
+          await page.screenshot({ path: `target/visual-captures/hs2-qagsjk-${name}.png` });
           await page.keyboard.press('Escape');
         }
       }
@@ -85,3 +108,77 @@ for (const action of ['allow', 'deny'] as const) {
     }
   });
 }
+
+test('HS2-QAGSJK synchronizes a saved automatic decision between same-origin windows', async ({ context, baseURL }) => {
+  const app = await desktopApp(context, baseURL!);
+  try {
+    const first = await app.launch();
+    await openNewTicket(first, true);
+    await dialog(first).getByRole('button', { name: 'Cancel', exact: true }).click();
+    await app.projectRemembered();
+    await first.getByLabel('Settings View').click();
+    await first.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const firstDecision = first.locator('kui-select[name="permission-automation-action"]');
+    await firstDecision.getByRole('combobox').click();
+    await firstDecision.getByRole('option', { name: 'Auto-Allow', exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await app.server.request<{ action: string }>(`/checkouts/${app.server.checkoutId}/permission-automation`))
+            .action,
+      )
+      .toBe('allow');
+
+    const second = await context.newPage();
+    await second.goto(first.url());
+    await second.getByLabel('Settings View').click();
+    await second.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const secondDecision = second.locator('kui-select[name="permission-automation-action"]');
+    await expect(secondDecision).toHaveJSProperty('value', 'allow');
+    await secondDecision.getByRole('combobox').click();
+    await secondDecision.getByRole('option', { name: 'Off', exact: true }).click();
+    await expect(firstDecision).toHaveJSProperty('value', 'off');
+    await second.close();
+  } finally {
+    await context.unrouteAll({ behavior: 'ignoreErrors' });
+    await app.stop();
+  }
+});
+
+test('HS2-QAGSJK restores the confirmed decision when the local write fails', async ({ context, baseURL }) => {
+  const app = await desktopApp(context, baseURL!);
+  try {
+    const page = await app.launch();
+    await openNewTicket(page, true);
+    await dialog(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const decision = page.locator('kui-select[name="permission-automation-action"]');
+    await decision.getByRole('combobox').click();
+    await decision.getByRole('option', { name: 'Auto-Allow', exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await app.server.request<{ action: string }>(`/checkouts/${app.server.checkoutId}/permission-automation`))
+            .action,
+      )
+      .toBe('allow');
+    let rejected = 0;
+    await page.route('**/permission-automation', (route) => {
+      if (route.request().method() !== 'PUT') return route.fallback();
+      rejected += 1;
+      return route.fulfill({ status: 500, json: { error: 'synthetic write failure' } });
+    });
+    await decision.getByRole('combobox').click();
+    await decision.getByRole('option', { name: 'Auto-Deny', exact: true }).click();
+    await expect.poll(() => rejected).toBe(1);
+    await expect(decision).toHaveJSProperty('value', 'allow');
+    expect(
+      (await app.server.request<{ action: string }>(`/checkouts/${app.server.checkoutId}/permission-automation`))
+        .action,
+    ).toBe('allow');
+  } finally {
+    await context.unrouteAll({ behavior: 'ignoreErrors' });
+    await app.stop();
+  }
+});

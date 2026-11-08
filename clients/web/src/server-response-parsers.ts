@@ -78,7 +78,7 @@ import type {
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
-import type { PermissionRule, PermissionSecretSuggestion } from './permission-notifications';
+import type { PermissionAutomation, PermissionRule, PermissionSecretSuggestion } from './permission-notifications';
 
 /**
  * Response parsers for successful Hot Sheet server bodies (HS2-34P6XY). `Api` and the
@@ -1150,6 +1150,17 @@ export const parseTerminalName = shape<TerminalName>('terminal name', { id: isSt
 export const parseTerminalSettings = shape<TerminalSettings>('terminal settings', {
   inherit_global_shell_history: isBoolean,
 });
+
+/** Project-local automatic permission choice (HS2-QAGSJK). */
+export const parsePermissionAutomationSettings = shape<PermissionAutomation & { configured: boolean }>(
+  'permission automation settings',
+  {
+    configured: isBoolean,
+    action: (value): value is PermissionAutomation['action'] =>
+      value === 'off' || value === 'allow' || value === 'deny',
+    delayMs: isNumber,
+  },
+);
 
 /** `GET`/`PUT /terminal-limits` (HS2-Y5DYC0). */
 export const parseTerminalLimits: ResponseParser<TerminalLimits> = (value) => {

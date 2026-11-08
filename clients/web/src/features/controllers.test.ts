@@ -51,6 +51,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => stored.get(key) ?? null,
     setItem: (key: string, value: string) => stored.set(key, value),
+    removeItem: (key: string) => stored.delete(key),
   });
   vi.stubGlobal('document', { querySelector: () => null, querySelectorAll: () => [], dispatchEvent: vi.fn() });
   vi.stubGlobal(
@@ -65,6 +66,35 @@ afterEach(() => {
 });
 
 describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () => {
+  it('HS2-QAGSJK migrates a browser choice once and reloads it after site data clears', async () => {
+    const choice = { action: 'allow' as const, delayMs: 5_000 },
+      key = 'hotsheet.project.a.permission-automation';
+    localStorage.setItem(key, JSON.stringify(choice));
+    fetchMock
+      .mockResolvedValueOnce(json({ configured: false, action: 'off', delayMs: 60_000 }))
+      .mockResolvedValueOnce(json({ configured: true, ...choice }))
+      .mockResolvedValueOnce(json({ configured: true, ...choice }));
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    expect(await owner.loadPermissionAutomation(project('a'))).toEqual(choice);
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('POST');
+    expect(localStorage.getItem(key)).toBeNull();
+    // The server remains authoritative when the browser no longer has a key.
+    expect(await owner.loadPermissionAutomation(project('a'))).toEqual(choice);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    owner.dispose();
+  });
+
+  it('HS2-QAGSJK fails closed and retains a legacy choice when migration cannot save', async () => {
+    const key = 'hotsheet.project.a.permission-automation';
+    localStorage.setItem(key, JSON.stringify({ action: 'allow', delayMs: 5_000 }));
+    fetchMock
+      .mockResolvedValueOnce(json({ configured: false, action: 'off', delayMs: 60_000 }))
+      .mockRejectedValueOnce(new Error('write failed'));
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    expect(await owner.loadPermissionAutomation(project('a'))).toEqual({ action: 'off', delayMs: 60_000 });
+    expect(localStorage.getItem(key)).not.toBeNull();
+    owner.dispose();
+  });
   it('keeps command draft, range selection, validation and delayed autosave isolated by active project', async () => {
     const projects = signal([project('a'), project('b')]),
       selectedProjectId = signal('a');

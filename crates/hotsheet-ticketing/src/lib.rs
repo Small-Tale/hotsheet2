@@ -32,6 +32,7 @@ pub mod metrics;
 pub mod ops;
 pub mod orchestration;
 pub mod overlay;
+pub mod permission_automation;
 pub mod phase_report;
 pub mod phase_timing;
 pub mod ports;

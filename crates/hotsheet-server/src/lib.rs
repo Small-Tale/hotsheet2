@@ -134,10 +134,12 @@ use routes::notifiers::{
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
     discard_checkout_legacy_permissions, discovered_ai_tools_off_runtime, get_ai_settings,
-    get_checkout_ai_settings, interrupt_drive_turn, invalidate_checkout_legacy_permissions,
-    list_ai_tools, list_connections, list_drive_sessions, list_permissions, now_ms,
+    get_checkout_ai_settings, get_checkout_permission_automation, interrupt_drive_turn,
+    invalidate_checkout_legacy_permissions, list_ai_tools, list_connections, list_drive_sessions,
+    list_permissions, migrate_checkout_permission_automation, now_ms,
     preview_checkout_legacy_permissions, probe_checkout_legacy_permission_host,
-    probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
+    probe_permission_bridge, put_ai_settings, put_checkout_ai_settings,
+    put_checkout_permission_automation, send_drive_turn,
 };
 use routes::project_tools::{
     acknowledge_notification, cancel_checkout_command_run, cancel_command_run, checkout_analytics,
@@ -1468,6 +1470,14 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/ai-settings",
             get(get_checkout_ai_settings).put(put_checkout_ai_settings),
+        )
+        .route(
+            "/checkouts/{reference}/permission-automation",
+            get(get_checkout_permission_automation).put(put_checkout_permission_automation),
+        )
+        .route(
+            "/checkouts/{reference}/permission-automation/migrate",
+            post(migrate_checkout_permission_automation),
         )
         .route(
             "/checkouts/{reference}/terminal-settings",
