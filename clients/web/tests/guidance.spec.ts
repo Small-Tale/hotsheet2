@@ -3,6 +3,45 @@ import { expect, test } from '@playwright/test';
 import { openDemoProject } from './mobile-project-fixture';
 import { expectProjectSidebarLayout } from './project-sidebar-layout';
 
+test('HS2-4PNWAT keeps edited refs when a guidance refresh finishes before review', async ({ page }) => {
+  await openDemoProject(page);
+  let releaseOverview!: () => void;
+  const overviewHeld = new Promise<void>((resolve) => {
+    releaseOverview = resolve;
+  });
+  let overviewRequested!: () => void;
+  const requestStarted = new Promise<void>((resolve) => {
+    overviewRequested = resolve;
+  });
+  const requests: unknown[] = [];
+  await page.route('**/checkouts/demo-checkout/guidance', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    overviewRequested();
+    await overviewHeld;
+    await route.fulfill({
+      json: { owner: 'builtin', explicit_selection: true, default_repository: '', sources: [] },
+    });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/batch-review', async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ json: { requests: [], pins: [] } });
+  });
+
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  await requestStarted;
+  await page.locator('input[name="guidance-source-id"]').fill('one');
+  await page.locator('input[name="guidance-repository"]').fill('https://example.test/one');
+  const refs = page.locator('input[name="guidance-ref"]');
+  await refs.fill('main, v1.*');
+  releaseOverview();
+  await expect(page.getByRole('button', { name: 'Review Exact Pins' })).toBeEnabled();
+  await expect(refs).toHaveValue('main, v1.*');
+  await page.getByRole('button', { name: 'Review Exact Pins' }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests).toEqual([[{ id: 'one', repository: 'https://example.test/one', refs: ['main', 'v1.*'] }]]);
+});
+
 test('HS2-1YXCCW and HS2-F203CG review full pins in a settled responsive shell', async ({ page }) => {
   await openDemoProject(page);
   const requests: unknown[] = [];

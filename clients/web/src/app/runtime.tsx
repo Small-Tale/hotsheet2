@@ -2030,15 +2030,19 @@ export async function startHotSheetWebClient() {
       .catch(() => {
         // The guidance overview remains usable with an older or unavailable server.
       });
+    const draftGeneration = guidanceBatchGeneration;
     try {
       const next = await new Api(current.apiPath, '', { trackBusy: !quiet }).checkoutGuidance(current.id);
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
         guidanceOverview.value = next;
         guidanceReview.value = undefined;
         guidanceRulePreview.value = undefined;
-        const chosen = next.sources.find((source) => source.id === guidanceSourceId.value);
-        guidanceRepository.value = chosen?.repository ?? next.default_repository;
-        guidanceRef.value = chosen?.requested_ref ?? 'main';
+        // HS2-4PNWAT: a late overview must not replace a draft typed while it loaded.
+        if (draftGeneration === guidanceBatchGeneration) {
+          const chosen = next.sources.find((source) => source.id === guidanceSourceId.value);
+          guidanceRepository.value = chosen?.repository ?? next.default_repository;
+          guidanceRef.value = chosen?.requested_ref ?? 'main';
+        }
       }
     } catch (error) {
       if (generation === guidanceLoadGeneration)

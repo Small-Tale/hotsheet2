@@ -257,6 +257,8 @@ commits. A trailing `*` expands matching tags only; the review rejects empty,
 duplicate, or overlarge expansions. It shows every exact full commit and the
 verified rule and skill counts before registration. Registration resolves the
 refs again and rejects a changed set, then writes all pins in one config update.
+An overview response that arrives while a source row is being edited preserves
+the edited ID, repository, and refs through review (HS2-4PNWAT).
 Each expanded ref receives its own stable source id under the row's group id;
 existing one-ref source ids remain valid. Selections and cached older rule
 digests stay with the matching ref across refreshes. Applying guidance remains
