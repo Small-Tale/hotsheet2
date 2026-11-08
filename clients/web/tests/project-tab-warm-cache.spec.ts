@@ -102,8 +102,16 @@ async function installWorkspace(page: Page) {
   // until the test releases it, pinning an in-flight request across a project switch.
   const gates = new Set<string>();
   const gated = new Map<string, Route>();
+  const catchupHolds = new Set<string>(),
+    heldCatchups = new Map<string, Route>();
   const sockets = new Map<string, WebSocketRoute[]>(),
-    cursor = new Map<string, number>();
+    cursor = new Map<string, number>(),
+    events = new Map<string, Array<{ cursor: number; store: string; kind: string; id: string; slug: string }>>();
+  const pollPage = (id: string, since: string | null) => ({
+    cursor: cursor.get(id) ?? 1,
+    events: since === null ? [] : (events.get(id) ?? []).filter((event) => event.cursor > Number(since)),
+    overflow: false,
+  });
   // Opt-in server-faithful paging (HS2-38MPMC): a project listed here answers with a continuation cursor
   // bound to its request's sort, and rejects a cursor sent with any other sort as stale.
   const pagedProjects = new Set<string>(),
@@ -170,7 +178,12 @@ async function installWorkspace(page: Page) {
     }
     if (rest.endsWith('/ws/poll')) {
       cursor.set(id, cursor.get(id) ?? 1);
-      return route.fulfill({ json: { cursor: cursor.get(id), events: [], overflow: false } });
+      const since = url.searchParams.get('since');
+      if (since !== null && catchupHolds.delete(id)) {
+        heldCatchups.set(id, route);
+        return;
+      }
+      return route.fulfill({ json: pollPage(id, since) });
     }
     if (rest.endsWith('/providers'))
       return route.fulfill({
@@ -256,6 +269,16 @@ async function installWorkspace(page: Page) {
       gated.delete(key);
       await route.fulfill({ json: [] });
     },
+    holdCatchup: (index: number) => {
+      catchupHolds.add(projectId(index));
+    },
+    releaseCatchup: async (index: number) => {
+      const id = projectId(index);
+      await expect.poll(() => heldCatchups.has(id)).toBe(true);
+      const route = heldCatchups.get(id)!;
+      heldCatchups.delete(id);
+      await route.fulfill({ json: pollPage(id, new URL(route.request().url()).searchParams.get('since')) });
+    },
     busyLog: () => page.evaluate(() => [...(window as unknown as { __busyLog: string[] }).__busyLog]),
     clearBusyLog: () =>
       page.evaluate(() => {
@@ -266,10 +289,9 @@ async function installWorkspace(page: Page) {
       await expect.poll(() => sockets.get(id)?.length ?? 0).toBeGreaterThan(0);
       const next = (cursor.get(id) ?? 1) + 1;
       cursor.set(id, next);
-      sockets
-        .get(id)!
-        .at(-1)!
-        .send(JSON.stringify({ cursor: next, store: 'git', kind, id: 'ticket', slug: `HS2-${projects[index].name}A` }));
+      const event = { cursor: next, store: 'git', kind, id: 'ticket', slug: `HS2-${projects[index].name}A` };
+      events.set(id, [...(events.get(id) ?? []), event]);
+      sockets.get(id)!.at(-1)!.send(JSON.stringify(event));
     },
   };
 }
@@ -511,6 +533,27 @@ test('live change events keep a cached background project current so its switch 
   await expect(workspace.ticketRow('HS2-P1LIVE')).toBeVisible();
   await page.waitForTimeout(600);
   expect(await workspace.busyLog()).toEqual([]);
+});
+
+test('replays a background ticket event emitted during the socket catch-up poll (HS2-T8FR9Q)', async ({ page }) => {
+  const workspace = await installWorkspace(page);
+  await bootWorkspace(page, workspace);
+  workspace.holdCatchup(1);
+  await warmUp(workspace, [1, 0]);
+
+  const before = workspace.requestsFor(1, '/tickets');
+  workspace.rows.p1 = [row('P1A'), row('P1LIVE')];
+  // The socket exists, but its zero-wait replay has not returned. The same event must be
+  // delivered by that replay even if the queued socket copy becomes a duplicate.
+  await workspace.emit(1, 'created');
+  await workspace.releaseCatchup(1);
+  await expect.poll(() => workspace.requestsFor(1, '/tickets')).toBeGreaterThan(before);
+  await expect(workspace.tab(1).locator('..').locator('.project-tab__work')).toHaveAttribute(
+    'aria-label',
+    '2 Up Next tickets',
+  );
+  await switchTo(workspace, 1);
+  await expect(workspace.ticketRow('HS2-P1LIVE')).toBeVisible({ timeout: 250 });
 });
 
 test('a stream-triggered permission reconciliation in flight across a warm switch stays invisible (HS2-7G3C19)', async ({
