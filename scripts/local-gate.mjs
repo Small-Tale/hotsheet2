@@ -10,7 +10,7 @@ import { exerciseIndexForRepo, withSpecimenInventory } from './gate-browser-exer
 import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engines.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { platformCfgForRepo } from './platform-cfg.mjs';
-import { parseBudget, selectBudget } from './gate-budget.mjs';
+import { contractInputsChanged, parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
 import { sandboxFailureNotice } from './sandbox-notice.mjs';
 import {
@@ -133,9 +133,20 @@ export function inspectTimings(repo) {
  * specs and provider test titles that render or exercise a changed client module through its hooks.
  */
 export function browserStages(changes, full, providerTitles = [], testTitles = {}, exercised = undefined) {
-  if (!full && !changes.some((path) => classifyPath(path).groups.includes?.('web'))) return [];
-  const files = new Set(['tests/contracts.spec.ts', 'tests/shell-composition.spec.ts']);
-  const reasons = ['real-server contracts and shipped shell composition'];
+  const webChanged = changes.some(
+    (path) =>
+      path !== 'crates/hotsheet-server/src/lib.rs' &&
+      path !== 'docs/contracts/v1/openapi.yaml' &&
+      classifyPath(path).groups.includes?.('web'),
+  );
+  if (!full && !webChanged && !contractInputsChanged(changes)) return [];
+  const files = new Set(['tests/contracts.spec.ts']);
+  if (full || webChanged) files.add('tests/shell-composition.spec.ts');
+  const reasons = [
+    full || webChanged
+      ? 'real-server contracts and shipped shell composition'
+      : 'HS2-PDNJA0: router or OpenAPI contract changed',
+  ];
   for (const file of exercised?.files ?? []) files.add(file);
   if (exercised?.providerWhole) files.add('tests/providers.spec.ts');
   reasons.push(...(exercised?.reasons ?? []));

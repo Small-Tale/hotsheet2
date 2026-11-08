@@ -3,6 +3,10 @@ import { stageTimingKey, timingEstimate } from './gate-timings.mjs';
 
 export const stageId = (stage) => `${stage.cwd}::${stage.command}`;
 
+// HS2-PDNJA0: route registration and its public schema need a real-server contract run.
+export const contractInputsChanged = (changes) =>
+  changes.some((path) => path === 'crates/hotsheet-server/src/lib.rs' || path === 'docs/contracts/v1/openapi.yaml');
+
 export function parseBudget(value) {
   const match = /^(\d+)(ms|s|m|h)$/.exec(value ?? '');
   if (!match) throw new Error('Budget must be a positive duration such as 5m, 300s, or 1h.');
@@ -23,7 +27,10 @@ function directlyAffected(stage, changes) {
   if (stage.cwd === 'migrator' && command === 'npm run test:coverage')
     return changes.some((path) => /^migrator\//.test(path));
   if (stage.cwd === 'clients/web' && command.startsWith('npx playwright test '))
-    return changes.some((path) => /^clients\/web\/(src|tests|public)\//.test(path) || /^docs\/contracts\//.test(path));
+    return (
+      changes.some((path) => /^clients\/web\/(src|tests|public)\//.test(path) || /^docs\/contracts\//.test(path)) ||
+      (contractInputsChanged(changes) && command.includes('tests/contracts.spec.ts'))
+    );
   return false;
 }
 

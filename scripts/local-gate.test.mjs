@@ -77,6 +77,27 @@ test('HS2-RS0FFT client selection omits unrelated Rust and keeps policy and real
   assert.ok(p.stages.filter((stage) => !stage.selected).every((stage) => stage.reasons.length));
 });
 
+test('HS2-PDNJA0 router and OpenAPI edits run the real-server browser contract locally', (t) => {
+  for (const changed of ['crates/hotsheet-server/src/lib.rs', 'docs/contracts/v1/openapi.yaml']) {
+    const f = fixture(t);
+    f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    f.put(changed, 'synthetic route contract change\n');
+    f.git('add', changed);
+    f.git('commit', '--quiet', '-m', 'synthetic contract change');
+    const p = prepare(f.repo, undefined, false, f.options.versions);
+    assert.equal(p.mode, 'selected', changed);
+    const contract = p.checks.find((stage) => stage.command === "npx playwright test 'tests/contracts.spec.ts'");
+    assert.ok(contract, `${changed}: ${p.checks.map((stage) => stage.command).join(', ')}`);
+    assert.equal(contract.floor, true, changed);
+    assert.ok(
+      p.checks.some((stage) => stage.command === 'npm run test:fixtures'),
+      changed,
+    );
+    assert.ok(!p.deferred.some((stage) => stage.command.includes('tests/contracts.spec.ts')), changed);
+    assert.ok(!p.checks.some((stage) => stage.command.includes('tests/shell-composition.spec.ts')), changed);
+  }
+});
+
 test('HS2-55MWQ9 a private web candidate cannot replace the required unit stage or receipt inputs', (t) => {
   const f = fixture(t);
   f.put('clients/web/src/trailing-task-internal.ts', 'export const delay = 250;\n');

@@ -15,6 +15,11 @@ select their dependent packages. Unknown paths, missing baseline, configuration,
 lockfiles, toolchain, gate scripts, or ambiguous stages select the full package gate.
 High-risk changes retain full affected suites.
 
+HS2-PDNJA0 makes a Rust server router edit or an OpenAPI source edit select the
+real-server `contracts.spec.ts` browser check and its fixture as mandatory local
+work. A router-only or OpenAPI-only edit does not pull in shell composition. This
+closes the selection gap exposed by HS2-F1QJ03's missing note-doctor contract.
+
 ## Read-only dependency edge preview (HS2-55MWQ9)
 
 `scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate
