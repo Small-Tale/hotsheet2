@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::api_error::ApiError;
+use crate::events::ChangeEvent;
 use crate::routes::checkout_tickets::checkout_source_for_create;
 use crate::routes::providers::{provider_for, provider_transfer_error};
 
@@ -46,6 +47,23 @@ pub struct PendingOperation {
 
 fn ledger_error(error: ClaimLedgerError) -> ApiError {
     ApiError::new(StatusCode::CONFLICT, error.to_string())
+}
+
+/// The event is checkout-qualified; its id and slug carry the provider connection and
+/// native ticket id, respectively. It contains no provider text or worker identity.
+fn emit_advisory_change(state: &AppState, checkout: &str, ticket: &TicketRef) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: checkout.to_string(),
+        kind: "advisory_claim_changed".into(),
+        id: ticket.connection_id.clone(),
+        slug: ticket.native_id.clone(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+        live: None,
+    });
 }
 
 fn source(
@@ -307,11 +325,14 @@ pub async fn get_advisory_claim(
     Path((checkout, connection_id, native_id)): Path<(String, String, String)>,
 ) -> Result<Json<ClaimStatus>, ApiError> {
     let (project_scope, provider) = source(&state, &checkout, &connection_id, &native_id)?;
-    let _ = replay_pending_once(&state, &project_scope, &connection_id, &native_id)?;
+    let settled = replay_pending_once(&state, &project_scope, &connection_id, &native_id)?;
     let ticket = TicketRef {
         connection_id,
         native_id,
     };
+    if settled > 0 {
+        emit_advisory_change(&state, &project_scope, &ticket);
+    }
     let now_ms = now_epoch().saturating_mul(1000);
     Ok(Json(local_status(
         &state,
@@ -373,6 +394,7 @@ pub async fn post_advisory_claim(
             .append_advisory_claim_event(&ticket.native_id, &event, now_ms, 60_000)
             .map_err(provider_transfer_error)?;
     }
+    emit_advisory_change(&state, &project_scope, &ticket);
     Ok(Json(local_status(
         &state,
         &project_scope,

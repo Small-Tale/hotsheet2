@@ -62,6 +62,7 @@ controlled-close flush for large pending draft strings (HS2-E0H7S0). See the
 process-claim reconciliation and a durable provisional headless/server path. GitHub,
 GitLab, and Jira can assign the current credential user. Exclusive external leases remain
 unsupported. MCP and web selected-ticket conflict/provisional presentation are shipped (HS2-2MZWZT);
+open web notices follow checkout-qualified advisory changes and stream reconnects (HS2-WHW46N);
 non-notifying GitHub/GitLab process metadata remains deferred (HS2-D9V8YT).
 Jira prunes time-fenced v2 issue properties before a new advisory write
 (HS2-HTYZAG), while the bounded reader fails closed above 1,000 total issue

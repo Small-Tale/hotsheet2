@@ -4115,6 +4115,8 @@ export async function startHotSheetWebClient() {
     conversationForActivity,
     refreshDriveConnections,
     refreshPermissions,
+    refreshAdvisoryClaim: (current, connection, nativeId) =>
+      advisoryClaimResource.refreshMatching(current.id, connection, nativeId),
     serverResolvedPermission,
     permissionRulesChanged,
     applyTerminalRenamed,

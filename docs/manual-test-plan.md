@@ -891,6 +891,12 @@ Claim/Renew/Release appear only for valid current-session state. Reconnect and
 refresh to confirm the projection updates without periodic requests. Exercise
 the checkout-qualified MCP status/event tools against the same linked source.
 
+For HS2-WHW46N, leave the same synthetic Jira ticket open in two independent
+browser sessions. Claim, release, and reconcile a provisional operation in one
+session, and confirm the other notice updates through the change stream without
+Refresh or periodic requests. Exercise conflict and reconnect while the second
+notice is open; check wide, medium, narrow, then wide again.
+
 On a synthetic Jira issue with Browse and Edit issue permissions, assign the
 current credential user, then create an advisory claim through the checkout
 qualified route or `provider-advisory-claim`. Confirm the property appears under

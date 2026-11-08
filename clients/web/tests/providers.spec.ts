@@ -13769,6 +13769,173 @@ test('shows selected Jira advisory conflict, provisional state, and safe actions
   await page.screenshot({ path: 'target/visual-captures/hs2-2mzwzt-unavailable-wide.png', fullPage: true });
 });
 
+test('HS2-WHW46N two open clients reconcile advisory claim, conflict, provisional settlement, and release', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const otherContext = await browser.newContext();
+  try {
+    const other = await otherContext.newPage();
+    const clients = [page, other];
+    const sockets = new Map<typeof page, import('@playwright/test').WebSocketRoute>();
+    const empty: AdvisoryClaimStatus = {
+      projection: { claims: [], conflicted: false, invalid_markers: 0 },
+      provisional: false,
+      remote_verified: true,
+      automatic_handoff_safe: true,
+      pending_operation_ids: [],
+      pending_operations: [],
+    };
+    const external = {
+      ...row,
+      id: 'PROJ-7',
+      native_id: 'PROJ-7',
+      qualified_id: 'jira-1:PROJ-7',
+      connection_id: 'jira-1',
+      slug: 'JIRA-7',
+      title: 'Advisory process ticket',
+    };
+    let advisory: AdvisoryClaimStatus = empty;
+    let cursor = 0;
+    const publish = () => {
+      const event = {
+        cursor: ++cursor,
+        store: 'demo-checkout',
+        kind: 'advisory_claim_changed',
+        id: 'jira-1',
+        slug: 'PROJ-7',
+      };
+      for (const socket of sockets.values()) socket.send(JSON.stringify(event));
+    };
+    for (const client of clients) {
+      await mockProject(client);
+      await client.routeWebSocket(/\/ws\/sync(?:\?|$)/, (socket) => {
+        sockets.set(client, socket);
+      });
+      await client.route('**/providers', (route) =>
+        route.fulfill({
+          json: [
+            {
+              connection_id: 'jira-1',
+              provider: 'jira',
+              display_name: 'Jira',
+              locator: 'https://jira.test',
+              default: true,
+              capabilities: { update: true, notes: true, advisory_claims: true, claims: false },
+            },
+          ],
+        }),
+      );
+      await client.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
+        const path = decodeURIComponent(new URL(route.request().url()).pathname);
+        if (path.endsWith('/tickets'))
+          return route.fulfill({
+            json: {
+              items: [external],
+              counts: {
+                total: 1,
+                queued: 1,
+                backlog: 0,
+                archive: 0,
+                trash: 0,
+                open: 1,
+                up_next: 0,
+                active: 0,
+                started: 1,
+                completed_today: 0,
+              },
+            },
+          });
+        if (path.endsWith('/tickets/jira-1:PROJ-7'))
+          return route.fulfill({ json: { store: 'jira-1', ...full, ...external } });
+        return route.fallback();
+      });
+      await client.route('**/checkouts/demo-checkout/providers/jira-1/tickets/PROJ-7/advisory-claim', async (route) => {
+        if (route.request().method() === 'POST') {
+          const event = route.request().postDataJSON() as {
+            worker: string;
+            operation_id: string;
+            kind: { type: string };
+          };
+          advisory = {
+            ...empty,
+            projection: {
+              ...empty.projection,
+              claims:
+                event.kind.type === 'release'
+                  ? []
+                  : [
+                      {
+                        worker: event.worker,
+                        operation_id: event.operation_id,
+                        expires_unix_ms: Date.now() + 30 * 60_000,
+                      },
+                    ],
+            },
+          };
+        }
+        await route.fulfill({ json: advisory });
+        if (route.request().method() === 'POST') publish();
+      });
+      await client.setViewportSize({ width: 1440, height: 900 });
+      await client.goto('/');
+      await client.getByRole('button', { name: 'Open Project' }).click();
+      await client.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await client.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
+      await expect(client.locator('#app-right-rail')).toContainText('No advisory process claim');
+    }
+    await expect.poll(() => sockets.size).toBe(2);
+    const firstNotice = page.locator('#app-right-rail');
+    const secondNotice = other.locator('#app-right-rail');
+    await firstNotice.getByRole('button', { name: 'Claim Advisory' }).click();
+    await expect(secondNotice).toContainText('advisory claim');
+    await expect(secondNotice).not.toContainText('No advisory process claim');
+    await other.screenshot({ path: testInfo.outputPath('hs2-whw46n-claim-wide.png'), animations: 'disabled' });
+    advisory = {
+      ...advisory,
+      projection: {
+        ...advisory.projection,
+        conflicted: true,
+        claims: [
+          ...advisory.projection.claims,
+          { worker: 'another-worker', operation_id: 'op-other', expires_unix_ms: Date.now() + 30 * 60_000 },
+        ],
+      },
+      automatic_handoff_safe: false,
+    };
+    publish();
+    await expect(secondNotice).toContainText('Overlapping advisory claims');
+    await other.screenshot({ path: testInfo.outputPath('hs2-whw46n-conflict-wide.png'), animations: 'disabled' });
+    advisory = {
+      ...advisory,
+      provisional: true,
+      pending_operation_ids: ['op-other'],
+      pending_operations: [{ operation_id: 'op-other', state: 'needs_attention' }],
+    };
+    publish();
+    await expect(secondNotice).toContainText('The local claim needs review');
+    await secondNotice.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const readerNotice = other.locator(
+      '.ticket-reader[data-reader-active="true"] [data-component="advisory-claim-notice"]',
+    );
+    await other.setViewportSize({ width: 940, height: 844 });
+    await expect(readerNotice).toContainText('The local claim needs review');
+    await other.screenshot({ path: testInfo.outputPath('hs2-whw46n-provisional-medium.png'), animations: 'disabled' });
+    await other.setViewportSize({ width: 390, height: 844 });
+    await expect(readerNotice).toContainText('The local claim needs review');
+    await other.screenshot({ path: testInfo.outputPath('hs2-whw46n-provisional-narrow.png'), animations: 'disabled' });
+    await other.setViewportSize({ width: 1440, height: 900 });
+    advisory = { ...empty, projection: { ...empty.projection, claims: advisory.projection.claims.slice(0, 1) } };
+    publish();
+    await expect(firstNotice).toContainText('Your advisory claim is active');
+    await firstNotice.getByRole('button', { name: 'Release Advisory' }).click();
+    await expect(readerNotice).toContainText('No advisory process claim');
+    await other.screenshot({ path: testInfo.outputPath('hs2-whw46n-release-wide.png'), animations: 'disabled' });
+  } finally {
+    await otherContext.close();
+  }
+});
+
 test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (HS2-YSF8TV, HS2-QA1VEF) @ci-smoke', async ({
   page,
 }) => {

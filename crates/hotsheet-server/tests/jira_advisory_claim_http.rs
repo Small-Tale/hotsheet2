@@ -173,6 +173,15 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     assert_eq!(status, StatusCode::CREATED, "{registration}");
     let checkout_id = registration["id"].as_str().unwrap();
     let uri = format!("/checkouts/{checkout_id}/providers/jira-eng/tickets/ENG-9/advisory-claim");
+    let (_, before) = response_json(
+        server
+            .clone()
+            .oneshot(request("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let cursor = before["cursor"].as_u64().unwrap();
     let expiry = (now_epoch() + 3600) * 1000;
     let operation_id = format!("v2:{:013}:0123456789abcdef", now_epoch() * 1000);
     fake.offline.store(true, Ordering::SeqCst);
@@ -188,6 +197,22 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
         operation_id
     );
     assert_eq!(admitted["pending_operations"][0]["state"], "queued");
+    let (_, changed) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(changed["events"][0]["kind"], "advisory_claim_changed");
+    assert_eq!(changed["events"][0]["store"], checkout_id);
+    assert_eq!(changed["events"][0]["id"], "jira-eng");
+    assert_eq!(changed["events"][0]["slug"], "ENG-9");
     drop(server);
     fake.offline.store(false, Ordering::SeqCst);
     fake.timeout_after_property_write
@@ -201,6 +226,15 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     .with_ticket_provider(Arc::new(provider(fake.clone())))
     .with_advisory_claim_ledger(&ledger)
     .unwrap());
+    let (_, before_replay) = response_json(
+        restarted
+            .clone()
+            .oneshot(request("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let replay_cursor = before_replay["cursor"].as_u64().unwrap();
     let (status, uncertain) = response_json(
         restarted
             .clone()
@@ -216,14 +250,41 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
         uncertain["pending_operations"][0]["state"],
         "needs_attention"
     );
-    let (status, reconciled) =
-        response_json(restarted.oneshot(request("GET", &uri, None)).await.unwrap()).await;
+    let (status, reconciled) = response_json(
+        restarted
+            .clone()
+            .oneshot(request("GET", &uri, None))
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{reconciled}");
     assert_eq!(reconciled["provisional"], false);
     assert_eq!(reconciled["remote_verified"], true);
     assert_eq!(reconciled["projection"]["claims"][0]["worker"], "worker-a");
     assert_eq!(reconciled["pending_operations"], json!([]));
     assert_eq!(fake.properties.lock().unwrap().len(), 1);
+    let (_, replay_events) = response_json(
+        restarted
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={replay_cursor}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(replay_events["events"].as_array().unwrap().len(), 2);
+    assert!(
+        replay_events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|event| {
+                event["kind"] == "advisory_claim_changed" && event["store"] == checkout_id
+            })
+    );
 }
 
 #[tokio::test]
@@ -302,8 +363,18 @@ async fn hs2_htyzag_http_claim_prunes_fenced_v2_properties_before_remote_write()
     let uri = format!("/checkouts/{checkout_id}/providers/jira-eng/tickets/ENG-9/advisory-claim");
     let new_now = now_epoch() * 1000;
     let new_id = format!("v2:{new_now:013}:fedcba9876543210");
+    let (_, before) = response_json(
+        server
+            .clone()
+            .oneshot(request("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let cursor = before["cursor"].as_u64().unwrap();
     let (status, result) = response_json(
         server
+            .clone()
             .oneshot(request(
                 "POST",
                 &uri,
@@ -320,4 +391,81 @@ async fn hs2_htyzag_http_claim_prunes_fenced_v2_properties_before_remote_write()
     assert_eq!(status, StatusCode::OK, "{result}");
     assert_eq!(result["projection"]["claims"][0]["worker"], "new-worker");
     assert_eq!(fake.properties.lock().unwrap().len(), 1);
+    let (_, claim_events) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(claim_events["events"][0]["kind"], "advisory_claim_changed");
+    assert_eq!(claim_events["events"][0]["store"], checkout_id);
+    let after_claim = claim_events["cursor"].as_u64().unwrap();
+    let other_id = format!("v2:{new_now:013}:0123456789abcdef");
+    let (status, _) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "POST",
+                &uri,
+                Some(json!({
+                    "worker":"other-worker","operation_id":other_id,
+                    "kind":{"type":"claim","expires_unix_ms":new_now+60_000}
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (_, after_conflict) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={after_claim}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(after_conflict["events"], json!([]));
+    let (status, released) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "POST",
+                &uri,
+                Some(json!({
+                    "worker":"new-worker","operation_id":new_id,"kind":{"type":"release"}
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{released}");
+    assert_eq!(released["projection"]["claims"], json!([]));
+    let (_, release_events) = response_json(
+        server
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={after_claim}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        release_events["events"][0]["kind"],
+        "advisory_claim_changed"
+    );
+    assert_eq!(release_events["events"][0]["store"], checkout_id);
 }

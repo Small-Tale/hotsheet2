@@ -47,13 +47,31 @@ export function advisoryRenewExpiry(operationId: string, now = Date.now()): numb
 export function createAdvisoryClaimResource(transport: () => Transport) {
   const state = signal<AdvisoryClaimResourceState>({ loading: false, busy: false });
   let generation = 0;
+  let refreshAfterWrite = false;
 
   function select(target?: AdvisoryClaimTarget) {
     const previous = state.peek().target;
     if (target && previous && targetKey(target) === targetKey(previous)) return;
     generation += 1;
+    refreshAfterWrite = false;
     state.value = { target, loading: Boolean(target), busy: false };
     if (target) void refresh();
+  }
+
+  /** A checkout event or stream resync invalidates only the matching selected ticket. */
+  async function refreshMatching(checkout: string, connection?: string, nativeId?: string) {
+    const target = state.peek().target;
+    if (
+      target?.checkout !== checkout ||
+      (connection !== undefined && target.connection !== connection) ||
+      (nativeId !== undefined && target.nativeId !== nativeId)
+    )
+      return;
+    if (state.peek().busy) {
+      refreshAfterWrite = true;
+      return;
+    }
+    await refresh();
   }
 
   async function refresh() {
@@ -90,8 +108,13 @@ export function createAdvisoryClaimResource(transport: () => Transport) {
       }
     } catch (reason) {
       if (write === generation) state.value = { target, loading: false, busy: false, error: message(reason) };
+    } finally {
+      if (write === generation && refreshAfterWrite) {
+        refreshAfterWrite = false;
+        void refresh();
+      }
     }
   }
 
-  return { state, select, refresh, submit };
+  return { state, select, refresh, refreshMatching, submit };
 }

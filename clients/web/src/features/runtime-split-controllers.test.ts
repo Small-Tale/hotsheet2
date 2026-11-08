@@ -151,6 +151,49 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(streams.started).toEqual(['/api/a', '/api/b', '/api/b']);
   });
 
+  it('HS2-WHW46N routes checkout-qualified advisory invalidations and resyncs without polling', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      refreshAdvisoryClaim = vi.fn().mockResolvedValue(undefined);
+    const owner = createProjectChangeStreamsController({
+      projects,
+      project: () => projects.value[0],
+      shellMode: signal('project'),
+      statsProjectId: signal(undefined),
+      localTicketMutationBarrier: createRefreshBarrier(),
+      localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+      projectTabRefresh: { request: noop },
+      turnStreamEvents: () => [],
+      conversationPersistence: { flush: vi.fn() } as never,
+      updateConversation: vi.fn(),
+      conversationForActivity: vi.fn(),
+      refreshDriveConnections: noop,
+      refreshPermissions: noop,
+      refreshAdvisoryClaim,
+      serverResolvedPermission: vi.fn(),
+      permissionRulesChanged: vi.fn(),
+      applyTerminalRenamed: vi.fn(),
+      refreshTerminalDashboard: noop,
+      refreshProviderOutbox: noop,
+      refreshCommands: noop,
+      refreshCustomViews: noop,
+      refreshRepositoryStatus: noop,
+      loadConfidenceReport: noop,
+      loadRepositorySize: noop,
+    });
+    owner.syncProjectChangeStreams();
+    const event = { cursor: 7, kind: 'advisory_claim_changed', store: 'a', id: 'jira', slug: 'ENG-1' };
+    await streams.onEvents.get('/api/a')!({ cursor: 7, overflow: false, events: [event, event] });
+    await streams.onEvents.get('/api/b')!({ cursor: 7, overflow: false, events: [event] });
+    expect(
+      refreshAdvisoryClaim.mock.calls.map(([project, connection, nativeId]) => [project.id, connection, nativeId]),
+    ).toEqual([['a', 'jira', 'ENG-1']]);
+    await streams.onResync.get('/api/a')!('reconnect');
+    expect(refreshAdvisoryClaim.mock.calls.at(-1)?.[0].id).toBe('a');
+    expect(refreshAdvisoryClaim.mock.calls.at(-1)?.slice(1)).toEqual([]);
+    owner.dispose();
+  });
+
   it('change streams: burst refreshes are bounded per project while other events keep flowing', async () => {
     const projects = signal([project('a'), project('b')]);
     const noop = vi.fn(async () => undefined);

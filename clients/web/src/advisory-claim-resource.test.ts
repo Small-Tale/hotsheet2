@@ -21,6 +21,46 @@ const emptyStatus = (): AdvisoryClaimStatus => ({
 });
 
 describe('HS2-2MZWZT advisory claim resource', () => {
+  it('HS2-WHW46N refreshes only a matching checkout, connection, and native ticket', async () => {
+    const read = vi.fn().mockResolvedValue(emptyStatus());
+    const resource = createAdvisoryClaimResource(() => ({
+      advisoryClaimStatus: read,
+      appendAdvisoryClaimEvent: vi.fn(),
+    }));
+    resource.select({ checkout: 'code', connection: 'jira', nativeId: 'ENG-1' });
+    await Promise.resolve();
+    for (const target of [
+      ['other', 'jira', 'ENG-1'],
+      ['code', 'other', 'ENG-1'],
+      ['code', 'jira', 'ENG-2'],
+    ])
+      await resource.refreshMatching(...(target as [string, string, string]));
+    expect(read).toHaveBeenCalledTimes(1);
+    await resource.refreshMatching('code', 'jira', 'ENG-1');
+    await resource.refreshMatching('code'); // reconnect resync
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+  it('HS2-WHW46N rechecks a matching remote invalidation that arrives during a local write', async () => {
+    let finish!: (value: AdvisoryClaimStatus) => void;
+    const pending = new Promise<AdvisoryClaimStatus>((resolve) => {
+      finish = resolve;
+    });
+    const read = vi.fn().mockResolvedValueOnce(emptyStatus()).mockResolvedValueOnce(status('other-worker'));
+    const resource = createAdvisoryClaimResource(() => ({
+      advisoryClaimStatus: read,
+      appendAdvisoryClaimEvent: vi.fn().mockReturnValue(pending),
+    }));
+    resource.select({ checkout: 'code', connection: 'jira', nativeId: 'ENG-1' });
+    await Promise.resolve();
+    const writing = resource.submit({ worker: 'me', operation_id: 'op-me', kind: { type: 'release' } });
+    await resource.refreshMatching('code', 'jira', 'ENG-1');
+    expect(read).toHaveBeenCalledTimes(1);
+    finish(status('me'));
+    await writing;
+    await Promise.resolve();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(resource.state.value.status?.projection.claims[0].worker).toBe('other-worker');
+  });
   it('caps v2 renewal at the operation horizon and refuses an elapsed horizon', () => {
     const now = 2_000_000_000_000;
     const issued = now - 24 * 60 * 60_000 + 60_000;

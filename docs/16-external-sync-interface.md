@@ -195,8 +195,12 @@ needs-attention state separately from Git's exclusive live claim. Actions use
 a stable browser-session worker and retry a claim under the same operation id
 and expiry after an uncertain response. Selected-ticket reads refresh on
 selection, explicit Refresh, and project detail refreshes without board-row
-polling. Advisory mutations do not emit a project event, so another session's
-change is not pushed into an already open notice (HS2-WHW46N). Failed remote
+polling. A successful remote or provisional write, and each changed provisional
+reconciliation, emits a replayable `advisory_claim_changed` event (HS2-WHW46N).
+Its `store`, `id`, and `slug` identify the checkout, connection, and native ticket;
+the payload contains no worker or provider text. An already open notice for that
+qualified ticket re-reads once, and stream reconnect rechecks the selected notice
+without fixed polling. Failed remote
 reads clear the displayed projection and present automatic handoff as unsafe.
 The current provider route returns a generic conflict for both transport and
 malformed-marker failures, so the web cannot safely offer offline provisional

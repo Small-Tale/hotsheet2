@@ -45,6 +45,8 @@ export interface ProjectChangeStreamsDependencies {
   conversationForActivity: DriveConversations['conversationForActivity'];
   refreshDriveConnections: DriveConversations['refreshDriveConnections'];
   refreshPermissions: ReturnType<typeof createPermissionsController>['refreshPermissions'];
+  /** Refresh only the selected checkout-qualified advisory status after an invalidation or resync. */
+  refreshAdvisoryClaim?: (project: Project, connection?: string, nativeId?: string) => Promise<unknown>;
   serverResolvedPermission: ReturnType<typeof createPermissionsController>['serverResolvedPermission'];
   permissionRulesChanged: ReturnType<typeof createPermissionsController>['permissionRulesChanged'];
   applyTerminalRenamed: ReturnType<typeof createTerminalNamesController>['applyTerminalRenamed'];
@@ -220,6 +222,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     conversationForActivity,
     refreshDriveConnections,
     refreshPermissions,
+    refreshAdvisoryClaim,
     serverResolvedPermission,
     permissionRulesChanged,
     applyTerminalRenamed,
@@ -365,6 +368,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             onStreamHealth?.(current.id, true);
             await Promise.all([
               refreshPermissions(current.id),
+              ...(refreshAdvisoryClaim ? [refreshAdvisoryClaim(current)] : []),
               ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
               ...(liveStates ? [liveStates.resync(new Api(current.apiPath))] : []),
               ...(hostHealth ? [hostHealth.resync()] : []),
@@ -418,6 +422,14 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               response.events.some((event) => event.kind === 'permission_asked' || event.kind === 'permission_resolved')
             )
               await refreshPermissions(current.id);
+            const advisoryInvalidations = new Set<string>();
+            for (const event of response.events)
+              if (event.kind === 'advisory_claim_changed' && event.store === current.id) {
+                const key = JSON.stringify([event.id, event.slug]);
+                if (advisoryInvalidations.has(key)) continue;
+                advisoryInvalidations.add(key);
+                await refreshAdvisoryClaim?.(current, event.id, event.slug);
+              }
             // A remembered answer was added or revoked, possibly by another client (HS2-KYK1S7).
             if (response.events.some((event) => event.kind === 'permission_rules_changed'))
               permissionRulesChanged(current.id);
