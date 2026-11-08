@@ -294,7 +294,9 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   await dialog.getByRole('textbox', { name: 'View Name' }).fill('Needs docs');
   await dialog.getByRole('searchbox', { name: 'Search query' }).fill('tag:docs ');
   await dialog.getByRole('button', { name: 'Create View' }).click();
-  expect(views()).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
+  // The click returns before the asynchronous PUT /views reaches the fixture under full load.
+  // Observe the persisted request before asserting the selected view's search behavior (HS2-WJVYDC).
+  await expect.poll(views).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
 
   // Selecting the view shows its tickets like any other view; the search bar stays closed and empty.
   await expect(page.getByRole('button', { name: 'Needs docs', exact: true })).toHaveAttribute('aria-current', 'page');
