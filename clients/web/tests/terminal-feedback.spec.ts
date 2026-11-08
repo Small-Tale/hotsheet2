@@ -1369,8 +1369,15 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
   });
   await expect.poll(() => sliderTop(magnifiedViewport)).toBeGreaterThan(0);
   const magnifiedBottom = await settledSliderTop(magnifiedViewport);
+  const firstVisibleMagnifiedLine = () =>
+    magnifiedViewport.evaluate((node) =>
+      Number((node.querySelector('.xterm-rows')?.textContent ?? '').match(/magnified line (\d+)/)?.[1] ?? NaN),
+    );
+  await expect.poll(firstVisibleMagnifiedLine).toBeGreaterThanOrEqual(0);
+  const firstLineAtBottom = await firstVisibleMagnifiedLine();
   await swipe(magnifiedViewport, 0.3, 0.8);
-  await expect.poll(() => sliderTop(magnifiedViewport)).toBeLessThan(magnifiedBottom - 20);
+  await expect.poll(() => sliderTop(magnifiedViewport)).toBeLessThan(magnifiedBottom);
+  await expect.poll(firstVisibleMagnifiedLine).toBeLessThan(firstLineAtBottom);
   await page.screenshot({ path: test.info().outputPath('hs2-kfbrsb-magnified-scrolled.png') });
   await context.close();
 });
