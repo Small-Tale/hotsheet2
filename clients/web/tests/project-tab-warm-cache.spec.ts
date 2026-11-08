@@ -562,6 +562,10 @@ test('a stream-triggered permission reconciliation in flight across a warm switc
   const workspace = await installWorkspace(page);
   await bootWorkspace(page, workspace);
   await warmUp(workspace, [1, 0]);
+  // Startup reconciles permissions after the remembered projects open, and the project's
+  // initial stream handshake reconciles them again. Wait for both before measuring whether
+  // the P2 event below causes an unrelated P1 read (HS2-87VA0A).
+  await expect.poll(() => workspace.requestsFor(1, '/permissions')).toBe(2);
   await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
   await workspace.clearBusyLog();
 
