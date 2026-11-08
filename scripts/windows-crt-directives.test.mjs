@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   candidateArtifacts,
+  archiveMemberNameCounts,
   crtRequests,
   identity,
   main,
@@ -72,6 +73,15 @@ test('HS2-1R2RGQ parses per-member default libraries and runtime mismatch tags',
     { member: 'dav1d.lib', defaultlibs: ['LIBCMT'], runtimeLibrary: [] },
   ]);
   assert.deepEqual(parseDirectives('File Type: LIBRARY\n\n  Summary\n'), []);
+});
+
+test('HS2-K2NSCE counts all archive basenames, including members without directives', () => {
+  const source = `${ARCHIVE}\nArchive member name at A10: /44 C:\\other\\read.obj\nArchive member name at B20: no-directive.obj`;
+  const counts = archiveMemberNameCounts(source);
+  assert.equal(counts.get('read.obj'), 2);
+  assert.equal(counts.get('write.obj'), 1);
+  assert.equal(counts.get('no-directive.obj'), 1);
+  assert.equal(counts.has(''), false);
 });
 
 test('HS2-1R2RGQ reports only relative artifact identities', () => {
@@ -227,6 +237,8 @@ test('HS2-1R2RGQ reports requesting members and fails when every artifact is unr
     assert.equal(report.scanned, 1);
     assert.deepEqual(report.requesters.MSVCRTD[0].memberIdentity, memberIdentity(parseDirectives(ARCHIVE)[0].member));
     assert.deepEqual(report.requesters.MSVCRTD[0].memberSpelling, { kind: 'drive_absolute', segments: 11 });
+    assert.equal(report.requesters.MSVCRTD[0].archiveMemberNameCount, 1);
+    assert.equal(report.results[0].requests[0].archiveMemberNameCount, 1);
     assert.deepEqual(report.results[0].requests[0].memberIdentity, report.requesters.MSVCRTD[0].memberIdentity);
     assert.doesNotMatch(JSON.stringify(report), new RegExp(repo.replaceAll('\\', '\\\\')), 'no machine-local paths');
     const unreadable = main({

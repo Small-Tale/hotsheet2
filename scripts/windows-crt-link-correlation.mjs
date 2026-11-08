@@ -170,38 +170,76 @@ export function parseVerboseLink(text) {
  */
 export function correlate(candidates, loaded) {
   const exact = new Map(),
-    names = new Map();
+    names = new Map(),
+    identitiesByArchiveName = new Map(),
+    countsByArchiveName = new Map();
   for (const candidate of candidates) {
     const key = `${normalized(candidate.artifact)}|${candidate.memberIdentity?.sha256}`;
     if (qualifiedArchive(candidate.artifact) && exactMember(candidate.memberIdentity))
       exact.set(key, [...(exact.get(key) ?? []), candidate]);
     const name = `${archiveName(candidate.artifact)}|${memberName(candidate.member)}`;
     names.set(name, [...(names.get(name) ?? []), candidate]);
+    const archiveMember = `${normalized(candidate.artifact)}|${memberName(candidate.member)}`;
+    identitiesByArchiveName.set(
+      archiveMember,
+      new Set([...(identitiesByArchiveName.get(archiveMember) ?? []), candidate.memberIdentity?.sha256]),
+    );
+    countsByArchiveName.set(
+      archiveMember,
+      new Set([...(countsByArchiveName.get(archiveMember) ?? []), candidate.archiveMemberNameCount]),
+    );
   }
   const matches = [],
     seen = new Set();
   for (const entry of loaded) {
     const key = `${normalized(entry.archive)}|${entry.memberIdentity?.sha256 ?? normalized(entry.member)}`;
     if (seen.has(key)) continue;
-    const direct = qualifiedArchive(entry.archive) && exactMember(entry.memberIdentity) ? exact.get(key) : undefined;
+    const directCandidates =
+      qualifiedArchive(entry.archive) && exactMember(entry.memberIdentity) ? exact.get(key) : undefined;
+    // A basename digest is not a member identity when the archive contains two members of
+    // that name. Full-path digest matches remain valid for legacy reports without counts.
+    const direct = directCandidates?.every((candidate) => {
+      const factKey = `${normalized(candidate.artifact)}|${memberName(candidate.member)}`;
+      return (
+        countsByArchiveName.get(factKey)?.size === 1 &&
+        (candidate.archiveMemberNameCount === undefined || candidate.archiveMemberNameCount === 1) &&
+        (entry.memberSpelling?.kind !== 'basename' || candidate.archiveMemberNameCount === 1)
+      );
+    })
+      ? directCandidates
+      : undefined;
     const byName = direct ?? names.get(`${archiveName(entry.archive)}|${memberName(entry.member)}`) ?? [];
     if (byName.length === 0) continue;
     seen.add(key);
-    // Several cached archives can share a file name (dav1d release and debug); a name-only match
-    // to more than one candidate cannot say which archive this link loaded.
-    for (const candidate of byName)
+    // LINK may print only the basename. The *same qualified archive* plus a dumpbin inventory
+    // count of one proves that member; duplicate names anywhere in that archive stay advisory.
+    for (const candidate of byName) {
+      const uniqueMember =
+        !direct &&
+        entry.memberSpelling?.kind === 'basename' &&
+        qualifiedArchive(entry.archive) &&
+        qualifiedArchive(candidate.artifact) &&
+        normalized(entry.archive) === normalized(candidate.artifact) &&
+        candidate.archiveMemberNameCount === 1 &&
+        exactMember(candidate.memberIdentity) &&
+        identitiesByArchiveName.get(`${normalized(candidate.artifact)}|${memberName(candidate.member)}`)?.size === 1 &&
+        countsByArchiveName.get(`${normalized(candidate.artifact)}|${memberName(candidate.member)}`)?.size === 1;
       matches.push({
         library: candidate.library,
         artifact: candidate.artifact,
         kind: candidate.kind,
         member: candidate.member,
-        ...(direct ? { memberIdentity: { version: 1, sha256: candidate.memberIdentity.sha256 } } : {}),
+        ...(direct || uniqueMember ? { memberIdentity: { version: 1, sha256: candidate.memberIdentity.sha256 } } : {}),
         ...(safeSpelling(candidate.memberSpelling) ? { candidateMemberSpelling: candidate.memberSpelling } : {}),
         ...(exactMember(entry.memberIdentity) ? { selectedMemberIdentity: entry.memberIdentity } : {}),
         ...(safeSpelling(entry.memberSpelling) ? { selectedMemberSpelling: entry.memberSpelling } : {}),
+        ...(Number.isSafeInteger(candidate.archiveMemberNameCount) && candidate.archiveMemberNameCount > 0
+          ? { archiveMemberNameCount: candidate.archiveMemberNameCount }
+          : {}),
         loadedArchive: entry.archive,
-        match: direct ? 'exact' : byName.length === 1 ? 'basename' : 'ambiguous',
+        match: direct ? 'exact' : uniqueMember ? 'unique_member' : byName.length === 1 ? 'basename' : 'ambiguous',
       });
+    }
   }
   return matches;
 }
@@ -221,6 +259,9 @@ export function directiveCandidates(report) {
             ? { memberIdentity: { version: 1, sha256: requester.memberIdentity.sha256 } }
             : {}),
           ...(safeSpelling(requester.memberSpelling) ? { memberSpelling: requester.memberSpelling } : {}),
+          ...(Number.isSafeInteger(requester.archiveMemberNameCount) && requester.archiveMemberNameCount > 0
+            ? { archiveMemberNameCount: requester.archiveMemberNameCount }
+            : {}),
         });
   return candidates;
 }
@@ -356,7 +397,7 @@ export function run({ argv, env, cargo }) {
     .map((group) => ({
       warning: (group.lnk4098.MSVCRTD ?? 0) > 0,
       matches: correlate(candidates, selectedMembers(group.loaded)).filter(
-        (match) => match.library === 'MSVCRTD' && match.match === 'exact',
+        (match) => match.library === 'MSVCRTD' && ['exact', 'unique_member'].includes(match.match),
       ),
     }))
     .filter((group) => group.warning && group.matches.length > 0);
@@ -383,7 +424,7 @@ export function run({ argv, env, cargo }) {
     },
     // Confirmed only when this very link both warns about MSVCRTD and loads an MSVCRTD requester.
     currentLinkConfirmed: confirmed,
-    note: 'Cargo-wide candidateMatches are advisory; currentLinkMatches require fresh same-target, same-diagnostic evidence. Not a CRT fix or warning-free result (HS2-PN8D9F).',
+    note: 'Cargo-wide candidateMatches are advisory; currentLinkMatches require fresh same-target, same-diagnostic evidence and exact member identity or one basename in the qualified archive. Not a CRT fix or warning-free result (HS2-PN8D9F).',
   });
   report.status = result.status === 0 ? 'completed' : 'completed_link_failed';
   persist();

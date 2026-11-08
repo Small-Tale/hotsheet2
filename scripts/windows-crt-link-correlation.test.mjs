@@ -441,6 +441,55 @@ test('HS2-6W1S76 retains bounded selected identity and spelling shape without co
   assert.deepEqual(confirmed.selectedMemberSpelling, { kind: 'drive_absolute', segments: 5 });
 });
 
+test('HS2-K2NSCE confirms one basename in the selected qualified archive and rejects duplicates', (t) => {
+  const warning = "LINK : warning LNK4098: defaultlib 'MSVCRTD' conflicts";
+  const selected = cargoStream(`Loaded ${DEBUG_DAV1D}(lib.c.obj)\n${warning}`);
+  const directives = directiveReport();
+  directives.requesters.MSVCRTD[0].archiveMemberNameCount = 1;
+  const green = fixture(t, { directives, stdout: selected });
+  assert.equal(green.report.currentLinkConfirmed, true);
+  assert.equal(green.report.currentLinkMatches.kept[0].match, 'unique_member');
+  assert.equal(green.report.currentLinkMatches.kept[0].archiveMemberNameCount, 1);
+
+  for (const count of [undefined, 0, 2, -1, '1']) {
+    const redDirectives = directiveReport();
+    redDirectives.requesters.MSVCRTD[0].archiveMemberNameCount = count;
+    const red = fixture(t, { directives: redDirectives, stdout: selected });
+    assert.equal(red.report.currentLinkConfirmed, false, `count ${count}`);
+  }
+  const duplicate = directiveReport();
+  duplicate.requesters.MSVCRTD[0].archiveMemberNameCount = 1;
+  duplicate.requesters.MSVCRTD.push({
+    ...duplicate.requesters.MSVCRTD[0],
+    memberIdentity: memberIdentity('C:\\build\\other\\lib.c.obj'),
+  });
+  assert.equal(fixture(t, { directives: duplicate, stdout: selected }).report.currentLinkConfirmed, false);
+  assert.equal(
+    fixture(t, { directives, stdout: cargoStream(`Loaded ${RELEASE_DAV1D}(lib.c.obj)\n${warning}`) }).report
+      .currentLinkConfirmed,
+    false,
+  );
+  assert.equal(
+    fixture(t, {
+      directives,
+      stdout: [
+        artifact(),
+        event(`linker stdout: Loaded ${DEBUG_DAV1D}(lib.c.obj)`),
+        event(`linker stdout: ${warning}`),
+      ].join('\n'),
+    }).report.currentLinkConfirmed,
+    false,
+  );
+  const basenameDigest = directiveReport();
+  basenameDigest.requesters.MSVCRTD[0].memberIdentity = memberIdentity('lib.c.obj');
+  basenameDigest.requesters.MSVCRTD[0].archiveMemberNameCount = 2;
+  assert.equal(
+    fixture(t, { directives: basenameDigest, stdout: selected }).report.currentLinkConfirmed,
+    false,
+    'a matching basename digest cannot identify one of two same-named archive members',
+  );
+});
+
 test('HS2-6W1S76 rejects malformed producer spelling metadata from an input report', (t) => {
   const directives = directiveReport();
   directives.requesters.MSVCRTD[0].memberSpelling = { kind: 'C:/private', segments: 5 };

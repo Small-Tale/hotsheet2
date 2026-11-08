@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-K2NSCE: `scripts/windows-crt-directives.test.mjs` counts every archive
+basename, including objects without CRT directives, and checks that only a
+numeric multiplicity reaches the report. `scripts/windows-crt-link-correlation.test.mjs`
+confirms a unique basename in the same qualified archive and rejects duplicate,
+missing, malformed, wrong-archive, and split-diagnostic evidence. Fresh native
+Windows link evidence is required before the investigation closes.
+
 HS2-F1QJ03: `hotsheet-model/src/note_doctor.rs` tests the initial diagnostics
 against synthetic repaired note shapes and verifies decision context and note
 filtering. `hotsheet-cli/tests/cli.rs` and `hotsheet-mcp/src/lib.rs` exercise

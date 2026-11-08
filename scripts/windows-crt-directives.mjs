@@ -50,6 +50,27 @@ export function parseDirectives(text, artifact = '') {
   return members.filter((member) => member.defaultlibs.length || member.runtimeLibrary.length);
 }
 
+/** Count every ordinary archive member, including members without CRT directives (HS2-K2NSCE).
+ * A basename proves selection only when it occurs once in the scanned archive. */
+export function archiveMemberNameCounts(text) {
+  const counts = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const match = MEMBER.exec(line);
+    if (!match) continue;
+    const name = match[1]
+      .trim()
+      .replace(/^\/\d+\s+/, '')
+      .replaceAll('\\', '/')
+      .replace(/\/+$/, '')
+      .split('/')
+      .at(-1)
+      ?.toLowerCase();
+    if (!name) continue; // archive symbol tables (`/` and `//`)
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Members that request any C runtime library, with only those libraries listed. */
 export function crtRequests(members) {
   return members
@@ -171,6 +192,7 @@ export function summarize(results) {
           member: member.member,
           ...(member.memberIdentity ? { memberIdentity: member.memberIdentity } : {}),
           ...(member.memberSpelling ? { memberSpelling: member.memberSpelling } : {}),
+          ...(member.archiveMemberNameCount ? { archiveMemberNameCount: member.archiveMemberNameCount } : {}),
           runtimeLibrary: member.runtimeLibrary,
         });
       }
@@ -254,10 +276,21 @@ function run({ argv, env, dumpbin }) {
     const scan = dumpbin(['/NOLOGO', '/ARCHIVEMEMBERS', '/DIRECTIVES', path]);
     if (scan.error || scan.status !== 0)
       return { artifact, kind, bytes: statSync(path).size, error: scan.error?.code ?? `exit ${scan.status}` };
+    const memberCounts = archiveMemberNameCounts(scan.stdout);
     const requests = crtRequests(parseDirectives(scan.stdout, path)).map((request) => ({
       ...request,
       memberIdentity: memberIdentity(request.member),
       memberSpelling: memberSpelling(request.member),
+      archiveMemberNameCount:
+        memberCounts.get(
+          request.member
+            .replace(/^\/\d+\s+/, '')
+            .replaceAll('\\', '/')
+            .replace(/\/+$/, '')
+            .split('/')
+            .at(-1)
+            .toLowerCase(),
+        ) ?? 0,
       member: identity(request.member, roots),
     }));
     return { artifact, kind, bytes: statSync(path).size, requests };

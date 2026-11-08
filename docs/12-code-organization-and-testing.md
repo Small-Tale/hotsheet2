@@ -730,15 +730,21 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `linker_messages` diagnostics in Cargo's JSON stream and records:
   - the libraries searched, the members loaded per archive, the `/DEFAULTLIB` libraries processed,
     and the LNK4098 emissions;
-  - the join of the loaded members with the HS2-1R2RGQ candidates, matched `exact`, `basename` or
-    `ambiguous`. A bare archive name is attributed to the `Searching` block that loaded it, and two
-    cached archives sharing a file name stay `ambiguous`.
+  - the join of the loaded members with the HS2-1R2RGQ candidates, matched `exact`,
+    `unique_member`, `basename` or `ambiguous`. A bare archive name is attributed to the
+    `Searching` block that loaded it; two cached archives sharing a file name remain
+    ambiguous unless the selected archive's qualified path is known.
 
   `currentLinkConfirmed` requires complete validated source SHA, run id and attempt matching the
-  directive report, plus that same link emitting an `MSVCRTD` LNK4098 and loading an exact normalized
-  archive/member match for an `MSVCRTD` requester. Archive identity must retain a recognized
+  directive report, plus that same link emitting an `MSVCRTD` LNK4098 and loading a proven
+  archive/member match for an `MSVCRTD` requester. A full member digest match is `exact`.
+  When LINK reports only a basename, HS2-K2NSCE also accepts `unique_member` if the
+  selected qualified archive equals the scanned archive and the basename occurs exactly
+  once among **all** members in that archive, including members without CRT directives.
+  The scan records only the multiplicity, never private member paths; missing, malformed,
+  duplicate or contradictory member evidence stays advisory. Archive identity must retain a recognized
   `target/`, `vcpkg/` or `repo/` root; outside-root basename sanitization cannot establish identity.
-  Case, separators and dot segments are normalized. Unique basename and ambiguous matches remain
+  Case, separators and dot segments are normalized. Unqualified basename and ambiguous matches remain
   advisory, never positive confirmation. Stale, missing, malformed or explicitly unavailable
   provenance fails before cargo runs, replacing any earlier positive report. Both local and CI
   root Node gates run the ticket-named regression suite and its registration guard.
