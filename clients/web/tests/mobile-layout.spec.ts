@@ -72,6 +72,49 @@ test('keeps a long title readable at the real phone list width (HS2-KWPCFP)', as
   await row.screenshot({ path: test.info().outputPath('phone-list-long-title-390.png') });
 });
 
+test('shows the shared title clamp in real list and column views (HS2-PQGMWX)', async ({ page }) => {
+  const title = 'Real conflict outcome with a long title that has to wrap at narrow widths';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openDemoProject(page, false, 1, DEFAULT_TERMINALS, title);
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-M1"]');
+  await expect(row).toHaveAttribute('aria-label', `HS2-M1: ${title}`);
+
+  for (const [name, width, height] of [
+    ['wide', 1440, 900],
+    ['medium', 1024, 800],
+    ['narrow', 390, 844],
+    ['wide-again', 1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(row).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+              ).length,
+        ),
+      )
+      .toBe(0);
+    await expect.poll(() => row.evaluate((node) => node.getBoundingClientRect().left)).toBeGreaterThanOrEqual(0);
+    await expect.poll(() => row.evaluate((node) => node.getBoundingClientRect().right)).toBeLessThanOrEqual(width);
+    const clamp = row.locator('.kui-summary-row__title');
+    await expect(clamp).toHaveCSS('-webkit-line-clamp', '2');
+    await expect(row.locator('.ticket-list-row__title')).toHaveAttribute('title', title);
+    await row.screenshot({ path: `target/visual-captures/hs2-pqgmwx-list-${name}.png` });
+  }
+
+  await page.getByRole('button', { name: 'Columns View' }).click();
+  await expect(row).toHaveAttribute('data-presentation', 'card');
+  await expect(row.locator('.kui-summary-row__title')).toHaveCSS('-webkit-line-clamp', '4');
+  await expect(row).toHaveAttribute('aria-label', `HS2-M1: ${title}`);
+  await row.screenshot({ path: 'target/visual-captures/hs2-pqgmwx-column-narrow.png' });
+});
+
 test('mobile floating controls stay inside the dynamic viewport and safe area (HS2-43N9ZB)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page, true);
