@@ -14692,6 +14692,8 @@ test('projects background AI activity without rerendering the closed conversatio
 
 test('defers ticket refresh without hiding an open metadata popup', async ({ page }) => {
   await mockProject(page);
+  const boardMarkup = () =>
+    page.locator('[data-column-id]').evaluateAll((nodes) => nodes.map((node) => node.outerHTML));
   let rows = [row, notStartedRow],
     cursor = 0;
   const polls: Array<import('@playwright/test').Route> = [];
@@ -14732,6 +14734,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     .toBe(true);
   await resetRenderMetrics(page);
   const incoming = { ...startedRow2, slug: 'HS2-INCOMING', title: 'Incoming while choosing' };
+  const boardBeforeIncoming = await boardMarkup();
   rows = [...rows, incoming];
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   cursor += 1;
@@ -14755,7 +14758,8 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     )
     .toBe(true);
   await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toHaveCount(0);
-  expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
+  expect(await boardMarkup()).toEqual(boardBeforeIncoming);
+  expect((await renderMetrics(page))?.passes).toBe(0);
   await page.keyboard.press('Escape');
   await expect
     .poll(() =>
@@ -14793,6 +14797,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
       return current?.mutations === next?.mutations;
     })
     .toBe(true);
+  const boardBeforeSelect = await boardMarkup();
   await resetRenderMetrics(page);
   rows = rows.map((item) => (item.slug === notStartedRow.slug ? { ...item, status: 'started' } : item));
   cursor += 1;
@@ -14816,7 +14821,8 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     )
     .toBe(true);
   await expect(page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
-  expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
+  expect(await boardMarkup()).toEqual(boardBeforeSelect);
+  expect((await renderMetrics(page))?.passes).toBe(0);
   await composer.getByRole('textbox', { name: 'Ticket Title' }).click();
   await expect
     .poll(() =>
