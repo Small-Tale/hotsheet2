@@ -25,6 +25,7 @@ use crate::routes::store_scoped::ResolvedTicket;
 use crate::routes::ticket_writes::{
     AssignReq, do_assign, do_close, do_create, do_update_with_ticket,
 };
+use crate::routes::tickets::{NoteDoctorQuery, note_doctor_report};
 use crate::routes::tickets::{api_ticket, api_ticket_with_settings, contextualize_api_ticket};
 use crate::{AppState, multistore, now, opt_parse, provider_overlay};
 use axum::Json;
@@ -546,6 +547,34 @@ pub(crate) async fn get_checkout_ticket(
         let (checkout, _, mut resolved) = resolve_checkout_ticket(&state, &reference, &id)?;
         resolved.ticket = contextualize_api_ticket(resolved.ticket, &checkout.settings())?;
         Ok(Json(resolved))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+pub(crate) async fn get_checkout_ticket_note_doctor(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Query(query): Query<NoteDoctorQuery>,
+) -> Result<Json<hotsheet_model::note_doctor::NoteDoctorReport>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let (_, source, resolved) = resolve_checkout_ticket(&state, &reference, &id)?;
+        if source.provider != "git" {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "note doctor is unsupported by this source provider",
+            ));
+        }
+        let entry = state
+            .hosted_source(&source)
+            .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "source store is unavailable"))?;
+        let ticket_id = Ulid::from_string(&resolved.ticket.id)
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        let ticket = entry
+            .store
+            .read_ticket(&ticket_id)
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        Ok(Json(note_doctor_report(&ticket, query)?))
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?

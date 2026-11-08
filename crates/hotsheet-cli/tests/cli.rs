@@ -9,6 +9,66 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 #[test]
+fn hs2_f1qj03_note_doctor_reads_real_store_and_filters_notes() {
+    let root = tempfile::tempdir().unwrap();
+    let store = hotsheet_ticketing::FsStore::init_git(
+        root.path(),
+        &hotsheet_ticketing::StoreMetadata::new("TST"),
+    )
+    .unwrap();
+    let ticket = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "TST",
+        hotsheet_model::Timestamp::new("2026-01-01T00:00:00Z"),
+        hotsheet_ticketing::NewTicket {
+            title: "Synthetic note diagnosis".into(),
+            category: "issue".into(),
+            details: "FEEDBACK NEEDED: see note".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    hs(root.path())
+        .args([
+            "edit",
+            &ticket.slug,
+            "--note-kind",
+            "feedback_needed",
+            "--note",
+            "FEEDBACK NEEDED: choose",
+        ])
+        .assert()
+        .success();
+    let output = hs(root.path())
+        .args(["note", "doctor", &ticket.slug, "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["ticket_id"], ticket.id.to_string());
+    let findings = report["findings"].as_array().unwrap();
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["id"] == "duplicate_details_pointer"),
+        "{report}"
+    );
+    let note_id = store.read_ticket(&ticket.id).unwrap().notes[0]
+        .id
+        .to_string();
+    let filtered = hs(root.path())
+        .args(["note", "doctor", &ticket.slug, "--note", &note_id, "--json"])
+        .output()
+        .unwrap();
+    assert!(filtered.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&filtered.stdout).unwrap(),
+        report
+    );
+}
+
+#[test]
 fn hs2_2knvv0_mcp_child_cli_registers_only_in_its_pinned_home() {
     let root = tempfile::tempdir().unwrap();
     let source_codex_home = root.path().join("codex-source");

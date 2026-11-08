@@ -15,9 +15,9 @@ use hotsheet_ticketing::{
 };
 
 use crate::{
-    Cmd, confidence_change, default_index_path, now_ts, parse_close_reason, parse_confidence_arg,
-    parse_note_kind, parse_priority, parse_review_kind, parse_status_str, read_note_input, resolve,
-    validate_note_modifiers,
+    Cmd, NoteCmd, confidence_change, default_index_path, now_ts, parse_close_reason,
+    parse_confidence_arg, parse_note_kind, parse_priority, parse_review_kind, parse_status_str,
+    read_note_input, resolve, validate_note_modifiers,
 };
 
 use super::{Ctx, misrouted};
@@ -30,6 +30,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::LinkFollowUp { source, target } => cmd_link_follow_up(path, &source, &target),
         Cmd::Ls { filters } => cmd_ls(path, &filters),
         Cmd::Show { id } => cmd_show(path, &id),
+        Cmd::Note {
+            command: NoteCmd::Doctor { id, note, json },
+        } => cmd_note_doctor(path, &id, note.as_deref(), json),
         Cmd::Batch { ids, update } => cmd_batch(actor, path, &ids, update),
         Cmd::DeleteNote { id, note_id } => cmd_delete_note(path, &id, &note_id),
         Cmd::Attach(args) => cmd_attach(path, args),
@@ -605,6 +608,12 @@ pub(crate) fn cmd_reprice(
 }
 
 pub(crate) fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
+    let ticket = read_ticket(path, needle)?;
+    print!("{}", to_file_string(&ticket));
+    Ok(())
+}
+
+fn read_ticket(path: &PathBuf, needle: &str) -> Result<hotsheet_model::Ticket> {
     let store = FsStore::open(path)?;
     let ticket = if let Ok(id) = Ulid::from_string(needle) {
         store.read_ticket(&id)?
@@ -615,7 +624,31 @@ pub(crate) fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
             .with_context(|| format!("no ticket matching '{needle}'"))?;
         store.read_ticket(&id)?
     };
-    print!("{}", to_file_string(&ticket));
+    Ok(ticket)
+}
+
+fn cmd_note_doctor(path: &PathBuf, needle: &str, note: Option<&str>, json: bool) -> Result<()> {
+    let ticket = read_ticket(path, needle)?;
+    let note_id = note.map(Ulid::from_string).transpose()?;
+    if let Some(id) = note_id {
+        anyhow::ensure!(
+            ticket.notes.iter().any(|candidate| candidate.id == id),
+            "note '{id}' not found"
+        );
+    }
+    let report = hotsheet_model::note_doctor::diagnose_notes(&ticket, note_id);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else if report.findings.is_empty() {
+        println!("No note findings.");
+    } else {
+        for finding in report.findings {
+            println!(
+                "{} {}: {} {}",
+                finding.note_id, finding.id, finding.description, finding.proposed_operation
+            );
+        }
+    }
     Ok(())
 }
 

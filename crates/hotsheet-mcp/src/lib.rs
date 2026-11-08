@@ -200,6 +200,11 @@ fn base_tools_list() -> Value {
             "inputSchema": { "type": "object", "properties": { "id": str_prop("provider-native id, slug, or ULID"), "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id") }, "required": ["id"] }
         },
         {
+            "name": "hotsheet_note_doctor",
+            "description": "Read-only deterministic note findings for one ticket or note. Returns the same report as the CLI and server route.",
+            "inputSchema": { "type": "object", "properties": { "id": str_prop("ticket slug or ULID"), "note": str_prop("optional note ULID"), "checkout": str_prop("optional checkout id/alias/path") }, "required": ["id"] }
+        },
+        {
             "name": "hotsheet_annotate_attachment",
             "description": "Replace a git-backed attachment's media annotations. The attachment may be its ULID or unique filename; an empty array clears annotations. An unchanged batch is a no-op.",
             "inputSchema": { "type": "object", "properties": {
@@ -846,6 +851,22 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 &[],
             )
             .map_err(be_msg),
+        "hotsheet_note_doctor" => {
+            let query = args
+                .get("note")
+                .and_then(Value::as_str)
+                .map(|note| vec![("note".into(), note.into())])
+                .unwrap_or_default();
+            backend
+                .get(
+                    &checkout_route(
+                        args,
+                        &format!("/tickets/{}/note-doctor", arg_str(args, "id")?),
+                    ),
+                    &query,
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_create" => {
             let query = args
                 .get("store")
@@ -1396,6 +1417,27 @@ mod core_backend {
     use std::path::Path;
     use std::sync::Arc;
     use time::OffsetDateTime;
+
+    fn note_doctor_value(
+        ticket: &Ticket,
+        query: &[(String, String)],
+    ) -> Result<Value, BackendError> {
+        let note_id = query
+            .iter()
+            .find(|(key, _)| key == "note")
+            .map(|(_, value)| {
+                Ulid::from_string(value).map_err(|error| bad_request(error.to_string()))
+            })
+            .transpose()?;
+        if let Some(id) = note_id {
+            if !ticket.notes.iter().any(|note| note.id == id) {
+                return Err(not_found(&id.to_string()));
+            }
+        }
+        Ok(to_value(&hotsheet_model::note_doctor::diagnose_notes(
+            ticket, note_id,
+        )))
+    }
 
     /// Open a store this backend selects as a ticket source (HS2-726EXJ): the serverless
     /// counterpart of the server's hosting check, so an unowned or repository-less store, or
@@ -2122,6 +2164,25 @@ mod core_backend {
             if let Some(reference) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = reference.split_once("/tickets") {
                     let (checkout, stores) = self.checkout_context(checkout)?;
+                    if let Some(id) = suffix
+                        .strip_prefix('/')
+                        .and_then(|rest| rest.strip_suffix("/note-doctor"))
+                    {
+                        let mut found = Vec::new();
+                        for store in stores {
+                            if let Some(ticket) = ops::resolve(&store, id).map_err(store_err)? {
+                                found.push(ticket);
+                            }
+                        }
+                        return match found.as_slice() {
+                            [ticket] => note_doctor_value(ticket, query),
+                            [] => Err(not_found(id)),
+                            _ => Err(BackendError {
+                                status: Some(409),
+                                message: format!("ticket {id} is ambiguous across checkout stores"),
+                            }),
+                        };
+                    }
                     if suffix.is_empty() {
                         // Read every store unprojected, merge into one checkout-wide
                         // order, cap by `limit`, then project (HS2-M0YTB6). The same
@@ -2260,6 +2321,13 @@ mod core_backend {
                     .finish(&mut vals)
                     .map_err(|e| bad_request(e.to_string()))?;
                 return Ok(Value::Array(vals));
+            }
+            if let Some(id) = path
+                .strip_prefix("/tickets/")
+                .and_then(|rest| rest.strip_suffix("/note-doctor"))
+            {
+                let ticket = self.resolve(id)?;
+                return note_doctor_value(&ticket, query);
             }
             if let Some(id) = ticket_id(path) {
                 let t = self.resolve(id)?;
@@ -4968,6 +5036,51 @@ mod tests {
             return json!({ "error": text });
         }
         serde_json::from_str(text).unwrap_or_else(|_| json!({ "raw": text }))
+    }
+
+    #[test]
+    fn hs2_f1qj03_note_doctor_uses_real_store_and_shared_report() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("TST")).unwrap();
+        let mut ticket = ops::create(
+            &store,
+            hotsheet_model::Ulid::new(),
+            "TST",
+            hotsheet_model::Timestamp::new("2026-01-01T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: "Synthetic note diagnosis".into(),
+                category: "issue".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let note_id = hotsheet_model::Ulid::new();
+        ticket.notes.push(hotsheet_model::Note {
+            id: note_id,
+            kind: hotsheet_model::NoteKind::Activity,
+            kind_explicit: true,
+            created_at: hotsheet_model::Timestamp::new("2026-01-01T00:01:00Z"),
+            edited_at: hotsheet_model::Timestamp::new("2026-01-01T00:01:00Z"),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: false,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            actor: None,
+            text: "Progress".into(),
+        });
+        store.write_ticket(&ticket).unwrap();
+        let backend = CoreBackend::new(store);
+        let result = call(
+            &backend,
+            "hotsheet_note_doctor",
+            json!({"id": ticket.slug, "note": note_id.to_string()}),
+        );
+        assert_eq!(result["ticket_id"], ticket.id.to_string());
+        assert_eq!(result["findings"][0]["id"], "missing_summary");
+        assert_eq!(result["findings"][0]["note_id"], note_id.to_string());
     }
 
     #[test]

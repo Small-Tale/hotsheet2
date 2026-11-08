@@ -23,6 +23,59 @@ use hotsheet_extsync::{
 
 const SECRET: &str = "test-secret";
 
+#[tokio::test]
+async fn hs2_f1qj03_note_doctor_http_reads_one_note_without_mutation() {
+    let (dir, state) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let mut ticket = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "HS",
+        hotsheet_model::Timestamp::new("2026-01-01T00:00:00Z"),
+        hotsheet_ticketing::NewTicket {
+            title: "Synthetic note diagnosis".into(),
+            category: "issue".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let note_id = hotsheet_model::Ulid::new();
+    ticket.notes.push(hotsheet_model::Note {
+        id: note_id,
+        kind: hotsheet_model::NoteKind::Status,
+        kind_explicit: true,
+        created_at: hotsheet_model::Timestamp::new("2026-01-01T00:01:00Z"),
+        edited_at: hotsheet_model::Timestamp::new("2026-01-01T00:01:00Z"),
+        summary: None,
+        confidence: None,
+        feedback_for: None,
+        feedback_request: false,
+        response_to: None,
+        ai_feedback: None,
+        human_edited: false,
+        actor: None,
+        text: "Update".into(),
+    });
+    store.write_ticket(&ticket).unwrap();
+    let before = std::fs::read(store.ticket_path(&ticket.id)).unwrap();
+    let response = app(state)
+        .oneshot(authed(
+            "GET",
+            &format!("/tickets/{}/note-doctor?note={note_id}", ticket.slug),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let report = body_json(response).await;
+    assert_eq!(report["findings"][0]["id"], "missing_summary");
+    assert_eq!(report["findings"][0]["note_id"], note_id.to_string());
+    assert_eq!(
+        std::fs::read(store.ticket_path(&ticket.id)).unwrap(),
+        before
+    );
+}
+
 trait TestPermissionRules {
     fn with_test_permission_rules(self, path: impl Into<std::path::PathBuf>) -> Self;
 }

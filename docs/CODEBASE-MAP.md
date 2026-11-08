@@ -581,6 +581,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/enums.rs           #   Priority/Status/CloseReason/NoteKind/ReviewKind
       src/ids.rs             #   Ulid re-export + derive_slug (FNV-1a -> Crockford)
       src/ticket.rs          #   Ticket/Note/ReviewRequest/ExternalLink; Ticket::new
+      src/note_doctor.rs    #   pure note findings shared by CLI, MCP, and server (HS2-F1QJ03)
       src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
       src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps + summary_hex/confidence note tokens; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)

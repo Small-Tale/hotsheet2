@@ -93,7 +93,8 @@ use routes::checkout_tickets::{
     delete_checkout_ticket_note, empty_checkout_trash, get_checkout_ticket,
     get_checkout_ticket_attachment, get_checkout_ticket_attachment_by_name,
     get_checkout_ticket_attachment_original, get_checkout_ticket_attachment_thumbnail,
-    get_checkout_ticket_duplicate_backlinks, link_checkout_follow_up, preview_checkout_trash_purge,
+    get_checkout_ticket_duplicate_backlinks, get_checkout_ticket_note_doctor,
+    link_checkout_follow_up, preview_checkout_trash_purge,
     put_checkout_ticket_attachment_thumbnail, rename_checkout_ticket_attachment,
     restore_checkout_ticket, update_checkout_ticket, update_checkout_ticket_attachment_annotations,
     update_checkout_ticket_attachment_markup, update_checkout_ticket_attachment_metadata,
@@ -189,7 +190,8 @@ use routes::ticket_writes::{
     delete_ticket_note, list_store_tickets, update_ticket,
 };
 use routes::tickets::{
-    compatibility, get_ticket, health, lifecycle_quiescence, lifecycle_restart, list_tickets,
+    compatibility, get_ticket, get_ticket_note_doctor, health, lifecycle_quiescence,
+    lifecycle_restart, list_tickets,
 };
 use routes::transfer::{copy_ticket_route, move_ticket_route};
 pub(crate) use watcher::RepositoryWatchHandle;
@@ -1379,6 +1381,7 @@ pub fn app(state: AppState) -> Router {
     let protected = Router::new()
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
+        .route("/tickets/{id}/note-doctor", get(get_ticket_note_doctor))
         .route("/tickets/{id}/notes/{note_id}", delete(delete_ticket_note))
         .route(
             "/tickets/{id}/attachments",
@@ -1659,6 +1662,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}",
             get(get_checkout_ticket).patch(update_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/note-doctor",
+            get(get_checkout_ticket_note_doctor),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/notes/{note_id}/notify",

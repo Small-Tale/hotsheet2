@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-F1QJ03: `hotsheet-model/src/note_doctor.rs` tests the initial diagnostics
+against synthetic repaired note shapes and verifies decision context and note
+filtering. `hotsheet-cli/tests/cli.rs` and `hotsheet-mcp/src/lib.rs` exercise
+the JSON report through real Git stores. `hotsheet-server/tests/http.rs` checks
+the authenticated route, note filter, and read-only behavior. Both server routes
+call the same pure report function.
+
 HS2-52BEHN keeps a typed GitHub repository path when the repository list loads.
 `clients/web/src/components/ticket-source-surfaces.test.ts` checks that the Repository
 input has the same identity and seeded value before and after the list arrives, for both

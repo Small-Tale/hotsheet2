@@ -9,9 +9,13 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use hotsheet_model::Ticket;
+use hotsheet_model::{
+    Ticket, Ulid,
+    note_doctor::{NoteDoctorReport, diagnose_notes},
+};
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{ApiTicket, Settings, auto_context, ops};
+use serde::Deserialize;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -320,6 +324,41 @@ pub(crate) async fn get_ticket(
         .resolve(&id)?
         .ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json(api_ticket(&state.default_entry(), &ticket)?))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NoteDoctorQuery {
+    pub(crate) note: Option<String>,
+}
+
+pub(crate) fn note_doctor_report(
+    ticket: &Ticket,
+    query: NoteDoctorQuery,
+) -> Result<NoteDoctorReport, ApiError> {
+    let note_id = query
+        .note
+        .as_deref()
+        .map(Ulid::from_string)
+        .transpose()
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    if let Some(id) = note_id {
+        if !ticket.notes.iter().any(|candidate| candidate.id == id) {
+            return Err(ApiError::not_found(&id.to_string()));
+        }
+    }
+    Ok(diagnose_notes(ticket, note_id))
+}
+
+pub(crate) async fn get_ticket_note_doctor(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<NoteDoctorQuery>,
+) -> Result<Json<NoteDoctorReport>, ApiError> {
+    let ticket = state
+        .default_entry()
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    Ok(Json(note_doctor_report(&ticket, query)?))
 }
 
 pub(crate) fn api_ticket(entry: &StoreEntry, ticket: &Ticket) -> Result<ApiTicket, ApiError> {

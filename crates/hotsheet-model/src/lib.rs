@@ -12,6 +12,7 @@ pub mod enums;
 pub mod feedback_choices;
 pub mod format;
 pub mod ids;
+pub mod note_doctor;
 pub mod ticket;
 pub mod ticket_ref;
 pub mod timestamp;

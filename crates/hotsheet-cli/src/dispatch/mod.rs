@@ -76,6 +76,7 @@ impl Cmd {
             | LinkFollowUp { .. }
             | Ls { .. }
             | Show { .. }
+            | Note { .. }
             | Batch { .. }
             | DeleteNote { .. }
             | Attach(_)

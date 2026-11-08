@@ -1180,6 +1180,16 @@ Generic add-note UI requests omit an implicit kind, while intentional choices re
 explicit. Older readers/writers may infer or strip explicit intent; upgrade all
 writers before depending on this behavior (see §17.3).
 
+`hotsheet note doctor <slug> [--note <ulid>] [--json]` (HS2-F1QJ03) reports
+read-only, deterministic note findings. It checks feedback markers and request
+links, malformed CHOICE prompts, likely unlinked decisions, redundant details
+pointers, missing timeline summaries, and literal backslash-n text. The same
+report is available through MCP `hotsheet_note_doctor` and authenticated
+`GET /tickets/{id}/note-doctor` or
+`GET /checkouts/{reference}/tickets/{id}/note-doctor` with optional `?note=<ulid>`.
+The checkout route reports unsupported external providers explicitly. A finding
+is a repair suggestion; the doctor never edits a note.
+
 `--note-confidence <0-100>` (HS2-DWTJ43) records the author's completion confidence on the
 **appended** note, where it requires `--note`/`--note-file`. Anything but a plain integer
 from 0 to 100 is rejected before any write. With `--edit-note <note-ulid>` (HS2-CY4CWC) it

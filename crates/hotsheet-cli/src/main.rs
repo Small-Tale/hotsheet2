@@ -323,6 +323,11 @@ enum Cmd {
     },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
+    /// Inspect ticket notes for deterministic repair suggestions.
+    Note {
+        #[command(subcommand)]
+        command: NoteCmd,
+    },
     /// Apply one update independently to several git-backed tickets.
     Batch {
         /// Ticket slugs or ULIDs; failures are reported per ticket.
@@ -855,6 +860,18 @@ enum Cmd {
     Work(WorkArgs),
 }
 
+#[derive(Subcommand)]
+enum NoteCmd {
+    /// Diagnose one note or every note on a ticket.
+    Doctor {
+        id: String,
+        #[arg(long)]
+        note: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[derive(Subcommand, Debug)]
 enum GuidanceCmd {
     /// Read local project evidence and pinned guidance recommendations as JSON.
@@ -1030,6 +1047,7 @@ fn writes_tickets(cmd: &Cmd) -> bool {
             cmd,
             Cmd::Ls { .. }
                 | Cmd::Show { .. }
+                | Cmd::Note { .. }
                 | Cmd::Read { .. }
                 | Cmd::People { .. }
                 | Cmd::ConfidenceReport { .. }
