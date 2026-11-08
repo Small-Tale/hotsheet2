@@ -8689,8 +8689,8 @@ type AIConversationScenarioValue =
  * and on the GPU-less macOS runner, its total length crossed the 60 s timeout at whichever step was
  * running. Each state is now its own test with its own budget (HS2-GCQV13, HS2-R0CJWC).
  */
-async function openAIConversationStates(page: Page) {
-  await page.setViewportSize({ width: 1280, height: 800 });
+async function openAIConversationStates(page: Page, viewport = { width: 1280, height: 800 }) {
+  await page.setViewportSize(viewport);
   await page.goto('/ux-demo?component=ai-conversation');
   const conversationHost = page.locator(
       '[data-component="ai-conversation"], [data-dialog-component="ai-conversation"]',
@@ -8821,11 +8821,11 @@ for (const value of [
   });
 }
 
-test('labels completed AIConversation activity at wide and narrow sizes', async ({ page }) => {
-  const { conversationHost, dialog, show, openSettings } = await openAIConversationStates(page);
+test('labels completed AIConversation activity at wide size (HS2-HYABT6)', async ({ page }) => {
+  const { conversationHost, show, openSettings } = await openAIConversationStates(page);
   await openSettings();
   await show('completed');
-  let activityCard = conversationHost.locator('.ai-conversation__activity');
+  const activityCard = conversationHost.locator('.ai-conversation__activity');
   const label = activityCard.locator('[data-component="ai-content-label"]'),
     feedback = activityCard.locator('.ai-content-label__feedback').first();
   await expect(label).toHaveCount(1);
@@ -8855,8 +8855,16 @@ test('labels completed AIConversation activity at wide and narrow sizes', async 
     glyphFitsButton: true,
   });
   await activityCard.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-ai-content-label-wide.png' });
-  await show('completed', { width: 430, height: 760 });
-  activityCard = conversationHost.locator('.ai-conversation__activity');
+});
+
+test('labels completed AIConversation activity at narrow size (HS2-HYABT6)', async ({ page }) => {
+  const { conversationHost, dialog, show, openSettings } = await openAIConversationStates(page, {
+    width: 430,
+    height: 760,
+  });
+  await openSettings();
+  await show('completed');
+  const activityCard = conversationHost.locator('.ai-conversation__activity');
   await expect(activityCard.locator('[data-component="ai-content-label"]')).toHaveCount(1);
   await expect(activityCard).toContainText('AI-generated · may contain errors');
   const command = activityCard.locator('code');
