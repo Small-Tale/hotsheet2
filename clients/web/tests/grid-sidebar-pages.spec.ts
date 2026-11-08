@@ -274,11 +274,13 @@ test('jumps between grid sidebar pages without animation under reduced motion (H
     .toBeLessThan(1);
 });
 
-test('keeps the grid sidebar pages aligned wide to narrow to wide in both themes (HS2-EZSQDF)', async ({ page }) => {
-  for (const colorScheme of ['light', 'dark'] as const) {
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`keeps the grid sidebar pages aligned wide to narrow to wide in ${colorScheme} (HS2-KBRZTN)`, async ({
+    page,
+  }) => {
     await page.emulateMedia({ colorScheme });
     await page.setViewportSize({ width: 1440, height: 900 });
-    const { pager } = await openWorkspaceGrid(page);
+    const { sidebar, pager } = await openWorkspaceGrid(page);
     for (const [width, label] of [
       [1440, 'wide'],
       [1024, 'medium'],
@@ -308,7 +310,9 @@ test('keeps the grid sidebar pages aligned wide to narrow to wide in both themes
     // Narrow: the phone layout opens the operations sidebar as an overlay; the dots stay in it.
     await page.setViewportSize({ width: 390, height: 844 });
     const show = page.getByRole('button', { name: 'Show Operations Sidebar' });
-    if (await show.isVisible()) await show.click();
+    await expect(show).toBeVisible();
+    await show.click();
+    await expect(sidebar).not.toHaveAttribute('aria-hidden', 'true');
     await expect(pager.getByRole('tablist', { name: 'Sidebar pages' })).toBeInViewport();
     await pager.getByRole('tab', { name: /: Gauges$/ }).click();
     await expect(pager).toHaveAttribute('data-page', 'gauges');
@@ -316,6 +320,5 @@ test('keeps the grid sidebar pages aligned wide to narrow to wide in both themes
     await expect.poll(() => pageOffset(pager)).toBeLessThan(1);
     expect(await currentPanel(pager).evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
     await page.screenshot({ path: `target/visual-captures/hs2-ezsqdf-gauges-narrow-${colorScheme}.png` });
-    await page.goto('about:blank');
-  }
-});
+  });
+}
