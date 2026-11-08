@@ -4,6 +4,47 @@ import { installTerminalFixture } from './terminal-feedback-fixture';
 
 test.use({ deviceScaleFactor: 2 });
 
+test('ellipsizes the project tab before scrolling at medium width with the drawer grid open (HS2-A7QPW4)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
+  const tab = page.locator('[data-component="project-tab-bar"] [data-tab-kind="project"]');
+  const label = tab.locator('.kui-tab-bar-item__name');
+  const strip = page.locator('[data-component="project-tab-bar"] .kui-tab-bar__tabs');
+  const geometry = () =>
+    tab.evaluate((element) => {
+      const name = element.querySelector<HTMLElement>('.kui-tab-bar-item__name')!;
+      const scroller = element.closest<HTMLElement>('.kui-tab-bar__tabs')!;
+      const tabRect = element.getBoundingClientRect();
+      const stripRect = scroller.getBoundingClientRect();
+      return {
+        ellipsized: name.scrollWidth > name.clientWidth,
+        textOverflow: getComputedStyle(name).textOverflow,
+        insideStrip: tabRect.left >= stripRect.left - 2 && tabRect.right <= stripRect.right + 2,
+      };
+    });
+  await expect(label).toHaveText('Terminal feedback');
+  await expect.poll(geometry).toMatchObject({ ellipsized: false, insideStrip: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a7qpw4-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect.poll(geometry).toEqual({ ellipsized: true, textOverflow: 'ellipsis', insideStrip: true });
+  await expect(strip).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-a7qpw4-after-1024.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(tab).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-a7qpw4-narrow.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(geometry).toMatchObject({ ellipsized: false, insideStrip: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a7qpw4-wide-again.png', animations: 'disabled' });
+});
+
 type TerminalFrame = {
   ready?: string;
   hidden: boolean;

@@ -468,8 +468,9 @@ describe('application shell components', () => {
   it('draws tab-selection focus around the complete compound pill', () => {
     const projectCss = readFileSync(new URL('./project-tab.css', import.meta.url), 'utf8'),
       barCss = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
+    // HS2-A7QPW4: project tabs use Kerf's shrinkable ellipsis before the strip scrolls.
     expect(String(ProjectTab({ id: 'focus', name: 'Focus', location: 'local' }))).toMatch(
-      /class="kui-tab-bar-item" data-component="tab-bar-item"[^>]*data-name-overflow="visible"/,
+      /class="kui-tab-bar-item" data-component="tab-bar-item"[^>]*data-name-overflow="ellipsis"/,
     );
     expect(projectCss).not.toContain('.project-tab:has(.kui-tab-bar-item__close)');
     expect(barCss).toMatch(

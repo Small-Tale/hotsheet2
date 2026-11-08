@@ -440,7 +440,9 @@ preview/download, server directory browser) are separate design work.
   trailing edge of ProjectTabBar. Selecting the already-current project tab while the
   Notifications or Settings view is open returns to the ticket view the user last had open,
   list or columns, remembered in the workspace preferences across reloads; on a ticket view
-  that click is a no-op (HS2-42T028). Add project stays immediately after the last project tab;
+  that click is a no-op (HS2-42T028). Project names ellipsize as tabs shrink at medium widths,
+  including with the terminal drawer open, before the strip scrolls (HS2-A7QPW4).
+  Add project stays immediately after the last project tab;
   only when the tabs overflow and the strip shrinks and scrolls does it end up beside the
   ticket-view action (HS2-NE8JBS). While the project tabs overflow the strip (for example one
   project with its attention badge at 1024px with the inspector open), the far-edge New ticket
