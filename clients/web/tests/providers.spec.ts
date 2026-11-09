@@ -561,6 +561,150 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
   }
 });
 
+test('HS2-1Z3T0Z shows workers-first and late registration from real coordination', async ({ page }) => {
+  test.setTimeout(120_000);
+  let fixtureCli = '';
+  let fixtureEnv: NodeJS.ProcessEnv = {};
+  const server = await realTicketServer({
+    seed: async ({ root, env, cli }) => {
+      fixtureCli = cli;
+      fixtureEnv = env;
+      const initialized = spawnSync('git', ['-C', root, 'init'], { env, encoding: 'utf8' });
+      expect(initialized.status, initialized.stderr).toBe(0);
+      const committed = spawnSync(
+        'git',
+        [
+          '-C',
+          root,
+          '-c',
+          'user.name=Hot Sheet fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '--allow-empty',
+          '-m',
+          'Seed code checkout',
+        ],
+        { env, encoding: 'utf8' },
+      );
+      expect(committed.status, committed.stderr).toBe(0);
+    },
+  });
+  const run = (...args: string[]) => {
+    const result = spawnSync(fixtureCli, ['-C', server.store, 'coordination', '--project', server.root, ...args], {
+      cwd: server.root,
+      env: fixtureEnv,
+      encoding: 'utf8',
+    });
+    expect(result.status, `${args.join(' ')}: ${result.stderr}`).toBe(0);
+  };
+  try {
+    const providers = await server.request<Array<{ connection_id: string; provider: string }>>('/providers'),
+      source = providers.find((item) => item.provider === 'git')?.connection_id;
+    expect(source).toBeTruthy();
+    run('setup');
+    run(
+      'register',
+      '--role',
+      'worker',
+      '--id',
+      'synthetic-worker-first',
+      '--session',
+      'worker-first-1',
+      '--route',
+      'human',
+      '--lease-seconds',
+      '3600',
+    );
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/workers?*', async (route) => {
+      const incoming = new URL(route.request().url());
+      incoming.searchParams.set('connection_id', source!);
+      try {
+        const response = await route.fetch({
+          url: `${server.url}/checkouts/${server.checkoutId}/workers${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 35_000,
+        });
+        await route.fulfill({ response });
+      } catch {
+        await route.abort().catch(() => undefined);
+      }
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Workers' }).click();
+    const columns = page.locator('.worker-columns');
+    await expect(columns.locator('[data-worker-id="synthetic-worker-first"]')).toHaveCount(1);
+    await expect(columns).toContainText('No assigned or planned tickets');
+    run(
+      'register',
+      '--role',
+      'integrator',
+      '--id',
+      'synthetic-integrator',
+      '--session',
+      'integrator-first-1',
+      '--route',
+      'human',
+      '--lease-seconds',
+      '3600',
+    );
+    await expect(columns.locator('[data-worker-id="synthetic-integrator"]')).toHaveCount(1);
+    run(
+      'register',
+      '--role',
+      'worker',
+      '--id',
+      'synthetic-worker-late',
+      '--session',
+      'worker-late-1',
+      '--route',
+      'human',
+      '--lease-seconds',
+      '3600',
+    );
+    await expect(columns.locator('[data-worker-id="synthetic-worker-late"]')).toHaveCount(1);
+    const snapshot = await server.request<{ workers: Array<{ id: string }> }>(
+      `/checkouts/${server.checkoutId}/workers?connection_id=${encodeURIComponent(source!)}`,
+    );
+    expect(snapshot.workers.map((worker) => worker.id).sort()).toEqual([
+      'synthetic-integrator',
+      'synthetic-worker-first',
+      'synthetic-worker-late',
+    ]);
+    await expect(columns.locator('[data-worker-id]')).toHaveCount(snapshot.workers.length);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      for (const [name, width] of [
+        ['wide', 1440],
+        ['medium', 900],
+        ['phone', 390],
+        ['returned-wide', 1440],
+      ] as const) {
+        await page.setViewportSize({ width, height: 844 });
+        await expect(columns.locator('[data-worker-id]')).toHaveCount(snapshot.workers.length);
+        await page.screenshot({
+          path: test.info().outputPath(`hs2-1z3t0z-${scheme}-${name}.png`),
+          animations: 'disabled',
+        });
+      }
+    }
+  } finally {
+    await page.goto('about:blank').catch(() => undefined);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
+});
+
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
 
 const fixturePermissionKey = 'private-test-fixture-key-for-remembered-rules';

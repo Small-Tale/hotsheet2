@@ -115,6 +115,15 @@ cursor-driven title/status refresh; the authenticated real-server browser path
 checks checkout coverage. Rebuilt wide/medium/narrow visual review is recorded
 on the ticket.
 
+HS2-1Z3T0Z adds a real-server browser lifecycle slice in
+`clients/web/tests/providers.spec.ts`: a worker registers before the integrator,
+the integrator then joins, and a third worker joins late. The page and authenticated
+headless snapshot agree on exactly three worker cards; Chromium and WebKit exercise
+the live cursor path. The existing Workers parent test covers light/dark,
+wide/medium/phone/returned-wide and focused unsaved edits. The broader independent
+Claude/Codex, claim, handoff, CI, failure and reconnection pilot remains open on
+HS2-1Z3T0Z; this slice is not that acceptance result.
+
 HS2-8SZBJJ covers one card per source-qualified ticket in a worker column in
 `clients/web/src/worker-view-model.test.ts` (blocked plus handoff on a
 disconnected worker, live versus expired claim against an offered operation,

@@ -11,6 +11,10 @@ working, planned, handoff, remote CI, disconnected, idle, and zero-worker states
 an unavailable external source must show unknown coverage. Observe an idle minute:
 the cursor long poll remains held without fixed-interval requests. Interrupt the
 connection and verify bounded reconnect and cursor replay.
+The HS2-1Z3T0Z browser slice now automates real-server worker-first registration,
+integrator join, a late worker, and exact worker-card count in Chromium and WebKit.
+Its wider independent-session lifecycle, connection failure, and real-app visual
+inspection remain in this manual plan until observed and recorded on the ticket.
 
 ### GitHub webhook reachability (HS2-SGQ183)
 
