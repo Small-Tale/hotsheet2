@@ -553,7 +553,10 @@ preview/download, server directory browser) are separate design work.
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
   open starts the new binary, unless the production host owns that server (see pinned-server
   ownership below; `npm run server:rebuild -- --force` overrides); `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
-  for other devices on the LAN. The production host prefers **release** binaries (HS2-D2JQ9A): when
+  for other devices on the LAN. Both debug and release rebuild scripts first check the installed
+  web dependencies against the committed lockfile; a stale install reports the `npm ci` fix
+  before Rust installation or any server stop (HS2-R0XY7S). The production host prefers
+  **release** binaries (HS2-D2JQ9A): when
   `HOTSHEET_SERVER_BIN` is unset, it probes the release server's build/source revision and uses the
   release server only when current. It probes the CLI and migrator independently, preferring each
   current release binary and falling back to its current debug binary. Every chosen binary must

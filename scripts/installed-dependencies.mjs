@@ -4,7 +4,8 @@
 // deterministic, offline check. A worktree that advanced its lockfile without `npm ci` fails here.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MANIFEST_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
@@ -77,4 +78,19 @@ export function verifyInstalledDependencies(repo, directories) {
   }
   if (failures.length) throw new Error(`Stale or missing installed dependencies (HS2-PNBH4X):\n${failures.join('\n')}`);
   return digests;
+}
+
+// HS2-R0XY7S: rebuild scripts run this before installing Rust binaries or stopping the server.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.length !== 3 || process.argv[2] !== '--check') {
+    process.stderr.write('Usage: node scripts/installed-dependencies.mjs --check\n');
+    process.exitCode = 2;
+  } else {
+    try {
+      verifyInstalledDependencies(process.cwd(), ['.']);
+    } catch (error) {
+      process.stderr.write(`${error.message}\n`);
+      process.exitCode = 1;
+    }
+  }
 }

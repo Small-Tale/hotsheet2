@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -102,5 +112,75 @@ test('HS2-PNBH4X verification skips lockfile-free directories and names the exac
       error.message.includes(`${name(stale.dir)}: installed dependencies do not match`) &&
       error.message.includes(`Fix: (cd ${name(stale.dir)} && npm ci)`) &&
       !error.message.includes(`${name(good.dir)}:`),
+  );
+});
+
+test('HS2-R0XY7S both rebuild scripts reject stale web dependencies before cargo or server stop', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'hs2-r0xy7s-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const web = join(root, 'clients', 'web');
+  const scripts = join(root, 'scripts');
+  const bin = join(root, 'bin');
+  mkdirSync(join(web, 'node_modules'), { recursive: true });
+  mkdirSync(scripts);
+  mkdirSync(bin);
+  mkdirSync(join(root, 'target', 'debug'), { recursive: true });
+  mkdirSync(join(root, 'target', 'release'), { recursive: true });
+  copyFileSync(new URL('./installed-dependencies.mjs', import.meta.url), join(scripts, 'installed-dependencies.mjs'));
+  writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
+
+  const actualScripts = JSON.parse(
+    readFileSync(new URL('../clients/web/package.json', import.meta.url), 'utf8'),
+  ).scripts;
+  writeFileSync(join(web, 'package.json'), JSON.stringify({ dependencies: { kerf: '1.0.1' } }));
+  writeFileSync(
+    join(web, 'package-lock.json'),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        '': { dependencies: { kerf: '1.0.1' } },
+        'node_modules/kerf': { version: '1.0.1' },
+      },
+    }),
+  );
+  const hiddenLock = join(web, 'node_modules', '.package-lock.json');
+  writeFileSync(hiddenLock, JSON.stringify({ packages: { 'node_modules/kerf': { version: '1.0.0' } } }));
+
+  const marker = join(root, 'rebuild-actions');
+  const executable = '#!/bin/sh\nprintf "%s\\n" "$1" >> "$HS2_REBUILD_SENTINEL"\n';
+  for (const path of [
+    join(bin, 'cargo'),
+    join(root, 'target', 'debug', 'hotsheet-cli'),
+    join(root, 'target', 'release', 'hotsheet-cli'),
+  ]) {
+    writeFileSync(path, executable);
+    chmodSync(path, 0o755);
+  }
+  const run = (name) =>
+    spawnSync('sh', ['-c', actualScripts[name]], {
+      cwd: web,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, HS2_REBUILD_SENTINEL: marker },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+
+  for (const name of ['server:rebuild', 'server:rebuild:release']) {
+    const result = run(name);
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+    assert.match(result.stderr, /kerf is installed at 1\.0\.0 but locked at 1\.0\.1/);
+    assert.match(result.stderr, /Fix: \(cd \. && npm ci\)/);
+    assert.equal(existsSync(marker), false, `${name} ran cargo or stopped the server before preflight`);
+  }
+
+  writeFileSync(hiddenLock, JSON.stringify({ packages: { 'node_modules/kerf': { version: '1.0.1' } } }));
+  for (const name of ['server:rebuild', 'server:rebuild:release']) {
+    const result = run(name);
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+  }
+  assert.equal(
+    readFileSync(marker, 'utf8')
+      .split('\n')
+      .filter((line) => line === 'serve').length,
+    2,
   );
 });
