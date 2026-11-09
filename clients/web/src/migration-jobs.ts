@@ -52,6 +52,7 @@ export class MigrationJobs {
     private lock: MigrationLock = acquireMigrationLock,
     private beforeSave: (job: MigrationJob) => Promise<void> = async () => {},
     private watchDirectory: WatchDirectory = nativeWatchDirectory,
+    private replaceCheckpoint: typeof rename = rename,
   ) {}
 
   private async load() {
@@ -100,7 +101,19 @@ export class MigrationJobs {
           temporary = `${path}.${randomUUID()}.tmp`;
         try {
           await writeFile(temporary, `${JSON.stringify(snapshot)}\n`, { flag: 'wx' });
-          await rename(temporary, path);
+          // Windows can deny replacement while a foreign snapshot reader briefly
+          // holds the old checkpoint open. Keep the new file intact and retry the
+          // atomic replacement; removing the destination would lose recovery data.
+          for (let attempt = 0; ; attempt++) {
+            try {
+              await this.replaceCheckpoint(temporary, path);
+              break;
+            } catch (error) {
+              const code = (error as NodeJS.ErrnoException).code;
+              if (attempt === 7 || (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY')) throw error;
+              await new Promise((done) => setTimeout(done, Math.min(10 * 2 ** attempt, 160)));
+            }
+          }
         } finally {
           await rm(temporary, { force: true });
         }

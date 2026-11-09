@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -39,6 +39,77 @@ const owner: MigrationOwner = {
 };
 
 describe('durable migration owner transitions', () => {
+  it('retries a transient Windows sharing denial without deleting the durable checkpoint (HS2-XRFNWH)', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'migration-replace-'));
+    const locks = memoryLocks();
+    let finish = () => {};
+    const gate = new Promise<void>((done) => {
+      finish = done;
+    });
+    let denied = 0;
+    const replace: typeof rename = async (temporary, destination) => {
+      if (await readFile(destination, 'utf8').catch(() => undefined)) {
+        if (denied++ < 2) {
+          const error = new Error('destination is open') as NodeJS.ErrnoException;
+          error.code = 'EPERM';
+          throw error;
+        }
+      }
+      await rename(temporary, destination);
+    };
+    const jobs = new MigrationJobs(
+      directory,
+      async () => {
+        await gate;
+        return undefined;
+      },
+      undefined,
+      locks.lock,
+      undefined,
+      undefined,
+      replace,
+    );
+    try {
+      const started = await jobs.start(owner);
+      const previous = JSON.parse(await readFile(resolve(directory, `${started.id}.json`), 'utf8')) as MigrationJob;
+      expect(previous.status).toBe('running');
+      finish();
+      let terminal = await jobs.watch(owner.root, started.revision);
+      while (terminal?.status === 'running') terminal = await jobs.watch(owner.root, terminal.revision);
+      expect(terminal?.status).toBe('succeeded');
+      expect(denied).toBe(3);
+      const durable = JSON.parse(await readFile(resolve(directory, `${started.id}.json`), 'utf8')) as MigrationJob;
+      expect(durable.status).toBe('succeeded');
+      expect(durable.attempt).toBe(started.attempt);
+      expect((await readdir(directory)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+      expect((await jobs.start(owner)).attempt).toBe(started.attempt);
+    } finally {
+      finish();
+      await jobs.flush();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('stops retrying a persistent replacement denial and removes only the temporary file (HS2-XRFNWH)', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'migration-replace-denied-'));
+    const locks = memoryLocks();
+    const runner = vi.fn(async () => undefined);
+    const denied = vi.fn(async () => {
+      const error = new Error('destination remains open') as NodeJS.ErrnoException;
+      error.code = 'EPERM';
+      throw error;
+    });
+    const jobs = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, undefined, denied);
+    try {
+      await expect(jobs.start(owner)).rejects.toMatchObject({ code: 'EPERM' });
+      expect(denied).toHaveBeenCalledTimes(8);
+      expect(runner).not.toHaveBeenCalled();
+      expect(await readdir(directory)).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('deduplicates starts, rejects competing destinations, replays revisions, and survives subscriber disconnect', async () => {
     const directory = await mkdtemp(resolve(tmpdir(), 'migration-jobs-'));
     let progress: (event: MigrationProgress) => void = () => {},

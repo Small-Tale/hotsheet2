@@ -75,6 +75,12 @@ Windows, while Unix keeps the direct npm executable. An isolated Windows VM
 confirmed both launcher forms after direct `npm.cmd` execution failed. Fresh
 native Windows ARM64 and x86_64 Tauri resource staging remains required.
 
+HS2-XRFNWH: `clients/web/src/migration-jobs.test.ts` checks transient and persistent
+Windows sharing denials during atomic checkpoint replacement, preservation of the
+durable destination, temporary-file cleanup, and idempotent rejoin. An isolated
+synthetic Windows 11 open-handle probe confirmed the native rename denial and recovery.
+The shipped SHA still requires native Windows core web-unit proof in `Platforms`.
+
 HS2-9TQM2G: the terminal launch argument test retains Windows `/D /S /K` and
 Unix `-lc` behavior. Conditional imports in `session_messages.rs` keep the
 Windows test build warning-free without suppressions; native Windows x86_64

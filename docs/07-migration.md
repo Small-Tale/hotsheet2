@@ -356,6 +356,10 @@ existence alone is never treated as ownership. An owner makes its terminal check
 durable before releasing those locks; a start from another bridge that loses the lock in
 that window re-reads the checkpoint and rejoins the finished attempt (same inputs, no
 retry) instead of reporting foreign ownership. Launching new work still requires the locks.
+On Windows, a reader can briefly deny replacement of the existing checkpoint. The
+writer retries that atomic replacement for a bounded period, preserving the old
+checkpoint until the new one replaces it, and fails explicitly if the denial persists
+(HS2-XRFNWH).
 
 `GET` on the same route returns a snapshot for `root`; `after=<revision>` blocks until
 change or a 25-second idle timeout. Subscribers may disconnect without cancelling the
