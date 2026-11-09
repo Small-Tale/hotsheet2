@@ -134,14 +134,16 @@ pub(crate) async fn setup_tool(
 pub(crate) async fn ws_sync(
     State(state): State<AppState>,
     Query(params): Query<Vec<(String, String)>>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
     let secret = params
         .iter()
         .find(|(key, _)| key == "secret")
         .map(|(_, value)| value);
-    if secret.map(String::as_str) != Some(state.secret.as_str()) {
-        return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
+    let local = secret.map(String::as_str) == Some(state.secret.as_str());
+    if !local && crate::routes::remote_auth::session(&state, &headers, false, true).is_err() {
+        return (StatusCode::UNAUTHORIZED, "invalid remote session").into_response();
     }
     let client = params
         .iter()
@@ -171,7 +173,7 @@ pub(crate) async fn ws_sync(
             .collect()
     };
     ws.on_upgrade(move |socket| async move {
-        ws_loop(socket, rx).await;
+        ws_loop(socket, rx, (!local).then_some((state, headers))).await;
         drop(leases);
     })
 }
@@ -374,14 +376,27 @@ fn store_has_live_claim(state: &AppState, id: &str) -> bool {
     })
 }
 
-async fn ws_loop(mut socket: WebSocket, mut rx: broadcast::Receiver<ChangeEvent>) {
-    while let Ok(event) = rx.recv().await {
-        let text = match serde_json::to_string(&event) {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        if socket.send(Message::Text(text.into())).await.is_err() {
-            break;
+async fn ws_loop(
+    mut socket: WebSocket,
+    mut rx: broadcast::Receiver<ChangeEvent>,
+    remote: Option<(AppState, HeaderMap)>,
+) {
+    let mut recheck = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            _ = recheck.tick(), if remote.is_some() => {
+                if let Some((state, headers)) = &remote {
+                    if crate::routes::remote_auth::session(state, headers, false, true).is_err() {
+                        let _ = socket.send(Message::Close(None)).await;
+                        break;
+                    }
+                }
+            }
+            event = rx.recv() => {
+                let Ok(event) = event else { break; };
+                let Ok(text) = serde_json::to_string(&event) else { continue; };
+                if socket.send(Message::Text(text.into())).await.is_err() { break; }
+            }
         }
     }
 }
@@ -425,10 +440,10 @@ pub(crate) async fn poll_events(
     let header_secret = headers
         .get("x-hotsheet-secret")
         .and_then(|value| value.to_str().ok());
-    if params.secret.as_deref() != Some(state.secret.as_str())
-        && header_secret != Some(state.secret.as_str())
-    {
-        return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
+    let local = params.secret.as_deref() == Some(state.secret.as_str())
+        || header_secret == Some(state.secret.as_str());
+    if !local && crate::routes::remote_auth::session(&state, &headers, false, false).is_err() {
+        return (StatusCode::UNAUTHORIZED, "invalid remote session").into_response();
     }
     let _lease = begin_presence(
         &state,
@@ -475,6 +490,9 @@ pub(crate) async fn poll_events(
         received = tokio::time::timeout(wait, rx.recv()) => received.map_err(|_| ()),
         () = state.stopping() => Err(()),
     };
+    if !local && crate::routes::remote_auth::session(&state, &headers, false, false).is_err() {
+        return (StatusCode::UNAUTHORIZED, "remote session revoked").into_response();
+    }
     let (events, cursor, overflow) = match next {
         // Re-read the ring rather than returning only the wake-up event. This atomically
         // captures every event + the exact cursor through that span, so a burst racing the

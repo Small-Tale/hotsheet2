@@ -12,6 +12,7 @@ describe('development server route boundary', () => {
     '/__hotsheet/projects/open',
     '/__hotsheet/server/recover-unhealthy',
     '/__hotsheet/project-api/project/tickets',
+    '/__hotsheet/remote-auth/mode',
   ])('passes %s through to the Hono bridge', (path) => {
     expect(devServerRouteExclude.test(path)).toBe(false);
   });

@@ -34,6 +34,237 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /remote-auth/pair:
+    post:
+      operationId: pair_remote_browser
+      summary: Request a short-lived browser pairing challenge
+      security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+      responses:
+        '201':
+          description: Pairing request awaiting trusted host approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemotePairing'
+        default:
+          description: Invalid, expired or rate-limited pairing request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/redeem:
+    post:
+      operationId: redeem_remote_browser_pairing
+      summary: Exchange an approved, single-use pairing challenge for cookies
+      security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, challenge]
+              properties:
+                id:
+                  type: string
+                challenge:
+                  type: string
+      responses:
+        '200':
+          description: Device details; opaque session and CSRF credentials are issued as cookies.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDevice'
+        default:
+          description: Pairing is invalid, expired, unapproved or already redeemed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/me:
+    get:
+      operationId: get_remote_browser_session
+      summary: Inspect the current paired browser device
+      security:
+        - RemoteSessionCookie: []
+      responses:
+        '200':
+          description: Current authorized device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDevice'
+        default:
+          description: Missing, expired or revoked session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/rotate:
+    post:
+      operationId: rotate_remote_browser_session
+      summary: Replace the current session and CSRF cookies
+      security:
+        - RemoteSessionCookie: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Hotsheet-Csrf
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Device details with replacement credentials in cookies.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDevice'
+        default:
+          description: Invalid session, origin or CSRF token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/logout:
+    post:
+      operationId: logout_remote_browser_session
+      summary: Revoke the current session and clear its cookies
+      security:
+        - RemoteSessionCookie: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Hotsheet-Csrf
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Session revoked and cookies cleared.
+        default:
+          description: Invalid session, origin or CSRF token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner:
+    get:
+      operationId: list_remote_browser_devices
+      summary: List paired and pending devices from the trusted host
+      responses:
+        '200':
+          description: Server identity, paired devices and pending requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [server_id, devices, pending]
+                properties:
+                  server_id:
+                    type: string
+                  devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RemoteDevice'
+                  pending:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RemotePendingDevice'
+        default:
+          description: Trusted host credential missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner/approve:
+    post:
+      operationId: approve_remote_browser_device
+      summary: Approve one pairing request from the trusted host
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, role]
+              properties:
+                id:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/RemoteDeviceRole'
+      responses:
+        '204':
+          description: Pairing request approved for the selected role.
+        default:
+          description: Trusted host credential or pairing request invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner/devices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: revoke_remote_browser_device
+      summary: Revoke one paired device from the trusted host
+      responses:
+        '204':
+          description: Device revoked.
+        default:
+          description: Trusted host credential invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner/revoke-all:
+    post:
+      operationId: revoke_all_remote_browser_devices
+      summary: Revoke every paired device from the trusted host
+      responses:
+        '204':
+          description: All devices revoked.
+        default:
+          description: Trusted host credential invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /remote-checkouts:
     get:
       operationId: listHostedRemoteCheckouts
@@ -12838,6 +13069,10 @@ components:
       type: apiKey
       in: header
       name: X-Hotsheet-Secret
+    RemoteSessionCookie:
+      type: apiKey
+      in: cookie
+      name: hs2_remote_session
     HotsheetQuerySecret:
       type: apiKey
       in: query
@@ -12869,6 +13104,63 @@ components:
           schema:
             $ref: '#/components/schemas/Ticket'
   schemas:
+    RemoteDeviceRole:
+      type: string
+      enum: [read_only, read_write]
+    RemotePairing:
+      type: object
+      required: [id, server_id, challenge, expires_at]
+      properties:
+        id:
+          type: string
+        server_id:
+          type: string
+        challenge:
+          type: string
+        expires_at:
+          type: integer
+          format: int64
+    RemoteDevice:
+      type: object
+      required: [id, server_id, label, role, origin, created_at, last_used_at, expires_at]
+      properties:
+        id:
+          type: string
+        server_id:
+          type: string
+        label:
+          type: string
+        role:
+          $ref: '#/components/schemas/RemoteDeviceRole'
+        origin:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+        last_used_at:
+          type: integer
+          format: int64
+        expires_at:
+          type: integer
+          format: int64
+    RemotePendingDevice:
+      type: object
+      required: [id, label, origin, created_at, expires_at, approved]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        origin:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+        expires_at:
+          type: integer
+          format: int64
+        approved:
+          type: boolean
     NoteDoctorFinding:
       type: object
       required:

@@ -21,14 +21,16 @@ import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 
 import { startHotSheetWebClient } from './app/runtime';
+import { ensureRemoteBrowserSession } from './components/remote-auth-screen';
 import { TERMINAL_VISIBILITY_SCROLL_TARGET } from './components/terminal-visibility-dialog';
 import { installDesktopClose } from './desktop-close';
 import { initializeDesktopStorage } from './desktop-storage';
 import { installDocumentScrollRestore } from './document-scroll-restore';
 
+const remoteBrowser = await ensureRemoteBrowserSession();
 // The release shell marks this window; ordinary browser and Vite sessions keep their own storage.
-const desktopStorage = '__HOTSHEET_DESKTOP_STORAGE__' in window ? await initializeDesktopStorage() : undefined;
-
+const desktopStorage =
+  !remoteBrowser && '__HOTSHEET_DESKTOP_STORAGE__' in window ? await initializeDesktopStorage() : undefined;
 const { appRoot } = await startHotSheetWebClient();
 if (desktopStorage) installDesktopClose(desktopStorage);
 // iOS keyboard scrolls of the clipped app root are not user-recoverable; undo them on dismissal (HS2-BCA512).

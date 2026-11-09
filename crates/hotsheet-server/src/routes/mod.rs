@@ -16,6 +16,7 @@ pub(crate) mod orchestration;
 pub(crate) mod permissions;
 pub(crate) mod project_tools;
 pub(crate) mod providers;
+pub(crate) mod remote_auth;
 pub(crate) mod remotes;
 pub(crate) mod session_messages;
 pub(crate) mod standby;

@@ -1724,6 +1724,47 @@ export async function listServerCheckouts(
   return checkouts.filter((_, index) => available[index]);
 }
 
+/** The browser-facing host must opt in before it can serve remote clients. Its backend
+ * may still be loopback, so backend address alone cannot select the auth boundary. */
+export function remoteBrowserAuthRequired(): boolean {
+  return process.env.HOTSHEET_BROWSER_AUTH_MODE === 'remote';
+}
+
+export function remoteCsrfCookie(headers: Headers): string | undefined {
+  return headers
+    .get('cookie')
+    ?.split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('hs2_remote_csrf='))
+    ?.slice('hs2_remote_csrf='.length);
+}
+
+/** Forward a browser session to this machine server without exposing or injecting its
+ * loopback bearer. Owner routes may be used only by the trusted local host. */
+export async function browserAuthRequest(path: string, request: Request, owner = false): Promise<Response> {
+  if (owner && remoteBrowserAuthRequired()) return Response.json({ error: 'Trusted host required.' }, { status: 403 });
+  const store = await bootstrapStore();
+  const instance = await ensureServer(store);
+  const headers = new Headers(request.headers);
+  headers.delete('host');
+  headers.delete('x-hotsheet-secret');
+  if (owner) headers.set('x-hotsheet-secret', instance.secret);
+  else if (remoteBrowserAuthRequired() && request.method !== 'GET' && request.method !== 'HEAD') {
+    headers.delete('x-hotsheet-csrf');
+    const csrf = remoteCsrfCookie(headers);
+    if (csrf) headers.set('x-hotsheet-csrf', csrf);
+  }
+  const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
+  const response = await fetch(new URL(path, instance.url), {
+    method: request.method,
+    headers,
+    body,
+    redirect: 'manual',
+    signal: request.signal,
+  });
+  return new Response(response.body, { status: response.status, headers: response.headers });
+}
+
 async function changeStoreIds(stores: string[]): Promise<string[]> {
   return Promise.all(
     stores.map(async (store) =>
@@ -1771,7 +1812,17 @@ export async function proxyProjectRequest(
   const target = sessions.get(projectId);
   if (!target) return Response.json({ error: 'Project session is not open.' }, { status: 404 });
   const headers = new Headers(request.headers);
-  headers.set('x-hotsheet-secret', target.secret);
+  headers.delete('x-hotsheet-secret');
+  if (remoteBrowserAuthRequired()) {
+    const bootstrap = await ensureServer(await bootstrapStore());
+    if (bootstrap.url !== target.url)
+      return Response.json({ error: 'Session belongs to a different server.' }, { status: 403 });
+    headers.delete('x-hotsheet-csrf');
+    const csrf = remoteCsrfCookie(headers);
+    if (csrf) headers.set('x-hotsheet-csrf', csrf);
+  } else {
+    headers.set('x-hotsheet-secret', target.secret);
+  }
   headers.delete('host');
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
   const serverPath = projectScopedServerPath(projectId, path);
@@ -1781,13 +1832,18 @@ export async function proxyProjectRequest(
     !serverPath.split('?')[0].endsWith('/color');
   const forward = async () => {
     mark?.('dispatch');
-    const response = await fetch(authenticatedServerUrl(target.url, serverPath, target.secret), {
-      method: request.method,
-      headers,
-      body,
-      redirect: 'manual',
-      ...(signal ? { signal } : {}),
-    });
+    const response = await fetch(
+      remoteBrowserAuthRequired()
+        ? new URL(serverPath, target.url)
+        : authenticatedServerUrl(target.url, serverPath, target.secret),
+      {
+        method: request.method,
+        headers,
+        body,
+        redirect: 'manual',
+        ...(signal ? { signal } : {}),
+      },
+    );
     mark?.('headers');
     if (response.ok && sourceMutation) await refreshChangeStoreMembership(target);
     return new Response(response.body, { status: response.status, headers: response.headers });
@@ -1886,6 +1942,13 @@ export async function projectTerminalWebSocketUrl(projectId: string, terminalId:
   const target = sessions.get(projectId);
   if (!target) return undefined;
   await refreshSupervisedTarget(target);
+  if (remoteBrowserAuthRequired()) {
+    const bootstrap = await ensureServer(await bootstrapStore());
+    if (bootstrap.url !== target.url) return undefined;
+    const url = new URL(`/terminals/${encodeURIComponent(terminalId)}/attach`, target.url);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return url.toString();
+  }
   return authenticatedTerminalWebSocketUrl(target.url, terminalId, target.secret);
 }
 
@@ -1895,9 +1958,13 @@ export async function projectChangeWebSocketUrl(projectId: string, client?: stri
   const target = sessions.get(projectId);
   if (!target) return undefined;
   await refreshSupervisedTarget(target);
+  if (remoteBrowserAuthRequired()) {
+    const bootstrap = await ensureServer(await bootstrapStore());
+    if (bootstrap.url !== target.url) return undefined;
+  }
   const url = new URL('/ws/sync', target.url);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.searchParams.set('secret', target.secret);
+  if (!remoteBrowserAuthRequired()) url.searchParams.set('secret', target.secret);
   // Which checkout and tab this stream serves, so the server knows the project is open (HS2-ARJ9J1).
   url.searchParams.set('checkout', projectId);
   if (client) url.searchParams.set('client', client);

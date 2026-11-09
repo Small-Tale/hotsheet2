@@ -1,5 +1,16 @@
 # Feature Coverage Matrix
 
+HS2-7DBJMS: `hotsheet-server/src/remote_auth.rs` tests durable pairing,
+single-use challenge redemption, expiry, rate limits, role and revocation.
+`hotsheet-server/tests/remote_auth.rs` exercises the real router for owner
+approval, read-only writes, Origin/CSRF, rotation, logout, and restart.
+`clients/web/src/remote-auth-bridge.test.ts` checks remote bridge denial and
+local-only route isolation; `remote-auth-server-integration.test.ts` runs a
+private synthetic server and CLI through the actual browser proxy, project
+route, WebSocket revocation, and responsive pairing screen. No customer
+content was copied into fixtures. Follow-up tickets own network transport,
+TLS, and remote workspace selection.
+
 HS2-BCCF8J: `scripts/platform-matrix.test.mjs` checks that both native Windows arm64
 jobs install the exact upstream gas-preprocessor SHA-256 and verify Perl syntax
 before their Rust builds. Native assembly and build evidence comes from the

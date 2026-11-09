@@ -18,6 +18,11 @@ pub(crate) struct RemoteArgs {
 
 #[derive(Subcommand)]
 enum RemoteCmd {
+    /// Manage host-approved browser sessions on this machine's running server.
+    Sessions {
+        #[command(subcommand)]
+        command: SessionCmd,
+    },
     /// Print this machine's durable authenticated server identity (no bearer or certificate).
     Identity,
     /// List reviewed bindings and cached observations without network requests.
@@ -64,13 +69,55 @@ enum RemoteCmd {
     Checkouts { id: String },
 }
 
-pub(crate) fn run(command: Cmd, _context: &Ctx) -> Result<()> {
+#[derive(Subcommand)]
+enum SessionCmd {
+    /// List pending pairings and active devices; idempotent setup/status probe.
+    Status,
+    /// Approve one pending device from the trusted local CLI.
+    Approve {
+        id: String,
+        #[arg(long, value_parser = ["read_only", "read_write"])]
+        role: String,
+    },
+    /// Revoke one device immediately, including its live browser streams.
+    Revoke { id: String },
+    /// Revoke every browser session on this host.
+    RevokeAll,
+}
+
+pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     let Cmd::Remote(arguments) = command else {
         super::misrouted("remote")
     };
     let home = hotsheet_plugins::hotsheet_home();
     let runtime = RemoteRuntime::live(&home);
     let output = match arguments.command {
+        RemoteCmd::Sessions { command } => match command {
+            SessionCmd::Status => super::server::local_server_json_with_body(
+                &context.path,
+                "GET",
+                "remote-auth/owner",
+                None,
+            )?,
+            SessionCmd::Approve { id, role } => super::server::local_server_json_with_body(
+                &context.path,
+                "POST",
+                "remote-auth/owner/approve",
+                Some(&serde_json::json!({"id": id, "role": role})),
+            )?,
+            SessionCmd::Revoke { id } => super::server::local_server_json_with_body(
+                &context.path,
+                "DELETE",
+                &format!("remote-auth/owner/devices/{id}"),
+                None,
+            )?,
+            SessionCmd::RevokeAll => super::server::local_server_json_with_body(
+                &context.path,
+                "POST",
+                "remote-auth/owner/revoke-all",
+                None,
+            )?,
+        },
         RemoteCmd::Identity => serde_json::to_value(
             hotsheet_ticketing::remote_servers::server_identity(&home, || {
                 ulid::Ulid::new().to_string()

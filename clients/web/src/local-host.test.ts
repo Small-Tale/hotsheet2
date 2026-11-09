@@ -15,6 +15,7 @@ import {
   mcpBinaryEnvironment,
   releaseBinaryEnvironment,
   snapshotLocalHostArtifacts,
+  stampBrowserAuthMode,
   startLocalHost,
 } from './local-host';
 import { webSocketRawText } from './terminal-ws-bridge';
@@ -65,6 +66,17 @@ describe('local production host (HS2-587N4D)', () => {
     expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
+  });
+});
+
+describe('production browser auth mode (HS2-7DBJMS)', () => {
+  it('stamps the running host mode into the same built document', () => {
+    const built = '<!doctype html><head><meta name="hotsheet-browser-auth" content="local"></head>';
+    expect(stampBrowserAuthMode(built, true)).toContain('name="hotsheet-browser-auth" content="remote"');
+    expect(stampBrowserAuthMode(built, false)).toContain('name="hotsheet-browser-auth" content="local"');
+    expect(stampBrowserAuthMode(built, true).match(/name="hotsheet-browser-auth"/g)).toHaveLength(1);
+    const backToLocal = stampBrowserAuthMode(stampBrowserAuthMode(built, true), false);
+    expect(backToLocal).toBe(built);
   });
 });
 

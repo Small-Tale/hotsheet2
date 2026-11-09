@@ -36,6 +36,7 @@ pub mod project_activity;
 pub mod provider_advisory_claims;
 mod provider_overlay;
 pub mod provider_write_behind;
+pub mod remote_auth;
 pub mod repository_browser;
 mod request_timing;
 mod routes;
@@ -253,6 +254,9 @@ pub struct AppState {
     /// switch to a different store placed at the same path (HS2-34XE8B).
     primary_instance_id: Result<String, String>,
     secret: String,
+    /// Explicitly enabled server-owned remote browser sessions. Tests opt in with an
+    /// isolated path; the real server opens the machine-local catalog at startup.
+    remote_auth: Option<remote_auth::RemoteAuth>,
     events: broadcast::Sender<ChangeEvent>,
     index: Arc<Mutex<Index>>,
     /// The primary store's stat-validated corrupt-ticket cache (HS2-KYSBT2), shared with
@@ -597,6 +601,7 @@ impl AppState {
             orchestration_runtime: None,
             primary_instance_id,
             secret,
+            remote_auth: None,
             events,
             index,
             corrupt,
@@ -822,7 +827,19 @@ impl AppState {
         self.managed_secrets = ManagedSecretCache::default();
         self.remote_runtime = None;
         self.orchestration_runtime = None;
+        self.remote_auth = None;
         self
+    }
+
+    /// Enable remote browser authorization with a durable machine-local catalog.
+    /// A corrupt catalog fails startup rather than silently forgetting revocations.
+    pub fn with_remote_auth(mut self, path: impl Into<std::path::PathBuf>) -> anyhow::Result<Self> {
+        let identity =
+            hotsheet_ticketing::remote_servers::server_identity(self.machine_home(), || {
+                ulid::Ulid::new().to_string()
+            })?;
+        self.remote_auth = Some(remote_auth::RemoteAuth::open(path, &identity.server_id)?);
+        Ok(self)
     }
 
     /// Explicit remote ports for isolated credential/transport tests (HS2-1Y45MZ).
@@ -1383,6 +1400,19 @@ impl AppState {
 /// (the WS checks the secret via a query param, since browsers can't set WS headers).
 pub fn app(state: AppState) -> Router {
     let protected = Router::new()
+        .route("/remote-auth/owner", get(routes::remote_auth::owner_list))
+        .route(
+            "/remote-auth/owner/approve",
+            post(routes::remote_auth::approve),
+        )
+        .route(
+            "/remote-auth/owner/devices/{id}",
+            delete(routes::remote_auth::revoke),
+        )
+        .route(
+            "/remote-auth/owner/revoke-all",
+            post(routes::remote_auth::revoke_all),
+        )
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/note-doctor", get(get_ticket_note_doctor))
@@ -2109,6 +2139,11 @@ pub fn app(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
+        .route("/remote-auth/pair", post(routes::remote_auth::pair))
+        .route("/remote-auth/redeem", post(routes::remote_auth::redeem))
+        .route("/remote-auth/me", get(routes::remote_auth::me))
+        .route("/remote-auth/rotate", post(routes::remote_auth::rotate))
+        .route("/remote-auth/logout", post(routes::remote_auth::logout))
         // GitHub authenticates with its per-hook HMAC, never the local server bearer.
         .route(
             "/webhooks/github/{connection_id}",

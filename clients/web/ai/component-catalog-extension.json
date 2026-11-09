@@ -1739,6 +1739,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "remote-auth-screen",
+      "name": "RemoteAuthScreen",
+      "kind": "component",
+      "purpose": "Pair a remote browser with the host's server before rendering the application (HS2-7DBJMS).",
+      "useWhen": [
+        "A remote browser needs host approval before application access."
+      ],
+      "avoidWhen": [
+        "The browser is using the trusted local bridge."
+      ],
+      "publicClasses": [
+        "remote-auth-screen"
+      ],
+      "publicTokens": [],
+      "source": "src/components/remote-auth-screen.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "repository-size",
       "name": "RepositorySize",
       "kind": "component",

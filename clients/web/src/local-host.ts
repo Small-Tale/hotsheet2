@@ -36,7 +36,7 @@ import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
-import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV } from './project-bridge';
+import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV, remoteBrowserAuthRequired } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
@@ -246,6 +246,14 @@ function documentNoCache(): MiddlewareHandler {
 }
 const DEVELOPMENT_ONLY = /^\/ux-demo(?:[/?]|$)/;
 
+/** The same production dist can be served locally or remotely; stamp the running host's mode. */
+export function stampBrowserAuthMode(html: string, remote = remoteBrowserAuthRequired()): string {
+  const tag = `<meta name="hotsheet-browser-auth" content="${remote ? 'remote' : 'local'}">`;
+  const existing = /<meta\s+name=["']hotsheet-browser-auth["']\s+content=["'](?:local|remote)["']\s*\/?\s*>/i;
+  if (existing.test(html)) return html.replace(existing, tag);
+  return html.replace(/<\/head>/i, `${tag}</head>`);
+}
+
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
 export function createLocalHostApp(
   distRoot: string,
@@ -257,8 +265,16 @@ export function createLocalHostApp(
     if (DEVELOPMENT_ONLY.test(context.req.path)) return context.notFound();
     await next();
   });
-  if (desktopStorageDirectory) app.route('/', desktopStorageBridge(desktopStorageDirectory));
+  if (desktopStorageDirectory && !remoteBrowserAuthRequired())
+    app.route('/', desktopStorageBridge(desktopStorageDirectory));
   app.route('/', bridge);
+  app.use('*', async (context, next) => {
+    await next();
+    if (context.req.method === 'HEAD' || !context.res.headers.get('content-type')?.includes('text/html')) return;
+    const headers = new Headers(context.res.headers);
+    headers.delete('content-length');
+    context.res = new Response(stampBrowserAuthMode(await context.res.text()), { status: context.res.status, headers });
+  });
   // Hashed build assets never change for a given URL; the application document always revalidates.
   app.use('/assets/*', cacheControl('public, max-age=31536000, immutable'));
   app.use('/assets/*', serveStatic({ root: distRoot }));
@@ -277,6 +293,8 @@ export function startLocalHost({
   port = LOCAL_HOST_DEFAULT_PORT,
   distRoot = fileURLToPath(new URL('../dist', import.meta.url)),
 }: { host?: string; port?: number; distRoot?: string } = {}): Promise<Server> {
+  if (!['127.0.0.1', '::1', 'localhost'].includes(host) && !remoteBrowserAuthRequired())
+    throw new Error('A non-loopback browser host requires HOTSHEET_BROWSER_AUTH_MODE=remote.');
   const listener = getRequestListener(createLocalHostApp(distRoot).fetch),
     server = createServer((request, response) => {
       void listener(request, response);

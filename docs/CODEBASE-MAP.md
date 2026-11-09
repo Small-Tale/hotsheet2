@@ -1036,6 +1036,20 @@ hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli
   policy; each Node package owns its ESLint flat config. The web and spike configs use
   the Glassbox ESLint/TypeScript/import/TSDoc/Kerf baseline.
 
+### Host-approved remote browser sessions (HS2-7DBJMS)
+
+`crates/hotsheet-server/src/remote_auth.rs` owns the private hashed challenge and
+session catalog at `${HOTSHEET_HOME}/remote-auth/<store-id>.json`, bound to the
+machine's existing `server-identity.json`. `routes/remote_auth.rs` exposes
+pairing, redemption and trusted-owner endpoints; `routes/auth.rs`,
+`routes/store_scoped.rs` and `routes/terminals/attach.rs` enforce REST, polling
+and WebSocket authorization. `crates/hotsheet-cli/src/dispatch/remotes.rs`
+exposes `remote sessions status|approve|revoke|revoke-all`. In the browser,
+`clients/web/src/components/remote-auth-screen.tsx` gates startup;
+`{dev-server,project-bridge,terminal-ws-bridge,local-host}.ts` enforce remote
+mode before proxying or local bearer injection. See [04](04-core-server-cli.md)
+§4.6.1 and [08](08-distributed-and-remote.md) §8.2.2.
+
 ## Where do I look for X?
 
 | X                                                                            | Where                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

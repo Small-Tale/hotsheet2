@@ -182,6 +182,29 @@ This foundation supplies reviewed, authenticated identities for HS2-4J6V46 targe
 bindings and HS2-42B2FD aggregate views. It adds no automatic clone, UI picker,
 orchestration manifest, queue fan-out or second claim coordinator.
 
+### 8.2.2 Host-approved browser sessions (HS2-7DBJMS)
+
+The reviewed remote-server registry above belongs to a native client connecting
+to another server. Browser device pairing is a separate machine-server
+authorization path. A remote browser requests a random five-minute challenge;
+the host owner verifies its server id, origin, label and request id, then
+approves read-only or read-write access from a trusted local CLI. A remote
+browser session cannot approve devices. The server issues a revocable,
+server-side session and checks it on REST, polling and WebSocket routes;
+the browser-facing bridge authenticates before proxying and never passes its
+loopback secret for a remote request. The session catalog is private to each
+server store and bound to the machine's durable server identity.
+
+The browser host must opt in with `HOTSHEET_BROWSER_AUTH_MODE=remote` even when
+a proxy reaches it through loopback. Its HTTPS session cookie is Secure,
+HttpOnly, host-only and SameSite=Strict; the separate CSRF cookie is readable
+by the browser on that same host. Direct HTTP is an explicit later transport
+choice with a documented exposure boundary. Origin and CSRF checks protect
+writes and upgrades. Host revocation ends live streams promptly. This
+foundation does not change the existing off-loopback mTLS bind requirement.
+HS2-W4JJJE adds optional-certificate direct listener modes, HS2-747RTD adds
+Serve/direct TLS launch, and HS2-WSGZZY owns their cross-transport acceptance.
+
 ## 8.3 Mobile (iOS) configuration & connection
 
 The ticket asks how mobile devices connect to one or more servers. Directions:

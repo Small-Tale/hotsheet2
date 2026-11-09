@@ -174,6 +174,23 @@ export function clientBuildIdPlugin(developmentId: string): Plugin {
   };
 }
 
+/** The browser mode belongs to the serving host, not to the reusable client bundle (HS2-7DBJMS). */
+export function browserAuthModePlugin(): Plugin {
+  return {
+    name: 'hotsheet-browser-auth-mode',
+    transformIndexHtml: () => [
+      {
+        tag: 'meta',
+        attrs: {
+          name: 'hotsheet-browser-auth',
+          content: process.env.HOTSHEET_BROWSER_AUTH_MODE === 'remote' ? 'remote' : 'local',
+        },
+        injectTo: 'head',
+      },
+    ],
+  };
+}
+
 export default defineConfig(({ command, isSsrBuild }) => {
   const developmentBuildId = developmentClientBuildId();
   return {
@@ -190,6 +207,12 @@ export default defineConfig(({ command, isSsrBuild }) => {
             {
               name: 'hotsheet-project-websocket-bridge',
               configureServer: (server) => {
+                const host = server.config.server.host;
+                if (
+                  (host === true || (typeof host === 'string' && !['127.0.0.1', '::1', 'localhost'].includes(host))) &&
+                  process.env.HOTSHEET_BROWSER_AUTH_MODE !== 'remote'
+                )
+                  throw new Error('A non-loopback browser host requires HOTSHEET_BROWSER_AUTH_MODE=remote.');
                 installProjectWebSocketBridge(server, undefined, undefined, undefined, () => developmentBuildId);
               },
             },
@@ -199,9 +222,10 @@ export default defineConfig(({ command, isSsrBuild }) => {
               injectClientScript: stableDevInjectClientScript(),
             }),
             stableDevClientStripPlugin(),
+            browserAuthModePlugin(),
             clientBuildIdPlugin(developmentBuildId),
           ]
-        : [clientBuildIdPlugin(developmentBuildId)],
+        : [browserAuthModePlugin(), clientBuildIdPlugin(developmentBuildId)],
     define: { 'import.meta.env.HOTSHEET_WEB_STABLE_DEV': JSON.stringify(process.env.HOTSHEET_WEB_STABLE_DEV === '1') },
     css: { postcss: { plugins: [remifyCss()] } },
     server: { host: '127.0.0.1', port: 4175, strictPort: true, hmr: stableDevHmr() },

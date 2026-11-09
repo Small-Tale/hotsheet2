@@ -1700,6 +1700,52 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
   > valid-in / no-cert-out / revoked-out-live plus read-only/write/unknown authorization.
   > **Deferred:** `.p12` bundling + QR enrollment (client work) and intermediate-CA UX.
 
+### 4.6.1 Host-approved remote browser sessions (HS2-7DBJMS)
+
+The browser host must explicitly set `HOTSHEET_BROWSER_AUTH_MODE=remote` before
+serving a remote client, including a Serve proxy whose backend is loopback. A
+direct non-loopback browser-host bind refuses to start without it. In that mode
+the Vite and production hosts hide local-only bridge routes, authenticate before
+project proxying or WebSocket upgrades, and forward the browser session to the
+same machine server without injecting `X-Hotsheet-Secret`. A trusted local host
+continues to use its local bearer and needs no routine browser login. The
+production desktop storage bridge is unavailable in remote mode.
+
+A remote browser posts a device label to `/remote-auth/pair`. The response has a
+random 256-bit challenge, a request id, the existing durable machine server id,
+and a five-minute expiry. The challenge stays in page memory; the screen shows
+the two ids, never the challenge. On the host Mac, `hotsheet-cli remote sessions
+status` lists pending requests and paired devices. The owner verifies the id,
+server id, label, and browser origin, then runs `hotsheet-cli remote sessions
+approve <request-id> --role read_only|read_write`. This approval path requires
+the local server bearer; a remote session cannot approve another device or
+bootstrap itself. `remote sessions revoke <device-id>` and `revoke-all` are
+idempotent. The server checks the same approved role on every protected route;
+read-only sessions cannot mutate projects or hosted stores.
+
+After approval, the browser redeems the challenge once. Five failed attempts
+disable it; the server admits at most ten new requests per minute. Successful
+redeem sends a host-only, HttpOnly, SameSite=Strict session cookie and a separate
+CSRF cookie. HTTPS sets Secure on both; explicit HTTP does not, so its session
+cookie is exposed to observers of that transport. The server stores only SHA-256
+digests of the random tokens in a private atomic catalog under
+`${HOTSHEET_HOME}/remote-auth/<store-id>.json`. The catalog is bound to the
+durable machine server id and fails startup if it belongs to another identity.
+Sessions expire after 30 days absolute or 24 hours idle; active-use timestamps
+persist at most once per minute. The browser host checks same-origin writes,
+and the server requires the matching Origin and CSRF token; WebSocket upgrades
+require the approved Origin, with terminal input requiring write role and CSRF.
+Revocation, logout and rotation invalidate the old session immediately; open
+sync and terminal streams recheck within one second. Reloads and server restarts
+recover a still-valid cookie from the durable catalog. No bearer or session
+token is placed in a URL, browser storage, telemetry or logs.
+
+The remote bridge currently runs against an existing loopback server or the
+current mTLS listener. HS2-W4JJJE adds optional-client-certificate direct
+listeners, HS2-747RTD adds Serve/direct TLS launch, and HS2-WSGZZY owns final
+cross-transport acceptance. The machine-wide `remote identity` and reviewed
+remote-server registry are separate from these browser device sessions.
+
 ## 4.7 Project settings (shared / local / client) — core-owned
 
 > **Built (HS2-94, HS2-34, HS2-REF96F, HS2-48XDJR):** `hotsheet_ticketing::settings::Settings` — a flat

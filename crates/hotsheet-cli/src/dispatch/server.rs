@@ -790,7 +790,12 @@ pub(crate) fn server_json_with_body(
         }
         Err(error) => return Err(error.into()),
     };
-    Ok(serde_json::from_reader(response.into_reader())?)
+    let text = response.into_string()?;
+    Ok(if text.trim().is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_str(&text)?
+    })
 }
 
 #[cfg(test)]

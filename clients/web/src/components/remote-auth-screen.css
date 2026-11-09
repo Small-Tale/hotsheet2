@@ -1,0 +1,89 @@
+.remote-auth-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--wa-color-surface-lowered);
+  color: var(--wa-color-text-normal);
+}
+
+.remote-auth-screen__card {
+  width: min(calc(100% - 2 * var(--kui-space-l)), 36rem);
+  padding: var(--kui-space-l);
+  border: 1px solid var(--kui-color-neutral-border-normal);
+  border-radius: 1rem;
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+}
+
+.remote-auth-screen__eyebrow {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.remote-auth-screen h1 {
+  margin: 0.25rem 0 1rem;
+  font-size: clamp(var(--wa-font-size-xl), 4vw, var(--wa-font-size-2xl));
+  line-height: 1.15;
+}
+.remote-auth-screen p {
+  line-height: 1.5;
+}
+.remote-auth-screen__field {
+  display: grid;
+  gap: var(--kui-space-xs);
+  margin-block: 1.5rem;
+  font-weight: 600;
+}
+.remote-auth-screen__field input {
+  width: 100%;
+  padding: var(--kui-space-xs) var(--kui-space-s);
+  border: 1px solid var(--kui-color-neutral-border-normal);
+  border-radius: 0.5rem;
+  font: inherit;
+}
+.remote-auth-screen__request {
+  margin-block: 1.5rem;
+}
+.remote-auth-screen__request code {
+  overflow-wrap: anywhere;
+}
+.remote-auth-screen__message {
+  color: var(--kui-color-danger-on-quiet);
+}
+.remote-auth-screen__actions {
+  display: flex;
+  gap: var(--kui-space-s);
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+.remote-auth-screen__actions button {
+  min-height: 2.75rem;
+  padding: var(--kui-space-xs) var(--kui-space-m);
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.remote-auth-screen__actions button:first-child {
+  background: var(--wa-color-brand-fill-loud);
+  border-color: var(--wa-color-brand-fill-loud);
+  color: var(--wa-color-brand-on-loud);
+}
+.remote-auth-screen__actions button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+@media (max-width: 38rem) {
+  .remote-auth-screen {
+    align-items: start;
+  }
+  .remote-auth-screen__card {
+    margin-block-start: var(--kui-space-l);
+  }
+  .remote-auth-screen__actions {
+    display: grid;
+  }
+}

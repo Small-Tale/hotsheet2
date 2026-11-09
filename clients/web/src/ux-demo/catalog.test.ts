@@ -62,6 +62,7 @@ describe('UX demo catalog', () => {
     expect(entries.map((entry) => entry.id)).toEqual([
       'app-shell',
       'app-loading-indicator',
+      'remote-auth-screen',
       'announcer-overlay',
       'project-sidebar',
       'project-summary',

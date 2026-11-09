@@ -484,6 +484,22 @@ WebKit profile in `docs/21-scale-stress-testing.md` exercises a disposable real
 server and PTY, but cannot attribute an existing Safari tab or reproduce its
 background and extension behavior.
 
+### Host-approved browser pairing (HS2-7DBJMS)
+
+Use a disposable synthetic store and a browser host explicitly configured with
+`HOTSHEET_BROWSER_AUTH_MODE=remote`. At desktop, tablet and phone widths, request
+access and confirm the screen shows the same request and durable server ids as
+`hotsheet-cli remote sessions status` on the host Mac, without showing the
+challenge. Approve read-only, continue, reload and reconnect; reads should work
+while project/store writes and terminal input are refused. Check that local-only
+file and desktop storage routes are absent. Approve a second read-write device,
+exercise a write, revoke it from the host, and confirm an existing sync/terminal
+socket closes within one second and subsequent requests fail. Repeat with
+logout, rotation, expired challenge, five wrong redemptions, spoofed Origin,
+missing CSRF, server restart, and a browser restart. Verify the local trusted
+client and headless CLI continue without browser prompts. Do not use customer
+data or capture a cookie/challenge in screenshots.
+
 ### Real-device mTLS enrollment
 
 1. Enroll a second physical device against an off-loopback server.

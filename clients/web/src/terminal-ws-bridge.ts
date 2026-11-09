@@ -4,7 +4,13 @@ import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 
 import { CHANGE_WS_MUX_PATH, type ChangeWsCommand, type ChangeWsMessage, parseChangeWsCommand } from './change-ws-mux';
-import { projectChangeStoreIds, projectChangeWebSocketUrl, projectTerminalWebSocketUrl } from './project-bridge';
+import {
+  browserAuthRequest,
+  projectChangeStoreIds,
+  projectChangeWebSocketUrl,
+  projectTerminalWebSocketUrl,
+  remoteBrowserAuthRequired,
+} from './project-bridge';
 
 const browserAttach = /^\/__hotsheet\/project-api\/([^/]+)\/terminals\/([^/]+)\/attach$/;
 const browserSync = /^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
@@ -84,6 +90,7 @@ function serveChangeMux(
   resolveSync: SyncTargetResolver,
   resolveStores: StoreResolver,
   clientBuild: ClientBuildResolver,
+  upstreamHeaders?: Record<string, string>,
 ): void {
   type Subscription = {
     client: string;
@@ -173,7 +180,7 @@ function serveChangeMux(
         const key = keyOf(member.client, member.project);
         if (group.direct.has(key)) continue;
         waiting += 1;
-        const socket = new WebSocket(member.target);
+        const socket = new WebSocket(member.target, { headers: upstreamHeaders });
         group.direct.set(key, socket);
         socket.on('open', () => {
           if (group.direct.get(key) !== socket) return;
@@ -234,7 +241,7 @@ function serveChangeMux(
       const checkout = new URL(member.target).searchParams.get('checkout');
       if (checkout) url.searchParams.append('checkout', checkout);
     }
-    const candidate = new WebSocket(url.toString());
+    const candidate = new WebSocket(url.toString(), { headers: upstreamHeaders });
     group.candidate = candidate;
     candidate.on('open', () => {
       if (group.candidate !== candidate) return;
@@ -408,51 +415,79 @@ export function installProjectWebSocketBridge(
     socket.on('error', () => {
       socket.destroy();
     });
-    if (new URL(request.url ?? '/', 'http://localhost').pathname === CHANGE_WS_MUX_PATH) {
-      browserServer.handleUpgrade(request, socket, head, (browser) => {
-        serveChangeMux(browser, resolveSync, resolveStores, clientBuild);
-      });
-      return;
-    }
-    void browserProjectWebSocketTarget(request.url, resolveTerminal, resolveSync)
-      .then((target) => {
-        if (socket.destroyed) return;
-        if (!target) {
-          // A Hot Sheet path the bridge cannot resolve (no open session, unreachable server) used to
-          // be left pending forever, so the browser waited out its handshake timeout on each retry;
-          // refuse it at once instead (HS2-CNWHW3).
-          refuseUpgrade(socket);
+    void (async () => {
+      const remote = remoteBrowserAuthRequired();
+      const upstreamHeaders =
+        remote && request.headers.cookie && request.headers.origin
+          ? { cookie: request.headers.cookie, origin: request.headers.origin }
+          : undefined;
+      if (remote) {
+        const sameOrigin =
+          upstreamHeaders && request.headers.host && new URL(upstreamHeaders.origin).host === request.headers.host;
+        if (!sameOrigin) {
+          socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
           return;
         }
+        const checked = await browserAuthRequest(
+          '/remote-auth/me',
+          new Request('http://bridge.invalid/remote-auth/me', {
+            headers: upstreamHeaders,
+          }),
+        );
+        if (!checked.ok) {
+          socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+          return;
+        }
+      }
+      if (socket.destroyed) return;
+      if (new URL(request.url ?? '/', 'http://localhost').pathname === CHANGE_WS_MUX_PATH) {
         browserServer.handleUpgrade(request, socket, head, (browser) => {
-          const upstream = new WebSocket(target),
-            pending: Array<{ data: WebSocket.RawData; binary: boolean }> = [];
-          browser.on('message', (data, binary) => {
-            if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary });
-            else pending.push({ data, binary });
-          });
-          upstream.on('open', () => {
-            for (const frame of pending.splice(0)) upstream.send(frame.data, { binary: frame.binary });
-          });
-          upstream.on('message', (data, binary) => {
-            if (browser.readyState === WebSocket.OPEN) browser.send(data, { binary });
-          });
-          const closeBrowser = () => {
-            if (browser.readyState === WebSocket.OPEN) browser.close();
-          };
-          const closeUpstream = () => {
-            if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING)
-              upstream.close();
-          };
-          upstream.on('close', closeBrowser);
-          upstream.on('error', closeBrowser);
-          browser.on('close', closeUpstream);
-          browser.on('error', closeUpstream);
+          serveChangeMux(browser, resolveSync, resolveStores, clientBuild, upstreamHeaders);
         });
-      })
-      .catch(() => {
-        socket.destroy();
-      });
+        return;
+      }
+      void browserProjectWebSocketTarget(request.url, resolveTerminal, resolveSync)
+        .then((target) => {
+          if (socket.destroyed) return;
+          if (!target) {
+            // A Hot Sheet path the bridge cannot resolve (no open session, unreachable server) used to
+            // be left pending forever, so the browser waited out its handshake timeout on each retry;
+            // refuse it at once instead (HS2-CNWHW3).
+            refuseUpgrade(socket);
+            return;
+          }
+          browserServer.handleUpgrade(request, socket, head, (browser) => {
+            const upstream = new WebSocket(target, { headers: upstreamHeaders }),
+              pending: Array<{ data: WebSocket.RawData; binary: boolean }> = [];
+            browser.on('message', (data, binary) => {
+              if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary });
+              else pending.push({ data, binary });
+            });
+            upstream.on('open', () => {
+              for (const frame of pending.splice(0)) upstream.send(frame.data, { binary: frame.binary });
+            });
+            upstream.on('message', (data, binary) => {
+              if (browser.readyState === WebSocket.OPEN) browser.send(data, { binary });
+            });
+            const closeBrowser = () => {
+              if (browser.readyState === WebSocket.OPEN) browser.close();
+            };
+            const closeUpstream = () => {
+              if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING)
+                upstream.close();
+            };
+            upstream.on('close', closeBrowser);
+            upstream.on('error', closeBrowser);
+            browser.on('close', closeUpstream);
+            browser.on('error', closeUpstream);
+          });
+        })
+        .catch(() => {
+          socket.destroy();
+        });
+    })().catch(() => {
+      socket.destroy();
+    });
   });
 }
 

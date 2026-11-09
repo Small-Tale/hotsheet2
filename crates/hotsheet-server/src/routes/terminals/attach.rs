@@ -6,7 +6,7 @@ use crate::routes::terminals::replay::{ReplayKind, ReplayOptions, ReplayParams, 
 use crate::routes::terminals::term_key;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -23,10 +23,12 @@ pub(crate) async fn attach_terminal(
     Path(id): Path<String>,
     Query(params): Query<WsParams>,
     Query(replay): Query<ReplayParams>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
     let replay = ReplayOptions::from(&replay);
-    if params.secret.as_deref() != Some(state.secret.as_str()) {
+    let local = params.secret.as_deref() == Some(state.secret.as_str());
+    if !local && crate::routes::remote_auth::session(&state, &headers, true, true).is_err() {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
     // Broker mode: the PTY lives in the detached broker. Confirm the terminal exists (clean
@@ -43,13 +45,42 @@ pub(crate) async fn attach_terminal(
             }
         }
         let socket_path = tb.socket.clone();
-        return ws
-            .on_upgrade(move |socket| broker_attach_loop(socket, socket_path, id, state, replay));
+        let remote = (!local).then_some((state.clone(), headers.clone()));
+        return ws.on_upgrade(move |socket| async move {
+            if let Some((check, headers)) = remote {
+                tokio::select! {
+                    () = broker_attach_loop(socket, socket_path, id, state, replay) => {},
+                    () = remote_session_ended(check, headers) => {},
+                }
+            } else {
+                broker_attach_loop(socket, socket_path, id, state, replay).await;
+            }
+        });
     }
     let Some(term) = state.terminals.get(&term_key(&state, &id)) else {
         return (StatusCode::NOT_FOUND, "no such terminal").into_response();
     };
-    ws.on_upgrade(move |socket| terminal_attach_loop(socket, term, state, id, replay))
+    let remote = (!local).then_some((state.clone(), headers));
+    ws.on_upgrade(move |socket| async move {
+        if let Some((check, headers)) = remote {
+            tokio::select! {
+                () = terminal_attach_loop(socket, term, state, id, replay) => {},
+                () = remote_session_ended(check, headers) => {},
+            }
+        } else {
+            terminal_attach_loop(socket, term, state, id, replay).await;
+        }
+    })
+}
+
+async fn remote_session_ended(state: AppState, headers: HeaderMap) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    loop {
+        interval.tick().await;
+        if crate::routes::remote_auth::session(&state, &headers, true, true).is_err() {
+            break;
+        }
+    }
 }
 
 fn default_true() -> bool {

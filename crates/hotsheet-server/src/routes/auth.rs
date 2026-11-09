@@ -47,19 +47,16 @@ pub(crate) async fn require_secret(
         .headers()
         .get("x-hotsheet-secret")
         .and_then(|v| v.to_str().ok());
-    if presented != Some(state.secret.as_str()) {
-        return Err(ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "missing or invalid secret",
-        ));
-    }
-    if primary_store_route(req.uri().path()) {
-        state.require_primary_store_identity()?;
-    }
     let is_mutation = matches!(
         *req.method(),
         Method::POST | Method::PUT | Method::PATCH | Method::DELETE
     );
+    if presented != Some(state.secret.as_str()) {
+        crate::routes::remote_auth::session(&state, req.headers(), is_mutation, false)?;
+    }
+    if primary_store_route(req.uri().path()) {
+        state.require_primary_store_identity()?;
+    }
     let is_restart = req.uri().path() == "/lifecycle/restart";
     // HS2-RFJ1GN: compaction closes admission itself, then checks quiescence. Counting
     // its own request as an active mutation would make that check always fail.

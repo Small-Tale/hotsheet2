@@ -10,6 +10,7 @@ export const BINARY_SUITES = [
   'src/checkouts-server-integration.test.ts',
   'src/hs1-backup.test.ts',
   'src/migration-server-integration.test.ts',
+  'src/remote-auth-server-integration.test.ts',
 ];
 
 /** Files the detector flags that never launch a real binary, with the reason. */

@@ -14,6 +14,7 @@ import { traceDevBridgeRequest } from './dev-request-timing';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
 import {
+  browserAuthRequest,
   chooseLocalFolder,
   connectGitTicketStoreRemote,
   createLocalGitTicketStore,
@@ -23,6 +24,8 @@ import {
   openLocalProject,
   proxyProjectRequest,
   recoverUnhealthyServer,
+  remoteBrowserAuthRequired,
+  remoteCsrfCookie,
   removeImportedHs1Data,
   revealCorruptTicket,
   type UnhealthyServerRecovery,
@@ -45,6 +48,47 @@ export function createDevApp(
     proxyProjectRequest(project, path, new Request(new URL(path, 'http://bridge.invalid')), signal),
 ): Hono {
   const app = new Hono();
+  app.use('/__hotsheet/*', async (context, next) => {
+    if (!remoteBrowserAuthRequired()) return next();
+    const path = context.req.path;
+    if (
+      path === '/__hotsheet/remote-auth/mode' ||
+      path === '/__hotsheet/remote-auth/pair' ||
+      path === '/__hotsheet/remote-auth/redeem'
+    )
+      return next();
+    if (path.startsWith('/__hotsheet/remote-auth/owner')) return context.json({ error: 'Trusted host required.' }, 403);
+    const allowed =
+      path === '/__hotsheet/checkouts' ||
+      path.startsWith('/__hotsheet/project-api/') ||
+      ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
+    if (!allowed) return context.notFound();
+    if (!context.req.header('cookie')) return context.json({ error: 'Remote session required.' }, 401);
+    const checked = await browserAuthRequest(
+      '/remote-auth/me',
+      new Request('http://bridge.invalid/remote-auth/me', {
+        headers: context.req.raw.headers,
+      }),
+    );
+    if (!checked.ok) return context.json({ error: 'Remote session required.' }, 401);
+    if (context.req.method !== 'GET' && context.req.method !== 'HEAD') {
+      const origin = context.req.header('origin');
+      if (!origin || origin !== new URL(context.req.url).origin || !remoteCsrfCookie(context.req.raw.headers))
+        return context.json({ error: 'Origin and CSRF token required.' }, 403);
+    }
+    return next();
+  });
+  app.get('/__hotsheet/remote-auth/mode', (context) => context.json({ required: remoteBrowserAuthRequired() }));
+  app.all('/__hotsheet/remote-auth/*', async (context) => {
+    const path = context.req.path.slice('/__hotsheet'.length);
+    if (
+      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|owner(?:\/approve|\/revoke-all|\/devices\/[A-Za-z0-9]+)?)$/.test(
+        path,
+      )
+    )
+      return context.notFound();
+    return browserAuthRequest(path, context.req.raw, path.startsWith('/remote-auth/owner'));
+  });
   // The development latency monitor's durable log (HS2-ZGBQ5Q): the browser posts each slow
   // interaction/request once (event-driven, never polled); GET reads the recent reports back.
   app.post('/__hotsheet/dev/latency', async (context) => {

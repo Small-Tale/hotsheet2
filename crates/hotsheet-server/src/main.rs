@@ -297,9 +297,11 @@ async fn main() -> Result<()> {
     let mut state = AppState::with_index(store, secret.clone(), index)
         .with_persistent_registered_indexes()
         .with_permission_rules_deferred(permission_rules_path)
-        .with_client_drive_persistence(
-            drive_root.join("sessions.json"),
-            drive_root.join("homes"),
+        .with_client_drive_persistence(drive_root.join("sessions.json"), drive_root.join("homes"))?
+        .with_remote_auth(
+            hotsheet_plugins::hotsheet_home()
+                .join("remote-auth")
+                .join(format!("{store_id}.json")),
         )?;
     if std::env::var("HOTSHEET_JIRA_WRITE_BEHIND").as_deref() == Ok("1") {
         let outbox_path = hotsheet_plugins::hotsheet_home()

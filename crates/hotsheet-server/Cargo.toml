@@ -49,6 +49,7 @@ ulid.workspace = true
 time.workspace = true
 notify.workspace = true
 sha2.workspace = true
+getrandom.workspace = true
 tempfile.workspace = true
 ureq.workspace = true
 

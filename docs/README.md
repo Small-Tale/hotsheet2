@@ -10,6 +10,15 @@ These documents remain the source of truth for what we are building and why.
 Windows; Unix keeps detached broker persistence across server restarts. Windows
 server and credential-cache execution awaits fresh native Platforms verification.
 
+**Remote browser authentication (HS2-7DBJMS):** an explicitly remote-facing
+browser host pairs a new device through owner approval on the host Mac, then
+uses a revocable server-side session with read-only or read-write access. The
+browser bridge does not inject its local server bearer for remote requests.
+Current off-loopback listeners still require mTLS; optional-certificate and
+Serve/direct TLS modes remain with HS2-W4JJJE and HS2-747RTD, followed by
+HS2-WSGZZY cross-transport acceptance. See [server trust](04-core-server-cli.md)
+§4.6.1 and [distributed access](08-distributed-and-remote.md) §8.2.2.
+
 **Phone terminal keys (HS2-RS96EJ):** the expanded key group uses an ellipsis control labelled More terminal keys
 because it includes Shift and clipboard actions as well as function and navigation
 keys. See [client behavior](06-clients.md) §6.

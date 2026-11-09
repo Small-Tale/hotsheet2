@@ -5253,6 +5253,79 @@
       }
     },
     {
+      "key": "hotsheet-web:remote-auth-screen",
+      "package": "hotsheet-web",
+      "id": "remote-auth-screen",
+      "name": "RemoteAuthScreen",
+      "kind": "component",
+      "purpose": "Pair a remote browser with the host's server before rendering the application (HS2-7DBJMS).",
+      "publicExports": [
+        {
+          "name": "RemoteAuthScreen"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-auth-screen.tsx",
+        "src/components/remote-auth-screen.css"
+      ],
+      "source": "src/components/remote-auth-screen.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "component",
+        "behaviors": [
+          "single-column-card"
+        ]
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Announce pairing errors and show the host-verifiable request and server IDs."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "remote-auth-screen",
+        "publicClasses": [
+          "remote-auth-screen"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "remote-auth-screen"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-auth-screen.tsx",
+        "composition": "src/components/remote-auth-screen.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:repository-size",
       "package": "hotsheet-web",
       "id": "repository-size",

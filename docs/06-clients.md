@@ -193,6 +193,18 @@ still recreate it. Current registry entries carry the project-derived channel id
 live entries that explicitly identify another project do not block cleanup, while matching
 and identity-less legacy entries remain conservatively blocking.
 
+**Remote browser pairing (HS2-7DBJMS).** When the browser host explicitly selects
+remote auth, the shipped app asks for a device name before it loads any project.
+It displays a short-lived request id and the server's durable id for the owner to
+verify on the host Mac. The random challenge remains in page memory; a reload
+starts another request. After the owner approves through the local CLI, Continue
+redeems it into a host-only HttpOnly session cookie. The server and browser
+bridge enforce the device's read-only or read-write role; local-only bridge
+routes, including desktop storage, stay unavailable. The screen is responsive
+from desktop to phone widths. The project picker that follows successful
+authentication retains its existing remote-project limitations until
+HS2-BT4KN6.
+
 **Host-only actions on remote clients (HS2-F78B1S).** Some actions launch a process or
 native dialog on the machine running the server: the configured `git difftool` (ticket
 commits/Code Review, repository status ranges and worktree files), attachment and
