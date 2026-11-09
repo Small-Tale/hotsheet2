@@ -75,6 +75,10 @@ Windows, while Unix keeps the direct npm executable. An isolated Windows VM
 confirmed both launcher forms after direct `npm.cmd` execution failed. Fresh
 native Windows ARM64 and x86_64 Tauri resource staging remains required.
 
+HS2-01QZZZ aligns the transitive runtime package staging assertion with that
+same platform-specific launcher while retaining the package-copy and dev-exclusion
+checks; native Windows core web-unit proof on the shipped SHA remains required.
+
 HS2-XRFNWH: `clients/web/src/migration-jobs.test.ts` checks transient and persistent
 Windows sharing denials during atomic checkpoint replacement, preservation of the
 durable destination, temporary-file cleanup, and idempotent rejoin. An isolated

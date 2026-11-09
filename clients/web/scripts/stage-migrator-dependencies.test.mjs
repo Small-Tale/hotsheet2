@@ -57,7 +57,8 @@ it('HS2-9XAJXR stages transitive runtime packages without development binaries',
     vi.mocked(execFileSync).mockReturnValue(`${migrator}\n${runtime}\n${nested}\n`);
     stageMigratorDependencies(migrator, staged);
 
-    expect(execFileSync).toHaveBeenCalledWith('npm', ['ls', '--omit=dev', '--all', '--parseable'], {
+    const invocation = npmListInvocation();
+    expect(execFileSync).toHaveBeenCalledWith(invocation.file, invocation.args, {
       cwd: migrator,
       encoding: 'utf8',
     });
