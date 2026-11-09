@@ -1,5 +1,5 @@
-# HS2-XW91TJ: aws-lc-sys needs clang-cl for Windows ARM assembly. The AVIF build
-# keeps CC=cl, so select clang-cl for this crate alone.
+# HS2-XW91TJ, HS2-HK3RMC: aws-lc-sys and rav1e need clang-cl for Windows ARM
+# assembly. rav1e uses cc-rs and inherits CC; MSVC cl silently ignores its .S files.
 $ErrorActionPreference = 'Stop'
 
 $candidates = @()
@@ -30,5 +30,6 @@ if (-not $compiler) {
   throw 'No clang-cl.exe could assemble a Windows ARM64 object; install the Visual Studio C++ Clang Compiler for Windows component'
 }
 
-Write-Output "Using clang-cl for aws-lc-sys Windows ARM64: $compiler"
+Write-Output "Using clang-cl for Windows ARM64 assembly: $compiler"
 "AWS_LC_SYS_CC=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+"CC=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

@@ -100,7 +100,7 @@ test('HS2-MX0N0G patches the pinned converter to resolve tbz and tbnz numeric ta
   assert.equal(branchTarget(newPattern, 'tbz x14, #0, 7f'), '7f');
 });
 
-test('HS2-XW91TJ selects an ARM64 assembler for aws-lc-sys without changing AVIF CC', () => {
+test('HS2-XW91TJ selects a verified ARM64 assembler for aws-lc-sys', () => {
   for (const job of [
     workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),
     workflow.slice(workflow.indexOf('\n  tauri:')),
@@ -123,6 +123,26 @@ test('HS2-XW91TJ selects an ARM64 assembler for aws-lc-sys without changing AVIF
   assert.match(awsLcCompiler, /\$LASTEXITCODE -eq 0/);
   assert.match(awsLcCompiler, /AWS_LC_SYS_CC=\$compiler/);
   assert.doesNotMatch(awsLcCompiler, /NO_ASM|PREBUILT_NASM/);
+});
+
+test('HS2-HK3RMC sends rav1e ARM assembly to the same verified clang-cl in both native jobs', () => {
+  for (const job of [
+    workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),
+    workflow.slice(workflow.indexOf('\n  tauri:')),
+  ]) {
+    const configure = job.indexOf('Select clang-cl for aws-lc-sys assembly (Windows arm64)');
+    assert.ok(configure >= 0 && configure < job.indexOf('Set up Node'));
+    assert.match(
+      job.slice(configure, job.indexOf('Set up Node')),
+      /matrix\.os == 'windows' && matrix\.arch == 'arm64'/,
+      'the compiler override must stay restricted to Windows ARM64',
+    );
+  }
+  assert.match(awsLcCompiler, /& \$candidate --target=aarch64-pc-windows-msvc \/c \$probe "\/Fo\$object"/);
+  assert.match(awsLcCompiler, /\$LASTEXITCODE -eq 0 -and \(Test-Path -LiteralPath \$object -PathType Leaf\)/);
+  assert.match(awsLcCompiler, /"AWS_LC_SYS_CC=\$compiler" \| Out-File -FilePath \$env:GITHUB_ENV/);
+  assert.match(awsLcCompiler, /"CC=\$compiler" \| Out-File -FilePath \$env:GITHUB_ENV/);
+  assert.doesNotMatch(awsLcCompiler, /CC=cl|NO_ASM|PREBUILT_NASM/);
 });
 
 test('HS2-31RGRK reports every target separately without masking failures', () => {
