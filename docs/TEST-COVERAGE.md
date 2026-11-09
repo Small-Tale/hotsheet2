@@ -56,6 +56,11 @@ and copied Node execution, and macOS linkage inspection. Platform workflow
 checks staged Windows resources before unsigned `--no-bundle` Tauri builds.
 Fresh native `tauri-windows-x86_64` and `tauri-windows-arm64` jobs are required.
 
+HS2-9TQM2G: the terminal launch argument test retains Windows `/D /S /K` and
+Unix `-lc` behavior. Conditional imports in `session_messages.rs` keep the
+Windows test build warning-free without suppressions; native Windows x86_64
+Clippy and test compilation remain required.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

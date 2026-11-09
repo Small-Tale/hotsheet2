@@ -12,8 +12,12 @@ use std::sync::{Arc, Mutex};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use base64::Engine as _;
+#[cfg(unix)]
+use hotsheet_server::resume_broker_terminal_sessions;
+#[cfg(unix)]
 use hotsheet_server::terminal_broker::TerminalBroker;
-use hotsheet_server::{AppState, app, resume_broker_terminal_sessions};
+use hotsheet_server::{AppState, app};
+#[cfg(unix)]
 use hotsheet_terminals::TerminalManager;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use http_body_util::BodyExt;

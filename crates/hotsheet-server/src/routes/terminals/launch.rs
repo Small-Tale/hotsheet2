@@ -317,18 +317,20 @@ fn shell_command_args(command: &str, shell: &str) -> Vec<String> {
     #[cfg(windows)]
     {
         let _ = shell;
-        return vec![
+        vec![
             "/D".to_string(),
             "/S".to_string(),
             "/K".to_string(),
             command.to_string(),
-        ];
+        ]
     }
     #[cfg(not(windows))]
-    return vec![
-        "-lc".to_string(),
-        format!("{command}\nexec {} -il", shell_single_quote(shell)),
-    ];
+    {
+        vec![
+            "-lc".to_string(),
+            format!("{command}\nexec {} -il", shell_single_quote(shell)),
+        ]
+    }
 }
 
 /// Single-quote a shell word so a shell path with spaces or quotes stays one argument.
