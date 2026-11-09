@@ -4877,7 +4877,9 @@ and column cards, at every width, follow one rule:
   `<strong>`, the same regular-or-strong choice Kerf `Text` exposes as `weight`. A light gray
   Lucide `bot` glyph leads the tags list and wraps with it. It has the accessible name and
   tooltip "Created by AI", plus the tool when the creator id names one, for example "Created by
-  AI (Claude)".
+  AI (Claude)". An ordinary unselected AI row uses a half-transparent surface in both list
+  and column presentations; selected or specially colored rows keep their normal surface,
+  and text and icons remain opaque (HS2-1NBJZH).
 - **Human, Hot Sheet, or unknown creators** keep the prominent bold title and no glyph. Tickets
   created before the field existed, by unspecified callers, or in external trackers have no
   recorded creator, so they are never shown as AI-created.
