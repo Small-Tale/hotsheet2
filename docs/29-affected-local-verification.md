@@ -246,6 +246,10 @@ and a green `main` CI run covers the shipping commit, invoke
 <store> --ticket <slug> --worktree <path> --shipping <full-main-sha>`. Add
 `--operation <assignment-id>` for an integrator-reviewed handoff. The handoff
 requires its durable integration record and reviewed worktree/branch proposal.
+For a reviewed findings handoff later retired with its recovery note preserved,
+cleanup also requires the exact findings, review-return, and retirement notes plus
+one later same-worker code handoff that is done and shipped through the usual green
+batch and CI proof (HS2-X4MM1P). Active, ambiguous, or unmatched handoffs refuse.
 The command rechecks ownership, no live claim or work, an unlocked clean worktree,
 source preservation, remote `main` ancestry, the exact-tree local gate receipt,
 and covering green `main` CI immediately before removal. It uses ordinary

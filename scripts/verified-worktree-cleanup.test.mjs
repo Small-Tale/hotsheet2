@@ -20,7 +20,7 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
-function fixture({ cherryPick = false, batch = false, superseded = false, differentReplayPatch = false } = {}) {
+function fixture({ cherryPick = false, batch = false, superseded = false, differentReplayPatch = false, retiredFindings = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hs2-hr3zx4-'));
   const project = join(root, 'project'),
     store = join(root, 'store'),
@@ -119,17 +119,23 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     ciConclusion = 'success',
     ticketStatus = 'completed',
     handoffCommit = source;
-  const note = (heading, text) => `<!-- hotsheet:note:begin synthetic created_at: 2026-11-09T00:00:00Z -->\n## ${heading}\n${text}\n<!-- hotsheet:note:end -->`;
+  const note = (heading, text, id = 'synthetic') => `<!-- hotsheet:note:begin ${id} created_at: 2026-11-09T00:00:00Z -->\n## ${heading}\n${text}\n<!-- hotsheet:note:end -->`;
   let notes = superseded ? [
     note('Integration handoff', `Assignment operation; branch ${branch}; commit ${source}; worktree ${realpathSync(worktree)}`),
     note('Replacement worker assignment', `Assignment: replacement; original ${source}; old assignment blocked and marked done`),
     note('Integration handoff', `Assignment replacement; commit ${replacement}; prior ${source}`),
+  ] : retiredFindings ? [
+    note('Findings handoff', 'Assignment old-findings; original findings', 'findings-note'),
+    note('Review return', 'Reviewed findings handoff old-findings at base; original findings note findings-note', 'review-note'),
+    note('Worker assignment: reviewed correction', 'Operation operation supersedes old-findings, review-returned with note review-note'),
+    note('Coordination retirement', 'assignment: old-findings; handoff evidence: findings note findings-note; recovery or review-return note: review-note'),
   ] : [];
   let oldTransitions = superseded ? [
     { kind: 'blocked', at: '2026-11-09T00:00:00Z', actor: { role: 'worker' } },
     { kind: 'done', at: '2026-11-09T00:01:00Z', actor: { role: 'integrator' } },
   ] : [];
   let extraReplacement = false;
+  let retiredPhase = 'done', retiredRecovery = 'review-note';
   const run = (binary, args, cwd, input) => {
     if (binary === 'hotsheet-cli') {
       if (args.includes('show'))
@@ -149,6 +155,18 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
           stdout: JSON.stringify({
             state: {
               assignments: {
+                ...(retiredFindings ? {
+                  'old-findings': {
+                    id: 'old-findings', phase: retiredPhase, recovery_note: retiredRecovery,
+                    handoff: { kind: 'findings', note_id: 'findings-note' },
+                    ticket: { connection_id: connection, native_id: native }, worker: 'worker',
+                    transitions: [
+                      { kind: 'handoff', at: '2026-11-09T00:00:00Z', actor: { role: 'worker' } },
+                      { kind: 'review_return', at: '2026-11-09T00:01:00Z', actor: { role: 'integrator' } },
+                      { kind: 'done', at: '2026-11-09T00:04:00Z', actor: { role: 'integrator' } },
+                    ],
+                  },
+                } : {}),
                 ...(phase === null
                   ? {}
                   : {
@@ -158,9 +176,14 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
                         handoff: superseded ? null : { kind: 'code', commit: handoffCommit },
                         ticket: { connection_id: connection, native_id: native },
                         worker: 'worker',
-                        transitions: oldTransitions,
+                        transitions: retiredFindings ? [{ kind: 'offered', at: '2026-11-09T00:02:00Z' }] : oldTransitions,
                       },
                     }),
+                ...(retiredFindings && extraReplacement ? { another: {
+                  id: 'another', phase: 'done', handoff: { kind: 'code', commit: source },
+                  ticket: { connection_id: connection, native_id: native }, worker: 'worker',
+                  transitions: [{ kind: 'offered', at: '2026-11-09T00:03:00Z' }],
+                } } : {}),
                 ...(superseded ? {
                   replacement: {
                     id: 'replacement', phase: 'done', handoff: { kind: 'code', commit: replacement },
@@ -261,6 +284,8 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     notes: (value) => { notes = value; },
     oldTransitions: (value) => { oldTransitions = value; },
     extraReplacement: (value) => { extraReplacement = value; },
+    retiredPhase: (value) => { retiredPhase = value; },
+    retiredRecovery: (value) => { retiredRecovery = value; },
     gate,
     integratorGate,
     receiptPath,
@@ -449,6 +474,30 @@ test('HS2-HQD4QZ refuses ambiguous or unlinked superseded replays', () => {
     assert.equal(existsSync(f.worktree), true, tamper);
     assert.equal(spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/hotsheet/integration-source/${f.source}`],
       { cwd: f.project, env: withoutGitRepositoryEnv(process.env) }).status, 1);
+  }
+});
+
+test('HS2-X4MM1P cleans a retired findings handoff only through its unique shipped replacement', () => {
+  const f = fixture({ cherryPick: true, batch: true, retiredFindings: true });
+  recordReviewedHandoff(f, { proposal: false });
+  unlinkSync(f.integratorGate);
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+});
+
+test('HS2-X4MM1P refuses active, ambiguous, unmatched, or unshipped retired findings', () => {
+  for (const tamper of ['active', 'ambiguous', 'review', 'replacement', 'recovery', 'batch', 'receipt']) {
+    const f = fixture({ cherryPick: true, batch: true, retiredFindings: true });
+    recordReviewedHandoff(f, { proposal: false });
+    unlinkSync(f.integratorGate);
+    if (tamper === 'active') f.retiredPhase('blocked');
+    if (tamper === 'ambiguous') f.extraReplacement(true);
+    if (tamper === 'review') f.notes([]);
+    if (tamper === 'replacement') f.phase('ci');
+    if (tamper === 'recovery') f.retiredRecovery('wrong-note');
+    if (tamper === 'batch') f.batchEntry.state = 'red';
+    if (tamper === 'receipt') unlinkSync(f.receiptPath);
+    assert.throws(() => cleanup({ ...f.options, operation: 'operation' }, { run: f.run }), undefined, tamper);
+    assert.equal(existsSync(f.worktree), true, tamper);
   }
 });
 

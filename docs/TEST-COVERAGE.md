@@ -143,6 +143,13 @@ archive, green batch smoke receipt and covering CI. Ambiguous replacements,
 different patches, missing proof, live claims, dirty trees, and open handles
 still refuse deletion.
 
+HS2-X4MM1P: the cleanup suite admits a retired findings handoff with its
+review-return recovery note intact only when the exact findings and retirement
+notes link one later same-worker done code assignment to the requested operation.
+The usual integration record, source archive, green batch receipt, shipped commit,
+and covering CI remain required. Active, ambiguous, unmatched, or unshipped
+replacements preserve the worktree.
+
 HS2-8W51AA: the cleanup suite accepts one exact green shipped batch after an
 aborted attempt for the same reviewed handoff. It still refuses two green batches,
 only-aborted history, and an aborted attempt followed by a red effective batch;

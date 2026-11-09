@@ -84,10 +84,12 @@ function coordination(project, store, ticket, operation, run) {
       assignment.ticket?.connection_id === ticket.source.connection_id &&
       assignment.ticket?.native_id === ticket.ticket.id,
   );
-  requireProof(
-    assignments.every((assignment) => assignment.phase === 'done' && !assignment.recovery_note),
-    'handoff, review, build, or CI wait is still active',
-  );
+  requireProof(assignments.every((assignment) => assignment.phase === 'done'),
+    'handoff, review, build, or CI wait is still active');
+  const notes = ticketNotes(ticket.markdown);
+  requireProof(assignments.every((assignment) => !assignment.recovery_note ||
+    retiredFindingsAssignment(assignment, assignments, operation, ticket.markdown, notes)),
+    'handoff, review, build, or CI wait is still active');
   const relevant = operation ? assignments.find((assignment) => assignment.id === operation) : null;
   if (operation)
     requireProof(relevant?.phase === 'done', 'reviewed code handoff is not done');
@@ -95,6 +97,32 @@ function coordination(project, store, ticket, operation, run) {
   // The exact ticket claim and handoff checks above, plus liveHandles(path) below,
   // establish whether this completed worktree is still in use.
   return { assignment: relevant, assignments };
+}
+
+// HS2-X4MM1P: retain review-return audit notes without treating an arbitrary
+// recovered or active assignment as safe to clean. The target code handoff is
+// independently bound to its shipped commit, green batch, and integration record.
+function retiredFindingsAssignment(old, assignments, operation, markdown, notes) {
+  if (!operation || old.id === operation || old.handoff?.kind !== 'findings' ||
+    !old.recovery_note || !old.handoff.note_id ||
+    !markdown.includes(`<!-- hotsheet:note:begin ${old.recovery_note} `) ||
+    !markdown.includes(`<!-- hotsheet:note:begin ${old.handoff.note_id} `)) return false;
+  const transitions = old.transitions ?? [];
+  const reviewed = transitions.findIndex((item) => item.kind === 'review_return' && item.actor?.role === 'integrator');
+  const retired = transitions.findIndex((item, index) => index > reviewed &&
+    item.kind === 'done' && item.actor?.role === 'integrator');
+  if (reviewed < 0 || retired < 0) return false;
+  const replacements = assignments.filter((item) => item.id !== old.id && item.phase === 'done' &&
+    item.handoff?.kind === 'code' && item.worker === old.worker && !item.recovery_note &&
+    (item.transitions ?? []).some((transition) => transition.kind === 'offered' &&
+      transition.at > transitions[reviewed].at));
+  if (replacements.length !== 1 || replacements[0].id !== operation) return false;
+  return notes.some((note) => note.startsWith('## Review return') &&
+      note.includes(old.id) && note.includes(old.handoff.note_id)) &&
+    notes.some((note) => note.startsWith('## Worker assignment') &&
+      note.includes(operation) && note.includes(old.id) && note.includes(old.recovery_note)) &&
+    notes.some((note) => note.startsWith('## Coordination retirement') &&
+      note.includes(old.id) && note.includes(old.handoff.note_id) && note.includes(old.recovery_note));
 }
 
 function ticketNotes(markdown) {
