@@ -701,11 +701,21 @@ mod tests {
 
     #[test]
     fn prepend_path_puts_dirs_first_and_dedups() {
-        let a = Path::new("/shim");
-        let b = Path::new("/exe");
-        let out = prepend_path(&[a, b], "/usr/bin:/exe:/bin");
-        // shim + exe lead; the duplicate /exe from the base is dropped.
-        assert_eq!(out, "/shim:/exe:/usr/bin:/bin");
+        let root = tempfile::tempdir().unwrap();
+        let shim = root.path().join("shim");
+        let exe = root.path().join("exe");
+        let system = root.path().join("system");
+        let fallback = root.path().join("fallback");
+        let base = std::env::join_paths([system.as_path(), exe.as_path(), fallback.as_path()])
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let out = prepend_path(&[shim.as_path(), exe.as_path()], &base);
+        // The shim and executable lead; the duplicate executable in the base is dropped.
+        assert_eq!(
+            std::env::split_paths(std::ffi::OsStr::new(&out)).collect::<Vec<_>>(),
+            vec![shim, exe, system, fallback]
+        );
     }
 
     #[test]
