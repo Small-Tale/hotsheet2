@@ -1,0 +1,2 @@
+# HS2-AHE5SV: keep formatted text and executable shebangs LF on Windows checkouts.
+* text=auto eol=lf

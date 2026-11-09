@@ -217,7 +217,9 @@ browser observer or enter the development proxy route.
 ```
 hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE store (below)
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
+  .gitattributes             # Keep tracked text LF on Windows checkouts while leaving binary files binary (HS2-AHE5SV; tests: scripts/windows-line-endings.test.mjs)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
+  scripts/windows-line-endings.test.mjs # Synthetic core.autocrlf=true checkout/control regression for formatted text, migrator shebang, and binary bytes (HS2-AHE5SV)
   scripts/repository-env-isolation.test.mjs # HS2-KKDZF4 policy: every Node git spawn under scripts/, clients/web/{scripts,tests}/, migrator/ passes withoutGitRepositoryEnv; real fixtures under a hook-style GIT_DIR/GIT_INDEX_FILE leave a sentinel repo byte-identical (no commit, no core.bare)
   scripts/test-quiet.mjs     # Quiet per-tier test wrapper: named leak diagnostics, capped failure excerpts, full log path (HS2-CP63FG, HS2-ET5FF1; tests: test-quiet.test.mjs + fixtures/test-quiet/)
   scripts/sandbox-notice.mjs # Claude Code sandbox detection and the rerun-outside notice on failed Rust/browser tiers and gate stages (HS2-5PTT2Y)

@@ -166,6 +166,12 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   stages and selects the web-only ESLint, catalog, and doctor stage from its
   declared web and catalog-documentation inputs. `npm run lint` still runs both
   formatting and web lint for direct package use and CI.
+- Git checkouts keep text files LF on every platform through the root
+  `.gitattributes` (`* text=auto eol=lf`, HS2-AHE5SV). This makes the same tracked
+  Markdown, workflow, and source bytes pass Prettier on Windows when Git's
+  `core.autocrlf` is enabled, and preserves the migrator executable's shebang.
+  Git still detects binary files as binary. The synthetic checkout regression in
+  `scripts/windows-line-endings.test.mjs` verifies both text and binary behavior.
 - The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`, run through `node --max-old-space-size=4096` since HS2-TY5JHN), which enforces
   component CSS ownership between the app's own components. A stylesheet may style only the class
   blocks its component renders, plus the native and raw Web Awesome elements it authors, and a

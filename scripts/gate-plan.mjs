@@ -46,6 +46,7 @@ export const ROOT_POLICY_TESTS = [
   'gitgist-tooling',
   'check-rulesync-generation',
   'repository-env-isolation',
+  'windows-line-endings',
 ];
 export const ROOT_TOOLING_TESTS = [
   'test-quiet',
