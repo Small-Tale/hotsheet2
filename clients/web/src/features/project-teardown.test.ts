@@ -47,10 +47,15 @@ describe('nextProjectAfterClose (HS2-DCTS07)', () => {
 describe('createProjectTeardown (HS2-BSSWGV)', () => {
   const tab = (id: string) => ({ id, apiPath: `/api/${id}` }) as Project;
   const cancelable = () => ({ cancel: vi.fn() });
+  const persistedCalls = () => (localStorage.setItem as unknown as { mock: { calls: unknown[][] } }).mock.calls;
 
-  function teardown(selected: string) {
+  function teardown(selected: string, failedRoots: string[] = [], selectedFailedRoot = '') {
     const projects = signal([tab('a'), tab('b'), tab('c')]),
       selectedProjectId = signal(selected),
+      projectRestoreFailures = signal(
+        failedRoots.map((root) => ({ root, name: root.split('/').at(-1)!, error: 'Synthetic missing folder' })),
+      ),
+      selectedProjectRestoreRoot = signal(selectedFailedRoot),
       rows = signal<Record<string, unknown>>({ a: 1, b: 2, c: 3 }),
       providers = signal<Record<string, unknown>>({ a: 1, b: 2, c: 3 }),
       readerOpen = signal(true),
@@ -75,8 +80,8 @@ describe('createProjectTeardown (HS2-BSSWGV)', () => {
       projects,
       selectedProjectId,
       statsProjectId: signal<string | undefined>('b'),
-      projectRestoreFailures: signal([]),
-      selectedProjectRestoreRoot: signal(''),
+      projectRestoreFailures,
+      selectedProjectRestoreRoot,
       terminalDrawerVisible: signal(false),
       commandDialogId: signal<string | undefined>('cmd'),
       commandSettingsEditingId: signal<string | undefined>(undefined),
@@ -99,12 +104,17 @@ describe('createProjectTeardown (HS2-BSSWGV)', () => {
       projectsPendingActivation: new Set(['b']),
       warmProjects: { forget: vi.fn() },
       project: () => projects.value.find((item) => item.id === selectedProjectId.value),
-      currentRememberedProjectRoots: () => ['/work/a', '/work/c'],
+      currentRememberedProjectRoots: () => [
+        ...projects.value.map((item) => `/work/${item.id}`),
+        ...projectRestoreFailures.value.map((item) => item.root),
+      ],
     });
     return {
       owner,
       projects,
       selectedProjectId,
+      projectRestoreFailures,
+      selectedProjectRestoreRoot,
       rows,
       providers,
       readerOpen,
@@ -159,5 +169,41 @@ describe('createProjectTeardown (HS2-BSSWGV)', () => {
     expect(calls.activateOpenProject).not.toHaveBeenCalled();
     expect(calls.refreshProject).toHaveBeenCalled();
     expect(calls.refreshCommands).toHaveBeenCalled();
+  });
+
+  it('HS2-7V2EEV forgets a selected failed root without tearing down a healthy project', () => {
+    const { owner, projects, projectRestoreFailures, selectedProjectRestoreRoot, calls } = teardown(
+      'a',
+      ['/work/missing'],
+      '/work/missing',
+    );
+    owner.closeProjectIds(['project-restore-error:/work/missing']);
+    expect(projectRestoreFailures.value).toEqual([]);
+    expect(selectedProjectRestoreRoot.value).toBe('');
+    expect(projects.value.map((item) => item.id)).toEqual(['a', 'b', 'c']);
+    expect(persistedCalls()).toContainEqual([
+      'hotsheet.open-projects',
+      JSON.stringify(['/work/a', '/work/b', '/work/c']),
+    ]);
+    expect(calls.activateOpenProject).not.toHaveBeenCalled();
+    expect(calls.refreshProject).not.toHaveBeenCalled();
+  });
+
+  it('HS2-7V2EEV selects the next failed root or the empty state when no healthy project survives', () => {
+    const { owner, projects, selectedProjectId, projectRestoreFailures, selectedProjectRestoreRoot } = teardown(
+      '',
+      ['/work/first', '/work/second'],
+      '/work/first',
+    );
+    projects.value = [];
+    selectedProjectId.value = '';
+    owner.closeProjectIds(['project-restore-error:/work/first']);
+    expect(projectRestoreFailures.value.map((item) => item.root)).toEqual(['/work/second']);
+    expect(selectedProjectRestoreRoot.value).toBe('/work/second');
+    expect(persistedCalls().at(-1)).toEqual(['hotsheet.open-projects', '["/work/second"]']);
+    owner.closeProjectIds(['project-restore-error:/work/second']);
+    expect(projectRestoreFailures.value).toEqual([]);
+    expect(selectedProjectRestoreRoot.value).toBe('');
+    expect(persistedCalls().at(-1)).toEqual(['hotsheet.open-projects', '[]']);
   });
 });

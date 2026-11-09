@@ -95,4 +95,39 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     expect(recovered).not.toContain('circle-alert');
     expect(recovered).not.toContain('stopped on an error');
   });
+
+  it('HS2-7V2EEV closes the selected mobile project, including a failed remembered root, but not a pending root', () => {
+    const failed = String(
+      ProjectTabBar({
+        mobile: true,
+        tabs: [
+          { id: 'healthy', name: 'Healthy', location: 'local' },
+          {
+            id: 'project-restore-error:/work/missing',
+            name: 'Missing',
+            location: 'local',
+            selected: true,
+            restoreFailure: true,
+            closable: false,
+          },
+        ],
+      }),
+    );
+    expect(failed).toContain('data-action="close-project-tab"');
+    expect(failed).toContain('data-project-id="project-restore-error:/work/missing"');
+    expect(failed).toContain('aria-label="Close Missing Project"');
+    expect(failed).toContain('data-lucide="x"');
+    const healthy = String(
+      ProjectTabBar({ mobile: true, tabs: [{ id: 'healthy', name: 'Healthy', location: 'local', selected: true }] }),
+    );
+    expect(healthy).toContain('data-project-id="healthy"');
+    expect(healthy).toContain('aria-label="Close Healthy Project"');
+    const pending = String(
+      ProjectTabBar({
+        mobile: true,
+        tabs: [{ id: 'pending:/work/missing', name: 'Missing', location: 'local', pending: true }],
+      }),
+    );
+    expect(pending).not.toContain('data-action="close-project-tab"');
+  });
 });

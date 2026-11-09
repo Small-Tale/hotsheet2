@@ -864,7 +864,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.closeProjectTab.selector, (event, target) => {
       event.stopPropagation();
-      requestProjectClose([data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!]);
+      // A project tab and the phone strip's close action both carry the project id (HS2-7V2EEV).
+      requestProjectClose([data(target.closest<HTMLElement>('[data-project-id]')!).projectId!]);
     }),
   );
   // Project Settings' Close Project… (HS2-C7GMQN) enters the same close flow as the tab button.

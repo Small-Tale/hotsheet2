@@ -683,7 +683,7 @@ function wireAppShellDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.closeProjectTab.selector, (event, target) => {
       event.stopPropagation();
-      closeProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
+      closeProjectTab(target.closest<HTMLElement>('[data-project-id]')!.dataset.projectId!);
     }),
   );
   demoListeners.add(

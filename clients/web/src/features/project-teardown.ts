@@ -1,7 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import { Api, type CommandDefinition, type CommandRun } from '../api';
-import type { ProjectRestoreFailure } from '../components/project-restore-error';
+import { type ProjectRestoreFailure, projectRestoreTabId } from '../components/project-restore-error';
 import type { Project } from '../interactions/types';
 import { disposeTicketReaderFrames, type TicketReaderFrame } from '../ticket-reader-stack';
 
@@ -157,6 +157,22 @@ export function createProjectTeardown(dependencies: ProjectTeardownDependencies)
     }
   }
   function closeProjectIds(ids: readonly string[]) {
+    const failedRoots = new Set(
+      projectRestoreFailures.value
+        .filter((item) => ids.includes(projectRestoreTabId(item.root)))
+        .map((item) => item.root),
+    );
+    if (failedRoots.size) {
+      projectRestoreFailures.value = projectRestoreFailures.value.filter((item) => !failedRoots.has(item.root));
+      if (failedRoots.has(selectedProjectRestoreRoot.value))
+        selectedProjectRestoreRoot.value = selectedProjectId.value ? '' : (projectRestoreFailures.value[0]?.root ?? '');
+    }
+    // A failed remembered root has no live server session or per-project records to tear down.
+    if (!ids.some((id) => projects.value.some((item) => item.id === id))) {
+      if (failedRoots.size)
+        localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
+      return;
+    }
     disposeProjectTicketReaders(ids);
     for (const item of projects.value)
       if (ids.includes(item.id)) void new Api(item.apiPath).closeProjectSession().catch(() => undefined);

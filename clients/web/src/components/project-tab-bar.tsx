@@ -9,8 +9,9 @@ import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ArchiveRestore, CircleAlert } from 'lucide';
+import { ArchiveRestore, CircleAlert, X } from 'lucide';
 
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { AddProjectAction, ProjectDashboardModes, type ProjectStripMode } from './project-strip-actions';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
 import { TicketViewAction, type TicketViewActionSpec } from './workspace-controls';
@@ -123,6 +124,18 @@ export function ProjectTabBar({
                       </Row>
                     )}
                   />
+                </ToolbarControlGroup>
+              )}
+              {choosable.length > 0 && !active.pending && (active.closable !== false || active.restoreFailure) && (
+                <ToolbarControlGroup single appearance="borderless" size="compact" content="icon">
+                  <button
+                    type="button"
+                    {...TERMINALS_ACTIONS.closeProjectTab.attrs}
+                    data-project-id={active.id}
+                    aria-label={`Close ${active.name} Project`}
+                  >
+                    <LucideIcon size="s" icon={X} name="x" />
+                  </button>
                 </ToolbarControlGroup>
               )}
               <AddProjectAction />

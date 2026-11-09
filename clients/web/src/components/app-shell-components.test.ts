@@ -630,6 +630,8 @@ describe('application shell components', () => {
     // No kerf TabBar / tablist on mobile — the tabs become a project Select whose value is the active tab.
     expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain('data-tab-kind="project"');
+    // The selected project's close action stays reachable on a phone (HS2-7V2EEV).
+    expect(markup).toMatch(/data-action="close-project-tab" data-project-id="two"/);
     expect(markup).toContain('class="project-tab-bar project-tab-bar--mobile"');
     expect(markup).toContain('name="mobile-project"');
     // Kerf Select's native combobox trigger is named "Project".

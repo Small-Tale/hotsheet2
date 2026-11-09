@@ -9,6 +9,7 @@ import {
   projectCloseResourceKey,
   selectedProjectCloseResource,
 } from '../components/project-close-dialog';
+import { type ProjectRestoreFailure, projectRestoreTabId } from '../components/project-restore-error';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { Project } from '../interactions/types';
 import type { DrawerAIChat } from '../project-drive';
@@ -17,6 +18,7 @@ import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 /** Live application bindings the project-close flow reads (HS2-3JGWTV). */
 export interface ProjectCloseDependencies {
   projects: Signal<Project[]>;
+  projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
   projectCloseDialog: Signal<ProjectCloseDialogState | undefined>;
   terminalGroups: Signal<TerminalDashboardGroup[]>;
   terminalDrawerChatsByProject: Signal<Record<string, DrawerAIChat[]>>;
@@ -36,6 +38,7 @@ export interface ProjectCloseDependencies {
 export function createProjectCloseController(dependencies: ProjectCloseDependencies) {
   const {
     projects,
+    projectRestoreFailures,
     projectCloseDialog,
     terminalGroups,
     terminalDrawerChatsByProject,
@@ -84,15 +87,16 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
   function presentNextProjectClose() {
     while (pendingProjectCloseIds.length) {
       const projectId = pendingProjectCloseIds[0],
-        target = projects.value.find((item) => item.id === projectId);
-      if (!target) {
+        target = projects.value.find((item) => item.id === projectId),
+        failed = projectRestoreFailures.value.find((item) => projectRestoreTabId(item.root) === projectId);
+      if (!target && !failed) {
         pendingProjectCloseIds.shift();
         continue;
       }
-      const resources = projectCloseResources(projectId);
+      const resources = target ? projectCloseResources(projectId) : [];
       projectCloseDialog.value = {
         projectId,
-        projectName: target.name,
+        projectName: target?.name ?? failed!.name,
         resources,
         selectedKey: resources[0] ? projectCloseResourceKey(resources[0]) : undefined,
       };
@@ -102,7 +106,11 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
     projectCloseDialog.value = undefined;
   }
   function requestProjectClose(ids: readonly string[]) {
-    pendingProjectCloseIds = [...new Set(ids)].filter((id) => projects.value.some((item) => item.id === id));
+    pendingProjectCloseIds = [...new Set(ids)].filter(
+      (id) =>
+        projects.value.some((item) => item.id === id) ||
+        projectRestoreFailures.value.some((item) => projectRestoreTabId(item.root) === id),
+    );
     projectCloseDialog.value = undefined;
     presentNextProjectClose();
   }

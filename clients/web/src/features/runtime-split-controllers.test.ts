@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutTicketQuery, TicketRow } from '../api';
 import { ticketReadCursors } from '../change-read-gap';
 import type { ProjectCloseDialogState } from '../components/project-close-dialog';
+import type { ProjectRestoreFailure } from '../components/project-restore-error';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { InlineSearchToken } from '../inline-search';
 import type { Project } from '../interactions/types';
@@ -80,6 +81,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
       }),
       owner = createProjectCloseController({
         projects,
+        projectRestoreFailures: signal<ProjectRestoreFailure[]>([]),
         projectCloseDialog,
         terminalGroups: signal<TerminalDashboardGroup[]>([
           {

@@ -2653,6 +2653,7 @@ export async function startHotSheetWebClient() {
     cancelProjectClose,
   } = createProjectCloseController({
     projects,
+    projectRestoreFailures,
     projectCloseDialog,
     terminalGroups,
     terminalDrawerChatsByProject,
