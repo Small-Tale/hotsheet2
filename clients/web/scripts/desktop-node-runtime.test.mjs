@@ -36,3 +36,17 @@ it('HS2-KY5X6J executes a Windows Node .exe without invoking macOS otool', () =>
     }),
   ).toThrow(/standalone Windows executable/);
 });
+
+it('HS2-D80Q2V executes an extensionless Linux Node without invoking macOS otool', () => {
+  const calls = [];
+  assertStandaloneNode('/synthetic/node', undefined, 'linux', (...args) => {
+    calls.push(args);
+    return 'v22.0.0';
+  });
+  expect(calls).toEqual([['/synthetic/node', ['--version'], { encoding: 'utf8' }]]);
+  expect(() =>
+    assertStandaloneNode('/synthetic/node', undefined, 'linux', () => {
+      throw new Error('missing runtime');
+    }),
+  ).toThrow(/standalone Linux executable/);
+});

@@ -9,9 +9,11 @@ import { desktopResourcePlan, desktopTarget } from './desktop-node-runtime.mjs';
 it.each([
   ['darwin', 'arm64', 'aarch64-apple-darwin', ''],
   ['darwin', 'x64', 'x86_64-apple-darwin', ''],
+  ['linux', 'arm64', 'aarch64-unknown-linux-gnu', ''],
+  ['linux', 'x64', 'x86_64-unknown-linux-gnu', ''],
   ['win32', 'arm64', 'aarch64-pc-windows-msvc', '.exe'],
   ['win32', 'x64', 'x86_64-pc-windows-msvc', '.exe'],
-])('HS2-KY5X6J stages %s/%s with Tauri sidecar names', (platform, arch, triple, extension) => {
+])('HS2-KY5X6J HS2-D80Q2V stages %s/%s with Tauri sidecar names', (platform, arch, triple, extension) => {
   expect(desktopTarget(platform, arch)).toEqual({ triple, extension });
   const plan = desktopResourcePlan('/synthetic/root', '/synthetic/binaries', '/synthetic/node', platform, arch);
   expect(plan).toHaveLength(5);
@@ -26,8 +28,8 @@ it.each([
     });
 });
 
-it('HS2-KY5X6J rejects unsupported desktop resource targets explicitly', () => {
-  expect(() => desktopTarget('linux', 'x64')).toThrow(/Unsupported Hot Sheet desktop resource target/);
+it('HS2-KY5X6J HS2-D80Q2V rejects unsupported desktop resource targets explicitly', () => {
+  expect(() => desktopTarget('linux', 'ia32')).toThrow(/Unsupported Hot Sheet desktop resource target/);
   expect(() => desktopTarget('win32', 'ia32')).toThrow(/Unsupported Hot Sheet desktop resource target/);
 });
 

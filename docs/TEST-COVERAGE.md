@@ -56,6 +56,12 @@ and copied Node execution, and macOS linkage inspection. Platform workflow
 checks staged Windows resources before unsigned `--no-bundle` Tauri builds.
 Fresh native `tauri-windows-x86_64` and `tauri-windows-arm64` jobs are required.
 
+HS2-D80Q2V: desktop resource mapping tests check Linux ARM64 and x86_64 GNU
+triples, extensionless staged Node and Rust sidecars, and execution of the
+selected Linux Node binary. Fresh native `tauri-linux-arm64` and
+`tauri-linux-x86_64` Platforms jobs are required to verify resource staging and
+the unsigned desktop shell builds.
+
 HS2-YMXBD6: `clients/web/scripts/stage-migrator-dependencies.test.mjs`
 checks Node plus npm's JavaScript entry point and the `cmd.exe` fallback on
 Windows, while Unix keeps the direct npm executable. An isolated Windows VM

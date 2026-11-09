@@ -6,12 +6,13 @@ import { resolve } from 'node:path';
 export function desktopTarget(platform = process.platform, arch = process.arch) {
   const triples = {
     darwin: { arm64: 'aarch64-apple-darwin', x64: 'x86_64-apple-darwin' },
+    linux: { arm64: 'aarch64-unknown-linux-gnu', x64: 'x86_64-unknown-linux-gnu' },
     win32: { arm64: 'aarch64-pc-windows-msvc', x64: 'x86_64-pc-windows-msvc' },
   };
   const triple = triples[platform]?.[arch];
   if (!triple)
     throw new Error(
-      `Unsupported Hot Sheet desktop resource target: ${platform}/${arch}. Expected macOS or Windows arm64/x64.`,
+      `Unsupported Hot Sheet desktop resource target: ${platform}/${arch}. Expected Linux, macOS, or Windows arm64/x64.`,
     );
   return { triple, extension: platform === 'win32' ? '.exe' : '' };
 }
@@ -29,14 +30,17 @@ export function desktopResourcePlan(root, binaries, nodeRuntime, platform = proc
 }
 
 export function assertStandaloneNode(nodePath, linkage, platform = process.platform, run = execFileSync) {
-  if (platform === 'win32') {
-    if (!nodePath.toLowerCase().endsWith('.exe')) throw new Error('Desktop Node on Windows must be a .exe executable.');
-    // The Windows runner uses setup-node's official binary. Execute the selected copy candidate
-    // before staging; otool is macOS-only and cannot inspect a PE image (HS2-KY5X6J).
+  if (platform === 'win32' || platform === 'linux') {
+    if (platform === 'win32' && !nodePath.toLowerCase().endsWith('.exe'))
+      throw new Error('Desktop Node on Windows must be a .exe executable.');
+    // The runners use setup-node's official binary. Execute the selected copy candidate
+    // before staging; macOS-only otool cannot inspect PE or ELF images (HS2-D80Q2V).
     try {
       run(nodePath, ['--version'], { encoding: 'utf8' });
     } catch {
-      throw new Error('Desktop Node must start as a standalone Windows executable.');
+      throw new Error(
+        `Desktop Node must start as a standalone ${platform === 'win32' ? 'Windows' : 'Linux'} executable.`,
+      );
     }
     return;
   }
