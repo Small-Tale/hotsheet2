@@ -52,8 +52,13 @@ function fixture({ cherryPick = false } = {}) {
   const shipping = git(project, 'rev-parse', 'HEAD');
   const tree = git(project, 'rev-parse', 'HEAD^{tree}');
   const common = git(project, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  const gateDir = git(worktree, 'rev-parse', '--path-format=absolute', '--git-path', 'hotsheet-root-gate');
+  const gate = join(gateDir, tree);
+  mkdirSync(gateDir);
+  writeFileSync(gate, `${tree}\n`);
+  const integratorGate = join(common, 'hotsheet-root-gate', tree);
   mkdirSync(join(common, 'hotsheet-root-gate'));
-  writeFileSync(join(common, 'hotsheet-root-gate', tree), `${tree}\n`);
+  writeFileSync(integratorGate, `${tree}\n`);
   let claim = false,
     phase = 'done',
     handles = false,
@@ -156,9 +161,25 @@ function fixture({ cherryPick = false } = {}) {
     status: (value) => {
       ticketStatus = value;
     },
-    gate: join(common, 'hotsheet-root-gate', tree),
+    gate,
+    integratorGate,
   };
 }
+
+test('HS2-GYSR6T requires the exact linked worktree gate receipt', () => {
+  const f = fixture();
+  f.phase(null);
+  unlinkSync(f.gate);
+  assert.throws(() => cleanup(f.options, { run: f.run }), /gate in this worktree/);
+  assert.equal(existsSync(f.worktree), true);
+});
+
+test('HS2-GYSR6T requires the integrator receipt for a reviewed handoff', () => {
+  const f = fixture();
+  unlinkSync(f.integratorGate);
+  assert.throws(() => cleanup({ ...f.options, operation: 'operation' }, { run: f.run }), /gate in the integrator/);
+  assert.equal(existsSync(f.worktree), true);
+});
 
 test('HS2-HR3ZX4 removes only a clean verified direct worktree and branch', () => {
   const f = fixture();
@@ -226,6 +247,7 @@ test('HS2-HR3ZX4 requires a durable record for a reviewed operation', () => {
 
 test('HS2-HR3ZX4 verifies a cherry-picked handoff record and exact reviewed branch', () => {
   const f = fixture({ cherryPick: true });
+  unlinkSync(f.gate);
   const qualified = `@${projectId}/${connection}:${native}`;
   const recordDir = join(f.common, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
   mkdirSync(recordDir, { recursive: true });

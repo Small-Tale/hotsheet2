@@ -245,13 +245,11 @@ export function cleanup(options, { run = command } = {}) {
     'shipping commit is not on origin/main',
   );
   const tree = git(run, project, 'rev-parse', `${shipping}^{tree}`);
-  const gate = join(common, 'hotsheet-root-gate', tree);
-  requireProof(
-    existsSync(gate) && readFileSync(gate, 'utf8').trim() === tree,
-    'shipping tree has no successful exact-tree local gate',
-  );
   const ci = greenCi(project, shipping, run);
   if (previous && !existsSync(path)) {
+    // A direct ticket's receipt lived in this worktree's Git directory,
+    // which Git removed with the worktree. The durable intent records that
+    // the exact receipt passed earlier.
     const ref = run('git', ['show-ref', '--verify', '--quiet', `refs/heads/${previous.branch}`], project);
     if (ref.status === 0) {
       requireProof(
@@ -276,6 +274,15 @@ export function cleanup(options, { run = command } = {}) {
   requireProof(existsSync(path), 'worktree is missing without a cleanup intent');
   const resolved = realpathSync(path);
   requireProof(resolved === path, 'worktree path is a symlink or changed');
+  // A direct ticket is gated in its source worktree; a reviewed handoff is
+  // gated by the main-branch integrator in the project checkout.
+  const gateCheckout = options.operation ? project : path;
+  const gateDir = resolve(gateCheckout, git(run, gateCheckout, 'rev-parse', '--git-path', 'hotsheet-root-gate'));
+  const gate = join(gateDir, tree);
+  requireProof(
+    existsSync(gate) && readFileSync(gate, 'utf8').trim() === tree,
+    `shipping tree has no successful exact-tree local gate in ${options.operation ? 'the integrator' : 'this worktree'}`,
+  );
   const { branch, head } = worktreeEntry(project, path, run);
   requireProof(
     !git(run, path, 'status', '--porcelain=v1', '--untracked-files=all'),
