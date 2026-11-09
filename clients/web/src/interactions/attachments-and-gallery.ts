@@ -1174,11 +1174,24 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   document.addEventListener(
     'keydown',
     (event) => {
-      if (!attachmentGalleryMarkup.value || !attachmentGalleryUrl.value || event.defaultPrevented) return;
+      if (!attachmentGalleryUrl.value || event.defaultPrevented) return;
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, [contenteditable="true"], [data-gallery-range-handle]')) return;
       const key = event.key.toLowerCase(),
-        selectedId = attachmentGallerySelectedAnnotation.value,
+        toolKeys = { v: 'select', r: 'rect', f: 'freehand', a: 'arrow', i: 'insertion', s: 'strike' } as const,
+        tool =
+          !event.metaKey && !event.ctrlKey && !event.altKey && key in toolKeys
+            ? toolKeys[key as keyof typeof toolKeys]
+            : undefined;
+      if (!attachmentGalleryMarkup.value) {
+        if (!tool || event.shiftKey) return;
+        const toggle = document.querySelector<HTMLButtonElement>(
+          ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector,
+        );
+        if (!toggle || toggle.disabled) return;
+        galleryControls.toggleMarkup();
+      }
+      const selectedId = attachmentGallerySelectedAnnotation.value,
         selected = attachmentGalleryAnnotations.value.find((item) => item.id === selectedId),
         meta = event.metaKey || event.ctrlKey;
       let handled = true;
@@ -1208,12 +1221,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, duplicate];
         attachmentGallerySelectedAnnotation.value = duplicate.id;
         recordAnnotationChange(before);
-      } else if (!meta && !event.altKey && key in { v: 1, r: 1, f: 1, a: 1, i: 1, s: 1 }) {
-        setGalleryTool(
-          ({ v: 'select', r: 'rect', f: 'freehand', a: 'arrow', i: 'insertion', s: 'strike' } as const)[
-            key as 'v' | 'r' | 'f' | 'a' | 'i' | 's'
-          ],
-        );
+      } else if (tool) {
+        setGalleryTool(tool);
       } else if (key === 'escape') {
         const gesture = dependencies.attachmentAnnotationGesture;
         if (gesture) {
