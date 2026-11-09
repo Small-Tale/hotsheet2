@@ -21,7 +21,7 @@ const selectedGroups = (changes) => {
 };
 
 test('HS2-FCCRCK reads every stage of the real scripts/check.sh and classifies each one', () => {
-  assert.equal(stages.length, 18);
+  assert.equal(stages.length, 19); // HS2-6CK09C adds the browser shard completeness test.
   assert.deepEqual(
     stages.filter((stage) => stageGroup(stage) === undefined),
     [],
@@ -123,6 +123,7 @@ test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-
       'cargo lint',
       'cargo nextest run --all-features --status-level leak',
       'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/integration-batch.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs',
+      'node --test scripts/verify-playwright-shards.test.mjs',
       'npm run lint',
       'npm run test:coverage',
       'npm run lint',

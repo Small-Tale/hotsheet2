@@ -156,6 +156,9 @@ jobs:
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
         run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/integration-batch.test.mjs
 
+      - name: Test browser shard completeness guard
+        run: node --test scripts/verify-playwright-shards.test.mjs
+
       - name: Verify pinned gitgist commit drafting
         run: |
           npm ci
@@ -491,13 +494,15 @@ jobs:
         with:
           pattern: playwright-blob-*
           path: clients/web/all-blob-reports
-          merge-multiple: true
+
+      - name: Require every browser shard report
+        run: node scripts/verify-playwright-shards.mjs clients/web/all-blob-reports clients/web/verified-blob-reports 4
 
       - name: Merge the shard reports
         working-directory: clients/web
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-report.json
-        run: npx playwright merge-reports --reporter=html,json,list ./all-blob-reports
+        run: npx playwright merge-reports --reporter=html,json,list ./verified-blob-reports
 
       - name: Browser tests that needed a retry
         working-directory: clients/web

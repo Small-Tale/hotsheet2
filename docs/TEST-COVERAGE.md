@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-6CK09C: `scripts/verify-playwright-shards.test.mjs` checks that the CI
+merged-report job accepts exactly four separately named Playwright artifacts
+and rejects the observed odd-shard-only run before merging. The workflow
+downloads each artifact into its own directory and requires all four report
+ZIPs. A fresh main CI run must show all four shard jobs and the merged report
+before it can be used as full browser coverage.
+
 HS2-W4JJJE: `hotsheet-server/src/main.rs` pins explicit HTTP/HTTPS/mTLS
 selection and the legacy off-box mTLS default; `tests/remote_listener_modes.rs`
 checks accepted-peer bearer rejection on ordinary, owner, store and stream

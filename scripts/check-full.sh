@@ -8,6 +8,7 @@ cargo lint
 cargo nextest run --all-features --status-level leak
 zsh -ic 'node --test scripts/instruction-policy.test.mjs scripts/sync-ai-playbook.test.mjs scripts/check-test-coverage.test.mjs scripts/check-test-quarantine.test.mjs scripts/gitgist-tooling.test.mjs scripts/check-rulesync-generation.test.mjs scripts/repository-env-isolation.test.mjs scripts/windows-line-endings.test.mjs'
 zsh -ic 'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/integration-batch.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs'
+zsh -ic 'node --test scripts/verify-playwright-shards.test.mjs'
 zsh -ic 'node scripts/check-test-coverage.mjs'
 zsh -ic 'node scripts/check-test-quarantine.mjs'
 zsh -ic 'node scripts/sync-role-skills.mjs --check'

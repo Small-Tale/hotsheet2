@@ -21,6 +21,7 @@ export const STAGE_GROUPS = {
   '.::cargo fmt --all --check': 'always',
   '.::cargo lint': 'rust',
   '.::cargo nextest run --all-features --status-level leak': 'rust',
+  '.::node --test scripts/verify-playwright-shards.test.mjs': 'tooling',
   '.::node scripts/check-test-coverage.mjs': 'always',
   '.::node scripts/check-test-quarantine.mjs': 'always',
   '.::node scripts/sync-role-skills.mjs --check': 'always',
