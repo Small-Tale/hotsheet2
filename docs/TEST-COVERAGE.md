@@ -61,6 +61,11 @@ Unix `-lc` behavior. Conditional imports in `session_messages.rs` keep the
 Windows test build warning-free without suppressions; native Windows x86_64
 Clippy and test compilation remain required.
 
+HS2-2MEZPW: the migrator export test checks portable slash-delimited JSON
+`stored_path` with a synthetic Windows path while retaining the native copy
+destination. A Unix export/import fixture round-trips staged payload bytes
+through the built CLI. Native Windows migrator coverage remains required.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

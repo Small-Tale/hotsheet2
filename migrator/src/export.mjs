@@ -353,8 +353,8 @@ export function stageAttachments(fs, path, hotsheetDir, outPath, exportObj, obse
   observe({ version: 1, phase: 'stage_attachments', completed, total, unit: 'bytes' });
   for (const [index, { attachment, src, size }] of plan.entries()) {
     const name = path.basename(attachment.original_filename || attachment.stored_path);
-    const rel = path.join('attachments', String(index), name);
-    const dest = path.join(outDir, rel);
+    const rel = ['attachments', String(index), name].join('/');
+    const dest = path.join(outDir, 'attachments', String(index), name);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(src, dest);
     const copied = fs.statSync(dest).size;

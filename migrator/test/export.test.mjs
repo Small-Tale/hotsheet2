@@ -2,12 +2,21 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { PGlite as PGliteOld } from 'pglite-old';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { exportFromDb, exportDatadir, resolveCustomCommands } from '../src/export.mjs';
+import { exportFromDb, exportDatadir, resolveCustomCommands, stageAttachments } from '../src/export.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
@@ -384,6 +393,30 @@ describe('cross-version export', () => {
 });
 
 describe('attachments', () => {
+  it('serializes a portable path while copying through native Windows paths (HS2-2MEZPW)', () => {
+    const source = 'C:\\hs1\\attachments\\stored-abc.png';
+    const destination = 'D:\\export\\attachments\\0\\shot.png';
+    const copied = [];
+    const files = new Set([source]);
+    const fs = {
+      existsSync: (file) => files.has(file),
+      statSync: (file) => ({ isFile: () => files.has(file), size: 7 }),
+      mkdirSync: () => {},
+      copyFileSync: (from, to) => {
+        copied.push([from, to]);
+        files.add(to);
+      },
+    };
+    const exportObj = {
+      tickets: [{ attachments: [{ original_filename: 'shot.png', stored_path: source }] }],
+    };
+
+    stageAttachments(fs, win32, 'C:\\hs1', 'D:\\export\\export.json', exportObj);
+
+    expect(copied).toEqual([[source, destination]]);
+    expect(exportObj.tickets[0].attachments[0].stored_path).toBe('attachments/0/shot.png');
+  });
+
   it('exports promoted attachments and filters out drafts', async () => {
     const db = new PGlite();
     await db.exec(`
@@ -431,6 +464,24 @@ describe('attachments', () => {
       expect(att.original_filename).toBe('shot.png');
       expect(att.stored_path).toBe('attachments/0/shot.png');
       expect(existsSync(join(outDir, att.stored_path))).toBe(true);
+      const cli = join(
+        REPO_ROOT,
+        'target',
+        'debug',
+        process.platform === 'win32' ? 'hotsheet-cli.exe' : 'hotsheet-cli',
+      );
+      if (existsSync(cli)) {
+        const importedStore = join(outDir, 'imported.hs2');
+        const imported = execFileSync(cli, ['-C', importedStore, 'import', outPath], {
+          encoding: 'utf8',
+        });
+        expect(imported).toContain('Imported 1 ticket(s) (1 attachment file(s))');
+        const [ticketId] = readdirSync(join(importedStore, 'attachments'));
+        const [attachmentId] = readdirSync(join(importedStore, 'attachments', ticketId));
+        expect(readFileSync(join(importedStore, 'attachments', ticketId, attachmentId, 'shot.png'))).toEqual(
+          Buffer.from('PNGDATA'),
+        );
+      }
     } finally {
       rmSync(hs, { recursive: true, force: true });
       rmSync(outDir, { recursive: true, force: true });

@@ -37,7 +37,9 @@
 >
 > **Attachments** migrate: the exporter reads the `attachments` table (promoted
 > only — `draft_id IS NULL`), stages the files next to the export JSON, and rewrites
-> each `stored_path`; `hotsheet import` copies them into `attachments/<new-ulid>/`
+> each `stored_path` as a slash-separated JSON-relative path on every platform
+> (for example, `attachments/0/shot.png`); the physical staged copy uses the host
+> filesystem's path separators (HS2-2MEZPW). `hotsheet import` copies them into `attachments/<new-ulid>/`
 > (basename-sanitized). Source files resolve by basename under
 > `<.hotsheet>/attachments/` so a moved project still works.
 >
