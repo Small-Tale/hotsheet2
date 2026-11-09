@@ -4,8 +4,9 @@
 use crate::AppState;
 use crate::api_error::ApiError;
 use crate::remote_auth::{AuthFailure, Device, IssuedSession, PendingDevice, Role};
+use axum::Extension;
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
@@ -86,8 +87,14 @@ fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     })
 }
 
-fn owner(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
-    if value(headers, "x-hotsheet-secret") == Some(state.secret.as_str()) {
+fn owner(
+    state: &AppState,
+    headers: &HeaderMap,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
+) -> Result<(), ApiError> {
+    if value(headers, "x-hotsheet-secret") == Some(state.secret.as_str())
+        && state.local_bearer_allowed(peer.map(|info| info.0.0))
+    {
         Ok(())
     } else {
         Err(ApiError::new(
@@ -223,9 +230,10 @@ pub(crate) async fn logout(
 
 pub(crate) async fn owner_list(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
     headers: HeaderMap,
 ) -> Result<Json<DeviceList>, ApiError> {
-    owner(&state, &headers)?;
+    owner(&state, &headers, peer)?;
     let catalog = catalog(&state)?;
     Ok(Json(DeviceList {
         server_id: catalog.server_id(),
@@ -236,10 +244,11 @@ pub(crate) async fn owner_list(
 
 pub(crate) async fn approve(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
     headers: HeaderMap,
     Json(request): Json<ApproveRequest>,
 ) -> Result<StatusCode, ApiError> {
-    owner(&state, &headers)?;
+    owner(&state, &headers, peer)?;
     catalog(&state)?
         .approve(&request.id, request.role, now())
         .map_err(|_| internal())?
@@ -249,19 +258,21 @@ pub(crate) async fn approve(
 
 pub(crate) async fn revoke(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    owner(&state, &headers)?;
+    owner(&state, &headers, peer)?;
     catalog(&state)?.revoke(&id).map_err(|_| internal())?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub(crate) async fn revoke_all(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
-    owner(&state, &headers)?;
+    owner(&state, &headers, peer)?;
     catalog(&state)?.revoke_all().map_err(|_| internal())?;
     Ok(StatusCode::NO_CONTENT)
 }

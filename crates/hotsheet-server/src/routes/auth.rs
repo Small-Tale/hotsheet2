@@ -2,6 +2,7 @@
 
 use crate::AppState;
 use crate::api_error::ApiError;
+use axum::extract::ConnectInfo;
 use axum::extract::{Request, State};
 use axum::http::{Method, StatusCode};
 use axum::middleware::Next;
@@ -51,7 +52,17 @@ pub(crate) async fn require_secret(
         *req.method(),
         Method::POST | Method::PUT | Method::PATCH | Method::DELETE
     );
-    if presented != Some(state.secret.as_str()) {
+    let peer = req
+        .extensions()
+        .get::<ConnectInfo<std::net::SocketAddr>>()
+        .map(|info| info.0);
+    let certificate = req
+        .extensions()
+        .get::<crate::tls::CertificateAuthenticated>()
+        .is_some();
+    if !certificate
+        && (presented != Some(state.secret.as_str()) || !state.local_bearer_allowed(peer))
+    {
         crate::routes::remote_auth::session(&state, req.headers(), is_mutation, false)?;
     }
     if primary_store_route(req.uri().path()) {

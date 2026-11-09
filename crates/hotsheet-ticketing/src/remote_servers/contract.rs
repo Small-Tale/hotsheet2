@@ -31,6 +31,12 @@ impl std::fmt::Debug for RemoteCredentials {
 }
 
 impl RemoteCredentials {
+    /// A paired session is carried in the existing secret slot to preserve stored credential
+    /// records. Its prefix distinguishes it from the legacy machine-local bearer.
+    pub fn session_token(&self) -> Option<&str> {
+        self.bearer_secret.strip_prefix("session:")
+    }
+
     pub fn trust_fingerprint(&self, origin: &str) -> Result<Option<String>, RemoteError> {
         if self.bearer_secret.is_empty()
             || self.bearer_secret.len() > 8_192
@@ -43,13 +49,33 @@ impl RemoteCredentials {
                 "bearer must be nonempty printable ASCII",
             ));
         }
+        if self.session_token().is_some_and(|token| {
+            token.len() != 43
+                || !token
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        }) {
+            return Err(RemoteError::Invalid("invalid paired session token"));
+        }
         if origin.starts_with("http://") {
             if self.ca_pem.is_some()
                 || self.client_certificate_pem.is_some()
                 || self.client_key_pem.is_some()
             {
                 return Err(RemoteError::Invalid(
-                    "plaintext loopback does not take TLS material",
+                    "plaintext HTTP does not take TLS material",
+                ));
+            }
+            let loopback = url::Url::parse(origin)
+                .ok()
+                .is_some_and(|url| match url.host() {
+                    Some(url::Host::Ipv4(ip)) => IpAddr::V4(ip).is_loopback(),
+                    Some(url::Host::Ipv6(ip)) => IpAddr::V6(ip).is_loopback(),
+                    _ => false,
+                });
+            if !loopback && self.session_token().is_none() {
+                return Err(RemoteError::Invalid(
+                    "remote HTTP requires a paired session",
                 ));
             }
             return Ok(None);
@@ -58,16 +84,25 @@ impl RemoteCredentials {
             .ca_pem
             .as_deref()
             .ok_or(RemoteError::Invalid("CA is required"))?;
-        for value in [
-            Some(ca),
-            self.client_certificate_pem.as_deref(),
-            self.client_key_pem.as_deref(),
-        ] {
-            if value.is_none_or(|value| value.is_empty() || value.len() > 128 * 1024) {
-                return Err(RemoteError::Invalid(
-                    "bounded CA, device certificate and key are required",
-                ));
-            }
+        if ca.is_empty() || ca.len() > 128 * 1024 {
+            return Err(RemoteError::Invalid("bounded CA certificate is required"));
+        }
+        let cert = self.client_certificate_pem.as_deref();
+        let key = self.client_key_pem.as_deref();
+        if cert.is_some() != key.is_some()
+            || [cert, key]
+                .into_iter()
+                .flatten()
+                .any(|value| value.is_empty() || value.len() > 128 * 1024)
+        {
+            return Err(RemoteError::Invalid(
+                "device certificate and key must be paired",
+            ));
+        }
+        if cert.is_none() && self.session_token().is_none() {
+            return Err(RemoteError::Invalid(
+                "HTTPS requires a paired session or device certificate",
+            ));
         }
         let certs = rustls_pemfile::certs(&mut BufReader::new(ca.as_bytes()))
             .collect::<Result<Vec<_>, _>>()
@@ -103,14 +138,6 @@ pub fn normalize_remote_origin(value: &str) -> Result<String, RemoteError> {
     {
         return Err(RemoteError::Invalid(
             "origin must contain only HTTP(S) scheme, host and port",
-        ));
-    }
-    if url.scheme() == "http"
-        && !matches!(url.host(), Some(url::Host::Ipv4(ip)) if IpAddr::V4(ip).is_loopback())
-        && !matches!(url.host(), Some(url::Host::Ipv6(ip)) if IpAddr::V6(ip).is_loopback())
-    {
-        return Err(RemoteError::Invalid(
-            "off-box origins require HTTPS and mutual TLS",
         ));
     }
     Ok(url.origin().ascii_serialization())

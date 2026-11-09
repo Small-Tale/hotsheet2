@@ -20,9 +20,14 @@ fn response(status: u16, headers: &str, body: &str) -> String {
 }
 
 fn peer(responses: Vec<String>) -> (String, std::thread::JoinHandle<()>) {
+    peer_expected(responses, "synthetic-transport-bearer")
+}
+
+fn peer_expected(responses: Vec<String>, expected: &str) -> (String, std::thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
+    let expected = expected.to_owned();
     let worker = std::thread::spawn(move || {
         for response in responses {
             let deadline = std::time::Instant::now() + Duration::from_secs(5);
@@ -54,16 +59,81 @@ fn peer(responses: Vec<String>) -> (String, std::thread::JoinHandle<()>) {
                 bytes.push(byte[0]);
                 assert!(bytes.len() < 16_384);
             }
+            let request = String::from_utf8(bytes).unwrap();
             assert!(
-                String::from_utf8(bytes)
-                    .unwrap()
-                    .contains("synthetic-transport-bearer")
+                request.contains(&expected),
+                "missing expected credential header"
             );
+            if expected.contains("hs2_remote_session=") {
+                assert!(!request.to_ascii_lowercase().contains("x-hotsheet-secret:"));
+            }
             // Bounded readers may close before receiving the oversized tail.
             let _ = stream.write_all(response.as_bytes());
         }
     });
     (origin, worker)
+}
+
+#[test]
+fn hs2_w4jjje_remote_session_uses_cookie_without_forwarding_machine_bearer() {
+    let (origin, worker) = peer_expected(
+        vec![response(200, "", "{}")],
+        "hs2_remote_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+    let mut paired = credentials();
+    paired.bearer_secret = format!("session:{}", "A".repeat(43));
+    let agent = ureq::AgentBuilder::new().redirects(0).build();
+    assert_eq!(
+        get::<Value>(&agent, &origin, "/synthetic", &paired).unwrap(),
+        json!({})
+    );
+    worker.join().unwrap();
+}
+
+#[test]
+fn hs2_w4jjje_machine_bearer_is_only_attached_to_loopback_http() {
+    let agent = ureq::AgentBuilder::new().build();
+    let credentials = credentials();
+    for origin in [
+        "http://remote.example.test:1234",
+        "https://remote.example.test:1234",
+    ] {
+        let request = remote_auth_request(
+            agent.get(&format!("{origin}/synthetic")),
+            origin,
+            &credentials,
+        );
+        assert_eq!(request.header("X-Hotsheet-Secret"), None);
+        assert_eq!(request.header("Cookie"), None);
+    }
+    let origin = "http://127.0.0.1:1234";
+    let request = remote_auth_request(
+        agent.get(&format!("{origin}/synthetic")),
+        origin,
+        &credentials,
+    );
+    assert_eq!(
+        request.header("X-Hotsheet-Secret"),
+        Some("synthetic-transport-bearer")
+    );
+}
+
+#[test]
+fn hs2_w4jjje_https_client_verifies_server_without_device_certificate() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = hotsheet_tls::Paths::at(dir.path().join("tls"));
+    hotsheet_tls::init_ca(&paths, &[]).unwrap();
+    let mut paired = credentials();
+    paired.bearer_secret = format!("session:{}", "A".repeat(43));
+    paired.ca_pem = Some(std::fs::read_to_string(paths.ca_cert()).unwrap());
+    assert!(
+        paired
+            .trust_fingerprint("https://remote.example.test")
+            .unwrap()
+            .is_some()
+    );
+    let client = client_config(&paired).unwrap();
+    assert_eq!(client.alpn_protocols, vec![b"http/1.1".to_vec()]);
 }
 
 #[test]

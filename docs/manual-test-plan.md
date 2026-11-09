@@ -500,6 +500,22 @@ missing CSRF, server restart, and a browser restart. Verify the local trusted
 client and headless CLI continue without browser prompts. Do not use customer
 data or capture a cookie/challenge in screenshots.
 
+### Direct remote listener modes (HS2-W4JJJE)
+
+Using only a disposable synthetic store, start the server off-loopback without a
+transport flag and confirm it still requires an mTLS device certificate. Repeat
+with explicit `--remote-transport http`, `https`, and `mtls`; the printed URL and
+scheme must match each selection. For HTTP and HTTPS, pair a remote device from
+a browser host configured with `HOTSHEET_BROWSER_AUTH_MODE=remote`, approve it
+from a trusted loopback CLI, and verify REST, project/store, polling and WebSocket
+access, read-only denial, and live revocation. Present the local bearer from a
+second machine, including owner and stream routes and a forged
+`X-Forwarded-For: 127.0.0.1`; every attempt must fail. Confirm HTTPS needs no
+client certificate but verifies the server certificate, while mTLS still checks
+the device certificate and ACL. Verify no HTTPS client silently switches to HTTP.
+Treat an HTTP session cookie as visible to network observers and avoid using a
+production account or customer content in this check.
+
 ### Real-device mTLS enrollment
 
 1. Enroll a second physical device against an off-loopback server.

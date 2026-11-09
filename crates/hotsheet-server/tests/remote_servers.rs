@@ -309,7 +309,7 @@ async fn hs2_1y45mz_authenticated_service_and_serverless_mcp_use_the_same_regist
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn hs2_1y45mz_wrong_credentials_expired_client_wrong_hostname_and_acl_are_refused() {
+async fn hs2_w4jjje_mtls_uses_certificate_and_enforces_expiry_hostname_and_acl() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let paths = Paths::at(root.path().join("tls"));
@@ -321,11 +321,14 @@ async fn hs2_1y45mz_wrong_credentials_expired_client_wrong_hostname_and_acl_are_
     let good = credentials(&device);
     let mut wrong_bearer = good.clone();
     wrong_bearer.bearer_secret = "synthetic-wrong-bearer".into();
+    // HS2-W4JJJE: the legacy machine bearer is not sent off-box. The valid
+    // device certificate still authenticates this mTLS request.
     assert_eq!(
         MtlsRemoteTransport
             .probe(&origin, &wrong_bearer)
-            .unwrap_err(),
-        hotsheet_ticketing::remote_servers::RemoteFailure::Unauthorized
+            .unwrap()
+            .identity,
+        expected
     );
     let other = Paths::at(root.path().join("foreign"));
     init_ca(&other, &[]).unwrap();

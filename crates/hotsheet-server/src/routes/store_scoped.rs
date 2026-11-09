@@ -9,9 +9,10 @@ use crate::routes::ticket_writes::{AssignReq, do_assign, do_close, do_create, do
 use crate::routes::tickets::api_ticket;
 use crate::watcher::RepositoryWatchHandle;
 use crate::{AppState, now, presence};
+use axum::Extension;
 use axum::Json;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, State};
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use hotsheet_model::Ulid;
@@ -133,6 +134,8 @@ pub(crate) async fn setup_tool(
 
 pub(crate) async fn ws_sync(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
+    certificate: Option<Extension<crate::tls::CertificateAuthenticated>>,
     Query(params): Query<Vec<(String, String)>>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
@@ -141,7 +144,9 @@ pub(crate) async fn ws_sync(
         .iter()
         .find(|(key, _)| key == "secret")
         .map(|(_, value)| value);
-    let local = secret.map(String::as_str) == Some(state.secret.as_str());
+    let local = certificate.is_some()
+        || (secret.map(String::as_str) == Some(state.secret.as_str())
+            && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, false, true).is_err() {
         return (StatusCode::UNAUTHORIZED, "invalid remote session").into_response();
     }
@@ -434,14 +439,18 @@ struct PollResponse {
 /// the current cursor) on timeout. The client re-polls with the returned `cursor`.
 pub(crate) async fn poll_events(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
+    certificate: Option<Extension<crate::tls::CertificateAuthenticated>>,
     Query(params): Query<PollParams>,
     headers: HeaderMap,
 ) -> Response {
     let header_secret = headers
         .get("x-hotsheet-secret")
         .and_then(|value| value.to_str().ok());
-    let local = params.secret.as_deref() == Some(state.secret.as_str())
-        || header_secret == Some(state.secret.as_str());
+    let local = certificate.is_some()
+        || ((params.secret.as_deref() == Some(state.secret.as_str())
+            || header_secret == Some(state.secret.as_str()))
+            && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, false, false).is_err() {
         return (StatusCode::UNAUTHORIZED, "invalid remote session").into_response();
     }

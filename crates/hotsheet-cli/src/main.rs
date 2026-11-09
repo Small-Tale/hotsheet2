@@ -737,10 +737,14 @@ enum Cmd {
     /// Run the Hot Sheet server for this store in the foreground (execs the sibling
     /// `hotsheet-server` binary). Detached/supervised start is client-owned (HS2-4072GM).
     Serve {
-        /// Address to bind. Loopback = Tier 0 (plaintext + shared secret); an off-loopback
-        /// address serves over mTLS and needs `cert init` first (HS2-VT3JMF). Port 0 = ephemeral.
+        /// Address to bind. Loopback defaults to HTTP; off-loopback defaults to mTLS.
+        /// An explicit remote transport may override either default (HS2-W4JJJE).
         #[arg(long, default_value = "127.0.0.1:8787")]
         bind: String,
+        /// Direct listener transport. HTTP is explicit; off-loopback without this flag
+        /// retains the existing mTLS default (HS2-W4JJJE).
+        #[arg(long, value_parser = ["http", "https", "mtls"], conflicts_with_all = ["stop", "list"])]
+        remote_transport: Option<String>,
         /// Shared secret for `X-Hotsheet-Secret` (generated + printed by the server if omitted).
         #[arg(long, conflicts_with = "list")]
         secret: Option<String>,

@@ -119,9 +119,13 @@ hotsheet-cli remote review <registration-ulid> --expected-revision <revision> --
 hotsheet-cli remote revoke <registration-ulid> --expected-revision <revision>
 ```
 
-The input bundle has `bearer_secret`; HTTPS additionally requires `ca_pem`,
-`client_certificate_pem` and `client_key_pem` from the existing manual `cert`
-enrollment workflow. `--credentials-file -` reads bounded stdin. A repeated
+The input bundle keeps `bearer_secret` for stored-format compatibility. A
+paired session uses `session:<opaque-session-token>` in that field; transport
+sends it only as a cookie. HTTPS requires `ca_pem` to verify the reviewed
+server; `client_certificate_pem` and `client_key_pem` optionally select mTLS
+together. Legacy mTLS bundles remain readable, but the verified client
+certificate, not their old bearer, authorizes off-box requests.
+`--credentials-file -` reads bounded stdin. A repeated
 registration with the same origin/configuration/credentials preserves its id and
 revision; `--id` permits an explicit idempotent operation. Changed credentials,
 origin or identity require review. Registration probes before activating a binding;
@@ -130,10 +134,11 @@ through the existing native-master/encrypted-envelope adapter rooted at the sele
 machine home. The registry, returned DTOs, diagnostics and shared checkout files
 never contain them.
 
-Off-box origins require HTTPS with normal hostname/chain verification against the
-explicit CA and a supplied device certificate/key, in addition to the server bearer.
-There is no redirect, insecure TLS fallback or trust-on-first-use. Only literal
-loopback IP origins may use HTTP. Remote URL normalization uses the URL parser's
+Off-box HTTP origins require a paired session and an explicit HTTP URL. HTTPS
+verifies the hostname and chain against the reviewed CA, with either a paired
+session or a verified mTLS device certificate. There is no redirect, insecure
+TLS fallback or trust-on-first-use. A powerful machine bearer is sent only to
+a literal loopback HTTP origin. Remote URL normalization uses the URL parser's
 canonical origin, including normal default-port canonicalization; it does not alter
 the separate GitHub provider configuration identity contract. Probes bound time,
 response size and checkout count. They read authenticated `/remote-identity`,
@@ -198,11 +203,12 @@ server store and bound to the machine's durable server identity.
 The browser host must opt in with `HOTSHEET_BROWSER_AUTH_MODE=remote` even when
 a proxy reaches it through loopback. Its HTTPS session cookie is Secure,
 HttpOnly, host-only and SameSite=Strict; the separate CSRF cookie is readable
-by the browser on that same host. Direct HTTP is an explicit later transport
-choice with a documented exposure boundary. Origin and CSRF checks protect
-writes and upgrades. Host revocation ends live streams promptly. This
-foundation does not change the existing off-loopback mTLS bind requirement.
-HS2-W4JJJE adds optional-certificate direct listener modes, HS2-747RTD adds
+by the browser on that same host. Direct HTTP is an explicit
+`--remote-transport http` choice; HTTPS uses a server certificate without
+requiring a device certificate, and mTLS retains certificate roles. Origin and
+CSRF checks protect writes and upgrades. Host revocation ends live streams
+promptly. The off-loopback default remains mTLS for existing deployments;
+HTTP never becomes the default. HS2-747RTD adds
 Serve/direct TLS launch, and HS2-WSGZZY owns their cross-transport acceptance.
 
 ## 8.3 Mobile (iOS) configuration & connection
@@ -242,13 +248,15 @@ The ticket asks how mobile devices connect to one or more servers. Directions:
 >   deferred it too). Land remote **ticket data** first; a remote project shows
 >   tickets before it shows terminals.
 
-## 8.4 Security posture (unchanged, carried over)
+## 8.4 Security posture
 
 - Loopback stays plaintext + shared secret (Tier 0).
-- Any off-box bind requires mTLS + per-device certs + ACLs, or refuses to start
-  (Tier 1). Per-project CA, `.p12`/QR enrollment, per-connect revocation checks.
-  This entire model is shipped in HS1 and is orthogonal to the storage rewrite —
-  we carry it forward as-is.
+- An off-box bind defaults to mTLS with per-device certificates and live
+  revocation. An operator may explicitly choose direct HTTP or server-only
+  HTTPS with paired-device sessions. The powerful local bearer is refused for
+  every accepted off-box peer, even when a forwarded header claims loopback.
+  HTTP exposes session cookies to observers of that transport; HTTPS and mTLS
+  protect them in transit. Optional `.p12`/QR enrollment remains client work.
 
 ## 8.5 Git-native distributed claim/lease (no central coordinator)
 

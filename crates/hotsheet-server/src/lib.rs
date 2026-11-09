@@ -254,6 +254,7 @@ pub struct AppState {
     /// switch to a different store placed at the same path (HS2-34XE8B).
     primary_instance_id: Result<String, String>,
     secret: String,
+    remote_listener: bool,
     /// Explicitly enabled server-owned remote browser sessions. Tests opt in with an
     /// isolated path; the real server opens the machine-local catalog at startup.
     remote_auth: Option<remote_auth::RemoteAuth>,
@@ -601,6 +602,7 @@ impl AppState {
             orchestration_runtime: None,
             primary_instance_id,
             secret,
+            remote_listener: false,
             remote_auth: None,
             events,
             index,
@@ -840,6 +842,16 @@ impl AppState {
             })?;
         self.remote_auth = Some(remote_auth::RemoteAuth::open(path, &identity.server_id)?);
         Ok(self)
+    }
+
+    /// A direct remote listener accepts the machine bearer only from an accepted loopback peer.
+    pub fn with_remote_listener(mut self) -> Self {
+        self.remote_listener = true;
+        self
+    }
+
+    pub(crate) fn local_bearer_allowed(&self, peer: Option<std::net::SocketAddr>) -> bool {
+        !self.remote_listener || peer.is_some_and(|address| address.ip().is_loopback())
     }
 
     /// Explicit remote ports for isolated credential/transport tests (HS2-1Y45MZ).

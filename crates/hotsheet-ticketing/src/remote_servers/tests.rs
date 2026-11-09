@@ -366,6 +366,10 @@ fn hs2_1y45mz_invalid_origins_and_bounded_protocol_errors_never_touch_credential
         "https://example.test"
     );
     assert!(normalize_remote_origin("http://[::1]:80").is_ok());
+    assert_eq!(
+        normalize_remote_origin("http://remote.example.test:8787").unwrap(),
+        "http://remote.example.test:8787"
+    );
     assert!(remote_registry_origin_is_loopback("https://127.0.0.1:1234"));
     assert!(!remote_registry_origin_is_loopback(
         "https://localhost:1234"
@@ -376,6 +380,33 @@ fn hs2_1y45mz_invalid_origins_and_bounded_protocol_errors_never_touch_credential
     assert!(registry.register(request(), &secrets, &peer, 1).is_err());
     assert!(!registry.path.exists());
     assert!(secrets.events.lock_or_recover().is_empty());
+}
+
+#[test]
+fn hs2_w4jjje_remote_http_needs_a_paired_session_not_the_local_bearer() {
+    let mut credentials = request().credentials;
+    assert!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .is_err()
+    );
+    credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    assert_eq!(
+        credentials.session_token(),
+        Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+    );
+    assert_eq!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .unwrap(),
+        None
+    );
+    credentials.bearer_secret.push('/');
+    assert!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .is_err()
+    );
 }
 
 #[test]

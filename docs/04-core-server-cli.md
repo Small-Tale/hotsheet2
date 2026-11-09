@@ -579,8 +579,9 @@ Responsibilities:
 
 Stack (Rust recommendation): `axum` + `tokio`, `tower` middleware for auth/rate
 limiting, `rusqlite` for the index, `notify` for watching, `portable-pty` for
-terminals. Runs as a plain HTTP server on loopback by default; `--bind` off-box
-flips it into the mTLS tier or refuses to start.
+terminals. Runs as plain HTTP on loopback by default; an off-box `--bind`
+defaults to mTLS, while an explicit `--remote-transport` may select HTTP or
+server-only HTTPS with paired sessions (HS2-W4JJJE).
 
 ### 4.3.1 Lifecycle — independent, auto-started, survives the client
 
@@ -1678,8 +1679,12 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 
 - **Tier 0 — loopback:** plain HTTP + per-project shared secret. The default; the
   single-user local case. Trusts localhost.
-- **Tier 1 — exposed:** binding off-loopback requires **mTLS + per-device client
-  certs**, or the server refuses to start (never serves plaintext).
+- **Tier 1 — exposed:** an off-loopback bind retains **mTLS + per-device client
+  certs** by default. `--remote-transport http|https|mtls` selects an explicit
+  direct listener mode. HTTP is never selected implicitly. HTTP and server-only
+  HTTPS require a host-approved application session; mTLS authenticates the device
+  certificate and applies its role. The machine bearer is accepted only from the
+  accepted loopback socket peer, including on a wildcard listener (HS2-W4JJJE).
   See [08-distributed-and-remote.md](08-distributed-and-remote.md).
 
   > **Built (HS2-VT3JMF):** a **per-project CA** (`hotsheet-tls`, rcgen) signs the
@@ -1699,6 +1704,15 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
   > `read-only`, `read-write`, or `deny`, reloaded per request. Full live mTLS E2E proves
   > valid-in / no-cert-out / revoked-out-live plus read-only/write/unknown authorization.
   > **Deferred:** `.p12` bundling + QR enrollment (client work) and intermediate-CA UX.
+
+  > **Direct listener modes (HS2-W4JJJE):** `hotsheet-cli -C <store> serve --bind 0.0.0.0:8787 --remote-transport http` deliberately serves plaintext with
+  > paired-device session authorization. `https` uses the `cert init` server leaf
+  > and CA without requiring a client certificate; `mtls` retains the certificate
+  > handshake and live ACL. The server prints its selected mode and actual URL.
+  > A trusted local CLI can approve pairing only over an accepted loopback peer;
+  > forwarded IP headers never confer that privilege. HTTP exposes session cookies
+  > to network observers; choose HTTPS or a trusted TLS-terminating frontend when
+  > that exposure is unacceptable. A TLS client never falls back to HTTP.
 
 ### 4.6.1 Host-approved remote browser sessions (HS2-7DBJMS)
 
@@ -1740,9 +1754,8 @@ sync and terminal streams recheck within one second. Reloads and server restarts
 recover a still-valid cookie from the durable catalog. No bearer or session
 token is placed in a URL, browser storage, telemetry or logs.
 
-The remote bridge currently runs against an existing loopback server or the
-current mTLS listener. HS2-W4JJJE adds optional-client-certificate direct
-listeners, HS2-747RTD adds Serve/direct TLS launch, and HS2-WSGZZY owns final
+The remote bridge can use an explicitly selected direct HTTP, HTTPS, or mTLS
+listener. HS2-747RTD adds Serve/direct TLS launch, and HS2-WSGZZY owns final
 cross-transport acceptance. The machine-wide `remote identity` and reviewed
 remote-server registry are separate from these browser device sessions.
 

@@ -21,7 +21,9 @@ const SECRET: &str = "test-secret";
 async fn boot() -> (tempfile::TempDir, std::net::SocketAddr, Paths) {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let state = AppState::new(store, SECRET.into()).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_remote_listener();
     let paths = Paths::at(dir.path().join("tls"));
     init_ca(&paths, &[]).unwrap(); // server cert covers localhost + 127.0.0.1
 
@@ -104,6 +106,47 @@ fn client_config(paths: &Paths, dev: &hotsheet_tls::DeviceCert) -> rustls::Clien
 }
 
 #[tokio::test]
+async fn hs2_w4jjje_https_accepts_no_client_cert_but_requires_application_auth() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("SYN")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_remote_listener();
+    let paths = Paths::at(dir.path().join("tls"));
+    assert!(hotsheet_server::tls::build_https_server_config(&paths).is_err());
+    init_ca(&paths, &[]).unwrap();
+    let config = hotsheet_server::tls::build_https_server_config(&paths).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        hotsheet_server::tls::serve_tls_with_acl(
+            listener,
+            app(state),
+            config,
+            None,
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
+    });
+    let anonymous = || {
+        rustls::ClientConfig::builder()
+            .with_root_certificates(root_store(&paths))
+            .with_no_client_auth()
+    };
+    let health = get_health(addr, anonymous()).await.unwrap();
+    assert!(health.contains("200 OK"), "{health}");
+    let denied = request(
+        addr,
+        anonymous(),
+        b"GET /checkouts HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    )
+    .await
+    .unwrap();
+    assert!(denied.contains("401 Unauthorized"), "{denied}");
+}
+
+#[tokio::test]
 async fn a_ca_issued_client_cert_gets_in_and_no_cert_or_revoked_is_rejected() {
     let (_d, addr, paths) = boot().await;
     let roots = root_store(&paths);
@@ -160,7 +203,7 @@ async fn explicit_acl_is_live_and_enforces_read_only_read_write_and_unknown() {
     assert!(health.contains("200 OK"));
     let body = r#"{"title":"ACL write","category":"bug"}"#;
     let create = format!(
-        "POST /tickets HTTP/1.1\r\nHost: localhost\r\nX-Hotsheet-Secret: test-secret\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "POST /tickets HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     let denied = request(addr, client_config(&paths, &reader), create.as_bytes())

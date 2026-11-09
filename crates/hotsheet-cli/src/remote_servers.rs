@@ -254,24 +254,23 @@ fn client_config(credentials: &RemoteCredentials) -> Result<rustls::ClientConfig
     if roots.is_empty() {
         return Err(RemoteFailure::TrustFailed);
     }
-    let certificates = credentials
-        .client_certificate_pem
-        .as_deref()
-        .ok_or(RemoteFailure::TrustFailed)?;
-    let certificates = rustls_pemfile::certs(&mut BufReader::new(certificates.as_bytes()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| RemoteFailure::TrustFailed)?;
-    let key = credentials
-        .client_key_pem
-        .as_deref()
-        .ok_or(RemoteFailure::TrustFailed)?;
-    let key = rustls_pemfile::private_key(&mut BufReader::new(key.as_bytes()))
-        .map_err(|_| RemoteFailure::TrustFailed)?
-        .ok_or(RemoteFailure::TrustFailed)?;
-    let mut config = rustls::ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_client_auth_cert(certificates, key)
-        .map_err(|_| RemoteFailure::TrustFailed)?;
+    let builder = rustls::ClientConfig::builder().with_root_certificates(roots);
+    let mut config = if let (Some(certificates), Some(key)) = (
+        credentials.client_certificate_pem.as_deref(),
+        credentials.client_key_pem.as_deref(),
+    ) {
+        let certificates = rustls_pemfile::certs(&mut BufReader::new(certificates.as_bytes()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| RemoteFailure::TrustFailed)?;
+        let key = rustls_pemfile::private_key(&mut BufReader::new(key.as_bytes()))
+            .map_err(|_| RemoteFailure::TrustFailed)?
+            .ok_or(RemoteFailure::TrustFailed)?;
+        builder
+            .with_client_auth_cert(certificates, key)
+            .map_err(|_| RemoteFailure::TrustFailed)?
+    } else {
+        builder.with_no_client_auth()
+    };
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
     Ok(config)
 }
@@ -292,11 +291,8 @@ fn get_limited<T: DeserializeOwned>(
     credentials: &RemoteCredentials,
     limit: usize,
 ) -> Result<T, RemoteFailure> {
-    let result = agent
-        .get(&format!("{origin}{path}"))
-        .set("X-Hotsheet-Secret", &credentials.bearer_secret)
-        .set("Accept", "application/json")
-        .call();
+    let request = remote_auth_request(agent.get(&format!("{origin}{path}")), origin, credentials);
+    let result = request.set("Accept", "application/json").call();
     let response = match result {
         Ok(response) => response,
         Err(ureq::Error::Status(401 | 403, _)) => return Err(RemoteFailure::Unauthorized),
@@ -332,6 +328,19 @@ fn get_limited<T: DeserializeOwned>(
         return Err(RemoteFailure::ResponseLimit);
     }
     serde_json::from_slice(&bytes).map_err(|_| RemoteFailure::InvalidResponse)
+}
+
+fn remote_auth_request(
+    mut request: ureq::Request,
+    origin: &str,
+    credentials: &RemoteCredentials,
+) -> ureq::Request {
+    if let Some(token) = credentials.session_token() {
+        request = request.set("Cookie", &format!("hs2_remote_session={token}"));
+    } else if origin.starts_with("http://127.0.0.1:") || origin.starts_with("http://[::1]:") {
+        request = request.set("X-Hotsheet-Secret", &credentials.bearer_secret);
+    }
+    request
 }
 
 #[cfg(test)]

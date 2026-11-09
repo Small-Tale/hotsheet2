@@ -136,17 +136,21 @@ The UI never walks the store directory to draw a list; it always reads the index
   optional even locally** (§4.6) — worth it on a shared multi-user machine where
   another local user could otherwise reach the port; unnecessary on a
   single-user box.
-- **Exposed (Tier 1):** binding off-loopback requires mTLS + per-device client
-  certs + ACLs, or the server refuses to start. Carried over from HS1's shipped
-  §94/§97/§112 remote design. See [08-distributed-and-remote.md](08-distributed-and-remote.md).
+- **Exposed (Tier 1, HS2-W4JJJE):** an off-loopback bind defaults to the
+  existing mTLS certificate and ACL model. An explicit `--remote-transport`
+  selects HTTP or server-only HTTPS with paired application sessions, or mTLS.
+  The machine bearer is usable only from the accepted loopback socket peer;
+  forwarded headers do not change that decision. See
+  [08-distributed-and-remote.md](08-distributed-and-remote.md).
 - **Remote browser application access (HS2-7DBJMS):** a browser-facing host explicitly
   selects remote auth even when its upstream server is loopback. The host owner
   approves a short-lived pairing request from the trusted local CLI; the server
   keeps a revocable opaque browser session and enforces its read-only or read-write
   role on REST and live streams. The bridge forwards that session to the selected
   server and never adds its local bearer for remote requests. Browser sessions
-  do not replace transport security: the existing off-loopback mTLS requirement
-  remains until HS2-W4JJJE and HS2-747RTD add explicit listener choices.
+  do not replace transport security: direct HTTP is an explicit operator choice,
+  and HTTPS or a trusted terminating frontend protects sessions in transit.
+  HS2-747RTD owns Serve/direct TLS launch.
 - **One writer per store working copy at a time** for the _index_ is enforced by a
   lock; git itself arbitrates concurrent _content_ edits via normal merge. The
   index is per-machine and disposable, so cross-machine index locking is a

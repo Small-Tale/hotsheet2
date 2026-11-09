@@ -4,8 +4,9 @@ use crate::AppState;
 use crate::dto::WsParams;
 use crate::routes::terminals::replay::{ReplayKind, ReplayOptions, ReplayParams, replay_messages};
 use crate::routes::terminals::term_key;
+use axum::Extension;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, State};
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use futures_util::stream::SplitSink;
@@ -14,20 +15,31 @@ use hotsheet_terminals::{PendingOutput, VIEWER_QUEUE_FRAMES, ViewerFrame, pump_v
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+#[derive(Deserialize)]
+pub(crate) struct AttachParams {
+    #[serde(flatten)]
+    ws: WsParams,
+    #[serde(flatten)]
+    replay: ReplayParams,
+}
+
 /// `GET /terminals/{id}/attach?secret=…` — the **live** terminal attach (HS2-XTTTMV): a
 /// WebSocket that first replays the scrollback (one binary frame), then streams each new PTY
 /// output chunk as a binary frame and forwards any binary/text the viewer sends as PTY input.
 /// The socket closes when the terminal's child exits or the viewer disconnects.
 pub(crate) async fn attach_terminal(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
+    certificate: Option<Extension<crate::tls::CertificateAuthenticated>>,
     Path(id): Path<String>,
-    Query(params): Query<WsParams>,
-    Query(replay): Query<ReplayParams>,
+    Query(params): Query<AttachParams>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let replay = ReplayOptions::from(&replay);
-    let local = params.secret.as_deref() == Some(state.secret.as_str());
+    let replay = ReplayOptions::from(&params.replay);
+    let local = certificate.is_some()
+        || (params.ws.secret.as_deref() == Some(state.secret.as_str())
+            && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, true, true).is_err() {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }

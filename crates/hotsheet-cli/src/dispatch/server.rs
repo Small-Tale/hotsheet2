@@ -36,6 +36,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Notifications { cmd } => cmd_notifications(path, cmd),
         Cmd::Serve {
             bind,
+            remote_transport,
             secret,
             stop,
             kill_all_terminals,
@@ -44,6 +45,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         } => cmd_serve(
             path,
             &bind,
+            remote_transport.as_deref(),
             secret,
             ServeStop {
                 stop,
@@ -71,6 +73,7 @@ pub(crate) struct ServeStop {
 pub(crate) fn cmd_serve(
     path: &Path,
     bind: &str,
+    remote_transport: Option<&str>,
     secret: Option<String>,
     stop: ServeStop,
     list: bool,
@@ -86,6 +89,7 @@ pub(crate) fn cmd_serve(
     cmd.args(server_args(
         path,
         bind,
+        remote_transport,
         secret.as_deref(),
         stop,
         (!stop.stop).then_some("cli"),
@@ -665,6 +669,7 @@ pub(crate) fn verify_server_version(exe: &Path) -> Result<()> {
 pub(crate) fn server_args(
     path: &Path,
     bind: &str,
+    remote_transport: Option<&str>,
     secret: Option<&str>,
     stop: ServeStop,
     launcher: Option<&str>,
@@ -675,6 +680,9 @@ pub(crate) fn server_args(
         "--bind".into(),
         bind.into(),
     ];
+    if let Some(mode) = remote_transport {
+        args.extend(["--remote-transport".into(), mode.into()]);
+    }
     if let Some(secret) = secret {
         args.extend(["--secret".into(), secret.into()]);
     }
@@ -824,6 +832,7 @@ mod tests {
             server_args(
                 Path::new("store path"),
                 "127.0.0.1:0",
+                None,
                 Some("secret"),
                 ServeStop {
                     stop: true,
@@ -850,6 +859,7 @@ mod tests {
                 Path::new("s"),
                 "127.0.0.1:0",
                 None,
+                None,
                 ServeStop {
                     stop: true,
                     kill_all_terminals: false,
@@ -865,10 +875,32 @@ mod tests {
                 Path::new("s"),
                 "127.0.0.1:0",
                 None,
+                None,
                 ServeStop::default(),
                 Some("cli")
             ),
             ["-C", "s", "--bind", "127.0.0.1:0", "--launcher", "cli"].map(std::ffi::OsString::from)
+        );
+        assert_eq!(
+            server_args(
+                Path::new("s"),
+                "0.0.0.0:8787",
+                Some("http"),
+                None,
+                ServeStop::default(),
+                Some("cli")
+            ),
+            [
+                "-C",
+                "s",
+                "--bind",
+                "0.0.0.0:8787",
+                "--remote-transport",
+                "http",
+                "--launcher",
+                "cli"
+            ]
+            .map(std::ffi::OsString::from)
         );
     }
 

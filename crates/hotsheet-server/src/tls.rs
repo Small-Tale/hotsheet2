@@ -19,6 +19,10 @@ use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 
 use hotsheet_tls::Paths;
 
+/// Present only when the TLS handshake verified a device certificate.
+#[derive(Clone, Copy)]
+pub struct CertificateAuthenticated;
+
 /// Build a mutual-TLS `ServerConfig`: the server presents its leaf, and every client must
 /// present a cert that chains to the project CA and isn't revoked. Errors if the store's TLS
 /// material isn't initialized (`cert init`).
@@ -50,6 +54,23 @@ pub fn build_server_config(paths: &Paths) -> anyhow::Result<rustls::ServerConfig
     let mut config = rustls::ServerConfig::builder()
         .with_client_cert_verifier(verifier)
         .with_single_cert(server_certs, server_key)?;
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    Ok(config)
+}
+
+/// TLS with a verified server certificate and application-session client authorization.
+/// The same store CA/server leaf is used as mTLS, but clients do not need certificates.
+pub fn build_https_server_config(paths: &Paths) -> anyhow::Result<rustls::ServerConfig> {
+    if !paths.is_initialized() {
+        anyhow::bail!("TLS not initialized for this store — run `hotsheet-cli cert init` first");
+    }
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let mut config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(
+            load_certs(&paths.server_cert())?,
+            load_key(&paths.server_key())?,
+        )?;
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
     Ok(config)
 }
@@ -108,7 +129,13 @@ pub async fn serve_tls_with_acl(
                     let access = client_access(acl_file.as_deref(), fingerprint.as_deref(), peer.ip().is_loopback());
                     let app = app
                         .layer(axum::middleware::from_fn(enforce_client_access))
-                        .layer(axum::Extension(access));
+                        .layer(axum::Extension(access))
+                        .layer(axum::Extension(axum::extract::ConnectInfo(peer)));
+                    let app = if fingerprint.is_some() {
+                        app.layer(axum::Extension(CertificateAuthenticated))
+                    } else {
+                        app
+                    };
                     let io = TokioIo::new(tls);
                     let svc = TowerToHyperService::new(app);
                     let builder = Builder::new(TokioExecutor::new());

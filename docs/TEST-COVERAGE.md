@@ -1,5 +1,17 @@
 # Feature Coverage Matrix
 
+HS2-W4JJJE: `hotsheet-server/src/main.rs` pins explicit HTTP/HTTPS/mTLS
+selection and the legacy off-box mTLS default; `tests/remote_listener_modes.rs`
+checks accepted-peer bearer rejection on ordinary, owner, store and stream
+entry points plus paired read-only access and revocation. `tests/mtls.rs`
+checks real server-only HTTPS handshakes without a client certificate and keeps
+the existing mTLS ACL/revocation cases. Ticketing remote contract tests cover
+paired-session requirements for off-box HTTP, and CLI transport tests check
+cookie forwarding and restrict machine bearer headers to loopback HTTP. The
+real browser bridge test remains the proxy/WS companion. Native platform
+transport proof is deferred to the covering CI and platform workflow. Fixtures
+use synthetic data only.
+
 HS2-KJ9WSC: `hotsheet-server/tests/project_open_missing_ticket.rs` uses a
 post-open background-work hook with synthetic Up Next tickets to remove one
 indexed file before worklist regeneration reads it. The healthy entry remains

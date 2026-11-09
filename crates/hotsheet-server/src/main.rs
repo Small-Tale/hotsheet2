@@ -15,6 +15,20 @@ use time::OffsetDateTime;
 use tokio::net::TcpListener;
 use ulid::Ulid;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum RemoteTransportMode {
+    Http,
+    Https,
+    Mtls,
+}
+
+fn listener_mode(
+    addr: SocketAddr,
+    requested: Option<RemoteTransportMode>,
+) -> Option<RemoteTransportMode> {
+    requested.or_else(|| (!addr.ip().is_loopback()).then_some(RemoteTransportMode::Mtls))
+}
+
 #[derive(Parser)]
 #[command(
     name = "hotsheet-server",
@@ -25,9 +39,13 @@ struct Cli {
     /// The store directory to serve.
     #[arg(short = 'C', long = "path", default_value = ".")]
     path: PathBuf,
-    /// Address to bind (loopback only until mTLS lands). Use port 0 for an ephemeral port.
+    /// Address to bind. Off-loopback defaults to mTLS; use port 0 for an ephemeral port.
     #[arg(long, default_value = "127.0.0.1:8787")]
     bind: String,
+    /// Explicit remote listener transport. Off-loopback binds without this flag retain legacy mTLS.
+    /// HTTP is permitted only when selected deliberately.
+    #[arg(long, value_enum, conflicts_with = "stop")]
+    remote_transport: Option<RemoteTransportMode>,
     /// Shared secret required on `X-Hotsheet-Secret` (generated + printed if omitted).
     #[arg(long)]
     secret: Option<String>,
@@ -234,7 +252,11 @@ async fn main() -> Result<()> {
             existing.url,
             existing.pid
         );
-        println!("secret: {}", existing.secret);
+        if existing.url.starts_with("http://127.0.0.1:")
+            || existing.url.starts_with("http://[::1]:")
+        {
+            println!("secret: {}", existing.secret);
+        }
         return Ok(());
     }
 
@@ -255,22 +277,28 @@ async fn main() -> Result<()> {
         .bind
         .parse()
         .map_err(|_| anyhow::anyhow!("invalid --bind '{}' (want IP:port)", cli.bind))?;
-    // Tier 0 = loopback + shared secret (plaintext). Off-loopback = Tier 1 mTLS: every client
-    // must present a project-CA cert (HS2-VT3JMF). Build the TLS config before binding so a
-    // missing `cert init` fails fast rather than after announcing a listener.
-    let tls_config = if addr.ip().is_loopback() {
-        None
-    } else {
-        let paths = hotsheet_tls::Paths::for_store(&cli.path);
-        Some((
-            hotsheet_server::tls::build_server_config(&paths).map_err(|e| {
-                anyhow::anyhow!(
-                    "off-loopback bind {addr} needs mTLS: {e}\n\
-                 run `hotsheet-cli cert init` (optionally --host <ip/dns>) first"
-                )
-            })?,
-            paths.acl(),
-        ))
+    // A wildcard/non-loopback bind still defaults to its old mTLS contract. Plain HTTP and
+    // server-certificate-only HTTPS require an explicit choice (HS2-W4JJJE).
+    let mode = listener_mode(addr, cli.remote_transport);
+    let tls_config = match mode {
+        None | Some(RemoteTransportMode::Http) => None,
+        Some(mode) => {
+            let paths = hotsheet_tls::Paths::for_store(&cli.path);
+            let config = match mode {
+                RemoteTransportMode::Https => {
+                    hotsheet_server::tls::build_https_server_config(&paths)
+                }
+                RemoteTransportMode::Mtls => hotsheet_server::tls::build_server_config(&paths),
+                RemoteTransportMode::Http => unreachable!(),
+            }
+            .map_err(|e| {
+                anyhow::anyhow!("{mode:?} listener {addr} needs `hotsheet-cli cert init`: {e}")
+            })?;
+            Some((
+                config,
+                (mode == RemoteTransportMode::Mtls).then(|| paths.acl()),
+            ))
+        }
     };
     let scheme = if tls_config.is_some() {
         "https"
@@ -303,6 +331,9 @@ async fn main() -> Result<()> {
                 .join("remote-auth")
                 .join(format!("{store_id}.json")),
         )?;
+    if mode.is_some() {
+        state = state.with_remote_listener();
+    }
     if std::env::var("HOTSHEET_JIRA_WRITE_BEHIND").as_deref() == Ok("1") {
         let outbox_path = hotsheet_plugins::hotsheet_home()
             .join("outbox")
@@ -366,13 +397,16 @@ async fn main() -> Result<()> {
     println!(
         "hotsheet-server listening on {url} (store: {}){}",
         cli.path.display(),
-        if tls_config.is_some() {
-            " [mTLS — client cert required]"
-        } else {
-            ""
+        match mode {
+            None => " [local HTTP]",
+            Some(RemoteTransportMode::Http) => " [remote HTTP — paired session required]",
+            Some(RemoteTransportMode::Https) => " [remote HTTPS — paired session required]",
+            Some(RemoteTransportMode::Mtls) => " [remote mTLS — client cert required]",
         }
     );
-    println!("secret: {secret}");
+    if mode.is_none() {
+        println!("secret: {secret}");
+    }
 
     // Opt-in distributed driving loop (HS2-1TY7GC): spawn a real AI tool per self-claimed
     // ticket. Off unless `--drive-tool` is given. Spawned after bind so the driven tool's
@@ -486,13 +520,16 @@ async fn main() -> Result<()> {
                 listener,
                 app(state.clone()),
                 config,
-                Some(acl_file),
+                acl_file,
                 stop_accepting,
             )),
             // Tier 0: plaintext loopback, with axum's per-connection graceful shutdown.
             None => {
-                let serve = axum::serve(listener, app(state.clone()))
-                    .with_graceful_shutdown(stop_accepting);
+                let serve = axum::serve(
+                    listener,
+                    app(state.clone()).into_make_service_with_connect_info::<SocketAddr>(),
+                )
+                .with_graceful_shutdown(stop_accepting);
                 Box::pin(async move { Ok(serve.await?) })
             }
         };
@@ -782,6 +819,37 @@ fn prune_stale_indexes() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_w4jjje_remote_transport_is_explicit_except_legacy_mtls() {
+        let loopback: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let wildcard: SocketAddr = "0.0.0.0:0".parse().unwrap();
+        assert_eq!(listener_mode(loopback, None), None);
+        assert_eq!(
+            listener_mode(wildcard, None),
+            Some(RemoteTransportMode::Mtls)
+        );
+        for (label, mode) in [
+            ("http", RemoteTransportMode::Http),
+            ("https", RemoteTransportMode::Https),
+            ("mtls", RemoteTransportMode::Mtls),
+        ] {
+            let cli = Cli::try_parse_from([
+                "hotsheet-server",
+                "--bind",
+                "0.0.0.0:0",
+                "--remote-transport",
+                label,
+            ])
+            .unwrap();
+            assert_eq!(listener_mode(wildcard, cli.remote_transport), Some(mode));
+        }
+        assert!(Cli::try_parse_from(["hotsheet-server", "--remote-transport", "invalid"]).is_err());
+        assert!(
+            Cli::try_parse_from(["hotsheet-server", "--remote-transport", "http", "--stop"])
+                .is_err()
+        );
+    }
 
     #[test]
     fn hs2_b14hyw_fixture_owner_requires_isolated_artifact_without_changing_normal_hosts() {
