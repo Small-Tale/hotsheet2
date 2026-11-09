@@ -10,6 +10,7 @@ import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.m
 
 const slug = 'HS2-HR3ZX4';
 const native = '01M00000000000000000000000';
+const nextNative = '01M00000000000000000000001';
 const connection = 'synthetic-store';
 const projectId = 'synthetic-checkout';
 
@@ -89,7 +90,7 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     phase = 'done',
     handles = false,
     failBranchOnce = false;
-  let workerLive = false,
+  let workerRefilled = false,
     ciConclusion = 'success',
     ticketStatus = 'completed',
     handoffCommit = source;
@@ -111,8 +112,8 @@ function fixture({ cherryPick = false, batch = false } = {}) {
           status: 0,
           stdout: JSON.stringify({
             state: {
-              assignments:
-                phase === null
+              assignments: {
+                ...(phase === null
                   ? {}
                   : {
                       operation: {
@@ -122,10 +123,24 @@ function fixture({ cherryPick = false, batch = false } = {}) {
                         ticket: { connection_id: connection, native_id: native },
                         worker: 'worker',
                       },
-                    },
-              workers: workerLive ? { worker: { expires_at: Date.now() / 1000 + 3600 } } : {},
+                    }),
+                ...(workerRefilled
+                  ? {
+                      later: {
+                        id: 'later',
+                        phase: 'accepted',
+                        ticket: { connection_id: connection, native_id: nextNative },
+                        worker: 'worker',
+                      },
+                    }
+                  : {}),
+              },
+              workers: workerRefilled ? { worker: { expires_at: Date.now() / 1000 + 3600 } } : {},
             },
-            live_claims: claim ? [{ ticket: { connection_id: connection, native_id: native } }] : [],
+            live_claims: [
+              ...(claim ? [{ ticket: { connection_id: connection, native_id: native } }] : []),
+              ...(workerRefilled ? [{ ticket: { connection_id: connection, native_id: nextNative } }] : []),
+            ],
           }),
           stderr: '',
         };
@@ -181,8 +196,8 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     interrupt: () => {
       failBranchOnce = true;
     },
-    worker: (value) => {
-      workerLive = value;
+    refilled: (value) => {
+      workerRefilled = value;
     },
     ci: (value) => {
       ciConclusion = value;
@@ -235,7 +250,6 @@ test('HS2-HR3ZX4 refuses dirty, locked, claimed, active, and unmerged worktrees'
     'locked',
     'claim',
     'handoff',
-    'worker',
     'handles',
     'unmerged',
     'gate',
@@ -248,10 +262,6 @@ test('HS2-HR3ZX4 refuses dirty, locked, claimed, active, and unmerged worktrees'
     if (condition === 'locked') git(f.project, 'worktree', 'lock', f.worktree);
     if (condition === 'claim') f.claim(true);
     if (condition === 'handoff') f.phase('ci');
-    if (condition === 'worker') {
-      f.phase('done');
-      f.worker(true);
-    }
     if (condition === 'handles') f.handles(true);
     if (condition === 'gate') unlinkSync(f.gate);
     if (condition === 'ci') f.ci('failure');
@@ -286,17 +296,14 @@ test('HS2-HR3ZX4 verifies a cherry-picked handoff record and exact reviewed bran
   const qualified = `@${projectId}/${connection}:${native}`;
   const recordDir = join(f.common, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
   mkdirSync(recordDir, { recursive: true });
-  writeFileSync(
-    join(recordDir, 'operation.json'),
-    JSON.stringify({
-      version: 1,
-      operation: 'operation',
-      branch: 'main',
-      ticket: { project_id: projectId, connection_id: connection, native_id: native },
-      source_commits: [f.source],
-      shipping_commits: [f.shipping],
-    }),
-  );
+  writeFileSync(join(recordDir, 'operation.json'), JSON.stringify({
+    version: 1,
+    operation: 'operation',
+    branch: 'main',
+    ticket: { project_id: projectId, connection_id: connection, native_id: native },
+    source_commits: [f.source],
+    shipping_commits: [f.shipping],
+  }));
   const proposalDir = join(f.common, 'hotsheet-ci-proposals');
   mkdirSync(proposalDir);
   const proposal = {
@@ -326,14 +333,17 @@ function recordReviewedHandoff(f, { proposal = true } = {}) {
   const qualified = `@${projectId}/${connection}:${native}`;
   const recordDir = join(f.common, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
   mkdirSync(recordDir, { recursive: true });
-  writeFileSync(join(recordDir, 'operation.json'), JSON.stringify({
-    version: 1,
-    operation: 'operation',
-    branch: 'main',
-    ticket: { project_id: projectId, connection_id: connection, native_id: native },
-    source_commits: [f.source],
-    shipping_commits: [f.shipping],
-  }));
+  writeFileSync(
+    join(recordDir, 'operation.json'),
+    JSON.stringify({
+      version: 1,
+      operation: 'operation',
+      branch: 'main',
+      ticket: { project_id: projectId, connection_id: connection, native_id: native },
+      source_commits: [f.source],
+      shipping_commits: [f.shipping],
+    }),
+  );
   if (proposal) {
     const proposalDir = join(f.common, 'hotsheet-ci-proposals');
     mkdirSync(proposalDir, { recursive: true });
@@ -354,6 +364,15 @@ test('HS2-VKGV08 accepts the exact green batch smoke receipt from a clean integr
   assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
   assert.equal(existsSync(f.worktree), false);
   assert.equal(existsSync(join(f.project, 'unrelated-local-edit.txt')), true);
+});
+
+test('HS2-AYPN79 cleans a completed handoff after its worker refills on another ticket', () => {
+  const f = fixture({ cherryPick: true, batch: true });
+  recordReviewedHandoff(f, { proposal: false });
+  unlinkSync(f.integratorGate);
+  f.refilled(true);
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+  assert.equal(existsSync(f.worktree), false);
 });
 
 test('HS2-VKGV08 refuses dispatcher batches with mismatched coordinator or ledger source commits', () => {

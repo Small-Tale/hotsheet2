@@ -89,11 +89,9 @@ function coordination(project, store, ticket, operation, run) {
   const relevant = operation ? assignments.find((assignment) => assignment.id === operation) : null;
   if (operation)
     requireProof(relevant?.phase === 'done' && relevant.handoff?.kind === 'code', 'reviewed code handoff is not done');
-  const liveWorker = assignments.find((assignment) => {
-    const worker = snapshot.state?.workers?.[assignment.worker];
-    return worker && worker.expires_at > Date.now() / 1000;
-  });
-  requireProof(!liveWorker, 'worker session is still live for this ticket');
+  // HS2-AYPN79: a worker may remain registered while working on a later ticket.
+  // The exact ticket claim and handoff checks above, plus liveHandles(path) below,
+  // establish whether this completed worktree is still in use.
   return relevant;
 }
 

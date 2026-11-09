@@ -56,6 +56,12 @@ eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,
 unmerged and missing-record refusal; and interrupted retry after worktree removal.
 `scripts/ci-completion-proposal.test.mjs` covers reviewed handoff registration.
 
+HS2-AYPN79: the cleanup suite also proves a completed reviewed handoff may be
+removed after its worker takes a later ticket, while a live claim on the original
+ticket, an unfinished handoff, dirty worktree, or open file handle still refuses
+removal. The synthetic refill case failed against the former session-wide guard
+and passes with exact ticket and worktree checks.
+
 HS2-VKGV08: `scripts/verified-worktree-cleanup.test.mjs` also proves that a
 completed green batch's exact smoke receipt in the shared Git cache allows
 reviewed cleanup after a clean integration worktree gate while the primary
