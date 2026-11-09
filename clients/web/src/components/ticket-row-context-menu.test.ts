@@ -137,6 +137,24 @@ describe('TicketRowContextMenu', () => {
     );
   });
 
+  it('HS2-R3ZS3V places eligible Up Next first in the opening action section', () => {
+    const upNext = 'data-context-action="Toggle Up Next"',
+      open = 'data-context-action="Open ticket"',
+      copy = 'data-context-action="Copy ticket IDs"',
+      category = 'data-context-field="category"';
+    const single = String(TicketRowContextMenu({ x: 0, y: 0, status: 'started' }));
+    expect(single.indexOf(upNext)).toBeLessThan(single.indexOf(open));
+    expect(single.indexOf(open)).toBeLessThan(single.indexOf(copy));
+    expect(single.indexOf(copy)).toBeLessThan(single.indexOf(category));
+    const multiple = String(TicketRowContextMenu({ x: 0, y: 0, status: 'started', selectionCount: 2 }));
+    expect(multiple.indexOf(upNext)).toBeLessThan(multiple.indexOf(copy));
+    expect(multiple.indexOf(copy)).toBeLessThan(multiple.indexOf(category));
+    expect(multiple).not.toContain(open);
+    const disabled = String(TicketRowContextMenu({ x: 0, y: 0, canBulkUpdate: false }));
+    expect(disabledItem(disabled, upNext)).toBe(true);
+    expect(disabled.indexOf(upNext)).toBeLessThan(disabled.indexOf(copy));
+  });
+
   it('omits Up Next when a colocated toolbar button already owns that action', () => {
     expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: true, hideUpNext: true }))).not.toContain(
       'data-context-action="Toggle Up Next"',

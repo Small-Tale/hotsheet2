@@ -222,6 +222,8 @@ export function TicketRowContextMenu({
     if (notWorkingAction) entries.push(contextEntry(COMPLETED_TICKET_CONTEXT_ACTIONS[1]));
     entries.push({ kind: 'divider' });
   }
+  // Keep the Up Next toggle at the top of the first action section (HS2-R3ZS3V).
+  if (upNextEligible && !hideUpNext) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[4], !canBulkUpdate));
   // "Open ticket" opens one ticket; the copy action follows the full selection (HS2-F0XZAX).
   if (selectionCount <= 1) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[0]));
   entries.push(
@@ -260,7 +262,6 @@ export function TicketRowContextMenu({
       disabled: !canBulkUpdate,
     }),
   );
-  if (upNextEligible && !hideUpNext) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[4], !canBulkUpdate));
   entries.push({ kind: 'divider' });
   if (closeAction) entries.push(contextEntry(CLOSE_TICKET_CONTEXT_ACTION), { kind: 'divider' });
   for (const item of TICKET_CONTEXT_ACTIONS.slice(5)) {
