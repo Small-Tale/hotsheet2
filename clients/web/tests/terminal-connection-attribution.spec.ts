@@ -28,6 +28,7 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
     // retain real time; no network polling interval is accelerated by this simulation.
     await page.clock.install();
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');

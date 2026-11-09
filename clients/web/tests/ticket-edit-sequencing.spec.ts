@@ -172,6 +172,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   // The inert preview renders a visible priority select before the detail arrives; it is not the
@@ -307,6 +308,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const priority_ = page.locator(loadedInspectorPriority);
@@ -423,6 +425,7 @@ test('typing never writes to the server and one blur saves the whole edit withou
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const inspector = page.locator('#app-right-rail');
@@ -552,6 +555,7 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
     const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
     if (!openedOnce) {
       await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Local Project' }).click();
       await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
       openedOnce = true;
     }
@@ -707,6 +711,7 @@ for (const keepTyping of [true, false])
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
     const inspector = page.locator('#app-right-rail');

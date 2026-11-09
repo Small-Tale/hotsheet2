@@ -216,6 +216,7 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
 async function openBulkProject(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Columns View' }).click();
 }
@@ -268,6 +269,7 @@ test('finishes queued bulk changes for their owning project after a project swit
   const mock = await mockBulkProject(page);
   await openBulkProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Other project' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Bulk status demo' }).click();
   await page.getByRole('button', { name: 'Columns View' }).click();

@@ -520,6 +520,24 @@ the device certificate and ACL. Verify no HTTPS client silently switches to HTTP
 Treat an HTTP session cookie as visible to network observers and avoid using a
 production account or customer content in this check.
 
+### Desktop local and remote projects (HS2-BT4KN6)
+
+With two disposable synthetic hosts advertising the same checkout id, open a
+local project and then use desktop `+` → Remote project. Enter each explicit
+HTTP or HTTPS address and port, confirm the shown protocol and durable server
+identity, approve once from that host's trusted CLI, and open both remote
+checkouts. Verify three independent tabs, server labels, ticket mutations and
+change events on only the matching host. Restart one host and retry discovery;
+replace its identity or revoke its session and verify that host fails closed
+while the other two tabs remain usable. Review a changed binding with fresh
+approval, then remove it and confirm its active stream closes and its selected
+project no longer restores. Repeat after restarting the desktop to check the
+machine-local selected pairs and private credential store. On a phone browser
+connected to one host, confirm `+` still offers only that host's checkout list.
+Inspect the rebuilt app at wide, medium and phone widths and after returning
+to wide; verify the source choice, address form, project list and tab states
+without clipping. Remote terminals are outside this ticket's data-only scope.
+
 ### Real-device mTLS enrollment
 
 1. Enroll a second physical device against an off-loopback server.

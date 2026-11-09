@@ -111,6 +111,8 @@ fn request() -> RegisterRemote {
         expected_server_id: PEER.into(),
         credentials: RemoteCredentials {
             bearer_secret: "synthetic-bearer".into(),
+            session_origin: None,
+            session_csrf: None,
             ca_pem: None,
             client_certificate_pem: None,
             client_key_pem: None,
@@ -407,6 +409,78 @@ fn hs2_w4jjje_remote_http_needs_a_paired_session_not_the_local_bearer() {
             .trust_fingerprint("http://remote.example.test:8787")
             .is_err()
     );
+}
+
+#[test]
+fn hs2_bt4kn6_paired_write_proof_is_complete_and_private() {
+    let mut credentials = request().credentials;
+    credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    credentials.session_origin = Some("http://127.0.0.1:5173".into());
+    assert!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .is_err()
+    );
+    credentials.session_csrf = Some("B".repeat(43));
+    assert_eq!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .unwrap(),
+        None
+    );
+    assert_eq!(format!("{credentials:?}"), "RemoteCredentials(<redacted>)");
+    credentials.session_origin = Some("http://127.0.0.1:5173/path".into());
+    assert!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .is_err()
+    );
+    credentials.session_origin = Some("http://127.0.0.1:5173".into());
+    credentials.session_csrf = Some("short".into());
+    assert!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .is_err()
+    );
+    credentials.session_csrf = None;
+    credentials.session_origin = None;
+    assert!(
+        credentials
+            .trust_fingerprint("http://remote.example.test:8787")
+            .is_ok()
+    );
+}
+
+#[test]
+fn hs2_bt4kn6_selected_projects_are_machine_local_and_revocation_clears_them() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = RemoteRegistry::new(home.path().join("remotes.json"));
+    let secrets = Memory::default();
+    let registered = registry
+        .register(request(), &secrets, &Peer::default(), 1)
+        .unwrap();
+    assert!(registry.select_project(ID, "unknown-checkout").is_err());
+    registry.select_project(ID, "synthetic-checkout").unwrap();
+    registry.select_project(ID, "synthetic-checkout").unwrap();
+    let reopened = RemoteRegistry::new(registry.path());
+    assert_eq!(
+        reopened.selected_projects().unwrap(),
+        vec![RemoteSelectedProject {
+            binding_id: ID.into(),
+            checkout_id: "synthetic-checkout".into()
+        }]
+    );
+    let (view, credential) = reopened.bridge_connection(ID, &secrets).unwrap();
+    assert_eq!(view.id, ID);
+    assert_eq!(credential.bearer_secret, "synthetic-bearer");
+    reopened
+        .revoke(ID, registered.remote.revision, &secrets)
+        .unwrap();
+    assert!(reopened.selected_projects().unwrap().is_empty());
+    assert!(matches!(
+        reopened.bridge_connection(ID, &secrets),
+        Err(RemoteError::Revoked)
+    ));
 }
 
 #[test]

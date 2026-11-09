@@ -110,6 +110,7 @@ test('each image in one note opens its own gallery attachment', async ({ page })
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-IMAGES"]').click();
   const visibleInspector = page.locator('#app-right-rail'),

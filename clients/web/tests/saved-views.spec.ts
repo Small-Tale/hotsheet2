@@ -144,6 +144,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
@@ -288,6 +289,7 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
@@ -348,6 +350,7 @@ test('keeps immediate saved-view query replacement focused when opening frames r
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const frames = await holdAnimationFrames(page);
   try {
@@ -408,6 +411,7 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
   await mockSavedViews(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const frames = await holdAnimationFrames(page);
   try {
@@ -509,6 +513,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');

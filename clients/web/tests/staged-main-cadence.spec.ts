@@ -61,6 +61,7 @@ test('HS2-0BJ1A3 rebuilt Workers view shows the real source cadence across sizes
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-segment-value="workers"]').first().click();
     const cadence = page.locator('[data-cadence-source]');

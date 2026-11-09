@@ -35,6 +35,7 @@ async function openProject(page: Page, server: Server, beforeLoad?: () => Promis
   await beforeLoad?.();
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 }
 

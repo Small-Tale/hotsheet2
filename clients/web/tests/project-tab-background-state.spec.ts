@@ -212,8 +212,10 @@ async function installProjects(page: Page) {
 async function openBothProjects(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Beta' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-BETA01"]')).toBeVisible();
   await page.getByRole('tab', { name: 'Alpha' }).click();

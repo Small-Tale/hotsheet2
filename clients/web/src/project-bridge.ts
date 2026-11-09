@@ -22,6 +22,14 @@ import {
 import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } from './json-value';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
+import {
+  discoverRemoteProjects,
+  type PrivateRemoteConnection,
+  privateRemoteConnection,
+  requireCurrentRemoteBinding,
+} from './remote-projects/host';
+import { remoteProjectId } from './remote-projects/identity';
+import { remoteRequest } from './remote-projects/transport';
 import { developmentRepositoryRoot } from './repository-root';
 import {
   ignoreBody,
@@ -84,6 +92,12 @@ interface SessionTarget {
   ticketStore?: string;
   storeIds?: string[];
   storeRefresh?: number;
+  remote?: {
+    bindingId: string;
+    bindingRevision: number;
+    checkoutId: string;
+    connection: PrivateRemoteConnection;
+  };
 }
 interface CorruptDiagnostic {
   path: string;
@@ -101,6 +115,7 @@ export type GitRunner = (command: string, args: string[]) => Promise<void>;
 
 type ProjectBridgeProcess = typeof process & {
   __hotsheetProjectSessions?: Map<string, SessionTarget>;
+  __hotsheetRemoteSessionListeners?: Set<(projectId: string) => void>;
   __hotsheetPendingHookNotices?: Map<string, ProjectSetupRefreshResult>;
 };
 
@@ -112,6 +127,22 @@ export function projectSessionRegistry(host: ProjectBridgeProcess = process): Ma
 }
 
 const sessions = projectSessionRegistry();
+const remoteSessionListeners = ((process as ProjectBridgeProcess).__hotsheetRemoteSessionListeners ??= new Set<
+  (projectId: string) => void
+>());
+
+export function onRemoteProjectSessionClosed(listener: (projectId: string) => void): () => void {
+  remoteSessionListeners.add(listener);
+  return () => remoteSessionListeners.delete(listener);
+}
+
+export function closeRemoteServerSessions(bindingId: string): void {
+  for (const [projectId, session] of sessions) {
+    if (session.remote?.bindingId !== bindingId) continue;
+    sessions.delete(projectId);
+    for (const listener of remoteSessionListeners) listener(projectId);
+  }
+}
 
 export function revealCommand(path: string, hostPlatform = process.platform): { command: string; args: string[] } {
   if (hostPlatform === 'darwin') return { command: 'open', args: ['-R', path] };
@@ -1612,6 +1643,54 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   return deliverProjectSetupNotice(root, setupResult, (result) => openPreparedLocalProject(root, ticketStore, result));
 }
 
+/** Open an already hosted remote checkout without touching this machine's filesystem or
+ * starting its local server. The browser id is composite; the remote API sees its native id. */
+export async function openReviewedRemoteProject(bindingId: string, checkoutId: string): Promise<ProjectSession> {
+  const discovery = await discoverRemoteProjects(bindingId);
+  const checkout = discovery.checkouts?.find((item) => item.id === checkoutId && item.state === 'available');
+  if (!checkout || discovery.remote.revoked) throw new Error('This remote project is unavailable. Retry discovery.');
+  const connection = await privateRemoteConnection(bindingId);
+  if (
+    connection.binding.revision !== discovery.remote.revision ||
+    connection.binding.identity.server_id !== discovery.remote.identity.server_id
+  )
+    throw new Error('The remote server changed during project open. Retry discovery.');
+  const id = remoteProjectId(bindingId, checkoutId);
+  const target: SessionTarget = {
+    url: connection.binding.origin,
+    secret: '',
+    remote: { bindingId, bindingRevision: connection.binding.revision, checkoutId, connection },
+  };
+  sessions.set(id, target);
+  try {
+    const response = await proxyProjectRequest(
+      id,
+      '/compatibility',
+      new Request('http://bridge.invalid/compatibility'),
+    );
+    const metadata = response.ok ? parseServerCompatibility(await response.json()) : undefined;
+    const compatibility = assessCompatibility(metadata);
+    requireCompatibleServer(compatibility);
+    return {
+      id,
+      root: id,
+      name: `${connection.binding.label} · ${checkout.name}`,
+      stores: [],
+      apiPath: `/__hotsheet/project-api/${encodeURIComponent(id)}`,
+      changeMuxPath: CHANGE_MUX_PATH,
+      compatibility,
+      needsTicketSetup: false,
+      needsHs1Migration: false,
+      hs1ImportCompleted: false,
+      hs1CleanupEligible: false,
+      hs1RegistrationRepairAvailable: false,
+    };
+  } catch (error) {
+    sessions.delete(id);
+    throw error;
+  }
+}
+
 async function openPreparedLocalProject(
   root: string,
   ticketStore: string | undefined,
@@ -1843,6 +1922,55 @@ export async function proxyProjectRequest(
 ): Promise<Response> {
   const target = sessions.get(projectId);
   if (!target) return Response.json({ error: 'Project session is not open.' }, { status: 404 });
+  if (target.remote) {
+    if (remoteBrowserAuthRequired())
+      return Response.json({ error: 'Cross-server projects require the trusted desktop host.' }, { status: 403 });
+    try {
+      await requireCurrentRemoteBinding(target.remote.connection);
+      if (path.split('?')[0] === '/close') {
+        sessions.delete(projectId);
+        return Response.json({ closed: true });
+      }
+      const credentials = target.remote.connection.credentials;
+      const token = credentials.bearer_secret.startsWith('session:')
+        ? credentials.bearer_secret.slice('session:'.length)
+        : undefined;
+      if (!token) return Response.json({ error: 'Remote session approval is required.' }, { status: 401 });
+      const headers = new Headers(request.headers);
+      for (const name of ['host', 'cookie', 'authorization', 'x-hotsheet-secret', 'x-hotsheet-csrf', 'origin'])
+        headers.delete(name);
+      headers.set('cookie', `hs2_remote_session=${token}`);
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        if (!credentials.session_origin || !credentials.session_csrf)
+          return Response.json({ error: 'Remote session needs a new write approval.' }, { status: 403 });
+        headers.set('origin', credentials.session_origin);
+        headers.set('x-hotsheet-csrf', credentials.session_csrf);
+      }
+      const [pathname, query] = path.split('?', 2);
+      let nativePath = path;
+      if (pathname.startsWith('/checkouts/')) {
+        const match = /^\/checkouts\/([^/]+)(.*)$/.exec(pathname);
+        if (!match || decodeURIComponent(match[1]) !== projectId)
+          return Response.json({ error: 'This tab belongs to a different remote project.' }, { status: 403 });
+        nativePath = `/checkouts/${encodeURIComponent(target.remote.checkoutId)}${match[2]}${query ? `?${query}` : ''}`;
+      }
+      const serverPath = projectScopedServerPath(target.remote.checkoutId, nativePath);
+      const response = await remoteRequest(
+        new URL(serverPath, target.url),
+        {
+          method: request.method,
+          headers,
+          body: request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer(),
+          redirect: 'manual',
+          ...(signal ? { signal } : {}),
+        },
+        credentials,
+      );
+      return new Response(response.body, { status: response.status, headers: response.headers });
+    } catch {
+      return Response.json({ error: 'Remote server is unavailable or its approval changed.' }, { status: 503 });
+    }
+  }
   const headers = new Headers(request.headers);
   headers.delete('x-hotsheet-secret');
   if (remoteBrowserAuthRequired()) {
@@ -1973,6 +2101,9 @@ export function authenticatedServerUrl(origin: string, path: string, secret: str
 export async function projectTerminalWebSocketUrl(projectId: string, terminalId: string): Promise<string | undefined> {
   const target = sessions.get(projectId);
   if (!target) return undefined;
+  // Remote terminal transport remains deferred by docs/08 §8.2; ticket data and its
+  // change stream are the first cross-server desktop scope (HS2-BT4KN6).
+  if (target.remote) return undefined;
   await refreshSupervisedTarget(target);
   if (remoteBrowserAuthRequired()) {
     const bootstrap = await ensureServer(await bootstrapStore());
@@ -1989,6 +2120,7 @@ export async function projectTerminalWebSocketUrl(projectId: string, terminalId:
 export async function projectChangeWebSocketUrl(projectId: string, client?: string): Promise<string | undefined> {
   const target = sessions.get(projectId);
   if (!target) return undefined;
+  if (target.remote) await requireCurrentRemoteBinding(target.remote.connection);
   await refreshSupervisedTarget(target);
   if (remoteBrowserAuthRequired()) {
     const bootstrap = await ensureServer(await bootstrapStore());
@@ -1996,11 +2128,40 @@ export async function projectChangeWebSocketUrl(projectId: string, client?: stri
   }
   const url = new URL('/ws/sync', target.url);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (!remoteBrowserAuthRequired()) url.searchParams.set('secret', target.secret);
+  if (!remoteBrowserAuthRequired() && !target.remote) url.searchParams.set('secret', target.secret);
   // Which checkout and tab this stream serves, so the server knows the project is open (HS2-ARJ9J1).
-  url.searchParams.set('checkout', projectId);
+  url.searchParams.set('checkout', target.remote?.checkoutId ?? projectId);
   if (client) url.searchParams.set('client', client);
   return url.toString();
+}
+
+/** Private, per-project upgrade material. It never enters the browser URL or page state. */
+export async function projectRemoteWebSocketOptions(projectId: string): Promise<
+  | {
+      headers: Record<string, string>;
+      ca?: string;
+      cert?: string;
+      key?: string;
+    }
+  | undefined
+> {
+  const target = sessions.get(projectId);
+  if (!target?.remote) return undefined;
+  if (remoteBrowserAuthRequired()) throw new Error('Cross-server projects require the trusted desktop host.');
+  await requireCurrentRemoteBinding(target.remote.connection);
+  const credentials = target.remote.connection.credentials;
+  if (!credentials.bearer_secret.startsWith('session:') || !credentials.session_origin || !credentials.session_csrf)
+    throw new Error('Remote session needs a new approval.');
+  return {
+    headers: {
+      cookie: `hs2_remote_session=${credentials.bearer_secret.slice('session:'.length)}`,
+      origin: credentials.session_origin,
+      'x-hotsheet-csrf': credentials.session_csrf,
+    },
+    ...(credentials.ca_pem ? { ca: credentials.ca_pem } : {}),
+    ...(credentials.client_certificate_pem ? { cert: credentials.client_certificate_pem } : {}),
+    ...(credentials.client_key_pem ? { key: credentials.client_key_pem } : {}),
+  };
 }
 
 /** Hosted Git store ids used to route a shared upstream event to its open projects. */

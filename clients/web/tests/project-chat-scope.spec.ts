@@ -142,6 +142,7 @@ test('a project restores only its own AI chats from the machine-wide connection 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toBeVisible();
@@ -157,6 +158,7 @@ test('a project restores only its own AI chats from the machine-wide connection 
   ).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await expect(
     drawer.locator('[data-tab-kind="ai-chat"][data-tab-id="ai-chat:hotsheet-drawer-chat-other"]'),

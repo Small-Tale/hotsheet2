@@ -20,6 +20,7 @@ import { demoModule as contentTransition } from './content-transition-demo';
 import { demoModule as corruptTicketInspector } from './corrupt-ticket-inspector-demo';
 import { demoModule as cpuCoreMeter } from './cpu-core-meter-demo';
 import type { DemoEntry, DemoModule } from './demo-module';
+import { demoModule as desktopRemoteDialog } from './desktop-remote-dialog-demo';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
 import { demoModule as glanceSparkline } from './glance-sparkline-demo';
@@ -74,6 +75,7 @@ import { demoModule as workspaceComponents } from './workspace-components-demo';
  */
 export const demoModules: readonly DemoModule[] = [
   projectDialog,
+  desktopRemoteDialog,
   appShell,
   announcerOverlay,
   workspaceComponents,

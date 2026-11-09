@@ -38,6 +38,7 @@ test('saves machine-wide terminal limits and updates mounted terminals', async (
 
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('tab', { name: 'Terminal feedback' }).click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -112,6 +113,7 @@ test('shows Terminal memory settings on a fresh phone viewport (HS2-ZWVDTZ)', as
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();

@@ -206,8 +206,21 @@ redeems it into a host-only HttpOnly session cookie. The server and browser
 bridge enforce the device's read-only or read-write role; local-only bridge
 routes, including desktop storage, stay unavailable. The screen is responsive
 from desktop to phone widths. The project picker that follows successful
-authentication retains its existing remote-project limitations until
-HS2-BT4KN6.
+authentication retains its one-host project picker.
+
+**Desktop remote projects (HS2-BT4KN6).** The desktop `+` control asks whether
+to open a local folder or a project already known to another Hot Sheet server.
+The latter never invokes the local folder picker. The user enters an explicit
+HTTP or HTTPS address and port, sees the host's approval request, then chooses
+from freshly discovered checkouts. Optional CA and client certificate/key PEM
+paths are read by the trusted Node host; private session and write proof remain
+in the machine secret store. Selected `(server, checkout)` pairs persist in the
+machine registry, not browser storage. Tabs include the server label and use
+composite ids so identical checkout ids on different hosts remain independent.
+The desktop bridge routes REST and change WebSockets to each tab's reviewed
+server; removing or reviewing one binding closes only its sessions. The phone
+browser continues to list projects from its single connected host. Remote PTY
+display and control remain deferred by [08](08-distributed-and-remote.md) §8.2.
 
 **Remote project open (HS2-3HC9HT).** A remote browser opens projects through
 `POST /__hotsheet/remote/projects/open` rather than the local

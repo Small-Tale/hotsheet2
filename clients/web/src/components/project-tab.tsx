@@ -144,6 +144,11 @@ export function ProjectTab({
       <LucideIcon icon={CircleAlert} name="circle-alert" color={uiColor('danger-on-quiet')} />
     </span>
   );
+  const disconnectedIcon = (
+    <span class="project-tab__state" role="img" aria-label="Server disconnected" title="Server disconnected">
+      <LucideIcon icon={WifiOff} name="wifi-off" color={uiColor('neutral-on-quiet')} />
+    </span>
+  );
   const trailing = pending ? (
     <span class="project-tab__busy">
       <LoadingSpinner size={PROJECT_TAB_SPINNER_SIZE} />
@@ -152,6 +157,7 @@ export function ProjectTab({
     <Row gap="2xs" vAlign="middle" className="project-tab__indicators">
       {/* Attention stays visible beside counts, so a halted AI session is never hidden (HS2-HJ4D1H). */}
       {attention && attentionIcon}
+      {disconnected && disconnectedIcon}
       {notification}
       {work}
     </Row>
@@ -160,9 +166,7 @@ export function ProjectTab({
       <LoadingSpinner label="Project busy" size={PROJECT_TAB_SPINNER_SIZE} />
     </span>
   ) : disconnected ? (
-    <span class="project-tab__state">
-      <LucideIcon icon={WifiOff} name="wifi-off" color={uiColor('neutral-on-quiet')} />
-    </span>
+    disconnectedIcon
   ) : attention ? (
     attentionIcon
   ) : undefined;

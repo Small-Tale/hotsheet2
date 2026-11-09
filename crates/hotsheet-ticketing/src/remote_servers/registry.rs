@@ -24,6 +24,8 @@ pub(crate) struct RegistryFile {
     pub version: u32,
     pub servers: Vec<Binding>,
     pub pending_cleanup: Vec<String>,
+    #[serde(default)]
+    pub selected_projects: Vec<RemoteSelectedProject>,
 }
 
 impl Default for RegistryFile {
@@ -32,6 +34,7 @@ impl Default for RegistryFile {
             version: 1,
             servers: Vec::new(),
             pending_cleanup: Vec::new(),
+            selected_projects: Vec::new(),
         }
     }
 }
@@ -94,6 +97,73 @@ impl RemoteRegistry {
             .collect())
     }
 
+    pub fn selected_projects(&self) -> Result<Vec<RemoteSelectedProject>, RemoteError> {
+        Ok(self.read()?.selected_projects)
+    }
+
+    pub fn select_project(&self, binding_id: &str, checkout_id: &str) -> Result<(), RemoteError> {
+        let _lock = self.lock()?;
+        let mut file = self.read()?;
+        let binding = file
+            .servers
+            .iter()
+            .find(|binding| binding.id == binding_id && !binding.revoked)
+            .ok_or(RemoteError::NotFound)?;
+        if !binding
+            .checkouts
+            .iter()
+            .any(|checkout| checkout.id == checkout_id)
+        {
+            return Err(RemoteError::Invalid(
+                "checkout is not confirmed on this server",
+            ));
+        }
+        if !file
+            .selected_projects
+            .iter()
+            .any(|item| item.binding_id == binding_id && item.checkout_id == checkout_id)
+        {
+            file.selected_projects.push(RemoteSelectedProject {
+                binding_id: binding_id.into(),
+                checkout_id: checkout_id.into(),
+            });
+            self.write(&file)?;
+        }
+        Ok(())
+    }
+
+    pub fn unselect_project(&self, binding_id: &str, checkout_id: &str) -> Result<(), RemoteError> {
+        let _lock = self.lock()?;
+        let mut file = self.read()?;
+        file.selected_projects
+            .retain(|item| item.binding_id != binding_id || item.checkout_id != checkout_id);
+        self.write(&file)
+    }
+
+    /// Read one currently approved binding and its private credential for the same-machine
+    /// desktop bridge. The caller must keep the credential off browser-facing responses.
+    pub fn bridge_connection(
+        &self,
+        id: &str,
+        secrets: &dyn crate::SecretStore,
+    ) -> Result<(RemoteView, RemoteCredentials), RemoteError> {
+        let file = self.read()?;
+        let binding = file
+            .servers
+            .iter()
+            .find(|binding| binding.id == id)
+            .ok_or(RemoteError::NotFound)?;
+        if binding.revoked {
+            return Err(RemoteError::Revoked);
+        }
+        let credentials = super::workflow::read_credentials(binding, secrets)
+            .map_err(RemoteError::Verification)?;
+        if credentials.trust_fingerprint(&binding.origin)? != binding.identity.ca_fingerprint {
+            return Err(RemoteError::Verification(RemoteFailure::TrustFailed));
+        }
+        Ok((binding.view(&file), credentials))
+    }
+
     pub(crate) fn lock(&self) -> Result<FileLock, RemoteError> {
         ensure_parent(&self.path)?;
         let lock = self.path.with_extension("json.lock");
@@ -140,6 +210,7 @@ fn validate_file(file: &RegistryFile) -> Result<(), RemoteError> {
     let mut references = HashSet::new();
     let mut origins = HashSet::new();
     if file.servers.len() > 64
+        || file.selected_projects.len() > 1_000
         || file.pending_cleanup.len() > MAX_CREDENTIAL_OBLIGATIONS
         || credential_obligations(file) > MAX_CREDENTIAL_OBLIGATIONS
     {
@@ -189,6 +260,18 @@ fn validate_file(file: &RegistryFile) -> Result<(), RemoteError> {
             return Err(RemoteError::Corrupt);
         }
         validate_remote_checkouts(&server.checkouts).map_err(|_| RemoteError::Corrupt)?;
+    }
+    let mut selected = HashSet::new();
+    for item in &file.selected_projects {
+        if !selected.insert((&item.binding_id, &item.checkout_id))
+            || !file
+                .servers
+                .iter()
+                .any(|server| server.id == item.binding_id && !server.revoked)
+            || !bounded_text(&item.checkout_id, 160)
+        {
+            return Err(RemoteError::Corrupt);
+        }
     }
     let mut pending = HashSet::new();
     for reference in &file.pending_cleanup {

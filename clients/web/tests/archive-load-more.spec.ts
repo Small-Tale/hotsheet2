@@ -52,6 +52,7 @@ test('keeps rows appended by Load more when a concurrent change refreshes the li
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page
       .getByRole('button', { name: /^Archive/ })

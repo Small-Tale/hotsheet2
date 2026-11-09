@@ -238,6 +238,8 @@ fn request(f: &Fixture, revision: String, destination: TargetDestination) -> Bin
 fn credentials() -> RemoteCredentials {
     RemoteCredentials {
         bearer_secret: "synthetic-bearer".into(),
+        session_origin: None,
+        session_csrf: None,
         ca_pem: None,
         client_certificate_pem: None,
         client_key_pem: None,

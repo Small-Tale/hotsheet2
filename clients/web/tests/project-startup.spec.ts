@@ -2,6 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import type { Capabilities } from '../src/api';
 import type { Project } from '../src/interactions/types';
+import { remoteProjectId } from '../src/remote-projects/identity';
 
 const capabilities: Capabilities = {
   create: true,
@@ -155,6 +156,7 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       });
     if (path.endsWith('/tickets')) {
       const name = path.split('/')[3];
+      const remoteFixture = decodeURIComponent(name).startsWith('remote:');
       await ticketGates.get(name)?.promise;
       if (url.searchParams.get('source') !== 'git') await fullTicketGates.get(name)?.promise;
       const row = {
@@ -162,8 +164,8 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
         native_id: `${name}-ticket`,
         connection_id: 'git-local',
         qualified_id: `git-local:${name}-ticket`,
-        slug: `HS2-${name.toUpperCase()}`,
-        title: `${name} restored work`,
+        slug: remoteFixture ? 'HS2-DEMO' : `HS2-${name.toUpperCase()}`,
+        title: remoteFixture ? 'Workspace restored work' : `${name} restored work`,
         status: name === 'beta' ? 'backlog' : 'started',
         up_next: true,
         feedback_needed: false,
@@ -243,6 +245,125 @@ const draft = (page: Page, name: string) =>
       JSON.parse(localStorage.getItem(`hotsheet.workspace.project-session.v1.${id}`) ?? '{}').composer.title as string,
     name,
   );
+
+test('desktop source choice keeps two same-id remote projects in distinct tabs (HS2-BT4KN6)', async ({ page }) => {
+  const first = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  const second = '01ARZ3NDEKTSV4RRFFQ69G5FAW';
+  const remotes = [
+    { id: first, label: 'Studio', origin: 'http://studio.test:8787' },
+    { id: second, label: 'Laptop', origin: 'https://laptop.test:8787' },
+  ].map((item) => ({
+    ...item,
+    identity: { server_id: item.id, ca_fingerprint: null },
+    revision: 1,
+    revoked: false,
+    last_failure: null as string | null,
+    stale: false,
+  }));
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  await page.route('**/__hotsheet/remotes**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/__hotsheet/remotes') return route.fulfill({ json: remotes });
+    if (path === '/__hotsheet/remotes/selected-projects') return route.fulfill({ json: [] });
+    const match = /^\/__hotsheet\/remotes\/([^/]+)\/(?:checkouts|projects\/([^/]+)\/open)$/.exec(path);
+    if (!match) return route.fulfill({ status: 404, json: { error: 'Unknown synthetic remote route' } });
+    const server = remotes.find((item) => item.id === match[1]);
+    if (!server) return route.fulfill({ status: 404, json: { error: 'Unknown synthetic server' } });
+    if (!match[2])
+      return route.fulfill({
+        json: { remote: server, checkouts: [{ id: 'same', name: 'Workspace', state: 'available', sources: [] }] },
+      });
+    const id = remoteProjectId(server.id, 'same');
+    return route.fulfill({
+      status: 201,
+      json: {
+        id,
+        root: id,
+        name: `${server.label} · Workspace`,
+        stores: [],
+        apiPath: `/__hotsheet/project-api/${encodeURIComponent(id)}`,
+        compatibility: { kind: 'compatible', revisionMismatch: false, sourceStale: false, canRestartServer: false },
+        needsTicketSetup: false,
+        needsHs1Migration: false,
+        hs1ImportCompleted: false,
+        hs1CleanupEligible: false,
+        hs1RegistrationRepairAvailable: false,
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.getByRole('tab', { name: /^alpha/ })).toBeVisible();
+  const add = () => page.getByRole('button', { name: 'Add Project' });
+  await add().click();
+  const choice = page.locator('[data-project-source-choice]');
+  await expect(choice).toHaveJSProperty('open', true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-bt4kn6-choice-wide.png', animations: 'disabled' });
+  for (const [name, width, height] of [
+    ['medium', 900, 700],
+    ['narrow', 390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(choice.getByRole('button', { name: 'Local Project' })).toBeInViewport();
+    await expect(choice.getByRole('button', { name: 'Remote Project' })).toBeInViewport();
+    await page.screenshot({ path: `target/visual-captures/hs2-bt4kn6-choice-${name}.png`, animations: 'disabled' });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(choice).toHaveJSProperty('open', true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-bt4kn6-choice-returned-wide.png', animations: 'disabled' });
+  await choice.getByRole('button', { name: 'Remote Project' }).click();
+  const dialog = page.locator('[data-desktop-remote-dialog]');
+  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog.getByText('http://studio.test:8787')).toBeVisible();
+  await page.setViewportSize({ width: 900, height: 700 });
+  await dialog.getByRole('button', { name: 'Add Server' }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Server Address' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-bt4kn6-address-form-medium.png', animations: 'disabled' });
+  await dialog.getByRole('button', { name: 'Back to Servers' }).click();
+  await page.screenshot({ path: 'target/visual-captures/hs2-bt4kn6-address-medium.png', animations: 'disabled' });
+  await dialog.getByRole('button', { name: 'Studio', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Workspace' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-bt4kn6-projects-phone.png', animations: 'disabled' });
+  await dialog.getByRole('button', { name: 'Workspace' }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.getByRole('tab', { name: /Studio · Workspace/ })).toBeVisible();
+  await add().click();
+  await choice.getByRole('button', { name: 'Remote Project' }).click();
+  await dialog.getByRole('button', { name: 'Laptop', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Workspace' }).click();
+  await expect(page.getByRole('tab', { name: /Studio · Workspace/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Laptop · Workspace/ })).toBeVisible();
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-bt4kn6-two-hosts-returned-wide.png',
+    animations: 'disabled',
+  });
+  remotes[0].last_failure = 'Synthetic host unavailable';
+  await add().click();
+  await choice.getByRole('button', { name: 'Remote Project' }).click();
+  await expect(dialog.getByRole('button', { name: 'Retry Studio' })).toBeVisible();
+  await dialog.locator('[data-action="cancel-desktop-remote-dialog"]').click();
+  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(choice).toHaveJSProperty('open', false);
+  await expect(page.locator(`[data-project-id="${remoteProjectId(first, 'same')}"]`)).toHaveAttribute(
+    'data-disconnected',
+    'true',
+  );
+  await expect(page.locator(`[data-project-id="${remoteProjectId(second, 'same')}"]`)).toHaveAttribute(
+    'data-disconnected',
+    'false',
+  );
+  await expect(
+    page.locator(`[data-project-id="${remoteProjectId(first, 'same')}"] [data-lucide="wifi-off"]`),
+  ).toBeVisible();
+  await expect(
+    page.locator(`[data-project-id="${remoteProjectId(second, 'same')}"] [data-lucide="wifi-off"]`),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-bt4kn6-one-host-disconnected-wide.png',
+    animations: 'disabled',
+  });
+});
 
 test('shows local tickets while a mixed-source page waits for credential access', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -574,6 +695,7 @@ test('activates a passive tab after closing the active project, then opens again
   expect(await page.locator('wa-dialog[data-project-dialog][open]').count()).toBe(0);
   await expect(page.getByRole('button', { name: 'Open Project', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.locator('[data-project-source-choice]').getByRole('button', { name: 'Local Project' }).click();
   await page.locator('[data-project-dialog]').getByRole('textbox', { name: 'Project Folder' }).fill('/work/alpha');
   await page.locator('[data-project-dialog]').getByRole('button', { name: 'Open Project', exact: true }).click();
   await expect(page.getByRole('tab', { name: /^alpha/ })).toHaveAttribute('aria-selected', 'true');

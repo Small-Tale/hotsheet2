@@ -4,6 +4,80 @@
   "description": "Hot Sheet application-owned visual components and compositions used with Kerf UI.",
   "components": [
     {
+      "id": "project-source-choice-dialog",
+      "name": "ProjectSourceChoiceDialog",
+      "kind": "component",
+      "purpose": "Ask the trusted desktop whether a project is local or hosted on a reviewed remote server (HS2-BT4KN6).",
+      "source": "src/components/project-source-choice-dialog.tsx",
+      "publicExports": [{ "name": "ProjectSourceChoiceDialog" }],
+      "sourceLinks": ["src/components/project-source-choice-dialog.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "component", "behaviors": ["single-column-card"] },
+        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "self", "padding": "self" } }
+      },
+      "boundaries": {
+        "rootClass": "project-source-choice-dialog",
+        "publicClasses": ["project-source-choice-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["project-source-choice-dialog"]
+      },
+      "accessibility": { "obligations": ["Keep local and remote choices labeled and keyboard reachable."] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-source-choice-dialog.tsx",
+        "composition": "src/components/project-source-choice-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["A trusted desktop opens another project."],
+        "avoidWhen": ["A phone browser views one remote server."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "desktop-remote-dialog",
+      "name": "DesktopRemoteDialog",
+      "kind": "component",
+      "purpose": "Pair, discover, review and remove machine-local remote server bindings (HS2-BT4KN6).",
+      "source": "src/components/desktop-remote-dialog.tsx",
+      "publicExports": [{ "name": "DesktopRemoteDialog" }],
+      "sourceLinks": ["src/components/desktop-remote-dialog.tsx", "src/components/desktop-remote-dialog.css"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "component", "behaviors": ["single-column-card"] },
+        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "self", "padding": "self" } }
+      },
+      "boundaries": {
+        "rootClass": "desktop-remote-dialog",
+        "publicClasses": ["desktop-remote-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["desktop-remote-dialog"]
+      },
+      "accessibility": {
+        "obligations": ["Announce pairing and discovery errors; keep server actions reachable on phones."]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/desktop-remote-dialog.tsx",
+        "composition": "src/components/desktop-remote-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["A trusted desktop opens a reviewed remote project."],
+        "avoidWhen": ["A phone browser views its connected server."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "remote-auth-screen",
       "name": "RemoteAuthScreen",
       "kind": "component",

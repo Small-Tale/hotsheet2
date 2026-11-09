@@ -18,6 +18,9 @@ pub(crate) struct RemoteArgs {
 
 #[derive(Subcommand)]
 enum RemoteCmd {
+    /// Private transport material for the same-machine desktop bridge; stdout must be captured.
+    #[command(hide = true)]
+    BridgeConnection { id: String },
     /// Manage host-approved browser sessions on this machine's running server.
     Sessions {
         #[command(subcommand)]
@@ -27,6 +30,12 @@ enum RemoteCmd {
     Identity,
     /// List reviewed bindings and cached observations without network requests.
     List,
+    /// List the remote projects this desktop opens on startup.
+    SelectedProjects,
+    /// Remember one confirmed remote checkout on this machine.
+    SelectProject { id: String, checkout: String },
+    /// Stop restoring one remote checkout on this machine.
+    UnselectProject { id: String, checkout: String },
     /// Verify and register a server using explicit pairing identity and credential input.
     Register {
         #[arg(long)]
@@ -92,6 +101,10 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     let home = hotsheet_plugins::hotsheet_home();
     let runtime = RemoteRuntime::live(&home);
     let output = match arguments.command {
+        RemoteCmd::BridgeConnection { id } => {
+            let (binding, credentials) = runtime.bridge_connection(&id)?;
+            serde_json::json!({"binding": binding, "credentials": credentials})
+        }
         RemoteCmd::Sessions { command } => match command {
             SessionCmd::Status => super::server::local_server_json_with_body(
                 &context.path,
@@ -124,6 +137,15 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             })?,
         )?,
         RemoteCmd::List => serde_json::to_value(runtime.list()?)?,
+        RemoteCmd::SelectedProjects => serde_json::to_value(runtime.selected_projects()?)?,
+        RemoteCmd::SelectProject { id, checkout } => {
+            runtime.select_project(&id, &checkout)?;
+            serde_json::json!({"selected": true})
+        }
+        RemoteCmd::UnselectProject { id, checkout } => {
+            runtime.unselect_project(&id, &checkout)?;
+            serde_json::json!({"selected": false})
+        }
         RemoteCmd::Register {
             id,
             label,

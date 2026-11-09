@@ -142,6 +142,8 @@ it('traces compiled-host remembered reopen with a missing synthetic ticket (HS2-
     const responses = recordResponses(page);
     await page.goto(origin);
     await page.getByRole('button', { name: 'Open Project' }).first().click();
+    // The trusted desktop first asks where the project is hosted (HS2-BT4KN6).
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('textbox', { name: 'Project Folder' }).fill(project);
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('heading', { name: 'Queue', level: 1 }).waitFor();

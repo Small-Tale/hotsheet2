@@ -56,6 +56,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
@@ -220,6 +221,7 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
@@ -245,6 +247,7 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
     await expect(settings.getByLabel('Green Main Goal (Minutes)')).toHaveValue('120');
     opening = second;
     await page.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(settings.getByLabel('Green Main Goal (Minutes)')).toHaveValue('360');
     await expect(settings).toContainText('unconfigured project');
     await expect(settings.locator(`[data-cadence-source="${firstSource}"]`)).toHaveCount(0);

@@ -6,6 +6,8 @@ use std::net::TcpListener;
 fn credentials() -> RemoteCredentials {
     RemoteCredentials {
         bearer_secret: "synthetic-transport-bearer".into(),
+        session_origin: None,
+        session_csrf: None,
         ca_pem: None,
         client_certificate_pem: None,
         client_key_pem: None,

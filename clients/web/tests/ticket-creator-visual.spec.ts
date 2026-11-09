@@ -39,6 +39,7 @@ test('quietly paints ordinary AI ticket surfaces without dimming content', async
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 
     const surfaceAlpha = (row: Locator) =>

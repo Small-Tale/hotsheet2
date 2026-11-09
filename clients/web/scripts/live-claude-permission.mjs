@@ -154,6 +154,8 @@ async function main() {
     await page.screenshot({ path: resolve(evidence, '01-opened.png') });
     // Open the project the way a user does: the Open Project dialog's folder field.
     await page.getByRole('button', { name: 'Open Project' }).first().click();
+    // The trusted desktop first asks where the project is hosted (HS2-BT4KN6).
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('textbox', { name: 'Project Folder' }).fill(project);
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).waitFor({ timeout: 60_000 });

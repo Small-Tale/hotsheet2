@@ -701,6 +701,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/demo');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
@@ -732,6 +733,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
 
   // Adding a project opens and activates it; the project Select then switches the active project.
   await page.locator('.project-tab-bar--mobile').getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(projectSelect).toHaveAttribute('value', 'other-checkout');
   await expect(projectCombobox).toContainText('other');
   await expect(projectSelect.locator('.project-tab-bar__selected-project')).toHaveText('other');

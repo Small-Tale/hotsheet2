@@ -87,6 +87,8 @@ import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import type { PermissionItem } from '../permission-notifications';
 import type { WorkersLive } from '../project-live-summary';
+import type { DesktopRemoteServer } from '../remote-projects/client';
+import { parseRemoteProjectId } from '../remote-projects/identity';
 import { showsStaleSourceNotice } from '../source-stale-notice';
 import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
@@ -141,6 +143,7 @@ export interface HotSheetShellDependencies {
   projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
   projectRestoreRank: (id: string) => number | undefined;
   projects: Signal<Project[]>;
+  desktopRemoteServers: Signal<DesktopRemoteServer[]>;
   projectTabClaimClock: Signal<number>;
   projectTerminalDrawerProps: () => TerminalDrawerProps | undefined;
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
@@ -240,6 +243,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     projectRestoreFailures,
     projectRestoreRank,
     projects,
+    desktopRemoteServers,
     projectTabClaimClock,
     projectTerminalDrawerProps,
     projectTicketCounts,
@@ -322,7 +326,12 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         return {
           id: item.id,
           name: item.name,
-          location: 'local' as const,
+          location: parseRemoteProjectId(item.id) ? ('remote' as const) : ('local' as const),
+          disconnected: Boolean(
+            parseRemoteProjectId(item.id) &&
+            desktopRemoteServers.value.find((server) => server.id === parseRemoteProjectId(item.id)?.bindingId)
+              ?.last_failure,
+          ),
           selected: !restoreFailure && !openingRoot && item.id === selectedProjectId.value,
           notificationCount: permissionCount(item.id),
           // A halted session or unanswered AI question in this project's terminals needs the user.

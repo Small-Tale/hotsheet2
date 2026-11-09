@@ -180,6 +180,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="open-repository-status"]').click();
   const dialog = page.locator('[data-repository-surface="repository-status"]');

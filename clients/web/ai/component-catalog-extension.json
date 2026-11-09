@@ -803,6 +803,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "desktop-remote-dialog",
+      "name": "DesktopRemoteDialog",
+      "kind": "component",
+      "purpose": "Pair, discover, review and remove machine-local remote server bindings (HS2-BT4KN6).",
+      "useWhen": [
+        "A trusted desktop opens a reviewed remote project."
+      ],
+      "avoidWhen": [
+        "A phone browser views its connected server."
+      ],
+      "publicClasses": [
+        "desktop-remote-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/desktop-remote-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "development-strategy-settings",
       "name": "DevelopmentStrategySettings",
       "kind": "component",
@@ -1681,6 +1704,29 @@
         "notes": [
           "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
         ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-source-choice-dialog",
+      "name": "ProjectSourceChoiceDialog",
+      "kind": "component",
+      "purpose": "Ask the trusted desktop whether a project is local or hosted on a reviewed remote server (HS2-BT4KN6).",
+      "useWhen": [
+        "A trusted desktop opens another project."
+      ],
+      "avoidWhen": [
+        "A phone browser views one remote server."
+      ],
+      "publicClasses": [
+        "project-source-choice-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-source-choice-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
       },
       "documentation": "../../docs/ux-components.md"
     },

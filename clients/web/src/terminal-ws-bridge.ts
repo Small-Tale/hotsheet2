@@ -6,8 +6,10 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { CHANGE_WS_MUX_PATH, type ChangeWsCommand, type ChangeWsMessage, parseChangeWsCommand } from './change-ws-mux';
 import {
   browserAuthRequest,
+  onRemoteProjectSessionClosed,
   projectChangeStoreIds,
   projectChangeWebSocketUrl,
+  projectRemoteWebSocketOptions,
   projectTerminalWebSocketUrl,
   remoteBrowserAuthRequired,
 } from './project-bridge';
@@ -19,6 +21,7 @@ type SyncTargetResolver = (projectId: string, client?: string) => string | undef
 type StoreResolver = (projectId: string) => string[] | undefined;
 /** The web client build this host serves (HS2-KPJWBK); undefined when it is unknown. */
 type ClientBuildResolver = () => string | undefined;
+type RemoteUpstreamOptions = NonNullable<Awaited<ReturnType<typeof projectRemoteWebSocketOptions>>>;
 
 export function webSocketRawText(data: WebSocket.RawData): string {
   if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
@@ -91,6 +94,7 @@ function serveChangeMux(
   resolveStores: StoreResolver,
   clientBuild: ClientBuildResolver,
   upstreamHeaders?: Record<string, string>,
+  remoteOptions: (project: string) => Promise<RemoteUpstreamOptions | undefined> = projectRemoteWebSocketOptions,
 ): void {
   type Subscription = {
     client: string;
@@ -98,6 +102,7 @@ function serveChangeMux(
     subscription: number;
     target: string;
     acknowledged: boolean;
+    options?: RemoteUpstreamOptions;
   };
   type Group = {
     base: string;
@@ -119,10 +124,10 @@ function serveChangeMux(
     const build = message.type === 'event' ? undefined : clientBuild();
     browser.send(JSON.stringify(build ? { ...message, client_build: build } : message));
   };
-  const groupBase = (target: string, client: string): string => {
+  const groupBase = (target: string, client: string, project: string): string => {
     const url = new URL(target);
     url.searchParams.delete('checkout');
-    return `${client}\n${url.toString()}`;
+    return `${client}\n${url.toString()}${project.startsWith('remote:') ? `\n${project}` : ''}`;
   };
   const ack = (member: Subscription) => {
     if (member.acknowledged) return;
@@ -180,7 +185,10 @@ function serveChangeMux(
         const key = keyOf(member.client, member.project);
         if (group.direct.has(key)) continue;
         waiting += 1;
-        const socket = new WebSocket(member.target, { headers: upstreamHeaders });
+        const socket = new WebSocket(member.target, {
+          headers: member.options?.headers ?? upstreamHeaders,
+          ...member.options,
+        });
         group.direct.set(key, socket);
         socket.on('open', () => {
           if (group.direct.get(key) !== socket) return;
@@ -241,7 +249,10 @@ function serveChangeMux(
       const checkout = new URL(member.target).searchParams.get('checkout');
       if (checkout) url.searchParams.append('checkout', checkout);
     }
-    const candidate = new WebSocket(url.toString(), { headers: upstreamHeaders });
+    const candidate = new WebSocket(url.toString(), {
+      headers: members[0].options?.headers ?? upstreamHeaders,
+      ...members[0].options,
+    });
     group.candidate = candidate;
     candidate.on('open', () => {
       if (group.candidate !== candidate) return;
@@ -299,7 +310,7 @@ function serveChangeMux(
     candidate.on('error', closed);
   };
   const remove = (member: Subscription) => {
-    const group = groups.get(groupBase(member.target, member.client));
+    const group = groups.get(groupBase(member.target, member.client, member.project));
     const key = keyOf(member.client, member.project);
     if (!group || group.members.get(key) !== member) return;
     group.members.delete(key);
@@ -308,6 +319,9 @@ function serveChangeMux(
     group.direct.delete(key);
     reconcile(group);
   };
+  const stopWatchingRevocation = onRemoteProjectSessionClosed((projectId) => {
+    for (const member of [...subscriptions.values()]) if (member.project === projectId) remove(member);
+  });
   browser.on('message', (raw) => {
     let command: ChangeWsCommand | undefined;
     try {
@@ -343,22 +357,24 @@ function serveChangeMux(
     pending.set(key, { token, subscription: command.subscription });
     void Promise.resolve()
       .then(() => resolveSync(project, command.client))
-      .then((target) => {
+      .then(async (target) => {
         if (pending.get(key)?.token !== token) return;
         pending.delete(key);
         if (!target || browser.readyState !== WebSocket.OPEN) {
           send({ version: 2, type: 'closed', client, project, subscription: command.subscription });
           return;
         }
+        const options = await remoteOptions(project);
         const member: Subscription = {
           client,
           project,
           subscription: command.subscription,
           target,
           acknowledged: false,
+          options,
         };
         subscriptions.set(key, member);
-        const base = groupBase(target, client);
+        const base = groupBase(target, client, project);
         let group = groups.get(base);
         if (!group) {
           group = { base, members: new Map(), activeProjects: '', legacy: false, direct: new Map() };
@@ -374,6 +390,7 @@ function serveChangeMux(
       });
   });
   browser.on('close', () => {
+    stopWatchingRevocation();
     pending.clear();
     for (const group of groups.values()) {
       group.active?.close();
@@ -447,8 +464,7 @@ export function installProjectWebSocketBridge(
         return;
       }
       void browserProjectWebSocketTarget(request.url, resolveTerminal, resolveSync)
-        .then((target) => {
-          if (socket.destroyed) return;
+        .then(async (target) => {
           if (!target) {
             // A Hot Sheet path the bridge cannot resolve (no open session, unreachable server) used to
             // be left pending forever, so the browser waited out its handshake timeout on each retry;
@@ -456,9 +472,26 @@ export function installProjectWebSocketBridge(
             refuseUpgrade(socket);
             return;
           }
+          const project = new URL(request.url ?? '/', 'http://localhost').pathname.match(
+            /\/__hotsheet\/project-api\/([^/]+)\//,
+          )?.[1];
+          const remoteOptions = project ? await projectRemoteWebSocketOptions(decodeURIComponent(project)) : undefined;
+          if (socket.destroyed) return;
           browserServer.handleUpgrade(request, socket, head, (browser) => {
-            const upstream = new WebSocket(target, { headers: upstreamHeaders }),
+            const upstream = new WebSocket(target, {
+                headers: remoteOptions?.headers ?? upstreamHeaders,
+                ...remoteOptions,
+              }),
               pending: Array<{ data: WebSocket.RawData; binary: boolean }> = [];
+            const stopWatchingRevocation =
+              project && remoteOptions
+                ? onRemoteProjectSessionClosed((closed) => {
+                    if (closed === decodeURIComponent(project)) {
+                      browser.close();
+                      upstream.close();
+                    }
+                  })
+                : () => undefined;
             browser.on('message', (data, binary) => {
               if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary });
               else pending.push({ data, binary });
@@ -480,6 +513,7 @@ export function installProjectWebSocketBridge(
             upstream.on('error', closeBrowser);
             browser.on('close', closeUpstream);
             browser.on('error', closeUpstream);
+            browser.on('close', stopWatchingRevocation);
           });
         })
         .catch(() => {

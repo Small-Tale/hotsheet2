@@ -93,6 +93,8 @@ pub(super) fn state(root: &Path, home: &Path) -> AppState {
 pub(super) fn credentials(device: &hotsheet_tls::DeviceCert) -> RemoteCredentials {
     RemoteCredentials {
         bearer_secret: SECRET.into(),
+        session_origin: None,
+        session_csrf: None,
         ca_pem: Some(device.ca_pem.clone()),
         client_certificate_pem: Some(device.cert_pem.clone()),
         client_key_pem: Some(device.key_pem.clone()),
@@ -230,6 +232,8 @@ pub(super) fn expired_credentials(paths: &Paths) -> RemoteCredentials {
     let certificate = params.signed_by(&key, &issuer, &ca_key).unwrap();
     RemoteCredentials {
         bearer_secret: SECRET.into(),
+        session_origin: None,
+        session_csrf: None,
         ca_pem: Some(ca_pem),
         client_certificate_pem: Some(certificate.pem()),
         client_key_pem: Some(key.serialize_pem()),

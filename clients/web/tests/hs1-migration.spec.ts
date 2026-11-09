@@ -235,6 +235,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.locator('[data-component="hs1-migration-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
@@ -362,6 +363,7 @@ test('persists HS1 cleanup dismissal until the saved dismissal is cleared', asyn
   await page.setViewportSize({ width: 760, height: 720 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const banner = page.locator('[data-component="hs1-cleanup-banner"] [data-component="state-banner"]');
   await expect(banner).toBeVisible();
@@ -385,6 +387,7 @@ test('repairs preexisting HS1 registrations after an older cleanup, then stays r
   await page.setViewportSize({ width: 760, height: 720 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const banner = page.locator('[data-component="hs1-cleanup-banner"] [data-component="state-banner"]');
   await expect(banner).toContainText('Hot Sheet 1 may reopen this imported project');
@@ -421,10 +424,12 @@ test('keeps background import failure and retry owned by its project across navi
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="hs1-migration-dialog"]').getByRole('button', { name: 'Import project' }).click();
   await expect(page.locator('[data-component="hs1-job-banner"]')).toContainText('Copying database');
   await page.getByRole('button', { name: 'Add Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.locator('[data-project-id="other"]')).toHaveAttribute('data-selected', 'true');
   await expect(page.locator('[data-component="hs1-job-banner"]')).toHaveCount(0);
   await expect(page.locator('[data-project-id="legacy"] .project-tab__operation')).toBeVisible();

@@ -33,7 +33,7 @@ The model carried from HS1's shipped remote-client work (§112) already fits:
   `${HOTSHEET_HOME}/remotes.json` (HS2-1Y45MZ). It records reviewed server/CA identity,
   origin, label, revision and opaque credential references; bearer secrets and device
   keys stay in the existing machine-secret store. The headless boundary is below;
-  a multi-server graphical picker is separate client work.
+  the desktop picker uses this registry for selected remote projects (HS2-BT4KN6).
 - Each project tab carries a server `(origin, secret)` — a **local** project's
   origin is this machine's own server (`https?://127.0.0.1:<port>`), a **remote**
   project's is another device's. Every tab is server-backed; there is no
@@ -44,7 +44,8 @@ The model carried from HS1's shipped remote-client work (§112) already fits:
 
 **Orchestration is live-mount only** (maintainer decision, 2026-08-19). A client
 reaches another machine's project by **attaching to that machine's running server**
-over mTLS (real-time; it drives the AI tools _there_). That is the one path.
+over an explicitly selected HTTP, HTTPS, or mTLS listener (real-time). Remote
+ticket data ships first; remote terminals remain deferred below.
 
 > **Decisions (resolved 2026-08-19).**
 >
@@ -115,14 +116,20 @@ bundle through a private JSON file or stdin, never secret command arguments:
 hotsheet-cli remote register --label "Remote workstation" --origin https://server.example.test --expected-server-id <paired-server-ulid> --credentials-file <private-bundle.json>
 hotsheet-cli remote list
 hotsheet-cli remote checkouts <registration-ulid>
+hotsheet-cli remote select-project <registration-ulid> <checkout-id>
+hotsheet-cli remote selected-projects
+hotsheet-cli remote unselect-project <registration-ulid> <checkout-id>
 hotsheet-cli remote review <registration-ulid> --expected-revision <revision> --previous-server-id <old-server-ulid> --previous-ca-fingerprint <old-ca-sha256> --label "Remote workstation" --origin https://server.example.test --expected-server-id <reviewed-server-ulid> --credentials-file <private-bundle.json>
 hotsheet-cli remote revoke <registration-ulid> --expected-revision <revision>
 ```
 
 The input bundle keeps `bearer_secret` for stored-format compatibility. A
 paired session uses `session:<opaque-session-token>` in that field; transport
-sends it only as a cookie. HTTPS requires `ca_pem` to verify the reviewed
-server; `client_certificate_pem` and `client_key_pem` optionally select mTLS
+sends it only as a cookie. A paired session keeps its approved
+`session_origin` and `session_csrf` in the private secret record for writes and
+WebSocket upgrades; neither appears in `remotes.json` or a browser response.
+HTTPS requires `ca_pem` to verify the reviewed server;
+`client_certificate_pem` and `client_key_pem` optionally select mTLS
 together. Legacy mTLS bundles remain readable, but the verified client
 certificate, not their old bearer, authorizes off-box requests.
 `--credentials-file -` reads bounded stdin. A repeated
@@ -218,6 +225,29 @@ HTTP (HS2-CD8YNK). Host revocation ends live streams
 promptly. The off-loopback default remains mTLS for existing deployments;
 HTTP never becomes the default. HS2-747RTD adds
 Serve/direct TLS launch, and HS2-WSGZZY owns their cross-transport acceptance.
+
+### 8.2.3 Desktop local and remote projects (HS2-BT4KN6)
+
+The trusted desktop `+` menu asks Local project or Remote project. Local keeps
+the folder chooser and auto-start. A phone viewing one remote host keeps its
+existing one-host project picker. The desktop remote form takes an explicit
+scheme, DNS name or IP, and port. Direct HTTP is used only when entered as HTTP;
+HTTPS uses the selected host CA and optionally a client certificate/key. Pairing
+asks the host owner for one-time approval, then the Node host redeems the challenge
+and saves the session, Origin, CSRF proof and optional TLS material in the
+machine-secret store through the same headless registry workflow. The browser
+receives only a temporary pairing handle and public server/project metadata.
+
+The machine registry remembers selected `(binding_id, checkout_id)` pairs.
+Each tab uses a composite browser id, so equal checkout ids on two servers
+remain separate. The trusted bridge translates that id to the reviewed server's
+native checkout, applies only that server's private session to REST and change
+WebSocket requests, and rechecks the local binding revision before dispatch.
+The picker shows server labels and schemes; tabs show server labels and
+connection failures. Editing a binding requires fresh host approval and explicit registry review;
+removing one disables its selected projects and closes that host's active desktop
+streams without disturbing another server. A failed discovery has a deliberate
+retry path. Remote ticket data is in this scope; remote PTYs stay deferred.
 
 ## 8.3 Mobile (iOS) configuration & connection
 

@@ -1879,6 +1879,16 @@ listener. HS2-747RTD adds Serve/direct TLS launch, and HS2-WSGZZY owns final
 cross-transport acceptance. The machine-wide `remote identity` and reviewed
 remote-server registry are separate from these browser device sessions.
 
+The trusted desktop host uses the same headless registry for HS2-BT4KN6:
+`remote list`, `remote checkouts <binding-id>`, `remote select-project
+<binding-id> <checkout-id>`, `remote selected-projects`, and `remote
+unselect-project <binding-id> <checkout-id>`. The selected pairs are nonsecret
+machine-local data; only the Node host calls the hidden `remote
+bridge-connection <binding-id>` command and captures its private credential
+reply. Pairing stores a revocable session plus the approved Origin and CSRF
+proof in the secret store. The browser gets metadata and a temporary pairing
+handle, never that CLI reply.
+
 ## 4.7 Project settings (shared / local / client) — core-owned
 
 > **Built (HS2-94, HS2-34, HS2-REF96F, HS2-48XDJR):** `hotsheet_ticketing::settings::Settings` — a flat

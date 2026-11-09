@@ -166,6 +166,7 @@ for (const width of [1280, 768, 390]) {
     await mockProject(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByText('Measure the phases').click();
     await page.getByRole('tab', { name: 'Timeline' }).click();
@@ -251,6 +252,7 @@ test('shows priced Fable terminal usage in the narrow ticket timeline (HS2-TTYZG
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Measure the phases').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();
@@ -265,6 +267,7 @@ test('keeps the timeline unchanged when a ticket has no recorded usage', async (
   await mockProject(page, { events: [], settled_cost_usd: 0, settled_through: '' });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Measure the phases').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();
@@ -282,6 +285,7 @@ for (const width of [1280, 390])
     await mockProject(page, () => currentUsage);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByText('Measure the phases').click();
     await page.getByRole('tab', { name: 'Timeline' }).click();
@@ -367,6 +371,7 @@ async function openLiveTimeline(page: Page, width: number) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Measure the phases').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();

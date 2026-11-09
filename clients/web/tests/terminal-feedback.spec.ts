@@ -11,6 +11,7 @@ test('ellipsizes the project tab before scrolling at medium width with the drawe
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -145,6 +146,7 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
   await installTerminalFixture(page, true);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -193,6 +195,7 @@ test('opens ticket references from interactive terminals without linking scaled 
   await installTerminalFixture(page, false, true);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -288,6 +291,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -497,6 +501,7 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -562,6 +567,7 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -667,6 +673,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   let drawer = page.locator('[data-component="terminal-drawer"]');
@@ -889,6 +896,7 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -949,6 +957,7 @@ test('fits one 80x24 terminal per phone grid row and keeps phone zoom separate (
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -999,6 +1008,7 @@ test('a zoomed Workspace Grid terminal keeps 80x24 sizing across zoom, unzoom, z
   await installTerminalFixture(page, false, false, { openDelayMs: 300, warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -1065,6 +1075,7 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1131,6 +1142,7 @@ test('renders the magnified terminal at scaled 80x24 on a phone (HS2-SA08XA)', a
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -1175,6 +1187,7 @@ test('adapts the phone magnified terminal to the keyboard with a fixed grid (HS2
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -1283,6 +1296,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1396,6 +1410,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1558,6 +1573,7 @@ test('recovers a drawer terminal whose socket closed on focus, typing, visibilit
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1699,6 +1715,7 @@ test('shows a moved Nano terminal at scaled 80x24 in both grids across widths (H
   await installTerminalFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');

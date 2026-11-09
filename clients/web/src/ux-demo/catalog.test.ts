@@ -131,6 +131,8 @@ describe('UX demo catalog', () => {
       'saved-view-dialog',
       'ticket-link-choice-dialog',
       'project-dialog',
+      'project-source-choice-dialog',
+      'desktop-remote-dialog',
       'project-close-dialog',
       'conversation-export-dialog',
       'command-run-dialog',

@@ -208,6 +208,8 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('saved-view-dialog', ['ticket-search-field']),
           cataloged('ticket-link-choice-dialog', ['surface-scaffold', 'list', 'text', 'row', 'list-item']),
           cataloged('project-dialog', ['list-item']),
+          cataloged('project-source-choice-dialog', ['surface-scaffold', 'list', 'text']),
+          cataloged('desktop-remote-dialog', ['surface-scaffold', 'list', 'text', 'text-field']),
           cataloged('project-close-dialog', [
             'state-banner',
             'list',

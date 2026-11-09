@@ -48,6 +48,7 @@ test('marks a claim from another Hot Sheet host as remote and keeps local worker
 
     const page = await app.launch();
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const row = (slug: string) => page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${slug}"]`);
     const owner = (slug: string) => row(slug).locator('[data-claim-origin="remote"]');
