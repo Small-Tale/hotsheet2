@@ -283,8 +283,15 @@ disconnected and unconfirmed labels, same-cursor recovery, and capped backoff in
 `clients/web/tests/worker-availability.spec.ts` checks short-lease expiry, idle
 request rate, source 503 after a live snapshot, no stale Available card, and
 same-cursor recovery. Wide, medium, phone, and returned-wide captures are attached
-to HS2-KX87JC. Native worker stop/crash and claim-takeover UI paths remain in
-follow-up HS2-R0E39D.
+to HS2-KX87JC.
+
+HS2-R0E39D: `clients/web/tests/worker-native-lifecycle.spec.ts` runs the real
+worker CLI against a private synthetic project and rebuilt Workers view. It kills
+the first worker process, observes its disconnected claim through the API and
+live UI, waits for lease expiry, and claims with a second worker. It checks the
+former worker in history, a deliberate leave with unresolved claim ownership,
+idle request rate, cursor-bearing requests, and wide, medium, phone, and returned-wide
+screenshots. No customer content enters the fixture.
 
 HS2-1Z3T0Z adds a real-server browser lifecycle slice in
 `clients/web/tests/providers.spec.ts`: a worker registers before the integrator,
