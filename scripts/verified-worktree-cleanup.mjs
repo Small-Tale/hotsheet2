@@ -97,7 +97,7 @@ function coordination(project, store, ticket, operation, run) {
   return relevant;
 }
 
-function handoffMapping(project, common, ticket, operation, path, branch, head, shipping, run) {
+function handoffMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, batchMember, run) {
   requireProof(operationName.test(operation), 'operation is not a safe identifier');
   const recordPath = join(common, 'hotsheet-integrations', hash(ticket.qualified), `${operation}.json`);
   requireProof(existsSync(recordPath), 'durable integration record is missing');
@@ -114,20 +114,29 @@ function handoffMapping(project, common, ticket, operation, path, branch, head, 
     'integration record does not map this exact source and shipping commit',
   );
   const proposalPath = join(common, 'hotsheet-ci-proposals', `${operation}.json`);
-  requireProof(existsSync(proposalPath), 'reviewed handoff worktree mapping is missing');
-  const proposal = JSON.parse(readFileSync(proposalPath, 'utf8')).record;
-  requireProof(
-    proposal?.operation === operation &&
-      proposal.slug === ticket.ticket.slug &&
-      proposal.sourceWorktree &&
-      realpathSync(proposal.sourceWorktree) === path &&
-      proposal.sourceBranch === branch &&
-      proposal.sourceCommit === head &&
-      proposal.integrated === shipping &&
-      proposal.ticket?.native_id === ticket.ticket.id &&
-      proposal.ticket?.connection_id === ticket.source.connection_id,
-    'reviewed handoff does not map this exact ticket, worktree, branch, and commits',
-  );
+  if (existsSync(proposalPath)) {
+    const proposal = JSON.parse(readFileSync(proposalPath, 'utf8')).record;
+    requireProof(
+      proposal?.operation === operation &&
+        proposal.slug === ticket.ticket.slug &&
+        proposal.sourceWorktree &&
+        realpathSync(proposal.sourceWorktree) === path &&
+        proposal.sourceBranch === branch &&
+        proposal.sourceCommit === head &&
+        proposal.integrated === shipping &&
+        proposal.ticket?.native_id === ticket.ticket.id &&
+        proposal.ticket?.connection_id === ticket.source.connection_id,
+      'reviewed handoff does not map this exact ticket, worktree, branch, and commits',
+    );
+  } else {
+    // Dispatcher batches have no legacy proposal. Their frozen source commit is in both
+    // the coordinator handoff and batch member; require a canonical ticket worktree too.
+    requireProof(
+      batchMember?.source_commit === head && assignment?.handoff?.commit === head,
+      'reviewed batch has no exact source commit mapping',
+    );
+    sourceWorktreeIdentity(project, path, branch, ticket.ticket.slug, run);
+  }
   const archive = `refs/hotsheet/integration-source/${head}`;
   requireProof(
     git(run, project, 'rev-parse', '--verify', archive) === head,
@@ -184,10 +193,10 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
     );
   });
   requireProof(passed, 'reviewed batch has no successful exact-tree smoke receipt in the shared Git gate cache');
-  return true;
+  return batch.tickets.find((member) => member.assignment === operation && member.shipping_commits?.includes(shipping));
 }
 
-function directMapping(project, path, branch, head, slug, run) {
+function sourceWorktreeIdentity(project, path, branch, slug, run) {
   const token = slug.toLowerCase();
   requireProof(branch === token || branch.startsWith(`${token}-`), 'branch does not identify this ticket');
   requireProof(basename(path) === branch, 'worktree path does not identify this branch');
@@ -195,12 +204,16 @@ function directMapping(project, path, branch, head, slug, run) {
   const subpath = relative(expectedRoot, path);
   requireProof(
     subpath && !subpath.startsWith('..') && !subpath.includes('/'),
-    'direct worktree is outside the ticket worktree root',
+    'worktree is outside the ticket worktree root',
   );
   requireProof(
     git(run, path, 'log', '-1', '--format=%s').startsWith(`${slug} `),
     'source HEAD subject does not name this ticket',
   );
+}
+
+function directMapping(project, path, branch, head, slug, run) {
+  sourceWorktreeIdentity(project, path, branch, slug, run);
   requireProof(
     run('git', ['merge-base', '--is-ancestor', head, 'refs/remotes/origin/main'], project).status === 0,
     'source commit is not preserved on origin/main',
@@ -346,7 +359,7 @@ export function cleanup(options, { run = command } = {}) {
     );
   }
   if (options.operation)
-    handoffMapping(project, common, identity, options.operation, path, branch, head, shipping, run);
+    handoffMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, batchPassed, run);
   else directMapping(project, path, branch, head, slug, run);
   requireProof(
     run('git', ['merge-base', '--is-ancestor', head, remote], project).status === 0 || options.operation,

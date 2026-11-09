@@ -83,7 +83,7 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     state: 'green',
     main_commit: shipping,
     smoke_checks: smokeChecks,
-    tickets: [{ assignment: 'operation', ticket: { connection_id: connection, native_id: native }, shipping_commits: [shipping] }],
+    tickets: [{ assignment: 'operation', ticket: { connection_id: connection, native_id: native }, source_commit: source, shipping_commits: [shipping] }],
   };
   let claim = false,
     phase = 'done',
@@ -91,7 +91,8 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     failBranchOnce = false;
   let workerLive = false,
     ciConclusion = 'success',
-    ticketStatus = 'completed';
+    ticketStatus = 'completed',
+    handoffCommit = source;
   const run = (binary, args, cwd) => {
     if (binary === 'hotsheet-cli') {
       if (args.includes('show'))
@@ -117,7 +118,7 @@ function fixture({ cherryPick = false, batch = false } = {}) {
                       operation: {
                         id: 'operation',
                         phase,
-                        handoff: { kind: 'code', commit: source },
+                        handoff: { kind: 'code', commit: handoffCommit },
                         ticket: { connection_id: connection, native_id: native },
                         worker: 'worker',
                       },
@@ -188,6 +189,9 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     },
     status: (value) => {
       ticketStatus = value;
+    },
+    handoff: (value) => {
+      handoffCommit = value;
     },
     gate,
     integratorGate,
@@ -318,7 +322,7 @@ test('HS2-HR3ZX4 verifies a cherry-picked handoff record and exact reviewed bran
   assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
 });
 
-function recordReviewedHandoff(f) {
+function recordReviewedHandoff(f, { proposal = true } = {}) {
   const qualified = `@${projectId}/${connection}:${native}`;
   const recordDir = join(f.common, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
   mkdirSync(recordDir, { recursive: true });
@@ -330,24 +334,42 @@ function recordReviewedHandoff(f) {
     source_commits: [f.source],
     shipping_commits: [f.shipping],
   }));
-  const proposalDir = join(f.common, 'hotsheet-ci-proposals');
-  mkdirSync(proposalDir, { recursive: true });
-  writeFileSync(join(proposalDir, 'operation.json'), JSON.stringify({ record: {
-    operation: 'operation', slug, sourceWorktree: f.worktree, sourceBranch: f.branch,
-    sourceCommit: f.source, integrated: f.shipping,
-    ticket: { connection_id: connection, native_id: native },
-  } }));
+  if (proposal) {
+    const proposalDir = join(f.common, 'hotsheet-ci-proposals');
+    mkdirSync(proposalDir, { recursive: true });
+    writeFileSync(join(proposalDir, 'operation.json'), JSON.stringify({ record: {
+      operation: 'operation', slug, sourceWorktree: f.worktree, sourceBranch: f.branch,
+      sourceCommit: f.source, integrated: f.shipping,
+      ticket: { connection_id: connection, native_id: native },
+    } }));
+  }
   git(f.project, 'update-ref', `refs/hotsheet/integration-source/${f.source}`, f.source);
 }
 
 test('HS2-VKGV08 accepts the exact green batch smoke receipt from a clean integration worktree', () => {
   const f = fixture({ cherryPick: true, batch: true });
-  recordReviewedHandoff(f);
+  recordReviewedHandoff(f, { proposal: false });
   unlinkSync(f.integratorGate);
   assert.equal(existsSync(join(f.project, 'unrelated-local-edit.txt')), true);
   assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
   assert.equal(existsSync(f.worktree), false);
   assert.equal(existsSync(join(f.project, 'unrelated-local-edit.txt')), true);
+});
+
+test('HS2-VKGV08 refuses dispatcher batches with mismatched coordinator or ledger source commits', () => {
+  for (const tamper of ['coordinator', 'ledger']) {
+    const f = fixture({ cherryPick: true, batch: true });
+    recordReviewedHandoff(f, { proposal: false });
+    unlinkSync(f.integratorGate);
+    if (tamper === 'coordinator') f.handoff('0'.repeat(40));
+    else f.batchEntry.tickets[0].source_commit = '0'.repeat(40);
+    assert.throws(
+      () => cleanup({ ...f.options, operation: 'operation' }, { run: f.run }),
+      /exact source commit mapping/,
+      tamper,
+    );
+    assert.equal(existsSync(f.worktree), true, tamper);
+  }
 });
 
 test('HS2-VKGV08 rejects red, mismatched, and unsuccessful batch evidence', () => {
