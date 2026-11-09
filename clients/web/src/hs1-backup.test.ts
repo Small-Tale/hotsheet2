@@ -257,7 +257,8 @@ describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', 
       // The headless verifier writes the same proof that the HTTP cleanup gate reads.
       await rm(resolve(store, '.git/hotsheet-hs1-backup.json'));
       await runGitCommand(
-        process.env.HOTSHEET_MIGRATE_BIN || resolve(process.cwd(), '../../target/debug/hotsheet-migrate'),
+        process.env.HOTSHEET_MIGRATE_BIN ||
+          resolve(process.cwd(), '../../target/debug', `hotsheet-migrate${process.platform === 'win32' ? '.exe' : ''}`),
         ['-C', store, '--verify-backup'],
       );
       await expect(requireHs1Backup(store, root)).resolves.toBeUndefined();

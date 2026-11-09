@@ -17,6 +17,7 @@ import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabiliti
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 export const TEST_BINARIES = ['hotsheet-cli', 'hotsheet-server', 'hotsheet-migrate'];
+export const fixtureBinaryName = (name, platform = process.platform) => `${name}${platform === 'win32' ? '.exe' : ''}`;
 
 /** Everything whose change can change the binaries: sources, manifests, and embedded assets. */
 export const BUILD_INPUTS = [
@@ -55,11 +56,17 @@ export function newestInputMtime(root, inputs = BUILD_INPUTS, fs = { statSync, r
 }
 
 /** The binaries are fresh when each exists and is newer than every build input. */
-export function binariesAreFresh(root, { targetDir = join(root, 'target'), fs = { statSync, readdirSync } } = {}) {
+export function binariesAreFresh(
+  root,
+  { targetDir = join(root, 'target'), fs = { statSync, readdirSync }, platform = process.platform } = {},
+) {
   let oldestBinary = Infinity;
   for (const name of TEST_BINARIES) {
     try {
-      oldestBinary = Math.min(oldestBinary, fs.statSync(join(targetDir, 'debug', name)).mtimeMs);
+      oldestBinary = Math.min(
+        oldestBinary,
+        fs.statSync(join(targetDir, 'debug', fixtureBinaryName(name, platform))).mtimeMs,
+      );
     } catch {
       return false;
     }
@@ -81,16 +88,8 @@ export function buildDecision(env, fresh) {
 
 export default function buildTestBinaries() {
   const targetDir = process.env.CARGO_TARGET_DIR ? resolve(repoRoot, process.env.CARGO_TARGET_DIR) : undefined;
-  const binary = join(
-    targetDir ?? join(repoRoot, 'target'),
-    'debug',
-    `hotsheet-server${process.platform === 'win32' ? '.exe' : ''}`,
-  );
-  const cli = join(
-    targetDir ?? join(repoRoot, 'target'),
-    'debug',
-    `hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`,
-  );
+  const binary = join(targetDir ?? join(repoRoot, 'target'), 'debug', fixtureBinaryName('hotsheet-server'));
+  const cli = join(targetDir ?? join(repoRoot, 'target'), 'debug', fixtureBinaryName('hotsheet-cli'));
   const fresh = () => {
     if (!binariesAreFresh(repoRoot, { targetDir })) return false;
     try {

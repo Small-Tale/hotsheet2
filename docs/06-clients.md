@@ -580,7 +580,11 @@ preview/download, server directory browser) are separate design work.
   release server only when current. It probes the CLI and migrator independently, preferring each
   current release binary and falling back to its current debug binary. Every chosen binary must
   match the workspace source and the selected server revision. If a required binary has no current
-  build, startup requests a rebuild before project setup or migration can run.
+  build, startup requests a rebuild before project setup or migration can run. On Windows,
+  selected server, CLI, migrator, and MCP shim paths use native `.exe` names. The
+  private snapshot preserves those names for its server, CLI, and migrator copies;
+  the development bridge and test fixture require binaries built from the current
+  checkout (HS2-NRYAXT).
   The host compares an already running server with its selected build before opening a project
   and requests a supported quiescent restart for a mismatch. Every host on the machine shares one
   bootstrap machine server, so another host or a rebuild script can replace it with a different

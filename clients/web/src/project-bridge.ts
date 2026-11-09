@@ -226,12 +226,16 @@ async function exists(path: string) {
   }
 }
 
+export function developmentBinaryPath(root: string, name: string, platform = process.platform): string {
+  return resolve(root, 'target/debug', `${name}${platform === 'win32' ? '.exe' : ''}`);
+}
+
 function toolBinary() {
-  return process.env.HOTSHEET_CLI_BIN || resolve(developmentRepositoryRoot(), 'target/debug/hotsheet-cli');
+  return process.env.HOTSHEET_CLI_BIN || developmentBinaryPath(developmentRepositoryRoot(), 'hotsheet-cli');
 }
 
 function migrateBinary() {
-  return process.env.HOTSHEET_MIGRATE_BIN || resolve(developmentRepositoryRoot(), 'target/debug/hotsheet-migrate');
+  return process.env.HOTSHEET_MIGRATE_BIN || developmentBinaryPath(developmentRepositoryRoot(), 'hotsheet-migrate');
 }
 
 function migratorScript() {
@@ -1308,7 +1312,7 @@ export function openServerLog(home: string = hotsheetHome(), maxBytes = SERVER_L
 
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
-  const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
+  const binary = process.env.HOTSHEET_SERVER_BIN || developmentBinaryPath(repoRoot, 'hotsheet-server');
   let exited: string | undefined;
   return {
     discover: () => instanceFor(store),

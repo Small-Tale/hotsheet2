@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -10,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -20,6 +21,7 @@ import {
   binariesAreFresh,
   BUILD_INPUTS,
   buildDecision,
+  fixtureBinaryName,
   newestInputMtime,
   TEST_BINARIES,
 } from './vitest-build-binaries.mjs';
@@ -30,7 +32,7 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 function fakeFs(tree) {
   const lookup = (path) => {
     let node = tree;
-    for (const part of path.split('/').filter(Boolean)) {
+    for (const part of path.split(/[\\/]/).filter(Boolean)) {
       if (node === undefined || typeof node === 'number') return undefined;
       node = node[part];
     }
@@ -48,7 +50,8 @@ function fakeFs(tree) {
   };
 }
 
-const binaries = (mtime) => Object.fromEntries(TEST_BINARIES.map((name) => [name, mtime]));
+const binaries = (mtime, platform = process.platform) =>
+  Object.fromEntries(TEST_BINARIES.map((name) => [fixtureBinaryName(name, platform), mtime]));
 
 describe('fresh-binary detection (HS2-3PX1E4)', () => {
   const tree = (overrides = {}) => ({
@@ -75,6 +78,14 @@ describe('fresh-binary detection (HS2-3PX1E4)', () => {
     expect(binariesAreFresh('/repo', { fs: fakeFs(oneStale) })).toBe(false);
     const missing = tree({ target: { debug: { 'hotsheet-cli': 100 } } });
     expect(binariesAreFresh('/repo', { fs: fakeFs(missing) })).toBe(false);
+  });
+
+  it('requires the matching Windows .exe artifacts and rejects stale companions (HS2-NRYAXT)', () => {
+    const windows = tree({ target: { debug: binaries(100, 'win32') } });
+    expect(binariesAreFresh('/repo', { fs: fakeFs(windows), platform: 'win32' })).toBe(true);
+    expect(binariesAreFresh('/repo', { fs: fakeFs(windows), platform: 'linux' })).toBe(false);
+    const stale = tree({ target: { debug: { ...binaries(100, 'win32'), 'hotsheet-migrate.exe': 20 } } });
+    expect(binariesAreFresh('/repo', { fs: fakeFs(stale), platform: 'win32' })).toBe(false);
   });
 
   it('honors a custom target directory', () => {
@@ -128,13 +139,40 @@ describe('Vitest runs the cargo build only for binary suites (HS2-3PX1E4)', () =
     const marker = join(scratch, 'cargo-calls');
     const target = join(scratch, 'target');
     mkdirSync(join(target, 'debug'), { recursive: true });
-    const server = join(target, 'debug/hotsheet-server');
-    writeFileSync(server, `#!/bin/sh\necho '{"isolated_permission_vault":true,"isolated_native_credentials":true}'\n`);
-    chmodSync(server, 0o755);
-    writeFileSync(join(target, 'debug/hotsheet-cli'), readFileSync(server));
-    chmodSync(join(target, 'debug/hotsheet-cli'), 0o755);
-    writeFileSync(join(scratch, 'cargo'), `#!/bin/sh\necho "$@" >> "${marker}"\n`);
-    chmodSync(join(scratch, 'cargo'), 0o755);
+    if (process.platform === 'win32') {
+      // A .cmd wrapper cannot be launched by Node's spawnSync on Windows. Compile one tiny
+      // native fixture that records cargo arguments or reports isolated capabilities.
+      const source = join(scratch, 'fixture.rs'),
+        executable = join(scratch, 'cargo.exe');
+      writeFileSync(
+        source,
+        String.raw`
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("build") {
+        std::fs::write(std::env::var("HS2_FAKE_CARGO_MARKER").unwrap(), format!("{}\n", args.join(" "))).unwrap();
+    } else {
+        println!(r#"{"isolated_permission_vault":true,"isolated_native_credentials":true}"#);
+    }
+}
+`,
+      );
+      const compiled = spawnSync('rustc', [source, '-o', executable], { encoding: 'utf8' });
+      expect(compiled.status, compiled.stdout + compiled.stderr).toBe(0);
+      for (const name of ['hotsheet-server', 'hotsheet-cli'])
+        copyFileSync(executable, join(target, 'debug', fixtureBinaryName(name)));
+    } else {
+      const server = join(target, 'debug/hotsheet-server');
+      writeFileSync(
+        server,
+        `#!/bin/sh\necho '{"isolated_permission_vault":true,"isolated_native_credentials":true}'\n`,
+      );
+      chmodSync(server, 0o755);
+      writeFileSync(join(target, 'debug/hotsheet-cli'), readFileSync(server));
+      chmodSync(join(target, 'debug/hotsheet-cli'), 0o755);
+      writeFileSync(join(scratch, 'cargo'), `#!/bin/sh\necho "$@" >> "${marker}"\n`);
+      chmodSync(join(scratch, 'cargo'), 0o755);
+    }
     const result = spawnSync(
       process.execPath,
       [
@@ -150,7 +188,8 @@ describe('Vitest runs the cargo build only for binary suites (HS2-3PX1E4)', () =
         encoding: 'utf8',
         env: {
           ...process.env,
-          PATH: `${scratch}:${process.env.PATH}`,
+          PATH: `${scratch}${delimiter}${process.env.PATH}`,
+          HS2_FAKE_CARGO_MARKER: marker,
           HOTSHEET_VITEST_BUILD: 'always',
           CARGO_TARGET_DIR: target,
         },

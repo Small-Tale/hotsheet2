@@ -134,9 +134,11 @@ describe('local host client build announcement (HS2-KPJWBK)', () => {
 });
 
 describe('release binaries for the production host (HS2-D2JQ9A)', () => {
-  const root = '/repo',
-    release = (name: string) => `/repo/target/release/${name}`,
-    debug = (name: string) => `/repo/target/debug/${name}`,
+  const root = resolve(tmpdir(), 'synthetic-repo'),
+    executable = (name: string, platform = process.platform) => `${name}${platform === 'win32' ? '.exe' : ''}`,
+    release = (name: string, platform = process.platform) =>
+      resolve(root, 'target/release', executable(name, platform)),
+    debug = (name: string, platform = process.platform) => resolve(root, 'target/debug', executable(name, platform)),
     built =
       (...names: string[]) =>
       (path: string) =>
@@ -146,6 +148,30 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
       source_revision: 'source-sha256:current',
       source_stale: false,
     });
+
+  it('selects only matching Windows executables from one source revision (HS2-NRYAXT)', () => {
+    const names = ['hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'];
+    const windowsBinaries = new Set(names.map((name) => debug(name, 'win32')));
+    const selected = releaseBinaryEnvironment(root, {}, (path) => windowsBinaries.has(path), current, 'win32');
+    expect(selected).toEqual({
+      HOTSHEET_SERVER_BIN: debug('hotsheet-server', 'win32'),
+      HOTSHEET_CLI_BIN: debug('hotsheet-cli', 'win32'),
+      HOTSHEET_MIGRATE_BIN: debug('hotsheet-migrate', 'win32'),
+      HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
+    });
+    expect(() =>
+      releaseBinaryEnvironment(
+        root,
+        {},
+        (path) => windowsBinaries.has(path),
+        (path) =>
+          path === debug('hotsheet-migrate', 'win32')
+            ? { build_revision: 'source-sha256:other', source_revision: 'source-sha256:other', source_stale: false }
+            : current(),
+        'win32',
+      ),
+    ).toThrow('No current Hot Sheet hotsheet-migrate binary');
+  });
 
   it('prefers current release binaries', () => {
     expect(
@@ -279,6 +305,40 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
     }
   });
 
+  it('keeps Windows executable names in pinned and stable copies (HS2-NRYAXT)', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-windows-snapshot-')),
+      dist = resolve(root, 'dist'),
+      server = resolve(root, 'hotsheet-server.exe'),
+      cli = resolve(root, 'hotsheet-cli.exe'),
+      migrator = resolve(root, 'hotsheet-migrate.exe');
+    let snapshot: ReturnType<typeof snapshotLocalHostArtifacts> | undefined;
+    try {
+      await mkdir(dist);
+      await writeFile(resolve(dist, 'index.html'), 'host');
+      for (const binary of [server, cli, migrator]) await writeFile(binary, 'current fixture');
+      snapshot = snapshotLocalHostArtifacts(
+        dist,
+        { HOTSHEET_SERVER_BIN: server, HOTSHEET_CLI_BIN: cli, HOTSHEET_MIGRATE_BIN: migrator },
+        resolve(root, 'home'),
+        () => {},
+        'win32',
+      );
+      for (const [variable, name] of [
+        ['HOTSHEET_SERVER_BIN', 'hotsheet-server.exe'],
+        ['HOTSHEET_CLI_BIN', 'hotsheet-cli.exe'],
+        ['HOTSHEET_MIGRATE_BIN', 'hotsheet-migrate.exe'],
+      ] as const) {
+        expect(snapshot.environment[variable]).toBe(resolve(dirname(snapshot.distRoot), 'bin', name));
+        expect(readFileSync(snapshot.environment[variable], 'utf8')).toBe('current fixture');
+      }
+      expect(snapshot.environment.HOTSHEET_HOOK_CLI_BIN).toBe(resolve(root, 'home/bin/hotsheet-cli.exe'));
+    } finally {
+      snapshot?.dispose();
+      if (snapshot) await rm(dirname(snapshot.distRoot), { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('serves and launches the selected build after working outputs change or disappear', async () => {
     const root = await mkdtemp(resolve(tmpdir(), 'hs-local-host-source-'));
     const dist = resolve(root, 'dist');
@@ -304,7 +364,9 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
       );
       const pinnedServer = snapshot.environment.HOTSHEET_SERVER_BIN;
       expect(snapshot.environment.HOTSHEET_CLI_BIN).not.toBe(cli);
-      expect(snapshot.environment.HOTSHEET_HOOK_CLI_BIN).toBe(resolve(root, 'home/bin/hotsheet-cli'));
+      expect(snapshot.environment.HOTSHEET_HOOK_CLI_BIN).toBe(
+        resolve(root, 'home/bin', `hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`),
+      );
       expect(readFileSync(resolve(dirname(pinnedServer), '.stable-hook-cli'), 'utf8')).toBe(
         snapshot.environment.HOTSHEET_HOOK_CLI_BIN,
       );
@@ -370,9 +432,11 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
 });
 
 describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
-  const root = '/repo',
-    release = '/repo/target/release/hotsheet-mcp',
-    debug = '/repo/target/debug/hotsheet-mcp',
+  const root = resolve(tmpdir(), 'synthetic-repo'),
+    release = resolve(root, 'target/release', `hotsheet-mcp${process.platform === 'win32' ? '.exe' : ''}`),
+    debug = resolve(root, 'target/debug', `hotsheet-mcp${process.platform === 'win32' ? '.exe' : ''}`),
+    server = (profile: 'release' | 'debug') =>
+      resolve(root, 'target', profile, `hotsheet-server${process.platform === 'win32' ? '.exe' : ''}`),
     present =
       (...paths: string[]) =>
       (path: string) =>
@@ -380,13 +444,13 @@ describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
 
   it('follows the selected server profile, then the other profile', () => {
     const both = present(release, debug);
-    expect(mcpBinaryEnvironment(root, '/repo/target/release/hotsheet-server', {}, both)).toEqual({
+    expect(mcpBinaryEnvironment(root, server('release'), {}, both)).toEqual({
       HOTSHEET_MCP_BIN: release,
     });
-    expect(mcpBinaryEnvironment(root, '/repo/target/debug/hotsheet-server', {}, both)).toEqual({
+    expect(mcpBinaryEnvironment(root, server('debug'), {}, both)).toEqual({
       HOTSHEET_MCP_BIN: debug,
     });
-    expect(mcpBinaryEnvironment(root, '/repo/target/release/hotsheet-server', {}, present(debug))).toEqual({
+    expect(mcpBinaryEnvironment(root, server('release'), {}, present(debug))).toEqual({
       HOTSHEET_MCP_BIN: debug,
     });
     expect(mcpBinaryEnvironment(root, undefined, {}, present(release))).toEqual({ HOTSHEET_MCP_BIN: release });
@@ -394,6 +458,13 @@ describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
 
   it('keeps an explicit override and selects nothing when no shim is built', () => {
     expect(mcpBinaryEnvironment(root, undefined, { HOTSHEET_MCP_BIN: '/custom/mcp' }, present(debug))).toEqual({});
-    expect(mcpBinaryEnvironment(root, '/repo/target/debug/hotsheet-server', {}, present())).toEqual({});
+    expect(mcpBinaryEnvironment(root, server('debug'), {}, present())).toEqual({});
+  });
+
+  it('keeps the native executable extension when a Windows server selects its MCP shim (HS2-NRYAXT)', () => {
+    const releaseExe = resolve(root, 'target/release/hotsheet-mcp.exe');
+    expect(
+      mcpBinaryEnvironment(root, 'C:\\repo\\target\\release\\hotsheet-server.exe', {}, present(releaseExe), 'win32'),
+    ).toEqual({ HOTSHEET_MCP_BIN: releaseExe });
   });
 });

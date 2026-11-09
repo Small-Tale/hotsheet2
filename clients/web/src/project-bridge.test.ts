@@ -16,6 +16,7 @@ import {
   createServerHealthProbe,
   deliverProjectSetupNotice,
   describeGitRemoteFailure,
+  developmentBinaryPath,
   developmentRepositoryRoot,
   developmentSetupAssetsFingerprint,
   folderChooserCommand,
@@ -194,6 +195,16 @@ describe('developmentRepositoryRoot', () => {
 
   it('retains the normal clients/web fallback for hot development', () => {
     expect(developmentRepositoryRoot('/work/hotsheet2/clients/web', {})).toBe('/work/hotsheet2');
+  });
+});
+
+describe('development binary paths (HS2-NRYAXT)', () => {
+  it('selects current checkout executables on Windows without changing Unix names', () => {
+    const root = resolve('synthetic-repo');
+    for (const name of ['hotsheet-cli', 'hotsheet-server', 'hotsheet-migrate']) {
+      expect(developmentBinaryPath(root, name, 'win32')).toBe(resolve(root, 'target/debug', `${name}.exe`));
+      expect(developmentBinaryPath(root, name, 'linux')).toBe(resolve(root, 'target/debug', name));
+    }
   });
 });
 

@@ -886,6 +886,12 @@ different server build still does. The browser flow in
 `clients/web/tests/compatibility.spec.ts` keeps project data visible without a
 false build-mismatch banner; the local production-host
 integration flow remains in `clients/web/scripts/local-host.e2e.test.mjs`.
+HS2-NRYAXT checks native Windows `.exe` selection and current-checkout identity in
+`clients/web/scripts/vitest-build-binaries.test.mjs`, `clients/web/src/local-host.test.ts`,
+`clients/web/src/migration-lock.test.ts`, and `clients/web/src/project-bridge.test.ts`. The real-checkout
+`clients/web/tests/compatibility.spec.ts` requires a matching server, CLI, and migrator on
+each host platform; native Windows Platforms remains the shipping proof.
+
 HS2-6VQ5RV also runs that flow against a private checkout whose `plugins/` templates are
 edited after the host starts, then asserts no `setupWarning` on reopen and no setup banner
 after a reload, on a phone page, or in a fresh context; `project-bridge.test.ts` covers the

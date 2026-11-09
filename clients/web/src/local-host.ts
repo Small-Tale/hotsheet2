@@ -87,6 +87,8 @@ const HOST_BINARIES = {
   HOTSHEET_MIGRATE_BIN: 'hotsheet-migrate',
 } as const;
 
+const executableName = (name: string, platform = process.platform) => `${name}${platform === 'win32' ? '.exe' : ''}`;
+
 /**
  * Release builds of the bridge's binaries for a production host (HS2-D2JQ9A). The bridge defaults to
  * `target/debug`, whose server is many times slower at hashing and walking stores. When a release
@@ -99,9 +101,10 @@ export function releaseBinaryEnvironment(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   exists: (path: string) => boolean = existsSync,
   inspect: (path: string) => BinaryRevisionStatus | undefined = binaryRevisionStatus,
+  platform = process.platform,
 ): Record<string, string> {
-  const release = (name: string) => resolve(repositoryRoot, 'target/release', name);
-  const debug = (name: string) => resolve(repositoryRoot, 'target/debug', name);
+  const release = (name: string) => resolve(repositoryRoot, 'target/release', executableName(name, platform));
+  const debug = (name: string) => resolve(repositoryRoot, 'target/debug', executableName(name, platform));
   const chosen: Record<string, string> = {};
   let expectedRevision: string | undefined;
   for (const [variable, name] of Object.entries(HOST_BINARIES)) {
@@ -141,11 +144,13 @@ export function mcpBinaryEnvironment(
   serverBinary: string | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   exists: (path: string) => boolean = existsSync,
+  platform = process.platform,
 ): Record<string, string> {
   if (environment.HOTSHEET_MCP_BIN) return {};
-  const profiles = serverBinary?.includes('/target/release/') ? ['release', 'debug'] : ['debug', 'release'];
+  const profiles =
+    serverBinary && /[\\/]target[\\/]release[\\/]/.test(serverBinary) ? ['release', 'debug'] : ['debug', 'release'];
   for (const profile of profiles) {
-    const path = resolve(repositoryRoot, 'target', profile, 'hotsheet-mcp');
+    const path = resolve(repositoryRoot, 'target', profile, executableName('hotsheet-mcp', platform));
     if (exists(path)) return { HOTSHEET_MCP_BIN: path };
   }
   return {};
@@ -157,12 +162,13 @@ export function snapshotLocalHostArtifacts(
   binaryEnvironment: Record<string, string>,
   machineHome: string,
   signSnapshot: typeof signMacOSSnapshotIfConfigured = signMacOSSnapshotIfConfigured,
+  platform = process.platform,
 ): { distRoot: string; environment: Record<string, string>; dispose: () => void } {
   const snapshotRoot = mkdtempSync(resolve(tmpdir(), 'hotsheet-local-host-')),
     environment = { ...binaryEnvironment },
     dispose = () => {
       const stable = environment.HOTSHEET_HOOK_CLI_BIN,
-        pinnedCli = resolve(snapshotRoot, 'bin/hotsheet-cli');
+        pinnedCli = resolve(snapshotRoot, 'bin', executableName('hotsheet-cli', platform));
       if (stable && existsSync(stable) && existsSync(pinnedCli)) {
         // Sessions opened before a setup refresh may still hold this snapshot path. Leave a
         // small alias so their next hook continues working after the host has exited.
@@ -176,7 +182,8 @@ export function snapshotLocalHostArtifacts(
         }
         rmSync(resolve(snapshotRoot, 'dist'), { recursive: true, force: true });
         for (const name of Object.values(HOST_BINARIES)) {
-          if (name !== 'hotsheet-cli') rmSync(resolve(snapshotRoot, 'bin', name), { force: true });
+          if (name !== 'hotsheet-cli')
+            rmSync(resolve(snapshotRoot, 'bin', executableName(name, platform)), { force: true });
         }
         return;
       }
@@ -189,7 +196,7 @@ export function snapshotLocalHostArtifacts(
     for (const [variable, name] of Object.entries(HOST_BINARIES)) {
       const source = environment[variable];
       if (!source || !isAbsolute(source)) continue;
-      const pinned = resolve(snapshotRoot, 'bin', name);
+      const pinned = resolve(snapshotRoot, 'bin', executableName(name, platform));
       copyFileSync(source, pinned);
       chmodSync(pinned, statSync(source).mode & 0o777);
       if (name === 'hotsheet-server' || name === 'hotsheet-cli') signSnapshot(source, pinned, name, machineHome);
@@ -200,8 +207,8 @@ export function snapshotLocalHostArtifacts(
         mkdirSync(stableDir, { recursive: true });
         const staging = mkdtempSync(resolve(stableDir, '.hook-cli-'));
         try {
-          const staged = resolve(staging, name),
-            stable = resolve(stableDir, name);
+          const staged = resolve(staging, executableName(name, platform)),
+            stable = resolve(stableDir, executableName(name, platform));
           copyFileSync(source, staged);
           chmodSync(staged, statSync(source).mode & 0o777);
           signSnapshot(source, staged, 'hotsheet-cli', machineHome);

@@ -10,19 +10,30 @@ describe('migrationLockBinary (HS2-KFKE8W)', () => {
   it('follows the checkout root instead of the running module location', () => {
     // The stable dev host serves a snapshot from the user cache directory and names the checkout.
     const snapshot = '/Users/someone/Library/Caches/hotsheet-web-stable/snapshot-abc';
-    expect(migrationLockBinary({ HOTSHEET_REPO_ROOT: '/work/hotsheet2' }, snapshot)).toBe(
-      '/work/hotsheet2/target/debug/hotsheet-migrate',
+    const debug = resolve(
+      '/work/hotsheet2',
+      'target/debug',
+      `hotsheet-migrate${process.platform === 'win32' ? '.exe' : ''}`,
     );
+    expect(migrationLockBinary({ HOTSHEET_REPO_ROOT: '/work/hotsheet2' }, snapshot)).toBe(debug);
     // A plain dev host runs from clients/web inside the checkout.
-    expect(migrationLockBinary({}, '/work/hotsheet2/clients/web')).toBe(
-      '/work/hotsheet2/target/debug/hotsheet-migrate',
-    );
+    expect(migrationLockBinary({}, '/work/hotsheet2/clients/web')).toBe(debug);
     // The production host pins its snapshot copy explicitly.
     expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: '/tmp/snapshot/bin/hotsheet-migrate' }, snapshot)).toBe(
       '/tmp/snapshot/bin/hotsheet-migrate',
     );
     expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: '', HOTSHEET_REPO_ROOT: '/work/hotsheet2' }, snapshot)).toBe(
-      '/work/hotsheet2/target/debug/hotsheet-migrate',
+      debug,
+    );
+  });
+
+  it('selects the Windows executable and preserves an explicit pinned override (HS2-NRYAXT)', () => {
+    const root = resolve('synthetic-repo');
+    expect(migrationLockBinary({ HOTSHEET_REPO_ROOT: root }, root, 'win32')).toBe(
+      resolve(root, 'target/debug/hotsheet-migrate.exe'),
+    );
+    expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: '/snapshot/migrate.exe' }, root, 'win32')).toBe(
+      '/snapshot/migrate.exe',
     );
   });
 });

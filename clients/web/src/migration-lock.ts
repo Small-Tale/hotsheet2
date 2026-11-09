@@ -17,10 +17,15 @@ export type MigrationLock = (paths: string[]) => Promise<() => Promise<void>>;
 export function migrationLockBinary(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   cwd = process.cwd(),
+  platform = process.platform,
 ): string {
   return (
     environment.HOTSHEET_MIGRATE_BIN ||
-    resolve(developmentRepositoryRoot(cwd, environment), 'target/debug/hotsheet-migrate')
+    resolve(
+      developmentRepositoryRoot(cwd, environment),
+      'target/debug',
+      `hotsheet-migrate${platform === 'win32' ? '.exe' : ''}`,
+    )
   );
 }
 
