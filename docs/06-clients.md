@@ -2493,6 +2493,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   Duplicate (Command/Ctrl+D) copies the note
   and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
   by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.
+  With the gallery open and markup off, an unmodified V, R, F, A, I, or S shortcut
+  starts the same markup session as the toolbar and selects its corresponding tool
+  (HS2-J02JH7). Focused text fields and modified shortcuts retain their own keys.
   A drawing tool plus Enter inserts its default shape at the visible media center;
   Enter in Select focuses the selected note. Undo and redo keep edits in the local
   session and no gesture writes during a drag. Video and animated-SVG annotations can be points or inclusive
