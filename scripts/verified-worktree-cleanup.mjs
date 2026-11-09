@@ -13,19 +13,20 @@ const sha = /^[0-9a-f]{40}$/i;
 const operationName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 
-export function command(binary, args, cwd) {
+export function command(binary, args, cwd, input) {
   const result = spawnSync(binary, args, {
     cwd,
     encoding: 'utf8',
     env: withoutGitRepositoryEnv(process.env),
     maxBuffer: 64 * 1024 * 1024,
+    input,
   });
   if (result.error) throw result.error;
   return result;
 }
 
-function checked(run, binary, args, cwd) {
-  const result = run(binary, args, cwd);
+function checked(run, binary, args, cwd, input) {
+  const result = run(binary, args, cwd, input);
   if (result.status !== 0) throw new Error(result.stderr?.trim() || `${binary} ${args[0]} failed`);
   return result.stdout.trim();
 }
@@ -58,14 +59,15 @@ function worktreeEntry(project, path, run) {
 }
 
 function ticketIdentity(project, store, slug, run) {
-  const ticket = parseTicket(checked(run, 'hotsheet-cli', ['-C', store, 'show', slug], project));
+  const markdown = checked(run, 'hotsheet-cli', ['-C', store, 'show', slug], project);
+  const ticket = parseTicket(markdown);
   requireProof(ticket.slug === slug && ticket.id, 'ticket identity does not match the requested slug');
   requireProof(['completed', 'verified', 'archive'].includes(ticket.status), 'ticket is not completed or verified');
   const checkout = JSON.parse(checked(run, 'hotsheet-cli', ['checkout', 'resolve', project], project));
   const source = checkout.sources?.find((item) => item.provider === 'git' && realpathSync(item.locator) === store);
   requireProof(checkout.id && source?.connection_id, 'checkout does not own this exact ticket store');
   const qualified = `@${checkout.id}/${source.connection_id}:${ticket.id}`;
-  return { ticket, qualified, source };
+  return { ticket, qualified, source, markdown };
 }
 
 function coordination(project, store, ticket, operation, run) {
@@ -88,11 +90,77 @@ function coordination(project, store, ticket, operation, run) {
   );
   const relevant = operation ? assignments.find((assignment) => assignment.id === operation) : null;
   if (operation)
-    requireProof(relevant?.phase === 'done' && relevant.handoff?.kind === 'code', 'reviewed code handoff is not done');
+    requireProof(relevant?.phase === 'done', 'reviewed code handoff is not done');
   // HS2-AYPN79: a worker may remain registered while working on a later ticket.
   // The exact ticket claim and handoff checks above, plus liveHandles(path) below,
   // establish whether this completed worktree is still in use.
-  return relevant;
+  return { assignment: relevant, assignments };
+}
+
+function ticketNotes(markdown) {
+  return [...markdown.matchAll(/<!-- hotsheet:note:begin \S+ [^>]*-->\n?([\s\S]*?)<!-- hotsheet:note:end -->/g)]
+    .map((match) => match[1].trimStart());
+}
+
+function commitPatchId(project, commit, run) {
+  requireProof(sha.test(commit), 'replacement source commit is invalid');
+  const diff = git(run, project, 'show', '--format=', '--binary', commit);
+  requireProof(diff, 'source commit has no patch');
+  const output = checked(run, 'git', ['patch-id', '--stable'], project, `${diff}\n`);
+  const patch = /^([0-9a-f]{40})\s+[0-9a-f]{40}$/i.exec(output)?.[1];
+  requireProof(patch, 'source patch identity is unavailable');
+  return patch;
+}
+
+// HS2-HQD4QZ: a superseded operation has no code handoff of its own. Its exact
+// source may be removed only when a unique reviewed replay of that patch shipped.
+function supersededMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, assignments, remote, run) {
+  requireProof(assignment && !assignment.handoff, 'superseded operation has a code handoff');
+  const transitions = assignment.transitions ?? [];
+  const blocked = transitions.findIndex((item) => item.kind === 'blocked' && item.actor?.role === 'worker');
+  const done = transitions.findIndex((item, index) => index > blocked && item.kind === 'done' && item.actor?.role === 'integrator');
+  requireProof(blocked >= 0 && done > blocked, 'old operation lacks reviewed supersession');
+  const notes = ticketNotes(ticket.markdown);
+  requireProof(
+    notes.some((note) => note.startsWith('## Integration handoff') && note.includes(operation) && note.includes(head) && note.includes(path)),
+    'old source handoff note does not identify this worktree and commit',
+  );
+  sourceWorktreeIdentity(project, path, branch, ticket.ticket.slug, run);
+  const candidates = assignments.filter((item) =>
+    item.id !== operation && item.phase === 'done' && item.handoff?.kind === 'code' &&
+    item.worker === assignment.worker &&
+    (item.transitions ?? []).some((transition) => transition.kind === 'offered' && transition.at > transitions[done].at),
+  );
+  requireProof(candidates.length === 1, 'superseded operation has ambiguous replacement ancestry');
+  const replacement = candidates[0];
+  const source = replacement.handoff.commit?.toLowerCase();
+  requireProof(sha.test(source ?? '') && source !== head, 'replacement source commit is invalid');
+  requireProof(
+    notes.some((note) => note.startsWith('## Replacement worker assignment') && note.includes(replacement.id) &&
+      note.includes(head) && note.includes('blocked and marked done')) &&
+      notes.some((note) => note.startsWith('## Integration handoff') && note.includes(replacement.id) &&
+        note.includes(source) && note.includes(head)),
+    'ticket notes do not explicitly link reviewed replacement and old source',
+  );
+  requireProof(commitPatchId(project, head, run) === commitPatchId(project, source, run), 'replacement patch differs from old source');
+  requireProof(operationName.test(replacement.id), 'replacement operation is not a safe identifier');
+  const recordPath = join(common, 'hotsheet-integrations', hash(ticket.qualified), `${replacement.id}.json`);
+  requireProof(existsSync(recordPath), 'replacement integration record is missing');
+  const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+  requireProof(
+    record.version === 1 && record.operation === replacement.id && record.branch === 'main' &&
+    record.ticket?.project_id === ticket.qualified.split('/')[0].slice(1) &&
+    record.ticket?.connection_id === ticket.source.connection_id && record.ticket?.native_id === ticket.ticket.id &&
+    record.source_commits?.includes(source) && record.shipping_commits?.includes(shipping),
+    'replacement integration record does not map source and shipping commits',
+  );
+  const member = batchGate(project, ticket.source.locator, common, ticket, replacement.id, shipping, remote, run);
+  requireProof(member?.source_commit === source, 'replacement batch has no exact source commit mapping');
+  requireProof(
+    git(run, project, 'rev-parse', '--verify', `refs/hotsheet/integration-source/${source}`) === source,
+    'replacement source commit is not preserved by its integration archive ref',
+  );
+  return true;
 }
 
 function handoffMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, batchMember, run) {
@@ -305,7 +373,7 @@ export function cleanup(options, { run = command } = {}) {
     );
   }
   const identity = ticketIdentity(project, store, slug, run);
-  const assignment = coordination(project, store, identity, options.operation, run);
+  const { assignment, assignments } = coordination(project, store, identity, options.operation, run);
   requireProof(options.operation ? assignment : true, 'operation has no matching assignment');
   const remoteLine = git(run, project, 'ls-remote', '--exit-code', 'origin', 'refs/heads/main');
   const remote = /^([0-9a-f]{40})\s+refs\/heads\/main$/i.exec(remoteLine)?.[1]?.toLowerCase();
@@ -353,10 +421,11 @@ export function cleanup(options, { run = command } = {}) {
     'worktree has tracked or non-ignored untracked edits',
   );
   requireProof(git(run, path, 'rev-parse', 'HEAD') === head, 'worktree HEAD changed');
-  const batchPassed = options.operation
+  const superseded = Boolean(options.operation && !assignment.handoff);
+  const batchPassed = options.operation && !superseded
     ? batchGate(project, store, common, identity, options.operation, shipping, remote, run)
     : false;
-  if (!batchPassed) {
+  if (!batchPassed && !superseded) {
     // Direct and nonbatch handoffs still require their existing exact-tree root-gate marker.
     const gateCheckout = options.operation ? project : path;
     const gateDir = resolve(gateCheckout, git(run, gateCheckout, 'rev-parse', '--git-path', 'hotsheet-root-gate'));
@@ -366,7 +435,9 @@ export function cleanup(options, { run = command } = {}) {
       `shipping tree has no successful exact-tree local gate in ${options.operation ? 'the integrator' : 'this worktree'}`,
     );
   }
-  if (options.operation)
+  if (superseded)
+    supersededMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, assignments, remote, run);
+  else if (options.operation)
     handoffMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, batchPassed, run);
   else directMapping(project, path, branch, head, slug, run);
   requireProof(
@@ -374,6 +445,12 @@ export function cleanup(options, { run = command } = {}) {
     'source commit is not preserved on origin/main or an integration archive ref',
   );
   liveHandles(path, project, run);
+  if (superseded) {
+    const archive = `refs/hotsheet/integration-source/${head}`;
+    const existing = run('git', ['rev-parse', '--verify', archive], project);
+    if (existing.status === 0) requireProof(existing.stdout.trim() === head, 'old source archive ref differs');
+    else git(run, project, 'update-ref', archive, head, '0'.repeat(40));
+  }
   const intent = { version: 1, slug, path, branch, head, shipping, operation: options.operation ?? null, ciRun: ci.id };
   if (previous)
     requireProof(

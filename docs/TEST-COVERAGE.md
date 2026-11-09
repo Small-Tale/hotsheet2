@@ -108,6 +108,14 @@ the smoke manifest at the exact batch commit, then checks the receipt's bare
 selected commands and ledger spelling at each position. Wrong cwd, order,
 command, tree, or failed status still refuses cleanup.
 
+HS2-HQD4QZ: the cleanup suite covers a superseded reviewed source operation
+followed by one same-worker replay. It requires explicit old/replacement ticket
+notes, equal stable patch identities, the replacement integration record and
+archive, green batch smoke receipt and covering CI. Ambiguous replacements,
+different patches, missing proof, live claims, dirty trees, and open handles
+still refuse deletion. HS2-8W51AA tracks cleanup of a separate source operation
+listed in both an aborted batch and its successful replacement batch.
+
 HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
 manager on Windows. `hotsheet-server/src/main.rs #
 hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out` and

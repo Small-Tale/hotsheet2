@@ -20,7 +20,7 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
-function fixture({ cherryPick = false, batch = false } = {}) {
+function fixture({ cherryPick = false, batch = false, superseded = false, differentReplayPatch = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hs2-hr3zx4-'));
   const project = join(root, 'project'),
     store = join(root, 'store'),
@@ -53,6 +53,17 @@ function fixture({ cherryPick = false, batch = false } = {}) {
   git(worktree, 'add', 'ticket.txt');
   git(worktree, 'commit', '-m', `${slug} Add synthetic change`);
   const source = git(worktree, 'rev-parse', 'HEAD');
+  let replacement = null;
+  if (superseded) {
+    const replay = join(project, '.claude', 'worktrees', `${branch}-replay`);
+    git(project, 'worktree', 'add', '-b', `${branch}-replay`, replay, `${source}^`);
+    if (differentReplayPatch) {
+      writeFileSync(join(replay, 'ticket.txt'), 'different synthetic change\n');
+      git(replay, 'add', 'ticket.txt');
+    } else git(replay, 'cherry-pick', '-n', source);
+    git(replay, 'commit', '-m', `${slug} Replay synthetic change`);
+    replacement = git(replay, 'rev-parse', 'HEAD');
+  }
   if (cherryPick) {
     git(project, 'cherry-pick', '-n', branch);
     git(project, 'commit', '-m', `${slug} Integrate synthetic change`);
@@ -97,7 +108,7 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     state: 'green',
     main_commit: shipping,
     smoke_checks: smokeChecks,
-    tickets: [{ assignment: 'operation', ticket: { connection_id: connection, native_id: native }, source_commit: source, shipping_commits: [shipping] }],
+    tickets: [{ assignment: superseded ? 'replacement' : 'operation', ticket: { connection_id: connection, native_id: native }, source_commit: replacement ?? source, shipping_commits: [shipping] }],
   };
   let claim = false,
     phase = 'done',
@@ -107,10 +118,21 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     ciConclusion = 'success',
     ticketStatus = 'completed',
     handoffCommit = source;
-  const run = (binary, args, cwd) => {
+  const note = (heading, text) => `<!-- hotsheet:note:begin synthetic created_at: 2026-11-09T00:00:00Z -->\n## ${heading}\n${text}\n<!-- hotsheet:note:end -->`;
+  let notes = superseded ? [
+    note('Integration handoff', `Assignment operation; branch ${branch}; commit ${source}; worktree ${realpathSync(worktree)}`),
+    note('Replacement worker assignment', `Assignment: replacement; original ${source}; old assignment blocked and marked done`),
+    note('Integration handoff', `Assignment replacement; commit ${replacement}; prior ${source}`),
+  ] : [];
+  let oldTransitions = superseded ? [
+    { kind: 'blocked', at: '2026-11-09T00:00:00Z', actor: { role: 'worker' } },
+    { kind: 'done', at: '2026-11-09T00:01:00Z', actor: { role: 'integrator' } },
+  ] : [];
+  let extraReplacement = false;
+  const run = (binary, args, cwd, input) => {
     if (binary === 'hotsheet-cli') {
       if (args.includes('show'))
-        return { status: 0, stdout: `---\nid: ${native}\nslug: ${slug}\nstatus: ${ticketStatus}\n---\n`, stderr: '' };
+        return { status: 0, stdout: `---\nid: ${native}\nslug: ${slug}\nstatus: ${ticketStatus}\n---\n${notes.join('\n')}`, stderr: '' };
       if (args.includes('resolve'))
         return {
           status: 0,
@@ -132,11 +154,24 @@ function fixture({ cherryPick = false, batch = false } = {}) {
                       operation: {
                         id: 'operation',
                         phase,
-                        handoff: { kind: 'code', commit: handoffCommit },
+                        handoff: superseded ? null : { kind: 'code', commit: handoffCommit },
                         ticket: { connection_id: connection, native_id: native },
                         worker: 'worker',
+                        transitions: oldTransitions,
                       },
                     }),
+                ...(superseded ? {
+                  replacement: {
+                    id: 'replacement', phase: 'done', handoff: { kind: 'code', commit: replacement },
+                    ticket: { connection_id: connection, native_id: native }, worker: 'worker',
+                    transitions: [{ kind: 'offered', at: '2026-11-09T00:02:00Z' }],
+                  },
+                  ...(extraReplacement ? { another: {
+                    id: 'another', phase: 'done', handoff: { kind: 'code', commit: replacement },
+                    ticket: { connection_id: connection, native_id: native }, worker: 'worker',
+                    transitions: [{ kind: 'offered', at: '2026-11-09T00:03:00Z' }],
+                  } } : {}),
+                } : {}),
                 ...(workerRefilled
                   ? {
                       later: {
@@ -183,7 +218,7 @@ function fixture({ cherryPick = false, batch = false } = {}) {
       failBranchOnce = false;
       return { status: 1, stdout: '', stderr: 'synthetic interruption after worktree removal' };
     }
-    return command(binary, args, cwd);
+    return command(binary, args, cwd, input);
   };
   const options = { project, store, worktree, ticket: slug, shipping };
   return {
@@ -193,6 +228,7 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     worktree,
     branch,
     source,
+    replacement,
     shipping,
     common,
     options,
@@ -221,6 +257,9 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     handoff: (value) => {
       handoffCommit = value;
     },
+    notes: (value) => { notes = value; },
+    oldTransitions: (value) => { oldTransitions = value; },
+    extraReplacement: (value) => { extraReplacement = value; },
     gate,
     integratorGate,
     receiptPath,
@@ -368,6 +407,48 @@ function recordReviewedHandoff(f, { proposal = true } = {}) {
   }
   git(f.project, 'update-ref', `refs/hotsheet/integration-source/${f.source}`, f.source);
 }
+
+function recordSupersededReplay(f) {
+  const qualified = `@${projectId}/${connection}:${native}`;
+  const recordDir = join(f.common, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
+  mkdirSync(recordDir, { recursive: true });
+  writeFileSync(join(recordDir, 'replacement.json'), JSON.stringify({
+    version: 1, operation: 'replacement', branch: 'main',
+    ticket: { project_id: projectId, connection_id: connection, native_id: native },
+    source_commits: [f.replacement], shipping_commits: [f.shipping],
+  }));
+  git(f.project, 'update-ref', `refs/hotsheet/integration-source/${f.replacement}`, f.replacement);
+}
+
+test('HS2-HQD4QZ removes a reviewed superseded source only after its exact replay shipped', () => {
+  const f = fixture({ cherryPick: true, batch: true, superseded: true });
+  recordSupersededReplay(f);
+  unlinkSync(f.integratorGate);
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+  assert.equal(existsSync(f.worktree), false);
+  assert.equal(git(f.project, 'rev-parse', `refs/hotsheet/integration-source/${f.source}`), f.source);
+});
+
+test('HS2-HQD4QZ refuses ambiguous or unlinked superseded replays', () => {
+  for (const tamper of ['notes', 'transition', 'ambiguous', 'record', 'patch', 'batch', 'receipt', 'claim', 'handles', 'dirty']) {
+    const f = fixture({ cherryPick: true, batch: true, superseded: true, differentReplayPatch: tamper === 'patch' });
+    recordSupersededReplay(f);
+    if (tamper === 'notes') f.notes([]);
+    if (tamper === 'transition') f.oldTransitions([]);
+    if (tamper === 'ambiguous') f.extraReplacement(true);
+    if (tamper === 'record') unlinkSync(join(f.common, 'hotsheet-integrations',
+      createHash('sha256').update(`@${projectId}/${connection}:${native}`).digest('hex'), 'replacement.json'));
+    if (tamper === 'batch') f.batchEntry.state = 'red';
+    if (tamper === 'receipt') unlinkSync(f.receiptPath);
+    if (tamper === 'claim') f.claim(true);
+    if (tamper === 'handles') f.handles(true);
+    if (tamper === 'dirty') writeFileSync(join(f.worktree, 'untracked.txt'), 'synthetic\n');
+    assert.throws(() => cleanup({ ...f.options, operation: 'operation' }, { run: f.run }), undefined, tamper);
+    assert.equal(existsSync(f.worktree), true, tamper);
+    assert.equal(spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/hotsheet/integration-source/${f.source}`],
+      { cwd: f.project, env: withoutGitRepositoryEnv(process.env) }).status, 1);
+  }
+});
 
 test('HS2-VKGV08 and HS2-54M43C accept mixed ledger spellings backed by exact cwd results', () => {
   const f = fixture({ cherryPick: true, batch: true });
