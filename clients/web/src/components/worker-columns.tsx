@@ -186,8 +186,11 @@ export function WorkerColumns({
   sources,
   layout,
 }: WorkerColumnsProps) {
-  const workers = mergeWorkerViews(views),
-    coverage = workerCoverage(views, sources, sourceErrors),
+  // HS2-KX87JC: do not render stale availability from a source that failed after its last snapshot.
+  const failedSources = new Set(sourceErrors.map((error) => error.connectionId)),
+    currentViews = views.filter((view) => !failedSources.has(view.source_id)),
+    workers = mergeWorkerViews(currentViews),
+    coverage = workerCoverage(currentViews, sources, sourceErrors),
     coverageIncomplete =
       coverage.problems.length > 0 ||
       coverage.notes.length > 0 ||

@@ -81,4 +81,62 @@ describe('HS2-E9SR7R worker cursor stream', () => {
     expect(onSnapshot).toHaveBeenCalledTimes(1);
     stop();
   });
+
+  it('HS2-KX87JC backs off repeated failures and replays a same-cursor recovery', async () => {
+    const checkoutWorkers = vi
+      .fn()
+      .mockResolvedValueOnce(snapshot('one'))
+      .mockRejectedValueOnce(new Error('first 503'))
+      .mockRejectedValueOnce(new Error('second 503'))
+      .mockResolvedValueOnce(snapshot('one'))
+      .mockImplementation(() => new Promise(() => {}));
+    const delays: number[] = [];
+    const onSnapshot = vi.fn(),
+      onError = vi.fn();
+    const stop = startWorkerViewStream({
+      client: { checkoutWorkers },
+      checkout: 'demo',
+      sources: ['git'],
+      onSnapshot,
+      onError,
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    await vi.waitFor(() => {
+      expect(checkoutWorkers).toHaveBeenCalledTimes(5);
+    });
+    expect(delays).toEqual([1000, 2000]);
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(onSnapshot.mock.calls.map((call) => (call[1] as WorkerView).cursor)).toEqual(['one', 'one']);
+    expect(checkoutWorkers).toHaveBeenNthCalledWith(2, 'demo', 'git', 'one', expect.any(AbortSignal));
+    expect(checkoutWorkers).toHaveBeenNthCalledWith(3, 'demo', 'git', undefined, expect.any(AbortSignal));
+    expect(checkoutWorkers).toHaveBeenNthCalledWith(5, 'demo', 'git', 'one', expect.any(AbortSignal));
+    stop();
+  });
+
+  it('HS2-KX87JC caps repeated source failure backoff instead of spinning', async () => {
+    let attempts = 0;
+    const checkoutWorkers = vi.fn(async () => {
+      attempts += 1;
+      if (attempts <= 7) throw new Error('synthetic unavailable source');
+      return new Promise<WorkerView>(() => {});
+    });
+    const delays: number[] = [];
+    const stop = startWorkerViewStream({
+      client: { checkoutWorkers },
+      checkout: 'demo',
+      sources: ['git'],
+      onSnapshot: vi.fn(),
+      onError: vi.fn(),
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    await vi.waitFor(() => {
+      expect(checkoutWorkers).toHaveBeenCalledTimes(8);
+    });
+    expect(delays).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000]);
+    stop();
+  });
 });

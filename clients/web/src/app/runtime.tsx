@@ -1518,9 +1518,11 @@ export async function startHotSheetWebClient() {
         pending.delete(source);
         workerLoading.value = pending.size > 0;
         const previous = workerViews.value[source] as WorkerView | undefined;
+        batch(() => {
+          workerErrors.value = Object.fromEntries(Object.entries(workerErrors.value).filter(([id]) => id !== source));
+          if (previous?.cursor !== snapshot.cursor) workerViews.value = { ...workerViews.value, [source]: snapshot };
+        });
         if (previous?.cursor === snapshot.cursor) return;
-        workerErrors.value = Object.fromEntries(Object.entries(workerErrors.value).filter(([id]) => id !== source));
-        workerViews.value = { ...workerViews.value, [source]: snapshot };
         const refs = [
           ...snapshot.workers.flatMap((worker) => [
             ...worker.tickets.map((item) => item.ticket),
@@ -1539,14 +1541,18 @@ export async function startHotSheetWebClient() {
         if (generation !== workerStreamGeneration) return;
         pending.delete(source);
         workerLoading.value = pending.size > 0;
-        workerErrors.value = {
-          ...workerErrors.value,
-          [source]: {
-            connectionId: source,
-            name: sources.find((item) => item.connectionId === source)?.name ?? source,
-            message: reason instanceof Error ? reason.message : String(reason),
-          },
-        };
+        batch(() => {
+          // HS2-KX87JC: a failed source's previous snapshot cannot prove current availability.
+          workerViews.value = Object.fromEntries(Object.entries(workerViews.value).filter(([id]) => id !== source));
+          workerErrors.value = {
+            ...workerErrors.value,
+            [source]: {
+              connectionId: source,
+              name: sources.find((item) => item.connectionId === source)?.name ?? source,
+              message: reason instanceof Error ? reason.message : String(reason),
+            },
+          };
+        });
       },
     });
   });

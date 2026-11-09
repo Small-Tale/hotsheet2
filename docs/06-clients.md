@@ -275,6 +275,9 @@ preview/download, server directory browser) are separate design work.
   `coverage_gaps`, the project's non-Git sources and failed worker-view loads by
   connection id (HS2-7WE7CQ). A failed read or failed load is a warning banner,
   **Workers Not Shown for Some Sources**, naming each source with its problem. A source
+  failure also removes that source's last worker snapshot from visible columns; it
+  cannot leave a stale **Available** card beside the warning. A recovered snapshot
+  clears the warning even when its replay cursor has not changed (HS2-KX87JC). A source
   that cannot support coordination by design, one this pool does not watch, unloaded
   ticket sources, and unknown live connection status sit in a collapsed **Workers not
   shown for N sources** disclosure, one plain line each. Both say tickets are

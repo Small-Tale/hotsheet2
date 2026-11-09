@@ -267,6 +267,16 @@ cursor-driven title/status refresh; the authenticated real-server browser path
 checks checkout coverage. Rebuilt wide/medium/narrow visual review is recorded
 on the ticket.
 
+HS2-KX87JC covers failed-source snapshot removal, healthy-source preservation,
+disconnected and unconfirmed labels, same-cursor recovery, and capped backoff in
+`clients/web/src/components/worker-columns-availability.test.ts` and
+`clients/web/src/worker-view-stream.test.ts`. The private real-server
+`clients/web/tests/worker-availability.spec.ts` checks short-lease expiry, idle
+request rate, source 503 after a live snapshot, no stale Available card, and
+same-cursor recovery. Wide, medium, phone, and returned-wide captures are attached
+to HS2-KX87JC. Native worker stop/crash and claim-takeover UI paths remain in
+follow-up HS2-R0E39D.
+
 HS2-1Z3T0Z adds a real-server browser lifecycle slice in
 `clients/web/tests/providers.spec.ts`: a worker registers before the integrator,
 the integrator then joins, and a third worker joins late. The page and authenticated
