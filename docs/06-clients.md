@@ -2878,7 +2878,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   placeholders retain their intentional toolbar separator.
   The main toolbar's star applies the same bulk Up Next toggle as the row menu, while
   its ellipsis opens that shared menu without duplicating the star action; both disable
-  with no selection or unsupported providers. After a successful status mutation, any
+  with no selection or unsupported providers. An eligible ticket row menu places Toggle
+  Up Next first in its opening action section, before Open ticket and Copy ticket IDs
+  (HS2-R3ZS3V). After a successful status mutation, any
   ticket no longer present in Queue, Backlog, or Archive is removed from selection, and
   a hidden single-ticket inspector is cleared.
   The compact sort `Select` draws exactly one focus ring on its enclosing control group:
