@@ -3,9 +3,21 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
+const npmListArguments = ['ls', '--omit=dev', '--all', '--parseable'];
+
+// HS2-YMXBD6: execFileSync cannot run Windows .cmd shims directly. An npm script exposes
+// its JavaScript entry point; direct callers use the Windows command launcher.
+export function npmListInvocation(platform = process.platform, environment = process.env, node = process.execPath) {
+  if (platform !== 'win32') return { file: 'npm', args: npmListArguments };
+  if (environment.npm_execpath?.toLowerCase().endsWith('.js'))
+    return { file: node, args: [environment.npm_execpath, ...npmListArguments] };
+  return { file: environment.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `npm.cmd ${npmListArguments.join(' ')}`] };
+}
+
 export function stageMigratorDependencies(migrator, destination) {
   const nodeModules = realpathSync(resolve(migrator, 'node_modules'));
-  const installed = execFileSync('npm', ['ls', '--omit=dev', '--all', '--parseable'], {
+  const { file, args } = npmListInvocation();
+  const installed = execFileSync(file, args, {
     cwd: migrator,
     encoding: 'utf8',
   })

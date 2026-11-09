@@ -5,9 +5,25 @@ import { join } from 'node:path';
 
 import { expect, it, vi } from 'vitest';
 
-import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
+import { npmListInvocation, stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
+
+it('HS2-YMXBD6 selects an executable npm launcher on Windows and Unix', () => {
+  const npmCli = 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js';
+  const node = 'C:\\Program Files\\nodejs\\node.exe';
+  const list = ['ls', '--omit=dev', '--all', '--parseable'];
+  expect(npmListInvocation('win32', { npm_execpath: npmCli }, node)).toEqual({
+    file: node,
+    args: [npmCli, ...list],
+  });
+  expect(npmListInvocation('win32', { ComSpec: 'C:\\Windows\\System32\\cmd.exe' }, node)).toEqual({
+    file: 'C:\\Windows\\System32\\cmd.exe',
+    args: ['/d', '/s', '/c', 'npm.cmd ls --omit=dev --all --parseable'],
+  });
+  expect(npmListInvocation('linux', { npm_execpath: npmCli }, node)).toEqual({ file: 'npm', args: list });
+  expect(npmListInvocation('darwin', {}, node)).toEqual({ file: 'npm', args: list });
+});
 
 it('HS2-9XAJXR stages transitive runtime packages without development binaries', () => {
   const root = mkdtempSync(join(tmpdir(), 'hotsheet-migrator-package-'));
