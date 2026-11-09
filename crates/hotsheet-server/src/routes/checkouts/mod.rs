@@ -156,7 +156,15 @@ pub(crate) fn regenerate_checkout_worklist_indexed(
         for row in rows {
             let id = Ulid::from_string(&row.id)?;
             if let std::collections::btree_map::Entry::Vacant(ticket) = tickets.entry(id) {
-                ticket.insert(entry.store.read_ticket(&id)?);
+                match entry.store.read_ticket(&id) {
+                    Ok(value) => {
+                        ticket.insert(value);
+                    }
+                    Err(error) if error.is_io_kind(std::io::ErrorKind::NotFound) => {
+                        tracing::warn!(ticket_id = %id, "indexed worklist ticket vanished before read (HS2-KJ9WSC)");
+                    }
+                    Err(error) => return Err(error.into()),
+                }
             }
         }
     }

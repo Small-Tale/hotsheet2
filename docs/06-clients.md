@@ -175,6 +175,10 @@ bootstrap store only to reach the standalone server; that store is never linked 
 project. Once the empty checkout is visible, the client asks whether to create and link a
 standalone `<project>.hs2` git repository or configure another provider in Sources. The
 prompt can be dismissed and returns on a later open until a source is configured.
+After a project opens, its generated checkout worklist refreshes in the background from
+indexed Up Next tickets. If a Git checkout removes one indexed ticket before that refresh
+reads it, the refresh skips that ticket and keeps the remaining entries; other ticket
+read errors still fail the refresh (HS2-KJ9WSC).
 Global operation failures use a high-contrast alert toast with a keyboard-accessible
 Dismiss error action. Dismissing clears only the presented client error; it does not
 retry, undo, or otherwise mutate the failed operation, and the rest of the project stays

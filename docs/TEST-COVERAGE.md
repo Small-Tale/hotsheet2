@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-KJ9WSC: `hotsheet-server/tests/project_open_missing_ticket.rs` uses a
+post-open background-work hook with synthetic Up Next tickets to remove one
+indexed file before worklist regeneration reads it. The healthy entry remains
+in the generated worklist, while a different read error still fails the
+refresh. The project-open response stays successful. HS2-AGGWG2 separately
+tracks the original failed remembered-project tile.
+
 HS2-PT0Y8A: `hotsheet-index/src/tests.rs` deterministically removes a ticket
 between directory enumeration and read, checks full rebuild/reconcile and Git
 delta reconcile, and confirms that other I/O errors still propagate.
