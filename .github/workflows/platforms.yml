@@ -146,6 +146,11 @@ jobs:
           "PKG_CONFIG_PATH=$pkgconfig" >> $env:GITHUB_ENV
           "CC=cl" >> $env:GITHUB_ENV
 
+      - name: Install gas-preprocessor for MSVC ARM assembly (Windows arm64)
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: ./scripts/install-windows-arm64-gas-preprocessor.ps1
+
       - name: Install git-filter-repo for compaction tests
         run: |
           python=$(command -v python || command -v python3)
@@ -417,6 +422,11 @@ jobs:
           "PKG_CONFIG=$(Join-Path $installed "$env:HOST_TRIPLET/tools/pkgconf/pkgconf.exe")" >> $env:GITHUB_ENV
           "PKG_CONFIG_PATH=$(Join-Path $installed "$env:TRIPLET/lib/pkgconfig")" >> $env:GITHUB_ENV
           "CC=cl" >> $env:GITHUB_ENV
+
+      - name: Install gas-preprocessor for MSVC ARM assembly (Windows arm64)
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: ./scripts/install-windows-arm64-gas-preprocessor.ps1
 
       - name: Set up Node
         uses: actions/setup-node@v4

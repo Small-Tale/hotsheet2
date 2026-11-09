@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-BCCF8J: `scripts/platform-matrix.test.mjs` checks that both native Windows arm64
+jobs install the exact upstream gas-preprocessor SHA-256 and verify Perl syntax
+before their Rust builds. Native assembly and build evidence comes from the
+`Platforms` workflow on `windows-arm64` and `tauri-windows-arm64`.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

@@ -1000,8 +1000,10 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   launch it (see the browser engine matrix, HS2-HW6VED). Every suite runs even when an
   earlier one fails, and each target uploads its JUnit and JSON reports and Playwright
   failure output as `platform-reports-<target>`. Windows targets install dav1d from vcpkg
-  with the `x64-windows-static-md` or `arm64-windows-static-md` triplet and keep the
-  HS2-1R2RGQ/HS2-9E879K CRT directive and link-correlation reports
+  with the `x64-windows-static-md` or `arm64-windows-static-md` triplet. The Windows
+  arm64 core and Tauri jobs install a commit-pinned, SHA-256-verified
+  `gas-preprocessor.pl` for dav1d's MSVC ARM assembly (HS2-BCCF8J). Windows targets
+  keep the HS2-1R2RGQ/HS2-9E879K CRT directive and link-correlation reports
   (`windows-crt-directives-<target>`, `windows-crt-link-correlation-<target>`). The Tauri desktop shell is its own `tauri-<target>` job
   per desktop OS and architecture: `npm run desktop:prepare`, the shell's own fmt check
   and `cargo lint-desktop` clippy (its separate Cargo workspace is outside `cargo fmt --all`

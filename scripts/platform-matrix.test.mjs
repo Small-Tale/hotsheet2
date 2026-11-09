@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { CORE_TARGETS, planOutputs, selectTargets, TAURI_TARGETS } from './platform-matrix.mjs';
 
 const workflow = readFileSync(new URL('../.github/workflows/platforms.yml', import.meta.url), 'utf8');
+const gasPreprocessor = readFileSync(new URL('./install-windows-arm64-gas-preprocessor.ps1', import.meta.url), 'utf8');
 const ids = (entries) => entries.map(({ target }) => target);
 
 test('HS2-31RGRK covers the maintainer platform set with stable target ids and runners', () => {
@@ -59,6 +60,24 @@ test('HS2-31RGRK keeps the platform workflow out of the per-commit CI gate', () 
   assert.match(triggers, /\n {2}workflow_dispatch:/);
   assert.match(triggers, /\n {2}workflow_call:/);
   assert.doesNotMatch(triggers, /\n {2}(push|pull_request):/);
+});
+
+test('HS2-BCCF8J installs a verified gas-preprocessor for both native Windows arm64 jobs', () => {
+  for (const job of [
+    workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),
+    workflow.slice(workflow.indexOf('\n  tauri:')),
+  ]) {
+    const install = job.indexOf('Install gas-preprocessor for MSVC ARM assembly (Windows arm64)');
+    assert.ok(install > job.indexOf('Install the AVIF decoder for the native build (Windows)'));
+    assert.ok(install < job.indexOf('Set up Node'));
+    assert.match(job.slice(install, job.indexOf('Set up Node')), /matrix\.os == 'windows' && matrix\.arch == 'arm64'/);
+    assert.match(job.slice(install, job.indexOf('Set up Node')), /run: \.\/scripts\/install-windows-arm64-gas-preprocessor\.ps1/);
+  }
+  assert.match(gasPreprocessor, /d09971fad329d32df19f5bbafe88cf2f0ed04ed7/);
+  assert.match(gasPreprocessor, /78ad06351ac8be513fb6e6291d9bb8f667899625c2649093e3b08f59fae950a2/);
+  assert.match(gasPreprocessor, /Get-FileHash -Algorithm SHA256 -Path \$script/);
+  assert.match(gasPreprocessor, /perl -c \$script/);
+  assert.match(gasPreprocessor, /\$env:GITHUB_PATH/);
 });
 
 test('HS2-31RGRK reports every target separately without masking failures', () => {
