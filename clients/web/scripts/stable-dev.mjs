@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -57,7 +58,7 @@ export async function pruneStaleSnapshots(parent, { isAlive = processIsAlive, no
       owner = undefined;
     }
     if (Number.isInteger(owner) ? isAlive(owner) : now - (await stat(path)).mtimeMs < OWNERLESS_GRACE_MS) continue;
-    await rm(path, { recursive: true, force: true });
+    await rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     removed.push(path);
   }
   return removed;
@@ -81,15 +82,17 @@ export async function createStableSnapshot(
     await writeFile(join(snapshotRoot, OWNER_FILE), JSON.stringify({ pid: ownerPid }));
     await cp(sourceRoot, snapshotRoot, { recursive: true, filter });
     await symlink(resolve(sourceRoot, 'node_modules'), resolve(snapshotRoot, 'node_modules'), 'dir');
-    return snapshotRoot;
+    // Windows runners may supply an 8.3 short TEMP path. Vite refuses any file path containing
+    // `~` before its allow-list check, so expand short names before spawning Vite.
+    return realpathSync.native(snapshotRoot);
   } catch (error) {
-    await rm(snapshotRoot, { recursive: true, force: true });
+    await rm(snapshotRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     throw error;
   }
 }
 
 export async function removeStableSnapshot(snapshotRoot) {
-  await rm(snapshotRoot, { recursive: true, force: true });
+  await rm(snapshotRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 
 export function stableDevEnvironment(sourceRoot, snapshotRoot, environment = process.env) {
@@ -114,6 +117,8 @@ export async function runStableDev({
   spawnChild = spawn,
   log = console.log,
   timers = globalThis,
+  parentIsAlive = processIsAlive,
+  stdin = process.stdin,
   parentCheckMs = 1000,
   forceKillAfterMs = 5000,
 } = {}) {
@@ -143,10 +148,16 @@ export async function runStableDev({
   const parentWatch =
     Number.isInteger(originalParent) && originalParent > 1
       ? timers.setInterval(() => {
-          if (processHost.ppid !== originalParent) stop('SIGTERM');
+          if (processHost.ppid !== originalParent || !parentIsAlive(originalParent)) stop('SIGTERM');
         }, parentCheckMs)
       : undefined;
   parentWatch?.unref?.();
+  const onStdinEnd = () => stop('SIGTERM');
+  if (environment.HOTSHEET_STABLE_DEV_OWNED_STDIN === '1') {
+    stdin.on('end', onStdinEnd);
+    stdin.on('close', onStdinEnd);
+    stdin.resume();
+  }
 
   try {
     await pruneSnapshots(temporaryRoot).catch(() => []);
@@ -171,6 +182,11 @@ export async function runStableDev({
     return result.code ?? (exitSignal === 'SIGINT' ? 130 : 143);
   } finally {
     if (parentWatch !== undefined) timers.clearInterval(parentWatch);
+    if (environment.HOTSHEET_STABLE_DEV_OWNED_STDIN === '1') {
+      stdin.off('end', onStdinEnd);
+      stdin.off('close', onStdinEnd);
+      stdin.pause();
+    }
     if (forceKill !== undefined) timers.clearTimeout(forceKill);
     try {
       if (snapshotRoot) await removeSnapshot(snapshotRoot);

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { lstat, mkdir, mkdtemp, readdir, readFile, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -73,12 +73,18 @@ describe('stable dev snapshot', () => {
   });
 
   it('keeps snapshots out of the swept OS temporary directory (HS2-ZJ6VN3)', () => {
-    expect(stableSnapshotParent({}, 'darwin', '/Users/dev')).toBe('/Users/dev/Library/Caches/hotsheet-web-stable');
-    expect(stableSnapshotParent({}, 'linux', '/home/dev')).toBe('/home/dev/.cache/hotsheet-web-stable');
-    expect(stableSnapshotParent({ XDG_CACHE_HOME: '/cache' }, 'linux', '/home/dev')).toBe('/cache/hotsheet-web-stable');
-    expect(stableSnapshotParent({ LOCALAPPDATA: '/local' }, 'win32', '/users/dev')).toBe('/local/hotsheet-web-stable');
+    expect(stableSnapshotParent({}, 'darwin', '/Users/dev')).toBe(
+      join('/Users/dev', 'Library', 'Caches', 'hotsheet-web-stable'),
+    );
+    expect(stableSnapshotParent({}, 'linux', '/home/dev')).toBe(join('/home/dev', '.cache', 'hotsheet-web-stable'));
+    expect(stableSnapshotParent({ XDG_CACHE_HOME: '/cache' }, 'linux', '/home/dev')).toBe(
+      join('/cache', 'hotsheet-web-stable'),
+    );
+    expect(stableSnapshotParent({ LOCALAPPDATA: '/local' }, 'win32', '/users/dev')).toBe(
+      join('/local', 'hotsheet-web-stable'),
+    );
     expect(stableSnapshotParent({ HOTSHEET_WEB_STABLE_TEMP_ROOT: '/override' }, 'darwin', '/Users/dev')).toBe(
-      '/override',
+      resolve('/override'),
     );
   });
 
@@ -99,7 +105,7 @@ describe('stable dev snapshot', () => {
     await make('hotsheet-web-stable-orphan', undefined, 60 * 60 * 1000);
     await make('unrelated-directory', 200);
     const removed = await pruneStaleSnapshots(parent, { isAlive: (pid) => pid === 100 });
-    expect(removed.map((path) => path.split('/').at(-1)).sort()).toEqual([
+    expect(removed.map((path) => basename(path)).sort()).toEqual([
       'hotsheet-web-stable-dead',
       'hotsheet-web-stable-orphan',
     ]);
@@ -113,7 +119,7 @@ describe('stable dev snapshot', () => {
   });
 
   /** Deterministic timers plus a fake Vite child for the shutdown paths (HS2-4SSWV5). */
-  function shutdownHarness({ ppid = 500 } = {}) {
+  function shutdownHarness({ ppid = 500, ownedStdin = false } = {}) {
     const intervals = new Map(),
       timeouts = new Map();
     let next = 0;
@@ -132,6 +138,10 @@ describe('stable dev snapshot', () => {
       clearTimeout: (id) => timeouts.delete(id),
     };
     const processHost = Object.assign(new EventEmitter(), { ppid, execPath: 'node' });
+    const stdin = Object.assign(new EventEmitter(), { resumed: false });
+    stdin.resume = () => (stdin.resumed = true);
+    stdin.pause = () => (stdin.resumed = false);
+    let parentAlive = true;
     const child = Object.assign(new EventEmitter(), { signals: [] });
     child.kill = (signal) => {
       child.signals.push(signal);
@@ -144,8 +154,10 @@ describe('stable dev snapshot', () => {
     const running = runStableDev({
       sourceRoot: '/work/web',
       temporaryRoot: '/tmp/runtime',
-      environment: {},
+      environment: ownedStdin ? { HOTSHEET_STABLE_DEV_OWNED_STDIN: '1' } : {},
       processHost,
+      stdin,
+      parentIsAlive: () => parentAlive,
       timers,
       createSnapshot: async () => '/tmp/runtime/hotsheet-web-stable-test',
       removeSnapshot: async () => undefined,
@@ -156,7 +168,16 @@ describe('stable dev snapshot', () => {
       },
       log: () => undefined,
     });
-    return { running, childStarted, child, processHost, intervals, timeouts };
+    return {
+      running,
+      childStarted,
+      child,
+      processHost,
+      stdin,
+      intervals,
+      timeouts,
+      parentDies: () => (parentAlive = false),
+    };
   }
 
   it('shuts Vite down when its parent disappears and force-kills a child that ignores SIGTERM', async () => {
@@ -177,6 +198,27 @@ describe('stable dev snapshot', () => {
     expect(await harness.running).toBe(143);
     expect(harness.intervals.size).toBe(0);
     expect(harness.timeouts.size).toBe(0);
+  });
+
+  it('notices Windows-style parent death without a ppid change (HS2-XP3Y4D)', async () => {
+    const harness = shutdownHarness();
+    await harness.childStarted;
+    harness.parentDies();
+    [...harness.intervals.values()][0]();
+    expect(harness.child.signals).toEqual(['SIGTERM']);
+    harness.child.emit('close', null, 'SIGTERM');
+    expect(await harness.running).toBe(143);
+  });
+
+  it('closes an owned pipe gracefully before the Windows parent force exits (HS2-XP3Y4D)', async () => {
+    const harness = shutdownHarness({ ownedStdin: true });
+    await harness.childStarted;
+    expect(harness.stdin.resumed).toBe(true);
+    harness.stdin.emit('end');
+    expect(harness.child.signals).toEqual(['SIGTERM']);
+    harness.child.emit('close', null, 'SIGTERM');
+    expect(await harness.running).toBe(143);
+    expect(harness.stdin.listenerCount('end')).toBe(0);
   });
 
   it('cancels the force kill when Vite exits promptly after a signal', async () => {
@@ -201,16 +243,16 @@ describe('stable dev snapshot', () => {
 
   it('preserves the original repository root for every snapshot-side bridge', () => {
     const environment = stableDevEnvironment('/work/hotsheet2/clients/web', '/tmp/stable-snapshot', {});
-    expect(environment.HOTSHEET_REPO_ROOT).toBe('/work/hotsheet2');
+    expect(environment.HOTSHEET_REPO_ROOT).toBe(resolve('/work/hotsheet2'));
     expect(environment.HOTSHEET_WEB_STABLE_DEV).toBe('1');
-    expect(environment.HOTSHEET_VITE_CACHE_DIR).toBe('/tmp/stable-snapshot/.vite-cache');
+    expect(environment.HOTSHEET_VITE_CACHE_DIR).toBe(resolve('/tmp/stable-snapshot/.vite-cache'));
 
     const overridden = stableDevEnvironment('/snapshot/web', '/tmp/other-snapshot', {
       HOTSHEET_REPO_ROOT: '/real/repository',
       HOTSHEET_VITE_CACHE_DIR: '/shared/cache-that-must-not-be-used',
     });
     expect(overridden.HOTSHEET_REPO_ROOT).toBe('/real/repository');
-    expect(overridden.HOTSHEET_VITE_CACHE_DIR).toBe('/tmp/other-snapshot/.vite-cache');
+    expect(overridden.HOTSHEET_VITE_CACHE_DIR).toBe(resolve('/tmp/other-snapshot/.vite-cache'));
   });
 
   it('awaits and removes a snapshot when shutdown arrives during startup', async () => {

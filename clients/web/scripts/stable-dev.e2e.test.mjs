@@ -64,7 +64,8 @@ function captureChildOutput(child) {
 async function stopChild(child, { forceAfterMs = 10_000 } = {}) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise((resolveExit) => child.once('exit', resolveExit));
-  child.kill('SIGTERM');
+  if (child.stdin?.writable) child.stdin.end();
+  else child.kill('SIGTERM');
   // One hung server must not stall the suite or survive it (HS2-4SSWV5).
   const force = setTimeout(() => child.kill('SIGKILL'), forceAfterMs);
   try {
@@ -192,8 +193,9 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
         HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: fixture,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+        HOTSHEET_STABLE_DEV_OWNED_STDIN: '1',
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     },
   );
   const output = captureChildOutput(child);
@@ -249,7 +251,7 @@ it.concurrent(
     const child = spawn(
       process.execPath,
       [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
-      { env: environment, stdio: ['ignore', 'pipe', 'pipe'] },
+      { env: { ...environment, HOTSHEET_STABLE_DEV_OWNED_STDIN: '1' }, stdio: ['pipe', 'pipe', 'pipe'] },
     );
     const output = captureChildOutput(child);
     let browser;
@@ -406,8 +408,9 @@ it('does not reload when a later route first imports another dependency', async 
         HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+        HOTSHEET_STABLE_DEV_OWNED_STDIN: '1',
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     },
   );
   const output = captureChildOutput(child);
@@ -467,8 +470,9 @@ it.concurrent(
           HOTSHEET_HOME: fixtureHome,
           HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
           HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+          HOTSHEET_STABLE_DEV_OWNED_STDIN: '1',
         },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
     const output = captureChildOutput(child);
@@ -538,8 +542,9 @@ it.concurrent(
           HOTSHEET_HOME: fixtureHome,
           HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
           HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+          HOTSHEET_STABLE_DEV_OWNED_STDIN: '1',
         },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
     const output = captureChildOutput(child);

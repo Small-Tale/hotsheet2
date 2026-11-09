@@ -34,9 +34,16 @@ export function parseOwnedServerArguments(argv) {
 }
 
 /** Whether this live process leads its own process group (Playwright's detached webServer group). */
-export function leadsOwnProcessGroup(pid = process.pid, run = spawnSync) {
+export function leadsOwnProcessGroup(pid = process.pid, run = spawnSync, platform = process.platform) {
+  if (platform === 'win32') return false;
   const result = run('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8' });
   return result.status === 0 && Number(result.stdout.trim()) === pid;
+}
+
+function killOwnedWindowsTree(pid, run = spawnSync) {
+  // Windows has no POSIX process group. Taskkill follows the child we still own, including its
+  // descendants, before Node can reap that child and the pid can be reused.
+  return run('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true });
 }
 
 /**
@@ -53,6 +60,8 @@ export function runOwnedServer({
   spawnChild = spawn,
   timers = globalThis,
   leadsGroup = leadsOwnProcessGroup,
+  platform = process.platform,
+  killTree = killOwnedWindowsTree,
 }) {
   // Decided before the server starts, while this process is certainly alive in its own group.
   const sweepGroup = leadsGroup();
@@ -65,6 +74,10 @@ export function runOwnedServer({
     if (stopReason !== undefined) return;
     stopReason = reason;
     if (child.exitCode !== null || child.signalCode !== null) return;
+    if (platform === 'win32') {
+      killTree(child.pid);
+      return;
+    }
     child.kill('SIGTERM');
     // The timer lives in this launcher, which stays alive until the child closes.
     forceKill = timers.setTimeout(() => {

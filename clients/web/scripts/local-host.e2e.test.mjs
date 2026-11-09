@@ -29,7 +29,8 @@ import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabiliti
 // HS2-587N4D: `npm run prod` serves the built client through the same local bridge without Vite.
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
   repoRoot = resolve(webRoot, '../..'),
-  run = promisify(execFile);
+  run = promisify(execFile),
+  viteCli = resolve(webRoot, 'node_modules/vite/bin/vite.js');
 
 async function availablePort() {
   const server = createServer();
@@ -216,13 +217,13 @@ beforeAll(async () => {
   assertFixtureCli(workingTreeBinaries.HOTSHEET_CLI_BIN);
   await mkdir(resolve(webRoot, 'target'), { recursive: true });
   buildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-'));
-  await run('npx', ['vite', 'build', '--outDir', resolve(buildRoot, 'dist'), '--emptyOutDir'], {
+  await run(process.execPath, [viteCli, 'build', '--outDir', resolve(buildRoot, 'dist'), '--emptyOutDir'], {
     cwd: webRoot,
     env: productionEnvironment,
   });
   await run(
-    'npx',
-    ['vite', 'build', '--ssr', 'src/local-host.ts', '--outDir', resolve(buildRoot, 'dist-host'), '--emptyOutDir'],
+    process.execPath,
+    [viteCli, 'build', '--ssr', 'src/local-host.ts', '--outDir', resolve(buildRoot, 'dist-host'), '--emptyOutDir'],
     {
       cwd: webRoot,
       env: productionEnvironment,

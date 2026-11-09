@@ -58,9 +58,16 @@ it('stops the real ticket server when its runner is SIGKILLed before teardown', 
     const deadline = Date.now() + 10_000;
     while (alive(started.pid) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
     expect(alive(started.pid), 'the orphaned server must stop on its own').toBe(false);
-    const registrations = (await readdir(resolve(started.home, 'instances')).catch(() => [])).filter((name) =>
-      name.endsWith('.json'),
-    );
+    // The process exit and registry unlink are separate observations, especially on Windows.
+    // Keep the cleanup assertion, but wait for the bounded unlink instead of racing it.
+    const unlinkDeadline = Date.now() + 5_000;
+    let registrations;
+    do {
+      registrations = (await readdir(resolve(started.home, 'instances')).catch(() => [])).filter((name) =>
+        name.endsWith('.json'),
+      );
+      if (registrations.length > 0) await new Promise((r) => setTimeout(r, 50));
+    } while (registrations.length > 0 && Date.now() < unlinkDeadline);
     expect(registrations).toEqual([]);
   } finally {
     if (owner.exitCode === null && owner.signalCode === null) owner.kill('SIGKILL');

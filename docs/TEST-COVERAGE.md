@@ -77,6 +77,13 @@ the full CLI integration suite passed 166 tests. The original intermittent
 coverage startup exit remains unattributed under HS2-PY4GH2; Linux coverage
 CI is required to exercise the diagnostic on the failing platform.
 
+HS2-XP3Y4D: web server fixture tests pin exact child identity, taken-port
+refusal, cache ownership, and cleanup after normal and already-exited parents.
+The Windows path waits for descendants of the launched Vite PID before cache
+removal; a native Windows 11 probe observed a real `esbuild.exe` child before
+shutdown and none afterward. The full web unit and binary suites passed on the
+source tree; shipped native Windows web proof remains required.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

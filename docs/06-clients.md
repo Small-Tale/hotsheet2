@@ -537,8 +537,11 @@ preview/download, server directory browser) are separate design work.
   and removes it before returning the conventional signal exit status. After Vite starts,
   shutdown first waits for the child to exit and then removes the private snapshot before
   the launcher itself exits; every path removes its signal listeners and prevents concurrent
-  Vite writes from racing snapshot cleanup. Stable-dev browser checks allow the snapshot
-  copy a bounded 30-second readiness window under full-suite I/O load, fail immediately if
+  Vite writes from racing snapshot cleanup. On Windows, the test-owned Vite launcher also
+  stops and drains descendants of its exact child PID before removing a disposable cache;
+  a native `esbuild.exe` may outlive Vite's parent exit (HS2-XP3Y4D). Stable-dev
+  browser checks allow the snapshot copy a bounded 30-second readiness window
+  under full-suite I/O load, fail immediately if
   the launcher exits, and include its captured output in timeout and early-exit diagnostics
   (HS2-2D5CXN). Before the lazy terminal-runtime check imports `terminal-viewport-runtime`
   in the browser, it waits on the module graph's readiness. It fetches that module and every

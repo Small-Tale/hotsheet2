@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const launcher = resolve(webRoot, 'scripts/owned-server.mjs');
 const vite = resolve(webRoot, 'node_modules/vite/bin/vite.js');
+const windows = process.platform === 'win32';
 // Process exits are awaited by state for up to 15 s each on a loaded gate host.
 vi.setConfig({ testTimeout: 30_000 });
 let fixtures;
@@ -22,7 +23,11 @@ const handles = [];
 // The runner stands in for Playwright's test runner: detached webServer group, stdin pipe held open.
 const RUNNER = `
 const { spawn } = require('node:child_process');
-const child = spawn(process.argv[1], { shell: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+const config = JSON.parse(process.argv[1]);
+const child = spawn(config.command, config.args, {
+  shell: config.shell, detached: true, stdio: ['pipe', 'pipe', 'pipe'],
+  env: { ...process.env, ...config.env },
+});
 console.log('launcher ' + child.pid);
 child.stdout.on('data', (chunk) => process.stdout.write(chunk));
 child.stderr.on('data', (chunk) => process.stdout.write(chunk));
@@ -63,7 +68,8 @@ afterEach(() => {
   for (const entry of recorded.splice(0))
     if (alive(entry))
       try {
-        process.kill(entry.pid, 'SIGKILL');
+        if (windows) spawnSync('taskkill', ['/PID', String(entry.pid), '/T', '/F'], { windowsHide: true });
+        else process.kill(entry.pid, 'SIGKILL');
       } catch {
         /* already gone */
       }
@@ -71,6 +77,16 @@ afterEach(() => {
 });
 
 function processInfo(pid) {
+  if (windows) {
+    const script = `Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' | Select-Object ParentProcessId,CreationDate,Name | ConvertTo-Json -Compress`;
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    if (result.status !== 0 || !result.stdout.trim()) return null;
+    const info = JSON.parse(result.stdout);
+    return { pgid: null, ppid: info.ParentProcessId, started: info.CreationDate, name: info.Name };
+  }
   const result = spawnSync('ps', ['-o', 'pgid=,stat=,lstart=', '-p', String(pid)], { encoding: 'utf8' });
   const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(result.stdout);
   // A zombie has released its port and every resource; only its reaper can still remove the row.
@@ -91,6 +107,23 @@ function alive(entry) {
 }
 
 function descendantsOf(rootPid) {
+  if (windows) {
+    const result = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    );
+    const rows = JSON.parse(result.stdout).map((row) => [row.ProcessId, row.ParentProcessId]);
+    const found = [rootPid];
+    for (let index = 0; index < found.length; index += 1)
+      for (const [pid, ppid] of rows) if (ppid === found[index] && !found.includes(pid)) found.push(pid);
+    return found.slice(1);
+  }
   const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' })
     .stdout.trim()
     .split('\n')
@@ -132,7 +165,7 @@ async function eventually(check, label, timeoutMs = 15_000) {
 
 /** Start a runner in its own group so the test can end it the way an interrupted gate ends. */
 function startRunner(command) {
-  const runner = spawn(process.execPath, ['-e', RUNNER, command], {
+  const runner = spawn(process.execPath, ['-e', RUNNER, JSON.stringify(command)], {
     cwd: webRoot,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -164,7 +197,17 @@ function startRunner(command) {
 
 function launch(serverArgs, launcherArgs = ['--exit-on-stdin-eof']) {
   // `exec`, exactly as playwright.config.ts: without it Ubuntu's dash stays the group leader.
-  return `exec node ${launcher} ${launcherArgs.join(' ')} -- node ${join(fixtures, 'server.cjs')} ${serverArgs}`;
+  if (windows)
+    return {
+      command: process.execPath,
+      args: [launcher, ...launcherArgs, '--', process.execPath, join(fixtures, 'server.cjs'), serverArgs],
+      shell: false,
+    };
+  return {
+    command: `exec node ${launcher} ${launcherArgs.join(' ')} -- node ${join(fixtures, 'server.cjs')} ${serverArgs}`,
+    args: [],
+    shell: true,
+  };
 }
 
 async function startOwned(mode, launcherArgs) {
@@ -203,19 +246,46 @@ async function expectReleased({ owned, port }) {
   expect(await listening(port)).toBe(false);
 }
 
+function stopRunner(run, signal) {
+  // POSIX can signal the detached runner group; Windows has no such group and the runner's
+  // process handle is the identity this fixture owns. Its death closes the launcher's pipe.
+  process.kill(windows ? run.runner.pid : -run.runner.pid, signal);
+}
+
 it('runs the server in the launcher-led group Playwright creates for its webServer (HS2-F6F8MA)', async () => {
   const run = await startOwned('plain');
   // `sh -c exec` makes the shell's pid the launcher itself, so it leads the detached group and the
   // server shares it. Without `exec`, dash would keep that pid and leave the launcher a plain member.
-  expect(spawnSync('ps', ['-o', 'comm=', '-p', String(run.owned.launcher.pid)], { encoding: 'utf8' }).stdout).toMatch(
-    /node/u,
-  );
-  expect(run.owned.launcher.pgid).toBe(run.owned.launcher.pid);
-  expect(run.owned.server.pgid).toBe(run.owned.launcher.pid);
+  if (windows) {
+    expect(run.owned.launcher.name).toMatch(/^node\.exe$/iu);
+    expect(run.owned.server.ppid).toBe(run.owned.launcher.pid);
+  } else {
+    expect(spawnSync('ps', ['-o', 'comm=', '-p', String(run.owned.launcher.pid)], { encoding: 'utf8' }).stdout).toMatch(
+      /node/u,
+    );
+    expect(run.owned.launcher.pgid).toBe(run.owned.launcher.pid);
+    expect(run.owned.server.pgid).toBe(run.owned.launcher.pid);
+  }
   expect(await listening(run.port)).toBe(true);
-  process.kill(-run.runner.pid, 'SIGKILL');
+  stopRunner(run, 'SIGKILL');
   await expectReleased(run);
 });
+
+if (windows)
+  it('closes the real cmd.exe webServer pipe when its runner dies (HS2-XP3Y4D)', async () => {
+    const run = startRunner({
+      command: `node scripts/owned-server.mjs --exit-on-stdin-eof -- node "${join(fixtures, 'server.cjs')}" plain`,
+      args: [],
+      shell: true,
+    });
+    const ready = await run.line(/ready (\d+) (\d+)\n/);
+    const server = record(Number(ready[1]));
+    const port = Number(ready[2]);
+    expect(await listening(port)).toBe(true);
+    stopRunner(run, 'SIGKILL');
+    await eventually(() => !alive(server), 'cmd.exe fixture server to exit');
+    expect(await listening(port)).toBe(false);
+  });
 
 for (const signal of ['SIGKILL', 'SIGTERM'])
   it(`releases the owned port and every owned descendant when the runner ends by ${signal} (HS2-F6F8MA)`, async () => {
@@ -223,9 +293,10 @@ for (const signal of ['SIGKILL', 'SIGTERM'])
     const run = await startOwned('descendants');
     expect(run.owned.descendants).toHaveLength(2);
     // The detached descendant really left the server's group: a group signal alone cannot reach it.
-    expect(run.owned.descendants[1].pgid).not.toBe(run.owned.launcher.pgid);
+    if (windows) expect(run.owned.descendants[1].ppid).toBe(run.owned.server.pid);
+    else expect(run.owned.descendants[1].pgid).not.toBe(run.owned.launcher.pgid);
     // The runner dies without any teardown of its own; only the closed stdin pipe remains.
-    process.kill(-run.runner.pid, signal);
+    stopRunner(run, signal);
     await expectReleased(run);
     // A same-command process and listener the launcher never started is untouched.
     expect(foreign.entries.every(alive)).toBe(true);
@@ -234,13 +305,13 @@ for (const signal of ['SIGKILL', 'SIGTERM'])
 
 it('force-kills a server that ignores SIGTERM after the grace period (HS2-F6F8MA)', async () => {
   const run = await startOwned('ignore-term', ['--exit-on-stdin-eof', '--grace-ms', '300']);
-  process.kill(-run.runner.pid, 'SIGKILL');
+  stopRunner(run, 'SIGKILL');
   await expectReleased(run);
 });
 
 it('stops on a signal to its group while the runner stays alive (HS2-F6F8MA)', async () => {
   const run = await startOwned('descendants');
-  process.kill(-run.owned.launcher.pid, 'SIGTERM');
+  process.kill(windows ? run.owned.launcher.pid : -run.owned.launcher.pid, 'SIGTERM');
   await expectReleased(run);
   await run.closed;
   expect(run.output()).toMatch(/closed /);
@@ -255,12 +326,15 @@ it('reports the server exit code when the server stops by itself (HS2-F6F8MA)', 
 it('ignores stdin without --exit-on-stdin-eof (HS2-F6F8MA)', async () => {
   const run = await startOwned('plain', []);
   // Close only the runner's pipe handle to the launcher, not the runner: the server keeps serving.
-  process.kill(-run.runner.pid, 'SIGKILL');
+  stopRunner(run, 'SIGKILL');
   await run.closed;
   expect(alive(run.owned.server)).toBe(true);
   expect(await listening(run.port)).toBe(true);
   // This file started it; end its group by the recorded launcher identity.
-  if (alive(run.owned.launcher)) process.kill(-run.owned.launcher.pid, 'SIGKILL');
+  if (alive(run.owned.launcher)) {
+    if (windows) spawnSync('taskkill', ['/PID', String(run.owned.launcher.pid), '/T', '/F'], { windowsHide: true });
+    else process.kill(-run.owned.launcher.pid, 'SIGKILL');
+  }
   await eventually(() => !alive(run.owned.server), 'manual fixture stop');
 });
 
@@ -270,7 +344,29 @@ it('stops the real Vite fixture server and its esbuild service when the runner i
   try {
     // The same command shape as playwright.config.ts.
     const run = startRunner(
-      `HOTSHEET_VITE_CACHE_DIR=${cacheDir} node ${launcher} --exit-on-stdin-eof -- node ${vite} --host 127.0.0.1 --port ${port} --strictPort`,
+      windows
+        ? {
+            command: process.execPath,
+            args: [
+              launcher,
+              '--exit-on-stdin-eof',
+              '--',
+              process.execPath,
+              vite,
+              '--host',
+              '127.0.0.1',
+              '--port',
+              String(port),
+              '--strictPort',
+            ],
+            shell: false,
+            env: { HOTSHEET_VITE_CACHE_DIR: cacheDir },
+          }
+        : {
+            command: `HOTSHEET_VITE_CACHE_DIR=${cacheDir} node ${launcher} --exit-on-stdin-eof -- node ${vite} --host 127.0.0.1 --port ${port} --strictPort`,
+            args: [],
+            shell: true,
+          },
     );
     const [, launcherPid] = await run.line(/launcher (\d+)/);
     await run.line(/ready in/i);
@@ -278,7 +374,7 @@ it('stops the real Vite fixture server and its esbuild service when the runner i
     const tree = [Number(launcherPid), ...descendantsOf(Number(launcherPid))].map(record);
     // Launcher, Vite, and at least esbuild's service.
     expect(tree.length).toBeGreaterThanOrEqual(3);
-    process.kill(-run.runner.pid, 'SIGKILL');
+    stopRunner(run, 'SIGKILL');
     await eventually(() => tree.every((entry) => !alive(entry)), 'every Vite fixture process to exit');
     expect(await listening(port)).toBe(false);
   } finally {

@@ -60,9 +60,15 @@ describe('repository formatting scope (HS2-G9K0NY)', () => {
       return { status: result.status, output: result.stdout + result.stderr };
     };
     // Real package-script wiring through npm: both the Prettier and the Cargo half.
-    const npm = (name) => spawn('npm', ['run', name]);
-    // The exact package-script command without an npm boot; `sh -c` keeps its `&&` short-circuit.
-    const script = (name) => spawn('sh', ['-c', scripts[name]]);
+    const npm = (name) =>
+      process.platform === 'win32'
+        ? spawn(process.execPath, [process.env.npm_execpath, 'run', name])
+        : spawn('npm', ['run', name]);
+    // Match npm's platform shell so the compound package command keeps its `&&` short-circuit.
+    const script = (name) =>
+      process.platform === 'win32'
+        ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', scripts[name]])
+        : spawn('sh', ['-c', scripts[name]]);
     // The Prettier half alone, for states that do not touch Rust sources.
     const sources = (mode) => spawn(process.execPath, ['scripts/format-sources.mjs', mode]);
     // Normalize the generated manifest, then verify the untouched clean-checkout gate.

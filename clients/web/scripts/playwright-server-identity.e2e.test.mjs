@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, it } from 'vitest';
 
-import { stopServerProcess, trackServerProcess } from './playwright-server-process.mjs';
+import { stopServerProcess, trackServerProcess, windowsDescendants } from './playwright-server-process.mjs';
 
 // Two real Vite servers launched the way Playwright's webServer launches them: each answers only its
 // own test-server identity, a second server on a taken port refuses instead of sharing it, and
@@ -80,6 +80,10 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   const shared = await availablePort();
   const first = await launch(shared, 'run-a');
   await ready(first, shared, 'run-a');
+  if (process.platform === 'win32') {
+    expect((await fetch(`http://127.0.0.1:${shared}/src/main.tsx`)).status).toBe(200);
+    expect(windowsDescendants(first.child.pid).some((child) => child.Name === 'esbuild.exe')).toBe(true);
+  }
   expect(await identity(shared, 'run-b')).toBe(404);
   expect(await identity(shared, '')).toBe(404);
 
@@ -87,6 +91,10 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   const collision = await launch(shared, 'run-b');
   expect(await collision.exited).not.toBe(0);
   expect(collision.output()).toMatch(/already in use/i);
+  if (process.platform === 'win32') {
+    await stopServerProcess(collision);
+    expect(windowsDescendants(collision.child.pid)).toEqual([]);
+  }
   expect(await identity(shared, 'run-b')).toBe(404);
   expect(await identity(shared, 'run-a')).toBe(200);
 
@@ -96,6 +104,7 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   await ready(second, separate, 'run-b');
   expect(await identity(separate, 'run-a')).toBe(404);
   await stopServerProcess(first);
+  if (process.platform === 'win32') expect(windowsDescendants(first.child.pid)).toEqual([]);
   expect(await identity(shared, 'run-a')).toBe('refused');
   expect(await identity(separate, 'run-b')).toBe(200);
 }, 60_000);
@@ -105,28 +114,67 @@ it.each(['already exited', 'running'])(
   async (state) => {
     const cacheDir = await mkdtemp(resolve(tmpdir(), 'hotsheet-identity-writer-'));
     directories.push(cacheDir);
-    // Like esbuild's service, this real descendant inherits the parent's output pipes. A separate
-    // inherited control pipe holds its final cache write until the test releases it, without sleeps.
+    // Unix descendants can hold inherited pipes open. Windows closes the parent-facing fd3 when
+    // the parent exits, so a loopback control socket supplies the equivalent deterministic gate.
+    let releaseWriter;
+    let writerSocket;
+    let resolveDrained;
+    const drained = new Promise((resolveDrainedPromise) => {
+      resolveDrained = resolveDrainedPromise;
+    });
+    let control;
+    let connected;
+    if (process.platform === 'win32') {
+      let resolveConnected;
+      connected = new Promise((resolveConnectedPromise) => {
+        resolveConnected = resolveConnectedPromise;
+      });
+      control = createServer((socket) => {
+        writerSocket = socket;
+        releaseWriter = () => socket.write('release');
+        socket.once('data', (chunk) => {
+          if (chunk.toString() === 'finished') resolveDrained();
+        });
+        socket.once('close', () => resolveDrained());
+        socket.on('error', () => resolveDrained());
+        resolveConnected();
+      });
+      await new Promise((resolveListen, reject) => control.once('error', reject).listen(0, '127.0.0.1', resolveListen));
+    }
     const writer = `
     import { createReadStream } from 'node:fs';
     import { writeFile } from 'node:fs/promises';
+    import { connect } from 'node:net';
     import { resolve } from 'node:path';
-    createReadStream(null, { fd: 3 }).once('data', async () => {
+    const finish = async (socket) => {
       await writeFile(resolve(process.argv[1], 'writer-finished'), 'finished');
-      process.exit(0);
-    });
+      if (socket) socket.end('finished', () => process.exit(0));
+      else process.exit(0);
+    };
+    if (process.argv[2]) {
+      const socket = connect(Number(process.argv[2]), '127.0.0.1');
+      socket.once('data', () => finish(socket));
+    } else {
+      createReadStream(null, { fd: 3 }).once('data', () => finish());
+    }
     process.stdout.write('writer-ready\\n');
   `;
     const parent = `
     import { spawn } from 'node:child_process';
-    spawn(process.execPath, ['--input-type=module', '-e', process.argv[1], process.argv[2]], {
-      stdio: ['ignore', 'inherit', 'inherit', 3],
+    spawn(process.execPath, ['--input-type=module', '-e', process.argv[1], process.argv[2], process.argv[4]], {
+      stdio: process.argv[4] ? 'ignore' : ['ignore', 'inherit', 'inherit', 3],
+      detached: Boolean(process.argv[4]),
     }).once('spawn', () => { if (process.argv[3] === 'already exited') process.exit(0); });
   `;
-    const child = spawn(process.execPath, ['--input-type=module', '-e', parent, writer, cacheDir, state], {
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
-    });
-    const server = trackServerProcess(child);
+    const port = control?.address()?.port;
+    const child = spawn(
+      process.execPath,
+      ['--input-type=module', '-e', parent, writer, cacheDir, state, String(port ?? '')],
+      {
+        stdio: ['ignore', 'pipe', 'pipe', port ? 'ignore' : 'pipe'],
+      },
+    );
+    const server = trackServerProcess(child, { drained: port ? drained : undefined });
     owned.push(server);
     const writerReady = new Promise((resolveReady) => {
       child.stdout.on('data', (chunk) => {
@@ -135,7 +183,7 @@ it.each(['already exited', 'running'])(
     });
     let stopFinished = false;
     try {
-      await writerReady;
+      await (connected ?? writerReady);
       if (state === 'already exited') expect(await server.exited).toBe(0);
       const stopping = stopServerProcess(server).then(() => {
         stopFinished = true;
@@ -144,13 +192,20 @@ it.each(['already exited', 'running'])(
       // Give an incorrectly resolved stop its promise turn; the writer remains event-gated.
       await new Promise(setImmediate);
       expect(stopFinished).toBe(false);
-      child.stdio[3].end('release');
+      if (releaseWriter) releaseWriter();
+      else child.stdio[3].end('release');
       await stopping;
       expect(await readFile(resolve(cacheDir, 'writer-finished'), 'utf8')).toBe('finished');
       await rm(cacheDir, { recursive: true, force: true });
     } finally {
-      if (!child.stdio[3].writableEnded) child.stdio[3].end('release');
+      if (releaseWriter) releaseWriter();
+      else if (!child.stdio[3].writableEnded) child.stdio[3].end('release');
+      resolveDrained();
       await server.closed;
+      if (control) {
+        writerSocket?.destroy();
+        await new Promise((resolveClose) => control.close(resolveClose));
+      }
     }
   },
 );

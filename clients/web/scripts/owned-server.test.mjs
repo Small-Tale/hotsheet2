@@ -6,8 +6,8 @@ import { leadsOwnProcessGroup, parseOwnedServerArguments, runOwnedServer } from 
 
 // HS2-F6F8MA: the launcher's stop transitions with fake processes; owned-server.e2e.test.mjs covers
 // the same paths with real process groups, pipes, and Vite.
-function harness({ exitOnStdinEof = true, leadsGroup = true, graceMs = 100 } = {}) {
-  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null, signals: [] });
+function harness({ exitOnStdinEof = true, leadsGroup = true, graceMs = 100, platform = 'linux' } = {}) {
+  const child = Object.assign(new EventEmitter(), { pid: 42, exitCode: null, signalCode: null, signals: [] });
   child.kill = (signal) => {
     // Node's ChildProcess.kill is a no-op once the child has been reaped.
     if (child.exitCode === null && child.signalCode === null) child.signals.push(signal);
@@ -38,6 +38,7 @@ function harness({ exitOnStdinEof = true, leadsGroup = true, graceMs = 100 } = {
     }
   };
   const spawned = [];
+  const killedTrees = [];
   const result = runOwnedServer({
     program: 'node',
     args: ['vite.js', '--port', '1'],
@@ -47,12 +48,14 @@ function harness({ exitOnStdinEof = true, leadsGroup = true, graceMs = 100 } = {
     stdin,
     timers,
     leadsGroup: () => leadsGroup,
+    platform,
+    killTree: (pid) => killedTrees.push(pid),
     spawnChild: (program, args, options) => {
       spawned.push({ program, args, options });
       return child;
     },
   });
-  return { child, exit, processHost, stdin, timers, spawned, result };
+  return { child, exit, processHost, stdin, timers, spawned, result, killedTrees };
 }
 
 describe('parseOwnedServerArguments', () => {
@@ -82,9 +85,18 @@ describe('parseOwnedServerArguments', () => {
 
 describe('leadsOwnProcessGroup', () => {
   it('compares the reported group id with the pid', () => {
-    expect(leadsOwnProcessGroup(42, () => ({ status: 0, stdout: '   42\n' }))).toBe(true);
-    expect(leadsOwnProcessGroup(42, () => ({ status: 0, stdout: '7\n' }))).toBe(false);
-    expect(leadsOwnProcessGroup(42, () => ({ status: 1, stdout: '' }))).toBe(false);
+    expect(leadsOwnProcessGroup(42, () => ({ status: 0, stdout: '   42\n' }), 'linux')).toBe(true);
+    expect(leadsOwnProcessGroup(42, () => ({ status: 0, stdout: '7\n' }), 'linux')).toBe(false);
+    expect(leadsOwnProcessGroup(42, () => ({ status: 1, stdout: '' }), 'linux')).toBe(false);
+    expect(
+      leadsOwnProcessGroup(
+        42,
+        () => {
+          throw new Error('ps must not run on Windows');
+        },
+        'win32',
+      ),
+    ).toBe(false);
   });
 });
 
@@ -138,6 +150,23 @@ describe('runOwnedServer', () => {
     expect(child.signals).toEqual(['SIGTERM', 'SIGKILL']);
     exit(null, 'SIGKILL');
     expect(await result).toBe(137);
+  });
+
+  it('kills only the live owned Windows child tree before its pid can be reused (HS2-XP3Y4D)', async () => {
+    const { exit, stdin, result, killedTrees, child, timers } = harness({ platform: 'win32' });
+    stdin.emit('end');
+    stdin.emit('close');
+    expect(killedTrees).toEqual([child.pid]);
+    expect(child.signals).toEqual([]);
+    expect(timers.pending.size).toBe(0);
+    exit(null, 'SIGTERM');
+    expect(await result).toBe(143);
+    const alreadyExited = harness({ platform: 'win32' });
+    alreadyExited.child.exitCode = 0;
+    alreadyExited.stdin.emit('end');
+    expect(alreadyExited.killedTrees).toEqual([]);
+    alreadyExited.exit(0);
+    await alreadyExited.result;
   });
 
   it('never signals a server that already exited (no reused pid can receive it)', async () => {
