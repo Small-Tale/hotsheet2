@@ -6187,6 +6187,22 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
     .unwrap();
     let empty = root.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
+    // HS2-HA63BE: a fixture server that exits during startup must expose its own bounded
+    // diagnostic; the next launch must still start a clean server for the same project.
+    let failed = host
+        .command()
+        .env("HOTSHEET_TEST_SERVER_OWNER_PID", "invalid")
+        .current_dir(&empty)
+        .args(["launch", "fake"])
+        .output()
+        .unwrap();
+    assert!(!failed.status.success());
+    let diagnostic = String::from_utf8_lossy(&failed.stderr);
+    assert!(
+        diagnostic.contains("isolated server stderr (first 4096 bytes)")
+            && diagnostic.contains("invalid digit found in string"),
+        "unexpected isolated startup diagnostic: {diagnostic}"
+    );
     let mut zero = host.command();
     let zero_output = zero
         .current_dir(&empty)

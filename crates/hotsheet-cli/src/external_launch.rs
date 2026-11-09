@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use std::{io::Read, io::Seek};
 
 use anyhow::{Context, Result, bail};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
@@ -92,13 +93,28 @@ pub fn ensure_running_server(store: &Path, home: &Path) -> Result<ServerInstance
         }
     };
     let mut command = hotsheet_ticketing::git::launch(cli);
+    // HS2-HA63BE: isolated launch fixtures need the failed server's own diagnostic.
+    // Keep it in an anonymous temporary file so a detached child cannot block on a pipe,
+    // and never capture ordinary server stderr from a user's project.
+    let mut fixture_stderr = if std::env::var_os("HOTSHEET_TEST_SERVER_OWNER_PID").is_some() {
+        Some(tempfile::tempfile().context("creating isolated server startup diagnostic")?)
+    } else {
+        None
+    };
+    let stderr = match fixture_stderr.as_ref() {
+        Some(file) => Stdio::from(
+            file.try_clone()
+                .context("cloning isolated server diagnostic")?,
+        ),
+        None => Stdio::null(),
+    };
     command
         .arg("-C")
         .arg(store)
         .args(["serve", "--bind", "127.0.0.1:0"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(stderr);
     let context = hotsheet_process_journal::LaunchContext {
         journal: hotsheet_process_journal::ProcessJournal::at(home),
         supervisor: "hotsheet-cli",
@@ -115,6 +131,16 @@ pub fn ensure_running_server(store: &Path, home: &Path) -> Result<ServerInstance
             return Ok(server);
         }
         if let Some(status) = child.try_wait()? {
+            if let Some(file) = fixture_stderr.as_mut() {
+                file.rewind()
+                    .context("reading isolated server startup diagnostic")?;
+                let mut bytes = Vec::new();
+                file.take(4096).read_to_end(&mut bytes)?;
+                let diagnostic = String::from_utf8_lossy(&bytes);
+                bail!(
+                    "Hot Sheet project server exited during startup with {status}; isolated server stderr (first 4096 bytes): {diagnostic}"
+                );
+            }
             bail!("Hot Sheet project server exited during startup with {status}");
         }
         std::thread::sleep(Duration::from_millis(100));

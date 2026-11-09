@@ -70,6 +70,13 @@ HS2-0AJP3T: existing Unix HTTP terminal tests exercise the three helpers now
 guarded with `cfg(unix)`. Native Windows x86_64 test compilation must confirm
 they no longer produce dead-code warnings.
 
+HS2-HA63BE: CLI integration tests force an isolated fixture server to exit on
+an invalid owner, check that its bounded child stderr reaches the launch error,
+then verify a clean next launch. The targeted case passed 20 repeated runs and
+the full CLI integration suite passed 166 tests. The original intermittent
+coverage startup exit remains unattributed under HS2-PY4GH2; Linux coverage
+CI is required to exercise the diagnostic on the failing platform.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,
