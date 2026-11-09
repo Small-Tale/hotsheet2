@@ -843,6 +843,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .github/workflows/platforms.yml # `Platforms`: daily/manual/workflow_call full suite per target (Linux x86_64/arm64, Windows x86_64/arm64, macOS arm64) + `tauri-<target>` desktop shell fmt, `cargo lint-desktop` clippy (HS2-H37V5P), tests and unsigned build; never per commit, never a ci-gate run (HS2-31RGRK)
   scripts/platform-matrix.mjs # Platform target ids, runners and target selection for platforms.yml's plan job (HS2-31RGRK; tests: platform-matrix.test.mjs)
   scripts/install-windows-arm64-gas-preprocessor.ps1 # Pinned upstream Perl assembler helper for dav1d in both native Windows arm64 jobs (HS2-BCCF8J; tests: platform-matrix.test.mjs)
+  scripts/configure-windows-arm64-aws-lc.ps1 # Probe clang-cl assembly and set crate-specific AWS_LC_SYS_CC in both native Windows arm64 jobs (HS2-XW91TJ; tests: platform-matrix.test.mjs)
   .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns, GitHub/GitLab/Jira providers)
   .env                       # gitignored, machine-local live-provider settings as 1Password refs; `op run --env-file=.env -- …` (docs/12 §12.7.6)
 ```

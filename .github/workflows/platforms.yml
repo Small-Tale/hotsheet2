@@ -151,6 +151,11 @@ jobs:
         shell: pwsh
         run: ./scripts/install-windows-arm64-gas-preprocessor.ps1
 
+      - name: Select clang-cl for aws-lc-sys assembly (Windows arm64)
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: ./scripts/configure-windows-arm64-aws-lc.ps1
+
       - name: Install git-filter-repo for compaction tests
         run: |
           python=$(command -v python || command -v python3)
@@ -427,6 +432,11 @@ jobs:
         if: matrix.os == 'windows' && matrix.arch == 'arm64'
         shell: pwsh
         run: ./scripts/install-windows-arm64-gas-preprocessor.ps1
+
+      - name: Select clang-cl for aws-lc-sys assembly (Windows arm64)
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: ./scripts/configure-windows-arm64-aws-lc.ps1
 
       - name: Set up Node
         uses: actions/setup-node@v4

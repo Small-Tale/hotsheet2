@@ -6,6 +6,7 @@ import { CORE_TARGETS, planOutputs, selectTargets, TAURI_TARGETS } from './platf
 
 const workflow = readFileSync(new URL('../.github/workflows/platforms.yml', import.meta.url), 'utf8');
 const gasPreprocessor = readFileSync(new URL('./install-windows-arm64-gas-preprocessor.ps1', import.meta.url), 'utf8');
+const awsLcCompiler = readFileSync(new URL('./configure-windows-arm64-aws-lc.ps1', import.meta.url), 'utf8');
 const ids = (entries) => entries.map(({ target }) => target);
 
 test('HS2-31RGRK covers the maintainer platform set with stable target ids and runners', () => {
@@ -78,6 +79,25 @@ test('HS2-BCCF8J installs a verified gas-preprocessor for both native Windows ar
   assert.match(gasPreprocessor, /Get-FileHash -Algorithm SHA256 -Path \$script/);
   assert.match(gasPreprocessor, /perl -c \$script/);
   assert.match(gasPreprocessor, /\$env:GITHUB_PATH/);
+});
+
+test('HS2-XW91TJ selects an ARM64 assembler for aws-lc-sys without changing AVIF CC', () => {
+  for (const job of [
+    workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),
+    workflow.slice(workflow.indexOf('\n  tauri:')),
+  ]) {
+    const avif = job.indexOf('Install the AVIF decoder for the native build (Windows)');
+    const configure = job.indexOf('Select clang-cl for aws-lc-sys assembly (Windows arm64)');
+    assert.ok(avif >= 0 && configure > avif && configure < job.indexOf('Set up Node'));
+    assert.match(job.slice(avif, configure), /CC=cl/);
+    assert.match(job.slice(configure, job.indexOf('Set up Node')), /matrix\.os == 'windows' && matrix\.arch == 'arm64'/);
+    assert.match(job.slice(configure, job.indexOf('Set up Node')), /run: \.\/scripts\/configure-windows-arm64-aws-lc\.ps1/);
+  }
+  assert.match(awsLcCompiler, /VC\/Tools\/Llvm\/ARM64\/bin\/clang-cl\.exe/);
+  assert.match(awsLcCompiler, /--target=aarch64-pc-windows-msvc \/c \$probe/);
+  assert.match(awsLcCompiler, /\$LASTEXITCODE -eq 0/);
+  assert.match(awsLcCompiler, /AWS_LC_SYS_CC=\$compiler/);
+  assert.doesNotMatch(awsLcCompiler, /NO_ASM|PREBUILT_NASM/);
 });
 
 test('HS2-31RGRK reports every target separately without masking failures', () => {
