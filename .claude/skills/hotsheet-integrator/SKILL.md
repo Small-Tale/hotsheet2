@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 24 -->
+<!-- hotsheet-skill-version: 25 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -477,10 +477,16 @@ For a code handoff, follow these integration steps:
    completion or deleting the worker branch.
 4. While remote CI runs, release the claim and take another independent ready
    ticket. Reclaim this exact ticket when CI resolves. On green CI, re-read the
-   ticket, verify scope and follow-ups, and remove the finished worker worktree
-   and branch after confirming they have no uncommitted work, their commits
-   are integrated, and the integration record is durable. Complete it with the required confidence note and integrated
-   SHA, then release the claim. On a ticket-caused CI failure, return to working,
+   ticket, verify scope and follow-ups, and complete it with the required confidence
+   note and integrated SHA. Mark the mailbox `done`, then release the claim. Invoke
+   `node scripts/verified-worktree-cleanup.mjs --project <main-checkout>
+   --store <store> --ticket <slug> --operation <assignment-id>
+   --worktree <worker-path> --shipping <full-main-sha>`. It rechecks the durable
+   integration and reviewed worktree mapping; the integration record is durable
+   before cleanup. It also rechecks idle status, clean tree, source
+   preservation, exact-tree gate and green covering CI before removing the
+   worktree, its ignored build output and branch. On refusal, record the precise
+   reason and retry the same command after resolving it (HS2-HR3ZX4). On a ticket-caused CI failure, return to working,
    repair and verify it; record an independent failure as a follow-up ticket.
 
 If a handoff is missing, a claim conflicts, integration fails, or the main checkout

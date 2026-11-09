@@ -114,6 +114,7 @@ function fixture({ kind = 'code', phase = 'ci', review = '', dirty = false, head
 test('HS2-1C1565 refreshes a durable proposal without duplicate writes and rechecks evidence', () => {
   const f = fixture();
   const path = register({ project: f.project, store: f.store, assignment: 'operation-1', integrated, worktree: f.worktree }, f.fake);
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).record.sourceBranch, 'worker');
   const green = [run(1, integrated, 'completed', 'success', '2026-10-28T01:00:00Z')];
   const proposal = refresh(path, { run: f.fake, runs: green });
   assert.equal(proposal.ready, true);

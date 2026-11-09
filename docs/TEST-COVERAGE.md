@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
+Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
+eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,
+unmerged and missing-record refusal; and interrupted retry after worktree removal.
+`scripts/ci-completion-proposal.test.mjs` covers reviewed handoff registration.
+
 HS2-K2NSCE: `scripts/windows-crt-directives.test.mjs` counts every archive
 basename, including objects without CRT directives, and checks that only a
 numeric multiplicity reaches the report. `scripts/windows-crt-link-correlation.test.mjs`

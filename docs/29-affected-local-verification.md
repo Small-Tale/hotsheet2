@@ -238,6 +238,24 @@ non-floor stages exist; conflicting tier tags fail the plan. `--tier` remains a
 headless override for an explicit analyzed or diagnostic run. HS2-EJ8JTG owns
 the corresponding worker and policy wording.
 
+### Verified ticket worktree cleanup (HS2-HR3ZX4)
+
+After a direct ticket or reviewed code handoff is completed, its claim is released,
+and a green `main` CI run covers the shipping commit, invoke
+`node scripts/verified-worktree-cleanup.mjs --project <main-checkout> --store
+<store> --ticket <slug> --worktree <path> --shipping <full-main-sha>`. Add
+`--operation <assignment-id>` for an integrator-reviewed handoff. The handoff
+requires its durable integration record and reviewed worktree/branch proposal.
+The command rechecks ownership, no live claim or work, an unlocked clean worktree,
+source preservation, remote `main` ancestry, the exact-tree local gate receipt,
+and covering green `main` CI immediately before removal. It uses ordinary
+`git worktree remove` and `git branch -d` for direct worktrees; reviewed handoffs
+delete only the expected branch tip after confirming its archive ref. Ignored
+`target/` output leaves with the worktree. A durable intent in the Git common
+directory lets a retry finish branch deletion after an interruption. It reports
+reclaimed filesystem bytes; a refusal keeps the checkout intact and names the missing proof. Historical
+dirty worktrees and stashes need the separate HS2-J37WRT review.
+
 `deep-testing` runs every affected local stage without a cap. `testing:browser`
 selects the complete affected Playwright files rather than bounded test-name
 greps. `testing:perf` forces the directly affected web, Rust ticketing, or

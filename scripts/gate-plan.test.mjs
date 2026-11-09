@@ -122,7 +122,7 @@ test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-
     [
       'cargo lint',
       'cargo nextest run --all-features --status-level leak',
-      'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/integration-batch.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs',
+      'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/integration-batch.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs',
       'npm run lint',
       'npm run test:coverage',
       'npm run lint',
@@ -181,7 +181,8 @@ test('HS2-3ZJBRM scopes web lint and script-local tests by declared inputs', () 
 function repository(t) {
   const repo = mkdtempSync(join(tmpdir(), 'hs2-fccrck-plan-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
+  const git = (...args) =>
+    execFileSync('git', ['-C', repo, ...args], { env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
   git('init', '--quiet', '-b', 'main');
   git('config', 'user.email', 'synthetic@example.invalid');
   git('config', 'user.name', 'Synthetic');

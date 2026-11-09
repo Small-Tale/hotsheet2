@@ -56,6 +56,18 @@ test('HS2-39D5YS requires an explicit integration record before worker cleanup',
   assert.match(integrator, /integration record is durable/);
 });
 
+test('HS2-HR3ZX4 finalization invokes guarded worktree cleanup', () => {
+  for (const file of ['plugins/codex/SKILL.md', 'plugins/claude/SKILL.md']) {
+    const skill = read(file);
+    assert.match(skill, /After green covering main CI, complete the ticket and release its claim/);
+    assert.match(skill, /scripts\/verified-worktree-cleanup\.mjs/);
+  }
+  const integrator = read('plugins/shared/role-skills/hotsheet-integrator.md');
+  assert.match(integrator, /Mark the mailbox `done`, then release the claim\. Invoke/);
+  assert.match(integrator, /scripts\/verified-worktree-cleanup\.mjs/);
+  assert.match(integrator, /--operation <assignment-id>/);
+});
+
 test('HS2-MFD44D runs notification process transitions on native Windows', () => {
   // HS2-WSE3FJ: the daily platform workflow's Windows targets run the whole nextest workspace,
   // which includes the hotsheet-notify hs2_mfd44d process regressions.

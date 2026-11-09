@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 70 -->
+<!-- hotsheet-skill-version: 71 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -86,6 +86,13 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    the exact ticket when CI resolves and finish it. Repair a failure caused by the ticket's
    own change before completion; for an independent failure, create a prioritized follow-up
    bug and cite it in the completing note. Do not defer local gates or integration to CI.
+   After green covering main CI, complete the ticket and release its claim. For a
+   direct ticket worktree, invoke `node scripts/verified-worktree-cleanup.mjs
+   --project <main-checkout> --store <store> --ticket <slug> --worktree <path>
+   --shipping <full-main-sha>`. The command rechecks ownership, clean and idle
+   state, exact-tree gate, remote ancestry, and green CI before removing the
+   worktree and its merged branch. A refusal leaves the checkout intact; record
+   its reason and retry after resolving it (HS2-HR3ZX4).
 6. **Re-read the queue after every completion.** Concurrent work and new findings can
    change the plan. Continue until no actionable Up Next ticket remains.
 

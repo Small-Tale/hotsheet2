@@ -316,6 +316,7 @@ export function register(opts, run = command) {
   if (kind === 'code' && (!SHA.test(opts.integrated) || !opts.worktree)) throw new Error('code handoff requires --integrated full SHA and --worktree');
   if (kind === 'code' && realpathSync(opts.worktree) === realpathSync(project)) throw new Error('source worktree must not be the main checkout');
   if (kind === 'findings' && (opts.integrated || opts.worktree)) throw new Error('findings handoff has no code gate or worktree');
+  const source = kind === 'code' ? worktree(project, opts.worktree, assignment.handoff.commit, run) : null;
   const record = {
     version: 1, project, store, operation: assignment.id, ticket: { ...assignment.ticket, project_id: snapshot.state.project_id }, slug: assignment.slug,
     workerGeneration: assignment.generation, integrator: snapshot.state.integrator ? { id: snapshot.state.integrator.id, generation: snapshot.state.integrator.generation } : null,
@@ -325,6 +326,7 @@ export function register(opts, run = command) {
     integrated: kind === 'code' ? opts.integrated.toLowerCase() : undefined,
     tree: kind === 'code' ? git(project, ['rev-parse', `${opts.integrated}^{tree}`], run) : undefined,
     sourceWorktree: kind === 'code' ? resolve(opts.worktree) : undefined,
+    sourceBranch: source?.branch?.replace(/^refs\/heads\//, ''),
     resolvedReviewNotes: opts.resolvedReviewNotes ?? [],
   };
   if (record.resolvedReviewNotes.some((id) => !currentTicket.reviewFindings.includes(id))) throw new Error('resolved review note is not a current Review return note');

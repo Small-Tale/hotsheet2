@@ -54,6 +54,7 @@ export const ROOT_TOOLING_TESTS = [
   'playwright-retries',
   'ci-gate',
   'ci-completion-proposal',
+  'verified-worktree-cleanup',
   'ci-failure-parse',
   'ci-failure-attribution',
   'integration-record',
