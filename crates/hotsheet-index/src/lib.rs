@@ -675,14 +675,29 @@ impl Index {
 
     /// Drop all rows and rebuild from a full store walk. Always safe (disposable).
     pub fn rebuild_from_store(&self, store: &FsStore) -> Result<usize, IndexError> {
+        self.rebuild_from_paths(store, ticket_files(store)?)
+    }
+
+    fn rebuild_from_paths(
+        &self,
+        store: &FsStore,
+        paths: Vec<PathBuf>,
+    ) -> Result<usize, IndexError> {
         let transaction = self.conn.unchecked_transaction()?;
         self.conn
             .execute_batch(
                 "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM reviews; DELETE FROM phase_spans; DELETE FROM tickets_fts;",
             )?;
         let mut count = 0;
-        for path in ticket_files(store)? {
-            let bytes = std::fs::read(&path)?;
+        for path in paths {
+            let bytes = match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    warn_vanished_ticket(&path, "rebuild");
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             // Resilience (HS2-PRVPCQ): a corrupt file must not abort a full rebuild — the
             // healthy tickets still index, the bad one is skipped with a warning.
             let ticket = match parse_ticket(&path, &bytes) {
@@ -778,29 +793,35 @@ impl Index {
         let mut deleted = 0;
         for id in ids {
             let path = store.ticket_path(&id);
-            if path.exists() {
-                let bytes = std::fs::read(&path)?;
-                let hash = hash_bytes(&bytes);
-                if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
-                    // Resilience (HS2-PRVPCQ): skip a corrupt file rather than aborting
-                    // the delta reconcile; the healthy changed tickets still index.
-                    let ticket = match parse_ticket(&path, &bytes) {
-                        Ok(ticket) => ticket,
-                        Err(error) => {
-                            self.record_source_hash(&id, &hash)?;
-                            eprintln!(
-                                "warning: skipping unparseable ticket {}: {error}",
-                                path.display()
-                            );
-                            continue;
-                        }
-                    };
-                    self.upsert(&ticket, &path.display().to_string(), &hash)?;
-                    upserted += 1;
+            match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let hash = hash_bytes(&bytes);
+                    if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
+                        // Resilience (HS2-PRVPCQ): skip a corrupt file rather than aborting
+                        // the delta reconcile; the healthy changed tickets still index.
+                        let ticket = match parse_ticket(&path, &bytes) {
+                            Ok(ticket) => ticket,
+                            Err(error) => {
+                                self.record_source_hash(&id, &hash)?;
+                                eprintln!(
+                                    "warning: skipping unparseable ticket {}: {error}",
+                                    path.display()
+                                );
+                                continue;
+                            }
+                        };
+                        self.upsert(&ticket, &path.display().to_string(), &hash)?;
+                        upserted += 1;
+                    }
                 }
-            } else if self.content_hash(&id)?.is_some() {
-                self.delete(&id)?;
-                deleted += 1;
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    if self.content_hash(&id)?.is_some() {
+                        self.delete(&id)?;
+                        warn_vanished_ticket(&path, "delta reconcile");
+                        deleted += 1;
+                    }
+                }
+                Err(error) => return Err(error.into()),
             }
         }
         Ok((upserted, deleted))
@@ -855,9 +876,13 @@ impl Index {
     /// Full hash-walk reconcile: re-read every ticket file, upsert those whose content
     /// changed, delete index rows whose file is gone. Always correct (the fallback).
     fn reconcile_full(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
+        self.reconcile_full_paths(ticket_files(store)?)
+    }
+
+    fn reconcile_full_paths(&self, paths: Vec<PathBuf>) -> Result<(usize, usize), IndexError> {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut upserted = 0;
-        for path in ticket_files(store)? {
+        for path in paths {
             // The filename stem is the ticket ULID.
             let Some(id) = path
                 .file_stem()
@@ -866,8 +891,15 @@ impl Index {
             else {
                 continue;
             };
+            let bytes = match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    warn_vanished_ticket(&path, "reconcile");
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             seen.insert(id.to_string());
-            let bytes = std::fs::read(&path)?;
             let hash = hash_bytes(&bytes);
             if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
                 // Resilience (HS2-PRVPCQ): a single unparseable ticket file must not abort
@@ -1301,6 +1333,16 @@ fn ticket_files(store: &FsStore) -> Result<Vec<PathBuf>, IndexError> {
         }
     }
     Ok(out)
+}
+
+/// A Git checkout can remove a ticket after the directory walk but before its read.
+/// Log only the ULID: the path may contain user data and the missing bytes are unavailable.
+fn warn_vanished_ticket(path: &Path, operation: &str) {
+    let id = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("unknown");
+    eprintln!("warning: ticket {id} vanished during index {operation}; skipping it (HS2-PT0Y8A)");
 }
 
 fn parse_ticket(path: &Path, bytes: &[u8]) -> Result<Ticket, IndexError> {

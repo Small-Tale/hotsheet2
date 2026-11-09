@@ -258,6 +258,14 @@ emits **no** notes block at all, so it can never leave a dangling
 `<!-- hotsheet:notes:begin -->` without its `…:end` marker (the exact shape that first
 triggered this).
 
+A Git checkout or rebase can remove a ticket after the index enumerates its path but
+before it reads the bytes (HS2-PT0Y8A). The index treats only `NotFound` as an absent
+file: it skips that path during rebuild or removes its cached row during reconcile,
+then keeps the project and healthy tickets available. It logs the ticket ULID and
+index operation without logging ticket content or a machine-local path. Other read
+errors still fail the operation. A later checkout that restores the file reindexes
+its actual bytes; the index never recreates ticket content.
+
 Store schema 3 retains the bounded-notes guard and changes ticket placement from the
 first two ULID characters to the final two. Schema-2 stores remain fully readable and
 writable at legacy prefix paths until explicit activation, so installing or rebuilding

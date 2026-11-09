@@ -24810,6 +24810,133 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
 }
 
 #[tokio::test]
+async fn hs2_pt0y8a_project_open_prunes_one_missing_indexed_ticket_and_reopens() {
+    let home = tempfile::tempdir().unwrap();
+    let bootstrap = tempfile::tempdir().unwrap();
+    let primary = FsStore::init_git(bootstrap.path(), &StoreMetadata::new("HS")).unwrap();
+    let checkout = tempfile::tempdir().unwrap();
+    let source = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(source.path(), &StoreMetadata::new("SY")).unwrap();
+    let now = hotsheet_model::Timestamp::new("2026-11-09T00:00:00Z");
+    let healthy = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "SY",
+        now.clone(),
+        hotsheet_ticketing::NewTicket {
+            title: "Synthetic healthy ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let transient = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "SY",
+        now,
+        hotsheet_ticketing::NewTicket {
+            title: "Synthetic transient ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let index_dir = home.path().join("index");
+    std::fs::create_dir_all(&index_dir).unwrap();
+    let index_path = index_dir.join(hotsheet_index::index_file_name(
+        &hotsheet_ticketing::git_connection_id(&store),
+    ));
+    let index = hotsheet_index::Index::open_reconciled(&index_path, &store).unwrap();
+    assert_eq!(index.ticket_count().unwrap(), 2);
+    drop(index);
+
+    // The persisted cache is ahead of the authoritative checkout at the next open.
+    let path = store.ticket_path(&transient.id);
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    let state = AppState::new(primary, SECRET.into())
+        .unwrap()
+        .with_machine_home(home.path())
+        .with_persistent_registered_indexes()
+        .with_checkout_registry(home.path().join("checkouts.json"));
+    let router = app(state);
+    let request = serde_json::json!({
+        "root": checkout.path().display().to_string(),
+        "stores": [source.path().display().to_string()],
+    })
+    .to_string();
+    let opened = router
+        .clone()
+        .oneshot(authed("POST", "/projects/open", Some(&request)))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        hotsheet_index::Index::open_reconciled(&index_path, &store)
+            .unwrap()
+            .ticket_count()
+            .unwrap(),
+        1
+    );
+
+    let list = |router: axum::Router, id: String| async move {
+        let response = router
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{id}/tickets?page_size=20"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        body_json(response).await["items"]
+            .as_array()
+            .unwrap()
+            .clone()
+    };
+    let rows = list(router.clone(), id.clone()).await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], healthy.id.to_string());
+    let repeated = router
+        .clone()
+        .oneshot(authed("POST", "/projects/open", Some(&request)))
+        .await
+        .unwrap();
+    assert_eq!(repeated.status(), StatusCode::CREATED);
+    assert_eq!(body_json(repeated).await["checkout"]["id"], id);
+    assert_eq!(list(router.clone(), id.clone()).await.len(), 1);
+
+    // A later Git checkout can restore the same synthetic bytes; reconciliation
+    // re-adds that row, and project open remains available.
+    std::fs::write(&path, bytes).unwrap();
+    assert_eq!(
+        hotsheet_index::Index::open_reconciled(&index_path, &store)
+            .unwrap()
+            .ticket_count()
+            .unwrap(),
+        2
+    );
+    let recovered = router
+        .clone()
+        .oneshot(authed("POST", "/projects/open", Some(&request)))
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::CREATED);
+    let recovered_rows = list(router, id).await;
+    assert_eq!(recovered_rows.len(), 2);
+    assert!(
+        recovered_rows
+            .iter()
+            .any(|row| row["id"] == transient.id.to_string())
+    );
+}
+
+#[tokio::test]
 async fn startup_discovery_hosts_stores_from_stores_json() {
     let home = tempfile::tempdir().unwrap();
 

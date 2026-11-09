@@ -198,7 +198,12 @@ On change:
    `changed` invalidation so clients refresh the separate corrupt-ticket diagnostics.
 4. **Deletions:** a file that disappeared → delete its index rows (a soft-deleted
    ticket is a `status: deleted` file, not a missing file; a _missing_ file means
-   the ticket was hard-removed or moved).
+   the ticket was hard-removed or moved). A checkout can also remove a file after
+   enumeration but before the read (HS2-PT0Y8A). Rebuild skips that path and full
+   or Git-delta reconciliation drops only its cached row; neither blocks project
+   open. The warning names the ULID and operation without copying ticket content or
+   local paths. Other read errors remain failures, and restoration is indexed from
+   the file's real bytes on the next reconcile.
 5. **Record and emit a change event.** The server appends it to the bounded replay
    ring before broadcasting it, so both WebSocket subscribers and cursor-based
    long-poll clients observe external CLI/git writes without a race. A client that

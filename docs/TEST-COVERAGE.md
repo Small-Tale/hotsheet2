@@ -1,5 +1,14 @@
 # Feature Coverage Matrix
 
+HS2-PT0Y8A: `hotsheet-index/src/tests.rs` deterministically removes a ticket
+between directory enumeration and read, checks full rebuild/reconcile and Git
+delta reconcile, and confirms that other I/O errors still propagate.
+`hotsheet-server/tests/http.rs` opens a synthetic project with one indexed file
+missing, repeats the open, lists its healthy ticket, and verifies restoration.
+The stable missing-file case already passed on the pre-incident pinned server;
+HS2-AGGWG2 traces the original literal host error and failed remembered tab.
+No customer content was copied into fixtures.
+
 HS2-7DBJMS: `hotsheet-server/src/remote_auth.rs` tests durable pairing,
 single-use challenge redemption, expiry, rate limits, role and revocation.
 `hotsheet-server/tests/remote_auth.rs` exercises the real router for owner

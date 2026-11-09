@@ -1313,6 +1313,62 @@ fn reconcile_deletes_rows_whose_file_is_gone() {
 }
 
 #[test]
+fn hs2_pt0y8a_full_walk_skips_a_ticket_removed_after_enumeration() {
+    let (_dir, store, index) = seeded();
+    let vanished = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
+    let path = store.ticket_path(&vanished);
+    let bytes = std::fs::read(&path).unwrap();
+    let enumerated = ticket_files(&store).unwrap();
+    assert!(enumerated.contains(&path));
+
+    // The checkout changes after the directory walk, before the index reads this path.
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(
+        index.reconcile_full_paths(enumerated.clone()).unwrap(),
+        (0, 1)
+    );
+    assert_eq!(index.ticket_count().unwrap(), 2);
+    assert!(
+        index
+            .query(&TicketQuery::default())
+            .unwrap()
+            .iter()
+            .all(|row| row.id != vanished.to_string())
+    );
+    assert_eq!(index.rebuild_from_paths(&store, enumerated).unwrap(), 2);
+    assert_eq!(index.ticket_count().unwrap(), 2);
+
+    std::fs::write(&path, bytes).unwrap();
+    assert_eq!(index.reconcile_full(&store).unwrap(), (1, 0));
+    assert_eq!(index.reconcile_full(&store).unwrap(), (0, 0));
+    assert_eq!(index.ticket_count().unwrap(), 3);
+}
+
+#[test]
+fn hs2_pt0y8a_delta_removes_only_not_found_and_preserves_other_io_errors() {
+    let (_dir, store, index) = seeded();
+    let vanished = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
+    let path = store.ticket_path(&vanished);
+    let bytes = std::fs::read(&path).unwrap();
+
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(index.reconcile_ids(&store, [vanished]).unwrap(), (0, 1));
+    assert_eq!(index.ticket_count().unwrap(), 2);
+    std::fs::write(&path, bytes).unwrap();
+    assert_eq!(index.reconcile_ids(&store, [vanished]).unwrap(), (1, 0));
+    assert_eq!(index.reconcile_ids(&store, [vanished]).unwrap(), (0, 0));
+
+    // A directory at the ticket path is a real read error, not a missing ticket.
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    assert!(matches!(
+        index.reconcile_ids(&store, [vanished]),
+        Err(IndexError::Io(_))
+    ));
+    assert_eq!(index.ticket_count().unwrap(), 3);
+}
+
+#[test]
 fn a_corrupt_index_file_is_deleted_and_rebuilt() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
