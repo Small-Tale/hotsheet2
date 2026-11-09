@@ -11,6 +11,12 @@ eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,
 unmerged and missing-record refusal; and interrupted retry after worktree removal.
 `scripts/ci-completion-proposal.test.mjs` covers reviewed handoff registration.
 
+HS2-VKGV08: `scripts/verified-worktree-cleanup.test.mjs` also proves that a
+completed green batch's exact smoke receipt in the shared Git cache allows
+reviewed cleanup after a clean integration worktree gate while the primary
+checkout is dirty. Red batches, mismatched commits or trees, changed smoke
+checks, failed checks, and missing receipts all preserve the source worktree.
+
 HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
 manager on Windows. `hotsheet-server/src/main.rs #
 hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out` and

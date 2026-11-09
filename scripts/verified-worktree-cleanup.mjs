@@ -2,7 +2,7 @@
 // HS2-HR3ZX4: remove only a closed ticket's verified, idle, preserved checkout.
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statfsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statfsSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyRuns, parseTicket } from './ci-completion-proposal.mjs';
@@ -133,6 +133,58 @@ function handoffMapping(project, common, ticket, operation, path, branch, head, 
     git(run, project, 'rev-parse', '--verify', archive) === head,
     'source commit is not preserved by its integration archive ref',
   );
+}
+
+// HS2-VKGV08: a batch smoke gate writes its exact receipt in the shared Git cache, not a
+// root-gate marker in the primary checkout. Bind it to the green batch and its exact member.
+function batchGate(project, store, common, ticket, operation, shipping, remote, run) {
+  const ledger = JSON.parse(
+    checked(run, 'hotsheet-cli', ['-C', store, 'coordination', '--project', project, 'batch-status'], project),
+  );
+  const matches = Object.values(ledger.batches ?? {}).filter((batch) =>
+    batch.tickets?.some(
+      (member) =>
+        member.assignment === operation &&
+        member.ticket?.connection_id === ticket.source.connection_id &&
+        member.ticket?.native_id === ticket.ticket.id,
+    ),
+  );
+  requireProof(matches.length <= 1, 'reviewed handoff maps to multiple batches');
+  if (!matches.length) return false;
+  const batch = matches[0];
+  requireProof(
+    batch.tickets.some((member) => member.assignment === operation && member.shipping_commits?.includes(shipping)),
+    'reviewed batch does not map the exact shipping commit',
+  );
+  requireProof(batch.state === 'green' && sha.test(batch.main_commit ?? ''), 'reviewed batch is not green');
+  requireProof(
+    run('git', ['merge-base', '--is-ancestor', shipping, batch.main_commit], project).status === 0 &&
+      run('git', ['merge-base', '--is-ancestor', batch.main_commit, remote], project).status === 0,
+    'reviewed batch does not contain the shipping commit on origin/main',
+  );
+  const tree = git(run, project, 'rev-parse', `${batch.main_commit}^{tree}`);
+  const cache = join(common, 'hotsheet-local-gate');
+  const expected = batch.smoke_checks;
+  requireProof(Array.isArray(expected) && expected.length > 0, 'reviewed batch has no declared smoke checks');
+  const receipts = existsSync(cache) ? readdirSync(cache).filter((name) => /^[0-9a-f]{64}\.json$/.test(name)) : [];
+  const passed = receipts.some((name) => {
+    const receipt = JSON.parse(readFileSync(join(cache, name), 'utf8'));
+    return (
+      receipt.key === name.slice(0, -5) &&
+      receipt.tree === tree &&
+      receipt.tier === 'smoke' &&
+      receipt.profile?.smoke === true &&
+      JSON.stringify(receipt.selected) === JSON.stringify(expected) &&
+      receipt.results?.length === expected.length &&
+      receipt.results.every(
+        (result, index) =>
+          result.command === expected[index] &&
+          (result.status === 0 || (result.reused === true && result.status == null)),
+      )
+    );
+  });
+  requireProof(passed, 'reviewed batch has no successful exact-tree smoke receipt in the shared Git gate cache');
+  return true;
 }
 
 function directMapping(project, path, branch, head, slug, run) {
@@ -274,21 +326,25 @@ export function cleanup(options, { run = command } = {}) {
   requireProof(existsSync(path), 'worktree is missing without a cleanup intent');
   const resolved = realpathSync(path);
   requireProof(resolved === path, 'worktree path is a symlink or changed');
-  // A direct ticket is gated in its source worktree; a reviewed handoff is
-  // gated by the main-branch integrator in the project checkout.
-  const gateCheckout = options.operation ? project : path;
-  const gateDir = resolve(gateCheckout, git(run, gateCheckout, 'rev-parse', '--git-path', 'hotsheet-root-gate'));
-  const gate = join(gateDir, tree);
-  requireProof(
-    existsSync(gate) && readFileSync(gate, 'utf8').trim() === tree,
-    `shipping tree has no successful exact-tree local gate in ${options.operation ? 'the integrator' : 'this worktree'}`,
-  );
   const { branch, head } = worktreeEntry(project, path, run);
   requireProof(
     !git(run, path, 'status', '--porcelain=v1', '--untracked-files=all'),
     'worktree has tracked or non-ignored untracked edits',
   );
   requireProof(git(run, path, 'rev-parse', 'HEAD') === head, 'worktree HEAD changed');
+  const batchPassed = options.operation
+    ? batchGate(project, store, common, identity, options.operation, shipping, remote, run)
+    : false;
+  if (!batchPassed) {
+    // Direct and nonbatch handoffs still require their existing exact-tree root-gate marker.
+    const gateCheckout = options.operation ? project : path;
+    const gateDir = resolve(gateCheckout, git(run, gateCheckout, 'rev-parse', '--git-path', 'hotsheet-root-gate'));
+    const gate = join(gateDir, tree);
+    requireProof(
+      existsSync(gate) && readFileSync(gate, 'utf8').trim() === tree,
+      `shipping tree has no successful exact-tree local gate in ${options.operation ? 'the integrator' : 'this worktree'}`,
+    );
+  }
   if (options.operation)
     handoffMapping(project, common, identity, options.operation, path, branch, head, shipping, run);
   else directMapping(project, path, branch, head, slug, run);

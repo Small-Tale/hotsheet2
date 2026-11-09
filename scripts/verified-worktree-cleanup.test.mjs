@@ -19,7 +19,7 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
-function fixture({ cherryPick = false } = {}) {
+function fixture({ cherryPick = false, batch = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hs2-hr3zx4-'));
   const project = join(root, 'project'),
     store = join(root, 'store'),
@@ -59,6 +59,32 @@ function fixture({ cherryPick = false } = {}) {
   const integratorGate = join(common, 'hotsheet-root-gate', tree);
   mkdirSync(join(common, 'hotsheet-root-gate'));
   writeFileSync(integratorGate, `${tree}\n`);
+  const smokeChecks = ['cargo fmt --all --check', 'npm run typecheck'];
+  const receiptKey = 'a'.repeat(64);
+  const receiptPath = join(common, 'hotsheet-local-gate', `${receiptKey}.json`);
+  const smokeReceipt = {
+    key: receiptKey,
+    tree,
+    tier: 'smoke',
+    profile: { smoke: true },
+    selected: smokeChecks,
+    results: smokeChecks.map((command) => ({ command, status: 0 })),
+  };
+  if (batch) {
+    const gateCheckout = join(project, '.claude', 'worktrees', 'synthetic-integrator');
+    git(project, 'worktree', 'add', '-b', 'synthetic-integrator', gateCheckout, shipping);
+    assert.equal(git(gateCheckout, 'rev-parse', '--git-common-dir'), common);
+    mkdirSync(join(common, 'hotsheet-local-gate'));
+    writeFileSync(receiptPath, JSON.stringify(smokeReceipt));
+    // The primary checkout is deliberately dirty; the clean integration worktree ran the gate.
+    writeFileSync(join(project, 'unrelated-local-edit.txt'), 'preserve\n');
+  }
+  const batchEntry = {
+    state: 'green',
+    main_commit: shipping,
+    smoke_checks: smokeChecks,
+    tickets: [{ assignment: 'operation', ticket: { connection_id: connection, native_id: native }, shipping_commits: [shipping] }],
+  };
   let claim = false,
     phase = 'done',
     handles = false,
@@ -102,6 +128,8 @@ function fixture({ cherryPick = false } = {}) {
           }),
           stderr: '',
         };
+      if (args.includes('batch-status'))
+        return { status: 0, stdout: JSON.stringify({ batches: batch ? { synthetic: batchEntry } : {} }), stderr: '' };
     }
     if (binary === 'gh')
       return {
@@ -163,6 +191,9 @@ function fixture({ cherryPick = false } = {}) {
     },
     gate,
     integratorGate,
+    receiptPath,
+    smokeReceipt,
+    batchEntry,
   };
 }
 
@@ -285,6 +316,60 @@ test('HS2-HR3ZX4 verifies a cherry-picked handoff record and exact reviewed bran
   assert.equal(existsSync(f.worktree), true);
   writeFileSync(join(proposalDir, 'operation.json'), JSON.stringify({ record: proposal }));
   assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+});
+
+function recordReviewedHandoff(f) {
+  const qualified = `@${projectId}/${connection}:${native}`;
+  const recordDir = join(f.common, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
+  mkdirSync(recordDir, { recursive: true });
+  writeFileSync(join(recordDir, 'operation.json'), JSON.stringify({
+    version: 1,
+    operation: 'operation',
+    branch: 'main',
+    ticket: { project_id: projectId, connection_id: connection, native_id: native },
+    source_commits: [f.source],
+    shipping_commits: [f.shipping],
+  }));
+  const proposalDir = join(f.common, 'hotsheet-ci-proposals');
+  mkdirSync(proposalDir, { recursive: true });
+  writeFileSync(join(proposalDir, 'operation.json'), JSON.stringify({ record: {
+    operation: 'operation', slug, sourceWorktree: f.worktree, sourceBranch: f.branch,
+    sourceCommit: f.source, integrated: f.shipping,
+    ticket: { connection_id: connection, native_id: native },
+  } }));
+  git(f.project, 'update-ref', `refs/hotsheet/integration-source/${f.source}`, f.source);
+}
+
+test('HS2-VKGV08 accepts the exact green batch smoke receipt from a clean integration worktree', () => {
+  const f = fixture({ cherryPick: true, batch: true });
+  recordReviewedHandoff(f);
+  unlinkSync(f.integratorGate);
+  assert.equal(existsSync(join(f.project, 'unrelated-local-edit.txt')), true);
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+  assert.equal(existsSync(f.worktree), false);
+  assert.equal(existsSync(join(f.project, 'unrelated-local-edit.txt')), true);
+});
+
+test('HS2-VKGV08 rejects red, mismatched, and unsuccessful batch evidence', () => {
+  for (const tamper of ['red', 'wrong-commit', 'wrong-shipping', 'wrong-tree', 'wrong-checks', 'failed-check', 'missing-receipt']) {
+    const f = fixture({ cherryPick: true, batch: true });
+    recordReviewedHandoff(f);
+    unlinkSync(f.integratorGate);
+    if (tamper === 'red') f.batchEntry.state = 'red';
+    if (tamper === 'wrong-commit') f.batchEntry.main_commit = git(f.project, 'rev-parse', `${f.shipping}^`);
+    if (tamper === 'wrong-shipping') f.batchEntry.tickets[0].shipping_commits = ['0'.repeat(40)];
+    if (tamper === 'wrong-tree') f.smokeReceipt.tree = '0'.repeat(40);
+    if (tamper === 'wrong-checks') f.smokeReceipt.selected = ['cargo check'];
+    if (tamper === 'failed-check') f.smokeReceipt.results[0].status = 1;
+    if (tamper === 'missing-receipt') unlinkSync(f.receiptPath);
+    else writeFileSync(f.receiptPath, JSON.stringify(f.smokeReceipt));
+    assert.throws(
+      () => cleanup({ ...f.options, operation: 'operation' }, { run: f.run }),
+      /batch|smoke receipt/i,
+      tamper,
+    );
+    assert.equal(existsSync(f.worktree), true, tamper);
+  }
 });
 
 test('HS2-HR3ZX4 resumes a branch deletion interrupted after worktree removal', () => {
