@@ -6,7 +6,7 @@
 //! every turn to `CODEX_HOME/sessions/YYYY/MM/DD/rollout-<time>-<session>.jsonl`, and that
 //! file is per session by construction: its name and its `session_meta.id` are the session id
 //! the TUI's `SessionStart` hook reports. This module follows that file through filesystem
-//! change notifications (never a timer) and turns the records appended after the session was
+//! change notifications and turns the records appended after the session was
 //! reported into [`RolloutSignal`]s.
 //!
 //! Observed on codex-tui 0.166.0 (record shapes only; no content was copied):
@@ -21,7 +21,9 @@
 //!
 //! Codex keeps the rollout open and appends to it. FSEvents reports such a file's change only
 //! when it is closed, so on macOS the rollout itself is followed per write through a kqueue
-//! vnode registration (HS2-TWE913); directory waits and other platforms use `notify`.
+//! vnode registration (HS2-TWE913). Windows also reports changes to a file held open only
+//! after the writer closes, so its active rollout gets one local read per second (HS2-WAAKXQ).
+//! Directory waits and other platforms use `notify`; no wake issues a network request.
 //!
 //! Only those numeric and identifying fields are parsed. Prompts, tool calls, and agent output
 //! in the same file are skipped unread by the typed parser and never logged. The rollout is an
@@ -295,6 +297,11 @@ impl Drop for RolloutWatch {
 /// never a repeating timer.
 const STREAM_SETTLE: Duration = Duration::from_secs(3);
 
+/// Windows can delay a directory change event until the writer closes. Bound the fallback to
+/// one local read of the active rollout per second; the watch thread and timer stop together.
+#[cfg(windows)]
+const WINDOWS_APPEND_CHECK: Duration = Duration::from_secs(1);
+
 /// What the watcher currently subscribes to while it waits for, then follows, the rollout.
 #[derive(PartialEq)]
 enum Target {
@@ -307,7 +314,8 @@ enum Target {
 /// thread with each batch of signals, in file order. The file may not exist yet: Codex
 /// creates it with the session's first turn, so the watcher waits on `sessions/` (or on the
 /// home until `sessions/` appears) and then watches the file itself. Wakes come from
-/// filesystem notifications, plus one settle read per subscription change; nothing polls.
+/// filesystem notifications, plus one settle read per subscription change. Windows checks
+/// only the active rollout locally while Codex may still hold it open.
 pub fn watch_rollout(
     codex_home: &Path,
     session: &str,
@@ -423,7 +431,24 @@ pub fn watch_rollout(
                         Ok(next) => Ok(next),
                     }
                 }
-                None => woken.recv(),
+                None => {
+                    #[cfg(windows)]
+                    {
+                        if matches!(current, Some(Target::Rollout(_))) {
+                            match woken.recv_timeout(WINDOWS_APPEND_CHECK) {
+                                Err(RecvTimeoutError::Timeout) => continue,
+                                Err(RecvTimeoutError::Disconnected) => return,
+                                Ok(next) => Ok(next),
+                            }
+                        } else {
+                            woken.recv()
+                        }
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        woken.recv()
+                    }
+                }
             };
             match next {
                 Ok(Wake::Changed) => {
@@ -698,7 +723,7 @@ mod tests {
         writeln!(file, "{}", started("2026-11-05T01:00:00Z", "t1")).unwrap();
         file.flush().unwrap();
         let (tx, signals) = channel();
-        let _watch = watch_rollout(&home, SESSION, at("2026-11-05T00:00:00Z"), move |batch| {
+        let watch = watch_rollout(&home, SESSION, at("2026-11-05T00:00:00Z"), move |batch| {
             let _ = tx.send(batch);
         })
         .unwrap();
@@ -709,6 +734,30 @@ mod tests {
             file.flush().unwrap();
             assert_eq!(next(&signals), [RolloutSignal::Resumed], "turn {turn}");
         }
+        // HS2-WAAKXQ: closing and reopening the writer must keep the same rollout live.
+        drop(file);
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&rollout)
+            .unwrap();
+        writeln!(file, "{}", started("2026-11-05T01:01:10Z", "t4")).unwrap();
+        file.flush().unwrap();
+        assert_eq!(next(&signals), [RolloutSignal::Resumed]);
+
+        // A restarted watcher reads the old records for context but reports only new turns.
+        drop(watch);
+        let (tx, resumed_signals) = channel();
+        let _resumed = watch_rollout(&home, SESSION, at("2026-11-05T01:01:30Z"), move |batch| {
+            let _ = tx.send(batch);
+        })
+        .unwrap();
+        assert_eq!(
+            resumed_signals.recv_timeout(Duration::from_millis(200)),
+            Err(RecvTimeoutError::Timeout)
+        );
+        writeln!(file, "{}", started("2026-11-05T01:02:00Z", "t5")).unwrap();
+        file.flush().unwrap();
+        assert_eq!(next(&resumed_signals), [RolloutSignal::Resumed]);
     }
 
     #[test]
