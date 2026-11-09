@@ -224,9 +224,13 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
         member.ticket?.native_id === ticket.ticket.id,
     ),
   );
-  requireProof(matches.length <= 1, 'reviewed handoff maps to multiple batches');
+  // HS2-8W51AA: an aborted attempt never shipped, so it cannot compete with the
+  // one effective batch. Keep every other state in the ambiguity check.
+  const effective = matches.filter((batch) => batch.state !== 'aborted');
+  requireProof(effective.length <= 1, 'reviewed handoff maps to multiple batches');
   if (!matches.length) return false;
-  const batch = matches[0];
+  requireProof(effective.length === 1, 'reviewed batch is not green');
+  const batch = effective[0];
   requireProof(
     batch.tickets.some((member) => member.assignment === operation && member.shipping_commits?.includes(shipping)),
     'reviewed batch does not map the exact shipping commit',

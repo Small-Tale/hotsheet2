@@ -110,6 +110,7 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     smoke_checks: smokeChecks,
     tickets: [{ assignment: superseded ? 'replacement' : 'operation', ticket: { connection_id: connection, native_id: native }, source_commit: replacement ?? source, shipping_commits: [shipping] }],
   };
+  const extraBatches = {};
   let claim = false,
     phase = 'done',
     handles = false,
@@ -193,7 +194,7 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
           stderr: '',
         };
       if (args.includes('batch-status'))
-        return { status: 0, stdout: JSON.stringify({ batches: batch ? { synthetic: batchEntry } : {} }), stderr: '' };
+        return { status: 0, stdout: JSON.stringify({ batches: batch ? { synthetic: batchEntry, ...extraBatches } : {} }), stderr: '' };
     }
     if (binary === 'gh')
       return {
@@ -265,6 +266,7 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     receiptPath,
     smokeReceipt,
     batchEntry,
+    addBatch: (id, entry) => { extraBatches[id] = entry; },
   };
 }
 
@@ -458,6 +460,31 @@ test('HS2-VKGV08 and HS2-54M43C accept mixed ledger spellings backed by exact cw
   assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
   assert.equal(existsSync(f.worktree), false);
   assert.equal(existsSync(join(f.project, 'unrelated-local-edit.txt')), true);
+});
+
+test('HS2-8W51AA accepts an aborted attempt followed by one exact green shipped batch', () => {
+  const f = fixture({ cherryPick: true, batch: true });
+  recordReviewedHandoff(f, { proposal: false });
+  unlinkSync(f.integratorGate);
+  f.addBatch('aborted-attempt', { ...structuredClone(f.batchEntry), state: 'aborted', main_commit: null });
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+  assert.equal(existsSync(f.worktree), false);
+});
+
+test('HS2-8W51AA still refuses ambiguous and non-green effective batch histories', () => {
+  for (const history of ['two-green', 'only-aborted', 'aborted-then-red']) {
+    const f = fixture({ cherryPick: true, batch: true });
+    recordReviewedHandoff(f, { proposal: false });
+    unlinkSync(f.integratorGate);
+    if (history === 'two-green') f.addBatch('second-green', structuredClone(f.batchEntry));
+    else {
+      f.addBatch('aborted-attempt', { ...structuredClone(f.batchEntry), state: 'aborted' });
+      f.batchEntry.state = history === 'only-aborted' ? 'aborted' : 'red';
+    }
+    assert.throws(() => cleanup({ ...f.options, operation: 'operation' }, { run: f.run }),
+      /multiple batches|not green/, history);
+    assert.equal(existsSync(f.worktree), true, history);
+  }
 });
 
 test('HS2-AYPN79 cleans a completed handoff after its worker refills on another ticket', () => {

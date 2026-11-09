@@ -126,8 +126,13 @@ followed by one same-worker replay. It requires explicit old/replacement ticket
 notes, equal stable patch identities, the replacement integration record and
 archive, green batch smoke receipt and covering CI. Ambiguous replacements,
 different patches, missing proof, live claims, dirty trees, and open handles
-still refuse deletion. HS2-8W51AA tracks cleanup of a separate source operation
-listed in both an aborted batch and its successful replacement batch.
+still refuse deletion.
+
+HS2-8W51AA: the cleanup suite accepts one exact green shipped batch after an
+aborted attempt for the same reviewed handoff. It still refuses two green batches,
+only-aborted history, and an aborted attempt followed by a red effective batch;
+source/shipping identity, receipt, CI, claim, dirty-tree, and open-handle guards
+remain in force. The real HS2-HA63BE source cleanup is gated on this fix shipping.
 
 HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
 manager on Windows. `hotsheet-server/src/main.rs #
