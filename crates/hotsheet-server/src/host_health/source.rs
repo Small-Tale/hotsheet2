@@ -4,10 +4,8 @@
 //! A signal the platform has no reader for is [`Probe::Unsupported`]; a reader that failed this
 //! tick (a missing tool, an unreadable file, unexpected output) is [`Probe::Unavailable`]. Neither
 //! is ever replaced by a guessed value. macOS reads `statvfs`, `sysctl`, `ps`, `pmset`, `ioreg`,
-//! and `route`; Linux reads `statvfs`, `/proc`, `/sys`, and `ps`; Windows reports every signal
-//! unsupported until a native reader exists (HS2-MEQ46T).
-
-#![cfg_attr(windows, allow(dead_code))] // HS2-MEQ46T: Windows has no readers yet.
+//! and `route`; Linux reads `statvfs`, `/proc`, `/sys`, and `ps`; Windows uses kernel APIs and
+//! system-tool readings (HS2-MEQ46T).
 
 use super::Level;
 
@@ -110,11 +108,16 @@ pub(crate) trait HostSource: Send {
 
 /// The real host.
 pub(crate) struct SystemSource {
-    #[cfg_attr(not(unix), allow(dead_code))] // HS2-MEQ46T: Windows has no disk reader yet.
     disk_path: std::path::PathBuf,
     /// Linux `/proc/stat` busy and total jiffies from the previous tick.
     #[cfg(target_os = "linux")]
     last_cpu: Option<(u64, u64)>,
+    /// Windows system-time counters (idle, kernel including idle, user).
+    #[cfg(windows)]
+    last_windows_cpu: Option<(u64, u64, u64)>,
+    /// Linux thermal throttle counters from the preceding tick.
+    #[cfg(target_os = "linux")]
+    last_thermal: Option<std::collections::BTreeMap<String, u64>>,
 }
 
 impl SystemSource {
@@ -124,6 +127,10 @@ impl SystemSource {
             disk_path: disk_path.into(),
             #[cfg(target_os = "linux")]
             last_cpu: None,
+            #[cfg(target_os = "linux")]
+            last_thermal: None,
+            #[cfg(windows)]
+            last_windows_cpu: None,
         }
     }
 }
@@ -135,7 +142,6 @@ impl HostSource for SystemSource {
 }
 
 /// Run a tool and return its stdout, or `None` when it cannot run or fails.
-#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))] // HS2-MEQ46T
 fn run(program: &str, args: &[&str]) -> Option<String> {
     let output = hotsheet_ticketing::git::launch(program)
         .args(args)
@@ -274,9 +280,28 @@ fn platform_sample(source: &mut SystemSource) -> HostReading {
                 top_process_percent: top.and_then(|top| top.top_process_percent),
             })
         });
-    let power = linux::linux_power(
+    let mut power = linux::linux_power(
         std::path::Path::new("/sys/class/power_supply"),
         std::path::Path::new("/proc/acpi/button/lid"),
+    );
+    let inhibitors = run(
+        "systemd-inhibit",
+        &["--list", "--no-pager", "--no-legend", "--what=sleep:idle"],
+    )
+    .and_then(|text| linux::parse_inhibitors(&text));
+    let idle = run(
+        "loginctl",
+        &["show-logind", "-p", "IdleAction", "-p", "IdleActionUSec"],
+    )
+    .and_then(|text| linux::parse_idle_sleep(&text));
+    if inhibitors.is_some() || idle.is_some() {
+        let reading = power.get_or_insert_with(PowerReading::default);
+        reading.sleep_prevented = inhibitors;
+        reading.idle_sleep_minutes = idle;
+    }
+    let thermal = linux::read_thermal_counters(
+        std::path::Path::new("/sys/devices/system/cpu"),
+        &mut source.last_thermal,
     );
     HostReading {
         disk: Probe::from_option(statvfs_disk(&source.disk_path)),
@@ -290,8 +315,7 @@ fn platform_sample(source: &mut SystemSource) -> HostReading {
                 interface,
             })
         }),
-        // Linux exposes trip points, not a throttling verdict (HS2-MEQ46T).
-        thermal: Probe::Unsupported,
+        thermal,
     }
 }
 
@@ -303,9 +327,254 @@ fn platform_sample(source: &mut SystemSource) -> HostReading {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn platform_sample(source: &mut SystemSource) -> HostReading {
+    let on_battery = windows::power_status().and_then(|status| status.on_battery);
+    let idle = run(
+        "powercfg.exe",
+        &["/query", "SCHEME_CURRENT", "SUB_SLEEP", "STANDBYIDLE"],
+    )
+    .and_then(|text| windows::parse_idle_sleep(&text, on_battery));
+    let sleep =
+        run("powercfg.exe", &["/requests"]).and_then(|text| windows::parse_sleep_requests(&text));
+    let power = windows::power_status().map(|mut reading| {
+        reading.sleep_prevented = sleep;
+        reading.idle_sleep_minutes = idle;
+        reading
+    });
+    let swap = run(
+        "powershell.exe",
+        &["-NoProfile", "-NonInteractive", "-Command",
+          "(Get-CimInstance Win32_PageFileUsage | Measure-Object -Property CurrentUsage -Sum).Sum"],
+    ).and_then(|text| windows::parse_pagefile_mib(&text));
+    HostReading {
+        disk: Probe::from_option(windows::disk(&source.disk_path)),
+        memory: windows::memory(swap).map_or(Probe::Unavailable, Probe::Value),
+        cpu: windows::cpu(&mut source.last_windows_cpu).map_or(Probe::Unavailable, Probe::Value),
+        power: power.map_or(Probe::Unavailable, Probe::Value),
+        network: windows::default_route(),
+        thermal: Probe::Unsupported,
+    }
+}
+
+#[cfg(all(not(unix), not(windows)))]
 fn platform_sample(_source: &mut SystemSource) -> HostReading {
     HostReading::unsupported()
+}
+
+#[cfg_attr(not(windows), allow(dead_code))] // HS2-MEQ46T: pure Windows parsers run in every host's unit suite.
+pub(crate) mod windows {
+    use super::MemoryReading;
+    #[cfg(windows)]
+    use super::{CpuReading, DiskReading, NetworkReading, PowerReading, Probe};
+    #[cfg(windows)]
+    use std::os::windows::ffi::OsStrExt;
+    #[cfg(windows)]
+    use windows_sys::Win32::Foundation::FILETIME;
+    #[cfg(windows)]
+    use windows_sys::Win32::NetworkManagement::IpHelper::{GetBestRoute2, MIB_IPFORWARD_ROW2};
+    #[cfg(windows)]
+    use windows_sys::Win32::Networking::WinSock::{
+        AF_INET, IN_ADDR, IN_ADDR_0, SOCKADDR_IN, SOCKADDR_INET,
+    };
+    #[cfg(windows)]
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    #[cfg(windows)]
+    use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    #[cfg(windows)]
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    #[cfg(windows)]
+    use windows_sys::Win32::System::Threading::GetSystemTimes;
+
+    #[cfg(windows)]
+    pub(super) fn disk(path: &std::path::Path) -> Option<DiskReading> {
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let (mut available, mut total) = (0, 0);
+        // SAFETY: the path is NUL-terminated and both output pointers are writable.
+        let ok = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut available,
+                &mut total,
+                std::ptr::null_mut(),
+            )
+        };
+        (ok != 0).then_some(DiskReading {
+            free_bytes: available,
+            total_bytes: total,
+        })
+    }
+
+    #[cfg(windows)]
+    pub(super) fn memory(swap_used_bytes: Option<u64>) -> Option<MemoryReading> {
+        let mut status = MEMORYSTATUSEX {
+            dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: dwLength names the complete writable status structure.
+        if unsafe { GlobalMemoryStatusEx(&mut status) } == 0 {
+            return None;
+        }
+        memory_reading(swap_used_bytes)
+    }
+
+    pub(crate) fn memory_reading(swap_used_bytes: Option<u64>) -> Option<MemoryReading> {
+        // Without a pagefile reading, neither metric in MemoryReading is known.
+        Some(MemoryReading {
+            // Memory load is not the OS memory-pressure level; do not guess one from it.
+            pressure: None,
+            swap_used_bytes: Some(swap_used_bytes?),
+        })
+    }
+
+    #[cfg(windows)]
+    fn ticks(time: FILETIME) -> u64 {
+        (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime)
+    }
+
+    #[cfg(windows)]
+    pub(super) fn cpu(previous: &mut Option<(u64, u64, u64)>) -> Option<CpuReading> {
+        let (mut idle, mut kernel, mut user) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        // SAFETY: all three FILETIME buffers are writable.
+        if unsafe { GetSystemTimes(&mut idle, &mut kernel, &mut user) } == 0 {
+            return None;
+        }
+        let now = (ticks(idle), ticks(kernel), ticks(user));
+        let before = previous.replace(now)?;
+        cpu_delta(before, now).map(|busy_percent| CpuReading {
+            busy_percent,
+            top_process: None,
+            top_process_percent: None,
+        })
+    }
+
+    #[cfg(windows)]
+    pub(super) fn power_status() -> Option<PowerReading> {
+        let mut status = SYSTEM_POWER_STATUS::default();
+        // SAFETY: status is a writable SYSTEM_POWER_STATUS buffer.
+        if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
+            return None;
+        }
+        Some(PowerReading {
+            on_battery: match status.ACLineStatus {
+                0 => Some(true),
+                1 => Some(false),
+                _ => None,
+            },
+            battery_percent: (status.BatteryLifePercent <= 100)
+                .then_some(u64::from(status.BatteryLifePercent)),
+            lid_closed: None,
+            sleep_prevented: None,
+            idle_sleep_minutes: None,
+        })
+    }
+
+    #[cfg(windows)]
+    pub(super) fn default_route() -> Probe<NetworkReading> {
+        let destination = SOCKADDR_INET {
+            Ipv4: SOCKADDR_IN {
+                sin_family: AF_INET,
+                sin_addr: IN_ADDR {
+                    S_un: IN_ADDR_0 {
+                        S_addr: u32::from_ne_bytes([1, 1, 1, 1]),
+                    },
+                },
+                ..Default::default()
+            },
+        };
+        let (mut route, mut source) = (MIB_IPFORWARD_ROW2::default(), SOCKADDR_INET::default());
+        // SAFETY: the destination and output structures are initialized and valid for the call.
+        let status = unsafe {
+            GetBestRoute2(
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                &destination,
+                0,
+                &mut route,
+                &mut source,
+            )
+        };
+        if status == 0 {
+            // A more-specific selected route does not tell us whether a default also exists.
+            if route.DestinationPrefix.PrefixLength != 0 {
+                return Probe::Unavailable;
+            }
+            return Probe::Value(NetworkReading {
+                reachable: true,
+                interface: Some(format!("if#{}", route.InterfaceIndex)),
+            });
+        }
+        // ERROR_NETWORK_UNREACHABLE and ERROR_HOST_UNREACHABLE mean there is no usable route.
+        if matches!(status, 1231 | 1232) {
+            return Probe::Value(NetworkReading {
+                reachable: false,
+                interface: None,
+            });
+        }
+        Probe::Unavailable
+    }
+
+    pub(crate) fn parse_pagefile_mib(text: &str) -> Option<u64> {
+        let text = text.trim();
+        if text.is_empty() {
+            return Some(0);
+        }
+        text.parse::<u64>().ok()?.checked_mul(1024 * 1024)
+    }
+
+    pub(crate) fn parse_sleep_requests(text: &str) -> Option<bool> {
+        let mut in_sleep_section = false;
+        let mut saw_system = false;
+        let mut held = false;
+        for line in text.lines().map(str::trim) {
+            if line.ends_with(':') {
+                in_sleep_section = matches!(line, "SYSTEM:" | "AWAYMODE:");
+                saw_system |= line == "SYSTEM:";
+            }
+            if in_sleep_section
+                && ["[PROCESS]", "[DRIVER]", "[SERVICE]"]
+                    .iter()
+                    .any(|tag| line.starts_with(tag))
+            {
+                held = true;
+            }
+        }
+        saw_system.then_some(held)
+    }
+
+    pub(crate) fn parse_idle_sleep(text: &str, on_battery: Option<bool>) -> Option<u64> {
+        let label = if on_battery? {
+            "Current DC Power Setting Index:"
+        } else {
+            "Current AC Power Setting Index:"
+        };
+        let hex = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(label))?
+            .trim()
+            .strip_prefix("0x")?;
+        let seconds = u64::from(u32::from_str_radix(hex, 16).ok()?);
+        Some(if seconds == 0 {
+            0
+        } else {
+            seconds.div_ceil(60)
+        })
+    }
+
+    pub(crate) fn cpu_delta(before: (u64, u64, u64), now: (u64, u64, u64)) -> Option<f64> {
+        if now.0 < before.0 || now.1 < before.1 || now.2 < before.2 {
+            return None;
+        }
+        let idle = now.0 - before.0;
+        let total = (now.1 - before.1).checked_add(now.2 - before.2)?;
+        (total > 0 && idle <= total)
+            .then_some(((total - idle) as f64 / total as f64 * 100.0).clamp(0.0, 100.0))
+    }
 }
 
 // ---- pure parsers ------------------------------------------------------------------------
@@ -498,7 +767,8 @@ pub(crate) mod macos {
 /// Linux `/proc` and `/sys` files. Parsed and unit-tested on every host; read only on Linux.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))] // HS2-DTAVQA: tested on every host.
 pub(crate) mod linux {
-    use super::{Level, PowerReading};
+    use super::{Level, PowerReading, Probe, ThermalReading};
+    use std::collections::BTreeMap;
 
     /// Linux `/proc/pressure/memory`: `full avg60` at or above 10 is critical, `some avg60` at or
     /// above 20 a warning.
@@ -565,8 +835,96 @@ pub(crate) mod linux {
         })
     }
 
+    /// Only a blocking sleep inhibitor prevents sleep. A delay inhibitor does not.
+    pub(crate) fn parse_inhibitors(text: &str) -> Option<bool> {
+        let mut blocked = false;
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if fields.first() == Some(&"WHO") || line.contains("inhibitors listed") {
+                continue;
+            }
+            let Some(mode) = fields.last() else { continue };
+            if !matches!(*mode, "block" | "delay" | "block-weak") {
+                return None;
+            }
+            blocked |= *mode != "delay";
+        }
+        Some(blocked)
+    }
+
+    /// `loginctl show-logind`: an explicit suspend action and its idle delay. Other desktop
+    /// power managers may override this, so absent or unknown policy remains unavailable.
+    pub(crate) fn parse_idle_sleep(text: &str) -> Option<u64> {
+        let field = |key: &str| text.lines().find_map(|line| line.strip_prefix(key));
+        let action = field("IdleAction=")?;
+        let micros = field("IdleActionUSec=")?.parse::<u64>().ok()?;
+        match action {
+            "ignore" => Some(0),
+            "sleep" | "suspend" | "hibernate" | "hybrid-sleep" | "suspend-then-hibernate" => {
+                Some(micros.div_ceil(60_000_000).max(1))
+            }
+            _ => None,
+        }
+    }
+
+    /// Throttle counters are cumulative. The first sample establishes a baseline; a later
+    /// increase is evidence of throttling, while a reset re-baselines without a false alert.
+    pub(crate) fn thermal_verdict(
+        previous: &mut Option<BTreeMap<String, u64>>,
+        now: BTreeMap<String, u64>,
+    ) -> Probe<ThermalReading> {
+        if now.is_empty() {
+            *previous = None;
+            return Probe::Unsupported;
+        }
+        let throttled = previous.as_ref().map(|before| {
+            now.iter()
+                .any(|(key, count)| before.get(key).is_some_and(|old| count > old))
+        });
+        *previous = Some(now);
+        throttled.map_or(Probe::Unavailable, |throttled| {
+            Probe::Value(ThermalReading {
+                throttled,
+                cpu_speed_limit: None,
+            })
+        })
+    }
+
+    pub(crate) fn read_thermal_counters(
+        cpus: &std::path::Path,
+        previous: &mut Option<BTreeMap<String, u64>>,
+    ) -> Probe<ThermalReading> {
+        let Ok(entries) = std::fs::read_dir(cpus) else {
+            return Probe::Unavailable;
+        };
+        let mut now = BTreeMap::new();
+        for entry in entries {
+            let Ok(entry) = entry else {
+                return Probe::Unavailable;
+            };
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("cpu") || !name[3..].bytes().all(|byte| byte.is_ascii_digit()) {
+                continue;
+            }
+            for counter in ["core_throttle_count", "package_throttle_count"] {
+                let path = entry.path().join("thermal_throttle").join(counter);
+                match std::fs::read_to_string(&path) {
+                    Ok(text) => {
+                        let Ok(count) = text.trim().parse::<u64>() else {
+                            return Probe::Unavailable;
+                        };
+                        now.insert(format!("{name}/{counter}"), count);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(_) => return Probe::Unavailable,
+                }
+            }
+        }
+        thermal_verdict(previous, now)
+    }
+
     /// Linux power from `/sys/class/power_supply` and the ACPI lid. `None` when the machine reports
-    /// no power supply at all. Sleep assertions and the idle timer have no Linux reader.
+    /// no power supply at all. Sleep policy is added by the platform sampler.
     pub(crate) fn linux_power(
         supplies: &std::path::Path,
         lids: &std::path::Path,

@@ -84,6 +84,13 @@ removal; a native Windows 11 probe observed a real `esbuild.exe` child before
 shutdown and none afterward. The full web unit and binary suites passed on the
 source tree; shipped native Windows web proof remains required.
 
+HS2-MEQ46T: `crates/hotsheet-server/src/host_health/tests.rs` covers Windows
+pagefile absence/malformed output, sleep requests and policy, and CPU deltas;
+Linux inhibitor and idle-action parsing plus thermal counter first, changed,
+reset, malformed, and absent samples. The exact-tree T2 gate passed full Rust,
+web, migrator, and selected browser suites. Native Windows and Linux Platforms
+targets on the shipped SHA remain required to exercise the OS-specific readers.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

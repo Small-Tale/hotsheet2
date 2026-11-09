@@ -75,6 +75,133 @@ fn crossings(emissions: &[Emission]) -> Vec<(&'static str, &'static str)> {
 // ---- parsers -----------------------------------------------------------------------------
 
 #[test]
+fn windows_host_health_parsers_preserve_unknown_and_changed_values() {
+    use source::windows;
+    assert_eq!(
+        windows::memory_reading(None),
+        None,
+        "missing pagefile data is unavailable, not normal"
+    );
+    assert_eq!(
+        windows::memory_reading(Some(0)),
+        Some(MemoryReading {
+            pressure: None,
+            swap_used_bytes: Some(0)
+        })
+    );
+    assert_eq!(windows::parse_pagefile_mib("1024\r\n"), Some(GIB));
+    assert_eq!(windows::parse_pagefile_mib("\r\n"), Some(0));
+    assert_eq!(windows::parse_pagefile_mib("not a number"), None);
+    assert_eq!(windows::parse_pagefile_mib("18446744073709551615"), None);
+
+    let clear = "DISPLAY:\r\nNone.\r\nSYSTEM:\r\nNone.\r\nAWAYMODE:\r\nNone.\r\n";
+    let held = "DISPLAY:\r\nNone.\r\nSYSTEM:\r\n[PROCESS] \\Device\\HarddiskVolume1\\agent.exe\r\nAWAYMODE:\r\nNone.\r\n";
+    assert_eq!(windows::parse_sleep_requests(clear), Some(false));
+    assert_eq!(windows::parse_sleep_requests(held), Some(true));
+    assert_eq!(
+        windows::parse_sleep_requests("SYSTEM:\r\n[SERVICE] synthetic-service\r\n"),
+        Some(true),
+        "Windows services can hold sleep assertions"
+    );
+    assert_eq!(
+        windows::parse_sleep_requests(
+            "SYSTEM:\r\nNone.\r\nAWAYMODE:\r\n[DRIVER] synthetic-driver\r\n"
+        ),
+        Some(true)
+    );
+    assert_eq!(windows::parse_sleep_requests("unrecognized output"), None);
+
+    let timer = "Current AC Power Setting Index: 0x00000708\r\nCurrent DC Power Setting Index: 0x00000384\r\n";
+    assert_eq!(windows::parse_idle_sleep(timer, Some(false)), Some(30));
+    assert_eq!(windows::parse_idle_sleep(timer, Some(true)), Some(15));
+    assert_eq!(windows::parse_idle_sleep(timer, None), None);
+    assert_eq!(
+        windows::parse_idle_sleep("Current AC Power Setting Index: 0x0000001e", Some(false)),
+        Some(1)
+    );
+    assert_eq!(
+        windows::parse_idle_sleep("Current AC Power Setting Index: 0x00000000", Some(false)),
+        Some(0)
+    );
+    assert_eq!(windows::parse_idle_sleep("malformed", Some(false)), None);
+    assert_eq!(windows::cpu_delta((1, 10, 10), (3, 20, 20)), Some(90.0));
+    assert_eq!(windows::cpu_delta((1, 10, 10), (1, 10, 10)), None);
+    assert_eq!(windows::cpu_delta((3, 10, 10), (1, 20, 20)), None);
+}
+
+#[test]
+fn linux_sleep_and_thermal_readers_rebaseline_and_fail_closed() {
+    use std::collections::BTreeMap;
+    assert_eq!(
+        source::linux::parse_inhibitors("0 inhibitors listed.\n"),
+        Some(false)
+    );
+    assert_eq!(
+        source::linux::parse_inhibitors("sleep 1000 agent 1000 app block\n"),
+        Some(true)
+    );
+    assert_eq!(
+        source::linux::parse_inhibitors("sleep 1000 agent 1000 app delay\n"),
+        Some(false)
+    );
+    assert_eq!(source::linux::parse_inhibitors("sleep garbled\n"), None);
+    assert_eq!(
+        source::linux::parse_idle_sleep("IdleAction=ignore\nIdleActionUSec=0\n"),
+        Some(0)
+    );
+    assert_eq!(
+        source::linux::parse_idle_sleep("IdleAction=suspend\nIdleActionUSec=900000000\n"),
+        Some(15)
+    );
+    assert_eq!(
+        source::linux::parse_idle_sleep("IdleAction=sleep\nIdleActionUSec=30000000\n"),
+        Some(1)
+    );
+    assert_eq!(
+        source::linux::parse_idle_sleep("IdleAction=lock\nIdleActionUSec=900000000\n"),
+        None
+    );
+
+    let root = tempfile::tempdir().unwrap();
+    let cpu = root.path().join("cpu0/thermal_throttle");
+    std::fs::create_dir_all(&cpu).unwrap();
+    let counter = cpu.join("core_throttle_count");
+    std::fs::write(&counter, "3\n").unwrap();
+    let mut last = None;
+    assert_eq!(
+        source::linux::read_thermal_counters(root.path(), &mut last),
+        Probe::Unavailable
+    );
+    std::fs::write(&counter, "4\n").unwrap();
+    assert_eq!(
+        source::linux::read_thermal_counters(root.path(), &mut last),
+        Probe::Value(ThermalReading {
+            throttled: true,
+            cpu_speed_limit: None
+        })
+    );
+    std::fs::write(&counter, "1\n").unwrap();
+    assert_eq!(
+        source::linux::read_thermal_counters(root.path(), &mut last),
+        Probe::Value(ThermalReading {
+            throttled: false,
+            cpu_speed_limit: None
+        })
+    );
+    std::fs::write(&counter, "bad\n").unwrap();
+    assert_eq!(
+        source::linux::read_thermal_counters(root.path(), &mut last),
+        Probe::Unavailable
+    );
+    std::fs::remove_file(&counter).unwrap();
+    assert_eq!(
+        source::linux::read_thermal_counters(root.path(), &mut last),
+        Probe::Unsupported
+    );
+    assert_eq!(last, None::<BTreeMap<String, u64>>);
+}
+
+#[test]
 fn macos_tool_output_parses_into_readings() {
     assert_eq!(
         source::macos::parse_pressure_level("1\n"),

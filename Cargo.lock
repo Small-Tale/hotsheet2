@@ -1303,6 +1303,7 @@ dependencies = [
  "ulid",
  "ureq",
  "webp-animation",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
