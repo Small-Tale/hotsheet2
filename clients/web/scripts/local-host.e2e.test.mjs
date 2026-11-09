@@ -102,9 +102,27 @@ async function processesUsing(home) {
     .update(await realpath(bootstrap).catch(() => bootstrap))
     .digest('hex')
     .slice(0, 16);
-  const { stdout } = await run('ps', ['-Ao', 'pid=,command=']);
-  return stdout
-    .split('\n')
+  // HS2-XP3Y4D: Windows has no `ps`. Read process command lines through the same
+  // native process inventory used by the owned-server fixture, without inserting
+  // the synthetic home path into a PowerShell expression.
+  const lines =
+    process.platform === 'win32'
+      ? []
+          .concat(
+            JSON.parse(
+              (
+                await run('powershell.exe', [
+                  '-NoProfile',
+                  '-NonInteractive',
+                  '-Command',
+                  'Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress',
+                ])
+              ).stdout || '[]',
+            ),
+          )
+          .map((row) => `${row.ProcessId} ${row.CommandLine ?? ''}`)
+      : (await run('ps', ['-Ao', 'pid=,command='])).stdout.split('\n');
+  return lines
     .filter(
       (line) =>
         line.includes(home) ||

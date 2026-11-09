@@ -100,8 +100,10 @@ HS2-XP3Y4D: web server fixture tests pin exact child identity, taken-port
 refusal, cache ownership, and cleanup after normal and already-exited parents.
 The Windows path waits for descendants of the launched Vite PID before cache
 removal; a native Windows 11 probe observed a real `esbuild.exe` child before
-shutdown and none afterward. The full web unit and binary suites passed on the
-source tree; shipped native Windows web proof remains required.
+shutdown and none afterward. The local-host binary fixture enumerates Windows
+process command lines through CIM for its exact synthetic home and broker cleanup,
+preserving the survivor check after SIGKILL. The full web unit and binary suites
+passed on the source tree; shipped native Windows web proof remains required.
 
 HS2-MEQ46T: `crates/hotsheet-server/src/host_health/tests.rs` covers Windows
 pagefile absence/malformed output, sleep requests and policy, and CPU deltas;
