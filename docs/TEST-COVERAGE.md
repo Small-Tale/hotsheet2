@@ -50,6 +50,12 @@ targets. The worker also ran the actual pinned Perl converter on both shapes.
 Fresh native `windows-arm64` and `tauri-windows-arm64` builds are required to
 confirm the vendored libdav1d assembly and final link.
 
+HS2-KY5X6J: desktop resource and Node runtime synthetic tests check macOS
+arm64/x64 and Windows ARM64/x86_64 target mapping, Windows `.exe` sidecar names
+and copied Node execution, and macOS linkage inspection. Platform workflow
+checks staged Windows resources before unsigned `--no-bundle` Tauri builds.
+Fresh native `tauri-windows-x86_64` and `tauri-windows-arm64` jobs are required.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

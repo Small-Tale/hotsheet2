@@ -66,10 +66,12 @@ Kerf model through `WorkspaceControls`; `search-and-composer.ts` wires its field
 > native SwiftUI clients and broader Tauri integrations. Git-aware fast-path reindex, Tier-1
 > mTLS, and version-pinned/live AI-tool protocol verification are built.
 
-The macOS Tauri host is under `clients/web/src-tauri/` (HS2-5R706Q). Its separate
+The Tauri host is under `clients/web/src-tauri/` (HS2-5R706Q). Its separate
 Cargo workspace builds the native window, while `clients/web/scripts/prepare-desktop.mjs`
 stages production web assets, Node, the Rust executables, plugins, and migrator
-resources for bundling. `npm run desktop:build` packages the `.app`, and
+resources for bundling. HS2-KY5X6J prepares Windows ARM64/x86_64 `.exe` resources
+for unsigned `--no-bundle` platform builds; `desktop-node-runtime.mjs` verifies
+the staged Node executable on each host. `npm run desktop:build` packages the macOS `.app`, and
 `npm run desktop:test` checks the staged bridge startup and shutdown.
 `src/desktop-storage-contract.ts` validates the desktop preference transport;
 `src/desktop-storage-bridge.ts` stores private atomic per-key records, and

@@ -459,6 +459,27 @@ jobs:
         working-directory: clients/web
         run: npm run desktop:prepare
 
+      # HS2-KY5X6J: Windows CI builds the Tauri shell with --no-bundle. Prove the staged native
+      # sidecars and copied Node executable are usable without implying installer support.
+      - name: Verify Windows desktop sidecars
+        if: ${{ matrix.os == 'windows' && steps.prepare.outcome == 'success' }}
+        shell: pwsh
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          $triple = switch ($env:TARGET_ARCH) {
+            'arm64' { 'aarch64-pc-windows-msvc' }
+            'x86_64' { 'x86_64-pc-windows-msvc' }
+            default { throw "Unsupported Windows desktop architecture: $env:TARGET_ARCH" }
+          }
+          $binaries = Join-Path $env:GITHUB_WORKSPACE 'clients/web/src-tauri/binaries'
+          foreach ($name in @('node', 'hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate', 'hotsheet-mcp')) {
+            $path = Join-Path $binaries "$name-$triple.exe"
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing Windows desktop sidecar: $path" }
+          }
+          & (Join-Path $binaries "node-$triple.exe") --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       # The shell is its own Cargo workspace, outside `cargo fmt --all` and `cargo lint`
       # (HS2-H37V5P). Clippy follows the prepare step because the build script checks the
       # staged sidecars.

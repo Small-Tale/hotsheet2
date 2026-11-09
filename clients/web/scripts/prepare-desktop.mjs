@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
 
-import { assertStandaloneNode } from './desktop-node-runtime.mjs';
+import { assertStandaloneNode, desktopResourcePlan } from './desktop-node-runtime.mjs';
 import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
 
 const web = fileURLToPath(new URL('..', import.meta.url));
@@ -14,12 +14,6 @@ const root = resolve(web, '../..');
 const resources = resolve(web, 'src-tauri/resources');
 const binaries = resolve(web, 'src-tauri/binaries');
 const migrator = resolve(root, 'migrator');
-const triple =
-  process.platform === 'darwin' && process.arch === 'arm64'
-    ? 'aarch64-apple-darwin'
-    : process.platform === 'darwin' && process.arch === 'x64'
-      ? 'x86_64-apple-darwin'
-      : undefined;
 
 function copyExecutable(source, destination) {
   if (!existsSync(source)) throw new Error(`Missing desktop runtime: ${source}`);
@@ -29,8 +23,8 @@ function copyExecutable(source, destination) {
 
 if (!existsSync(resolve(migrator, 'node_modules/@electric-sql/pglite')))
   throw new Error('Build the migrator first with `npm ci` from migrator/.');
-if (!triple) throw new Error('The first Hot Sheet desktop package supports macOS arm64 and x64.');
 const nodeRuntime = process.env.HOTSHEET_DESKTOP_NODE || process.execPath;
+const copyPlan = desktopResourcePlan(root, binaries, nodeRuntime);
 assertStandaloneNode(nodeRuntime);
 
 rmSync(resources, { recursive: true, force: true });
@@ -38,9 +32,7 @@ rmSync(binaries, { recursive: true, force: true });
 mkdirSync(binaries, { recursive: true });
 mkdirSync(resolve(resources, 'dist-host'), { recursive: true });
 mkdirSync(resolve(resources, 'migrator'), { recursive: true });
-copyExecutable(nodeRuntime, resolve(binaries, `node-${triple}`));
-for (const name of ['hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate', 'hotsheet-mcp'])
-  copyExecutable(resolve(root, 'target/release', name), resolve(binaries, `${name}-${triple}`));
+for (const { source, destination } of copyPlan) copyExecutable(source, destination);
 cpSync(resolve(web, 'dist'), resolve(resources, 'dist'), { recursive: true });
 // The bridge checks these live template bytes against the CLI's embedded copy
 // before refresh, so a packaged checkout needs the same source tree.
