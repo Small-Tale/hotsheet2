@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: includes detached Unix socket broker fixture.
+
 //! Opt-in attach replay protocol through a real server (HS2-K93QHA), in both terminal modes:
 //! PTYs owned by the server and PTYs in a detached broker. Legacy viewers keep the unframed
 //! replay; opted-in viewers get a capped, compressed, announced replay followed by the same live

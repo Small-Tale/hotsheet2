@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: Unix socket ownership and process-group fixture.
+
 //! Real detached server/broker startup with a home longer than AF_UNIX permits.
 
 use std::fs;

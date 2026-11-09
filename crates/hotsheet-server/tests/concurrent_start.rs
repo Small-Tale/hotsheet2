@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: Unix process-group fixture.
+
 //! Real `hotsheet-server` binaries started at the same instant on one store (HS2-585JCP):
 //! exactly one keeps serving and owns the registration; every other starter exits instead
 //! of lingering as an unregistered, orphaned listener.

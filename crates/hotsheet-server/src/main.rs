@@ -318,6 +318,8 @@ async fn main() -> Result<()> {
     if terminal_broker_enabled(cli.no_terminal_broker) {
         state = state.with_terminal_broker()?;
         println!("terminals: detached broker (survives restart)");
+    } else if cfg!(not(unix)) {
+        println!("terminals: in-process (detached broker unavailable on this platform)");
     }
 
     // Auto-host any stores configured in ${HOTSHEET_HOME}/stores.json (HS2-87 discovery).
@@ -530,7 +532,7 @@ fn ensure_fixture_capability(test_owned: bool, isolated_vault: bool) -> Result<(
 }
 
 fn terminal_broker_enabled(no_terminal_broker: bool) -> bool {
-    !no_terminal_broker
+    cfg!(unix) && !no_terminal_broker
 }
 
 /// How a shutdown drain ended.
@@ -794,9 +796,12 @@ mod tests {
     }
 
     #[test]
-    fn detached_terminal_broker_is_default_with_an_explicit_diagnostic_opt_out() {
+    fn hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out() {
         let default = Cli::try_parse_from(["hotsheet-server", "-C", "store"]).unwrap();
-        assert!(terminal_broker_enabled(default.no_terminal_broker));
+        assert_eq!(
+            terminal_broker_enabled(default.no_terminal_broker),
+            cfg!(unix)
+        );
         let disabled =
             Cli::try_parse_from(["hotsheet-server", "-C", "store", "--no-terminal-broker"])
                 .unwrap();

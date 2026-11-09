@@ -3733,6 +3733,7 @@ async fn terminal_ai_connection_ignores_stale_session_end_after_clear() {
 }
 
 #[tokio::test]
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn a_restart_prunes_names_of_terminals_that_did_not_survive() {
     use hotsheet_server::terminal_broker::TerminalBroker;
 
@@ -16027,6 +16028,7 @@ async fn checkout_activity_reads_linked_store_and_rejects_unknown_checkout() {
 
 /// HS2-A93BHS: the current diff is an authenticated, bounded checkout read. Native-style
 /// content in an edit event never crosses the retained or live activity boundary.
+#[cfg(unix)] // HS2-2TD7M7: this fixture uses a Unix filesystem symlink.
 #[tokio::test]
 async fn checkout_current_diff_is_on_demand_confined_and_non_retained() {
     let (primary, st) = state();
@@ -19302,6 +19304,7 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 /// A broker terminal opened without a cwd records the store root as its launch directory,
 /// like an in-process terminal, so it is never missing a working directory (HS2-R5KV1Q).
 #[tokio::test]
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn a_broker_terminal_without_a_cwd_records_the_store_root() {
     use hotsheet_server::terminal_broker::TerminalBroker;
     use std::sync::Arc;
@@ -19337,6 +19340,7 @@ async fn a_broker_terminal_without_a_cwd_records_the_store_root() {
 }
 
 #[tokio::test]
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn broker_mode_routes_terminals_and_survives_a_server_restart() {
     use hotsheet_server::terminal_broker::TerminalBroker;
     use std::sync::Arc;
@@ -19762,6 +19766,7 @@ async fn an_exited_in_process_ai_terminal_reregisters_when_reopened() {
 }
 
 #[tokio::test]
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn an_exited_broker_ai_terminal_reregisters_when_reopened() {
     use hotsheet_server::terminal_broker::TerminalBroker;
     use std::sync::Arc;
@@ -20071,6 +20076,7 @@ async fn shell_terminal_routes_permissions_to_its_own_checkout_project() {
 /// (HS2-ERT00F item 5): the server can't read an in-process `Terminal`, so it polls the broker
 /// over the socket for busy/idle and mirrors it into the connection registry.
 #[tokio::test]
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn a_broker_connected_terminal_feeds_its_busy_through_the_broker() {
     use hotsheet_server::terminal_broker::TerminalBroker;
     use std::sync::Arc;
@@ -26395,6 +26401,7 @@ async fn a_shell_terminal_session_releases_its_claims_when_the_terminal_ends() {
 }
 
 #[tokio::test]
+#[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn broker_terminal_sessions_release_claims_including_after_a_server_restart() {
     use hotsheet_server::terminal_broker::TerminalBroker;
 

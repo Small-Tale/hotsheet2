@@ -9,20 +9,34 @@
 //! route through a client (spawn/discover/reconnect) is layered on top.
 
 use std::path::Path;
+#[cfg(unix)]
 use std::sync::Mutex;
+#[cfg(unix)]
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+#[cfg(unix)]
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(unix)]
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 
+#[cfg(unix)]
 pub use crate::broker_socket::SocketCleanup;
+#[cfg(not(unix))]
+pub struct SocketCleanup;
+#[cfg(unix)]
 use crate::manager::TerminalManager;
+#[cfg(unix)]
 use crate::sizing::ViewportClaim;
-use crate::terminal::{TermSpec, TerminalKind};
+#[cfg(unix)]
+use crate::terminal::TermSpec;
+use crate::terminal::TerminalKind;
+#[cfg(unix)]
 use crate::viewer_output::{VIEWER_QUEUE_FRAMES, ViewerFrame, pump_viewer_output};
 use crate::wire_bytes::{BytesEncoding, WireBytes};
 
@@ -31,6 +45,7 @@ pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
 
 /// A real millis clock for the broker process (the size arbiter is deterministic given it).
 /// Distinct from the terminal's injected test clock — the broker runs as its own process.
+#[cfg(unix)]
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -222,13 +237,16 @@ pub struct BrokerPushState {
     pub session_id: Option<String>,
 }
 
+#[cfg(unix)]
 struct RetainedPush {
     terminal: Weak<crate::terminal::Terminal>,
     state: BrokerPushState,
 }
 
+#[cfg(unix)]
 type Pushes = Arc<Mutex<std::collections::HashMap<String, RetainedPush>>>;
 
+#[cfg(unix)]
 fn prune_exited_pushes(pushes: &Pushes) {
     pushes
         .lock()
@@ -266,6 +284,7 @@ pub struct BrokerTermInfo {
     pub foreground_command: Option<bool>,
 }
 
+#[cfg(unix)]
 fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
     let osc = term.term_state();
     BrokerTermInfo {
@@ -285,11 +304,13 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
 /// Serve a broker on `listener`, hosting `project`'s terminals in `manager` for the process's
 /// lifetime. Each connection is handled concurrently; the shared `manager` (and its PTYs)
 /// outlive any one connection — the whole point of the broker.
+#[cfg(unix)]
 pub async fn serve_broker(listener: UnixListener, project: String, manager: Arc<TerminalManager>) {
     serve_broker_with_idle(listener, project, manager, None).await;
 }
 
 /// Bind and run the detached broker process, removing its socket after idle shutdown.
+#[cfg(unix)]
 pub async fn run_broker_process(
     socket: impl AsRef<std::path::Path>,
     project: String,
@@ -332,11 +353,6 @@ fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
     }
 }
 
-#[cfg(not(unix))]
-fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
-    Ok(None)
-}
-
 #[cfg(unix)]
 async fn wait_for_test_server_owner_exit(owner_pid: i32) {
     while (unsafe { libc::kill(owner_pid, 0) }) == 0 {
@@ -344,13 +360,9 @@ async fn wait_for_test_server_owner_exit(owner_pid: i32) {
     }
 }
 
-#[cfg(not(unix))]
-async fn wait_for_test_server_owner_exit(_owner_pid: i32) {
-    std::future::pending::<()>().await;
-}
-
 /// Serve with an optional shutdown-when-empty grace period. `None` keeps the historical
 /// run-until-killed behavior used by embedded callers; the detached binary supplies a grace.
+#[cfg(unix)]
 pub async fn serve_broker_with_idle(
     listener: UnixListener,
     project: String,
@@ -391,6 +403,7 @@ pub async fn serve_broker_with_idle(
     }
 }
 
+#[cfg(unix)]
 async fn handle_connection(
     stream: UnixStream,
     project: &str,
@@ -427,6 +440,7 @@ async fn handle_connection(
 }
 
 /// Serialize `frame` as one JSON line and flush it.
+#[cfg(unix)]
 async fn write_line<T: Serialize>(write: &mut OwnedWriteHalf, frame: &T) -> std::io::Result<()> {
     let mut out = serde_json::to_string(frame).map_err(std::io::Error::other)?;
     out.push('\n');
@@ -436,6 +450,7 @@ async fn write_line<T: Serialize>(write: &mut OwnedWriteHalf, frame: &T) -> std:
 
 /// Write an attached client's queued frames as [`StreamOut`] lines until the queue closes
 /// (the terminal ended) or the client stops accepting writes.
+#[cfg(unix)]
 async fn write_stream_frames(
     mut write: OwnedWriteHalf,
     mut frames: tokio::sync::mpsc::Receiver<ViewerFrame>,
@@ -468,6 +483,7 @@ async fn write_stream_frames(
 /// input + size claims it sends back, until the connection closes (HS2-ERT00F item 4). On
 /// disconnect the viewport's size claim is dropped so the PTY size self-heals for the rest —
 /// broker-side, so it holds even across a server restart.
+#[cfg(unix)]
 async fn stream_terminal(
     mut lines: tokio::io::Lines<BufReader<OwnedReadHalf>>,
     mut write: OwnedWriteHalf,
@@ -556,6 +572,7 @@ async fn stream_terminal(
 /// Run one request against the manager (synchronous — PTY ops are quick, non-blocking).
 /// Answer one request. Only `Input` awaits (the PTY write runs on the terminal's writer
 /// thread, HS2-FERD7N); the other requests are immediate.
+#[cfg(unix)]
 async fn handle_request(
     project: &str,
     manager: &Arc<TerminalManager>,
@@ -731,11 +748,13 @@ async fn handle_request(
 }
 
 /// A client to a running broker over its Unix socket.
+#[cfg(unix)]
 pub struct BrokerClient {
     reader: tokio::io::Lines<BufReader<tokio::net::unix::OwnedReadHalf>>,
     writer: tokio::net::unix::OwnedWriteHalf,
 }
 
+#[cfg(unix)]
 impl BrokerClient {
     /// Connect to the broker at `socket_path`.
     pub async fn connect(socket_path: &Path) -> std::io::Result<Self> {
@@ -767,6 +786,7 @@ impl BrokerClient {
 /// [`open`](Self::open) sends the attach request, the broker streams [`StreamOut`] frames
 /// (scrollback replay, then live output + size decisions), and [`send`](Self::send) forwards
 /// [`StreamIn`] frames (input + size claims). The server bridges this to a WebSocket viewer.
+#[cfg(unix)]
 pub struct BrokerStream {
     reader: BrokerStreamReader,
     writer: BrokerStreamWriter,
@@ -774,6 +794,7 @@ pub struct BrokerStream {
 
 /// The receiving half of a [`BrokerStream`] (HS2-J52ZJ7): read it on one task while another
 /// forwards input through the [`BrokerStreamWriter`], so input never waits behind output.
+#[cfg(unix)]
 pub struct BrokerStreamReader {
     reader: tokio::io::Lines<BufReader<OwnedReadHalf>>,
     /// Set once the broker streamed a base64 payload on this connection, proving it
@@ -782,11 +803,13 @@ pub struct BrokerStreamReader {
 }
 
 /// The sending half of a [`BrokerStream`] (HS2-J52ZJ7).
+#[cfg(unix)]
 pub struct BrokerStreamWriter {
     writer: OwnedWriteHalf,
     base64_proven: Arc<AtomicBool>,
 }
 
+#[cfg(unix)]
 impl BrokerStream {
     /// Connect to the broker at `socket_path` and attach to terminal `id`. The first
     /// [`next`](Self::next) frame is the scrollback replay (or [`StreamOut::NotFound`]).
@@ -853,6 +876,7 @@ impl BrokerStream {
     }
 }
 
+#[cfg(unix)]
 impl BrokerStreamReader {
     /// The next streamed frame, or `None` when the broker closed the stream. Cancel-safe, so
     /// it can sit in a `select!`.
@@ -876,6 +900,7 @@ impl BrokerStreamReader {
     }
 }
 
+#[cfg(unix)]
 impl BrokerStreamWriter {
     /// The encoding [`send_input`](Self::send_input) uses right now.
     pub fn input_encoding(&self) -> BytesEncoding {
@@ -904,7 +929,104 @@ impl BrokerStreamWriter {
     }
 }
 
-#[cfg(test)]
+// HS2-2TD7M7: Windows keeps terminals in the server process until an authenticated
+// native broker transport exists. These types preserve the protocol-facing API so
+// dormant broker branches still compile, and reject accidental use explicitly.
+#[cfg(not(unix))]
+fn unsupported() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "detached terminal broker is unavailable on this platform",
+    )
+}
+
+#[cfg(not(unix))]
+pub async fn run_broker_process(
+    _socket: impl AsRef<Path>,
+    _project: String,
+) -> std::io::Result<()> {
+    Err(unsupported())
+}
+
+#[cfg(not(unix))]
+pub struct BrokerClient;
+
+#[cfg(not(unix))]
+impl BrokerClient {
+    pub async fn connect(_socket: &Path) -> std::io::Result<Self> {
+        Err(unsupported())
+    }
+
+    pub async fn request(&mut self, _req: &Request) -> std::io::Result<Response> {
+        Err(unsupported())
+    }
+}
+
+#[cfg(not(unix))]
+pub struct BrokerStream;
+#[cfg(not(unix))]
+pub struct BrokerStreamReader;
+#[cfg(not(unix))]
+pub struct BrokerStreamWriter;
+
+#[cfg(not(unix))]
+impl BrokerStream {
+    pub async fn open(_socket: &Path, _id: &str) -> std::io::Result<Self> {
+        Err(unsupported())
+    }
+
+    pub async fn open_with(
+        _socket: &Path,
+        _id: &str,
+        _bytes: BytesEncoding,
+    ) -> std::io::Result<Self> {
+        Err(unsupported())
+    }
+
+    pub fn into_split(self) -> (BrokerStreamReader, BrokerStreamWriter) {
+        (BrokerStreamReader, BrokerStreamWriter)
+    }
+
+    pub async fn next(&mut self) -> std::io::Result<Option<StreamOut>> {
+        Err(unsupported())
+    }
+
+    pub fn input_encoding(&self) -> BytesEncoding {
+        BytesEncoding::Array
+    }
+
+    pub async fn send_input(&mut self, _data: Vec<u8>) -> std::io::Result<()> {
+        Err(unsupported())
+    }
+
+    pub async fn send(&mut self, _frame: &StreamIn) -> std::io::Result<()> {
+        Err(unsupported())
+    }
+}
+
+#[cfg(not(unix))]
+impl BrokerStreamReader {
+    pub async fn next(&mut self) -> std::io::Result<Option<StreamOut>> {
+        Err(unsupported())
+    }
+}
+
+#[cfg(not(unix))]
+impl BrokerStreamWriter {
+    pub fn input_encoding(&self) -> BytesEncoding {
+        BytesEncoding::Array
+    }
+
+    pub async fn send_input(&mut self, _data: Vec<u8>) -> std::io::Result<()> {
+        Err(unsupported())
+    }
+
+    pub async fn send(&mut self, _frame: &StreamIn) -> std::io::Result<()> {
+        Err(unsupported())
+    }
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};

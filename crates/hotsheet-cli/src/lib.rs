@@ -779,7 +779,9 @@ mod store_link_tests {
 
 #[cfg(test)]
 mod launch_session_tests {
-    use super::{exit_code_of, launch_worker_id};
+    #[cfg(unix)]
+    use super::exit_code_of;
+    use super::launch_worker_id;
 
     #[test]
     fn a_launch_worker_id_is_the_tool_and_a_short_lowercase_suffix() {

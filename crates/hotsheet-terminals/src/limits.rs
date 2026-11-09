@@ -32,11 +32,9 @@ pub fn physical_memory_bytes() -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    #[cfg(unix)]
     #[test]
     fn this_machine_reports_its_physical_memory() {
-        #[cfg(unix)]
-        assert!(physical_memory_bytes().is_some_and(|bytes| bytes > 256 * 1024 * 1024));
+        assert!(super::physical_memory_bytes().is_some_and(|bytes| bytes > 256 * 1024 * 1024));
     }
 }

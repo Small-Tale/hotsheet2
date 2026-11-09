@@ -1,3 +1,5 @@
+#![cfg(unix)] // HS2-2TD7M7: detached Unix socket broker fixture.
+
 //! Creation-kind regressions through actual HTTP servers and the detached broker protocol.
 
 use std::path::Path;

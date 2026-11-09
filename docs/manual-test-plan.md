@@ -977,3 +977,12 @@ permission request follows it. Open a second project with no setting and confirm
 stays Off. Change the first project from another window and confirm the original
 window updates. Repeat with a denied local-file write: the UI must restore the last
 saved choice and show an error, without approving a request from an unsaved choice.
+
+## Windows in-process terminals (HS2-2TD7M7)
+
+On a native Windows x86_64 build, start a server with a disposable store and no
+`--no-terminal-broker` flag. Confirm startup reports in-process terminal hosting,
+open a synthetic `cmd.exe` terminal, send input, and observe its output and close.
+Restart that server and confirm the old terminal is gone, matching the documented
+Windows persistence limit. Run the managed credential-cache/account tests on the
+same build; a Unix broker compile error must not prevent them from starting.

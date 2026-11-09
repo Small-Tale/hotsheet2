@@ -507,6 +507,11 @@ which the project's run history never lists.
 > integration, lifecycle/discovery, and the long-poll fallback are also built. MCP is a
 > separate shim, not served here (§5.8).
 
+On Windows, terminals use the server's in-process manager (HS2-2TD7M7). The Unix
+detached broker is unavailable there, so terminal sessions do not survive a server
+restart. Startup reports which hosting mode is active; invoking the broker process
+on Windows fails explicitly. Windows credential-cache routes remain available.
+
 `GET /health` is intentionally unauthenticated and carries a non-secret protocol identity:
 `generation: "hs2"`, `api_version`, ticket prefix, and store schema. An HS2 MCP HTTP
 backend that receives 401/403 probes this marker so it can distinguish a bad HS2 secret
