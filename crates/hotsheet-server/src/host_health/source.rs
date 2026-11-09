@@ -353,7 +353,7 @@ fn platform_sample(source: &mut SystemSource) -> HostReading {
         cpu: windows::cpu(&mut source.last_windows_cpu).map_or(Probe::Unavailable, Probe::Value),
         power: power.map_or(Probe::Unavailable, Probe::Value),
         network: windows::default_route(),
-        thermal: Probe::Unsupported,
+        ..HostReading::unsupported()
     }
 }
 
