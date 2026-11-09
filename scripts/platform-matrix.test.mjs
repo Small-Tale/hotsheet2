@@ -72,13 +72,32 @@ test('HS2-BCCF8J installs a verified gas-preprocessor for both native Windows ar
     assert.ok(install > job.indexOf('Install the AVIF decoder for the native build (Windows)'));
     assert.ok(install < job.indexOf('Set up Node'));
     assert.match(job.slice(install, job.indexOf('Set up Node')), /matrix\.os == 'windows' && matrix\.arch == 'arm64'/);
-    assert.match(job.slice(install, job.indexOf('Set up Node')), /run: \.\/scripts\/install-windows-arm64-gas-preprocessor\.ps1/);
+    assert.match(
+      job.slice(install, job.indexOf('Set up Node')),
+      /run: \.\/scripts\/install-windows-arm64-gas-preprocessor\.ps1/,
+    );
   }
   assert.match(gasPreprocessor, /d09971fad329d32df19f5bbafe88cf2f0ed04ed7/);
   assert.match(gasPreprocessor, /78ad06351ac8be513fb6e6291d9bb8f667899625c2649093e3b08f59fae950a2/);
   assert.match(gasPreprocessor, /Get-FileHash -Algorithm SHA256 -Path \$script/);
   assert.match(gasPreprocessor, /perl -c \$script/);
   assert.match(gasPreprocessor, /\$env:GITHUB_PATH/);
+});
+
+test('HS2-MX0N0G patches the pinned converter to resolve tbz and tbnz numeric targets', () => {
+  const oldPattern = /\$oldBranchPattern = '([^']+)'/.exec(gasPreprocessor)?.[1];
+  const newPattern = /\$newBranchPattern = '([^']+)'/.exec(gasPreprocessor)?.[1];
+  assert.equal(oldPattern, 'cbn?z|adr|tbz');
+  assert.equal(newPattern, 'cbn?z|adr|tbn?z');
+  assert.match(gasPreprocessor, /\$source = \$source\.Replace\(\$oldBranchPattern, \$newBranchPattern\)/);
+  assert.match(gasPreprocessor, /1b4a7519ff4746ca26a6129bb799356d2d1394e68daff2fc693d8df37030fc99/);
+  assert.match(gasPreprocessor, /Patched gas-preprocessor does not match the expected SHA-256/);
+
+  const branchTarget = (pattern, instruction) =>
+    new RegExp(`^(?:${pattern})\\s+x14,\\s*#0,\\s*(\\d+[bf])$`).exec(instruction)?.[1];
+  assert.equal(branchTarget(oldPattern, 'tbnz x14, #0, 8f'), undefined, 'pinned upstream misses tbnz');
+  assert.equal(branchTarget(newPattern, 'tbnz x14, #0, 8f'), '8f');
+  assert.equal(branchTarget(newPattern, 'tbz x14, #0, 7f'), '7f');
 });
 
 test('HS2-XW91TJ selects an ARM64 assembler for aws-lc-sys without changing AVIF CC', () => {
@@ -90,8 +109,14 @@ test('HS2-XW91TJ selects an ARM64 assembler for aws-lc-sys without changing AVIF
     const configure = job.indexOf('Select clang-cl for aws-lc-sys assembly (Windows arm64)');
     assert.ok(avif >= 0 && configure > avif && configure < job.indexOf('Set up Node'));
     assert.match(job.slice(avif, configure), /CC=cl/);
-    assert.match(job.slice(configure, job.indexOf('Set up Node')), /matrix\.os == 'windows' && matrix\.arch == 'arm64'/);
-    assert.match(job.slice(configure, job.indexOf('Set up Node')), /run: \.\/scripts\/configure-windows-arm64-aws-lc\.ps1/);
+    assert.match(
+      job.slice(configure, job.indexOf('Set up Node')),
+      /matrix\.os == 'windows' && matrix\.arch == 'arm64'/,
+    );
+    assert.match(
+      job.slice(configure, job.indexOf('Set up Node')),
+      /run: \.\/scripts\/configure-windows-arm64-aws-lc\.ps1/,
+    );
   }
   assert.match(awsLcCompiler, /VC\/Tools\/Llvm\/ARM64\/bin\/clang-cl\.exe/);
   assert.match(awsLcCompiler, /--target=aarch64-pc-windows-msvc \/c \$probe/);

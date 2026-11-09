@@ -5,6 +5,12 @@ jobs install the exact upstream gas-preprocessor SHA-256 and verify Perl syntax
 before their Rust builds. Native assembly and build evidence comes from the
 `Platforms` workflow on `windows-arm64` and `tauri-windows-arm64`.
 
+HS2-MX0N0G: `scripts/platform-matrix.test.mjs` pins the verified
+gas-preprocessor patch and checks synthetic `tbz` and `tbnz` numeric branch
+targets. The worker also ran the actual pinned Perl converter on both shapes.
+Fresh native `windows-arm64` and `tauri-windows-arm64` builds are required to
+confirm the vendored libdav1d assembly and final link.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

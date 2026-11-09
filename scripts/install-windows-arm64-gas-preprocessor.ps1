@@ -11,6 +11,20 @@ $digest = (Get-FileHash -Algorithm SHA256 -Path $script).Hash.ToLowerInvariant()
 if ($digest -ne $expectedSha256) {
   throw 'Downloaded gas-preprocessor does not match the pinned upstream SHA-256'
 }
+# HS2-MX0N0G: upstream converts tbz numeric targets but leaves tbnz targets in
+# GNU form, which armasm64 rejects in dav1d's loopfilter assembly.
+$oldBranchPattern = 'cbn?z|adr|tbz'
+$newBranchPattern = 'cbn?z|adr|tbn?z'
+$patchedSha256 = '1b4a7519ff4746ca26a6129bb799356d2d1394e68daff2fc693d8df37030fc99'
+$source = [System.IO.File]::ReadAllText($script)
+if ($source.IndexOf($oldBranchPattern) -lt 0 -or $source.IndexOf($oldBranchPattern) -ne $source.LastIndexOf($oldBranchPattern)) {
+  throw 'Pinned gas-preprocessor branch pattern is missing or ambiguous'
+}
+$source = $source.Replace($oldBranchPattern, $newBranchPattern)
+[System.IO.File]::WriteAllText($script, $source, [System.Text.UTF8Encoding]::new($false))
+if ((Get-FileHash -Algorithm SHA256 -Path $script).Hash.ToLowerInvariant() -ne $patchedSha256) {
+  throw 'Patched gas-preprocessor does not match the expected SHA-256'
+}
 perl -c $script
 if ($LASTEXITCODE -ne 0) { throw 'Pinned gas-preprocessor failed Perl syntax validation' }
 $directory | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
