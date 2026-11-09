@@ -134,6 +134,11 @@ only-aborted history, and an aborted attempt followed by a red effective batch;
 source/shipping identity, receipt, CI, claim, dirty-tree, and open-handle guards
 remain in force. The real HS2-HA63BE source cleanup is gated on this fix shipping.
 
+HS2-2R3W4M: `launch_safety.rs` tests keep the shared Codex daemon scenario on
+Unix, assert its explicit unsupported result elsewhere, and compare isolated Git
+worktree metadata through native path components. The focused and full local Rust
+gates passed; native Windows x86_64 and ARM64 Rust reruns remain platform proof.
+
 HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
 manager on Windows. `hotsheet-server/src/main.rs #
 hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out` and

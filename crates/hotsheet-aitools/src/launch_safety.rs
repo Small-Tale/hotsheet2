@@ -1016,7 +1016,12 @@ mod tests {
                     .into_owned()
             )
         );
-        assert!(roots.iter().any(|root| root.contains(".git/worktrees/")));
+        let worktrees_dir = main.join(".git").canonicalize().unwrap().join("worktrees");
+        assert!(
+            roots
+                .iter()
+                .any(|root| Path::new(root).parent() == Some(worktrees_dir.as_path()))
+        );
     }
 
     #[test]
@@ -1075,6 +1080,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn daemon_isolated_home_symlinks_packages_and_fits_sun_path() {
         let src = tempfile::tempdir().unwrap();
         std::fs::write(src.path().join("auth.json"), "{}").unwrap();
@@ -1120,6 +1126,29 @@ mod tests {
             "socket path is too long for sun_path: {} ({} bytes)",
             sock.display(),
             sock.to_string_lossy().len()
+        );
+    }
+
+    #[test]
+    #[cfg(not(unix))]
+    fn daemon_isolated_home_reports_unsupported_platform() {
+        let src = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(src.path().join("packages/standalone")).unwrap();
+
+        let result = IsolatedCodexHome::create_for_daemon(
+            src.path(),
+            "hotsheet",
+            "hotsheet-mcp",
+            &[],
+            "codex",
+        );
+        let error = match result {
+            Ok(_) => panic!("the shared daemon must not start on this platform"),
+            Err(error) => error,
+        };
+        assert!(
+            format!("{error:#}").contains("the shared codex daemon is only supported on unix"),
+            "unexpected daemon error: {error:#}"
         );
     }
 
