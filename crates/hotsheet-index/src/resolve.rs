@@ -59,11 +59,18 @@ impl IndexFreshness {
 
     /// The watch loop applied `count` queued events to the index.
     pub fn events_applied(&self, count: usize) {
-        let _ = self
-            .queued
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |queued| {
-                Some(queued.saturating_sub(count))
-            });
+        let mut queued = self.queued.load(Ordering::SeqCst);
+        loop {
+            match self.queued.compare_exchange_weak(
+                queued,
+                queued.saturating_sub(count),
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(actual) => queued = actual,
+            }
+        }
     }
 
     /// Whether a failed index write is queued for repair.
