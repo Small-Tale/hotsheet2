@@ -724,6 +724,7 @@ export interface CheckoutTicketQuery {
   open?: boolean;
   up_next?: boolean;
   needs_review?: boolean;
+  ai_created?: boolean;
   blocked?: boolean;
   close_reason?: TicketCloseReason;
   compact?: boolean;

@@ -623,6 +623,7 @@ mod checkout_pagination_tests {
             "tags=a,b&status=started&text=x&has_commit=false",
             "tags=a,b&status=started&text=x&updated_after=2026-01-01",
             "tags=a,b&status=started&text=x&collection=queue",
+            "tags=a,b&status=started&text=x&ai_created=true",
         ] {
             assert_ne!(base, fingerprint(changed), "{changed}");
         }

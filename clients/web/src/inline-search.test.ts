@@ -167,6 +167,7 @@ describe('inline advanced-search tokens', () => {
       updated_before: expect.any(String),
     });
     expect(tokenQuery([tokenFromRaw('is:duplicate')!])).toEqual({ close_reason: 'duplicate' });
+    expect(tokenQuery([tokenFromRaw('IS:AI-CREATED')!])).toEqual({ ai_created: true });
   });
 
   it('adapts inline tokens to kerf SearchFieldToken keyed on raw', () => {

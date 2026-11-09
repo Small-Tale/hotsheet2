@@ -223,6 +223,7 @@ fn is_boolean(lexemes: &[Lexeme]) -> bool {
 /// (`clients/web/src/inline-search.ts`) must list the same values in the same order; its
 /// HS2-2GCMY1 parity test reads this constant.
 const LIFECYCLES: &[&str] = &[
+    "ai-created",
     "up-next",
     "active",
     "needs-review",
@@ -572,6 +573,12 @@ fn is_closed(t: &Ticket) -> bool {
 
 fn is_state(state: &str, t: &Ticket, now: OffsetDateTime) -> bool {
     let statuses: &[Status] = match state {
+        "ai-created" => {
+            return t
+                .created_by
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai);
+        }
         "up-next" => return t.up_next && t.status.is_active(),
         "active" => {
             return t.status.is_active()
@@ -681,6 +688,22 @@ mod tests {
         let t = ticket();
         assert!(matches("is:open page login", &t));
         assert!(!matches("is:completed login", &t));
+    }
+
+    #[test]
+    fn hs2_18qfj5_ai_created_requires_recorded_ai_provenance_and_supports_boolean_terms() {
+        let mut t = ticket();
+        assert!(!matches("is:ai-created", &t));
+        assert!(matches("NOT is:ai-created", &t));
+        t.created_by = Some(hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Human,
+            id: None,
+        });
+        assert!(!matches("IS:AI-CREATED", &t));
+        t.created_by.as_mut().unwrap().role = hotsheet_model::AttachmentActorRole::Ai;
+        assert!(matches("IS:AI-CREATED", &t));
+        assert!(matches("is:ai-created AND tag:docs", &t));
+        assert!(!matches("NOT is:ai-created", &t));
     }
 
     #[test]

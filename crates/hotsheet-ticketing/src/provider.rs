@@ -894,6 +894,13 @@ pub fn filter_provider_ticket_page(
             && query
                 .needs_review
                 .is_none_or(|want| ticket.needs_review == want)
+            && query.ai_created.is_none_or(|want| {
+                ticket
+                    .created_by
+                    .as_ref()
+                    .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
+                    == want
+            })
             && query
                 .created_after
                 .as_deref()
@@ -2741,6 +2748,35 @@ mod tests {
             .iter()
             .map(|item| item.ticket.title.clone())
             .collect()
+    }
+
+    #[test]
+    fn hs2_18qfj5_provider_filter_keeps_only_recorded_ai_creators() {
+        let mut rows = created_rows();
+        rows[1].created_by = Some(hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: None,
+        });
+        let matches = filter_provider_ticket_page(
+            rows.clone(),
+            &TicketQuery {
+                ai_created: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].title, rows[1].title);
+        assert_eq!(
+            filter_provider_ticket_page(
+                rows,
+                &TicketQuery {
+                    ai_created: Some(false),
+                    ..Default::default()
+                }
+            )
+            .len(),
+            6
+        );
     }
 
     /// Serve `rows` as native pages of two, with `page:N` cursors, counting fetches.

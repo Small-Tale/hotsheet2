@@ -258,6 +258,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     // Only a lone positive review term can be pushed down. In a composed expression,
     // the provider must leave all candidates for the local Boolean evaluator.
     if (effective.text.trim().toLowerCase() !== 'is:needs-review') delete tokenFilters.needs_review;
+    if (effective.text.trim().toLowerCase() !== 'is:ai-created') delete tokenFilters.ai_created;
     return sortedTicketQuery({
       ...searchScopeQuery(view),
       text: advanced ? '' : effective.text,

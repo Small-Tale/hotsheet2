@@ -845,6 +845,35 @@ fn hs2_9fphwy_list_rows_carry_the_recorded_creator() {
 }
 
 #[test]
+fn hs2_18qfj5_index_filters_creator_before_bounded_page() {
+    let (_dir, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2");
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.created_by = Some(hotsheet_model::NoteActor {
+        role: hotsheet_model::AttachmentActorRole::Ai,
+        id: Some("fixture-ai".into()),
+    });
+    ix.upsert(&ticket, "ai.md", "ai-creator").unwrap();
+    let query = TicketQuery {
+        ai_created: Some(true),
+        limit: Some(1),
+        ..Default::default()
+    };
+    let rows = ix.query(&query).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, id.to_string());
+    assert_eq!(
+        ix.query(&TicketQuery {
+            ai_created: Some(false),
+            ..Default::default()
+        })
+        .unwrap()
+        .len(),
+        2
+    );
+}
+
+#[test]
 fn fts_and_resolution_find_a_retained_legacy_number() {
     // HS2-4H2ZR1: an imported ticket keeps its HS1 number so old references (in text or a
     // navigate-to-ref) resolve/search against the new ticket.

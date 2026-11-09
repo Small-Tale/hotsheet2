@@ -37,6 +37,8 @@ pub(crate) struct ListParams {
     review_by: Option<String>,
     /// User-facing Needs Review state (unanswered feedback or an explicit review request).
     needs_review: Option<bool>,
+    /// Recorded AI creator (HS2-18QFJ5); unknown provenance does not match.
+    ai_created: Option<bool>,
     /// `true` = only claimed tickets; `false` = only unclaimed.
     claimed: Option<bool>,
     /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
@@ -183,6 +185,7 @@ impl ListParams {
             review_requested: resolve_person(self.review_requested)?,
             review_by: resolve_person(self.review_by)?,
             needs_review: self.needs_review,
+            ai_created: self.ai_created,
             claimed: self.claimed,
             blocked: self.blocked,
             created_after: self.created_after,

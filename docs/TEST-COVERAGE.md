@@ -863,6 +863,14 @@ equals `saved_views.rs` `LIFECYCLES`; `ticket-search-field.test.ts` checks help 
 value; `tests/advanced-search.spec.ts` types `is:blocked ` and asserts the chip and filtered rows
 across wide, 680px, and restored wide widths (captures `hs2-2gcmy1-is-blocked-chip-{wide,narrow}.png`).
 
+HS2-18QFJ5 covers `is:ai-created` across the saved-view Boolean evaluator, file scan,
+provider rows, SQL index before a bounded page, checkout HTTP, client pushdown, and local
+Boolean evaluation. `crates/hotsheet-server/tests/ai_created_search.rs` and
+`clients/web/tests/ticket-creator-search.spec.ts` exercise a real server and rebuilt
+workspace with synthetic AI, human, and unknown creators, including `NOT` and responsive
+wide, medium, phone, and returned-wide states. Missing provenance never matches the
+positive filter. Native platform regression remains in `Platforms`.
+
 HS2-C7917F covers `is:closed` with a close outcome: `saved_views.rs #
 hs2_c7917f_is_closed_includes_a_close_outcome_on_any_status` checks every close reason on a Backlog
 ticket and every terminal status without one; `advanced-search.test.ts` checks the web evaluator,

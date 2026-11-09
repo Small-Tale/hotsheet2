@@ -1463,6 +1463,10 @@ preview/download, server directory browser) are separate design work.
   and the column can reach its full done total (HS2-F2N4ZN).
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
+  `is:ai-created` matches only tickets with a recorded AI creator. A lone positive term
+  filters before bounded pagination; Boolean combinations, including `NOT`, evaluate
+  against the complete candidate set so unknown and human creators remain distinguishable
+  (HS2-18QFJ5).
   Search is scoped to the selected sidebar view, so Queue, Backlog, and Archive results do
   not bleed into one another. Column mode retains only that selected view's normal columns:
   a Queue search does not append Backlog or Archive columns for results that its scoped

@@ -799,6 +799,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
         up_next: false,
         feedback_needed: needsReview,
         needs_review: needsReview,
+        created_by: needsReview ? { role: 'ai' } : undefined,
         tags: [],
         blocked_by: [],
         claim_count: 0,
@@ -855,6 +856,17 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(calls.some((url) => url.includes('cursor=second'))).toBe(true);
     expect(calls.every((url) => !url.includes('needs_review=true'))).toBe(true);
     expect(searchMatchKeys.value).toEqual(new Set(['git:HS2-FIRST', 'git:HS2-LATE']));
+    calls.length = 0;
+    replaceTicketSearch(owner.workspaceSearchModel, 'is:ai-created');
+    await owner.refreshTicketSearch();
+    expect(calls.some((url) => url.includes('ai_created=true'))).toBe(true);
+    expect(searchMatchKeys.value).toEqual(new Set(['git:HS2-LATE']));
+    calls.length = 0;
+    replaceTicketSearch(owner.workspaceSearchModel, 'NOT is:ai-created');
+    await owner.refreshTicketSearch();
+    expect(calls.some((url) => url.includes('cursor=second'))).toBe(true);
+    expect(calls.every((url) => !url.includes('ai_created=true'))).toBe(true);
+    expect(searchMatchKeys.value).toEqual(new Set(['git:HS2-FIRST']));
   });
   it('workspace Boolean search uses complete qualified membership and refuses unavailable NOT (HS2-DE9CMP)', async () => {
     const first: TicketRow = {

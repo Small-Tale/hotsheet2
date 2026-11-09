@@ -690,6 +690,12 @@ describe('ticket search transport', () => {
     );
     fetchMock.mockRestore();
   });
+  it('sends the lone AI creator filter to the bounded checkout API (HS2-18QFJ5)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]', { status: 200 }));
+    await new Api('/api').checkoutTickets('demo', { ai_created: true });
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/demo/tickets?ai_created=true', expect.any(Object));
+    fetchMock.mockRestore();
+  });
 });
 
 describe('bounded whole-checkout reads', () => {

@@ -1030,6 +1030,14 @@ impl Index {
                 format!("NOT {predicate}")
             });
         }
+        if let Some(want) = q.ai_created {
+            let predicate = "(COALESCE(json_extract(t.created_by_json, '$.role'), '') = 'ai')";
+            wheres.push(if want {
+                predicate.into()
+            } else {
+                format!("NOT {predicate}")
+            });
+        }
         // Claimed / unclaimed — a lease holder is set or not (HS2-89).
         if let Some(want) = q.claimed {
             wheres.push(if want {

@@ -74,6 +74,15 @@ describe('advanced search semantics', () => {
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:blocked AND is:started'))).toEqual([blocked]);
     expect(filterAdvancedSearchResults(rows, 'is:blocked')).toEqual([blocked]);
   });
+  it('HS2-18QFJ5 matches only recorded AI creators, including case-insensitive and NOT expressions', () => {
+    const ai = row('HS2-AI', 'not_started', { created_by: { role: 'ai' } }),
+      human = row('HS2-HUMAN', 'not_started', { created_by: { role: 'human' } }),
+      unknown = row('HS2-UNKNOWN'),
+      rows = [ai, human, unknown];
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'IS:AI-CREATED'))).toEqual([ai]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'NOT is:ai-created'))).toEqual([human, unknown]);
+    expect(filterAdvancedSearchResults(rows, 'is:ai-created AND is:not-started')).toEqual([ai]);
+  });
   it('HS2-C7917F matches is:closed by a terminal status or a recorded close outcome on any status', () => {
     const notPlanned = row('HS2-NOT-PLANNED', 'backlog', { close_reason: 'not_planned' }),
       obsolete = row('HS2-OBSOLETE', 'backlog', { close_reason: 'obsolete' }),

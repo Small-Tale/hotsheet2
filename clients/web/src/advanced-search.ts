@@ -22,6 +22,7 @@ const hasStatus =
     statuses.includes(ticket.status ?? '');
 /** One predicate per supported `is:` value; the Record type keeps it exhaustive (HS2-2GCMY1). */
 const lifecyclePredicates: Record<SearchLifecycle, (ticket: TicketRow, now: number) => boolean> = {
+  'ai-created': (ticket) => ticket.created_by?.role === 'ai',
   'up-next': (ticket) => ticket.up_next,
   active: (ticket, now) => isTicketActivelyWorkedOn(ticket, now),
   'needs-review': (ticket) => ticket.needs_review ?? ticket.feedback_needed,

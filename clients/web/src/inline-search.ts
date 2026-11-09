@@ -7,6 +7,7 @@ export type SearchPresence = 'attachment' | 'media-annotation' | 'commit';
  * `saved_views.rs` `LIFECYCLES` must list the same values; a parity test pins it.
  */
 export const SEARCH_LIFECYCLES = [
+  'ai-created',
   'up-next',
   'active',
   'needs-review',
@@ -388,6 +389,7 @@ export function tokenQuery(tokens: readonly InlineSearchToken[]) {
   if (attachment) query.attachment = attachment.value;
   if (tokens.some((token) => token.kind === 'is' && token.value === 'duplicate')) query.close_reason = 'duplicate';
   if (tokens.some((token) => token.kind === 'is' && token.value === 'needs-review')) query.needs_review = true;
+  if (tokens.some((token) => token.kind === 'is' && token.value === 'ai-created')) query.ai_created = true;
   for (const token of tokens) {
     if (token.kind !== 'date') continue;
     const field = token.field === 'started' || token.field === 'archived' ? 'updated' : token.field;

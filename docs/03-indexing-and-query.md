@@ -50,6 +50,11 @@ surface accepts `has:attachment`,
 lifecycle bounds such as `created-after:<local-date>` or
 `completed-before:<local-date-and-time>`. Attachment and media-annotation presence are
 indexed fields; commit presence is evaluated against the selected checkout's git history.
+`is:ai-created` matches only a recorded AI ticket creator; missing or unknown creator
+provenance does not match. A lone positive term filters local indexed rows before
+bounded pagination and applies the same predicate to provider rows, while Boolean
+combinations, including `NOT is:ai-created`, evaluate against the complete candidate
+set (HS2-18QFJ5).
 Manual input
 uses the client machine's date/time order, punctuation, clock, and numerals; ISO 8601 dates
 and date-times (for example `2026-09-01` and `2026-09-01T11:05`) are always accepted.

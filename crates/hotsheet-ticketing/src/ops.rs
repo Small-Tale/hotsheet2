@@ -143,6 +143,8 @@ pub struct TicketQuery {
     pub review_by: Option<String>,
     /// Match the user-facing Needs Review state: unanswered feedback or a review request.
     pub needs_review: Option<bool>,
+    /// Match tickets whose recorded creator role is AI; missing provenance is not AI (HS2-18QFJ5).
+    pub ai_created: Option<bool>,
     /// `Some(true)` = only claimed tickets (a `claimed_by` is set); `Some(false)` = only
     /// unclaimed. `None` doesn't constrain (HS2-89).
     pub claimed: Option<bool>,
@@ -299,6 +301,12 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             })
             && q.needs_review.is_none_or(|want| {
                 (t.feedback_needed() || !t.review_requests.is_empty()) == want
+            })
+            && q.ai_created.is_none_or(|want| {
+                t.created_by
+                    .as_ref()
+                    .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
+                    == want
             })
             && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
             && q.blocked.is_none_or(|want| is_blocked(t, &done) == want)
@@ -3100,6 +3108,49 @@ mod tests {
         )
         .unwrap();
         assert_eq!(edited.created_by, Some(ai));
+    }
+
+    #[test]
+    fn hs2_18qfj5_serverless_query_filters_ai_creator_before_limit() {
+        let (_dir, store) = store();
+        titled(&store, "Unknown creator");
+        for (title, role) in [
+            ("Human creator", hotsheet_model::AttachmentActorRole::Human),
+            ("AI creator", hotsheet_model::AttachmentActorRole::Ai),
+        ] {
+            create_by(
+                &store,
+                Ulid::new(),
+                "HS",
+                ts("2026-10-15T00:00:00Z"),
+                NewTicket {
+                    title: title.into(),
+                    ..Default::default()
+                },
+                Some(hotsheet_model::NoteActor { role, id: None }),
+            )
+            .unwrap();
+        }
+        let ai = query(
+            &store,
+            &TicketQuery {
+                ai_created: Some(true),
+                limit: Some(1),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(ai.len(), 1);
+        assert_eq!(ai[0].title, "AI creator");
+        let other = query(
+            &store,
+            &TicketQuery {
+                ai_created: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(other.len(), 2);
     }
 
     #[test]
