@@ -1,5 +1,8 @@
+import { spawnSync } from 'node:child_process';
+
 import { expect, type Page, test } from '@playwright/test';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -126,6 +129,256 @@ test('Workers view choice names live workers and last progress (HS2-6B9S7P)', as
     await server.request(`/tickets/${ticket.id}/release`, 'POST', { worker: 'worker-a' });
     await expect(workers).toHaveAccessibleName('Workers View', { timeout: 30_000 });
   } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-HWMW0D keeps the real Workers view and edit through worker updates and resize', async ({ page }) => {
+  test.setTimeout(180_000);
+  let fixtureCli = '';
+  let fixtureEnv: NodeJS.ProcessEnv = {};
+  const server = await realTicketServer({
+    seed: async ({ root, env, cli }) => {
+      fixtureCli = cli;
+      fixtureEnv = env;
+      const initialized = spawnSync('git', ['-C', root, 'init'], {
+        env: withoutGitRepositoryEnv(env),
+        encoding: 'utf8',
+      });
+      expect(initialized.status, initialized.stderr).toBe(0);
+      const committed = spawnSync(
+        'git',
+        [
+          '-C',
+          root,
+          '-c',
+          'user.name=Hot Sheet fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '--allow-empty',
+          '-m',
+          'Seed synthetic checkout',
+        ],
+        { env: withoutGitRepositoryEnv(env), encoding: 'utf8' },
+      );
+      expect(committed.status, committed.stderr).toBe(0);
+    },
+  });
+  const run = (...args: string[]) => {
+    const result = spawnSync(fixtureCli, ['-C', server.store, 'coordination', '--project', server.root, ...args], {
+      cwd: server.root,
+      env: fixtureEnv,
+      encoding: 'utf8',
+    });
+    expect(result.status, `${args.join(' ')}: ${result.stderr}`).toBe(0);
+  };
+  try {
+    const ticket = await server.request<{ id: string }>('/tickets', 'POST', {
+      title: 'Synthetic ticket with a long but readable name for the Workers view',
+      category: 'task',
+    });
+    const workerId = 'synthetic-worker-with-an-intentionally-long-label';
+    await server.request(`/tickets/${ticket.id}/claim`, 'POST', { worker: workerId, lease_minutes: 30 });
+    run('setup');
+    run(
+      'register',
+      '--role',
+      'worker',
+      '--id',
+      workerId,
+      '--session',
+      'worker-long-1',
+      '--route',
+      'human',
+      '--lease-seconds',
+      '3600',
+    );
+    for (let number = 1; number <= 7; number += 1)
+      run(
+        'register',
+        '--role',
+        'worker',
+        '--id',
+        `synthetic-worker-${number}`,
+        '--session',
+        `worker-${number}-1`,
+        '--route',
+        'human',
+        '--lease-seconds',
+        '3600',
+      );
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1440, height: 844 });
+    await openProject(page, server);
+    await page.getByRole('button', { name: 'Workers' }).click();
+    const columns = page.locator('.worker-columns');
+    await expect(columns.locator('[data-worker-id]')).toHaveCount(8, { timeout: 30_000 });
+    await expect(columns).toContainText(workerId);
+    await columns.locator('[data-ticket-qualified-id]').first().click();
+    const inspector = page.getByRole('complementary', { name: 'Inspector rail' });
+    await expect(inspector).toContainText('Synthetic ticket with a long but readable name');
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
+    await inspector.getByRole('button', { name: 'Edit Ticket details' }).click();
+    const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+    await editor.fill('Unsaved synthetic worker edit');
+    await expect(editor).toBeFocused();
+    run(
+      'register',
+      '--role',
+      'worker',
+      '--id',
+      'synthetic-worker-late',
+      '--session',
+      'worker-late-1',
+      '--route',
+      'human',
+      '--lease-seconds',
+      '3600',
+    );
+    await expect(columns.locator('[data-worker-id]')).toHaveCount(9, { timeout: 30_000 });
+    await expect(editor).toHaveValue('Unsaved synthetic worker edit');
+    await expect(editor).toBeFocused();
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      for (const [name, width] of [
+        ['wide', 1440],
+        ['medium', 900],
+        ['phone', 390],
+        ['returned-wide', 1440],
+      ] as const) {
+        await page.setViewportSize({ width, height: 844 });
+        await expect(columns.locator('[data-worker-id]')).toHaveCount(9);
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) => {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  resolve();
+                });
+              });
+            }),
+        );
+        const showInspector = page.getByRole('button', { name: 'Show Ticket Inspector' });
+        if (await showInspector.isVisible()) await showInspector.click();
+        await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
+        const detailsButton = inspector.getByRole('button', { name: 'Edit Ticket details' });
+        await expect
+          .poll(async () =>
+            (await editor.count())
+              ? await editor.inputValue()
+              : (await detailsButton.count())
+                ? await detailsButton.textContent()
+                : '',
+          )
+          .toContain('Unsaved synthetic worker edit');
+        await expect(inspector.getByRole('combobox', { name: 'Category' })).toBeVisible();
+        await expect(inspector.getByRole('combobox', { name: 'Priority' })).toBeVisible();
+        await page.screenshot({
+          path: test.info().outputPath(`hs2-hwmw0d-${scheme}-${name}.png`),
+          animations: 'disabled',
+        });
+      }
+    }
+    if (await editor.count()) await editor.blur();
+    await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+    await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+    const longWorker = columns.getByRole('region', { name: `${workerId} Worker Column` });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      for (const [name, width] of [
+        ['wide', 1440],
+        ['medium', 900],
+        ['phone', 390],
+        ['returned-wide', 1440],
+      ] as const) {
+        await page.setViewportSize({ width, height: 844 });
+        await longWorker.scrollIntoViewIfNeeded();
+        await expect(longWorker).toBeInViewport();
+        await expect(longWorker).toContainText('Synthetic ticket with a long but readable name');
+        await page.screenshot({
+          path: test.info().outputPath(`hs2-hwmw0d-workers-${scheme}-${name}.png`),
+          animations: 'disabled',
+        });
+      }
+    }
+  } finally {
+    await page.goto('about:blank').catch(() => undefined);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
+});
+
+test('HS2-HWMW0D shows a genuine zero-worker state in the real app', async ({ page }) => {
+  test.setTimeout(120_000);
+  let fixtureCli = '';
+  let fixtureEnv: NodeJS.ProcessEnv = {};
+  const server = await realTicketServer({
+    seed: async ({ root, env, cli }) => {
+      fixtureCli = cli;
+      fixtureEnv = env;
+      const initialized = spawnSync('git', ['-C', root, 'init'], {
+        env: withoutGitRepositoryEnv(env),
+        encoding: 'utf8',
+      });
+      expect(initialized.status, initialized.stderr).toBe(0);
+      const committed = spawnSync(
+        'git',
+        [
+          '-C',
+          root,
+          '-c',
+          'user.name=Hot Sheet fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '--allow-empty',
+          '-m',
+          'Seed synthetic checkout',
+        ],
+        { env: withoutGitRepositoryEnv(env), encoding: 'utf8' },
+      );
+      expect(committed.status, committed.stderr).toBe(0);
+    },
+  });
+  try {
+    const setup = spawnSync(fixtureCli, ['-C', server.store, 'coordination', '--project', server.root, 'setup'], {
+      cwd: server.root,
+      env: fixtureEnv,
+      encoding: 'utf8',
+    });
+    expect(setup.status, setup.stderr).toBe(0);
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1440, height: 844 });
+    await openProject(page, server);
+    await page.getByRole('button', { name: 'Workers' }).click();
+    const columns = page.locator('.worker-columns');
+    await expect(columns.locator('[data-worker-id]')).toHaveCount(0, { timeout: 30_000 });
+    await expect(columns.locator('.worker-columns__zero')).toContainText('No workers are registered');
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      for (const [name, width] of [
+        ['wide', 1440],
+        ['medium', 900],
+        ['phone', 390],
+        ['returned-wide', 1440],
+      ] as const) {
+        await page.setViewportSize({ width, height: 844 });
+        await expect(columns.locator('.worker-columns__zero')).toContainText('No workers are registered');
+        await page.screenshot({
+          path: test.info().outputPath(`hs2-hwmw0d-zero-${scheme}-${name}.png`),
+          animations: 'disabled',
+        });
+      }
+    }
+  } finally {
+    await page.goto('about:blank').catch(() => undefined);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
