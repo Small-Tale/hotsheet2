@@ -61,6 +61,7 @@ import { INPUT_DIALOG_TARGETS } from '../interaction-attrs/input-dialogs';
 import { ticketDraftKey } from '../ticket-draft-store';
 import { reconcileTicketReaderFrame, type TicketReaderFrame } from '../ticket-reader-stack';
 import { data } from './dom';
+import { applyGalleryToolShortcut, toggleGalleryMarkupSession } from './gallery-shortcut-entry';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
 /** The shell's right rail while its panel shows the ticket inspector (not the terminal rail's list). */
@@ -1176,21 +1177,29 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     (event) => {
       if (!attachmentGalleryUrl.value || event.defaultPrevented) return;
       const target = event.target as HTMLElement;
-      if (target.closest('input, textarea, [contenteditable="true"], [data-gallery-range-handle]')) return;
-      const key = event.key.toLowerCase(),
-        toolKeys = { v: 'select', r: 'rect', f: 'freehand', a: 'arrow', i: 'insertion', s: 'strike' } as const,
-        tool =
-          !event.metaKey && !event.ctrlKey && !event.altKey && key in toolKeys
-            ? toolKeys[key as keyof typeof toolKeys]
-            : undefined;
-      if (!attachmentGalleryMarkup.value) {
-        if (!tool || event.shiftKey) return;
-        const toggle = document.querySelector<HTMLButtonElement>(
-          ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector,
-        );
-        if (!toggle || toggle.disabled) return;
-        galleryControls.toggleMarkup();
+      const toolHandled = applyGalleryToolShortcut(
+        event,
+        target,
+        () => attachmentGalleryMarkup.value,
+        () => {
+          const toggle = document.querySelector<HTMLButtonElement>(
+            ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector,
+          );
+          return Boolean(toggle && !toggle.disabled);
+        },
+        () => {
+          galleryControls.toggleMarkup();
+        },
+        setGalleryTool,
+      );
+      if (toolHandled) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
       }
+      if (!attachmentGalleryMarkup.value) return;
+      if (target.closest('input, textarea, [contenteditable="true"], [data-gallery-range-handle]')) return;
+      const key = event.key.toLowerCase();
       const selectedId = attachmentGallerySelectedAnnotation.value,
         selected = attachmentGalleryAnnotations.value.find((item) => item.id === selectedId),
         meta = event.metaKey || event.ctrlKey;
@@ -1221,8 +1230,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, duplicate];
         attachmentGallerySelectedAnnotation.value = duplicate.id;
         recordAnnotationChange(before);
-      } else if (tool) {
-        setGalleryTool(tool);
       } else if (key === 'escape') {
         const gesture = dependencies.attachmentAnnotationGesture;
         if (gesture) {
@@ -1325,18 +1332,20 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       dependencies.attachmentSwipeGesture = undefined;
     },
     toggleMarkup: () => {
-      if (attachmentGallerySaveState?.value === 'saving') return;
-      if (attachmentGalleryMarkup.value) {
-        attachmentGalleryMarkup.value = false;
-        finishGalleryAnnotationSession();
-      } else {
-        beginGalleryAnnotationSession();
-        attachmentGalleryMarkup.value = true;
-        undoAnnotations.length = 0;
-        redoAnnotations.length = 0;
-      }
-      setGalleryTool('select');
-      attachmentGallerySelectedAnnotation.value = undefined;
+      toggleGalleryMarkupSession({
+        saving: attachmentGallerySaveState?.value === 'saving',
+        markup: attachmentGalleryMarkup,
+        begin: beginGalleryAnnotationSession,
+        finish: finishGalleryAnnotationSession,
+        clearHistory: () => {
+          undoAnnotations.length = 0;
+          redoAnnotations.length = 0;
+        },
+        setTool: setGalleryTool,
+        clearSelection: () => {
+          attachmentGallerySelectedAnnotation.value = undefined;
+        },
+      });
     },
     toggleDraw: () => {
       setGalleryTool(attachmentGalleryTool.value === 'rect' ? 'select' : 'rect');
