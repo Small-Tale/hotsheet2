@@ -66,6 +66,10 @@ HS2-2MEZPW: the migrator export test checks portable slash-delimited JSON
 destination. A Unix export/import fixture round-trips staged payload bytes
 through the built CLI. Native Windows migrator coverage remains required.
 
+HS2-0AJP3T: existing Unix HTTP terminal tests exercise the three helpers now
+guarded with `cfg(unix)`. Native Windows x86_64 test compilation must confirm
+they no longer produce dead-code warnings.
+
 HS2-HR3ZX4: `scripts/verified-worktree-cleanup.test.mjs` exercises a synthetic
 Git origin, linked worktrees, exact-tree gate and covering CI evidence. It covers
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,

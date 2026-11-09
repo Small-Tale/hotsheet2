@@ -26971,6 +26971,7 @@ async fn a_restarted_server_releases_the_claims_of_drives_the_last_run_left_open
 }
 
 /// Wait up to 10 s for a terminal's scrollback to show `needle`.
+#[cfg(unix)]
 async fn scrollback_shows(app: &axum::Router, id: &str, needle: &str) -> bool {
     for _ in 0..100 {
         let info = body_json(
@@ -26992,6 +26993,7 @@ async fn scrollback_shows(app: &axum::Router, id: &str, needle: &str) -> bool {
 }
 
 /// Type `data` into a terminal.
+#[cfg(unix)]
 async fn terminal_input(app: &axum::Router, id: &str, data: &str) {
     let body = serde_json::json!({ "data": data }).to_string();
     let resp = app
@@ -27013,6 +27015,7 @@ async fn terminal_input(app: &axum::Router, id: &str, data: &str) {
 /// `head -n 1` until the test sends it a line, so a slow store write while recording a claim
 /// can no longer let the command finish first. The shell builds each marker, so the
 /// terminal's echo of the typed command never matches it.
+#[cfg(unix)]
 async fn a_finished_foreground_command_releases_claims(
     app: axum::Router,
     store: &FsStore,
