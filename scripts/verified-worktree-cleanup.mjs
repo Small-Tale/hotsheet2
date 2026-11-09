@@ -173,6 +173,10 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
   const cache = join(common, 'hotsheet-local-gate');
   const expected = batch.smoke_checks;
   requireProof(Array.isArray(expected) && expected.length > 0, 'reviewed batch has no declared smoke checks');
+  // HS2-54M43C: the ledger permits bare or cwd-qualified names, while receipts
+  // keep the command and cwd separately. Bind both to the batch commit's manifest.
+  const stages = JSON.parse(git(run, project, 'show', `${batch.main_commit}:scripts/gate-smoke.json`)).stages;
+  requireProof(Array.isArray(stages) && stages.length === expected.length, 'reviewed batch smoke manifest differs');
   const receipts = existsSync(cache) ? readdirSync(cache).filter((name) => /^[0-9a-f]{64}\.json$/.test(name)) : [];
   const passed = receipts.some((name) => {
     const receipt = JSON.parse(readFileSync(join(cache, name), 'utf8'));
@@ -181,13 +185,19 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
       receipt.tree === tree &&
       receipt.tier === 'smoke' &&
       receipt.profile?.smoke === true &&
-      JSON.stringify(receipt.selected) === JSON.stringify(expected) &&
-      receipt.results?.length === expected.length &&
-      receipt.results.every(
-        (result, index) =>
-          result.command === expected[index] &&
-          (result.status === 0 || (result.reused === true && result.status == null)),
-      )
+      receipt.selected?.length === stages.length &&
+      receipt.results?.length === stages.length &&
+      stages.every((stage, index) => {
+        const result = receipt.results[index];
+        const qualified = stage.cwd === '.' ? stage.command : `${stage.cwd} ${stage.command}`;
+        return (
+          result.cwd === stage.cwd &&
+          result.command === stage.command &&
+          receipt.selected[index] === stage.command &&
+          (expected[index] === stage.command || expected[index] === qualified) &&
+          (result.status === 0 || (result.reused === true && result.status == null))
+        );
+      })
     );
   });
   requireProof(passed, 'reviewed batch has no successful exact-tree smoke receipt in the shared Git gate cache');

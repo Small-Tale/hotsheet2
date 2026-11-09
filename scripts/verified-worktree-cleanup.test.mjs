@@ -32,7 +32,15 @@ function fixture({ cherryPick = false, batch = false } = {}) {
   git(project, 'config', 'user.email', 'synthetic@example.invalid');
   writeFileSync(join(project, 'base.txt'), 'synthetic\n');
   writeFileSync(join(project, '.gitignore'), 'target/\n');
-  git(project, 'add', 'base.txt', '.gitignore');
+  const smokeStages = [
+    { cwd: '.', command: 'cargo fmt --all --check' },
+    { cwd: 'clients/web', command: 'npm run format:sources:check' },
+    { cwd: 'clients/web', command: 'npm run lint:web' },
+    { cwd: 'clients/web', command: 'npm run typecheck' },
+  ];
+  mkdirSync(join(project, 'scripts'));
+  writeFileSync(join(project, 'scripts/gate-smoke.json'), JSON.stringify({ stages: smokeStages }));
+  git(project, 'add', 'base.txt', '.gitignore', 'scripts/gate-smoke.json');
   git(project, 'commit', '-m', 'Synthetic base');
   git(root, 'init', '--bare', remote);
   git(project, 'remote', 'add', 'origin', remote);
@@ -60,7 +68,12 @@ function fixture({ cherryPick = false, batch = false } = {}) {
   const integratorGate = join(common, 'hotsheet-root-gate', tree);
   mkdirSync(join(common, 'hotsheet-root-gate'));
   writeFileSync(integratorGate, `${tree}\n`);
-  const smokeChecks = ['cargo fmt --all --check', 'npm run typecheck'];
+  const smokeChecks = [
+    'cargo fmt --all --check',
+    'clients/web npm run format:sources:check',
+    'npm run lint:web',
+    'npm run typecheck',
+  ];
   const receiptKey = 'a'.repeat(64);
   const receiptPath = join(common, 'hotsheet-local-gate', `${receiptKey}.json`);
   const smokeReceipt = {
@@ -68,8 +81,8 @@ function fixture({ cherryPick = false, batch = false } = {}) {
     tree,
     tier: 'smoke',
     profile: { smoke: true },
-    selected: smokeChecks,
-    results: smokeChecks.map((command) => ({ command, status: 0 })),
+    selected: smokeStages.map((stage) => stage.command),
+    results: smokeStages.map((stage) => ({ ...stage, status: 0 })),
   };
   if (batch) {
     const gateCheckout = join(project, '.claude', 'worktrees', 'synthetic-integrator');
@@ -356,7 +369,7 @@ function recordReviewedHandoff(f, { proposal = true } = {}) {
   git(f.project, 'update-ref', `refs/hotsheet/integration-source/${f.source}`, f.source);
 }
 
-test('HS2-VKGV08 accepts the exact green batch smoke receipt from a clean integration worktree', () => {
+test('HS2-VKGV08 and HS2-54M43C accept mixed ledger spellings backed by exact cwd results', () => {
   const f = fixture({ cherryPick: true, batch: true });
   recordReviewedHandoff(f, { proposal: false });
   unlinkSync(f.integratorGate);
@@ -391,8 +404,20 @@ test('HS2-VKGV08 refuses dispatcher batches with mismatched coordinator or ledge
   }
 });
 
-test('HS2-VKGV08 rejects red, mismatched, and unsuccessful batch evidence', () => {
-  for (const tamper of ['red', 'wrong-commit', 'wrong-shipping', 'wrong-tree', 'wrong-checks', 'failed-check', 'missing-receipt']) {
+test('HS2-VKGV08 and HS2-54M43C reject red, mismatched, and unsuccessful batch evidence', () => {
+  for (const tamper of [
+    'red',
+    'wrong-commit',
+    'wrong-shipping',
+    'wrong-tree',
+    'wrong-checks',
+    'wrong-cwd',
+    'wrong-order',
+    'wrong-ledger-order',
+    'wrong-result',
+    'failed-check',
+    'missing-receipt',
+  ]) {
     const f = fixture({ cherryPick: true, batch: true });
     recordReviewedHandoff(f);
     unlinkSync(f.integratorGate);
@@ -401,6 +426,10 @@ test('HS2-VKGV08 rejects red, mismatched, and unsuccessful batch evidence', () =
     if (tamper === 'wrong-shipping') f.batchEntry.tickets[0].shipping_commits = ['0'.repeat(40)];
     if (tamper === 'wrong-tree') f.smokeReceipt.tree = '0'.repeat(40);
     if (tamper === 'wrong-checks') f.smokeReceipt.selected = ['cargo check'];
+    if (tamper === 'wrong-cwd') f.smokeReceipt.results[1].cwd = 'migrator';
+    if (tamper === 'wrong-order') f.smokeReceipt.selected.reverse();
+    if (tamper === 'wrong-ledger-order') f.batchEntry.smoke_checks.reverse();
+    if (tamper === 'wrong-result') f.smokeReceipt.results[1].command = 'npm run wrong';
     if (tamper === 'failed-check') f.smokeReceipt.results[0].status = 1;
     if (tamper === 'missing-receipt') unlinkSync(f.receiptPath);
     else writeFileSync(f.receiptPath, JSON.stringify(f.smokeReceipt));

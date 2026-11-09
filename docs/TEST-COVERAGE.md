@@ -68,6 +68,12 @@ reviewed cleanup after a clean integration worktree gate while the primary
 checkout is dirty. Red batches, mismatched commits or trees, changed smoke
 checks, failed checks, and missing receipts all preserve the source worktree.
 
+HS2-54M43C: the cleanup suite reproduces mixed bare and cwd-qualified smoke
+checks in a reviewed batch ledger. It binds ordered result cwd and command to
+the smoke manifest at the exact batch commit, then checks the receipt's bare
+selected commands and ledger spelling at each position. Wrong cwd, order,
+command, tree, or failed status still refuses cleanup.
+
 HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
 manager on Windows. `hotsheet-server/src/main.rs #
 hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out` and
