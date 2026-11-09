@@ -493,6 +493,39 @@ describe('TicketRow', () => {
     expect(css).not.toMatch(/font-weight:\s*(?:normal|400|300)/u);
   });
 
+  it('makes only an ordinary unselected AI row surface translucent (HS2-1NBJZH)', () => {
+    const ticket: TicketRowProps = {
+      slug: 'HS2-AI',
+      title: 'Agent filed',
+      status: 'not_started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      aiCreatorLabel: 'Created by AI',
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      expect(String(TicketRow({ ...ticket, presentation }))).toContain('data-row-quiet-ai-surface="true"');
+      for (const change of [
+        { aiCreatorLabel: undefined },
+        { selected: true },
+        { upNext: true },
+        { blocked: true },
+        { needsReview: true },
+        { feedbackNeeded: true },
+        { cutPending: true },
+      ]) {
+        expect(String(TicketRow({ ...ticket, presentation, ...change }))).toContain(
+          'data-row-quiet-ai-surface="false"',
+        );
+      }
+    }
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(css).toMatch(
+      /\[data-row-quiet-ai-surface='true'\] \{[^}]*--kui-color-surface: color-mix\(in srgb, var\(--wa-color-surface-default\) 50%, transparent\);/u,
+    );
+    expect(css).not.toMatch(/\.ticket-row\[data-row-quiet-ai-surface='true'\] \{[^}]*opacity:/u);
+  });
+
   it('keeps a selected cut row visibly pending while Kerf shows its selection', () => {
     const markup = String(
       TicketRow({

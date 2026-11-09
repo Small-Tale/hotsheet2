@@ -8,6 +8,10 @@
 .ticket-row[data-row-cut-pending='true'] {
   opacity: 0.5;
 }
+/* Kerf's SummaryRow consumes this surface token; only the paint becomes translucent (HS2-1NBJZH). */
+.ticket-row[data-row-quiet-ai-surface='true'] {
+  --kui-color-surface: color-mix(in srgb, var(--wa-color-surface-default) 50%, transparent);
+}
 .ticket-list-row-container[data-row-presentation='list'][data-row-selected='true']
   + .ticket-list-row-container[data-row-presentation='list'][data-row-selected='true'] {
   position: relative;

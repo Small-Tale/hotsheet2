@@ -141,6 +141,7 @@ export function TicketRow(raw: TicketRowProps) {
   const cardSource = props.showSourceIcon !== false && props.source;
   const needsReview = props.needsReview || props.feedbackNeeded;
   const indicator = ticketRowIndicator(props);
+  const quietAiSurface = Boolean(props.aiCreatorLabel) && !props.selected && !indicator && !props.cutPending;
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
   const confidence = ticketRowConfidence(props);
@@ -190,6 +191,7 @@ export function TicketRow(raw: TicketRowProps) {
       data-row-presentation={props.presentation}
       data-row-selected={String(props.selected)}
       data-row-cut-pending={String(Boolean(props.cutPending))}
+      data-row-quiet-ai-surface={String(quietAiSurface)}
     >
       <SummaryRow
         className="ticket-list-row"
