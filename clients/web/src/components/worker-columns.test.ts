@@ -91,6 +91,28 @@ describe('HS2-E9SR7R Workers composition', () => {
     expect(markup.match(/data-component="ticket-list-row-container"/g)).toHaveLength(2);
   });
 
+  it('HS2-D5KXBA removes a completed card and count while keeping its worker header', () => {
+    const completed = { ...rows[0], status: 'completed' };
+    const markup = String(
+      WorkerColumns({
+        views: [view],
+        details: { 'one:same': completed, 'two:same': rows[1] },
+        ticketRow: row,
+        loading: false,
+        sourceErrors: [],
+        sources: [],
+        layout: 'grid',
+      }),
+    );
+    expect(markup).toContain('data-worker-id="A"');
+    expect(markup).toContain('data-worker-id="B"');
+    expect(markup).not.toContain('data-worker-ticket="one:same"');
+    expect(markup).toContain('No assigned or planned tickets');
+    expect(markup).toContain('data-worker-ticket="two:same"');
+    expect(markup).toContain('Offered · 1');
+    expect(markup).not.toContain('Offered · 2');
+  });
+
   it('HS2-NEY1QH shows the integrator session strategy only on the integrator card', () => {
     const integrator = {
       ...worker('Integrator', rows[0]),

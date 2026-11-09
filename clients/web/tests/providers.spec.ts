@@ -288,14 +288,15 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   await columns.locator('[data-ticket-qualified-id="git-other:01"]').click();
   await expect(page.getByRole('complementary', { name: 'Inspector rail' })).toContainText('Other source ticket');
   otherTitle = 'Updated other source ticket';
-  otherStatus = 'completed';
   otherRevision = 2;
   advanceWorkers('worker-cursor-2');
   await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toContainText(otherTitle);
-  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"][data-status="completed"]')).toBeVisible();
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"][data-status="started"]')).toBeVisible();
   // HS2-J118P3: cursor-only refresh reconciles the exact selected inspector too.
   await expect(inspector).toContainText(otherTitle);
-  await expect(inspector.locator('.ticket-info-panel__status-field')).toContainText('Completed');
+  await expect(
+    inspector.locator('.ticket-info-panel__status-field .status-badge[data-status="started"]'),
+  ).toBeVisible();
   await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toContainText(row.title);
   expect(otherDetailReads).toBeGreaterThan(1);
   // An older worker response must not undo a newer ordinary source-event refresh.
@@ -340,7 +341,18 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   await expect(inspector).toContainText(row.title);
   await columns.locator('[data-ticket-qualified-id="git-other:01"]').click();
   await expect(inspector).toContainText(otherTitle);
-  await expect(inspector.locator('.ticket-info-panel__status-field')).toContainText('Completed');
+  await expect(
+    inspector.locator('.ticket-info-panel__status-field .status-badge[data-status="started"]'),
+  ).toBeVisible();
+  // HS2-D5KXBA: completion removes a Workers card without discarding its selected inspector.
+  otherStatus = 'completed';
+  otherRevision = 8;
+  advanceWorkers('worker-cursor-5-completed');
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toHaveCount(0);
+  await expect(inspector).toContainText(otherTitle);
+  await expect(
+    inspector.locator('.ticket-info-panel__status-field .status-badge[data-status="completed"]'),
+  ).toBeVisible();
   for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme });
     for (const width of [1440, 900, 390, 1440]) {
@@ -366,8 +378,10 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
     concurrency_token: 'local-remote',
   };
   advanceWorkers('worker-cursor-6');
-  await expect(columns.locator('[data-ticket-qualified-id="git-local:01"][data-status="completed"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-info-panel__status-field')).toContainText('Completed');
+  await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toHaveCount(0);
+  await expect(
+    inspector.locator('.ticket-info-panel__status-field .status-badge[data-status="completed"]'),
+  ).toBeVisible();
   await expect(editor).toBeFocused();
   await expect(editor).toHaveValue('Unsaved worker details');
   expect(patches).toEqual([]);

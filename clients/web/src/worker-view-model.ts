@@ -404,7 +404,7 @@ function representativeWorkerTickets(tickets: readonly WorkerTicket[], now: numb
 }
 
 /** Group authoritative work without treating a reservation or tentative plan as a live claim. */
-export function workerGroups(worker: WorkerRow, now = Date.now() / 1000): WorkerGroup[] {
+export function workerGroups(worker: WorkerRow, now = Date.now() / 1000, details?: WorkerTicketDetails): WorkerGroup[] {
   const groups = new Map<WorkerGroupKind, WorkerGroup>();
   const labels: Record<WorkerGroupKind, string> = {
     integrating: 'Integrating',
@@ -423,6 +423,8 @@ export function workerGroups(worker: WorkerRow, now = Date.now() / 1000): Worker
     groups.set(kind, group);
   };
   for (const ticket of representativeWorkerTickets(worker.tickets, now)) {
+    // HS2-D5KXBA: assignment history is not ticket status. The source-qualified detail wins.
+    if (details && details[qualifiedWorkerTicket(ticket.ticket)]?.status !== 'started') continue;
     const phase = ticket.assignment_phase;
     const kind: WorkerGroupKind =
       worker.availability !== 'live'
@@ -444,7 +446,10 @@ export function workerGroups(worker: WorkerRow, now = Date.now() / 1000): Worker
   }
   const assigned = new Set(worker.tickets.map((ticket) => qualifiedWorkerTicket(ticket.ticket)));
   for (const plan of worker.planned)
-    if (!assigned.has(qualifiedWorkerTicket(plan.entry.ticket)))
+    if (
+      !assigned.has(qualifiedWorkerTicket(plan.entry.ticket)) &&
+      (!details || details[qualifiedWorkerTicket(plan.entry.ticket)]?.status === 'started')
+    )
       add('planned', { ref: plan.entry.ticket, slug: plan.entry.slug, plan });
   const order: WorkerGroupKind[] =
     worker.role === 'integrator'

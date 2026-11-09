@@ -210,81 +210,84 @@ export function WorkerColumns({
       {coverageIncomplete && <WorkerCoverageSummary coverage={coverage} />}
       {workers.length > 0 ? (
         <ColumnTrack layout={layout === 'grid' ? 'scroll' : 'paged'} minColumnWidth={px(250)} peek={px(24)}>
-          {workers.map((worker) => (
-            <section
-              class="worker-columns__column"
-              data-key={`worker-column:${worker.id}`}
-              data-worker-column={worker.id}
-              aria-label={`${worker.label} Worker Column`}
-            >
-              <WorkerCard worker={worker} />
-              <div
-                class="worker-columns__tickets"
-                data-key={`worker-scroll:${worker.id}`}
-                data-ticket-scroll-owner={`worker:${worker.id}`}
-                role="group"
-                aria-label={`${worker.label} tickets`}
+          {workers.map((worker) => {
+            const groups = workerGroups(worker, Date.now() / 1000, details);
+            return (
+              <section
+                class="worker-columns__column"
+                data-key={`worker-column:${worker.id}`}
+                data-worker-column={worker.id}
+                aria-label={`${worker.label} Worker Column`}
               >
-                {workerGroups(worker).length === 0 && (
-                  <Text variant="p" tone="quiet" size="compact">
-                    No assigned or planned tickets
-                  </Text>
-                )}
-                {workerGroups(worker).map((group) => (
-                  <section
-                    class="worker-columns__group"
-                    data-key={`${worker.id}:${group.kind}`}
-                    aria-label={`${group.label} Tickets`}
-                  >
-                    <h3>
-                      {group.label} · {group.tickets.length}
-                    </h3>
-                    {group.tickets.map((item) => {
-                      const qualified = qualifiedWorkerTicket(item.ref),
-                        detail = details[qualified];
-                      return (
-                        <div
-                          class="worker-columns__ticket"
-                          data-key={`${worker.id}:${item.assignment ? workerTicketOperationKey(item.assignment) : `plan:${item.plan?.entry.operation ?? qualified}`}`}
-                          data-worker-ticket={qualified}
-                        >
-                          {detail ? (
-                            <TicketRow
-                              {...ticketRow(detail)}
-                              qualifiedId={qualified}
-                              selected={selectedQualifiedId === qualified}
-                              presentation="column"
-                              busy={group.kind === 'working'}
-                              agentName={worker.label}
-                              upNextEligible={false}
-                              draggable={false}
-                            />
-                          ) : (
-                            <div class="worker-columns__unavailable">
-                              <LucideIcon icon={CircleHelp} name="circle-help" />
-                              <span>{item.slug}: ticket details unavailable</span>
-                            </div>
-                          )}
-                          {item.plan && (
-                            <Text variant="p" tone="quiet" size="compact">
-                              {item.plan.reasons.length
-                                ? `Cannot dispatch: ${item.plan.reasons.join('; ')}`
-                                : 'Tentative plan; no claim'}
-                            </Text>
-                          )}
-                          {item.assignment?.eta_at && group.kind === 'working' && (
-                            <Text variant="p" tone="quiet" size="compact">
-                              ETA {new Date(item.assignment.eta_at).toLocaleString()}
-                            </Text>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </section>
-                ))}
-              </div>
-            </section>
-          ))}
+                <WorkerCard worker={worker} />
+                <div
+                  class="worker-columns__tickets"
+                  data-key={`worker-scroll:${worker.id}`}
+                  data-ticket-scroll-owner={`worker:${worker.id}`}
+                  role="group"
+                  aria-label={`${worker.label} tickets`}
+                >
+                  {groups.length === 0 && (
+                    <Text variant="p" tone="quiet" size="compact">
+                      No assigned or planned tickets
+                    </Text>
+                  )}
+                  {groups.map((group) => (
+                    <section
+                      class="worker-columns__group"
+                      data-key={`${worker.id}:${group.kind}`}
+                      aria-label={`${group.label} Tickets`}
+                    >
+                      <h3>
+                        {group.label} · {group.tickets.length}
+                      </h3>
+                      {group.tickets.map((item) => {
+                        const qualified = qualifiedWorkerTicket(item.ref),
+                          detail = details[qualified];
+                        return (
+                          <div
+                            class="worker-columns__ticket"
+                            data-key={`${worker.id}:${item.assignment ? workerTicketOperationKey(item.assignment) : `plan:${item.plan?.entry.operation ?? qualified}`}`}
+                            data-worker-ticket={qualified}
+                          >
+                            {detail ? (
+                              <TicketRow
+                                {...ticketRow(detail)}
+                                qualifiedId={qualified}
+                                selected={selectedQualifiedId === qualified}
+                                presentation="column"
+                                busy={group.kind === 'working'}
+                                agentName={worker.label}
+                                upNextEligible={false}
+                                draggable={false}
+                              />
+                            ) : (
+                              <div class="worker-columns__unavailable">
+                                <LucideIcon icon={CircleHelp} name="circle-help" />
+                                <span>{item.slug}: ticket details unavailable</span>
+                              </div>
+                            )}
+                            {item.plan && (
+                              <Text variant="p" tone="quiet" size="compact">
+                                {item.plan.reasons.length
+                                  ? `Cannot dispatch: ${item.plan.reasons.join('; ')}`
+                                  : 'Tentative plan; no claim'}
+                              </Text>
+                            )}
+                            {item.assignment?.eta_at && group.kind === 'working' && (
+                              <Text variant="p" tone="quiet" size="compact">
+                                ETA {new Date(item.assignment.eta_at).toLocaleString()}
+                              </Text>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </section>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </ColumnTrack>
       ) : (
         <div class="worker-columns__zero" role="status">

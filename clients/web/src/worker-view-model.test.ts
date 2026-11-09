@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { TicketRow } from './api';
 import {
   integrationStrategyLabel,
   mergeWorkerViews,
@@ -242,6 +243,37 @@ describe('HS2-E9SR7R worker view projection', () => {
       'assignment:git:same:blocked-op',
       'claim:git:same',
     ]);
+  });
+
+  it('HS2-D5KXBA keeps only authoritative Started tickets through completion, empty, and refill', () => {
+    const assigned = worker('A', {
+      availability: 'disconnected',
+      tickets: [ticket('one'), ticket('two'), { ...ticket('two'), assignment_id: 'older' }],
+      planned: [
+        {
+          entry: { operation: 'plan', worker: 'A', generation: 'g1', ticket: ref('future'), slug: 'HS2-future' },
+          reasons: [],
+        },
+      ],
+    });
+    const details = {
+      'git:one': { status: 'started' } as TicketRow,
+      'git:two': { status: 'completed' } as TicketRow,
+      'git:future': { status: 'not_started' } as TicketRow,
+    };
+    const ids = () =>
+      workerGroups(assigned, 100, details).flatMap((group) => group.tickets.map((item) => item.ref.native_id));
+    expect(workerGroups(assigned, 100, details).map((group) => [group.kind, group.tickets.length])).toEqual([
+      ['unresolved', 1],
+    ]);
+    expect(ids()).toEqual(['one']);
+    details['git:one'].status = 'completed';
+    expect(workerGroups(assigned, 100, details)).toEqual([]);
+    details['git:two'].status = 'started';
+    details['git:future'].status = 'started';
+    expect(ids()).toEqual(['two', 'future']);
+    delete (details as Record<string, TicketRow | undefined>)['git:two'];
+    expect(ids()).toEqual(['future']);
   });
 });
 
