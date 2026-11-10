@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use super::batch::{BatchConclusion, BatchFailure, BatchState, LEDGER_FILE, LEDGER_VERSION};
 use super::batch_staged::StagingOpen;
+use super::batch_staged::cadence_status;
 use super::strategy::CircuitBreaker;
 use super::tests::{NOW, SHA, assignment, fixture, register};
 use super::*;
@@ -136,6 +137,55 @@ fn error<T: std::fmt::Debug>(outcome: Result<T>) -> String {
 }
 
 #[test]
+fn hs2_0bj1a3_cadence_reports_durable_promotion_red_and_restart_without_unsafe_move() {
+    let (_root, c) = pool(2, IntegrationStrategy::CiStaged);
+    stage(&c, "batch-1", &["a0"], S1, NOW);
+    result(&c, "batch-1", "501", BatchConclusion::Success, NOW + 10);
+    let ready = cadence_status(&c.batch_ledger().unwrap().unwrap(), 360, NOW + 20);
+    assert_eq!(ready.action, "promote_green_tip");
+    assert_eq!(ready.ready_batch.as_deref(), Some("batch-1"));
+    assert_eq!(ready.last_green_main_at, None);
+    assert_eq!(ready.next_target_at, None);
+    assert_eq!(ready.missed_goal_reason, None);
+    c.batch_promote(I, G, NOW + 30, "batch-1", S1).unwrap();
+    let promoted = cadence_status(&c.batch_ledger().unwrap().unwrap(), 360, NOW + 31);
+    assert_eq!(promoted.last_green_main_at, Some(NOW + 30));
+    assert_eq!(promoted.next_target_at, Some(NOW + 30 + 360 * 60));
+    assert_eq!(promoted.tickets_promoted_in_goal_window, 1);
+    assert_eq!(
+        cadence_status(
+            &c.batch_ledger().unwrap().unwrap(),
+            360,
+            NOW + 31 + 360 * 60
+        )
+        .tickets_promoted_in_goal_window,
+        0
+    );
+    stage(&c, "batch-2", &["a1"], S2, NOW + 40);
+    result(&c, "batch-2", "502", BatchConclusion::Failure, NOW + 50);
+    let red = cadence_status(
+        &c.batch_ledger().unwrap().unwrap(),
+        360,
+        NOW + 30 + 360 * 60,
+    );
+    assert_eq!(red.action, "attribute_and_restage");
+    assert_eq!(red.ci_failures_since_promotion, 1);
+    assert_eq!(
+        red.missed_goal_reason.as_deref(),
+        Some("red_staging_requires_correction")
+    );
+    assert_eq!(batch(&c, "batch-2").main_commit, None);
+    assert_eq!(
+        red,
+        cadence_status(
+            &c.batch_ledger().unwrap().unwrap(),
+            360,
+            NOW + 30 + 360 * 60
+        )
+    );
+}
+
+#[test]
 fn hs2_gt57bq_staged_batch_reaches_main_only_after_green_and_exact_promotion() {
     let (root, c) = pool(2, IntegrationStrategy::CiStaged);
     let opened = open(&c, "batch-1", &["a0", "a1"], NOW);
@@ -214,6 +264,10 @@ fn hs2_gt57bq_staged_batch_reaches_main_only_after_green_and_exact_promotion() {
     let summary = status.staging.unwrap();
     assert_eq!(summary.awaiting_promotion, ["batch-1"]);
     assert_eq!(summary.tip.as_deref(), Some(S1));
+    let candidate = cadence_status(&c.batch_ledger().unwrap().unwrap(), 360, NOW + 11);
+    assert_eq!(candidate.ready_batch.as_deref(), Some("batch-1"));
+    assert_eq!(candidate.last_green_main_at, None);
+    assert_eq!(candidate.next_target_at, None);
     // Promotion fast-forwards to exactly the green SHA: another (moved) main is refused.
     assert!(error(c.batch_promote(I, G, NOW, "batch-1", MOVED_MAIN)).contains("exactly the green"));
     let promoted = c.batch_promote(I, G, NOW + 20, "batch-1", S1).unwrap();

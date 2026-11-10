@@ -295,6 +295,11 @@ preview/download, server directory browser) are separate design work.
   one; older servers omit it (HS2-NEY1QH). The policy itself is edited headlessly
   or through `PUT /checkouts/{id}/integration-strategies`; a settings editor is
   HS2-SVD5WA.
+  Under a configured Steady Main goal, the Workers view also shows the source's
+  last green main promotion, next target, and current staging action (HS2-0BJ1A3).
+  The target is an escalation cue: a red or unverified staged SHA never promotes.
+  Policy and batch events use the existing worker-view cursor; target time comparison
+  does not issue fixed-interval requests. Older servers omit the cadence summary.
   A worker card that states ticket preferences adds outline chips for each filter,
   strict filters first (`only: glance`, `avoid: T2`, `prefer: bug`), a line for its
   pending request (`Requested HS2-…`) or the authority's refusal with its reason and

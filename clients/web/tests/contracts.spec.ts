@@ -359,6 +359,7 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
         '--max-red-minutes',
         '45',
       );
+      await pool('strategy-allow', '--strategy', 'ci-staged', '--reason', 'synthetic cadence contract');
       const slugs: string[] = [];
       for (const [title, tags] of [
         ['Glance bug', ['glance']],
@@ -530,6 +531,21 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
     );
     expect(developmentReport(customReport), JSON.stringify(developmentReport.errors)).toBe(true);
     expect(customReport).toMatchObject({ effective: { preset: 'strict-review', source: 'project' } });
+    await server.request(`/checkouts/${server.checkoutId}/development-strategy`, 'PUT', {
+      version: 1,
+      default: 'steady-main',
+      green_main_goal_minutes: 90,
+    });
+    const cadenceView = await view('');
+    expect(workerView(cadenceView), JSON.stringify(workerView.errors)).toBe(true);
+    expect(cadenceView).toMatchObject({
+      cadence: {
+        goal_minutes: 90,
+        last_green_main_at: null,
+        next_target_at: null,
+        action: 'no_ready_work',
+      },
+    });
   } finally {
     await server.stop();
   }

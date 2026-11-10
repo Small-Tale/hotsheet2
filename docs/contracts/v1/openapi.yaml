@@ -17164,11 +17164,60 @@ components:
           oneOf:
             - $ref: '#/components/schemas/IntegrationStrategyName'
             - type: 'null'
+        cadence:
+          $ref: '#/components/schemas/WorkerCadence'
         unmatched_tickets:
           description: Ready tickets no live idle worker's strict preferences admit (HS2-6WFCZR).
           type: array
           items:
             type: string
+      additionalProperties: false
+    WorkerCadence:
+      type: object
+      required:
+        [
+          goal_minutes,
+          last_green_main_at,
+          next_target_at,
+          oldest_staging_at,
+          staging_age_seconds,
+          ci_failures_since_promotion,
+          correction_wall_seconds,
+          tickets_promoted_in_goal_window,
+          ready_batch,
+          action,
+          missed_goal_reason,
+        ]
+      properties:
+        goal_minutes:
+          type: integer
+          minimum: 1
+        last_green_main_at:
+          type: [integer, 'null']
+        next_target_at:
+          type: [integer, 'null']
+        oldest_staging_at:
+          type: [integer, 'null']
+        staging_age_seconds:
+          type: [integer, 'null']
+          minimum: 0
+        ci_failures_since_promotion:
+          type: integer
+          minimum: 0
+        correction_wall_seconds:
+          type: [integer, 'null']
+          minimum: 0
+        tickets_promoted_in_goal_window:
+          type: integer
+          minimum: 0
+          description: Tickets promoted to main within the rolling goal interval ending at the status read.
+        ready_batch:
+          type: [string, 'null']
+        action:
+          type: string
+          enum: [promote_green_tip, attribute_and_restage, await_exact_sha_ci, no_ready_work]
+        missed_goal_reason:
+          type: [string, 'null']
       additionalProperties: false
     ProviderConnections:
       type: array

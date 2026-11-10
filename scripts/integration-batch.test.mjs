@@ -526,6 +526,18 @@ test('HS2-GT57BQ ci reads the staging branch run once and a green batch waits fo
   assert.equal(calls.filter((call) => call.binary === 'gh').length, 1);
 });
 
+test('HS2-0BJ1A3 a CI outage reports a missed cadence risk without moving main', () => {
+  const fixture = stagedFake('ci');
+  const run = (binary, args, input) => binary === 'gh'
+    ? { status: 1, stdout: '', stderr: 'synthetic CI outage' }
+    : fixture.run(binary, args, input);
+  const result = ci(options, { run });
+  assert.equal(result.status, 'ci_unavailable');
+  assert.equal(result.completable, false);
+  assert.equal(fixture.ledger.batches['batch-1'].state, 'ci');
+  assert.ok(!fixture.calls.some((call) => call.args?.includes('batch-promote')));
+});
+
 test('HS2-GT57BQ a red staged run is attributed against the staged SHA and points at re-staging', (t) => {
   const { run, calls } = stagedFake('ci', {
     runs: [stagedRun('failure')],

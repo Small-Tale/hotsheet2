@@ -67,6 +67,7 @@ pub use strategy::{IntegrationStrategy, StrategyPolicy, StrategyRequest};
 
 pub struct Coordinator {
     pub(crate) directory: PathBuf,
+    pub(crate) project: PathBuf,
     pub(crate) source: PathBuf,
     pub(crate) registry_home: PathBuf,
     project_id: String,
@@ -126,6 +127,7 @@ impl Coordinator {
         fs::create_dir_all(&directory)?;
         let this = Self {
             directory,
+            project: shipping.to_path_buf(),
             source: source.canonicalize()?,
             registry_home,
             project_id,

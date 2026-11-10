@@ -814,3 +814,26 @@ fn hs2_gt57bq_staged_flow_stacks_promotes_exact_green_sha_and_keeps_main_on_red(
         "held as a suspect",
     );
 }
+
+#[test]
+fn hs2_0bj1a3_headless_status_uses_shared_goal_without_opening_a_batch() {
+    let f = staged_fixture();
+    json(
+        &f,
+        &[
+            "development-strategy-set",
+            "--preset",
+            "steady-main",
+            "--green-main-goal-minutes",
+            "90",
+        ],
+    );
+    let status = json(&f, &["batch-status"]);
+    assert_eq!(status["cadence"]["goal_minutes"], 90);
+    assert_eq!(
+        status["cadence"]["last_green_main_at"],
+        serde_json::Value::Null
+    );
+    assert_eq!(status["cadence"]["action"], "no_ready_work");
+    assert!(status["batches"].as_object().unwrap().is_empty());
+}

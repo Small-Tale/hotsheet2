@@ -195,7 +195,8 @@ export function WorkerColumns({
       coverage.problems.length > 0 ||
       coverage.notes.length > 0 ||
       coverage.sourcesUnknown ||
-      coverage.connectionUnknown;
+      coverage.connectionUnknown,
+    cadenceViews = currentViews.filter((view) => view.cadence);
   return (
     <section
       class="worker-columns"
@@ -207,7 +208,46 @@ export function WorkerColumns({
       aria-multiselectable="false"
       aria-label="Project Workers"
     >
-      {coverageIncomplete && <WorkerCoverageSummary coverage={coverage} />}
+      {(coverageIncomplete || cadenceViews.length > 0) && (
+        <div class="worker-columns__status">
+          {coverageIncomplete && <WorkerCoverageSummary coverage={coverage} />}
+          {cadenceViews.map((view) => {
+            const cadence = view.cadence!;
+            const target = cadence.next_target_at;
+            const due = target !== null && Date.now() >= target * 1000;
+            return (
+              <div class="worker-columns__cadence" data-cadence-source={view.source_id} data-cadence-due={due}>
+                <strong>Green main goal · {cadence.goal_minutes} min</strong>
+                <span>
+                  Last green promotion:{' '}
+                  {cadence.last_green_main_at === null
+                    ? 'Not recorded yet'
+                    : new Date(cadence.last_green_main_at * 1000).toLocaleString()}
+                </span>
+                <span>
+                  Next target: {target === null ? 'After first promotion' : new Date(target * 1000).toLocaleString()}
+                </span>
+                <span>
+                  {cadence.ready_batch
+                    ? 'Green staged CI passed; verify main before promotion'
+                    : cadence.action === 'attribute_and_restage'
+                      ? 'Red staging needs attribution and correction'
+                      : cadence.action === 'await_exact_sha_ci'
+                        ? 'Staging CI in progress'
+                        : 'No staged work ready'}
+                </span>
+                {due && (
+                  <span>
+                    Goal missed:{' '}
+                    {cadence.missed_goal_reason ??
+                      (cadence.ready_batch ? 'green batch awaiting promotion' : cadence.action.replaceAll('_', ' '))}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {workers.length > 0 ? (
         <ColumnTrack layout={layout === 'grid' ? 'scroll' : 'paged'} minColumnWidth={px(250)} peek={px(24)}>
           {workers.map((worker) => {

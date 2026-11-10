@@ -1201,6 +1201,13 @@ CI result (implied green, invalidation above a red batch), held suspects and the
 `hs2_gt57bq_*` case of `tests/coordination_batch.rs` pin its transitions. The push side
 is `scripts/main-integration-window.mjs` (`--staged`, `--promote`) and
 `integration-batch.mjs promote`.
+HS2-0BJ1A3 adds `cadence_status` in `batch_staged.rs`: durable last-green promotion,
+next target, staging age, failure/correction metrics, rolling ticket throughput and
+an escalation action. `snapshot.rs` and `worker_view.rs` project it into the
+event-driven Workers stream and watch policy-file changes; the headless `batch-status`
+uses the same projection. `clients/web/src/components/worker-columns.tsx` displays
+the source-scoped goal without network polling. Promotion still goes through the
+exact-SHA and fast-forward guard in `integration-batch.mjs`.
 `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,

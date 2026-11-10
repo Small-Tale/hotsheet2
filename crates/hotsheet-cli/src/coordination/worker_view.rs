@@ -110,6 +110,9 @@ pub struct WorkerView {
     /// The live integrator's strategy, None without a live integrator (HS2-NEY1QH).
     #[serde(default)]
     pub integration_strategy: Option<IntegrationStrategy>,
+    /// Durable Steady Main goal and staged transition facts (HS2-0BJ1A3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cadence: Option<super::batch_staged::CadenceStatus>,
     /// Ready tickets no live idle worker's strict preferences admit (HS2-6WFCZR).
     #[serde(default)]
     pub unmatched_tickets: Vec<String>,
@@ -428,6 +431,10 @@ impl WorkerView {
             connection_coverage,
             past_workers,
             integration_strategy: snapshot.integration_strategy,
+            cadence: snapshot
+                .batches
+                .as_ref()
+                .and_then(|batches| batches.cadence.clone()),
             unmatched_tickets: snapshot.unmatched_tickets.clone(),
         }
     }
@@ -486,6 +493,13 @@ impl Coordinator {
         watcher.watch(&self.source, RecursiveMode::Recursive)?;
         std::fs::create_dir_all(&self.registry_home)?;
         watcher.watch(&self.registry_home, RecursiveMode::NonRecursive)?;
+        let settings_directory = self.project.join(".hotsheet2");
+        let mut settings_directory_watched = settings_directory.is_dir();
+        if settings_directory_watched {
+            watcher.watch(&settings_directory, RecursiveMode::NonRecursive)?;
+        } else {
+            watcher.watch(&self.project, RecursiveMode::NonRecursive)?;
+        }
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let mut snapshot = self.snapshot(now)?;
         if WorkerView::worker_state_cursor(&snapshot) != after || max_wait.is_zero() {
@@ -529,9 +543,12 @@ impl Coordinator {
                     let providers = self.source.join("providers.json");
                     let checkouts = self.registry_home.join("checkouts.json");
                     let state = self.directory.join("state.json");
+                    let settings = settings_directory.join("settings.json");
                     event.need_rescan()
                         || event.paths.iter().any(|path| {
                             path == &state
+                                || path == &settings
+                                || path == &settings_directory
                                 || path == &providers
                                 || path == &checkouts
                                 || path.starts_with(&tickets)
@@ -550,6 +567,10 @@ impl Coordinator {
                 }
             };
             if relevant {
+                if !settings_directory_watched && settings_directory.is_dir() {
+                    watcher.watch(&settings_directory, RecursiveMode::NonRecursive)?;
+                    settings_directory_watched = true;
+                }
                 observe(WatchStep::Rescanned);
                 snapshot = self.snapshot(time::OffsetDateTime::now_utc().unix_timestamp())?;
                 if WorkerView::worker_state_cursor(&snapshot) != after {
@@ -896,6 +917,112 @@ mod tests {
             .watch_worker_snapshot(&WorkerView::worker_state_cursor(&changed), Duration::ZERO)
             .unwrap();
         assert_eq!(immediate.cursor, changed.cursor);
+    }
+
+    #[test]
+    fn hs2_0bj1a3_policy_only_goal_change_wakes_worker_view_without_a_batch() {
+        use crate::coordination::development_strategy::{DevelopmentPolicy, DevelopmentPreset};
+        use crate::coordination::strategy::StrategyPolicy;
+        let (root, coordinator) = crate::coordination::tests::fixture();
+        let settings = hotsheet_ticketing::Settings::for_project(root.path().join("project"));
+        let mut integration = StrategyPolicy::default();
+        integration
+            .allow(IntegrationStrategy::CiStaged, "synthetic cadence")
+            .unwrap();
+        integration.write(&settings).unwrap();
+        let mut policy = DevelopmentPolicy {
+            default: DevelopmentPreset::SteadyMain,
+            configured: true,
+            ..DevelopmentPolicy::default()
+        };
+        policy.write(&settings).unwrap();
+        let first = coordinator
+            .snapshot(time::OffsetDateTime::now_utc().unix_timestamp())
+            .unwrap();
+        assert_eq!(
+            first
+                .batches
+                .as_ref()
+                .unwrap()
+                .cadence
+                .as_ref()
+                .unwrap()
+                .goal_minutes,
+            360
+        );
+        let observer =
+            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let wait = ObservedWait::start(
+            observer,
+            WorkerView::worker_state_cursor(&first),
+            CHANGE_WAIT,
+            None,
+        );
+        assert_eq!(wait.next_step(), WatchStep::Armed);
+        policy.green_main_goal_minutes = 90;
+        policy.write(&settings).unwrap();
+        let (changed, steps) = wait.finish();
+        assert_woken_by_rescan(&steps);
+        assert_eq!(
+            changed
+                .batches
+                .as_ref()
+                .unwrap()
+                .cadence
+                .as_ref()
+                .unwrap()
+                .goal_minutes,
+            90
+        );
+        assert_ne!(
+            WorkerView::worker_state_cursor(&first),
+            WorkerView::worker_state_cursor(&changed)
+        );
+    }
+
+    #[test]
+    fn hs2_0bj1a3_first_policy_file_creation_wakes_worker_view() {
+        use crate::coordination::development_strategy::{DevelopmentPolicy, DevelopmentPreset};
+        use crate::coordination::strategy::StrategyPolicy;
+        let (root, coordinator) = crate::coordination::tests::fixture();
+        let initial = coordinator
+            .snapshot(time::OffsetDateTime::now_utc().unix_timestamp())
+            .unwrap();
+        let observer =
+            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let wait = ObservedWait::start(
+            observer,
+            WorkerView::worker_state_cursor(&initial),
+            CHANGE_WAIT,
+            None,
+        );
+        assert_eq!(wait.next_step(), WatchStep::Armed);
+        let settings = hotsheet_ticketing::Settings::for_project(root.path().join("project"));
+        let mut integration = StrategyPolicy::default();
+        integration
+            .allow(IntegrationStrategy::CiStaged, "synthetic first policy")
+            .unwrap();
+        integration.write(&settings).unwrap();
+        DevelopmentPolicy {
+            default: DevelopmentPreset::SteadyMain,
+            configured: true,
+            ..DevelopmentPolicy::default()
+        }
+        .write(&settings)
+        .unwrap();
+        let (changed, steps) = wait.finish();
+        assert_woken_by_rescan(&steps);
+        assert_eq!(
+            changed
+                .batches
+                .as_ref()
+                .unwrap()
+                .cadence
+                .as_ref()
+                .unwrap()
+                .goal_minutes,
+            360
+        );
     }
 
     #[test]

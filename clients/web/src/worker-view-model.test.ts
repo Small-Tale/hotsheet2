@@ -58,6 +58,24 @@ const view = (source_id: string, workers: WorkerRow[]): WorkerView => ({
 });
 
 describe('HS2-E9SR7R worker view projection', () => {
+  it('HS2-0BJ1A3 parses optional cadence and refuses a malformed goal', () => {
+    const status = {
+      goal_minutes: 360,
+      last_green_main_at: 1_800_000_000,
+      next_target_at: 1_800_021_600,
+      oldest_staging_at: null,
+      staging_age_seconds: null,
+      ci_failures_since_promotion: 0,
+      correction_wall_seconds: null,
+      tickets_promoted_in_goal_window: 2,
+      ready_batch: null,
+      action: 'no_ready_work',
+      missed_goal_reason: null,
+    };
+    expect(parseWorkerView({ ...view('s', []), cadence: status }).cadence).toEqual(status);
+    expect(parseWorkerView(view('s', [])).cadence).toBeUndefined();
+    expect(() => parseWorkerView({ ...view('s', []), cadence: { ...status, goal_minutes: -1 } })).toThrow();
+  });
   it('rejects malformed successful responses instead of showing a false empty state', () => {
     expect(() =>
       parseWorkerView({ cursor: 'c', project_id: 'p', source_id: 's', workers: [], uncovered_sources: [] }),

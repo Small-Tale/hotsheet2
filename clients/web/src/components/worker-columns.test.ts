@@ -66,6 +66,40 @@ const row = (ticket: WireTicketRow): TicketRowProps => ({
 });
 
 describe('HS2-E9SR7R Workers composition', () => {
+  it('HS2-0BJ1A3 shows the staged-main goal and green promotion action in the real column parent', () => {
+    const markup = String(
+      WorkerColumns({
+        views: [
+          {
+            ...view,
+            cadence: {
+              goal_minutes: 360,
+              last_green_main_at: null,
+              next_target_at: null,
+              oldest_staging_at: 1_800_000_000,
+              staging_age_seconds: null,
+              ci_failures_since_promotion: 0,
+              correction_wall_seconds: null,
+              tickets_promoted_in_goal_window: 0,
+              ready_batch: 'batch-green',
+              action: 'promote_green_tip',
+              missed_goal_reason: null,
+            },
+          },
+        ],
+        details: {},
+        ticketRow: row,
+        selectedQualifiedId: undefined,
+        loading: false,
+        sourceErrors: [],
+        sources: [],
+        layout: 'grid',
+      }),
+    );
+    expect(markup).toContain('Green main goal · 360 min');
+    expect(markup).toContain('Green staged CI passed; verify main before promotion');
+    expect(markup).toContain('data-cadence-source="one"');
+  });
   it('uses the shared ticket summary with qualified card identity and honest source coverage', () => {
     const markup = String(
       WorkerColumns({

@@ -236,6 +236,9 @@ export function ci(options, { run = command, scratch } = {}) {
     '--json',
     'databaseId,status,conclusion,headSha,event,workflowName,createdAt,url',
   ]);
+  // A CI outage is an unmet cadence goal, never a promotion override.
+  if (listed.status !== 0)
+    return { batch: batch.id, status: 'ci_unavailable', completable: false, reason: 'CI run lookup unavailable; retry without moving main' };
   const found = batchRun(JSON.parse(ok(listed, 'gh run list')), commit);
   if (!found) return { batch: batch.id, status: 'pending', reason: `no CI push run for ${commit} yet` };
   if (found.status !== 'completed') return { batch: batch.id, status: 'pending', run: found.databaseId };
