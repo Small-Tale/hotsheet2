@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -998,6 +998,7 @@ test('HS2-N7EY18 HS2-R1D0S5 a shared ux-demo fixture change selects the demo tes
 });
 
 const smokeConfig = readFileSync(new URL('./gate-smoke.json', import.meta.url), 'utf8');
+const coverageValidator = readFileSync(new URL('./check-test-coverage.mjs', import.meta.url), 'utf8');
 
 test('HS2-9G0M3V the smoke profile runs only the declared checks and defers the affected suites to CI', (t) => {
   const f = fixture(t);
@@ -1009,6 +1010,7 @@ test('HS2-9G0M3V the smoke profile runs only the declared checks and defers the 
   assert.equal(p.tier, 'smoke');
   assert.equal(p.budgetMs, null);
   const declared = JSON.parse(smokeConfig).stages.map((stage) => stage.command);
+  assert.equal(declared[3], 'node scripts/check-test-coverage.mjs');
   assert.deepEqual(
     p.checks.map((stage) => stage.command),
     declared,
@@ -1019,6 +1021,56 @@ test('HS2-9G0M3V the smoke profile runs only the declared checks and defers the 
   assert.ok(p.deferred.every((stage) => stage.reasons[0].includes('HS2-9G0M3V')));
   // The ordinary plan of the same tree differs, so its receipt is never reused for smoke.
   assert.notEqual(prepare(f.repo, undefined, false, f.options.versions).key, p.key);
+});
+
+test('HS2-61Z0JD malformed coverage evidence fails smoke before a receipt, then corrected evidence passes', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-smoke.json', smokeConfig);
+  f.put('scripts/check-test-coverage.mjs', coverageValidator);
+  f.put('docs/requirement.md', 'Synthetic requirement\n');
+  const matrix = (manual) =>
+    [
+      '<!-- coverage-matrix:begin -->',
+      '| Feature | Requirement | Summary | Unit | E2E | Manual | Status |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
+      `| gallery | docs/requirement.md | Synthetic | clients/web/src/example.ts | clients/web/src/example.ts | ${manual} | double-covered |`,
+      '<!-- coverage-matrix:end -->',
+      '',
+    ].join('\n');
+  f.put('docs/TEST-COVERAGE.md', matrix('HS2-ABC123 and HS2-DEF456'));
+  f.git(
+    'add',
+    'scripts/gate-smoke.json',
+    'scripts/check-test-coverage.mjs',
+    'docs/requirement.md',
+    'docs/TEST-COVERAGE.md',
+  );
+  f.git('commit', '--quiet', '-m', 'malformed synthetic coverage');
+
+  const actualCoverageResults = [];
+  const runner = (stage) => {
+    if (stage.command !== 'node scripts/check-test-coverage.mjs') return { status: 0 };
+    const result = spawnSync(process.execPath, ['scripts/check-test-coverage.mjs'], {
+      cwd: f.repo,
+      env: withoutGitRepositoryEnv(process.env),
+      encoding: 'utf8',
+    });
+    actualCoverageResults.push(result);
+    return { status: result.status ?? 1 };
+  };
+  const declared = JSON.parse(smokeConfig).stages.map((stage) => stage.command);
+  assert.equal(declared[3], 'node scripts/check-test-coverage.mjs');
+  assert.equal(runGate({ ...f.options, smoke: true, runner }), 1);
+  assert.match(actualCoverageResults.at(-1).stderr, /gallery: missing manual evidence/);
+  assert.throws(() => runGate({ ...f.options, smoke: true, verify: true }), /No valid/);
+
+  f.put('docs/TEST-COVERAGE.md', matrix('HS2-ABC123; HS2-DEF456'));
+  f.git('add', 'docs/TEST-COVERAGE.md');
+  f.git('commit', '--quiet', '-m', 'correct synthetic coverage');
+  assert.equal(runGate({ ...f.options, smoke: true, runner }), 0);
+  assert.match(actualCoverageResults.at(-1).stdout, /Validated 1 feature coverage rows/);
+  assert.equal(runGate({ ...f.options, smoke: true, verify: true }), 0);
+  assert.throws(() => runGate({ ...f.options, verify: true }), /No valid/);
 });
 
 test('HS2-9G0M3V a smoke receipt is exact, reusable, and never root-gate evidence', (t) => {

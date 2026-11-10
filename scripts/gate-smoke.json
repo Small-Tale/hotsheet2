@@ -13,6 +13,11 @@
     },
     {
       "cwd": ".",
+      "command": "node scripts/check-test-coverage.mjs",
+      "reason": "coverage matrix references are valid before a batch push (HS2-61Z0JD)"
+    },
+    {
+      "cwd": ".",
       "command": "cargo nextest run -p hotsheet-plugins",
       "reason": "fast sanity: embedded plugin, skill and mirror contracts"
     },
