@@ -51,7 +51,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [label]
+              required:
+                - label
               properties:
                 label:
                   type: string
@@ -85,7 +86,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [id, challenge]
+              required:
+                - id
+                - challenge
               properties:
                 id:
                   type: string
@@ -190,7 +193,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [server_id, devices, pending]
+                required:
+                  - server_id
+                  - devices
+                  - pending
                 properties:
                   server_id:
                     type: string
@@ -218,7 +224,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [id, role]
+              required:
+                - id
+                - role
               properties:
                 id:
                   type: string
@@ -13063,6 +13071,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/development-strategy:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_development_strategy
+      description: Read the versioned shared project development policy and effective default (HS2-BF79YX).
+      responses:
+        '200':
+          description: Validated project policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevelopmentStrategyReport'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_development_strategy
+      description: Replace the shared policy; an active integrator keeps its recorded strategy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevelopmentStrategyPolicy'
+      responses:
+        '200':
+          description: Validated project policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevelopmentStrategyReport'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -13106,10 +13159,16 @@ components:
   schemas:
     RemoteDeviceRole:
       type: string
-      enum: [read_only, read_write]
+      enum:
+        - read_only
+        - read_write
     RemotePairing:
       type: object
-      required: [id, server_id, challenge, expires_at]
+      required:
+        - id
+        - server_id
+        - challenge
+        - expires_at
       properties:
         id:
           type: string
@@ -13122,7 +13181,15 @@ components:
           format: int64
     RemoteDevice:
       type: object
-      required: [id, server_id, label, role, origin, created_at, last_used_at, expires_at]
+      required:
+        - id
+        - server_id
+        - label
+        - role
+        - origin
+        - created_at
+        - last_used_at
+        - expires_at
       properties:
         id:
           type: string
@@ -13145,7 +13212,13 @@ components:
           format: int64
     RemotePendingDevice:
       type: object
-      required: [id, label, origin, created_at, expires_at, approved]
+      required:
+        - id
+        - label
+        - origin
+        - created_at
+        - expires_at
+        - approved
       properties:
         id:
           type: string
@@ -16052,6 +16125,82 @@ components:
                 type: string
             additionalProperties: false
       additionalProperties: false
+    DevelopmentStrategyName:
+      type: string
+      enum:
+        - ticket-assured
+        - steady-main
+        - risk-guided
+    DevelopmentStrategyPolicy:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          type: integer
+          const: 1
+        default:
+          $ref: '#/components/schemas/DevelopmentStrategyName'
+        green_main_goal_minutes:
+          type: integer
+          minimum: 1
+          maximum: 10080
+          default: 360
+      additionalProperties: false
+    DevelopmentStrategySelection:
+      type: object
+      required:
+        - preset
+        - source
+        - integration
+        - local_gate
+        - require_green_main_sha
+        - attribute_red_ci_before_completion
+        - green_main_goal_minutes
+      properties:
+        preset:
+          $ref: '#/components/schemas/DevelopmentStrategyName'
+        source:
+          type: string
+          enum:
+            - project
+            - session
+            - ticket
+        integration:
+          $ref: '#/components/schemas/IntegrationStrategyName'
+        local_gate:
+          type: string
+          enum:
+            - full-local
+            - targeted
+            - risk-selected
+        require_green_main_sha:
+          type: boolean
+          const: true
+        attribute_red_ci_before_completion:
+          type: boolean
+          const: true
+        green_main_goal_minutes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      additionalProperties: false
+    DevelopmentStrategyReport:
+      type: object
+      required:
+        - policy
+        - effective
+        - presets
+      properties:
+        policy:
+          $ref: '#/components/schemas/DevelopmentStrategyPolicy'
+        effective:
+          $ref: '#/components/schemas/DevelopmentStrategySelection'
+        presets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DevelopmentStrategyName'
+      additionalProperties: false
     ConnectionRemoval:
       type: object
       required:
@@ -18370,10 +18519,21 @@ components:
       properties:
         action:
           type: string
-          enum: [off, allow, deny]
+          enum:
+            - off
+            - allow
+            - deny
         delayMs:
           type: integer
-          enum: [0, 5000, 15000, 60000, 120000, 300000, 900000, 3600000]
+          enum:
+            - 0
+            - 5000
+            - 15000
+            - 60000
+            - 120000
+            - 300000
+            - 900000
+            - 3600000
       additionalProperties: false
     PermissionAutomationSettings:
       type: object
@@ -18386,10 +18546,21 @@ components:
           type: boolean
         action:
           type: string
-          enum: [off, allow, deny]
+          enum:
+            - off
+            - allow
+            - deny
         delayMs:
           type: integer
-          enum: [0, 5000, 15000, 60000, 120000, 300000, 900000, 3600000]
+          enum:
+            - 0
+            - 5000
+            - 15000
+            - 60000
+            - 120000
+            - 300000
+            - 900000
+            - 3600000
       additionalProperties: false
     TrashSettings:
       type: object
