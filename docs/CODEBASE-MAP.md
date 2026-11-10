@@ -260,6 +260,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 5.0.0-beta.117 + Web Awesome Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
+    vitest.config.ts          # Node unit/binary projects plus narrow jsdom dom-pilot project (HS2-3FQNGT)
+    src/components/dom-pilot.dom.test.ts # Parent-composed search and Workers DOM pilot plus capability probes (HS2-3FQNGT)
     scripts/format-sources.mjs # Shared Prettier scope for format/check: required tracked paths plus optional local opencode.json
     scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression
     scripts/vitest-binary-suites.mjs # The binary-launching Vitest files (the `binaries` project) + guard detector (HS2-3PX1E4)

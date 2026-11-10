@@ -38,7 +38,16 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: testFiles,
-          exclude: [...configDefaults.exclude, ...BINARY_SUITES, 'src/eslint-policy.test.ts'],
+          exclude: [...configDefaults.exclude, ...BINARY_SUITES, 'src/eslint-policy.test.ts', 'src/**/*.dom.test.ts'],
+          sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'dom-pilot',
+          environment: 'jsdom',
+          include: ['src/**/*.dom.test.ts'],
           sequence: { groupOrder: 1 },
         },
       },

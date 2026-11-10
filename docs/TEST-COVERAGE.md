@@ -1,5 +1,7 @@
 # Feature Coverage Matrix
 
+HS2-3FQNGT adds a narrow jsdom `dom-pilot` project for parent-composed search-help insertion and Workers Started/Completed/Started transitions, plus custom-element, shadow-DOM, focus, mutation, composed-event, and re-edit probes. Existing real-browser search/Workers flows and visual checks remain authoritative; measured coverage and limits are in [the pilot report](dom-test-pilot-2026-11-10.md).
+
 HS2-6CK09C: `scripts/verify-playwright-shards.test.mjs` checks that the CI
 merged-report job accepts exactly four separately named Playwright artifacts
 and rejects the observed odd-shard-only run before merging. The workflow
