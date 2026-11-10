@@ -77,6 +77,20 @@ test('HS2-RS0FFT client selection omits unrelated Rust and keeps policy and real
   assert.ok(p.stages.filter((stage) => !stage.selected).every((stage) => stage.reasons.length));
 });
 
+test('HS2-RRNZYN server auth change forces the shipped-flow browser contract', (t) => {
+  const f = fixture(t);
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put('crates/hotsheet-server/src/auth.rs', 'pub fn synthetic_auth() {}\n');
+  f.git('add', 'crates/hotsheet-server/src/auth.rs');
+  f.git('commit', '--quiet', '-m', 'synthetic auth change');
+  const p = prepare(f.repo, undefined, false, f.options.versions);
+  assert.ok(p.checks.some((stage) => stage.command.includes('cargo nextest run')));
+  const browser = p.checks.find((stage) => stage.command.includes('tests/contracts.spec.ts'));
+  assert.ok(browser);
+  assert.equal(browser.floor, true);
+  assert.ok(p.checks.some((stage) => stage.command === 'npm run test:fixtures'));
+});
+
 test('HS2-PDNJA0 router and OpenAPI edits run the real-server browser contract locally', (t) => {
   for (const changed of ['crates/hotsheet-server/src/lib.rs', 'docs/contracts/v1/openapi.yaml']) {
     const f = fixture(t);
@@ -687,6 +701,80 @@ test('HS2-Q5XAAK bare push check reuses the explicit ticket receipt without weak
   const changed = { ...inferred, ticket: 'git:another' };
   assert.notEqual(prepare(f.repo, undefined, false, f.options.versions, { profile: changed, analyzed }).key, first.key);
   assert.throws(() => runGate({ ...f.options, profile: changed, runner, verify: true }), /--t2-stage/);
+});
+
+test('HS2-RRNZYN reviewed selection persists into exact-input receipt and bare push verification', (t) => {
+  const f = fixture(t);
+  const profile = {
+    ...profileFromTags({ qualified_id: 'git:HS2-RRNZYN', tags: ['tier:T2'] }),
+    developmentStrategy: { preset: 'risk-guided', source: 'project', local_gate: 'risk-selected' },
+  };
+  const analyzed = ['clients/web::npm run build'];
+  const preview = prepare(f.repo, undefined, false, f.options.versions, { profile, analyzed });
+  const omitted = preview.stages.filter((stage) => !stage.selected);
+  for (const command of ['cargo nextest run', 'npm run test:coverage'])
+    assert.ok(
+      omitted.some((stage) => stage.command.includes(command)),
+      `web-only plan discloses ${command}`,
+    );
+  assert.ok(
+    omitted.some((stage) => stage.cwd === 'spikes/kerf-webawesome'),
+    'web-only plan discloses spike',
+  );
+  const manifest = {
+    version: 1,
+    ticket: profile.ticket,
+    tree: preview.tree,
+    base: preview.base,
+    changed_paths: [...preview.changes].sort(),
+    strategy: 'risk-guided',
+    strategy_source: 'project',
+    behavior: 'Change a synthetic client state.',
+    risks: ['State transition may regress'],
+    reviewed_by: 'synthetic reviewer',
+    analyzed,
+    proposed: [],
+    selected: preview.checks.map((stage) => ({
+      id: `${stage.cwd}::${stage.command}`,
+      reason: 'Affected behavior',
+      estimate_ms: 1000,
+    })),
+    deferred: omitted.map((stage) => ({
+      id: `${stage.cwd}::${stage.command}`,
+      reason: 'Other platform',
+      ci_coverage: 'main CI',
+    })),
+  };
+  const directory = mkdtempSync(join(tmpdir(), 'hs2-rrnzyn-plan-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, 'reviewed.json');
+  writeFileSync(path, JSON.stringify(manifest));
+  let runs = 0;
+  const runner = () => {
+    runs += 1;
+    return { status: 0 };
+  };
+  assert.equal(runGate({ ...f.options, profile, testPlan: path, runner }), 0);
+  const receipt = JSON.parse(
+    readFileSync(
+      join(
+        preview.cache,
+        `${prepare(f.repo, undefined, false, f.options.versions, { profile, analyzed, testPlan: manifest }).key}.json`,
+      ),
+    ),
+  );
+  assert.equal(receipt.testPlan.ticket, profile.ticket);
+  assert.deepEqual(receipt.testPlan.selected, manifest.selected);
+  assert.deepEqual(
+    receipt.deferred,
+    omitted.map((stage) => stage.command),
+  );
+  assert.deepEqual(receipt.testPlan.estimate, { known_ms: manifest.selected.length * 1000, unknown_checks: 0 });
+  assert.equal(runGate({ ...f.options, profile, verify: true }), 0);
+  assert.ok(runs > 0);
+  f.put('clients/web/src/example.ts', 'export const value = 3;\n');
+  f.git('commit', '--quiet', '-am', 'changed tree');
+  assert.throws(() => runGate({ ...f.options, profile, verify: true }), /require --test-plan/);
 });
 
 test('HS2-PNBH4X a stale install blocks the gate and a reinstall changes every receipt key', (t) => {

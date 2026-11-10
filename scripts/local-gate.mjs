@@ -10,8 +10,16 @@ import { exerciseIndexForRepo, withSpecimenInventory } from './gate-browser-exer
 import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engines.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { platformCfgForRepo } from './platform-cfg.mjs';
-import { contractInputsChanged, parseBudget, selectBudget } from './gate-budget.mjs';
+import { contractInputsChanged, highImpactBrowserChange, parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
+import {
+  planIdentity,
+  planEstimate,
+  rememberTestPlan,
+  storedTestPlan,
+  validateTestPlan,
+  verifyTestPlanSelection,
+} from './gate-test-plan.mjs';
 import { sandboxFailureNotice } from './sandbox-notice.mjs';
 import {
   importCiReports,
@@ -527,11 +535,12 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     if (shared) titles.length = 0;
     testTitles[path] = [...new Set(titles)];
   }
+  const highImpactBrowser = highImpactBrowserChange(state.changes);
   let affected = [
     ...selected.stages.filter((stage) => stage.selected),
     ...browserStages(
       state.changes,
-      selected.mode === 'full' || profile?.browser === true,
+      selected.mode === 'full' || profile?.browser === true || highImpactBrowser,
       testTitles['clients/web/tests/providers.spec.ts'] ?? [],
       testTitles,
       withSpecimenInventory(exerciseIndexForRepo(repo, state.changes), {
@@ -542,6 +551,14 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
           ? readFileSync(join(repo, 'clients/web/tests/ux-demo.spec.ts'), 'utf8')
           : null,
       }),
+    ).map((stage) =>
+      highImpactBrowser
+        ? {
+            ...stage,
+            force: true,
+            reasons: [...stage.reasons, 'HS2-RRNZYN: high-impact shared state requires a shipped-flow browser check'],
+          }
+        : stage,
     ),
   ];
   if (profile?.browser && affected.some((stage) => stage.command.startsWith('npx playwright test '))) {
@@ -601,6 +618,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     analyzed: options.analyzed ?? [],
     proposed: options.proposed ?? [],
     profile: profileIdentity,
+    testPlan: options.testPlan ? planIdentity(options.testPlan) : null,
     tools,
     dependencies,
     platform: process.platform,
@@ -628,6 +646,8 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     ...budgeted,
     profile,
     checks,
+    testPlan: options.testPlan ?? null,
+    testPlanEstimate: options.testPlan ? planEstimate(options.testPlan) : null,
     browserCoverage: browserEvidence(repo, checks, budgeted.deferred),
     // HS2-A7X8F5: Rust cfg branches this host never compiles; derived from the tree, not a key input.
     platformCfg: platformCfgForRepo(repo, state.base, state.changes),
@@ -684,11 +704,43 @@ export function runGate(options = {}) {
     proposed,
     ticket,
     profile,
+    testPlan,
     smoke = false,
     log = console.log,
     env = withoutGitRepositoryEnv(process.env),
   } = options;
+  if (smoke && testPlan) throw new Error('--smoke cannot be combined with --test-plan.');
   let selection = { budgetMs, tier, analyzed, proposed, ticket, profile, smoke };
+  // HS2-RRNZYN: persist a reviewed plan outside the source tree, bound to the tree
+  // it describes. Bare push hooks may reuse it only for the same exact tree.
+  if (!smoke) {
+    const initial = collect(repo, base);
+    const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']));
+    const cache = join(common, 'hotsheet-local-gate');
+    const resolved = profile ?? readTicketProfile(repo, { ticket, dirty: initial.dirty });
+    const manifest = testPlan
+      ? JSON.parse(readFileSync(resolve(repo, testPlan), 'utf8'))
+      : storedTestPlan(cache, { tree: initial.tree, base: initial.base, ticket: resolved.ticket });
+    if (manifest) {
+      validateTestPlan(manifest, { ...initial, profile: resolved });
+      if (analyzed?.length && JSON.stringify(analyzed) !== JSON.stringify(manifest.analyzed))
+        throw new Error('HS2-RRNZYN: --t2-stage conflicts with the reviewed test plan.');
+      if (proposed?.length && JSON.stringify(proposed) !== JSON.stringify(manifest.proposed))
+        throw new Error('HS2-RRNZYN: --propose-stage conflicts with the reviewed test plan.');
+      selection = {
+        ...selection,
+        profile: resolved,
+        ticket: manifest.ticket,
+        analyzed: manifest.analyzed,
+        proposed: manifest.proposed,
+        testPlan: manifest,
+      };
+    } else if (testPlan) {
+      throw new Error('HS2-RRNZYN: reviewed test plan unavailable.');
+    } else if (!inspect && resolved.developmentStrategy) {
+      throw new Error('HS2-RRNZYN: configured projects require --test-plan <reviewed.json> for this tree.');
+    }
+  }
   let before;
   try {
     before = prepare(repo, base, full, versions, selection);
@@ -700,6 +752,7 @@ export function runGate(options = {}) {
     if (!reused) throw new Error(`${error.message} Pass --t2-stage <cwd::command> for each analyzed check.`);
     ({ selection, before } = reused);
   }
+  if (selection.testPlan) verifyTestPlanSelection(selection.testPlan, before);
   const gateStarted = Date.now();
   const budgetLabel = before.budgetMs === null ? 'none' : `${before.budgetMs}ms`;
   const receiptPath = join(before.cache, `${before.key}.json`);
@@ -725,9 +778,11 @@ export function runGate(options = {}) {
       'Local gate evidence requires a clean checkout; preserve local edits and verify the committed tree in a clean worktree.',
     );
   }
+  if (selection.testPlan && !verify) rememberTestPlan(before.cache, selection.testPlan);
   const existing = read(receiptPath);
   const selectedChecks = before.checks.map(observationStageKey);
-  const deferredChecks = before.deferred.map(observationStageKey);
+  const omittedStages = selection.testPlan ? before.stages.filter((stage) => !stage.selected) : before.deferred;
+  const deferredChecks = omittedStages.map(observationStageKey);
   const attempt = {
     id: `local:${randomUUID()}`,
     source: 'local',
@@ -827,8 +882,23 @@ export function runGate(options = {}) {
       analyzed: selection.analyzed ?? [],
       proposed: selection.proposed ?? [],
       profile: before.profile,
+      testPlan: selection.testPlan
+        ? {
+            id: planIdentity(selection.testPlan),
+            ticket: selection.testPlan.ticket,
+            selected: selection.testPlan.selected,
+            deferred: selection.testPlan.deferred,
+            behavior: selection.testPlan.behavior,
+            risks: selection.testPlan.risks,
+            reviewed_by: selection.testPlan.reviewed_by,
+            estimate: planEstimate(selection.testPlan),
+            strategy: selection.testPlan.strategy,
+            strategy_source: selection.testPlan.strategy_source,
+            override: selection.testPlan.override ?? null,
+          }
+        : null,
       selected: before.checks.map((stage) => stage.command),
-      deferred: before.deferred.map((stage) => stage.command),
+      deferred: omittedStages.map((stage) => stage.command),
       browserCoverage: before.browserCoverage,
       platformCfg: before.platformCfg,
       results,
@@ -875,13 +945,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       '--propose-stage',
       '--ticket',
       '--smoke',
+      '--test-plan',
     ]);
     for (let i = 0; i < args.length; i += 1) {
       if (!allowed.has(args[i])) throw new Error(`Unknown argument: ${args[i]}`);
       if (
-        ['--base', '--import-ci-timings', '--budget', '--tier', '--t2-stage', '--propose-stage', '--ticket'].includes(
-          args[i],
-        ) &&
+        [
+          '--base',
+          '--import-ci-timings',
+          '--budget',
+          '--tier',
+          '--t2-stage',
+          '--propose-stage',
+          '--ticket',
+          '--test-plan',
+        ].includes(args[i]) &&
         !args[++i]
       )
         throw new Error(`${args[i - 1]} requires a value`);
@@ -900,6 +978,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         analyzed: args.flatMap((arg, index) => (arg === '--t2-stage' ? [args[index + 1]] : [])),
         proposed: args.flatMap((arg, index) => (arg === '--propose-stage' ? [args[index + 1]] : [])),
         ticket: args.includes('--ticket') ? args[args.indexOf('--ticket') + 1] : undefined,
+        testPlan: args.includes('--test-plan') ? args[args.indexOf('--test-plan') + 1] : undefined,
         smoke: args.includes('--smoke'),
       });
     }

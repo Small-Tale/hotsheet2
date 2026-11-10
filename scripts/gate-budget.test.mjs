@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseBudget, selectBudget, stageId } from './gate-budget.mjs';
+import { highImpactBrowserChange, parseBudget, selectBudget, stageId } from './gate-budget.mjs';
+
+test('HS2-RRNZYN identifies auth, claims, sync and shared-state boundaries for browser proof', () => {
+  for (const path of [
+    'crates/hotsheet-server/src/auth.rs',
+    'crates/hotsheet-ticketing/src/claim.rs',
+    'crates/hotsheet-ticketing/src/sync.rs',
+    'crates/hotsheet-cli/src/dispatch/claims.rs',
+    'crates/hotsheet-cli/src/claim_process.rs',
+    'crates/hotsheet-aitools/src/session_push/mod.rs',
+    'clients/web/src/features/shared-state.ts',
+    'clients/web/src/features/shared_state.ts',
+  ])
+    assert.equal(highImpactBrowserChange([path]), true, path);
+  assert.equal(highImpactBrowserChange(['docs/README.md']), false);
+  assert.equal(highImpactBrowserChange(['migrator/src/export.mjs']), false, 'migrator keeps its direct suite');
+});
 
 const stage = (cwd, command, group, selected = true) => ({ cwd, command, group, selected, reasons: ['affected'] });
 const format = stage('.', 'cargo fmt --all --check', 'always');
