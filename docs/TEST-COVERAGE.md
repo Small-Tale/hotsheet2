@@ -268,6 +268,10 @@ transition in `clients/web/tests/announcer.spec.ts`.
 The macOS server voice and browser voice are the two local provider choices.
 `tts.rs` runs the installed macOS voice and checks RIFF/WAV output on macOS;
 the fake adapter keeps server HTTP behavior deterministic on other platforms.
+HS2-6PZ35D checks that the sidebar toggle opens and closes the Announcer, follows a
+collapsed sidebar, and stays clear of the phone drawer restore control; the overlay
+has no close button. `clients/web/tests/providers.spec.ts` also checks the project
+strip launcher and tab geometry after the toggle moves out of that strip.
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

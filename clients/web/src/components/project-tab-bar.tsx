@@ -9,7 +9,6 @@ import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { ArchiveRestore, CircleAlert } from 'lucide';
 
 import { AddProjectAction, ProjectDashboardModes, type ProjectStripMode } from './project-strip-actions';
@@ -25,8 +24,6 @@ export interface ProjectTabBarProps {
   /** The current ticket view's primary action, pinned in TabBar's far-edge `end` zone. It is data, not
    * markup, so the zone renders literal JSX that Kerf's composition rule checks (HS2-PNCDAE). */
   workspaceAction?: TicketViewActionSpec;
-  /** Announcer entry stays in this strip, away from workbench corner controls (HS2-5PSQJQ). */
-  announcerTrigger?: SafeHtml;
   /** Mobile: the horizontal tab strip does not fit a single narrow column, so the project tabs are
    * replaced with a project Select while the dashboard mode switcher and Add-project action remain
    * (HS2-4C5RM7). */
@@ -49,7 +46,6 @@ export function ProjectTabBar({
   mode = 'project',
   projectStats = false,
   workspaceAction,
-  announcerTrigger,
   mobile = false,
   surface = 'lowered',
   divider = true,
@@ -71,7 +67,6 @@ export function ProjectTabBar({
         <Toolbar
           label="Projects"
           dividerSides=""
-          trailing={announcerTrigger}
           leading={
             <>
               <ProjectDashboardModes mode={mode} projectStats={projectStats} />
@@ -146,18 +141,11 @@ export function ProjectTabBar({
         // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
         activation="manual"
         // Add project sits beside the last tab in every shell mode, dashboards included (HS2-HV52WR,
-        // HS2-YFKQT1); Announcer and a project view's workspace action use the far-edge `end` zone.
+        // HS2-YFKQT1); a project view's workspace action uses the far-edge `end` zone.
         trailingPlacement="adjacent"
         leading={<ProjectDashboardModes mode={mode} projectStats={projectStats} />}
         trailing={<AddProjectAction />}
-        end={
-          (announcerTrigger || workspaceAction) && (
-            <>
-              {announcerTrigger}
-              {workspaceAction && <TicketViewAction action={workspaceAction} />}
-            </>
-          )
-        }
+        end={workspaceAction && <TicketViewAction action={workspaceAction} />}
       >
         {tabs.map((tab) => (
           <ProjectTab {...tab} selected={(mode === 'project' || (mode === 'stats' && projectStats)) && tab.selected} />

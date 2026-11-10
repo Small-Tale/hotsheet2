@@ -85,11 +85,12 @@ The `activity` capability turns native signals → events; the host owns the str
 
 ## 15.6 Consumers
 
-- **Announcer (HS2-5PSQJQ, HS2-A93BHS)** — a project-strip control opens the compact or expanded
-  picture-in-picture, retained cross-project digest, live narration over the change stream,
-  a bounded reel,
+- **Announcer (HS2-5PSQJQ, HS2-A93BHS, HS2-6PZ35D)** — a toggle in the left sidebar
+  toolbar opens and closes the compact or expanded picture-in-picture, retained
+  cross-project digest, live narration over the change stream, a bounded reel,
   browser speech or a configured server provider. The macOS server offers a local
-  `macos-say` provider. Edit events carry path, operation, and optional file count;
+  `macos-say` provider. The overlay has no separate close button. Edit events carry
+  path, operation, and optional file count;
   native patch and old/new text are excluded from retained and live activity. An
   explicit **View current diff** action calls the authenticated
   `POST /checkouts/{reference}/activity/current-diff` endpoint with a file path.

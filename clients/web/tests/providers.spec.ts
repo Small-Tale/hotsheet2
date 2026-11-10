@@ -30905,11 +30905,9 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.screenshot({ path: 'target/visual-captures/hotsheet-zero-selection-placeholder.png' });
 });
 
-// HS2-RNR35H: at the narrowest desktop width with the inspector open, the project strip's New ticket
-// launcher yields its full label so the lone project tab and its badge are not scrolled out of view.
-test('HS2-RNR35H compacts the project strip launcher so the project tab fits the narrow board header', async ({
-  page,
-}) => {
+// HS2-RNR35H, HS2-6PZ35D: at the narrowest desktop width with the inspector open, the project
+// strip keeps the full New ticket label and the lone project tab after Announcer moves to the sidebar.
+test('HS2-RNR35H keeps the project tab and New ticket label in the narrow board header', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
@@ -30932,8 +30930,7 @@ test('HS2-RNR35H compacts the project strip launcher so the project tab fits the
   await page.screenshot({ path: 'target/visual-captures/hs2-rnr35h-board-wide.png' });
   for (const pass of ['first', 'second']) {
     await page.setViewportSize({ width: 1024, height: 600 });
-    await expect(launcher).toHaveText('Ticket…');
-    await expect(launcher).toHaveAttribute('data-size', 'compact');
+    await expect(launcher).toHaveText('New ticket…');
     await expect.poll(fits).toEqual({ overflow: 0, tabInside: true });
     await expect(tab).toBeVisible();
     if (pass === 'first') {
@@ -30943,7 +30940,7 @@ test('HS2-RNR35H compacts the project strip launcher so the project tab fits the
       await inspector.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
       await expect(launcher).toHaveText('New ticket…');
       await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
-      await expect(launcher).toHaveText('Ticket…');
+      await expect(launcher).toHaveText('New ticket…');
     }
     await page.setViewportSize({ width: 1600, height: 900 });
     await expect(launcher).toHaveText('New ticket…');
@@ -36982,7 +36979,6 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
         stripRight: stripElement.getBoundingClientRect().right,
         overflowing: stripElement.scrollWidth > stripElement.clientWidth + 1,
         add: rect('.project-tab-bar [data-action="choose-project"]'),
-        announcer: rect('.project-tab-bar [data-announcer-action="open"]'),
         launcher: rect('.project-tab-bar [data-component="quick-ticket-composer-launcher"]'),
         bar: rect('.app-shell__main > .project-tab-bar'),
       };
@@ -36993,7 +36989,6 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   expect(box.add.left - box.lastTabRight).toBeGreaterThanOrEqual(0);
   expect(box.add.left - box.lastTabRight).toBeLessThan(24);
   expect(box.launcher.left - box.add.right).toBeGreaterThan(48);
-  expect(box.launcher.left - box.announcer.right).toBeLessThan(24);
   expect(box.bar.right - box.launcher.right).toBeLessThan(24);
   expect(Math.abs(box.add.top + box.add.height / 2 - (box.launcher.top + box.launcher.height / 2))).toBeLessThan(2);
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-few-tabs-wide.png' });
@@ -37004,8 +36999,7 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   box = await geometry();
   expect(box.overflowing).toBe(true);
   expect(box.add.left).toBeGreaterThanOrEqual(box.stripRight);
-  expect(box.announcer.left - box.add.right).toBeLessThan(24);
-  expect(box.launcher.left - box.announcer.right).toBeLessThan(24);
+  expect(box.launcher.left - box.add.right).toBeLessThan(24);
   expect(box.launcher.right).toBeLessThanOrEqual(box.bar.right);
   await expect(strip).toBeVisible();
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
@@ -37014,11 +37008,9 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   await expect(add).toBeVisible();
   const dashboardBar = (await page.locator('.project-tab-bar').boundingBox())!,
     dashboardAdd = (await add.boundingBox())!,
-    dashboardAnnouncer = (await page.locator('.project-tab-bar [data-announcer-action="open"]').boundingBox())!;
-  expect(dashboardAnnouncer.x - (dashboardAdd.x + dashboardAdd.width)).toBeLessThan(24);
-  expect(dashboardBar.x + dashboardBar.width - (dashboardAnnouncer.x + dashboardAnnouncer.width)).toBeLessThanOrEqual(
-    32,
-  );
+    dashboardRightGap = dashboardBar.x + dashboardBar.width - (dashboardAdd.x + dashboardAdd.width);
+  expect(dashboardAdd.x).toBeGreaterThanOrEqual(dashboardBar.x);
+  expect(dashboardRightGap).toBeGreaterThanOrEqual(0);
 });
 
 test('keeps Add project beside the last project tab on dashboard project strips (HS2-0KSBW7, HS2-YFKQT1)', async ({

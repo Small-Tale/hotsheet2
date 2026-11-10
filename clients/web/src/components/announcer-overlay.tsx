@@ -1,7 +1,7 @@
 import './announcer-overlay.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Play, Radio, Square, Volume2, X } from 'lucide';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Play, Radio, Square, Volume2 } from 'lucide';
 
 import type { AnnouncerReelItem } from '../announcer-reel';
 
@@ -52,9 +52,6 @@ export function AnnouncerOverlay({
           <span class="announcer__count">{items.length ? `${index + 1} / ${items.length}` : 'No activity'}</span>
           <button type="button" aria-label={expanded ? 'Shrink Announcer' : 'Expand Announcer'} {...action('expand')}>
             <LucideIcon icon={expanded ? Minimize2 : Maximize2} name={expanded ? 'minimize-2' : 'maximize-2'} />
-          </button>
-          <button type="button" aria-label="Close Announcer" {...action('close')}>
-            <LucideIcon icon={X} name="x" />
           </button>
         </header>
         <div class="announcer__screen" aria-live="polite">

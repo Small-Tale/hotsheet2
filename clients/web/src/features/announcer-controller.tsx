@@ -1,5 +1,4 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { delegate, type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Radio } from 'lucide';
@@ -217,14 +216,12 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     switch (requestedAction) {
       case 'open':
         clearDiff();
-        open.value = true;
-        void loadDigest();
-        break;
-      case 'close':
-        clearDiff();
-        open.value = false;
-        live.value = false;
-        cancelSpeech();
+        open.value = !open.peek();
+        if (open.peek()) void loadDigest();
+        else {
+          live.value = false;
+          cancelSpeech();
+        }
         break;
       case 'expand':
         expanded.value = !expanded.peek();
@@ -281,17 +278,15 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   });
   return {
     trigger: () => (
-      <ToolbarControlGroup single>
-        <button
-          type="button"
-          aria-label="Announcer"
-          title="Announcer"
-          aria-pressed={open.value}
-          data-announcer-action="open"
-        >
-          <LucideIcon icon={Radio} name="radio" />
-        </button>
-      </ToolbarControlGroup>
+      <button
+        type="button"
+        aria-label="Announcer"
+        title="Announcer"
+        aria-pressed={String(open.value)}
+        data-announcer-action="open"
+      >
+        <LucideIcon icon={Radio} name="radio" />
+      </button>
     ),
     surface: () => (
       <AnnouncerOverlay

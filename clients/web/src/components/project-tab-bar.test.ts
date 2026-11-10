@@ -5,6 +5,16 @@ import { describe, expect, it } from 'vitest';
 import { ProjectTabBar } from './project-tab-bar';
 
 describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
+  it('leaves the far-edge zone to ticket actions after the announcer moves to the sidebar (HS2-6PZ35D)', () => {
+    const tabs = [{ id: 'demo', name: 'demo', location: 'local' as const, selected: true }];
+    const desktop = String(ProjectTabBar({ tabs }));
+    const phone = String(ProjectTabBar({ tabs, mobile: true }));
+    expect(desktop).not.toContain('kui-tab-bar__end');
+    expect(desktop).not.toContain('data-announcer-action');
+    expect(phone).not.toContain('data-announcer-action');
+    expect(String(ProjectTabBar({ tabs, workspaceAction: { kind: 'new-ticket' } }))).toContain('kui-tab-bar__end');
+  });
+
   it('keeps the selected project tab active for project Stats without selecting global Stats (HS2-JK3DXP)', () => {
     const tabs = [{ id: 'demo', name: 'demo', location: 'local' as const, selected: true }];
     const projectStats = String(ProjectTabBar({ tabs, mode: 'stats', projectStats: true }));

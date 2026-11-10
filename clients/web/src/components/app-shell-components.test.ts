@@ -48,6 +48,30 @@ const inspectorParts = (content: string, name = 'Ticket Inspector'): SidebarPane
 });
 
 describe('application shell components', () => {
+  it('places the announcer in the left sidebar toolbar and relocates its control when collapsed (HS2-6PZ35D)', () => {
+    const render = (sidebarVisible: boolean, mobile = false) =>
+      String(
+        AppShell({
+          tabs: [],
+          sidebar: sidebarParts('Project Sidebar'),
+          sidebarVisible,
+          mobile,
+          announcerTrigger: 'announcer-control' as never,
+          header: 'head' as never,
+          workspace: 'work' as never,
+        }),
+      );
+    const expanded = render(true);
+    expect(expanded.indexOf('announcer-control')).toBeLessThan(expanded.indexOf('data-component="project-tab-bar"'));
+    expect(expanded).toContain('aria-label="Project Sidebar Toolbar"');
+    expect(expanded).toContain('aria-label="Announcer"');
+    expect(expanded).toContain('aria-label="Hide Project Sidebar"');
+    const collapsed = render(false);
+    expect(collapsed).toContain('aria-label="Show Project Sidebar"');
+    expect(collapsed).toContain('announcer-control');
+    expect(render(false, true)).toContain('announcer-control');
+  });
+
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');

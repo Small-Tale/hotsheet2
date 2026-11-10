@@ -45,7 +45,7 @@ export interface AppShellProps {
   sidebar?: SidebarPanelParts;
   header: SafeHtml;
   headerActions?: SafeHtml;
-  /** Announcer opens from the project strip, clear of the workbench's corner controls (HS2-5PSQJQ). */
+  /** Announcer toggles from the left sidebar's top controls (HS2-6PZ35D). */
   announcerTrigger?: SafeHtml;
   /** Expanded workspace search uses the whole available toolbar row. */
   workspaceSearchOpen?: boolean;
@@ -155,31 +155,35 @@ export function AppShell({
   // stats page alone, since its rails are overlays that would cover it.
   const railsAllowed = !gridFullscreen && !(mobile && mode === 'stats');
   const sidebarPanel = sidebar ? workbenchSidebarPanel(sidebar) : undefined;
+  const announcerControl = announcerTrigger && (
+    <ToolbarControlGroup appearance="borderless" single label="Announcer" relocateOnCollapse>
+      {announcerTrigger}
+    </ToolbarControlGroup>
+  );
+  const standbyButton = standbyControl && (
+    <ToolbarControlGroup appearance="borderless" single label="Standby" relocateOnCollapse={!mobile}>
+      <button
+        type="button"
+        {...SHELL_AND_GLOBAL_ACTIONS.enterStandby.attrs}
+        aria-label="Enter Standby"
+        title="Enter standby"
+      >
+        <LucideIcon {...STANDBY_ICON} />
+      </button>
+    </ToolbarControlGroup>
+  );
   const leftRail: WorkbenchStaticPanel | undefined =
     railsAllowed && sidebarPanel
       ? {
           ...sidebarPanel,
-          // The moon sits beside the collapse toggle, which the Workbench keeps last (approved in m1), and
-          // moves with it into the workspace toolbar while the rail is collapsed. A phone keeps it in the
-          // overlay rail: its one-row workspace toolbar has no room to spare (HS2-RDFY4A search width).
+          // The announcer and moon sit before the collapse toggle. The announcer follows that toggle
+          // into the workspace toolbar when the rail is hidden; a phone keeps only Standby in the rail.
           toolbar:
-            standbyControl && sidebarPanel.toolbar
+            announcerControl || standbyButton
               ? {
                   ...sidebarPanel.toolbar,
-                  // An array keeps the group's relocation annotation visible to the Workbench.
-                  trailing: [
-                    sidebarPanel.toolbar.trailing,
-                    <ToolbarControlGroup appearance="borderless" single label="Standby" relocateOnCollapse={!mobile}>
-                      <button
-                        type="button"
-                        {...SHELL_AND_GLOBAL_ACTIONS.enterStandby.attrs}
-                        aria-label="Enter Standby"
-                        title="Enter standby"
-                      >
-                        <LucideIcon {...STANDBY_ICON} />
-                      </button>
-                    </ToolbarControlGroup>,
-                  ],
+                  label: sidebarPanel.toolbar?.label ?? 'Sidebar toolbar',
+                  trailing: [sidebarPanel.toolbar?.trailing, announcerControl, standbyButton],
                 }
               : sidebarPanel.toolbar,
           // Rail names stay distinct from the landmarks inside them (the panel's content, the inspector).
@@ -314,7 +318,6 @@ export function AppShell({
               mode={mode}
               projectStats={projectStats}
               workspaceAction={projectTabAction}
-              announcerTrigger={announcerTrigger}
               mobile={mobile}
               surface="default"
               divider={mode === 'terminals'}
