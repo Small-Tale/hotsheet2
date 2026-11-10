@@ -799,6 +799,12 @@ tests for versioned development presets, override precedence, invalid policy
 combinations, and migration with an unset setting. The unset path preserves the
 prior integration and risk-tier gate defaults; the new route is validated against
 the typed OpenAPI schema in `clients/web/tests/contracts.spec.ts`.
+HS2-ARJNJV extends that coverage with named custom policy round-trips, strict
+validation and capability errors, project/session/ticket precedence, version-one
+migration, built-in rollback, bounded AI test suggestions, and CLI/server contract
+parity in `crates/hotsheet-cli/tests/development_strategy.rs`,
+`crates/hotsheet-server/tests/development_strategy.rs`,
+`scripts/gate-ticket-profile.test.mjs`, and `clients/web/tests/contracts.spec.ts`.
 
 HS2-9X1A6G covers Codex chat writes to a linked sibling ticket store. The
 `isolated_codex_home_grants_*` tests in `crates/hotsheet-aitools/src/launch_safety.rs`

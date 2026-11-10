@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use hotsheet_cli::coordination::development_strategy::CustomDevelopmentStrategy;
 use hotsheet_cli::coordination::{
     Assignment, Authority, CAPABILITIES, Coordinator, DevelopmentPolicy, DevelopmentPreset,
     HandoffEvidence, IntegrationStrategy, IntegrationSuspension, NextPlanEntry, Phase,
@@ -60,9 +61,9 @@ struct Registration {
     /// project and implemented; omit to use the project default (HS2-NEY1QH).
     #[arg(long, value_enum)]
     strategy: Option<IntegrationStrategy>,
-    /// Explicit development preset for this integrator generation (HS2-BF79YX).
-    #[arg(long, value_enum)]
-    development_strategy: Option<DevelopmentPreset>,
+    /// Built-in or named custom development strategy for this integrator generation.
+    #[arg(long)]
+    development_strategy: Option<String>,
     /// Integrator: confirms every participant runs a schema-eight executable before the
     /// first non-serial strategy is recorded. Worker: confirms every participant runs a
     /// schema-nine executable before the first ticket preferences are recorded.
@@ -148,13 +149,19 @@ impl Registration {
             )?
             .is_some();
         let selected = if explicitly_selected || self.development_strategy.is_some() {
-            let resolved =
-                development.resolve(&integration_policy, self.development_strategy, None)?;
+            let resolved = development.resolve_named(
+                &integration_policy,
+                self.development_strategy.as_deref(),
+                None,
+            )?;
+            if resolved.custom.is_some() {
+                development.validate_project_capabilities(project)?;
+            }
             if let Some(strategy) = self.strategy {
                 anyhow::ensure!(
                     strategy == resolved.integration,
                     "explicit integration strategy {strategy} conflicts with development preset {}",
-                    resolved.preset.name()
+                    resolved.preset
                 );
             }
             Some(resolved.integration)
@@ -256,12 +263,26 @@ enum CoordinationCmd {
         #[arg(long)]
         green_main_goal_minutes: Option<u32>,
     },
+    /// Add or replace a named version-2 custom policy from a declarative JSON file.
+    DevelopmentCustomSet {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        select_default: bool,
+    },
+    /// Select an already validated custom policy as the shared project default.
+    DevelopmentCustomSelect {
+        #[arg(long)]
+        name: String,
+    },
     /// Preview project/session/ticket precedence and mandatory gates without changing policy.
     DevelopmentStrategyResolve {
-        #[arg(long, value_enum)]
-        session: Option<DevelopmentPreset>,
-        #[arg(long, value_enum)]
-        ticket: Option<DevelopmentPreset>,
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long)]
+        ticket: Option<String>,
     },
     /// Allow a non-default integration strategy, recording why the project deviates.
     StrategyAllow {
@@ -776,6 +797,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         | CoordinationCmd::Strategies
         | CoordinationCmd::DevelopmentStrategies
         | CoordinationCmd::DevelopmentStrategySet { .. }
+        | CoordinationCmd::DevelopmentCustomSet { .. }
+        | CoordinationCmd::DevelopmentCustomSelect { .. }
         | CoordinationCmd::DevelopmentStrategyResolve { .. }
         | CoordinationCmd::StrategyAllow { .. }
         | CoordinationCmd::StrategyDisallow { .. }
@@ -1489,6 +1512,8 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
         CoordinationCmd::Strategies
             | CoordinationCmd::DevelopmentStrategies
             | CoordinationCmd::DevelopmentStrategySet { .. }
+            | CoordinationCmd::DevelopmentCustomSet { .. }
+            | CoordinationCmd::DevelopmentCustomSelect { .. }
             | CoordinationCmd::DevelopmentStrategyResolve { .. }
             | CoordinationCmd::StrategyAllow { .. }
             | CoordinationCmd::StrategyDisallow { .. }
@@ -1501,6 +1526,8 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
         command,
         CoordinationCmd::DevelopmentStrategies
             | CoordinationCmd::DevelopmentStrategySet { .. }
+            | CoordinationCmd::DevelopmentCustomSet { .. }
+            | CoordinationCmd::DevelopmentCustomSelect { .. }
             | CoordinationCmd::DevelopmentStrategyResolve { .. }
     ) {
         let mut policy = DevelopmentPolicy::read(&settings)?;
@@ -1511,19 +1538,43 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
                 green_main_goal_minutes,
             } => {
                 policy.default = *preset;
+                policy.default_custom = None;
                 if let Some(minutes) = green_main_goal_minutes {
                     policy.green_main_goal_minutes = *minutes;
                 }
                 policy.write(&settings)?;
                 policy = DevelopmentPolicy::read(&settings)?;
             }
+            CoordinationCmd::DevelopmentCustomSet {
+                name,
+                file,
+                select_default,
+            } => {
+                let custom: CustomDevelopmentStrategy =
+                    serde_json::from_slice(&std::fs::read(file)?)?;
+                policy.version = 2;
+                policy.custom.insert(name.clone(), custom);
+                if *select_default {
+                    policy.default_custom = Some(name.clone());
+                }
+                policy.validate_project_capabilities(project)?;
+                policy.write(&settings)?;
+                policy = DevelopmentPolicy::read(&settings)?;
+            }
+            CoordinationCmd::DevelopmentCustomSelect { name } => {
+                policy.version = 2;
+                policy.default_custom = Some(name.clone());
+                policy.validate_project_capabilities(project)?;
+                policy.write(&settings)?;
+                policy = DevelopmentPolicy::read(&settings)?;
+            }
             CoordinationCmd::DevelopmentStrategyResolve { session, ticket } => {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&policy.resolve(
+                    serde_json::to_string_pretty(&policy.resolve_named(
                         &integration,
-                        *session,
-                        *ticket
+                        session.as_deref(),
+                        ticket.as_deref()
                     )?)?
                 );
                 return Ok(true);

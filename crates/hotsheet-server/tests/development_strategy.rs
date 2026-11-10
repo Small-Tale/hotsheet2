@@ -132,6 +132,84 @@ async fn hs2_bf79yx_authenticated_rest_and_headless_policy_share_one_setting() {
         headless.default,
         hotsheet_cli::coordination::DevelopmentPreset::SteadyMain
     );
+    let custom = serde_json::json!({
+        "version": 2,
+        "default": "ticket-assured",
+        "default_custom": "strict-review",
+        "custom": {
+            "strict-review": {
+                "integration": "serial", "local_gate": "full-local", "minimum_tier": "T2",
+                "browser": true, "test_plan_timing": "before-work", "ci_gate": "CI",
+                "red_ci_recovery": "attribute-and-retry"
+            }
+        }
+    });
+    let no_ci = server
+        .clone()
+        .oneshot(request("PUT", &route, Some(&custom.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(no_ci.status(), StatusCode::BAD_REQUEST);
+    std::fs::create_dir_all(project.join(".github/workflows")).unwrap();
+    std::fs::write(
+        project.join(".github/workflows/ci.yml"),
+        "name: CI\non: push\n",
+    )
+    .unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .current_dir(&project)
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://example.invalid/synthetic.git"
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let custom_saved = server
+        .clone()
+        .oneshot(request("PUT", &route, Some(&custom.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(custom_saved.status(), StatusCode::OK);
+    let custom_saved = json(custom_saved).await;
+    assert_eq!(custom_saved["effective"]["preset"], "strict-review");
+    assert_eq!(custom_saved["effective"]["source"], "project");
+    assert_eq!(custom_saved["effective"]["custom"]["minimum_tier"], "T2");
+    let reread = hotsheet_cli::coordination::DevelopmentPolicy::read(&settings).unwrap();
+    assert_eq!(reread.default_custom.as_deref(), Some("strict-review"));
+    let unsupported = serde_json::json!({
+        "version": 2, "custom": {
+            "bad-ci": { "integration": "serial", "local_gate": "targeted", "minimum_tier": "T1",
+                "test_plan_timing": "before-handoff", "ci_gate": "Missing CI", "red_ci_recovery": "attribute-and-retry" }
+        }
+    });
+    let rejected = server
+        .clone()
+        .oneshot(request("PUT", &route, Some(&unsupported.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    std::fs::remove_file(project.join(".github/workflows/ci.yml")).unwrap();
+    let mut rollback = custom;
+    rollback.as_object_mut().unwrap().remove("default_custom");
+    let restored = server
+        .clone()
+        .oneshot(request("PUT", &route, Some(&rollback.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(
+        restored.status(),
+        StatusCode::OK,
+        "a built-in rollback must work after CI disappears"
+    );
+    assert_eq!(
+        json(restored).await["effective"]["preset"],
+        "ticket-assured"
+    );
     let unauthenticated = server
         .oneshot(Request::builder().uri(&route).body(Body::empty()).unwrap())
         .await

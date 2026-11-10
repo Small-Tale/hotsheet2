@@ -16131,6 +16131,63 @@ components:
         - ticket-assured
         - steady-main
         - risk-guided
+    CustomDevelopmentStrategy:
+      type: object
+      required:
+        - integration
+        - local_gate
+        - minimum_tier
+        - test_plan_timing
+        - ci_gate
+        - red_ci_recovery
+      properties:
+        integration:
+          $ref: '#/components/schemas/IntegrationStrategyName'
+        local_gate:
+          type: string
+          enum:
+            - full-local
+            - targeted
+            - risk-selected
+        minimum_tier:
+          type: string
+          enum:
+            - T0
+            - T1
+            - T2
+        budget_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        browser:
+          type: boolean
+          default: false
+        platform:
+          type: boolean
+          default: false
+        perf:
+          type: boolean
+          default: false
+        test_plan_timing:
+          type: string
+          enum:
+            - before-work
+            - before-handoff
+        ci_gate:
+          type: string
+          const: CI
+        staging_branch:
+          type: string
+        green_main_goal_minutes:
+          type: integer
+          minimum: 1
+          maximum: 10080
+        red_ci_recovery:
+          type: string
+          enum:
+            - attribute-and-retry
+            - fallback-to-serial
+      additionalProperties: false
     DevelopmentStrategyPolicy:
       type: object
       required:
@@ -16138,7 +16195,9 @@ components:
       properties:
         version:
           type: integer
-          const: 1
+          enum:
+            - 1
+            - 2
         default:
           $ref: '#/components/schemas/DevelopmentStrategyName'
         green_main_goal_minutes:
@@ -16146,6 +16205,13 @@ components:
           minimum: 1
           maximum: 10080
           default: 360
+        default_custom:
+          type: string
+        custom:
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            $ref: '#/components/schemas/CustomDevelopmentStrategy'
       additionalProperties: false
     DevelopmentStrategySelection:
       type: object
@@ -16159,7 +16225,8 @@ components:
         - green_main_goal_minutes
       properties:
         preset:
-          $ref: '#/components/schemas/DevelopmentStrategyName'
+          type: string
+          description: Built-in preset name or validated custom strategy name.
         source:
           type: string
           enum:
@@ -16175,6 +16242,8 @@ components:
             - full-local
             - targeted
             - risk-selected
+        custom:
+          $ref: '#/components/schemas/CustomDevelopmentStrategy'
         require_green_main_sha:
           type: boolean
           const: true

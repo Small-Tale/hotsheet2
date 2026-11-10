@@ -256,7 +256,12 @@ pub(crate) async fn put_development_strategy(
     RoutePath(reference): RoutePath<String>,
     Json(policy): Json<DevelopmentPolicy>,
 ) -> Result<Json<DevelopmentReport>, ApiError> {
-    let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    let (checkout, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    if policy.default_custom.is_some() {
+        policy
+            .validate_project_capabilities(std::path::Path::new(&checkout.root))
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    }
     policy
         .write(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;

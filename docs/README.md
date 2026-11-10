@@ -209,8 +209,9 @@ The core, CLI, server, MCP, monitor, and client implementations remain follow-up
 
 **Development strategies:** [34-development-strategies.md](34-development-strategies.md)
 defines the versioned shared project policy and the Ticket Assured, Steady Main,
-and Risk Guided presets (HS2-BF79YX). Headless CLI and authenticated REST use
-one policy workflow; the GUI editor and custom strategy tooling remain follow-ups.
+and Risk Guided presets (HS2-BF79YX), plus validated named custom policies
+(HS2-ARJNJV). Headless CLI and authenticated REST use one policy workflow;
+the GUI editor remains a follow-up.
 
 Dedicated Git ticket stores have a shipped CLI and project-statistics execution flow for
 attachment compaction (HS2-T2Q7KM, HS2-RFJ1GN). Its bounded plan also finds deleted

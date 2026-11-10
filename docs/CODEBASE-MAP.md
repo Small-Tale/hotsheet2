@@ -1173,11 +1173,12 @@ shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
 only under the schema-eight fence (HS2-NEY1QH); `strategy_tests.rs` and
 `tests/coordination_strategy.rs` pin its transitions.
 `development_strategy.rs` owns the versioned shared project policy (Ticket Assured,
-Steady Main, Risk Guided), preset/override resolution, and the CLI/REST report
-shared by `coordination development-strategy` and the authenticated checkout
-route (HS2-BF79YX). The unset setting preserves the existing integration and
-risk-tier gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit
-setting for local gate selection.
+Steady Main, Risk Guided, and named custom policies), preset/override resolution,
+capability validation, and the CLI/REST report shared by
+`coordination development-strategy` and the authenticated checkout route (HS2-BF79YX,
+HS2-ARJNJV). The unset setting preserves the existing integration and risk-tier
+gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit setting for
+local gate selection and enforces custom minimums.
 `preferences.rs` owns worker ticket preferences and requests (HS2-6WFCZR): the
 `tag:`/`category:`/`priority:`/`tier:` filter grammar, strict `only`/`avoid` and soft
 `prefer` matching, request checks and refusal reasons, and the snapshot projection

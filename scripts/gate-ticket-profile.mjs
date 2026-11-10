@@ -51,6 +51,77 @@ export function profileFromTags(ticket) {
 // HS2-BF79YX: the shared settings file is the policy source for the local gate.
 // An absent setting intentionally leaves the installed risk-tier behavior intact.
 const presets = new Set(['ticket-assured', 'steady-main', 'risk-guided']);
+const customKeys = new Set([
+  'integration',
+  'local_gate',
+  'minimum_tier',
+  'budget_minutes',
+  'browser',
+  'platform',
+  'perf',
+  'test_plan_timing',
+  'ci_gate',
+  'staging_branch',
+  'green_main_goal_minutes',
+  'red_ci_recovery',
+]);
+const customName = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+function validateCustomDevelopmentStrategy(name, custom, settings) {
+  if (!customName.test(name) || name.length > 40 || presets.has(name))
+    throw new Error(`Invalid or reserved custom development strategy name ${name}`);
+  if (
+    !custom ||
+    typeof custom !== 'object' ||
+    Array.isArray(custom) ||
+    Object.keys(custom).some((key) => !customKeys.has(key))
+  )
+    throw new Error(`Invalid custom development strategy ${name}`);
+  if (!['serial', 'batch', 'ci-staged'].includes(custom.integration))
+    throw new Error(`Invalid custom integration for ${name}`);
+  if (!['full-local', 'targeted', 'risk-selected'].includes(custom.local_gate))
+    throw new Error(`Invalid custom local gate for ${name}`);
+  if (!['T0', 'T1', 'T2'].includes(custom.minimum_tier)) throw new Error(`Invalid custom minimum tier for ${name}`);
+  if (
+    custom.budget_minutes !== undefined &&
+    (!Number.isInteger(custom.budget_minutes) || custom.budget_minutes < 1 || custom.budget_minutes > 1440)
+  )
+    throw new Error(`Invalid custom local budget for ${name}`);
+  if ((custom.minimum_tier === 'T2' || custom.local_gate === 'full-local') && custom.budget_minutes !== undefined)
+    throw new Error(`Custom strategy ${name} cannot budget a T2 or full local gate`);
+  for (const key of ['browser', 'platform', 'perf'])
+    if (custom[key] !== undefined && typeof custom[key] !== 'boolean')
+      throw new Error(`Invalid ${key} minimum for ${name}`);
+  if (!['before-work', 'before-handoff'].includes(custom.test_plan_timing))
+    throw new Error(`Invalid test-plan timing for ${name}`);
+  if (custom.ci_gate !== 'CI')
+    throw new Error(`Custom strategy ${name} requires the connected CI gate; this checkout supports only CI`);
+  if (
+    custom.green_main_goal_minutes !== undefined &&
+    (!Number.isInteger(custom.green_main_goal_minutes) ||
+      custom.green_main_goal_minutes < 1 ||
+      custom.green_main_goal_minutes > 10080)
+  )
+    throw new Error(`Invalid custom green-main goal for ${name}`);
+  if (!['attribute-and-retry', 'fallback-to-serial'].includes(custom.red_ci_recovery))
+    throw new Error(`Invalid red-CI recovery for ${name}`);
+  if (custom.red_ci_recovery !== (custom.integration === 'serial' ? 'attribute-and-retry' : 'fallback-to-serial'))
+    throw new Error(`Custom strategy ${name} red-CI recovery must match the integration circuit breaker`);
+  if (custom.integration === 'ci-staged') {
+    const allowed = settings.integration_strategies?.allowed?.find((item) => item.strategy === 'ci-staged');
+    if (!allowed) throw new Error(`Custom strategy ${name} requires an allowed ci-staged integration strategy`);
+    if (!custom.staging_branch || custom.staging_branch !== (allowed.staging_branch ?? 'integration'))
+      throw new Error(`Custom strategy ${name} requires the allowed staging branch`);
+  } else if (custom.staging_branch !== undefined) {
+    throw new Error(`Only ci-staged custom strategy ${name} may name a staging branch`);
+  }
+  if (
+    custom.integration === 'batch' &&
+    !settings.integration_strategies?.allowed?.some((item) => item.strategy === 'batch')
+  )
+    throw new Error(`Custom strategy ${name} requires an allowed batch integration strategy`);
+}
+
 export function developmentStrategyFromSettings(settings, { session, ticket } = {}) {
   const policy = settings.development_strategy;
   if (policy === undefined && session === undefined && ticket === undefined) return null;
@@ -58,24 +129,50 @@ export function developmentStrategyFromSettings(settings, { session, ticket } = 
     if (
       policy === null ||
       typeof policy !== 'object' ||
-      Object.keys(policy).some((key) => !['version', 'default', 'green_main_goal_minutes'].includes(key)) ||
-      policy.version !== 1 ||
+      Array.isArray(policy) ||
+      Object.keys(policy).some(
+        (key) => !['version', 'default', 'green_main_goal_minutes', 'default_custom', 'custom'].includes(key),
+      ) ||
+      ![1, 2].includes(policy.version) ||
       !presets.has(policy.default ?? 'ticket-assured')
     )
       throw new Error('Invalid versioned development_strategy policy');
     const goal = policy.green_main_goal_minutes ?? 360;
     if (!Number.isInteger(goal) || goal < 1 || goal > 10080)
       throw new Error('Invalid development_strategy green-main goal');
+    if (policy.version === 1 && (policy.default_custom !== undefined || policy.custom !== undefined))
+      throw new Error('Version 1 development_strategy cannot contain custom strategies');
+    const definitions = policy.custom ?? {};
+    if (
+      !definitions ||
+      typeof definitions !== 'object' ||
+      Array.isArray(definitions) ||
+      Object.keys(definitions).length > 20
+    )
+      throw new Error('Invalid custom development strategy map');
+    for (const [name, definition] of Object.entries(definitions))
+      validateCustomDevelopmentStrategy(name, definition, settings);
+    if (
+      policy.default_custom !== undefined &&
+      (typeof policy.default_custom !== 'string' || !definitions[policy.default_custom])
+    )
+      throw new Error('Unknown default custom development strategy');
   }
-  const choice = ticket ?? session ?? policy?.default ?? 'ticket-assured';
-  if (!presets.has(choice)) throw new Error(`Unknown development strategy ${choice}`);
-  const integration = choice === 'ticket-assured' ? 'serial' : 'ci-staged';
+  const choice = ticket ?? session ?? policy?.default_custom ?? policy?.default ?? 'ticket-assured';
+  const custom = policy?.custom?.[choice];
+  if (!presets.has(choice) && !custom) throw new Error(`Unknown development strategy ${choice}`);
+  const integration = custom?.integration ?? (choice === 'ticket-assured' ? 'serial' : 'ci-staged');
   if (
     integration === 'ci-staged' &&
     !settings.integration_strategies?.allowed?.some((entry) => entry.strategy === integration)
   )
     throw new Error(`Development strategy ${choice} conflicts with project integration policy`);
-  return { preset: choice, source: ticket ? 'ticket' : session ? 'session' : 'project', integration };
+  return {
+    preset: choice,
+    source: ticket ? 'ticket' : session ? 'session' : 'project',
+    integration,
+    ...(custom ? { custom } : {}),
+  };
 }
 
 export function withDevelopmentStrategy(profile, settings, session = process.env.HOTSHEET_DEVELOPMENT_STRATEGY) {
@@ -85,12 +182,25 @@ export function withDevelopmentStrategy(profile, settings, session = process.env
   const ticket = ticketTags[0]?.slice('development-strategy:'.length);
   const chosen = developmentStrategyFromSettings(settings, { session, ticket });
   if (!chosen) return profile;
+  const custom = chosen.custom;
+  const tiers = ['T0', 'T1', 'T2'];
+  const tier =
+    custom && tiers.indexOf(custom.minimum_tier) > tiers.indexOf(profile.tier) ? custom.minimum_tier : profile.tier;
+  if (tier === 'T2' && (profile.budgetMs !== undefined || custom?.budget_minutes !== undefined))
+    throw new Error('T2 custom strategy cannot use a local time budget');
+  const customBudgetMs = custom?.budget_minutes === undefined ? undefined : custom.budget_minutes * 60_000;
   // Ticket Assured deliberately opts into the full local gate. The unset
   // project does not: migration must not silently expand legacy verification.
   return {
     ...profile,
     developmentStrategy: chosen,
-    deep: profile.deep || chosen.preset === 'ticket-assured',
+    tier,
+    budgetMs:
+      customBudgetMs === undefined ? profile.budgetMs : Math.min(profile.budgetMs ?? customBudgetMs, customBudgetMs),
+    deep: profile.deep || (custom ? custom.local_gate === 'full-local' : chosen.preset === 'ticket-assured'),
+    browser: profile.browser || custom?.browser === true,
+    platform: profile.platform || custom?.platform === true,
+    perf: profile.perf || custom?.perf === true,
   };
 }
 

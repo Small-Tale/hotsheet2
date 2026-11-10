@@ -12,7 +12,7 @@ The green-main goal is an operational target, not a timer that promotes red or u
 
 ## Selection and precedence
 
-The shared policy contains `version: 1`, `default`, and optional `green_main_goal_minutes` (1–10,080; default 360). `default` is one of the three names above. An explicit ticket instruction takes precedence over an explicit session instruction, which takes precedence over the project default. The local gate recognizes `development-strategy:<name>` on a ticket and `HOTSHEET_DEVELOPMENT_STRATEGY=<name>` for the session. `coordination development-strategy-resolve --session <name> --ticket <name>` previews the same precedence in the headless CLI. The selected integration strategy must already be allowed by the project's existing `integration_strategies` policy: `serial` is always allowed; Steady Main and Risk Guided require a reviewed `coordination strategy-allow --strategy ci-staged --reason <why>` first. A conflict fails explicitly and does not rewrite either policy.
+The built-in policy contains `version: 1`, `default`, and optional `green_main_goal_minutes` (1–10,080; default 360). `default` is one of the three built-in names above. A version 2 policy may also contain a map of up to 20 named custom strategies and `default_custom`. An explicit ticket instruction takes precedence over an explicit session instruction, which takes precedence over the project default. The local gate recognizes `development-strategy:<name>` on a ticket and `HOTSHEET_DEVELOPMENT_STRATEGY=<name>` for the session. `coordination development-strategy-resolve --session <name> --ticket <name>` previews the same precedence in the headless CLI. The selected integration strategy must already be allowed by the project's existing `integration_strategies` policy: `serial` is always allowed; staged and batch strategies require a reviewed `coordination strategy-allow --strategy <name> --reason <why>` first. A conflict fails explicitly and does not rewrite either policy.
 
 Read the policy with `hotsheet-cli coordination --project <checkout> development-strategies`, or `GET /checkouts/{reference}/development-strategy`. Set it with `hotsheet-cli coordination --project <checkout> development-strategy-set --preset <name> [--green-main-goal-minutes <minutes>]`, or authenticated `PUT /checkouts/{reference}/development-strategy` with the versioned policy object. Both paths use the same Rust validation and shared settings write. A new integrator can select a session override with `register --development-strategy <name>` (or `next` with the same option). A separate `--strategy` must agree with that preset; a currently registered generation keeps its recorded integration strategy. The REST route is owner-authenticated by the server's usual checkout boundary. The GUI editor is HS2-NBDXPW and must call this route rather than introduce another policy store.
 
@@ -28,4 +28,58 @@ Example shared value:
 }
 ```
 
-The headless update rejects unsupported versions, unknown names, invalid green-main goals, and a staged preset when `ci-staged` is not permitted. The underlying integration-policy allowlist remains the authority for whether a new integrator may register on `ci-staged`. Changing a default never mutates a live coordinator session or retrospectively completes a ticket. The versioned `DevelopmentPolicy` model and typed preset registry are the extension points for HS2-ARJNJV's reviewed custom policies; this version has no custom fields. Cadence automation (HS2-0BJ1A3), skill setup (HS2-F9062F), and GUI selection (HS2-NBDXPW) remain separate follow-ups; these presets do not claim those capabilities. No customer content is stored in this policy.
+The headless update rejects unsupported versions, unknown names, invalid green-main goals, and a staged preset when `ci-staged` is not permitted. The underlying integration-policy allowlist remains the authority for whether a new integrator may register on `ci-staged`. Changing a default never mutates a live coordinator session or retrospectively completes a ticket. Cadence automation (HS2-0BJ1A3), skill setup (HS2-F9062F), and GUI selection (HS2-NBDXPW) remain separate follow-ups. No customer content is stored in this policy.
+
+## Named custom strategies (HS2-ARJNJV)
+
+Version 2 adds a validated `custom` map and an optional `default_custom` selector. A custom name is lower-case kebab-case and cannot collide with a built-in name. CLI `development-custom-set --name <name> --file <json> [--select-default]` validates and stores one definition; `development-custom-select --name <name>` selects an existing definition. `development-strategy-set --preset <built-in>` clears `default_custom` for a safe rollback, retaining the custom definitions. Session and ticket overrides use the same names. `development-strategies` and the authenticated REST report include the effective name, source, and resolved custom fields. Version 1 projects keep their existing integration default and risk-tier local checks until explicitly changed.
+
+The only connected CI gate supported by this checkout is `CI`; an unrecognized check name fails validation. A custom policy requires the project's checked-in `.github/workflows/ci.yml` named `CI` and a configured `origin` remote. `ci-staged` requires an allowed strategy and its exact configured staging branch; that scratch branch need not exist before the integrator creates it. `batch` likewise requires an allowed strategy. Red CI still needs attribution before completion. Serial policies require `attribute-and-retry`; batch and ci-staged require `fallback-to-serial`, matching their existing circuit breaker. Unsupported combinations are refused. Cadence automation for that recovery is HS2-0BJ1A3. `test_plan_timing` declares whether the plan is required before work or before handoff; HS2-F9062F owns installing that instruction into agent workflows. The green-main goal is a target, never permission to promote a red SHA. Custom checks can raise a ticket's minimum tier, select browser/platform/performance coverage, and cap T0/T1 planning time; T2 and full-local checks cannot have a time budget. Required affected checks always run. An AI agent can add a registered affected check with `scripts/check.sh --propose-stage '<cwd>::<command>'`; the gate rejects unknown or unaffected commands and includes the proposal in the exact receipt. A proposal cannot remove mandatory checks.
+
+Strict serial example:
+
+```json
+{
+  "version": 2,
+  "default": "ticket-assured",
+  "default_custom": "strict-review",
+  "custom": {
+    "strict-review": {
+      "integration": "serial",
+      "local_gate": "full-local",
+      "minimum_tier": "T2",
+      "browser": true,
+      "platform": true,
+      "perf": false,
+      "test_plan_timing": "before-work",
+      "ci_gate": "CI",
+      "red_ci_recovery": "attribute-and-retry"
+    }
+  }
+}
+```
+
+Fast reviewed batch example (requires `batch` in `integration_strategies.allowed`):
+
+```json
+{
+  "version": 2,
+  "default": "ticket-assured",
+  "default_custom": "fast-reviewed",
+  "custom": {
+    "fast-reviewed": {
+      "integration": "batch",
+      "local_gate": "risk-selected",
+      "minimum_tier": "T1",
+      "budget_minutes": 5,
+      "browser": false,
+      "platform": false,
+      "perf": false,
+      "test_plan_timing": "before-handoff",
+      "ci_gate": "CI",
+      "green_main_goal_minutes": 180,
+      "red_ci_recovery": "fallback-to-serial"
+    }
+  }
+}
+```

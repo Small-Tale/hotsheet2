@@ -4,6 +4,194 @@ use super::development_strategy::*;
 use super::strategy::{IntegrationStrategy, StrategyPolicy};
 use hotsheet_ticketing::{Scope, Settings};
 
+fn custom(
+    integration: IntegrationStrategy,
+    local_gate: LocalGate,
+    minimum_tier: RiskTier,
+) -> CustomDevelopmentStrategy {
+    CustomDevelopmentStrategy {
+        integration,
+        local_gate,
+        minimum_tier,
+        budget_minutes: None,
+        browser: false,
+        platform: false,
+        perf: false,
+        test_plan_timing: TestPlanTiming::BeforeWork,
+        ci_gate: "CI".to_owned(),
+        staging_branch: (integration == IntegrationStrategy::CiStaged)
+            .then(|| "integration".to_owned()),
+        green_main_goal_minutes: None,
+        red_ci_recovery: if integration == IntegrationStrategy::Serial {
+            RedCiRecovery::AttributeAndRetry
+        } else {
+            RedCiRecovery::FallbackToSerial
+        },
+    }
+}
+
+#[test]
+fn hs2_arjnjv_custom_round_trip_precedence_and_builtin_rollback() {
+    let root = tempfile::tempdir().unwrap();
+    let settings = Settings::for_project(root.path());
+    let integration = staged_allowed();
+    integration.write(&settings).unwrap();
+    let mut fast = custom(
+        IntegrationStrategy::CiStaged,
+        LocalGate::Targeted,
+        RiskTier::T1,
+    );
+    fast.budget_minutes = Some(5);
+    fast.test_plan_timing = TestPlanTiming::BeforeHandoff;
+    fast.green_main_goal_minutes = Some(180);
+    fast.red_ci_recovery = RedCiRecovery::FallbackToSerial;
+    let mut strict = custom(
+        IntegrationStrategy::Serial,
+        LocalGate::FullLocal,
+        RiskTier::T2,
+    );
+    strict.browser = true;
+    strict.platform = true;
+    let policy = DevelopmentPolicy {
+        version: 2,
+        default_custom: Some("fast".to_owned()),
+        custom: [
+            ("fast".to_owned(), fast.clone()),
+            ("strict".to_owned(), strict.clone()),
+        ]
+        .into(),
+        configured: true,
+        ..DevelopmentPolicy::default()
+    };
+    policy.write(&settings).unwrap();
+    assert_eq!(DevelopmentPolicy::read(&settings).unwrap(), policy);
+    let effective = policy.resolve_named(&integration, None, None).unwrap();
+    assert_eq!(effective.preset, "fast");
+    assert_eq!(effective.source, SelectionSource::Project);
+    assert_eq!(effective.integration, IntegrationStrategy::CiStaged);
+    assert_eq!(effective.custom, Some(fast));
+    let session = policy
+        .resolve_named(&integration, Some("strict"), None)
+        .unwrap();
+    assert_eq!(session.source, SelectionSource::Session);
+    assert_eq!(session.custom, Some(strict));
+    let ticket = policy
+        .resolve_named(&integration, Some("strict"), Some("ticket-assured"))
+        .unwrap();
+    assert_eq!(ticket.source, SelectionSource::Ticket);
+    assert_eq!(ticket.integration, IntegrationStrategy::Serial);
+    assert_eq!(ticket.custom, None);
+    assert!(
+        policy
+            .resolve_named(&integration, None, Some("missing"))
+            .is_err()
+    );
+
+    let mut rollback = policy.clone();
+    rollback.default_custom = None;
+    rollback.default = DevelopmentPreset::RiskGuided;
+    rollback.write(&settings).unwrap();
+    assert_eq!(
+        DevelopmentPolicy::read(&settings)
+            .unwrap()
+            .report(&integration)
+            .unwrap()
+            .effective
+            .preset,
+        "risk-guided"
+    );
+}
+
+#[test]
+fn hs2_arjnjv_custom_refuses_unsupported_capabilities_and_unsafe_fields() {
+    let root = tempfile::tempdir().unwrap();
+    let settings = Settings::for_project(root.path());
+    let mut policy = DevelopmentPolicy {
+        version: 2,
+        default_custom: Some("fast".to_owned()),
+        custom: [(
+            "fast".to_owned(),
+            custom(
+                IntegrationStrategy::CiStaged,
+                LocalGate::Targeted,
+                RiskTier::T1,
+            ),
+        )]
+        .into(),
+        configured: true,
+        ..DevelopmentPolicy::default()
+    };
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("not allowed")
+    );
+    let integration = staged_allowed();
+    integration.write(&settings).unwrap();
+    policy.custom.get_mut("fast").unwrap().staging_branch = None;
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("staging branch")
+    );
+    policy.custom.get_mut("fast").unwrap().staging_branch = Some("integration".to_owned());
+    policy.custom.get_mut("fast").unwrap().ci_gate.clear();
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("CI gate")
+    );
+    policy.custom.get_mut("fast").unwrap().ci_gate = "Missing CI".to_owned();
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("CI gate")
+    );
+    policy.custom.get_mut("fast").unwrap().ci_gate = "CI".to_owned();
+    policy.custom.get_mut("fast").unwrap().minimum_tier = RiskTier::T2;
+    policy.custom.get_mut("fast").unwrap().budget_minutes = Some(5);
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("T2 minimum")
+    );
+    policy.custom.get_mut("fast").unwrap().budget_minutes = None;
+    policy.custom.get_mut("fast").unwrap().red_ci_recovery = RedCiRecovery::AttributeAndRetry;
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("circuit breaker")
+    );
+    policy.custom.get_mut("fast").unwrap().red_ci_recovery = RedCiRecovery::FallbackToSerial;
+    policy.custom.insert(
+        "ticket-assured".to_owned(),
+        custom(
+            IntegrationStrategy::Serial,
+            LocalGate::FullLocal,
+            RiskTier::T2,
+        ),
+    );
+    assert!(
+        policy
+            .write(&settings)
+            .unwrap_err()
+            .to_string()
+            .contains("name")
+    );
+}
+
 fn staged_allowed() -> StrategyPolicy {
     let mut policy = StrategyPolicy::default();
     policy
@@ -21,7 +209,7 @@ fn hs2_bf79yx_unset_project_preserves_legacy_serial_and_migration_default() {
     let selection = policy
         .resolve(&StrategyPolicy::default(), None, None)
         .unwrap();
-    assert_eq!(selection.preset, DevelopmentPreset::TicketAssured);
+    assert_eq!(selection.preset, DevelopmentPreset::TicketAssured.name());
     assert_eq!(selection.source, SelectionSource::UnconfiguredProject);
     assert_eq!(selection.integration, IntegrationStrategy::Serial);
     assert_eq!(selection.local_gate, LocalGate::RiskSelected);
@@ -82,6 +270,8 @@ fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
             default: preset,
             green_main_goal_minutes: 420,
             configured: true,
+            custom: Default::default(),
+            default_custom: None,
         };
         policy.write(&settings).unwrap();
         assert_eq!(DevelopmentPolicy::read(&settings).unwrap(), policy);
@@ -92,7 +282,7 @@ fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
                 .is_none()
         );
         let effective = policy.resolve(&integration, None, None).unwrap();
-        assert_eq!(effective.preset, preset);
+        assert_eq!(effective.preset, preset.name());
         assert_eq!(effective.integration, preset.integration());
         assert_eq!(effective.local_gate, preset.local_gate());
         assert_eq!(effective.source, SelectionSource::Project);
@@ -183,7 +373,7 @@ fn hs2_bf79yx_rejects_invalid_policy_and_unauthorized_staging() {
             .unwrap()
             .is_none()
     );
-    policy.version = 2;
+    policy.version = 3;
     assert!(policy.validate().is_err());
     policy.version = DEVELOPMENT_POLICY_VERSION;
     policy.green_main_goal_minutes = 0;

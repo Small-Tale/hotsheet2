@@ -130,6 +130,28 @@ test('HS2-GN06JT T2 analyzed selection has no budget and never widens by cost', 
   assert.throws(() => choose({ analyzed: [stageId(browser)] }), /requires T2/);
 });
 
+test('HS2-ARJNJV proposed checks add only affected registered stages without dropping the floor', () => {
+  const result = choose({ changes: ['docs/06-clients.md'], budgetMs: 1, proposed: [stageId(browser)] });
+  assert.ok(
+    result.selected.some(
+      (item) => item.command === browser.command && item.budgetReason === 'AI-proposed additional check',
+    ),
+  );
+  assert.ok(result.selected.some((item) => item.command === fixtures.command));
+  assert.ok(result.selected.some((item) => item.command === format.command));
+  assert.throws(() => choose({ proposed: ['.: rm -rf /'] }), /Unknown or unaffected proposed stage/);
+  assert.throws(
+    () =>
+      choose({
+        stages: [...all, stage('migrator', 'npm run test:coverage', 'migrator', false)],
+        proposed: ['migrator::npm run test:coverage'],
+      }),
+    /Unknown or unaffected proposed stage/,
+  );
+  const t2 = choose({ changes: ['docs/06-clients.md'], tier: 'T2', budgetMs: null, proposed: [stageId(browser)] });
+  assert.ok(t2.selected.some((item) => item.command === browser.command));
+});
+
 test('HS2-GN06JT fallback stays full and unrelated stages remain omitted otherwise', () => {
   const omitted = stage('migrator', 'npm run test:coverage', 'migrator', false);
   const selected = choose({ stages: [...all, omitted], full: true, budgetMs: 50 });

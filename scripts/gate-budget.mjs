@@ -48,6 +48,7 @@ export function selectBudget({
   budgetMs,
   tier = 'T1',
   analyzed = [],
+  proposed = [],
   full = false,
   fullReason = 'full fallback',
 }) {
@@ -60,6 +61,7 @@ export function selectBudget({
   const candidates = stages.filter((stage) => stage.selected);
   const candidateIds = new Set(candidates.map(stageId));
   for (const id of analyzed) if (!candidateIds.has(id)) throw new Error(`Unknown or unaffected T2 stage: ${id}`);
+  for (const id of proposed) if (!candidateIds.has(id)) throw new Error(`Unknown or unaffected proposed stage: ${id}`);
   const selectedIds = new Set();
   const estimated = candidates.map((stage) => {
     const timing = timingEstimate(history.stages[stageTimingKey(stage)]);
@@ -83,6 +85,7 @@ export function selectBudget({
     tier === 'T2' &&
     !full &&
     !analyzed.length &&
+    !proposed.length &&
     estimated.some((stage) => !stage.floor && stage.command !== 'npm run test:fixtures')
   )
     throw new Error('T2 needs an explicit analyzed stage selection for affected non-floor checks.');
@@ -100,6 +103,14 @@ export function selectBudget({
     else floorEstimateMs += stage.estimateMs;
   }
   let plannedMs = floorEstimateMs;
+  // A ticket-specific proposal is additive and validated, even when unrelated
+  // mandatory stages have unknown timing. It never changes the mandatory floor.
+  for (const stage of estimated.filter((stage) => proposed.includes(stageId(stage)))) {
+    for (const needed of withFixture(stage).filter((item) => !selectedIds.has(stageId(item)))) {
+      selectedIds.add(stageId(needed));
+      plannedMs += needed.estimateMs ?? 0;
+    }
+  }
   if (full) for (const stage of estimated) selectedIds.add(stageId(stage));
   else if (tier === 'T2') {
     for (const stage of estimated.filter((stage) => analyzed.includes(stageId(stage))))
@@ -137,8 +148,12 @@ export function selectBudget({
               ? 'mandatory floor'
               : selected
                 ? tier === 'T2'
-                  ? 'T2 analyzed selection'
-                  : 'relevance within budget'
+                  ? proposed.includes(stageId(item))
+                    ? 'AI-proposed additional check'
+                    : 'T2 analyzed selection'
+                  : proposed.includes(stageId(item))
+                    ? 'AI-proposed additional check'
+                    : 'relevance within budget'
                 : tier === 'T2'
                   ? 'deferred to CI by T2 analyzed selection'
                   : item.estimateMs === null || floorUnknown

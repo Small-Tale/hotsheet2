@@ -204,6 +204,27 @@ test('HS2-GN06JT budget and analyzed set are exact receipt inputs', (t) => {
   );
 });
 
+test('HS2-ARJNJV an AI proposal is additive, bounded, and bound into the receipt', (t) => {
+  const f = fixture(t);
+  const build = 'clients/web::npm run build';
+  const baseline = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T1', budgetMs: 1 });
+  const proposed = prepare(f.repo, undefined, false, f.options.versions, {
+    tier: 'T1',
+    budgetMs: 1,
+    proposed: [build],
+  });
+  assert.notEqual(proposed.key, baseline.key);
+  assert.ok(proposed.checks.some((stage) => stage.command === 'npm run build'));
+  for (const floor of baseline.checks.filter((stage) => stage.group === 'always'))
+    assert.ok(proposed.checks.some((stage) => stage.command === floor.command));
+  assert.throws(
+    () => prepare(f.repo, undefined, false, f.options.versions, { proposed: ['.::unknown'] }),
+    /Unknown or unaffected proposed stage/,
+  );
+  assert.equal(runGate({ ...f.options, runner: () => ({ status: 0 }), tier: 'T1', budgetMs: 1, proposed: [build] }), 0);
+  assert.throws(() => runGate({ ...f.options, verify: true, tier: 'T1', budgetMs: 1 }), /No valid/);
+});
+
 test('HS2-PANVH5 emits unitless uncapped and millisecond numeric budgets on failure, success and reuse', (t) => {
   for (const { selection, label } of [
     { selection: { tier: 'T2', analyzed: ['clients/web::npm run build'] }, label: 'none' },

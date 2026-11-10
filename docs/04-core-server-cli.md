@@ -1671,11 +1671,16 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 
 The versioned shared development policy (HS2-BF79YX) is described in
 [34-development-strategies.md](34-development-strategies.md). Headless
-`coordination development-strategies`, `development-strategy-set`, and
+`coordination development-strategies`, `development-strategy-set`,
+`development-custom-set`, `development-custom-select`, and
 `development-strategy-resolve` read, update, and preview it. Authenticated
 `GET`/`PUT /checkouts/{reference}/development-strategy` use the same validated
-settings model. An unset checkout retains serial integration and the current
-risk-tier local gate; a staged preset needs an explicit `ci-staged` allow rule.
+settings model. An unset checkout retains its existing integration-policy default
+and risk-tier local gate; a staged or batch strategy needs an explicit allow rule.
+Version 2 adds named custom definitions with validated CI, local minimums,
+staging and recovery fields. The REST report exposes the selected definition and
+project, session, or ticket provenance. See [34](34-development-strategies.md) for
+strict and fast examples and bounded AI-proposed additional checks.
 New integrator generations may explicitly choose `register --development-strategy`
 or `next --development-strategy`; a live generation keeps its recorded strategy.
 
