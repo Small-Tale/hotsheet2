@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 25 -->
+<!-- hotsheet-skill-version: 26 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -11,6 +11,31 @@ owns main mutation, review, integration, push, CI follow-through and completion.
 The legacy integrator alone assigns only while the runtime reports integrator
 authority. Workers use `$hotsheet-worker` in separate Git worktrees. Follow `AGENTS.md` for the project's
 claim, phase, test, commit, push, and completion rules.
+
+## Effective development strategy (HS2-F9062F)
+
+At session start and before opening a new integration after a project-policy
+change, run `hotsheet-cli -C <shared-store> coordination --project <main>
+development-strategies` for the shared policy version, then run
+`hotsheet-cli -C <shared-store> coordination --project <main>
+development-strategy-resolve` with applicable `--session <strategy-name>` and
+`--ticket <strategy-name>` overrides. These name development strategies, not
+coordination generations. Apply the returned `integration`, `local_gate`,
+`custom`, `green_main_goal_minutes`, and mandatory-gate fields to the branch,
+local gate, staging cadence, exact-SHA CI, promotion, and red-CI recovery flow.
+`unconfigured-project` retains the existing integration default and risk-selected
+gate. If the CLI lacks the resolver, report the missing capability rather than
+choosing a hardcoded preset. Validate permission to use the resolved integration
+mode through the existing strategy registration; a preset cannot grant it.
+Explicit user direction precedes ticket, session, and project policy unless it
+would waive a mandatory gate, exact-tree receipt, or green-main promotion;
+report and refuse that conflict. Ticket overrides precede session overrides
+only when the resolver validates them. Supply an explicit user-selected strategy
+as the highest-priority `--ticket` value and record user provenance separately.
+A changed project policy applies at the next safe integration boundary: finish
+or return active work under its accepted
+strategy, then re-resolve and use a new generation if the mode changes. Never
+switch an active batch or red-CI recovery path silently.
 
 ## Integration strategy (HS2-NEY1QH)
 
@@ -24,7 +49,7 @@ one generation; to switch, `leave` and register a new generation. The runtime re
 a strategy the project has not allowed or this executable does not implement. Report
 that refusal to the user instead of silently falling back.
 
-- `serial` (default, implemented): every step below. One handoff integrates at a
+- `serial` (implemented): every step below. One handoff integrates at a
   time with its own exact-tree local gate, push and covering CI.
 - `batch` (implemented, HS2-9G0M3V): the steps in "Batch integration" below replace
   the per-handoff gate, push and CI steps. First check that `coordination

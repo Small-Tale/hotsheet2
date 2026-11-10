@@ -214,6 +214,8 @@ and Risk Guided presets (HS2-BF79YX), plus validated named custom policies
 the GUI editor remains a follow-up. HS2-0BJ1A3 ships the Steady Main green-main
 cadence in headless batch status and the live Workers view, with a target that
 escalates attention without authorizing a red promotion.
+HS2-F9062F makes the shared Hot Sheet worker, dispatcher and integrator skills
+resolve that policy at safe boundaries while retaining mandatory gates.
 
 Dedicated Git ticket stores have a shipped CLI and project-statistics execution flow for
 attachment compaction (HS2-T2Q7KM, HS2-RFJ1GN). Its bounded plan also finds deleted

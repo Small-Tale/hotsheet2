@@ -4,10 +4,27 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 71 -->
+<!-- hotsheet-skill-version: 72 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
+
+Before planning the queue, read the project's policy version with
+`hotsheet-cli -C <shared-store> coordination --project <main>
+development-strategies`, then resolve its effective selection with
+`hotsheet-cli -C <shared-store> coordination --project <main>
+development-strategy-resolve`, passing applicable `--session <strategy-name>` and
+`--ticket <strategy-name>` overrides at their respective boundaries (HS2-F9062F).
+An explicit user instruction takes precedence over ticket, session, then project
+strategy, but cannot waive mandatory gates or green-main promotion. Supply a
+user-selected strategy as the highest-priority `--ticket` override and record
+its user provenance separately. Report and refuse gate conflicts. Use the
+resolved integration mode, local verification,
+custom minimum tier, T0/T1 budget, browser/platform/performance selection,
+test-plan timing, cadence, and red-CI recovery. `unconfigured-project` retains
+the existing integration default and risk-selected gate. If the selected CLI
+lacks this resolver, report the missing capability rather than guessing. Re-read
+policy changes at a safe ticket/integration boundary, never during active work.
 
 1. **Read and plan the whole queue.** List Up Next, read every queued ticket in full, and
    inspect relevant code before choosing execution order. Build a short working plan that

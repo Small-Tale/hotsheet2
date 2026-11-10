@@ -1180,6 +1180,12 @@ capability validation, and the CLI/REST report shared by
 HS2-ARJNJV). The unset setting preserves the existing integration and risk-tier
 gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit setting for
 local gate selection and enforces custom minimums.
+HS2-F9062F uses the read-only `development-strategy-resolve` CLI result in the
+shared worker, dispatcher, integrator and generic Hot Sheet skills. Canonical
+role sources live in `plugins/shared/role-skills/`; `scripts/sync-role-skills.mjs`
+generates the Codex and Claude mirrors. The project Rulesync source and generated
+`AGENTS.md` carry the same precedence and safe-transition rule, and plugin setup
+installs the current role content for either provider.
 `preferences.rs` owns worker ticket preferences and requests (HS2-6WFCZR): the
 `tag:`/`category:`/`priority:`/`tier:` filter grammar, strict `only`/`avoid` and soft
 `prefer` matching, request checks and refusal reasons, and the snapshot projection

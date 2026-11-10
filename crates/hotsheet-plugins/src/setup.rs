@@ -3681,10 +3681,14 @@ mod tests {
             run_setup_in(store.path(), project.path(), Some(tool), false, None, &[]).unwrap();
             let plugin = crate::find_in(tool, &[]).unwrap();
             for (target, expected) in plugin.additional_skills() {
-                assert_eq!(
-                    std::fs::read_to_string(project.path().join(target)).unwrap(),
-                    expected
-                );
+                let installed = std::fs::read_to_string(project.path().join(target)).unwrap();
+                assert_eq!(installed, expected);
+                if target.contains("hotsheet-worker/")
+                    || target.contains("hotsheet-dispatcher/")
+                    || target.contains("hotsheet-integrator/")
+                {
+                    assert!(installed.contains("development-strategy-resolve"));
+                }
             }
         }
 
@@ -6941,6 +6945,44 @@ args = []
             without_claude_tool_metadata(bundled_codex)
         );
         assert_eq!(version(bundled_claude), version(bundled_codex));
+    }
+
+    #[test]
+    fn hs2_f9062f_setup_role_skill_sources_keep_effective_strategy_guidance() {
+        let roles = [
+            (
+                include_str!("../../../plugins/shared/role-skills/hotsheet-worker.md"),
+                include_str!("../../../plugins/codex/hotsheet-worker.md"),
+                include_str!("../../../plugins/claude/hotsheet-worker.md"),
+                include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+                include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+            ),
+            (
+                include_str!("../../../plugins/shared/role-skills/hotsheet-dispatcher.md"),
+                include_str!("../../../plugins/codex/hotsheet-dispatcher.md"),
+                include_str!("../../../plugins/claude/hotsheet-dispatcher.md"),
+                include_str!("../../../.agents/skills/hotsheet-dispatcher/SKILL.md"),
+                include_str!("../../../.claude/skills/hotsheet-dispatcher/SKILL.md"),
+            ),
+            (
+                include_str!("../../../plugins/shared/role-skills/hotsheet-integrator.md"),
+                include_str!("../../../plugins/codex/hotsheet-integrator.md"),
+                include_str!("../../../plugins/claude/hotsheet-integrator.md"),
+                include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+                include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+            ),
+        ];
+        for (source, codex, claude, codex_project, claude_project) in roles {
+            assert_eq!(source, codex);
+            assert_eq!(source, codex_project);
+            assert_eq!(claude, claude_project);
+            assert_eq!(
+                claude.replace("allowed-tools: Read, Grep, Glob, Edit, Write, Bash\n", ""),
+                source
+            );
+            assert!(source.contains("development-strategy-resolve"));
+            assert!(source.contains("unconfigured-project"));
+        }
     }
 
     #[test]

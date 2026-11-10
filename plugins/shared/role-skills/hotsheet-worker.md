@@ -3,13 +3,41 @@ name: hotsheet-worker
 description: Keep a local worker session receiving exact dispatcher or legacy assignments and handing verified work to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 48 -->
+<!-- hotsheet-skill-version: 49 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
 push, remote CI, and ticket completion. In legacy mode, the integrator also assigns.
 Follow the project's `AGENTS.md` and the ticket's
 full history; these instructions define the worker handoff only.
+
+## Effective development strategy (HS2-F9062F)
+
+At session start, before a new ticket's test plan, and after a project-policy change
+at the next safe ticket boundary, run `hotsheet-cli -C <shared-store>
+coordination --project <main> development-strategies` for the shared policy
+version, then run `hotsheet-cli -C <shared-store> coordination
+--project <main> development-strategy-resolve` with the applicable `--session
+<strategy-name>` and `--ticket <strategy-name>` overrides. These options name
+development strategies, not worker generation tokens. Use the returned `source`,
+`local_gate`, `custom`, and mandatory-gate fields; do not infer a preset from the
+skill or the integration strategy alone. If the selected CLI lacks the resolver,
+stop and report the required CLI upgrade; do not silently choose a default.
+An `unconfigured-project` result retains the existing risk-selected T0/T1/T2
+gate and the project's existing integration default.
+
+An explicit user direction takes precedence over ticket, session, then project
+strategy instructions, except that none can waive a mandatory gate, exact-tree
+receipt, or green-main requirement. Report and refuse such a conflict. A ticket
+instruction takes precedence over a session strategy only when the resolver
+accepts it. Supply an explicit user-selected strategy as the highest-priority
+`--ticket` value, and record that user provenance beside the resolver's source.
+Record the selected source and test plan in the ticket. For a custom
+policy, honor `minimum_tier`, `budget_minutes` for T0/T1, `browser`, `platform`,
+`perf`, and `test_plan_timing`; required affected checks always remain. A
+`before-work` plan precedes edits; `before-handoff` precedes handoff. Full-local
+and T2 have no time cap. Re-resolve a changed policy only after completing or
+releasing active work; never switch an in-flight claim or gate silently.
 
 ## Startup and next-ticket loop
 

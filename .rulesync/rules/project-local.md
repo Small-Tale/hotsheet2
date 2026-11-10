@@ -121,6 +121,29 @@ locally. The completion note names deferred-to-CI checks and the successful
 covering main CI run. If a defect escaped local selection, create a prioritized
 follow-up bug naming the missed selection so the policy can be tuned.
 
+## Effective development strategy (HS2-F9062F)
+
+Read the versioned shared `development_strategy` setting headlessly with
+`hotsheet-cli coordination --project . development-strategies`, then resolve it
+with `hotsheet-cli coordination --project . development-strategy-resolve` at session
+start and safe ticket or integration boundaries. The command's `--session` and
+`--ticket` values name development strategies, not coordination generations.
+An explicit user instruction takes precedence over a ticket strategy, then a
+session strategy, then the project default, except that no instruction can waive
+mandatory affected gates, exact-tree verification, or green-main promotion.
+Report and refuse a conflict with those requirements. Supply a user-selected
+strategy as the highest-priority `--ticket` override and record its user
+provenance separately. A ticket strategy takes precedence over a session
+strategy when validated by the resolver. An unset project setting preserves the
+existing integration default and risk-selected
+T0/T1/T2 checks. A selected policy governs test-plan timing, local gate
+selection, permitted integration branch, CI cadence, and red-CI recovery; custom
+minimum tier, browser, platform, performance, and T0/T1 budget fields add to
+mandatory affected checks. Re-resolve a policy change at the next safe boundary;
+do not switch an active claim, batch, or integration generation silently. If the
+CLI lacks the resolver, report the missing capability and use the project's
+supported headless upgrade path before acting on a presumed strategy.
+
 ## Deployment-scripts deviation (HS2-51HMCC)
 
 Hot Sheet 2 has no hosted deployment environment or infrastructure definitions.
