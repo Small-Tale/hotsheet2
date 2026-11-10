@@ -107,6 +107,12 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
         if preset == "ticket-assured" {
             assert_eq!(value["effective"]["integration"], "serial");
             assert_eq!(value["effective"]["local_gate"], "full-local");
+        } else if preset == "steady-main" {
+            assert_eq!(value["effective"]["integration"], "ci-staged");
+            assert_eq!(value["effective"]["local_gate"], "targeted");
+        } else {
+            assert_eq!(value["effective"]["integration"], "ci-staged");
+            assert_eq!(value["effective"]["local_gate"], "risk-selected");
         }
     }
     let resolved = run(
@@ -129,6 +135,21 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
     assert_eq!(value["source"], "ticket");
     assert_eq!(value["integration"], "ci-staged");
     assert_eq!(value["require_green_main_sha"], true);
+    assert_eq!(value["attribute_red_ci_before_completion"], true);
+    let session_only = run(
+        project,
+        &["development-strategy-resolve", "--session", "steady-main"],
+    );
+    assert!(session_only.status.success());
+    let session_only: serde_json::Value = serde_json::from_slice(&session_only.stdout).unwrap();
+    assert_eq!(session_only["source"], "session");
+    assert_eq!(session_only["preset"], "steady-main");
+    assert_eq!(session_only["green_main_goal_minutes"], 420);
+    let project_only = run(project, &["development-strategy-resolve"]);
+    assert!(project_only.status.success());
+    let project_only: serde_json::Value = serde_json::from_slice(&project_only.stdout).unwrap();
+    assert_eq!(project_only["source"], "project");
+    assert_eq!(project_only["preset"], "ticket-assured");
 }
 
 #[test]
@@ -228,6 +249,43 @@ fn hs2_arjnjv_headless_custom_policy_round_trip_precedence_and_rollback() {
         "scratch integration branch need not exist: {}",
         String::from_utf8_lossy(&staged.stderr)
     );
+    let staged_override = run(
+        project,
+        &["development-strategy-resolve", "--ticket", "fast-staged"],
+    );
+    assert!(staged_override.status.success());
+    let staged_override: serde_json::Value =
+        serde_json::from_slice(&staged_override.stdout).unwrap();
+    assert_eq!(staged_override["source"], "ticket");
+    assert_eq!(staged_override["integration"], "ci-staged");
+    assert_eq!(staged_override["custom"]["budget_minutes"], 5);
+    assert_eq!(
+        staged_override["custom"]["test_plan_timing"],
+        "before-handoff"
+    );
+    assert_eq!(staged_override["custom"]["staging_branch"], "integration");
+    assert_eq!(
+        staged_override["custom"]["red_ci_recovery"],
+        "fallback-to-serial"
+    );
+    let unsafe_file = project.join("unsafe.json");
+    std::fs::write(
+        &unsafe_file,
+        r#"{"integration":"serial","local_gate":"targeted","minimum_tier":"T1","test_plan_timing":"before-handoff","ci_gate":"Skip","red_ci_recovery":"attribute-and-retry"}"#,
+    )
+    .unwrap();
+    let unsafe_set = run(
+        project,
+        &[
+            "development-custom-set",
+            "--name",
+            "unsafe",
+            "--file",
+            unsafe_file.to_str().unwrap(),
+        ],
+    );
+    assert!(!unsafe_set.status.success());
+    assert!(String::from_utf8_lossy(&unsafe_set.stderr).contains("connected CI gate"));
     let overridden = run(
         project,
         &[
@@ -246,6 +304,18 @@ fn hs2_arjnjv_headless_custom_policy_round_trip_precedence_and_rollback() {
     let resolved: serde_json::Value = serde_json::from_slice(&overridden.stdout).unwrap();
     assert_eq!(resolved["preset"], "ticket-assured");
     assert_eq!(resolved["source"], "ticket");
+    let custom_session = run(
+        project,
+        &["development-strategy-resolve", "--session", "strict-review"],
+    );
+    assert!(custom_session.status.success());
+    let custom_session: serde_json::Value = serde_json::from_slice(&custom_session.stdout).unwrap();
+    assert_eq!(custom_session["source"], "session");
+    assert_eq!(custom_session["preset"], "strict-review");
+    assert_eq!(custom_session["custom"]["minimum_tier"], "T2");
+    assert_eq!(custom_session["custom"]["test_plan_timing"], "before-work");
+    assert_eq!(custom_session["custom"]["browser"], true);
+    assert_eq!(custom_session["custom"]["platform"], true);
     let restored = run(
         project,
         &["development-strategy-set", "--preset", "ticket-assured"],
@@ -265,4 +335,18 @@ fn hs2_arjnjv_headless_custom_policy_round_trip_precedence_and_rollback() {
         restored["policy"]["custom"]["strict-review"]["ci_gate"],
         "CI"
     );
+    let re_resolved = run(project, &["development-strategy-resolve"]);
+    assert!(re_resolved.status.success());
+    let re_resolved: serde_json::Value = serde_json::from_slice(&re_resolved.stdout).unwrap();
+    assert_eq!(re_resolved["source"], "project");
+    assert_eq!(re_resolved["preset"], "ticket-assured");
+    let explicit_ticket = run(
+        project,
+        &["development-strategy-resolve", "--ticket", "strict-review"],
+    );
+    assert!(explicit_ticket.status.success());
+    let explicit_ticket: serde_json::Value =
+        serde_json::from_slice(&explicit_ticket.stdout).unwrap();
+    assert_eq!(explicit_ticket["source"], "ticket");
+    assert_eq!(explicit_ticket["preset"], "strict-review");
 }

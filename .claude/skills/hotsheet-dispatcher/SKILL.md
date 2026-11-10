@@ -4,13 +4,34 @@ description: Keep a local dispatcher assigning independent Hot Sheet tickets whi
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 7 -->
+<!-- hotsheet-skill-version: 8 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
 sessions own exact claims and isolated worktrees. Follow the project's `AGENTS.md`.
 The durable coordination state is the assignment authority; chat cues only prompt a
 recipient to read it.
+
+## Effective development strategy (HS2-F9062F)
+
+At session start and before a new assignment after a project-policy change, run
+`hotsheet-cli -C <shared-store> coordination --project <main>
+development-strategies` for the shared policy version, then run
+`hotsheet-cli -C <shared-store> coordination --project <main>
+development-strategy-resolve` with applicable `--session <strategy-name>` and
+`--ticket <strategy-name>` overrides. They name policies, not session generations.
+Use the returned `source`, `integration`, `local_gate`, and `custom` fields to
+plan risk, test-plan timing, required browser/platform/performance capacity,
+T0/T1 budget, and staging throughput. `unconfigured-project` retains the
+existing integration default and risk-selected checks. If this CLI lacks the
+resolver, report the missing capability instead of guessing a policy.
+Explicit user direction precedes ticket, session, and project policy unless it
+would waive a mandatory gate or green-main boundary; report and refuse that
+conflict. A ticket override precedes a session override only when validated by
+the resolver. Supply an explicit user-selected strategy as the highest-priority
+`--ticket` value and record user provenance separately. A policy change does
+not rewrite an accepted assignment: re-resolve and apply it to future
+assignments at a safe boundary.
 
 ## Start and preserve authority
 

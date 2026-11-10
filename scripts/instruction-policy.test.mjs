@@ -82,3 +82,39 @@ test('HS2-MFD44D runs notification process transitions on native Windows', () =>
   assert.match(targets, /runner: 'windows-latest'/);
   assert.match(targets, /runner: 'windows-11-arm'/);
 });
+
+test('HS2-F9062F makes effective strategy resolution and precedence executable guidance', () => {
+  const local = read('.rulesync/rules/project-local.md');
+  const agents = read('AGENTS.md');
+  for (const text of [local, agents]) {
+    assert.match(text, /development-strategies/);
+    assert.match(text, /development-strategy-resolve/);
+    assert.match(text, /user instruction takes precedence over a ticket strategy, then a\s+session strategy/);
+    assert.match(text, /mandatory affected gates/);
+    assert.match(text, /unset\s+project setting preserves the\s+existing integration default and risk-selected/);
+    assert.match(text, /next safe boundary/);
+    assert.match(text, /user-selected\s+strategy as the highest-priority `--ticket` override/);
+  }
+  const roles = ['worker', 'dispatcher', 'integrator'];
+  for (const role of roles) {
+    const source = read(`plugins/shared/role-skills/hotsheet-${role}.md`);
+    const codex = read(`.agents/skills/hotsheet-${role}/SKILL.md`);
+    const claude = read(`.claude/skills/hotsheet-${role}/SKILL.md`);
+    assert.equal(codex, source);
+    assert.equal(claude.replace('allowed-tools: Read, Grep, Glob, Edit, Write, Bash\n', ''), source);
+    assert.match(source, /development-strategy-resolve/);
+    assert.match(source, /development-strategies/);
+    assert.match(source, /--session\s+<strategy-name>/);
+    assert.match(source, /--ticket\s+<strategy-name>/);
+    assert.match(source, /unconfigured-project/);
+    assert.match(source, /mandatory gate/);
+    assert.match(source, /safe (ticket |integration )?boundary/);
+    assert.match(source, /If (the selected CLI|this CLI|the CLI) lacks the\s+resolver/);
+  }
+  for (const skill of ['.agents/skills/hotsheet/SKILL.md', '.claude/skills/hotsheet/SKILL.md', 'plugins/codex/SKILL.md', 'plugins/claude/SKILL.md']) {
+    const text = read(skill);
+    assert.match(text, /development-strategy-resolve/);
+    assert.match(text, /ticket, session, then project/);
+    assert.match(text, /unconfigured-project/);
+  }
+});
