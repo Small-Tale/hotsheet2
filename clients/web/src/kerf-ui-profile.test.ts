@@ -155,11 +155,9 @@ describe('Kerf application UI profile', () => {
       }
     ).scripts;
     expect(scripts.lint.split('&&').map((step) => step.trim())).toEqual(['npm run format:check', 'npm run lint:web']);
-    expect(scripts['lint:web'].split('&&').map((step) => step.trim())).toEqual([
-      'node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js . --max-warnings 0',
-      'npm run catalog:check',
-      'npm run ui:doctor',
-    ]);
+    // HS2-9N8ZMD observes this ordered lint route; its focused helper tests verify
+    // ESLint, catalog and doctor commands plus first-failure exit behavior.
+    expect(scripts['lint:web']).toBe('node scripts/lint-web-observations.mjs');
     expect(scripts['format:sources:check']).toBe('node scripts/format-sources.mjs --check');
     // HS2-TY5JHN: the doctor runs through node with an explicit heap bound.
     expect(scripts['ui:doctor']).toBe('node --max-old-space-size=4096 node_modules/@kerfjs/ui/doctor/cli.mjs --full');

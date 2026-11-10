@@ -37,11 +37,14 @@ describe('web ESLint policy', () => {
     // Typed linting of the client peaks near 3.3 GB and needs about 2.5 GB of heap. Node's default
     // heap limit is derived from RAM, so the 7 GB macOS runner aborted at about 2 GB. Pin an explicit,
     // cross-platform bound on the one ESLint invocation.
-    const lint = packageJson.scripts['lint:web'];
-    expect(lint).toMatch(
-      /^node --max-old-space-size=4096 node_modules\/eslint\/bin\/eslint\.js \. --max-warnings 0 &&/,
-    );
-    expect(Object.values(packageJson.scripts).filter((script) => /\beslint(?:\.js)? \./.test(script))).toEqual([lint]);
+    // HS2-9N8ZMD moved this invocation into the observed lint entrypoint. Its focused
+    // tests check the ordered arguments and first-failure behavior; keep the heap
+    // bound pinned here as a policy on the shipped helper.
+    expect(packageJson.scripts['lint:web']).toBe('node scripts/lint-web-observations.mjs');
+    const helper = readFileSync(new URL('../scripts/lint-web-observations.mjs', import.meta.url), 'utf8');
+    expect(helper).toMatch(/id: 'web-lint:eslint',[\s\S]*?'--max-old-space-size=4096'/);
+    expect(helper).toMatch(/id: 'web-lint:eslint',[\s\S]*?'node_modules\/eslint\/bin\/eslint\.js'/);
+    expect(Object.values(packageJson.scripts).filter((script) => /\beslint(?:\.js)? \./.test(script))).toEqual([]);
   });
 
   it('HS2-TY5JHN bounds the type-aware Kerf UI doctor heap the same way', () => {
