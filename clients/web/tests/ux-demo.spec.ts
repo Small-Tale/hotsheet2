@@ -288,7 +288,7 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 1200 : 844 });
     for (const [component, label, count] of [
-      ['settings-navigation', 'Project Settings', 8],
+      ['settings-navigation', 'Project Settings', 9],
       ['notification-navigation', 'Notification views', 3],
     ] as const) {
       await page.goto(`/ux-demo?component=${component}`);
@@ -3763,6 +3763,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
   const categories = [
     ['sources', 'Ticket sources'],
     ['ai', 'AI tools'],
+    ['development-strategy', 'Development strategy'],
     ['guidance', 'Project guidance'],
     ['commands', 'Commands'],
     ['lifecycle', 'Lifecycle'],

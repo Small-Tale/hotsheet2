@@ -531,6 +531,16 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
     );
     expect(developmentReport(customReport), JSON.stringify(developmentReport.errors)).toBe(true);
     expect(customReport).toMatchObject({ effective: { preset: 'strict-review', source: 'project' } });
+    const sessionReport = await server.request<unknown>(
+      `/checkouts/${server.checkoutId}/development-strategy?session=strict-review`,
+    );
+    expect(developmentReport(sessionReport), JSON.stringify(developmentReport.errors)).toBe(true);
+    expect(sessionReport).toMatchObject({ effective: { preset: 'strict-review', source: 'session' } });
+    const ticketReport = await server.request<unknown>(
+      `/checkouts/${server.checkoutId}/development-strategy?session=steady-main&ticket=strict-review`,
+    );
+    expect(developmentReport(ticketReport), JSON.stringify(developmentReport.errors)).toBe(true);
+    expect(ticketReport).toMatchObject({ effective: { preset: 'strict-review', source: 'ticket' } });
     await server.request(`/checkouts/${server.checkoutId}/development-strategy`, 'PUT', {
       version: 1,
       default: 'steady-main',

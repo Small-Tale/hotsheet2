@@ -14,6 +14,7 @@ import {
   CircleUserRound,
   Columns3,
   Database,
+  GitBranch,
   Keyboard,
   MemoryStick,
   ShieldCheck,
@@ -34,6 +35,7 @@ export type SettingsCategory =
   | 'terminals'
   | 'permissions'
   | 'columns'
+  | 'development-strategy'
   | 'general'
   | 'accounts'
   | 'notifications'
@@ -50,6 +52,7 @@ const projectCategories = [
   { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, iconName: 'shield-check' },
   { id: 'columns', label: 'Column view', icon: Columns3, iconName: 'columns-3' },
+  { id: 'development-strategy', label: 'Development strategy', icon: GitBranch, iconName: 'git-branch' },
 ] as const;
 
 const appCategories = [
@@ -97,6 +100,12 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   terminals: [{ control: 'Use global shell history', server: '/terminal-settings' }],
   permissions: [{ control: 'Automatic decision and delay', server: '/permission-automation' }],
   columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
+  'development-strategy': [
+    {
+      control: 'Project development strategy and green main goal',
+      server: '/checkouts/{project}/development-strategy',
+    },
+  ],
   general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
   accounts: [{ control: 'Sign-ins and sign out', server: '/accounts' }],
   notifications: [

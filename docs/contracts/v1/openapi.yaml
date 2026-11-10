@@ -13080,7 +13080,18 @@ paths:
           type: string
     get:
       operationId: get_development_strategy
-      description: Read the versioned shared project development policy and effective default (HS2-BF79YX).
+      description: Read the versioned shared project development policy and effective selection (HS2-BF79YX, HS2-NBDXPW). A ticket override takes precedence over a session override.
+      parameters:
+        - name: session
+          in: query
+          description: Optional named session strategy override; absent uses the project default.
+          schema:
+            type: string
+        - name: ticket
+          in: query
+          description: Optional named ticket strategy override; takes precedence over session.
+          schema:
+            type: string
       responses:
         '200':
           description: Validated project policy.

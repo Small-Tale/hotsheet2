@@ -199,6 +199,9 @@ commands-and-ai	wireTrashSettings	document.body
 commands-and-ai	delegateCapture	document.body	'click'	heldNavigationSelector
 commands-and-ai	delegate	document.body	'click'	'[data-action="set-view-mode"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="select-settings-category"]'
+commands-and-ai	delegate	document.body	'change'	'[data-component="development-strategy-settings"] [name^="development-"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="save-development-strategy"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="preview-development-strategy"]'
 commands-and-ai	delegate	document.body	'input'	'input[name="guidance-source-id"]'
 commands-and-ai	delegate	document.body	'input'	'input[name="guidance-repository"]'
 commands-and-ai	delegate	document.body	'input'	'input[name="guidance-ref"]'

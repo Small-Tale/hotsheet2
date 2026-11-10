@@ -14,6 +14,7 @@ import {
   parseCommandRun,
   parseCorruptTicketPaths,
   parseCustomView,
+  parseDevelopmentStrategyReport,
   parseFeedbackDelivery,
   parseFullTicket,
   parseGitHubAuthStatus,
@@ -48,6 +49,31 @@ import {
   type ResponseParser,
   ServerResponseShapeError,
 } from './server-response-parsers';
+
+describe('HS2-NBDXPW development policy response boundary', () => {
+  it('accepts an empty custom map and refuses malformed effective provenance or mandatory gates', () => {
+    const report = {
+      policy: { version: 2, default: 'ticket-assured', green_main_goal_minutes: 360 },
+      effective: {
+        preset: 'ticket-assured',
+        source: 'session',
+        integration: 'serial',
+        local_gate: 'full-local',
+        require_green_main_sha: true,
+        attribute_red_ci_before_completion: true,
+        green_main_goal_minutes: null,
+      },
+      presets: ['ticket-assured', 'steady-main', 'risk-guided'],
+    };
+    expect(parseDevelopmentStrategyReport(report).policy.custom).toEqual({});
+    expect(() =>
+      parseDevelopmentStrategyReport({ ...report, effective: { ...report.effective, source: 'unknown' } }),
+    ).toThrow();
+    expect(() =>
+      parseDevelopmentStrategyReport({ ...report, effective: { ...report.effective, require_green_main_sha: 'yes' } }),
+    ).toThrow();
+  });
+});
 
 describe('HS2-2MZWZT advisory status parser', () => {
   const status = {

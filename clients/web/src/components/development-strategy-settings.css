@@ -1,0 +1,13 @@
+.development-strategy-settings {
+  min-width: 0;
+}
+
+.development-strategy-settings__cadence {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.development-strategy-settings__source {
+  min-width: 0;
+  word-break: break-all;
+}

@@ -28,6 +28,7 @@ import {
   type CommandLaunch,
   type CorruptTicket,
   type CustomView,
+  type DevelopmentStrategyReport,
   type DuplicateBacklink,
   type FullTicket,
   type GuidanceAction,
@@ -66,6 +67,13 @@ import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
+import {
+  changeDevelopmentStrategyField,
+  type DevelopmentStrategyDraft,
+  draftFromDevelopmentReport,
+  policyFromDevelopmentDraft,
+  selectDevelopmentStrategy,
+} from '../components/development-strategy-settings-interactions';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
 import type { NoteMetadataDialogState, NoteMetadataMode } from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
@@ -323,6 +331,13 @@ export async function startHotSheetWebClient() {
     // HS2-7WE7CQ: the project's sources for Workers coverage; undefined while not loaded.
     workerSources = signal<WorkerCoverageSource[] | undefined>(undefined),
     workerLoading = signal(false);
+  const developmentReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
+    developmentPreviewReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
+    developmentDrafts = signal<Record<string, DevelopmentStrategyDraft | undefined>>({}),
+    developmentMessages = signal<Record<string, string>>({}),
+    developmentStatuses = signal<Record<string, string>>({}),
+    developmentLoading = signal<Record<string, boolean>>({}),
+    developmentSaving = signal<Record<string, boolean>>({});
   const { corruptRecovery, revealCorruptTicket, queueCorruptTicketRepair } = createCorruptTicketRecoveryController({
     project: () => project(),
     corruptTickets,
@@ -1473,7 +1488,10 @@ export async function startHotSheetWebClient() {
       sources = current ? defaultProviders.value[current.id]?.sources : undefined,
       gitSources = sources?.filter((source) => source.provider === 'git').map((source) => source.connectionId) ?? [],
       key =
-        current && viewMode.value === 'workers' && sources
+        current &&
+        (viewMode.value === 'workers' ||
+          (viewMode.value === 'settings' && selectedSettingsCategory.value === 'development-strategy')) &&
+        sources
           ? `${current.id}:${current.apiPath}:${gitSources.join(',')}`
           : '';
     if (key === workerStreamKey) return;
@@ -1646,6 +1664,122 @@ export async function startHotSheetWebClient() {
     ]),
   ];
   const settingsCategory = () => selectedSettingsCategory.value;
+  let developmentRequestKey = '';
+  const developmentReadVersions = new Map<string, number>();
+  function invalidateDevelopmentReads(id: string): number {
+    const version = (developmentReadVersions.get(id) ?? 0) + 1;
+    developmentReadVersions.set(id, version);
+    developmentLoading.value = { ...developmentLoading.value, [id]: false };
+    return version;
+  }
+  async function refreshDevelopmentStrategy(current: Project) {
+    const id = current.id,
+      version = invalidateDevelopmentReads(id);
+    developmentLoading.value = { ...developmentLoading.value, [id]: true };
+    developmentMessages.value = { ...developmentMessages.value, [id]: '' };
+    try {
+      const report = await new Api(current.apiPath, '').developmentStrategy(id);
+      if (developmentReadVersions.get(id) !== version) return;
+      developmentReports.value = { ...developmentReports.value, [id]: report };
+      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
+      developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(report) };
+    } catch (error) {
+      if (developmentReadVersions.get(id) !== version) return;
+      developmentMessages.value = {
+        ...developmentMessages.value,
+        [id]: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      if (developmentReadVersions.get(id) === version) {
+        developmentLoading.value = { ...developmentLoading.value, [id]: false };
+      }
+    }
+  }
+  effect(() => {
+    const current = project(),
+      key =
+        current && viewMode.value === 'settings' && selectedSettingsCategory.value === 'development-strategy'
+          ? `${current.id}:${current.apiPath}`
+          : '';
+    if (developmentRequestKey === key) return;
+    developmentRequestKey = key;
+    if (key && current) void refreshDevelopmentStrategy(current);
+  });
+  function updateDevelopmentStrategyField(field: string, value: string | boolean) {
+    const current = project();
+    if (!current) return;
+    const report = developmentReports.value[current.id],
+      draft = developmentDrafts.value[current.id];
+    if (!report || !draft) return;
+    invalidateDevelopmentReads(current.id);
+    developmentDrafts.value = {
+      ...developmentDrafts.value,
+      [current.id]:
+        field === 'selection' && typeof value === 'string'
+          ? selectDevelopmentStrategy(draft, value, report.policy)
+          : changeDevelopmentStrategyField(draft, field, value),
+    };
+    developmentMessages.value = { ...developmentMessages.value, [current.id]: '' };
+    developmentStatuses.value = { ...developmentStatuses.value, [current.id]: '' };
+    developmentPreviewReports.value = { ...developmentPreviewReports.value, [current.id]: undefined };
+  }
+  async function saveDevelopmentStrategy() {
+    const current = project();
+    if (!current) return;
+    const id = current.id,
+      report = developmentReports.value[id],
+      draft = developmentDrafts.value[id];
+    if (!report || !draft || developmentSaving.value[id]) return;
+    invalidateDevelopmentReads(id);
+    developmentSaving.value = { ...developmentSaving.value, [id]: true };
+    developmentMessages.value = { ...developmentMessages.value, [id]: '' };
+    try {
+      const policy = policyFromDevelopmentDraft(report.policy, draft),
+        saved = await new Api(current.apiPath, '').saveDevelopmentStrategy(id, policy);
+      invalidateDevelopmentReads(id);
+      developmentReports.value = { ...developmentReports.value, [id]: saved };
+      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
+      if (developmentDrafts.value[id] === draft) {
+        developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(saved) };
+      }
+      developmentStatuses.value = { ...developmentStatuses.value, [id]: 'Development strategy saved.' };
+    } catch (error) {
+      developmentMessages.value = {
+        ...developmentMessages.value,
+        [id]: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      developmentSaving.value = { ...developmentSaving.value, [id]: false };
+    }
+  }
+  async function previewDevelopmentStrategy() {
+    const current = project();
+    if (!current) return;
+    const id = current.id,
+      draft = developmentDrafts.value[id];
+    if (!draft) return;
+    const version = invalidateDevelopmentReads(id);
+    developmentMessages.value = { ...developmentMessages.value, [id]: '' };
+    developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
+    try {
+      const report = await new Api(current.apiPath, '').developmentStrategy(id, {
+        session: draft.sessionOverride.trim() || undefined,
+        ticket: draft.ticketOverride.trim() || undefined,
+      });
+      if (developmentReadVersions.get(id) !== version) return;
+      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: report };
+      developmentStatuses.value = {
+        ...developmentStatuses.value,
+        [id]: 'Effective policy preview; project settings unchanged.',
+      };
+    } catch (error) {
+      if (developmentReadVersions.get(id) !== version) return;
+      developmentMessages.value = {
+        ...developmentMessages.value,
+        [id]: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
   function setSettingsCategory(_projectId: string, category: SettingsCategory) {
     selectedSettingsCategory.value = category;
     if (category === 'guidance') void refreshGuidance();
@@ -4708,6 +4842,28 @@ export async function startHotSheetWebClient() {
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
   const { settingsWorkspace } = createSettingsSurface({
     settingsCategory: () => settingsCategory(),
+    developmentStrategy: (projectId) => {
+      const current = projects.value.find((item) => item.id === projectId),
+        gitSources =
+          defaultProviders.value[projectId]?.sources
+            .filter((source) => source.provider === 'git')
+            .map((source) => source.connectionId) ?? [],
+        sourceIds = new Set(gitSources),
+        currentStream = current && workerStreamKey === `${current.id}:${current.apiPath}:${gitSources.join(',')}`;
+      return {
+        report: developmentPreviewReports.value[projectId] ?? developmentReports.value[projectId],
+        draft: developmentDrafts.value[projectId],
+        loading: developmentLoading.value[projectId] ?? false,
+        saving: developmentSaving.value[projectId] ?? false,
+        message: developmentMessages.value[projectId] ?? '',
+        status: developmentStatuses.value[projectId] ?? '',
+        cadence: currentStream
+          ? Object.entries(workerViews.value)
+              .filter(([source, view]) => sourceIds.has(source) && view.cadence)
+              .map(([source, view]) => ({ source, value: view.cadence! }))
+          : [],
+      };
+    },
     defaultProviders,
     providerConnections,
     providerSettingsError,
@@ -6047,6 +6203,9 @@ export async function startHotSheetWebClient() {
     resetProgressiveTicketRendering,
     viewMode,
     setSettingsCategory,
+    updateDevelopmentStrategyField,
+    saveDevelopmentStrategy,
+    previewDevelopmentStrategy,
     refreshProviderConnections,
     refreshTerminalSettings,
     terminalLimitsSettings,

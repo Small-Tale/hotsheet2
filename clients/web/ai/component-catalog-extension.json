@@ -740,6 +740,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "development-strategy-settings",
+      "name": "DevelopmentStrategySettings",
+      "kind": "component",
+      "purpose": "Project development policy, Custom strategy validation feedback, and live green-main cadence.",
+      "useWhen": [
+        "Hot Sheet project settings must show and edit shared development policy and live cadence."
+      ],
+      "avoidWhen": [
+        "The interaction does not need project development policy."
+      ],
+      "publicClasses": [
+        "development-strategy-settings"
+      ],
+      "publicTokens": [],
+      "source": "src/components/development-strategy-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "drive-control",
       "name": "DriveControl",
       "kind": "component",

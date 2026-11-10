@@ -18,6 +18,7 @@ export const SETTINGS_WORKSPACE_DEMO_CATEGORIES: readonly SettingsCategory[] = [
   'terminals',
   'permissions',
   'columns',
+  'development-strategy',
   'general',
   'accounts',
   'terminal-memory',

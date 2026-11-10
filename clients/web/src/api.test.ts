@@ -36,6 +36,42 @@ const urlOf = (input: RequestInfo | URL) =>
 /** A checkout-scoped ticket response, which also names its source store. */
 const storedTicket = (store = 'git', overrides: Record<string, unknown> = {}) => ({ store, ...fullTicket(overrides) });
 
+describe('HS2-NBDXPW development strategy API', () => {
+  it('encodes explicit override precedence and saves the shared project policy', async () => {
+    const report = {
+      policy: { version: 2, default: 'steady-main', green_main_goal_minutes: 360, custom: {} },
+      effective: {
+        preset: 'risk-guided',
+        source: 'ticket',
+        integration: 'ci-staged',
+        local_gate: 'risk-selected',
+        require_green_main_sha: true,
+        attribute_red_ci_before_completion: true,
+        green_main_goal_minutes: null,
+      },
+      presets: ['ticket-assured', 'steady-main', 'risk-guided'],
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify(report)));
+    try {
+      const api = new Api('/api');
+      expect(
+        (await api.developmentStrategy('project 1', { session: 'steady-main', ticket: 'risk-guided' })).effective
+          .source,
+      ).toBe('ticket');
+      await api.saveDevelopmentStrategy('project 1', report.policy as Parameters<Api['saveDevelopmentStrategy']>[1]);
+      expect(urlOf(fetchMock.mock.calls[0][0])).toBe(
+        '/api/checkouts/project%201/development-strategy?session=steady-main&ticket=risk-guided',
+      );
+      expect(urlOf(fetchMock.mock.calls[1][0])).toBe('/api/checkouts/project%201/development-strategy');
+      expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({ method: 'PUT' }));
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});
+
 describe('server-busy tracking option (HS2-AZZ9TF)', () => {
   it('tracks ordinary requests but leaves quiet background clients off the busy indicator', async () => {
     let release: (() => void) | undefined;

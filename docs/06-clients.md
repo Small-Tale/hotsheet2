@@ -950,7 +950,7 @@ preview/download, server directory browser) are separate design work.
   (HS2-C7GMQN). It is there for phones, whose project picker has no tab close button; it
   shows at every width. It closes the project in this window only. Forgetting a registered
   project (`DELETE /checkouts/{reference}`, `hotsheet-cli checkout remove`) stays headless.
-  Ticket sources, Commands, Lifecycle, Permissions, and Column view each render as a
+  Ticket sources, Commands, Lifecycle, Permissions, Column view, and Development strategy each render as a
   separate workspace so unrelated controls do not become one long settings page.
   Ticket sources are never global (HS2-SM9PM8, see
   [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
@@ -1034,20 +1034,21 @@ preview/download, server directory browser) are separate design work.
   `settings-storage-scope.test.ts` resolves it through the project bridge, so a setting
   filed under the wrong group fails the build:
 
-  | Group   | Category        | Stored in                                                                                                | Scope                   |
-  | ------- | --------------- | -------------------------------------------------------------------------------------------------------- | ----------------------- |
-  | Project | Ticket sources  | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source`         | this project, machine   |
-  | Project | AI tools        | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                             | this project, machine   |
-  | Project | Commands        | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                           | this project, machine   |
-  | Project | Lifecycle       | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                                       | this project, committed |
-  | Project | Terminals       | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                                     | this project, machine   |
-  | Project | Permissions     | `/checkouts/{id}/permission-automation` (`Scope::Local`)                                                 | this project, machine   |
-  | Project | Column view     | `localStorage hotsheet.project.{id}.hide-verified-column`                                                | this project, browser   |
-  | App     | General         | `localStorage hotsheet.show-loading-activity`                                                            | every project, browser  |
-  | App     | Accounts        | `/accounts` (credential names from `providers.json` + `keys.json`)                                       | every project, machine  |
-  | App     | Terminal memory | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                        | every project, machine  |
-  | App     | Notifications   | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1) | every project, machine  |
-  | App     | Keyboard        | `localStorage hotsheet.keyboard-shortcuts`                                                               | every project, browser  |
+  | Group   | Category             | Stored in                                                                                                | Scope                   |
+  | ------- | -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------- |
+  | Project | Ticket sources       | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source`         | this project, machine   |
+  | Project | AI tools             | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                             | this project, machine   |
+  | Project | Commands             | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                           | this project, machine   |
+  | Project | Lifecycle            | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                                       | this project, committed |
+  | Project | Terminals            | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                                     | this project, machine   |
+  | Project | Permissions          | `/checkouts/{id}/permission-automation` (`Scope::Local`)                                                 | this project, machine   |
+  | Project | Column view          | `localStorage hotsheet.project.{id}.hide-verified-column`                                                | this project, browser   |
+  | Project | Development strategy | `/checkouts/{id}/development-strategy` (`development_strategy`, `Scope::Shared`)                         | this project, committed |
+  | App     | General              | `localStorage hotsheet.show-loading-activity`                                                            | every project, browser  |
+  | App     | Accounts             | `/accounts` (credential names from `providers.json` + `keys.json`)                                       | every project, machine  |
+  | App     | Terminal memory      | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                        | every project, machine  |
+  | App     | Notifications        | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1) | every project, machine  |
+  | App     | Keyboard             | `localStorage hotsheet.keyboard-shortcuts`                                                               | every project, browser  |
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,
@@ -1057,6 +1058,16 @@ preview/download, server directory browser) are separate design work.
   app CSS only for its branded icon disc (HS2-0ZF0KS). The application root retains
   reactive signals, API mutations, and delegated event wiring and passes typed render
   data into those surfaces (HS2-HTB5RR).
+  **Project Settings → Development strategy** reads and writes the same versioned shared
+  project policy as the CLI (HS2-NBDXPW, docs/34). It describes the three built-ins,
+  edits a named Custom strategy with the server's mandatory-gate validation, and keeps an
+  invalid draft visible with its refusal. Session and ticket strategy names can be
+  previewed without saving them; the effective report names its source and ticket takes
+  precedence. The current project's green-main cadence and last green promotion come
+  from the Workers event stream while this category is visible. Switching projects resets
+  the stream, so no previous project's status can leak into the new one. No fixed-interval
+  network request is used. The integration-only editor and Workers badge remain
+  HS2-SVD5WA's separate surface.
   The workspace toolbar (or the mobile page header) titles the selected settings category, so
   settings pages never repeat that title as an in-page heading (HS2-FV538C, HS2-QEQ1YB,
   HS2-MF9D1K). The mobile page header belongs to the header area and sits on its default

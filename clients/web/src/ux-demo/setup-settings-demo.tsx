@@ -6,6 +6,7 @@ import { Row } from '@kerfjs/ui/row';
 import { attr, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { draftFromDevelopmentReport } from '../components/development-strategy-settings-interactions';
 import { KeyboardSettings } from '../components/keyboard-settings';
 import {
   PERMISSION_RULE_BATCH_SIZE,
@@ -31,6 +32,7 @@ import { createPermissionRuleEditorFocus } from '../permission-rule-editor-focus
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
+import { DEMO_DEVELOPMENT_REPORT, DevelopmentStrategySettingsDemo } from './development-strategy-settings-demo';
 import { DEMO_ACCOUNTS, DEMO_PROJECT_SOURCES, DEMO_TERMINAL_LIMITS, DEMO_TERMINAL_LIMITS_CONFIGURED } from './fixtures';
 import { syncSettingsControls } from './settings-controls';
 import {
@@ -262,6 +264,10 @@ export function SettingsWorkspaceDemo() {
           delays: [0, 15_000, 60_000, 120_000],
         }}
         columns={{ hideVerified: false }}
+        developmentStrategy={{
+          report: DEMO_DEVELOPMENT_REPORT,
+          draft: draftFromDevelopmentReport(DEMO_DEVELOPMENT_REPORT),
+        }}
         general={{ showLoadingActivity: true }}
         keyboard={{ overrides: {}, apple: true }}
       />
@@ -1165,6 +1171,7 @@ export const demoModule: DemoModule = {
       Settings: SettingsWorkspaceSettings,
       reset: resetSettingsWorkspaceDemo,
     },
+    'development-strategy-settings': { catalogExamples: true, Demo: DevelopmentStrategySettingsDemo },
     'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo, reset: resetTrashSettingsDemo },
     'terminal-memory-settings': { catalogExamples: true, Demo: TerminalMemorySettingsDemo },
     'permission-rules-settings': {
