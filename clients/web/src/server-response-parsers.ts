@@ -1227,6 +1227,7 @@ const terminalOptional: Record<string, Check> = {
   kind: isString,
   tool: isString,
   cwd: isString,
+  launch_cwd: isString,
   name: isString,
   progress: isNumber,
   halt: isObject,

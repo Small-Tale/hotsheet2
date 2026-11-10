@@ -76,6 +76,36 @@ const terminals = (ids: string[]) =>
   new Response(JSON.stringify(ids.map((id) => ({ id, alive: true, busy: false, cwd: '/work/a' }))));
 
 describe('terminal dashboard owner (HS2-ZJ67VE)', () => {
+  it('HS2-S46J0W keeps a terminal in its launch project after its shell enters another checkout', async () => {
+    const state = owner(signal([project('a'), project('b')]));
+    const moved = new Response(
+      JSON.stringify([{ id: 't1', alive: true, busy: false, launch_cwd: '/work/a', cwd: '/work/b' }]),
+    );
+    fetchMock.mockResolvedValueOnce(moved).mockResolvedValueOnce(moved.clone());
+    await state.controller.refreshTerminalDashboard();
+    expect(
+      state.terminalGroups.value.find((group) => group.projectId === 'a')?.sessions.map((session) => session.id),
+    ).toEqual(['t1']);
+    expect(state.terminalGroups.value.find((group) => group.projectId === 'b')?.sessions).toEqual([]);
+    expect(state.terminalGroups.value[0].sessions[0].cwd).toBe('/work/b');
+    state.controller.dispose();
+  });
+
+  it('HS2-S46J0W attributes an external launch after its shell reports an open project', async () => {
+    const state = owner();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { id: 't1', alive: true, busy: false, launch_cwd: '/tmp/launcher', cwd: '/work/a' },
+          { id: 'outside', alive: true, busy: false, launch_cwd: '/tmp/launcher', cwd: '/tmp/elsewhere' },
+        ]),
+      ),
+    );
+    await state.controller.refreshTerminalDashboard();
+    expect(state.terminalGroups.value[0].sessions.map((session) => session.id)).toEqual(['t1']);
+    state.controller.dispose();
+  });
+
   it('loads owned terminals with local names, keeps the last snapshot on failure, and persists tab order', async () => {
     const state = owner();
     fetchMock.mockResolvedValueOnce(terminals(['t1', 't2']));

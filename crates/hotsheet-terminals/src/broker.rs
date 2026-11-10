@@ -272,6 +272,9 @@ pub struct BrokerTermInfo {
     pub busy: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    /// Immutable directory supplied when the PTY was opened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -294,6 +297,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
         alive: term.is_alive(),
         busy: term.activity() == crate::busy::Activity::Busy,
         cwd: osc.cwd,
+        launch_cwd: term.launch_cwd().map(str::to_string),
         link: osc.link,
         progress: osc.progress,
         worker: term.worker_id().map(str::to_string),

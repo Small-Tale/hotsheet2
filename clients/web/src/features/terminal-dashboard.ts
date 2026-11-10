@@ -162,7 +162,11 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
                 ? [refreshDriveConnections(current, true, quiet)]
                 : []),
             ]),
-            owned = infos.filter((session) => terminalProjectOwner(openProjects, session.cwd) === current.id),
+            owned = infos.filter(
+              (session) =>
+                (terminalProjectOwner(openProjects, session.launch_cwd) ??
+                  terminalProjectOwner(openProjects, session.cwd)) === current.id,
+            ),
             defaultNames = defaultTerminalNames(owned, aiToolLabel),
             sessions = owned.map((session, index) => {
               const localName = terminalNames()[terminalNameKey(current.id, session.id)];

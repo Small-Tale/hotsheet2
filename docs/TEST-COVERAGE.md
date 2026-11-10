@@ -2710,3 +2710,8 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
 - Unit: `crates/hotsheet-plugins/src/tests.rs # hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical` checks the declared skill count, manifest-installed bodies, byte-identical mirrors, and the skill's required instructions.
 - End to end: a synthetic store and linked checkout with an isolated `HOTSHEET_HOME` exercised baseline and v1 batches, maintainer annotations (change, question, text-less), a v2 batch with change log, sign-off, and a qualified follow-up through the current CLI (recorded on HS2-C679CZ; not an automated suite).
 - Manual: a live Kerf design-mock capture needs `@kerfjs/ui` 5.0.0-beta.129 or newer; non-git provider capability stops need a provider connection.
+
+### Terminal ownership after shell navigation (HS2-S46J0W)
+
+- Unit: `crates/hotsheet-terminals/src/terminal.rs` keeps the immutable launch directory after OSC 7 changes the current directory; `clients/web/src/features/terminal-dashboard.test.ts` keeps the tab in its launch project, attributes an external launch by its reported directory, and excludes a terminal outside every open project.
+- End to end: `crates/hotsheet-server/tests/terminal_ws.rs` runs `git status` in a synthetic sibling checkout through a live shell and checks that the server reports both directories while the shell remains alive; `clients/web/tests/terminal-project-switch.spec.ts` checks the real drawer composition with the moved shell response.

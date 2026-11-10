@@ -352,6 +352,8 @@ enum Decided {
 /// A running PTY terminal.
 pub struct Terminal {
     kind: TerminalKind,
+    /// Directory chosen at launch; unlike OSC 7 cwd, it never follows shell navigation.
+    launch_cwd: Option<String>,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
     /// Ordered input drained by a dedicated writer thread, so a PTY that is not accepting
@@ -624,7 +626,9 @@ impl Terminal {
             OUTPUT_CHANNEL_CAP,
         ));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
-        let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(initial_cwd)));
+        let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(
+            initial_cwd.clone(),
+        )));
         let (out, bz, oc) = (output.clone(), busy.clone(), osc.clone());
         std::thread::spawn(move || {
             #[cfg(test)]
@@ -657,6 +661,7 @@ impl Terminal {
         sizer.set_applied(spec.cols, spec.rows);
         Ok(Terminal {
             kind: spec.kind,
+            launch_cwd: initial_cwd,
             master,
             child,
             input: InputQueue::spawn(writer),
@@ -679,6 +684,10 @@ impl Terminal {
     /// The immutable creation kind, independent of the process's output or current command.
     pub fn kind(&self) -> TerminalKind {
         self.kind
+    }
+
+    pub fn launch_cwd(&self) -> Option<&str> {
+        self.launch_cwd.as_deref()
     }
 
     /// A viewport's size claim (HS2-BD7Q74): update the arbiter and, if the reconciled size
@@ -1229,6 +1238,20 @@ mod tests {
         );
         let plain = Terminal::spawn(TermSpec::new("true")).expect("spawn");
         assert_eq!(plain.worker_id(), None);
+    }
+
+    #[test]
+    fn hs2_s46j0w_launch_directory_survives_osc_cwd_changes() {
+        let launch = tempfile::tempdir().unwrap();
+        let mut spec = TermSpec::new("printf");
+        spec.cwd = Some(launch.path().to_path_buf());
+        spec.args = vec!["\x1b]7;file://host/tmp/sibling-checkout\x07".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        assert!(wait_until(
+            || term.term_state().cwd.as_deref() == Some("/tmp/sibling-checkout"),
+            5
+        ));
+        assert_eq!(term.launch_cwd(), launch.path().to_str());
     }
 
     /// HS2-BCE5XG: a command that writes and exits before the drain thread starts reading

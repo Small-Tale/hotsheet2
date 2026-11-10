@@ -1115,6 +1115,8 @@ export interface TerminalInfo {
   alive: boolean;
   busy: boolean;
   cwd?: string;
+  /** Directory where this terminal was opened; stays fixed as the shell changes directory. */
+  launch_cwd?: string;
   link?: string;
   progress?: number;
   /** The saved tab name shared by every client of this server (HS2-89FPV1); absent until renamed. */

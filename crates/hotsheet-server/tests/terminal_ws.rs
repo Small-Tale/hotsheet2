@@ -12,6 +12,70 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 const SECRET: &str = "test-secret";
 
+#[tokio::test]
+async fn hs2_s46j0w_git_status_in_sibling_checkout_keeps_terminal_owned_by_launch_directory() {
+    let launch = tempfile::tempdir().unwrap();
+    let sibling = tempfile::tempdir().unwrap();
+    let git = hotsheet_ticketing::git::command_in(sibling.path())
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(git.success());
+    let store = FsStore::init(launch.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+    let base = format!("http://{addr}");
+    let launch_path = launch.path().to_string_lossy().into_owned();
+    let sibling_path = sibling.path().to_string_lossy().into_owned();
+    tokio::task::spawn_blocking(move || {
+        let body = serde_json::json!({
+            "id": "sibling-git-status",
+            "command": "/bin/sh",
+            "args": ["-i"],
+            "cwd": launch_path,
+        });
+        let opened = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&body.to_string())
+            .unwrap();
+        assert_eq!(opened.status(), 200);
+        let input = format!(
+            "cd '{sibling_path}'\ngit status\nprintf '\\033]7;file://host{sibling_path}\\007'\nprintf 'done-marker\\n'\n"
+        );
+        ureq::post(&format!("{base}/terminals/sibling-git-status/input"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&serde_json::json!({ "data": input }).to_string())
+            .unwrap();
+        for _ in 0..200 {
+            let value: serde_json::Value = serde_json::from_str(
+                &ureq::get(&format!("{base}/terminals/sibling-git-status"))
+                    .set("x-hotsheet-secret", SECRET)
+                    .call()
+                    .unwrap()
+                    .into_string()
+                    .unwrap(),
+            )
+            .unwrap();
+            if value["scrollback"].as_str().unwrap_or_default().contains("done-marker")
+                && value["cwd"] == sibling_path
+            {
+                assert!(value["scrollback"].as_str().unwrap().contains("On branch"));
+                assert!(value["alive"].as_bool().unwrap_or(false));
+                assert_eq!(value["launch_cwd"], launch_path);
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("shell did not complete git status and report the sibling cwd");
+    })
+    .await
+    .unwrap();
+}
+
 async fn wait_for_terminal_text(base: String, id: String, needle: &'static str) {
     tokio::task::spawn_blocking(move || {
         for _ in 0..100 {

@@ -527,6 +527,9 @@ pub(crate) struct TerminalInfo {
     /// The shell's reported working directory (OSC 7), if any (HS2-RCKEJ9).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cwd: Option<String>,
+    /// Immutable launch directory used for project ownership (HS2-S46J0W).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) launch_cwd: Option<String>,
     /// A currently-open hyperlink URI (OSC 8), if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     link: Option<String>,
@@ -826,6 +829,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         alive: term.is_alive(),
         busy: term.activity() == hotsheet_terminals::Activity::Busy,
         cwd: osc.cwd,
+        launch_cwd: term.launch_cwd().map(str::to_string),
         link: osc.link,
         progress: osc.progress,
         tool: ai_terminal_tool(term.kind(), term.worker_id(), id),
@@ -847,6 +851,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         alive: bi.alive,
         busy: bi.busy,
         cwd: bi.cwd,
+        launch_cwd: bi.launch_cwd,
         link: bi.link,
         progress: bi.progress,
         tool,

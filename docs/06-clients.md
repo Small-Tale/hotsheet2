@@ -3581,13 +3581,14 @@ remembered active root fails its first open, or there is none, the client waits 
 and the one bounded retry, then restores the remembered active healthy or failed tab as before.
 
 The terminal service is host-wide, while drawers are project-specific. The client assigns
-each terminal to the most-specific open project root containing its reported working
-directory before it builds drawer tabs or the workspace grid. A terminal therefore appears
-once in the global grid and only in its owning project's drawer, including when several open
-projects share the same server process. The terminal service reports the launch request's
-working directory immediately, before a shell emits OSC 7, and replaces it when a later OSC 7
-update arrives. Short-lived configured commands and shells without OSC integration therefore
-remain attributable to the correct project from their first response.
+each terminal to the most-specific open project root containing its immutable launch
+directory before it builds drawer tabs or the workspace grid (HS2-S46J0W). A shell may
+change directory, including into another checkout, without moving or closing its tab. A terminal
+therefore appears once in the global grid and only in its owning project's drawer, including when several open
+projects share the same server process. The service also reports the shell's current
+directory from OSC 7 for display and checkout hosting. When the launch directory belongs to
+no open project, the client uses the reported directory; older servers lacking a separate
+launch directory use that same fallback.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. It belongs to ticket views only: the

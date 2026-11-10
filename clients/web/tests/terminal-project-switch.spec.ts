@@ -28,7 +28,7 @@ type SwitchWindow = typeof window & {
   __frames?: Array<{ project?: string; tagged: boolean; text: string }>;
 };
 
-async function installWorkspace(page: Page) {
+async function installWorkspace(page: Page, movedShell = false) {
   await page.addInitScript(
     ({ roots, ids }) => {
       localStorage.setItem('hotsheet.open-projects', JSON.stringify(roots));
@@ -121,7 +121,17 @@ async function installWorkspace(page: Page) {
       });
     if (rest.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
     if (rest.endsWith('/terminals') && request.method() === 'GET')
-      return route.fulfill({ json: [{ id: 'shell', alive: true, busy: false, cwd: project.root }] });
+      return route.fulfill({
+        json: [
+          {
+            id: 'shell',
+            alive: true,
+            busy: false,
+            cwd: movedShell ? '/work/b' : project.root,
+            launch_cwd: project.root,
+          },
+        ],
+      });
     if (rest.endsWith('/tickets') && request.method() === 'GET')
       return route.fulfill({
         json: {
@@ -172,6 +182,19 @@ const attachSockets = (page: Page, id: string) =>
       ),
     id,
   );
+
+test('HS2-S46J0W keeps a moved shell tab in its launch project', async ({ page }, testInfo) => {
+  await installWorkspace(page, true);
+  await page.goto('/');
+  for (const width of [1440, 900, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(dedicated(page, 'a')).toBeVisible();
+    await expect(
+      page.locator('[data-component="terminal-drawer"] [data-tab-kind="terminal"][data-terminal-id="shell"]'),
+    ).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`moved-shell-${width}.png`) });
+  }
+});
 
 for (const [width, height] of [
   [1440, 900],
