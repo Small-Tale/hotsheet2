@@ -59,7 +59,7 @@ test('HS2-BF79YX rejects invalid or unauthorized gate policy', () => {
     /Invalid versioned/,
   );
   assert.throws(
-    () => developmentStrategyFromSettings({ development_strategy: { version: 2, default: 'ticket-assured' } }),
+    () => developmentStrategyFromSettings({ development_strategy: { version: 3, default: 'ticket-assured' } }),
     /Invalid versioned/,
   );
   assert.throws(
@@ -81,6 +81,108 @@ test('HS2-BF79YX rejects invalid or unauthorized gate policy', () => {
         undefined,
       ),
     /Conflicting/,
+  );
+});
+
+const fastCustom = {
+  integration: 'ci-staged',
+  local_gate: 'targeted',
+  minimum_tier: 'T1',
+  budget_minutes: 5,
+  browser: false,
+  platform: false,
+  perf: false,
+  test_plan_timing: 'before-handoff',
+  ci_gate: 'CI',
+  staging_branch: 'integration',
+  green_main_goal_minutes: 180,
+  red_ci_recovery: 'fallback-to-serial',
+};
+const strictCustom = {
+  integration: 'serial',
+  local_gate: 'full-local',
+  minimum_tier: 'T2',
+  browser: true,
+  platform: true,
+  perf: false,
+  test_plan_timing: 'before-work',
+  ci_gate: 'CI',
+  red_ci_recovery: 'attribute-and-retry',
+};
+const customSettings = {
+  development_strategy: {
+    version: 2,
+    default: 'ticket-assured',
+    default_custom: 'fast',
+    custom: { fast: fastCustom, strict: strictCustom },
+  },
+  integration_strategies: { allowed: [{ strategy: 'ci-staged', staging_branch: 'integration', reason: 'green main' }] },
+};
+
+test('HS2-ARJNJV named custom strategies raise floors and preserve precedence and rollback', () => {
+  assert.equal(developmentStrategyFromSettings(customSettings).preset, 'fast');
+  const selected = withDevelopmentStrategy(profileFromTags(ticket('HS2-A', ['tier:T0'])), customSettings, undefined);
+  assert.equal(selected.tier, 'T1');
+  assert.equal(selected.budgetMs, 300_000);
+  assert.equal(selected.deep, false);
+  const strict = withDevelopmentStrategy(
+    profileFromTags(ticket('HS2-A', ['tier:T1', 'development-strategy:strict'])),
+    customSettings,
+    'fast',
+  );
+  assert.equal(strict.developmentStrategy.source, 'ticket');
+  assert.equal(strict.tier, 'T2');
+  assert.equal(strict.deep, true);
+  assert.equal(strict.browser, true);
+  assert.equal(strict.platform, true);
+  assert.equal(developmentStrategyFromSettings(customSettings, { ticket: 'risk-guided' }).preset, 'risk-guided');
+  const rollback = {
+    ...customSettings,
+    development_strategy: {
+      ...customSettings.development_strategy,
+      default_custom: undefined,
+      default: 'ticket-assured',
+    },
+  };
+  assert.equal(developmentStrategyFromSettings(rollback).preset, 'ticket-assured');
+});
+
+test('HS2-ARJNJV refuses unsupported custom capabilities and invalid constraints', () => {
+  const withFast = (fast) => ({
+    ...customSettings,
+    development_strategy: { ...customSettings.development_strategy, custom: { fast, strict: strictCustom } },
+  });
+  assert.throws(() => developmentStrategyFromSettings(withFast({ ...fastCustom, ci_gate: '' })), /CI gate/);
+  assert.throws(() => developmentStrategyFromSettings(withFast({ ...fastCustom, ci_gate: 'Missing CI' })), /CI gate/);
+  assert.throws(
+    () => developmentStrategyFromSettings(withFast({ ...fastCustom, red_ci_recovery: 'attribute-and-retry' })),
+    /circuit breaker/,
+  );
+  assert.throws(
+    () => developmentStrategyFromSettings(withFast({ ...fastCustom, staging_branch: undefined })),
+    /staging branch/,
+  );
+  assert.throws(() => developmentStrategyFromSettings(withFast({ ...fastCustom, minimum_tier: 'T2' })), /budget a T2/);
+  assert.throws(
+    () => developmentStrategyFromSettings({ ...customSettings, integration_strategies: { allowed: [] } }),
+    /allowed ci-staged/,
+  );
+  assert.throws(
+    () =>
+      developmentStrategyFromSettings({
+        ...customSettings,
+        development_strategy: { ...customSettings.development_strategy, version: 1 },
+      }),
+    /Version 1/,
+  );
+  assert.throws(
+    () =>
+      withDevelopmentStrategy(
+        profileFromTags(ticket('HS2-A', ['tier:T1', 'test-budget:10m', 'development-strategy:strict'])),
+        customSettings,
+        undefined,
+      ),
+    /T2 custom strategy cannot use/,
   );
 });
 

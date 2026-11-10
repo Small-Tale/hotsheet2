@@ -317,6 +317,9 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
       const pool = (...args: string[]) => hs('coordination', '--project', root, ...args);
       await git('init', '-q', '-b', 'main');
       await git('commit', '-q', '--allow-empty', '-m', 'synthetic base');
+      await mkdir(join(root, '.github/workflows'), { recursive: true });
+      await writeFile(join(root, '.github/workflows/ci.yml'), 'name: CI\non: push\n');
+      await git('remote', 'add', 'origin', 'https://example.invalid/synthetic.git');
       // HS2-83KFB5: an external source coordination cannot cover by design, and one whose
       // metadata cannot be read, so the views carry real coverage gaps. No secret resolves.
       await writeFile(
@@ -501,6 +504,32 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
       integration: 'serial',
       local_gate: 'risk-selected',
     });
+    const strict = {
+      version: 2,
+      default: 'ticket-assured',
+      green_main_goal_minutes: 360,
+      default_custom: 'strict-review',
+      custom: {
+        'strict-review': {
+          integration: 'serial',
+          local_gate: 'full-local',
+          minimum_tier: 'T2',
+          browser: true,
+          platform: true,
+          perf: false,
+          test_plan_timing: 'before-work',
+          ci_gate: 'CI',
+          red_ci_recovery: 'attribute-and-retry',
+        },
+      },
+    };
+    const customReport = await server.request<unknown>(
+      `/checkouts/${server.checkoutId}/development-strategy`,
+      'PUT',
+      strict,
+    );
+    expect(developmentReport(customReport), JSON.stringify(developmentReport.errors)).toBe(true);
+    expect(customReport).toMatchObject({ effective: { preset: 'strict-review', source: 'project' } });
   } finally {
     await server.stop();
   }

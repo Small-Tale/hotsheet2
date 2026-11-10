@@ -125,7 +125,8 @@ export function importCiTimings(repo, directory) {
   };
   const reports = Object.fromEntries(Object.entries(paths).filter(([, path]) => existsSync(path)));
   const jobs = join(directory, 'jobs.json');
-  if (!Object.keys(reports).length && !existsSync(jobs)) throw new Error('No CI timing artifacts found in the named directory.');
+  if (!Object.keys(reports).length && !existsSync(jobs))
+    throw new Error('No CI timing artifacts found in the named directory.');
   const roots = { nextest: repo, vitest: join(repo, 'clients/web'), playwright: join(repo, 'clients/web') };
   mkdirSync(dirname(timingPath(repo)), { recursive: true });
   const manifest = read(join(directory, 'manifest.json')) ?? {};
@@ -416,8 +417,16 @@ export function smokeStages(repo) {
 }
 
 function prepareSmoke(repo, baseRef, versions, options) {
-  if (options.tier || options.budgetMs !== undefined || options.ticket || options.analyzed?.length)
-    throw new Error('--smoke cannot be combined with --full, --ticket, --tier, --t2-stage or --budget.');
+  if (
+    options.tier ||
+    options.budgetMs !== undefined ||
+    options.ticket ||
+    options.analyzed?.length ||
+    options.proposed?.length
+  )
+    throw new Error(
+      '--smoke cannot be combined with --full, --ticket, --tier, --t2-stage, --propose-stage or --budget.',
+    );
   const state = collect(repo, baseRef);
   const checks = smokeStages(repo);
   const tools = versions ?? toolVersions(repo);
@@ -470,7 +479,10 @@ function prepareSmoke(repo, baseRef, versions, options) {
 
 export function prepare(repo, baseRef, full = false, versions, options = {}) {
   if (options.smoke) {
-    if (full) throw new Error('--smoke cannot be combined with --full, --ticket, --tier, --t2-stage or --budget.');
+    if (full)
+      throw new Error(
+        '--smoke cannot be combined with --full, --ticket, --tier, --t2-stage, --propose-stage or --budget.',
+      );
     return prepareSmoke(repo, baseRef, versions, options);
   }
   const state = collect(repo, baseRef);
@@ -567,6 +579,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     budgetMs,
     tier,
     analyzed: options.analyzed ?? [],
+    proposed: options.proposed ?? [],
     full: selected.mode === 'full' || profile?.deep === true,
     fullReason: profile?.deep ? 'deep-testing tag' : 'full fallback',
   });
@@ -586,6 +599,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     budgetMs,
     tier: budgeted.tier,
     analyzed: options.analyzed ?? [],
+    proposed: options.proposed ?? [],
     profile: profileIdentity,
     tools,
     dependencies,
@@ -631,9 +645,14 @@ function recordedT2Selection(repo, base, full, versions, selection) {
   for (const name of readdirSync(cache)) {
     if (!name.endsWith('.json') || name.startsWith('stage-')) continue;
     const receipt = read(join(cache, name));
-    if (receipt?.tree !== tree || receipt.tier !== 'T2' || !Array.isArray(receipt.analyzed) || !receipt.analyzed.length)
+    if (
+      receipt?.tree !== tree ||
+      receipt.tier !== 'T2' ||
+      !Array.isArray(receipt.analyzed) ||
+      !(receipt.analyzed.length || receipt.proposed?.length)
+    )
       continue;
-    const candidate = { ...selection, analyzed: receipt.analyzed };
+    const candidate = { ...selection, analyzed: receipt.analyzed, proposed: receipt.proposed ?? [] };
     let before;
     try {
       before = prepare(repo, base, full, versions, candidate);
@@ -662,18 +681,19 @@ export function runGate(options = {}) {
     budgetMs,
     tier,
     analyzed,
+    proposed,
     ticket,
     profile,
     smoke = false,
     log = console.log,
     env = withoutGitRepositoryEnv(process.env),
   } = options;
-  let selection = { budgetMs, tier, analyzed, ticket, profile, smoke };
+  let selection = { budgetMs, tier, analyzed, proposed, ticket, profile, smoke };
   let before;
   try {
     before = prepare(repo, base, full, versions, selection);
   } catch (error) {
-    if (analyzed?.length || !/T2 needs an explicit analyzed/.test(error.message)) throw error;
+    if (analyzed?.length || proposed?.length || !/T2 needs an explicit analyzed/.test(error.message)) throw error;
     // HS2-BNAYKG: push.sh and the pre-push hook run a bare check; reuse the exact receipt
     // of the passing --t2-stage run for this tree instead of refusing every T2 push.
     const reused = recordedT2Selection(repo, base, full, versions, selection);
@@ -709,12 +729,21 @@ export function runGate(options = {}) {
   const selectedChecks = before.checks.map(observationStageKey);
   const deferredChecks = before.deferred.map(observationStageKey);
   const attempt = {
-    id: `local:${randomUUID()}`, source: 'local', cohort: `local-${before.mode}-${before.tier ?? 'T1'}`,
-    startedAt: gateStarted, selected: selectedChecks, deferred: deferredChecks, checks: [], cases: [],
+    id: `local:${randomUUID()}`,
+    source: 'local',
+    cohort: `local-${before.mode}-${before.tier ?? 'T1'}`,
+    startedAt: gateStarted,
+    selected: selectedChecks,
+    deferred: deferredChecks,
+    checks: [],
+    cases: [],
   };
   const remember = () => {
-    try { recordAttempt(timingPath(repo), attempt); }
-    catch (error) { console.warn(`Gate observation history unavailable: ${error.message}`); }
+    try {
+      recordAttempt(timingPath(repo), attempt);
+    } catch (error) {
+      console.warn(`Gate observation history unavailable: ${error.message}`);
+    }
   };
   if (existing?.key === before.key && existing.tree === before.tree) {
     attempt.endedAt = Date.now();
@@ -766,7 +795,9 @@ export function runGate(options = {}) {
           attempt.cases.push(...reportCaseObservations(report.kind, body, report.root));
           attempt.checks.push(...reportFileObservations(report.kind, body, report.root));
         }
-      } catch { /* A missing runner report leaves case observations unknown. */ }
+      } catch {
+        /* A missing runner report leaves case observations unknown. */
+      }
     }
     remember();
     if (result.status !== 0) {
@@ -794,6 +825,7 @@ export function runGate(options = {}) {
       budgetMs: before.budgetMs,
       tier: before.tier,
       analyzed: selection.analyzed ?? [],
+      proposed: selection.proposed ?? [],
       profile: before.profile,
       selected: before.checks.map((stage) => stage.command),
       deferred: before.deferred.map((stage) => stage.command),
@@ -840,13 +872,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       '--budget',
       '--tier',
       '--t2-stage',
+      '--propose-stage',
       '--ticket',
       '--smoke',
     ]);
     for (let i = 0; i < args.length; i += 1) {
       if (!allowed.has(args[i])) throw new Error(`Unknown argument: ${args[i]}`);
       if (
-        ['--base', '--import-ci-timings', '--budget', '--tier', '--t2-stage', '--ticket'].includes(args[i]) &&
+        ['--base', '--import-ci-timings', '--budget', '--tier', '--t2-stage', '--propose-stage', '--ticket'].includes(
+          args[i],
+        ) &&
         !args[++i]
       )
         throw new Error(`${args[i - 1]} requires a value`);
@@ -863,6 +898,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         budgetMs: args.includes('--budget') ? parseBudget(args[args.indexOf('--budget') + 1]) : undefined,
         tier: args.includes('--tier') ? args[args.indexOf('--tier') + 1] : undefined,
         analyzed: args.flatMap((arg, index) => (arg === '--t2-stage' ? [args[index + 1]] : [])),
+        proposed: args.flatMap((arg, index) => (arg === '--propose-stage' ? [args[index + 1]] : [])),
         ticket: args.includes('--ticket') ? args[args.indexOf('--ticket') + 1] : undefined,
         smoke: args.includes('--smoke'),
       });

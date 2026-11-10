@@ -367,8 +367,7 @@ impl StrategyPolicy {
         self.validate()?;
         // HS2-BF79YX: changing the integration allowlist must not leave a
         // selected project development preset pointing at a forbidden mode.
-        super::development_strategy::DevelopmentPolicy::read(settings)?
-            .resolve(self, None, None)?;
+        super::development_strategy::DevelopmentPolicy::read(settings)?.validate_against(self)?;
         let mut normalized = self.clone();
         for entry in &mut normalized.allowed {
             entry.reason = entry.reason.trim().to_owned();
