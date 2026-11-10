@@ -21,7 +21,7 @@ function git(cwd, ...args) {
 }
 
 function fixture({ cherryPick = false, batch = false, superseded = false, differentReplayPatch = false,
-  retiredFindings = false, findings = false, retiredCode = false } = {}) {
+  retiredFindings = false, findings = false, retiredCode = false, retiredCodeSibling = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hs2-hr3zx4-'));
   const project = join(root, 'project'),
     store = join(root, 'store'),
@@ -141,6 +141,10 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     note('Worker assignment: reviewed correction', 'Operation operation supersedes old-findings, review-returned with note review-note'),
     note('Coordination retirement', 'assignment: old-findings; handoff evidence: findings note findings-note; recovery or review-return note: review-note'),
   ] : [];
+  if (retiredCodeSibling) notes.push(
+    note('Review return', `Reviewed assignment sibling at ${source}`, 'sibling-review'),
+    note('Coordination retirement', `assignment sibling; code commit ${source}; recovery or review-return note sibling-review`),
+  );
   let oldTransitions = retiredCode ? [
     { kind: 'review_return', at: '2026-11-09T00:01:00Z', actor: { role: 'integrator' } },
     { kind: 'done', at: '2026-11-09T00:04:00Z', actor: { role: 'integrator' } },
@@ -171,6 +175,15 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
           stdout: JSON.stringify({
             state: {
               assignments: {
+                ...(retiredCodeSibling ? { sibling: {
+                  id: 'sibling', phase: 'done', recovery_note: 'sibling-review',
+                  handoff: { kind: 'code', commit: source },
+                  ticket: { connection_id: connection, native_id: native }, worker: 'worker',
+                  transitions: [
+                    { kind: 'review_return', at: '2026-11-09T00:01:30Z', actor: { role: 'integrator' } },
+                    { kind: 'done', at: '2026-11-09T00:04:00Z', actor: { role: 'integrator' } },
+                  ],
+                } } : {}),
                 ...(retiredFindings ? {
                   'old-findings': {
                     id: 'old-findings', phase: retiredPhase, recovery_note: retiredRecovery,
@@ -589,6 +602,14 @@ test('HS2-EVHMV3 verifies reviewed retired code with a unique shipped replacemen
   assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
   assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
   assert.equal(git(f.project, 'rev-parse', `refs/hotsheet/integration-source/${f.source}`), f.source);
+});
+
+test('HS2-EVHMV3 allows a reviewed retired sibling when both have one shipped replacement', () => {
+  const f = fixture({ cherryPick: true, batch: true, superseded: true,
+    retiredCode: true, retiredCodeSibling: true });
+  recordSupersededReplay(f);
+  unlinkSync(f.integratorGate);
+  assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
 });
 
 test('HS2-EVHMV3 refuses retired code without exact review, replacement, or archive proof', () => {

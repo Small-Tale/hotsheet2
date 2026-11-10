@@ -147,7 +147,10 @@ function retiredCodeAssignment(old, assignments, operation, markdown, notes) {
     item.handoff?.kind === 'code' && !item.recovery_note &&
     (item.transitions ?? []).some((transition) => transition.kind === 'offered' &&
       transition.at > transitions[reviewed].at));
-  if (replacements.length !== 1 || (replacements[0].id !== operation && old.id !== operation)) return false;
+  // HS2-EVHMV3: several reviewed returns may precede the same shipped correction. Each
+  // retired sibling must have one unique later replacement, even when another
+  // retired worktree is the one being cleaned now.
+  if (replacements.length !== 1) return false;
   return notes.some((note) => note.startsWith('## Review return') &&
       note.includes(old.id) && note.includes(old.handoff.commit)) &&
     notes.some((note) => note.startsWith('## Coordination retirement') &&
