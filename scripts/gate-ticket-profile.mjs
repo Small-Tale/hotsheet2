@@ -204,6 +204,61 @@ export function withDevelopmentStrategy(profile, settings, session = process.env
   };
 }
 
+/** HS2-RRNZYN: the CLI is the authority for a configured strategy's precedence and policy. */
+export function withResolvedDevelopmentStrategy(profile, selection) {
+  if (
+    !selection ||
+    typeof selection.preset !== 'string' ||
+    !['project', 'session', 'ticket'].includes(selection.source)
+  )
+    throw new Error('HS2-RRNZYN: development-strategy-resolve returned an invalid selection.');
+  const custom = selection.custom;
+  const tiers = ['T0', 'T1', 'T2'];
+  const tier =
+    custom && tiers.indexOf(custom.minimum_tier) > tiers.indexOf(profile.tier) ? custom.minimum_tier : profile.tier;
+  if (tier === 'T2' && (profile.budgetMs !== undefined || custom?.budget_minutes !== undefined))
+    throw new Error('T2 custom strategy cannot use a local time budget');
+  const customBudgetMs = custom?.budget_minutes === undefined ? undefined : custom.budget_minutes * 60_000;
+  return {
+    ...profile,
+    developmentStrategy: selection,
+    tier,
+    budgetMs:
+      customBudgetMs === undefined ? profile.budgetMs : Math.min(profile.budgetMs ?? customBudgetMs, customBudgetMs),
+    deep: profile.deep || selection.local_gate === 'full-local',
+    browser: profile.browser || custom?.browser === true,
+    platform: profile.platform || custom?.platform === true,
+    perf: profile.perf || custom?.perf === true,
+  };
+}
+
+export function resolveConfiguredDevelopmentStrategy(repo, profile, settings, run = execFileSync) {
+  if (settings.development_strategy === undefined) return withDevelopmentStrategy(profile, settings);
+  const tags = profile.tags ?? [];
+  const overrides = tags.filter((tag) => tag.startsWith('development-strategy:'));
+  if (overrides.length > 1) throw new Error(`Conflicting development strategy ticket tags: ${overrides.join(', ')}`);
+  const binary = join(repo, 'target/debug', process.platform === 'win32' ? 'hotsheet-cli.exe' : 'hotsheet-cli');
+  // The CLI resolves either a locator file or a directory link from its cwd.
+  // Passing the locator itself as -C would mistake it for a store directory.
+  const args = ['coordination', '--project', repo, 'development-strategy-resolve'];
+  const session = process.env.HOTSHEET_DEVELOPMENT_STRATEGY;
+  if (session) args.push('--session', session);
+  if (overrides.length) args.push('--ticket', overrides[0].slice('development-strategy:'.length));
+  try {
+    const stdout = run(existsSync(binary) ? binary : 'hotsheet-cli', args, {
+      cwd: repo,
+      env: withoutGitRepositoryEnv(process.env),
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    return withResolvedDevelopmentStrategy(profile, JSON.parse(stdout));
+  } catch (error) {
+    throw new Error(
+      `HS2-RRNZYN: configured project strategy requires a current hotsheet-cli development-strategy-resolve; build the CLI in this checkout. ${error.stderr?.toString().trim() || error.message}`,
+    );
+  }
+}
+
 function projectSettings(repo) {
   const path = join(repo, '.hotsheet2/settings.json');
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
@@ -252,7 +307,10 @@ export function readTicketProfile(
   { ticket: explicit, workerId = process.env.HOTSHEET_WORKER_ID, dirty = false } = {},
 ) {
   const project = projectTicketRoot(repo);
-  const selected = (profile) => withDevelopmentStrategy(profile, projectSettings(repo));
+  const selected = (profile) => {
+    const settings = projectSettings(repo);
+    return resolveConfiguredDevelopmentStrategy(repo, profile, settings);
+  };
   if (!existsSync(join(project, '.hotsheet2/store'))) {
     if (explicit) throw new Error(`--ticket ${explicit} cannot be resolved: no linked ticket source.`);
     return selected(defaultProfile('ticket source unavailable; default T1 budget'));

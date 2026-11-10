@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import {
   chooseTicket,
   developmentStrategyFromSettings,
   profileFromTags,
+  resolveConfiguredDevelopmentStrategy,
   withDevelopmentStrategy,
 } from './gate-ticket-profile.mjs';
 
@@ -21,6 +25,63 @@ test('HS2-BF79YX unset policy preserves existing local selection', () => {
   assert.equal(withDevelopmentStrategy(profile, {}, undefined), profile);
   assert.equal(developmentStrategyFromSettings({}), null);
   assert.equal(developmentStrategyFromSettings({ development_strategy: { version: 1 } }).preset, 'ticket-assured');
+});
+
+test('HS2-RRNZYN configured strategy uses the CLI resolver and fails when unavailable', () => {
+  const profile = profileFromTags(ticket('HS2-RRNZYN', ['tier:T1', 'development-strategy:steady-main']));
+  const settings = { development_strategy: { version: 2, default: 'ticket-assured' } };
+  const resolved = resolveConfiguredDevelopmentStrategy('/synthetic/project', profile, settings, (_binary, args) => {
+    assert.ok(args.includes('development-strategy-resolve'));
+    assert.deepEqual(args.slice(-2), ['--ticket', 'steady-main']);
+    return JSON.stringify({
+      preset: 'steady-main',
+      source: 'ticket',
+      integration: 'ci-staged',
+      local_gate: 'targeted',
+    });
+  });
+  assert.equal(resolved.developmentStrategy.preset, 'steady-main');
+  assert.equal(resolved.deep, false);
+  assert.throws(
+    () =>
+      resolveConfiguredDevelopmentStrategy('/synthetic/project', profile, settings, () => {
+        throw new Error('unrecognized subcommand development-strategy-resolve');
+      }),
+    /requires a current hotsheet-cli development-strategy-resolve/,
+  );
+  const unconfigured = resolveConfiguredDevelopmentStrategy(
+    '/synthetic/project',
+    profileFromTags(ticket('HS2-RRNZYN')),
+    {},
+    () => {
+      throw new Error('CLI must not run for unconfigured projects');
+    },
+  );
+  assert.equal(unconfigured.developmentStrategy, undefined);
+});
+
+test('HS2-RRNZYN worktree locator lets CLI resolve an external store from cwd', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'hs2-rrnzyn-locator-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, 'worktree');
+  const store = join(root, 'external.hs2');
+  mkdirSync(join(repo, '.hotsheet2'), { recursive: true });
+  mkdirSync(store);
+  writeFileSync(join(repo, '.hotsheet2/store'), `${store}\n`);
+  const settings = { development_strategy: { version: 2, default: 'ticket-assured' } };
+  const profile = profileFromTags(ticket('HS2-RRNZYN', ['tier:T1']));
+  const resolved = resolveConfiguredDevelopmentStrategy(repo, profile, settings, (_binary, args, options) => {
+    assert.deepEqual(args.slice(0, 4), ['coordination', '--project', repo, 'development-strategy-resolve']);
+    assert.equal(options.cwd, repo);
+    assert.equal(readFileSync(join(repo, '.hotsheet2/store'), 'utf8').trim(), store);
+    return JSON.stringify({
+      preset: 'ticket-assured',
+      source: 'project',
+      integration: 'serial',
+      local_gate: 'full-local',
+    });
+  });
+  assert.equal(resolved.deep, true);
 });
 
 test('HS2-BF79YX maps presets and ticket/session/project precedence', () => {

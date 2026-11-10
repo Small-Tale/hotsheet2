@@ -169,10 +169,13 @@ and don't imply reading order — read by group.
 **C · Data & storage**
 
 Local verification: [29-affected-local-verification.md](29-affected-local-verification.md)
-The measured browser-like test investigation is [dom-test-pilot-2026-11-10.md](dom-test-pilot-2026-11-10.md) (HS2-3FQNGT).
 defines the affected package/browser gate, receipt invalidation, and full CI boundary
-(HS2-RS0FFT; implemented with conservative fallback; controlled throughput validation
-remains HS2-DAA8AB/HS2-K1QNGC).
+(HS2-RS0FFT). Configured development strategies require a reviewed, exact-tree
+test plan with selected checks, explicit deferrals, and receipt binding
+(HS2-RRNZYN). Controlled throughput and defect-detection validation remains
+HS2-DAA8AB/HS2-K1QNGC.
+The measured browser-like test investigation is
+[dom-test-pilot-2026-11-10.md](dom-test-pilot-2026-11-10.md) (HS2-3FQNGT).
 Local test dependency and timing baseline: [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md), with its [proposed dependency manifest](local-verification-dependencies.proposed.yaml) (HS2-D461XW).
 
 | Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Status                  |

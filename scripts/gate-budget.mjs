@@ -7,6 +7,14 @@ export const stageId = (stage) => `${stage.cwd}::${stage.command}`;
 export const contractInputsChanged = (changes) =>
   changes.some((path) => path === 'crates/hotsheet-server/src/lib.rs' || path === 'docs/contracts/v1/openapi.yaml');
 
+/** HS2-RRNZYN: server/client state boundaries need a shipped-flow check in addition to direct suites. */
+export const highImpactBrowserChange = (changes) =>
+  changes.some((path) =>
+    /^(?:crates\/(?:hotsheet-server|hotsheet-ticketing|hotsheet-cli|hotsheet-aitools)\/src|clients\/web\/src)\/.*(?:auth|claim|sync|shared[-_.]state|session|checkout)/i.test(
+      path,
+    ),
+  );
+
 export function parseBudget(value) {
   const match = /^(\d+)(ms|s|m|h)$/.exec(value ?? '');
   if (!match) throw new Error('Budget must be a positive duration such as 5m, 300s, or 1h.');

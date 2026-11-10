@@ -286,6 +286,37 @@ the migrator; CI still runs its full functional suites and does not treat these
 local performance bounds as a replacement for covering CI.
 
 The exact-input receipt records the ticket profile, budget, tier, selected and deferred commands.
+For a project with a configured development strategy, HS2-RRNZYN also requires a
+reviewed version 1 JSON test plan after the implementation and before the gate:
+`scripts/check.sh --test-plan /path/to/reviewed.json`. The plan names the qualified
+ticket, current `tree` and `base` from `--plan`, sorted `changed_paths`, effective
+`strategy` and `strategy_source`, behavior, risks, `reviewed_by`, `analyzed` and `proposed` stage
+identifiers, and every selected and deferred `<cwd>::<command>`. Each selected
+entry records a reason and nonnegative `estimate_ms`, or `null` with
+`estimate_source: "unknown"` when no trustworthy history exists. The plan output
+and receipt show the known estimate total and count of unknown checks; neither
+turns an unknown into a zero-cost claim. Each deferred entry records
+a reason and `ci_coverage`. An explicit override also names its author and reason.
+The deferred list includes every unselected registered local stage, including
+unaffected Rust, migrator, and spike checks in a web-only plan; each entry names
+the covering CI job. Target-specific Windows, macOS, and arm64 code remains
+separate platform evidence under `platformCfg` and needs the `Platforms` workflow,
+not a claim that Linux x86 main CI executed those targets.
+The checked-in gate computes the mandatory floor and checks the plan against its
+actual selection; a plan cannot suppress a mandatory check.
+Auth, claim, sync, session, checkout, and shared-state source changes also force
+the shipped-flow browser contract and its fixture stage. Migration changes retain
+their direct migrator suite in the mandatory floor. The plan is stored outside
+the source tree under the Git common gate cache and its hash, selection,
+strategy provenance, and risk rationale enter the exact-input receipt. The bare
+push check reuses it only for that tree. A changed tree, diff, ticket, or strategy
+requires a newly reviewed plan. An unconfigured project retains its existing
+risk-selected gate without a plan. A configured strategy is resolved by the
+current-source `hotsheet-cli development-strategy-resolve` capability; build the
+CLI in the checkout if the installed binary lacks that command. Resolution fails
+clearly rather than silently applying a different strategy. A failed local gate
+cannot be waived by a green remote run.
+
 The diagnostic text explaining whether a ticket came from `--ticket` or the clean commit
 subject is excluded from the key; the qualified ticket, tags and effective settings remain
 exact inputs, so a bare push check reuses the ticket gate's receipt (HS2-Q5XAAK).

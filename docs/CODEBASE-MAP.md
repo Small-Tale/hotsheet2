@@ -5,7 +5,12 @@
 HS2-GN06JT `scripts/gate-budget.mjs` selects measured optional stages under the
 checked-in `scripts/gate-budget.json` target after the mandatory floor.
 HS2-VQ5ND5 `scripts/gate-ticket-profile.mjs` resolves provider ticket tags for
-the default tier and deeper profiles. HS2-A4HD9X `scripts/perf-ticketing.mjs`
+the default tier and deeper profiles. HS2-RRNZYN
+`scripts/gate-test-plan.mjs` validates and stores a reviewed, versioned plan for
+the exact tree, diff, qualified ticket, and effective development strategy; the
+local gate binds its selected and deferred commands to the receipt. Configured
+strategies resolve through the current-source CLI before selection. HS2-A4HD9X
+`scripts/perf-ticketing.mjs`
 and `migrator/test/performance.mjs` provide synthetic local Rust coordination and
 PGLite export baselines selected by `testing:perf`. The HS2-EJ8JTG tier-tag policy and T2
 deviation live in `.rulesync/rules/project-local.md`; generic role guidance is
@@ -230,9 +235,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/installed-dependencies.mjs # Installed node_modules versus committed lockfile check and installed-tree digest for gate receipts; preflight before server rebuild stop (HS2-PNBH4X, HS2-R0XY7S; tests: installed-dependencies.test.mjs)
   scripts/gate-timings.mjs   # Bounded local/CI timing estimates and attempt-outcome ledger with cohort, check and case summaries; local-gate --timings and --import-ci-timings (HS2-TCCKRZ, HS2-5RDMEV; tests: gate-timings.test.mjs)
   scripts/gate-review.mjs    # Bounded headless cost/failure report grouped by comparable cohort and area/stage/file/case (HS2-6QEZB0; tests: gate-review.test.mjs)
-  scripts/local-gate.mjs     # Exact-input affected gate and receipt runner; records reached, deferred, reused, failed, and interrupted check attempts (HS2-FCCRCK, HS2-5RDMEV; tests: local-gate.test.mjs)
+  scripts/local-gate.mjs     # Exact-input affected gate and receipt runner; records reached, deferred, reused, failed, and interrupted check attempts; validates reviewed exact-tree plans for configured strategies (HS2-FCCRCK, HS2-5RDMEV, HS2-RRNZYN; tests: local-gate.test.mjs)
   scripts/gate-browser-exercise.mjs # Static index of the browser specs and providers.spec titles that exercise a changed client module through its class/route hooks, plain-module helpers and nearest shipped parents (HS2-N7EY18, HS2-R1D0S5; tests: local-gate.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)
+  scripts/gate-test-plan.mjs # Versioned reviewed plan validation, complete deferred-stage disclosure, exact-tree/ticket/strategy identity, and atomic persistence (HS2-RRNZYN; tests: gate-test-plan.test.mjs)
   scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles, including shared development-policy gate selection (HS2-VQ5ND5, HS2-BF79YX; tests: gate-ticket-profile.test.mjs)
   scripts/gate-budget.json   # Checked-in five-minute T0/T1 planning target
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
