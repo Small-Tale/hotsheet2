@@ -378,34 +378,56 @@ integrator, and requires it for a multi-assignment push. See
 
 ## Timing history (HS2-TCCKRZ)
 
-`scripts/check.sh --timings` prints recent stage and test-file cost estimates as
-JSON. The executor records wall time only after a complete successful gate and
-only for stages it actually executed. Receipt hits, interrupted runs, and failed
-gates add no samples. It keeps the latest 20 samples per key in
-`hotsheet-gate-timings.json` under the Git common directory, outside tracked
-source. The estimate is the nearest-rank p75 with a sample count; a missing key
-reports `null` and `unknown`, never zero. Vitest and Playwright stages write
-temporary JSON reports under their ignored `target/` directory. Nextest's JUnit
-test target and module names are mapped only to Rust source files that exist in
-the checkout; unmapped cases add no guessed file sample. File times are summed
-test durations, so parallel execution means they are not a gate wall time.
+`scripts/check.sh --timings` prints recent stage and test-file cost estimates and
+HS2-5RDMEV outcome observations as JSON. The estimator still uses only completed
+successful work: the latest 20 samples per stage/file key, local samples preferred
+over CI, nearest-rank p75, and `null`/`unknown` for an unsampled key. A separate
+bounded ledger in `hotsheet-gate-timings.json` under the Git common directory
+records up to 20 gate attempts. Each attempt has a cohort, hashed host id, OS,
+selected and deferred checks, and reached check outcomes. A started check is
+provisionally interrupted, so an abruptly stopped gate retains its last reached
+check; a completed check replaces that provisional outcome. Receipt and stage-cache
+reuse are `reused`, never a fast pass. Summary distributions separate pass and
+failure wall times (p50, p75, p90), plus pass/fail/skip/reused/interrupted counts,
+selected/deferred denominators, and unknown unsampled checks. The JSON export
+includes separate per-cohort check and case summaries so CI and selected local
+worktrees are not pooled as one sampling population. First failure still
+stops the gate and exact-input receipts are unchanged. File times sum test durations,
+so parallel execution means they are not a gate wall time.
 
-CI uploads passing nextest/Vitest reports as `gate-timing-reports` and the merged
-Playwright JSON as `browser-timing-report`. Download those artifacts from one
-successful main run into one directory, then import them:
+Runner reports add test-case identities and outcomes when present. Vitest and
+Playwright stages write temporary JSON under ignored `target/`; nextest writes
+JUnit. Case titles are hashed and only safe project-relative source paths and
+metrics enter the history. Raw failures, user data, and machine-local paths are
+discarded. The `clients/web/scripts/lint-web-observations.mjs` helper records the
+existing ESLint, catalog, and UI doctor order and first-failure behavior. Doctor
+JSON supplies catalog, TypeScript, ESLint, analyzer, and optional browser stage
+outcomes. The doctor report does not provide per-stage wall time, so that duration
+remains unknown. The shipped `lint:web` npm entrypoint is not yet connected to the
+helper because its `package.json` is reserved by HS2-NRYAXT; that wiring remains
+part of HS2-5RDMEV's Started work.
+
+CI uploads available nextest/Vitest reports on success or failure as
+`gate-timing-reports`, with run and attempt metadata, and uploads the merged
+Playwright JSON when available as `browser-timing-report`. Download artifacts
+from one run into one directory. The GitHub jobs API adds per-step start/end,
+outcome, and skipped steps without copying raw logs:
 
 ```sh
 gh run download <run-id> -n gate-timing-reports -D target/ci-timings
 gh run download <run-id> -n browser-timing-report -D target/ci-timings
+gh api 'repos/Small-Tale/hotsheet2/actions/runs/<run-id>/jobs?per_page=100' > target/ci-timings/jobs.json
 scripts/check.sh --import-ci-timings target/ci-timings
 ```
 
-The import accepts files named
-`nextest-junit.xml`, `vitest-report.json`, and `playwright-report.json`, skips
-failed reports and duplicate contents, and labels their samples `ci`. Local
-samples take precedence over CI samples; CI estimates are a different-host seed
-and must be scaled or distrusted by any budget planner. Import and `--timings`
-never create gate receipts or change test selection.
+The import accepts `nextest-junit.xml`, `vitest-report.json`,
+`playwright-report.json`, `manifest.json`, and optional `jobs.json`. Failed
+reports contribute outcome observations but never success-cost estimates.
+Run/attempt/job identities deduplicate repeated imports while preserving a new CI
+retry as another attempt. Local samples take precedence over CI samples; CI
+estimates are a different-host seed and must be scaled or distrusted by any
+budget planner. Import and `--timings` never create gate receipts or change test
+selection. A missing report or step duration remains unknown rather than zero.
 
 ## Measurement and limitations (2026-10-28)
 

@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { formatTable, nextestTimings, parseArgs, playwrightTimings, profile, slowest, vitestTimings } from "./test-profile.mjs";
+import { formatTable, nextestTimings, nextestOutcomes, parseArgs, playwrightTimings, playwrightOutcomes, profile, slowest, vitestTimings, vitestOutcomes } from "./test-profile.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Reports written by real nextest 0.9.114, Vitest 4.1.11, and Playwright 1.63 runs.
@@ -21,6 +21,15 @@ test("reads nextest JUnit testcases", () => {
   assert.deepEqual(nextestTimings('<testcase name="a &amp; b" classname="x" time="1.5"/>'), [{ name: "x a & b", seconds: 1.5 }]);
 });
 
+test("HS2-5RDMEV keeps failed and skipped nextest cases without diagnostics", () => {
+  const xml = '<testsuite><testcase classname="suite" name="a" time="1"><failure message="private"/></testcase><testcase classname="suite" name="b" time="2"><skipped/></testcase><testcase classname="suite" name="c" time="3"/></testsuite>';
+  assert.deepEqual(nextestOutcomes(xml), [
+    { name: 'suite a', seconds: 1, outcome: 'fail' },
+    { name: 'suite b', seconds: 2, outcome: 'skip' },
+    { name: 'suite c', seconds: 3, outcome: 'pass' },
+  ]);
+});
+
 test("reads Vitest per-test and per-file durations", () => {
   const { tests, files } = vitestTimings(JSON.parse(read("vitest.json")), "/root");
   assert.deepEqual(
@@ -31,6 +40,14 @@ test("reads Vitest per-test and per-file durations", () => {
   assert.equal(files.length, 1);
   assert.equal(files[0].name, "a.test.mjs");
   assert.ok(files[0].seconds > 0);
+});
+
+test("HS2-5RDMEV parses Vitest and Playwright outcomes including retries", () => {
+  assert.deepEqual(vitestOutcomes(JSON.parse(read('vitest.json')), '/root').map(({ outcome }) => outcome), ['pass', 'fail']);
+  const result = playwrightOutcomes(JSON.parse(read('playwright.json')));
+  assert.deepEqual(result.map(({ outcome }) => outcome), ['pass', 'fail']);
+  assert.equal(result[1].seconds, 0.008);
+  assert.ok(result.every((row) => !JSON.stringify(row).includes('Expected:')));
 });
 
 test("reads Playwright tests with their attempts summed per file", () => {
