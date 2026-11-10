@@ -493,6 +493,8 @@ pub struct BatchStatus {
     /// ci-staged summary once a staged batch exists (HS2-GT57BQ).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub staging: Option<super::batch_staged::StagingStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cadence: Option<super::batch_staged::CadenceStatus>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
@@ -576,6 +578,7 @@ impl Coordinator {
             effective_strategy,
             breaker: ledger.breaker.clone(),
             staging: super::batch_staged::staging_status(state, ledger),
+            cadence: None,
             active: ledger
                 .batches
                 .values()

@@ -104,6 +104,53 @@ export interface WorkerView {
   /** Absent from servers older than HS2-83KFB5; `uncovered_sources` is the fallback. */
   coverage_gaps?: WorkerCoverageGap[];
   connection_coverage: boolean;
+  cadence?: WorkerCadence;
+}
+
+export interface WorkerCadence {
+  goal_minutes: number;
+  last_green_main_at: number | null;
+  next_target_at: number | null;
+  oldest_staging_at: number | null;
+  staging_age_seconds: number | null;
+  ci_failures_since_promotion: number;
+  correction_wall_seconds: number | null;
+  tickets_promoted_in_goal_window: number;
+  ready_batch: string | null;
+  action: string;
+  missed_goal_reason: string | null;
+}
+
+function cadence(value: unknown): WorkerCadence {
+  const item = record(value);
+  const goal = item.goal_minutes;
+  const failures = item.ci_failures_since_promotion;
+  const promoted = item.tickets_promoted_in_goal_window;
+  if (
+    typeof goal !== 'number' ||
+    !Number.isInteger(goal) ||
+    goal < 1 ||
+    typeof failures !== 'number' ||
+    !Number.isInteger(failures) ||
+    failures < 0 ||
+    typeof promoted !== 'number' ||
+    !Number.isInteger(promoted) ||
+    promoted < 0
+  )
+    throw new ServerResponseShapeError('worker cadence');
+  return {
+    goal_minutes: goal,
+    last_green_main_at: nullableNumber(item.last_green_main_at),
+    next_target_at: nullableNumber(item.next_target_at),
+    oldest_staging_at: nullableNumber(item.oldest_staging_at),
+    staging_age_seconds: nullableNumber(item.staging_age_seconds),
+    ci_failures_since_promotion: failures,
+    correction_wall_seconds: nullableNumber(item.correction_wall_seconds),
+    tickets_promoted_in_goal_window: promoted,
+    ready_batch: nullableString(item.ready_batch),
+    action: string(item.action),
+    missed_goal_reason: nullableString(item.missed_goal_reason),
+  };
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -297,6 +344,7 @@ export function parseWorkerView(value: unknown): WorkerView {
         : (() => {
             throw new ServerResponseShapeError('worker view');
           })(),
+    ...(item.cadence === undefined ? {} : { cadence: cadence(item.cadence) }),
   };
 }
 

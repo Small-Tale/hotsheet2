@@ -58,6 +58,129 @@ pub struct StagingStatus {
     pub held: Vec<String>,
 }
 
+/// HS2-0BJ1A3: a read-only cadence projection from durable staged transitions.
+/// A target is an escalation signal, never authorization to promote.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CadenceStatus {
+    pub goal_minutes: u32,
+    pub last_green_main_at: Option<i64>,
+    pub next_target_at: Option<i64>,
+    pub oldest_staging_at: Option<i64>,
+    pub staging_age_seconds: Option<i64>,
+    pub ci_failures_since_promotion: usize,
+    /// Elapsed wall time since the first unshipped red staged run, never a sum of parallel work.
+    pub correction_wall_seconds: Option<i64>,
+    /// Tickets promoted to main during the rolling goal interval ending at `now`.
+    pub tickets_promoted_in_goal_window: usize,
+    pub ready_batch: Option<String>,
+    pub action: String,
+    pub missed_goal_reason: Option<String>,
+}
+
+pub fn cadence_status(ledger: &BatchLedger, goal_minutes: u32, now: i64) -> CadenceStatus {
+    let last_green_main_at = ledger
+        .batches
+        .values()
+        .filter_map(|batch| {
+            batch
+                .staging
+                .as_ref()
+                .and_then(|staging| staging.promoted_at)
+        })
+        .max();
+    let next_target_at =
+        last_green_main_at.map(|at| at.saturating_add(i64::from(goal_minutes) * 60));
+    let pending: Vec<_> = ledger
+        .batches
+        .values()
+        .filter(|batch| {
+            batch.staging.is_some()
+                && matches!(
+                    batch.state,
+                    BatchState::Ci | BatchState::Green | BatchState::Red
+                )
+        })
+        .collect();
+    let oldest_staging_at = pending
+        .iter()
+        .map(|batch| batch.pushed_at.unwrap_or(batch.opened_at))
+        .min();
+    let ready = pending
+        .iter()
+        .filter(|batch| batch.state == BatchState::Green)
+        .filter(|batch| {
+            batch
+                .staging
+                .as_ref()
+                .and_then(|staging| staging.staged_commit.as_ref())
+                .is_some()
+        })
+        .max_by_key(|batch| batch.pushed_at.unwrap_or(batch.opened_at));
+    let red = pending.iter().any(|batch| batch.state == BatchState::Red);
+    let in_ci = pending.iter().any(|batch| batch.state == BatchState::Ci);
+    let action = if ready.is_some() {
+        "promote_green_tip"
+    } else if red {
+        "attribute_and_restage"
+    } else if in_ci {
+        "await_exact_sha_ci"
+    } else {
+        "no_ready_work"
+    };
+    let missed_goal_reason = next_target_at.filter(|target| now >= *target).map(|_| {
+        match action {
+            "promote_green_tip" => "green_staged_tip_awaiting_promotion",
+            "attribute_and_restage" => "red_staging_requires_correction",
+            "await_exact_sha_ci" => "staging_ci_pending_or_unavailable",
+            _ => "no_ready_staged_work",
+        }
+        .to_owned()
+    });
+    let since = last_green_main_at.unwrap_or(i64::MIN);
+    let goal_window_start = now.saturating_sub(i64::from(goal_minutes) * 60);
+    let first_red_at = ledger
+        .batches
+        .values()
+        .filter(|batch| {
+            batch.staging.is_some() && (batch.state == BatchState::Red || batch.attributed)
+        })
+        .filter_map(|batch| batch.concluded_at)
+        .filter(|at| *at >= since)
+        .min();
+    CadenceStatus {
+        goal_minutes,
+        last_green_main_at,
+        next_target_at,
+        oldest_staging_at,
+        staging_age_seconds: oldest_staging_at.map(|at| now.saturating_sub(at).max(0)),
+        ci_failures_since_promotion: ledger
+            .batches
+            .values()
+            .filter(|batch| {
+                batch.staging.is_some()
+                    && (batch.state == BatchState::Red || batch.attributed)
+                    && batch.concluded_at.is_some_and(|at| at >= since)
+            })
+            .count(),
+        correction_wall_seconds: first_red_at.map(|at| now.saturating_sub(at).max(0)),
+        tickets_promoted_in_goal_window: ledger
+            .batches
+            .values()
+            .filter(|batch| {
+                batch
+                    .staging
+                    .as_ref()
+                    .and_then(|staging| staging.promoted_at)
+                    .is_some_and(|at| at >= goal_window_start && at <= now)
+            })
+            .map(|batch| batch.tickets.len())
+            .sum(),
+        ready_batch: ready.map(|batch| batch.id.clone()),
+        action: action.to_owned(),
+        missed_goal_reason,
+    }
+}
+
 fn pending(batch: &BatchManifest) -> bool {
     batch
         .staging

@@ -10,6 +10,8 @@ use hotsheet_cli::coordination::batch::{
     BatchCandidate, BatchFailure, BatchLedger, priority_rank, select_batch,
 };
 use hotsheet_cli::coordination::batch_staged::StagingOpen;
+use hotsheet_cli::coordination::batch_staged::cadence_status;
+use hotsheet_cli::coordination::development_strategy::DevelopmentPolicy;
 use hotsheet_cli::coordination::{
     Assignment, Coordinator, HandoffEvidence, Phase, StrategyPolicy, TransitionKind,
 };
@@ -257,7 +259,7 @@ pub(super) fn run(
         )?)?,
         CoordinationCmd::BatchStatus => {
             let ledger = coordinator.batch_ledger()?.unwrap_or_default();
-            ledger_report(&coordinator.state()?, &ledger)?
+            ledger_report(&coordinator.state()?, &ledger, project, now)?
         }
         _ => unreachable!("only batch commands are routed here"),
     })
@@ -268,10 +270,21 @@ pub(super) fn run(
 fn ledger_report(
     state: &hotsheet_cli::coordination::State,
     ledger: &BatchLedger,
+    project: &Path,
+    now: i64,
 ) -> Result<serde_json::Value> {
     let mut report = serde_json::to_value(ledger)?;
     if let Some(staging) = Coordinator::staging_report(state, ledger) {
         report["staging"] = serde_json::to_value(staging)?;
+    }
+    let settings = hotsheet_ticketing::Settings::for_project(project);
+    let policy = DevelopmentPolicy::read(&settings)?;
+    let integration = StrategyPolicy::read(&settings)?;
+    if let Some(goal) = policy
+        .resolve(&integration, None, None)?
+        .green_main_goal_minutes
+    {
+        report["cadence"] = serde_json::to_value(cadence_status(ledger, goal, now))?;
     }
     Ok(report)
 }

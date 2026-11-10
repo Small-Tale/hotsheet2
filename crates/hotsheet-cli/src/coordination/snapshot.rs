@@ -6,12 +6,26 @@ impl Coordinator {
     pub fn snapshot(&self, now: i64) -> Result<Snapshot> {
         let (state, ledger) =
             self.change_batches(|state, ledger| Ok((state.clone(), ledger.clone())))?;
-        // HS2-9G0M3V: a pool that never opened a batch reports no batch facts.
-        let batches = self
-            .directory
-            .join(super::batch::LEDGER_FILE)
-            .exists()
-            .then(|| Self::batch_status(&state, &ledger));
+        let settings = hotsheet_ticketing::Settings::for_project(&self.project);
+        let policy = super::development_strategy::DevelopmentPolicy::read(&settings)?;
+        let integration = super::strategy::StrategyPolicy::read(&settings)?;
+        let goal = policy
+            .resolve(&integration, None, None)?
+            .green_main_goal_minutes;
+        // Serial-only pools still omit batch facts; configured Steady Main reports
+        // its goal even before the first staged batch opens (HS2-0BJ1A3).
+        let mut batches = (goal.is_some()
+            || self.directory.join(super::batch::LEDGER_FILE).exists())
+        .then(|| Self::batch_status(&state, &ledger));
+        if let (Some(batches), Some(goal)) = (&mut batches, goal) {
+            let mut cadence = super::batch_staged::cadence_status(&ledger, goal, now);
+            // A WorkerView cursor represents events, not elapsed wall time. The
+            // browser derives age/due text locally from these durable timestamps.
+            cadence.staging_age_seconds = None;
+            cadence.correction_wall_seconds = None;
+            cadence.missed_goal_reason = None;
+            batches.cadence = Some(cadence);
+        }
         let mut live_workers: Vec<String> = state
             .workers
             .values()
