@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chooseTicket, profileFromTags } from './gate-ticket-profile.mjs';
+import {
+  chooseTicket,
+  developmentStrategyFromSettings,
+  profileFromTags,
+  withDevelopmentStrategy,
+} from './gate-ticket-profile.mjs';
 
 const ticket = (slug, tags = [], claimed_by = null, connection_id = 'git') => ({
   slug,
@@ -9,6 +14,74 @@ const ticket = (slug, tags = [], claimed_by = null, connection_id = 'git') => ({
   connection_id,
   native_id: slug,
   qualified_id: `${connection_id}:${slug}`,
+});
+
+test('HS2-BF79YX unset policy preserves existing local selection', () => {
+  const profile = profileFromTags(ticket('HS2-A', ['tier:T1']));
+  assert.equal(withDevelopmentStrategy(profile, {}, undefined), profile);
+  assert.equal(developmentStrategyFromSettings({}), null);
+  assert.equal(developmentStrategyFromSettings({ development_strategy: { version: 1 } }).preset, 'ticket-assured');
+});
+
+test('HS2-BF79YX maps presets and ticket/session/project precedence', () => {
+  const settings = {
+    development_strategy: { version: 1, default: 'steady-main', green_main_goal_minutes: 360 },
+    integration_strategies: { allowed: [{ strategy: 'ci-staged', reason: 'green main' }] },
+  };
+  const profile = profileFromTags(ticket('HS2-A', ['tier:T1']));
+  assert.deepEqual(developmentStrategyFromSettings(settings), {
+    preset: 'steady-main',
+    source: 'project',
+    integration: 'ci-staged',
+  });
+  assert.deepEqual(developmentStrategyFromSettings(settings, { session: 'risk-guided' }), {
+    preset: 'risk-guided',
+    source: 'session',
+    integration: 'ci-staged',
+  });
+  const ticketChoice = withDevelopmentStrategy(
+    profileFromTags(ticket('HS2-A', ['development-strategy:ticket-assured'])),
+    settings,
+    'risk-guided',
+  );
+  assert.deepEqual(ticketChoice.developmentStrategy, {
+    preset: 'ticket-assured',
+    source: 'ticket',
+    integration: 'serial',
+  });
+  assert.equal(ticketChoice.deep, true);
+  assert.equal(withDevelopmentStrategy(profile, settings, undefined).deep, false);
+});
+
+test('HS2-BF79YX rejects invalid or unauthorized gate policy', () => {
+  assert.throws(
+    () => developmentStrategyFromSettings({ development_strategy: { version: 1, extra: true } }),
+    /Invalid versioned/,
+  );
+  assert.throws(
+    () => developmentStrategyFromSettings({ development_strategy: { version: 2, default: 'ticket-assured' } }),
+    /Invalid versioned/,
+  );
+  assert.throws(
+    () => developmentStrategyFromSettings({ development_strategy: { version: 1, default: 'risk-guided' } }),
+    /conflicts with project integration policy/,
+  );
+  assert.throws(
+    () =>
+      developmentStrategyFromSettings({
+        development_strategy: { version: 1, default: 'ticket-assured', green_main_goal_minutes: 0 },
+      }),
+    /green-main goal/,
+  );
+  assert.throws(
+    () =>
+      withDevelopmentStrategy(
+        profileFromTags(ticket('HS2-A', ['development-strategy:risk-guided', 'development-strategy:steady-main'])),
+        {},
+        undefined,
+      ),
+    /Conflicting/,
+  );
 });
 
 test('HS2-VQ5ND5 explicit ticket outranks commit and claim; commit outranks claim', () => {

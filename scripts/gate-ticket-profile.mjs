@@ -1,6 +1,6 @@
 // HS2-VQ5ND5: resolve local-gate profiles from normalized provider tickets.
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseBudget } from './gate-budget.mjs';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
@@ -48,6 +48,57 @@ export function profileFromTags(ticket) {
   };
 }
 
+// HS2-BF79YX: the shared settings file is the policy source for the local gate.
+// An absent setting intentionally leaves the installed risk-tier behavior intact.
+const presets = new Set(['ticket-assured', 'steady-main', 'risk-guided']);
+export function developmentStrategyFromSettings(settings, { session, ticket } = {}) {
+  const policy = settings.development_strategy;
+  if (policy === undefined && session === undefined && ticket === undefined) return null;
+  if (policy !== undefined) {
+    if (
+      policy === null ||
+      typeof policy !== 'object' ||
+      Object.keys(policy).some((key) => !['version', 'default', 'green_main_goal_minutes'].includes(key)) ||
+      policy.version !== 1 ||
+      !presets.has(policy.default ?? 'ticket-assured')
+    )
+      throw new Error('Invalid versioned development_strategy policy');
+    const goal = policy.green_main_goal_minutes ?? 360;
+    if (!Number.isInteger(goal) || goal < 1 || goal > 10080)
+      throw new Error('Invalid development_strategy green-main goal');
+  }
+  const choice = ticket ?? session ?? policy?.default ?? 'ticket-assured';
+  if (!presets.has(choice)) throw new Error(`Unknown development strategy ${choice}`);
+  const integration = choice === 'ticket-assured' ? 'serial' : 'ci-staged';
+  if (
+    integration === 'ci-staged' &&
+    !settings.integration_strategies?.allowed?.some((entry) => entry.strategy === integration)
+  )
+    throw new Error(`Development strategy ${choice} conflicts with project integration policy`);
+  return { preset: choice, source: ticket ? 'ticket' : session ? 'session' : 'project', integration };
+}
+
+export function withDevelopmentStrategy(profile, settings, session = process.env.HOTSHEET_DEVELOPMENT_STRATEGY) {
+  const tags = profile.tags ?? [];
+  const ticketTags = tags.filter((tag) => tag.startsWith('development-strategy:'));
+  if (ticketTags.length > 1) throw new Error(`Conflicting development strategy ticket tags: ${ticketTags.join(', ')}`);
+  const ticket = ticketTags[0]?.slice('development-strategy:'.length);
+  const chosen = developmentStrategyFromSettings(settings, { session, ticket });
+  if (!chosen) return profile;
+  // Ticket Assured deliberately opts into the full local gate. The unset
+  // project does not: migration must not silently expand legacy verification.
+  return {
+    ...profile,
+    developmentStrategy: chosen,
+    deep: profile.deep || chosen.preset === 'ticket-assured',
+  };
+}
+
+function projectSettings(repo) {
+  const path = join(repo, '.hotsheet2/settings.json');
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
+}
+
 export function chooseTicket({ explicit, subject = '', dirty = false, workerId, tickets }) {
   const byRef = (ref) => tickets.filter((ticket) => ticket.qualified_id === ref || ticket.slug === ref);
   if (explicit) {
@@ -91,9 +142,10 @@ export function readTicketProfile(
   { ticket: explicit, workerId = process.env.HOTSHEET_WORKER_ID, dirty = false } = {},
 ) {
   const project = projectTicketRoot(repo);
+  const selected = (profile) => withDevelopmentStrategy(profile, projectSettings(repo));
   if (!existsSync(join(project, '.hotsheet2/store'))) {
     if (explicit) throw new Error(`--ticket ${explicit} cannot be resolved: no linked ticket source.`);
-    return defaultProfile('ticket source unavailable; default T1 budget');
+    return selected(defaultProfile('ticket source unavailable; default T1 budget'));
   }
   const run = (...args) =>
     execFileSync('hotsheet-cli', args, { cwd: project, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -101,7 +153,7 @@ export function readTicketProfile(
     const split = explicit.indexOf(':');
     const ticket = JSON.parse(run('provider-get', explicit.slice(0, split), explicit.slice(split + 1)));
     const profile = profileFromTags(ticket);
-    return { ...profile, reason: `explicit --ticket; ${profile.reason}` };
+    return selected({ ...profile, reason: `explicit --ticket; ${profile.reason}` });
   }
   const providers = run('providers')
     .trim()
@@ -109,10 +161,14 @@ export function readTicketProfile(
     .filter(Boolean)
     .map((line) => line.trim().split(/\s+/)[0]);
   const tickets = providers.flatMap((connection) => JSON.parse(run('provider-ls', connection)));
-  const subject = execFileSync('git', ['log', '-1', '--format=%s'], { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
+  const subject = execFileSync('git', ['log', '-1', '--format=%s'], {
+    cwd: repo,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+  }).trim();
   const chosen = chooseTicket({ explicit, subject, dirty, workerId, tickets });
-  if (!chosen.ticket) return defaultProfile(chosen.reason);
+  if (!chosen.ticket) return selected(defaultProfile(chosen.reason));
   const ticket = JSON.parse(run('provider-get', chosen.ticket.connection_id, chosen.ticket.native_id));
   const profile = profileFromTags(ticket);
-  return { ...profile, reason: `${chosen.reason}; ${profile.reason}` };
+  return selected({ ...profile, reason: `${chosen.reason}; ${profile.reason}` });
 }

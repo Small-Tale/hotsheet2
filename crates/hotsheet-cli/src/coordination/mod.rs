@@ -11,6 +11,9 @@ mod batch_staged_tests;
 #[cfg(test)]
 mod batch_tests;
 pub mod contract;
+pub mod development_strategy;
+#[cfg(test)]
+mod development_strategy_tests;
 #[cfg(test)]
 mod findings_review_return_tests;
 mod next_plan;
@@ -55,6 +58,7 @@ pub use contract::{
     PlannedTicket, PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State, TransitionActor,
     TransitionKind, WaitRequest,
 };
+pub use development_strategy::{DevelopmentPolicy, DevelopmentPreset};
 pub use preferences::{
     PreferenceRequest, RefusalReason, RequestRefusal, TicketFilter, WorkerMatch, WorkerPreferences,
 };

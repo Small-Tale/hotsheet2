@@ -365,6 +365,10 @@ impl StrategyPolicy {
     /// Validate and replace the committed project policy.
     pub fn write(&self, settings: &Settings) -> Result<()> {
         self.validate()?;
+        // HS2-BF79YX: changing the integration allowlist must not leave a
+        // selected project development preset pointing at a forbidden mode.
+        super::development_strategy::DevelopmentPolicy::read(settings)?
+            .resolve(self, None, None)?;
         let mut normalized = self.clone();
         for entry in &mut normalized.allowed {
             entry.reason = entry.reason.trim().to_owned();

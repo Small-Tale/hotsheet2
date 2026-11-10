@@ -106,8 +106,8 @@ use routes::checkout_tickets::{
     update_ticket_attachment_annotations,
 };
 use routes::checkout_workers::{
-    checkout_workers, dispatch_worker_plan, get_integration_strategies, put_integration_strategies,
-    replace_worker_plan, worker_plan_events,
+    checkout_workers, dispatch_worker_plan, get_development_strategy, get_integration_strategies,
+    put_development_strategy, put_integration_strategies, replace_worker_plan, worker_plan_events,
 };
 use routes::checkouts::{
     add_checkout_source, checkout_repository_commits, checkout_repository_compaction,
@@ -1483,6 +1483,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/integration-strategies",
             get(get_integration_strategies).put(put_integration_strategies),
+        )
+        .route(
+            "/checkouts/{reference}/development-strategy",
+            get(get_development_strategy).put(put_development_strategy),
         )
         .route(
             "/checkouts/{reference}/commands",

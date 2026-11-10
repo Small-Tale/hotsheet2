@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::{
-    Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, IntegrationStrategy,
-    IntegrationSuspension, NextPlanEntry, Phase, PreferenceRequest, PrerequisiteGate,
-    RefusalReason, ReservationCheck, ReturnRoute, Role, StrategyPolicy, StrategyRequest,
-    TicketFilter, WaitRequest, WorkerPreferences,
+    Assignment, Authority, CAPABILITIES, Coordinator, DevelopmentPolicy, DevelopmentPreset,
+    HandoffEvidence, IntegrationStrategy, IntegrationSuspension, NextPlanEntry, Phase,
+    PreferenceRequest, PrerequisiteGate, RefusalReason, ReservationCheck, ReturnRoute, Role,
+    StrategyPolicy, StrategyRequest, TicketFilter, WaitRequest, WorkerPreferences,
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
@@ -60,6 +60,9 @@ struct Registration {
     /// project and implemented; omit to use the project default (HS2-NEY1QH).
     #[arg(long, value_enum)]
     strategy: Option<IntegrationStrategy>,
+    /// Explicit development preset for this integrator generation (HS2-BF79YX).
+    #[arg(long, value_enum)]
+    development_strategy: Option<DevelopmentPreset>,
     /// Integrator: confirms every participant runs a schema-eight executable before the
     /// first non-serial strategy is recorded. Worker: confirms every participant runs a
     /// schema-nine executable before the first ticket preferences are recorded.
@@ -126,14 +129,41 @@ impl Registration {
                 "only the integrator selects an integration strategy"
             );
             anyhow::ensure!(
+                self.development_strategy.is_none(),
+                "only the integrator selects a development strategy"
+            );
+            anyhow::ensure!(
                 self.role == Role::Worker || !self.all_participants_upgraded,
                 "--all-participants-upgraded on registration is for an integrator strategy or worker preferences"
             );
             return Ok(StrategyRequest::default());
         }
+        let settings = hotsheet_ticketing::Settings::for_project(project);
+        let integration_policy = StrategyPolicy::read(&settings)?;
+        let development = DevelopmentPolicy::read(&settings)?;
+        let explicitly_selected = settings
+            .get(
+                hotsheet_cli::coordination::development_strategy::DEVELOPMENT_POLICY_SETTING,
+                hotsheet_ticketing::Scope::Shared,
+            )?
+            .is_some();
+        let selected = if explicitly_selected || self.development_strategy.is_some() {
+            let resolved =
+                development.resolve(&integration_policy, self.development_strategy, None)?;
+            if let Some(strategy) = self.strategy {
+                anyhow::ensure!(
+                    strategy == resolved.integration,
+                    "explicit integration strategy {strategy} conflicts with development preset {}",
+                    resolved.preset.name()
+                );
+            }
+            Some(resolved.integration)
+        } else {
+            self.strategy
+        };
         StrategyRequest::from_policy(
-            &StrategyPolicy::read(&hotsheet_ticketing::Settings::for_project(project))?,
-            self.strategy,
+            &integration_policy,
+            selected,
             self.all_participants_upgraded,
         )
     }
@@ -216,6 +246,23 @@ enum CoordinationCmd {
     /// Show the project's integration strategy policy and the strategy registry, without
     /// opening the pool (HS2-NEY1QH).
     Strategies,
+    /// Read the project development and testing preset, without opening the pool.
+    DevelopmentStrategies,
+    /// Replace the shared project default; requires its integration strategy to be allowed.
+    DevelopmentStrategySet {
+        #[arg(long, value_enum)]
+        preset: DevelopmentPreset,
+        /// Steady Main's green-main goal in minutes (default 360).
+        #[arg(long)]
+        green_main_goal_minutes: Option<u32>,
+    },
+    /// Preview project/session/ticket precedence and mandatory gates without changing policy.
+    DevelopmentStrategyResolve {
+        #[arg(long, value_enum)]
+        session: Option<DevelopmentPreset>,
+        #[arg(long, value_enum)]
+        ticket: Option<DevelopmentPreset>,
+    },
     /// Allow a non-default integration strategy, recording why the project deviates.
     StrategyAllow {
         #[arg(long, value_enum)]
@@ -727,6 +774,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         }
         CoordinationCmd::Capabilities
         | CoordinationCmd::Strategies
+        | CoordinationCmd::DevelopmentStrategies
+        | CoordinationCmd::DevelopmentStrategySet { .. }
+        | CoordinationCmd::DevelopmentStrategyResolve { .. }
         | CoordinationCmd::StrategyAllow { .. }
         | CoordinationCmd::StrategyDisallow { .. }
         | CoordinationCmd::StrategyDefault { .. } => {
@@ -1437,6 +1487,9 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
     if !matches!(
         command,
         CoordinationCmd::Strategies
+            | CoordinationCmd::DevelopmentStrategies
+            | CoordinationCmd::DevelopmentStrategySet { .. }
+            | CoordinationCmd::DevelopmentStrategyResolve { .. }
             | CoordinationCmd::StrategyAllow { .. }
             | CoordinationCmd::StrategyDisallow { .. }
             | CoordinationCmd::StrategyDefault { .. }
@@ -1444,6 +1497,45 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
         return Ok(false);
     }
     let settings = hotsheet_ticketing::Settings::for_project(project);
+    if matches!(
+        command,
+        CoordinationCmd::DevelopmentStrategies
+            | CoordinationCmd::DevelopmentStrategySet { .. }
+            | CoordinationCmd::DevelopmentStrategyResolve { .. }
+    ) {
+        let mut policy = DevelopmentPolicy::read(&settings)?;
+        let integration = StrategyPolicy::read(&settings)?;
+        match command {
+            CoordinationCmd::DevelopmentStrategySet {
+                preset,
+                green_main_goal_minutes,
+            } => {
+                policy.default = *preset;
+                if let Some(minutes) = green_main_goal_minutes {
+                    policy.green_main_goal_minutes = *minutes;
+                }
+                policy.write(&settings)?;
+                policy = DevelopmentPolicy::read(&settings)?;
+            }
+            CoordinationCmd::DevelopmentStrategyResolve { session, ticket } => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&policy.resolve(
+                        &integration,
+                        *session,
+                        *ticket
+                    )?)?
+                );
+                return Ok(true);
+            }
+            _ => {}
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&policy.report(&integration)?)?
+        );
+        return Ok(true);
+    }
     let mut policy = StrategyPolicy::read(&settings)?;
     match command {
         CoordinationCmd::StrategyAllow {

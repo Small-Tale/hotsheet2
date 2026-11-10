@@ -231,7 +231,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/gate-timings.mjs   # Bounded per-stage and per-file local/CI timing history for budget estimates; local-gate --timings and --import-ci-timings (HS2-TCCKRZ; tests: gate-timings.test.mjs)
   scripts/gate-browser-exercise.mjs # Static index of the browser specs and providers.spec titles that exercise a changed client module through its class/route hooks, plain-module helpers and nearest shipped parents (HS2-N7EY18, HS2-R1D0S5; tests: local-gate.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)
-  scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles (HS2-VQ5ND5; tests: gate-ticket-profile.test.mjs)
+  scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles, including shared development-policy gate selection (HS2-VQ5ND5, HS2-BF79YX; tests: gate-ticket-profile.test.mjs)
   scripts/gate-budget.json   # Checked-in five-minute T0/T1 planning target
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
   scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
@@ -1168,6 +1168,12 @@ shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
 `routes/checkout_workers.rs`). The integrator session records a non-serial strategy
 only under the schema-eight fence (HS2-NEY1QH); `strategy_tests.rs` and
 `tests/coordination_strategy.rs` pin its transitions.
+`development_strategy.rs` owns the versioned shared project policy (Ticket Assured,
+Steady Main, Risk Guided), preset/override resolution, and the CLI/REST report
+shared by `coordination development-strategy` and the authenticated checkout
+route (HS2-BF79YX). The unset setting preserves the existing integration and
+risk-tier gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit
+setting for local gate selection.
 `preferences.rs` owns worker ticket preferences and requests (HS2-6WFCZR): the
 `tag:`/`category:`/`priority:`/`tier:` filter grammar, strict `only`/`avoid` and soft
 `prefer` matching, request checks and refusal reasons, and the snapshot projection

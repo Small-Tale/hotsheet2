@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use axum::Json;
 use axum::extract::{Path as RoutePath, Query, State};
 use axum::http::StatusCode;
+use hotsheet_cli::coordination::development_strategy::{DevelopmentPolicy, DevelopmentReport};
 use hotsheet_cli::coordination::strategy::StrategyReport;
 use hotsheet_cli::coordination::worker_view::{ConnectionObservation, WorkerView};
 use hotsheet_cli::coordination::{
@@ -232,6 +233,40 @@ pub(crate) async fn put_integration_strategies(
     let policy = StrategyPolicy::read(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     Ok(Json(policy.report()))
+}
+
+/// Shared versioned development policy. The CLI and REST handlers call the same
+/// read, resolve and write operations (HS2-BF79YX).
+pub(crate) async fn get_development_strategy(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+) -> Result<Json<DevelopmentReport>, ApiError> {
+    let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    let policy = DevelopmentPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let integration = StrategyPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(policy.report(&integration).map_err(|error| {
+        ApiError::new(StatusCode::CONFLICT, error.to_string())
+    })?))
+}
+
+pub(crate) async fn put_development_strategy(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    Json(policy): Json<DevelopmentPolicy>,
+) -> Result<Json<DevelopmentReport>, ApiError> {
+    let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    policy
+        .write(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let policy = DevelopmentPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let integration = StrategyPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(policy.report(&integration).map_err(|error| {
+        ApiError::new(StatusCode::CONFLICT, error.to_string())
+    })?))
 }
 
 fn worker_error(error: anyhow::Error) -> ApiError {

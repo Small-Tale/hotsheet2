@@ -781,8 +781,8 @@ adds real `/checkouts/{reference}/workers` (default and `include_past`) and
 worker preferences with a refused request, unmatched tickets, an expired past
 worker, and a batch policy with circuit-breaker thresholds. They are validated
 against `WorkerView` and the strategy report, so an omitted server field such as
-`past_workers` fails CI. The event
-schema also encodes assignment, activity, and turn envelope fields. The route
+`past_workers` fails CI. The event schema also encodes assignment, activity,
+and turn envelope fields. The route
 inventory includes the checkout legacy-permission discard and guidance endpoints
 (HS2-N44D0P); `clients/web/scripts/sync-openapi-routes.mjs` regenerates
 route-level entries from the Axum router before contract verification. Detailed
@@ -791,6 +791,12 @@ HS2-11BVBS now types the full 165-path inventory, including attachment binary
 and multipart routes, terminal WebSocket upgrade, provider outbox, guidance,
 permission, and analytics DTOs. The contract test rejects any remaining
 `route-only` marker and compiles every component schema.
+
+HS2-BF79YX adds model, CLI, authenticated REST, browser contract, and local-gate
+tests for versioned development presets, override precedence, invalid policy
+combinations, and migration with an unset setting. The unset path preserves the
+prior integration and risk-tier gate defaults; the new route is validated against
+the typed OpenAPI schema in `clients/web/tests/contracts.spec.ts`.
 
 HS2-9X1A6G covers Codex chat writes to a linked sibling ticket store. The
 `isolated_codex_home_grants_*` tests in `crates/hotsheet-aitools/src/launch_safety.rs`
