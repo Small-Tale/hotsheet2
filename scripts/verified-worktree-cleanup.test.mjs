@@ -20,7 +20,8 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
-function fixture({ cherryPick = false, batch = false, superseded = false, differentReplayPatch = false, retiredFindings = false } = {}) {
+function fixture({ cherryPick = false, batch = false, superseded = false, differentReplayPatch = false,
+  retiredFindings = false, findings = false, retiredCode = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hs2-hr3zx4-'));
   const project = join(root, 'project'),
     store = join(root, 'store'),
@@ -49,9 +50,11 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
   const worktree = join(project, '.claude', 'worktrees', branch);
   mkdirSync(join(project, '.claude', 'worktrees'), { recursive: true });
   git(project, 'worktree', 'add', '-b', branch, worktree);
-  writeFileSync(join(worktree, 'ticket.txt'), 'synthetic ticket\n');
-  git(worktree, 'add', 'ticket.txt');
-  git(worktree, 'commit', '-m', `${slug} Add synthetic change`);
+  if (!findings) {
+    writeFileSync(join(worktree, 'ticket.txt'), 'synthetic ticket\n');
+    git(worktree, 'add', 'ticket.txt');
+    git(worktree, 'commit', '-m', `${slug} Add synthetic change`);
+  }
   const source = git(worktree, 'rev-parse', 'HEAD');
   let replacement = null;
   if (superseded) {
@@ -120,7 +123,15 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     ticketStatus = 'completed',
     handoffCommit = source;
   const note = (heading, text, id = 'synthetic') => `<!-- hotsheet:note:begin ${id} created_at: 2026-11-09T00:00:00Z -->\n## ${heading}\n${text}\n<!-- hotsheet:note:end -->`;
-  let notes = superseded ? [
+  let notes = findings ? [
+    note('Findings handoff', `Assignment operation; clean source base ${source}; matching capture after.png`, 'findings-note'),
+    note('Review and completion', 'Reviewed the after.png capture and completed findings', 'review-note')
+      .replace('00:00:00Z', '00:01:00Z'),
+  ] : retiredCode ? [
+    note('Integration handoff', `Assignment operation; commit ${source}; worktree ${realpathSync(worktree)}`),
+    note('Review return', `Reviewed assignment operation at ${source}`, 'review-note'),
+    note('Coordination retirement', `assignment operation; code commit ${source}; recovery or review-return note review-note`),
+  ] : superseded ? [
     note('Integration handoff', `Assignment operation; branch ${branch}; commit ${source}; worktree ${realpathSync(worktree)}`),
     note('Replacement worker assignment', `Assignment: replacement; original ${source}; old assignment blocked and marked done`),
     note('Integration handoff', `Assignment replacement; commit ${replacement}; prior ${source}`),
@@ -130,16 +141,20 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     note('Worker assignment: reviewed correction', 'Operation operation supersedes old-findings, review-returned with note review-note'),
     note('Coordination retirement', 'assignment: old-findings; handoff evidence: findings note findings-note; recovery or review-return note: review-note'),
   ] : [];
-  let oldTransitions = superseded ? [
+  let oldTransitions = retiredCode ? [
+    { kind: 'review_return', at: '2026-11-09T00:01:00Z', actor: { role: 'integrator' } },
+    { kind: 'done', at: '2026-11-09T00:04:00Z', actor: { role: 'integrator' } },
+  ] : superseded ? [
     { kind: 'blocked', at: '2026-11-09T00:00:00Z', actor: { role: 'worker' } },
     { kind: 'done', at: '2026-11-09T00:01:00Z', actor: { role: 'integrator' } },
   ] : [];
   let extraReplacement = false;
-  let retiredPhase = 'done', retiredRecovery = 'review-note';
+  let retiredPhase = 'done', retiredRecovery = 'review-note', ciHead = shipping;
+  let ciCreatedAt = '2026-11-09T00:00:00Z';
   const run = (binary, args, cwd, input) => {
     if (binary === 'hotsheet-cli') {
       if (args.includes('show'))
-        return { status: 0, stdout: `---\nid: ${native}\nslug: ${slug}\nstatus: ${ticketStatus}\n---\n${notes.join('\n')}`, stderr: '' };
+        return { status: 0, stdout: `---\nid: ${native}\nslug: ${slug}\nstatus: ${ticketStatus}\nattachments:\n- id: synthetic-capture\n  filename: after.png\n---\n${notes.join('\n')}`, stderr: '' };
       if (args.includes('resolve'))
         return {
           status: 0,
@@ -173,7 +188,9 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
                       operation: {
                         id: 'operation',
                         phase,
-                        handoff: superseded ? null : { kind: 'code', commit: handoffCommit },
+                        handoff: findings ? { kind: 'findings', note_id: 'findings-note' } :
+                          superseded && !retiredCode ? null : { kind: 'code', commit: handoffCommit },
+                        recovery_note: retiredCode ? retiredRecovery : null,
                         ticket: { connection_id: connection, native_id: native },
                         worker: 'worker',
                         transitions: retiredFindings ? [{ kind: 'offered', at: '2026-11-09T00:02:00Z' }] : oldTransitions,
@@ -225,13 +242,13 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
         stdout: JSON.stringify([
           {
             databaseId: 1,
-            headSha: shipping,
+            headSha: ciHead,
             headBranch: 'main',
             event: 'push',
             workflowName: 'CI',
             status: 'completed',
             conclusion: ciConclusion,
-            createdAt: '2026-11-09T00:00:00Z',
+            createdAt: ciCreatedAt,
             url: 'https://example.invalid/1',
           },
         ]),
@@ -274,6 +291,10 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     },
     ci: (value) => {
       ciConclusion = value;
+    },
+    ciHead: (value, createdAt = '2026-11-09T00:02:00Z') => {
+      ciHead = value;
+      ciCreatedAt = createdAt;
     },
     status: (value) => {
       ticketStatus = value;
@@ -477,6 +498,108 @@ test('HS2-HQD4QZ refuses ambiguous or unlinked superseded replays', () => {
   }
 });
 
+test('HS2-EVHMV3 verifies a reviewed findings-only worktree without inventing a code gate', () => {
+  const f = fixture({ findings: true });
+  unlinkSync(f.gate);
+  assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
+  assert.equal(existsSync(f.worktree), true);
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+});
+
+test('HS2-EVHMV3 rejects incomplete findings evidence and active worktrees', () => {
+  for (const tamper of ['claim', 'phase', 'notes', 'attachment', 'head', 'ci', 'handles', 'dirty']) {
+    const f = fixture({ findings: true });
+    unlinkSync(f.gate);
+    if (tamper === 'claim') f.claim(true);
+    if (tamper === 'phase') f.phase('verifying');
+    if (tamper === 'notes') f.notes([]);
+    if (tamper === 'attachment') f.notes([`<!-- hotsheet:note:begin findings-note created_at: 2026-11-09T00:00:00Z -->\n## Findings handoff\nbase ${f.source}\n<!-- hotsheet:note:end -->`]);
+    if (tamper === 'head') git(f.worktree, 'commit', '--allow-empty', '-m', 'Unrelated head');
+    if (tamper === 'ci') f.ci('failure');
+    if (tamper === 'handles') f.handles(true);
+    if (tamper === 'dirty') writeFileSync(join(f.worktree, 'untracked.txt'), 'synthetic\n');
+    assert.throws(() => cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }), undefined, tamper);
+    assert.equal(existsSync(f.worktree), true, tamper);
+  }
+});
+
+test('HS2-EVHMV3 accepts an attributed red batch only after covering descendant CI', () => {
+  const f = fixture({ cherryPick: true, batch: true });
+  recordReviewedHandoff(f, { proposal: false });
+  unlinkSync(f.integratorGate);
+  f.batchEntry.state = 'red';
+  f.batchEntry.attributed = true;
+  f.batchEntry.run = '12';
+  f.batchEntry.concluded_at = Date.parse('2026-11-09T00:01:00Z') / 1000;
+  f.batchEntry.failures = [{ key: '12:gate:failure', follow_up: 'HS2-FOLLOW',
+    follow_up_ticket: { connection_id: connection, native_id: nextNative } }];
+  git(f.project, 'commit', '--allow-empty', '-m', 'HS2-FOLLOW Correct batch gate');
+  git(f.project, 'push', 'origin', 'main');
+  f.ciHead(git(f.project, 'rev-parse', 'HEAD'));
+  assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
+});
+
+test('HS2-EVHMV3 rejects unrelated or failed red-batch correction evidence', () => {
+  for (const tamper of ['unattributed', 'missing-followup', 'same-ci', 'same-head', 'old-ci',
+    'noncovering-ci', 'failed-ci', 'wrong-tree', 'missing-archive', 'dirty']) {
+    const f = fixture({ cherryPick: true, batch: true });
+    recordReviewedHandoff(f, { proposal: false });
+    unlinkSync(f.integratorGate);
+    f.batchEntry.state = 'red';
+    f.batchEntry.attributed = true;
+    f.batchEntry.run = '12';
+    f.batchEntry.concluded_at = Date.parse('2026-11-09T00:01:00Z') / 1000;
+    f.batchEntry.failures = [{ key: '12:gate:failure', follow_up: 'HS2-FOLLOW',
+      follow_up_ticket: { connection_id: connection, native_id: nextNative } }];
+    git(f.project, 'commit', '--allow-empty', '-m', 'HS2-FOLLOW Correct batch gate');
+    git(f.project, 'push', 'origin', 'main');
+    f.ciHead(git(f.project, 'rev-parse', 'HEAD'));
+    if (tamper === 'unattributed') f.batchEntry.attributed = false;
+    if (tamper === 'missing-followup') f.batchEntry.failures = [];
+    if (tamper === 'same-ci') {
+      f.batchEntry.run = '1';
+      f.batchEntry.failures[0].key = '1:gate:failure';
+    }
+    if (tamper === 'same-head') f.ciHead(f.shipping);
+    if (tamper === 'old-ci') f.ciHead(git(f.project, 'rev-parse', 'HEAD'), '2026-11-09T00:00:00Z');
+    if (tamper === 'noncovering-ci') f.ciHead(git(f.project, 'rev-parse', `${f.shipping}^`));
+    if (tamper === 'failed-ci') f.ci('failure');
+    if (tamper === 'wrong-tree') f.smokeReceipt.tree = '0'.repeat(40);
+    if (tamper === 'missing-archive') git(f.project, 'update-ref', '-d', `refs/hotsheet/integration-source/${f.source}`);
+    if (tamper === 'dirty') writeFileSync(join(f.worktree, 'untracked.txt'), 'synthetic\n');
+    if (tamper === 'wrong-tree') writeFileSync(f.receiptPath, JSON.stringify(f.smokeReceipt));
+    assert.throws(() => cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }), undefined, tamper);
+    assert.equal(existsSync(f.worktree), true, tamper);
+  }
+});
+
+test('HS2-EVHMV3 verifies reviewed retired code with a unique shipped replacement', () => {
+  const f = fixture({ cherryPick: true, batch: true, superseded: true, retiredCode: true });
+  recordSupersededReplay(f);
+  unlinkSync(f.integratorGate);
+  assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
+  assert.equal(cleanup({ ...f.options, operation: 'operation' }, { run: f.run }).state, 'removed');
+  assert.equal(git(f.project, 'rev-parse', `refs/hotsheet/integration-source/${f.source}`), f.source);
+});
+
+test('HS2-EVHMV3 refuses retired code without exact review, replacement, or archive proof', () => {
+  for (const tamper of ['review', 'ambiguous', 'commit', 'batch', 'archive', 'claim', 'handles', 'dirty']) {
+    const f = fixture({ cherryPick: true, batch: true, superseded: true, retiredCode: true });
+    recordSupersededReplay(f);
+    unlinkSync(f.integratorGate);
+    if (tamper === 'review') f.notes([]);
+    if (tamper === 'ambiguous') f.extraReplacement(true);
+    if (tamper === 'commit') f.handoff('0'.repeat(40));
+    if (tamper === 'batch') f.batchEntry.state = 'red';
+    if (tamper === 'archive') git(f.project, 'update-ref', '-d', `refs/hotsheet/integration-source/${f.replacement}`);
+    if (tamper === 'claim') f.claim(true);
+    if (tamper === 'handles') f.handles(true);
+    if (tamper === 'dirty') writeFileSync(join(f.worktree, 'untracked.txt'), 'synthetic\n');
+    assert.throws(() => cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }), undefined, tamper);
+    assert.equal(existsSync(f.worktree), true, tamper);
+  }
+});
+
 test('HS2-X4MM1P cleans a retired findings handoff only through its unique shipped replacement', () => {
   const f = fixture({ cherryPick: true, batch: true, retiredFindings: true });
   recordReviewedHandoff(f, { proposal: false });
@@ -613,6 +736,8 @@ test('HS2-HR3ZX4 resumes a branch deletion interrupted after worktree removal', 
     `${createHash('sha256').update(`${slug}\n${canonical}`).digest('hex')}.json`,
   );
   assert.equal(JSON.parse(readFileSync(intent, 'utf8')).branch, f.branch);
+  assert.equal(cleanup({ ...f.options, dryRun: true }, { run: f.run }).state, 'verified_already_removed');
+  assert.equal(command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status, 0);
   assert.equal(cleanup(f.options, { run: f.run }).state, 'already_removed');
   assert.equal(command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status, 1);
 });

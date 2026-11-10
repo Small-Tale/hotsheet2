@@ -88,7 +88,8 @@ function coordination(project, store, ticket, operation, run) {
     'handoff, review, build, or CI wait is still active');
   const notes = ticketNotes(ticket.markdown);
   requireProof(assignments.every((assignment) => !assignment.recovery_note ||
-    retiredFindingsAssignment(assignment, assignments, operation, ticket.markdown, notes)),
+    retiredFindingsAssignment(assignment, assignments, operation, ticket.markdown, notes) ||
+    retiredCodeAssignment(assignment, assignments, operation, ticket.markdown, notes)),
     'handoff, review, build, or CI wait is still active');
   const relevant = operation ? assignments.find((assignment) => assignment.id === operation) : null;
   if (operation)
@@ -125,6 +126,34 @@ function retiredFindingsAssignment(old, assignments, operation, markdown, notes)
       note.includes(old.id) && note.includes(old.handoff.note_id) && note.includes(old.recovery_note));
 }
 
+// HS2-EVHMV3: a reviewed code return can be retired after one later code
+// assignment shipped. Its own worktree still needs the exact source-note and
+// archive checks in retiredCodeMapping below.
+function retiredCodeAssignment(old, assignments, operation, markdown, notes) {
+  if (!operation || old.handoff?.kind !== 'code' || !old.recovery_note ||
+    !sha.test(old.handoff.commit ?? '') ||
+    !markdown.includes(`<!-- hotsheet:note:begin ${old.recovery_note} `)) return false;
+  const transitions = old.transitions ?? [];
+  const reviewed = transitions.findIndex((item) => item.kind === 'review_return' && item.actor?.role === 'integrator');
+  const retired = transitions.findIndex((item, index) => index > reviewed &&
+    item.kind === 'done' && item.actor?.role === 'integrator');
+  if (reviewed < 0 || retired < 0) return false;
+  const review = [...markdown.matchAll(
+    /<!-- hotsheet:note:begin (\S+) [^>]*-->\n?([\s\S]*?)<!-- hotsheet:note:end -->/g,
+  )].find((match) => match[1] === old.recovery_note)?.[2]?.trimStart();
+  if (!review?.startsWith('## Review return') || !review.includes(old.id) ||
+    !review.includes(old.handoff.commit)) return false;
+  const replacements = assignments.filter((item) => item.id !== old.id && item.phase === 'done' &&
+    item.handoff?.kind === 'code' && !item.recovery_note &&
+    (item.transitions ?? []).some((transition) => transition.kind === 'offered' &&
+      transition.at > transitions[reviewed].at));
+  if (replacements.length !== 1 || (replacements[0].id !== operation && old.id !== operation)) return false;
+  return notes.some((note) => note.startsWith('## Review return') &&
+      note.includes(old.id) && note.includes(old.handoff.commit)) &&
+    notes.some((note) => note.startsWith('## Coordination retirement') &&
+      note.includes(old.id) && note.includes(old.handoff.commit) && note.includes(old.recovery_note));
+}
+
 function ticketNotes(markdown) {
   return [...markdown.matchAll(/<!-- hotsheet:note:begin \S+ [^>]*-->\n?([\s\S]*?)<!-- hotsheet:note:end -->/g)]
     .map((match) => match[1].trimStart());
@@ -142,7 +171,7 @@ function commitPatchId(project, commit, run) {
 
 // HS2-HQD4QZ: a superseded operation has no code handoff of its own. Its exact
 // source may be removed only when a unique reviewed replay of that patch shipped.
-function supersededMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, assignments, remote, run) {
+function supersededMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, assignments, remote, ci, run) {
   requireProof(assignment && !assignment.handoff, 'superseded operation has a code handoff');
   const transitions = assignment.transitions ?? [];
   const blocked = transitions.findIndex((item) => item.kind === 'blocked' && item.actor?.role === 'worker');
@@ -182,13 +211,70 @@ function supersededMapping(project, common, ticket, operation, path, branch, hea
     record.source_commits?.includes(source) && record.shipping_commits?.includes(shipping),
     'replacement integration record does not map source and shipping commits',
   );
-  const member = batchGate(project, ticket.source.locator, common, ticket, replacement.id, shipping, remote, run);
+  const member = batchGate(project, ticket.source.locator, common, ticket, replacement.id, shipping, remote, ci, run);
   requireProof(member?.source_commit === source, 'replacement batch has no exact source commit mapping');
   requireProof(
     git(run, project, 'rev-parse', '--verify', `refs/hotsheet/integration-source/${source}`) === source,
     'replacement source commit is not preserved by its integration archive ref',
   );
   return true;
+}
+
+function retiredCodeMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, assignments, remote, ci, run) {
+  requireProof(assignment?.handoff?.kind === 'code' && assignment.handoff.commit === head &&
+    assignment.recovery_note && retiredCodeAssignment(assignment, assignments, operation,
+      ticket.markdown, ticketNotes(ticket.markdown)), 'old code handoff lacks reviewed retirement');
+  sourceWorktreeIdentity(project, path, branch, ticket.ticket.slug, run);
+  const notes = ticketNotes(ticket.markdown);
+  requireProof(notes.some((note) => note.startsWith('## Integration handoff') &&
+    note.includes(operation) && note.includes(head) && note.includes(path)),
+  'old code handoff note does not identify this worktree and commit');
+  const replacements = assignments.filter((item) => item.id !== operation && item.phase === 'done' &&
+    item.handoff?.kind === 'code' && !item.recovery_note &&
+    (item.transitions ?? []).some((transition) => transition.kind === 'offered' &&
+      transition.at > (assignment.transitions ?? []).find((old) => old.kind === 'review_return')?.at));
+  requireProof(replacements.length === 1, 'old code handoff has ambiguous replacement ancestry');
+  const replacement = replacements[0];
+  requireProof(operationName.test(replacement.id) && sha.test(replacement.handoff.commit ?? ''),
+    'replacement code handoff is invalid');
+  const recordPath = join(common, 'hotsheet-integrations', hash(ticket.qualified), `${replacement.id}.json`);
+  requireProof(existsSync(recordPath), 'replacement integration record is missing');
+  const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+  requireProof(record.version === 1 && record.operation === replacement.id && record.branch === 'main' &&
+    record.ticket?.project_id === ticket.qualified.split('/')[0].slice(1) &&
+    record.ticket?.connection_id === ticket.source.connection_id && record.ticket?.native_id === ticket.ticket.id &&
+    record.source_commits?.includes(replacement.handoff.commit) && record.shipping_commits?.includes(shipping),
+  'replacement integration record does not map source and shipping commits');
+  const member = batchGate(project, ticket.source.locator, common, ticket, replacement.id, shipping, remote, ci, run);
+  requireProof(member?.source_commit === replacement.handoff.commit,
+    'replacement batch has no exact source commit mapping');
+  requireProof(git(run, project, 'rev-parse', '--verify',
+    `refs/hotsheet/integration-source/${replacement.handoff.commit}`) === replacement.handoff.commit,
+  'replacement source commit is not preserved by its integration archive ref');
+}
+
+function findingsMapping(project, ticket, operation, path, branch, head, shipping, assignment, remote, run) {
+  requireProof(assignment?.handoff?.kind === 'findings' && assignment.handoff.note_id &&
+    !assignment.recovery_note, 'findings handoff is not reviewed and done');
+  sourceWorktreeIdentity(project, path, branch, ticket.ticket.slug, run, { findings: true });
+  requireProof(head === shipping &&
+    run('git', ['merge-base', '--is-ancestor', head, remote], project).status === 0,
+  'findings source HEAD is not the preserved shipping base');
+  const entries = [...ticket.markdown.matchAll(
+    /<!-- hotsheet:note:begin (\S+) ([^>]*) -->\n?([\s\S]*?)<!-- hotsheet:note:end -->/g,
+  )];
+  const handoff = entries.find((entry) => entry[1] === assignment.handoff.note_id);
+  requireProof(handoff?.[3].trimStart().startsWith('## Findings handoff') && handoff[3].includes(head),
+    'findings note does not identify the preserved source base');
+  const handoffAt = Date.parse(/created_at: (\S+)/.exec(handoff[2])?.[1] ?? '');
+  const captures = [...ticket.markdown.matchAll(/^\s*filename: ([^\n]+\.png)$/gm)].map((match) => match[1]);
+  requireProof(captures.length > 0 && captures.some((name) => handoff[3].includes(name)),
+    'findings handoff lacks attached visual evidence');
+  requireProof(entries.some((entry) => entry[3].trimStart().startsWith('## Review and completion') &&
+    Date.parse(/created_at: (\S+)/.exec(entry[2])?.[1] ?? '') > handoffAt &&
+    captures.some((name) => handoff[3].includes(name) && entry[3].includes(name))),
+  'integrator review does not confirm an attached findings capture');
+  requireProof(operationName.test(operation), 'findings operation is not a safe identifier');
 }
 
 function handoffMapping(project, common, ticket, operation, path, branch, head, shipping, assignment, batchMember, run) {
@@ -239,8 +325,8 @@ function handoffMapping(project, common, ticket, operation, path, branch, head, 
 }
 
 // HS2-VKGV08: a batch smoke gate writes its exact receipt in the shared Git cache, not a
-// root-gate marker in the primary checkout. Bind it to the green batch and its exact member.
-function batchGate(project, store, common, ticket, operation, shipping, remote, run) {
+// root-gate marker in the primary checkout. Bind it to its exact shipped member.
+function batchGate(project, store, common, ticket, operation, shipping, remote, ci, run) {
   const ledger = JSON.parse(
     checked(run, 'hotsheet-cli', ['-C', store, 'coordination', '--project', project, 'batch-status'], project),
   );
@@ -263,7 +349,16 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
     batch.tickets.some((member) => member.assignment === operation && member.shipping_commits?.includes(shipping)),
     'reviewed batch does not map the exact shipping commit',
   );
-  requireProof(batch.state === 'green' && sha.test(batch.main_commit ?? ''), 'reviewed batch is not green');
+  const correctedRed = batch.state === 'red' && batch.attributed === true &&
+    /^[0-9]+$/.test(batch.run ?? '') && Array.isArray(batch.failures) && batch.failures.length > 0 &&
+    batch.failures.every((failure) => failure.key?.startsWith(`${batch.run}:`) &&
+      /^HS2-[A-Z0-9]+$/.test(failure.follow_up ?? '') &&
+      failure.follow_up_ticket?.connection_id && failure.follow_up_ticket?.native_id) &&
+    ci && ci.headSha !== batch.main_commit && String(ci.id) !== batch.run &&
+    Date.parse(ci.createdAt) > batch.concluded_at * 1000 &&
+    run('git', ['merge-base', '--is-ancestor', batch.main_commit, ci.headSha], project).status === 0;
+  requireProof((batch.state === 'green' || correctedRed) && sha.test(batch.main_commit ?? ''),
+    'reviewed batch is not green or corrected by an attributed covering descendant');
   requireProof(
     run('git', ['merge-base', '--is-ancestor', shipping, batch.main_commit], project).status === 0 &&
       run('git', ['merge-base', '--is-ancestor', batch.main_commit, remote], project).status === 0,
@@ -304,7 +399,7 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
   return batch.tickets.find((member) => member.assignment === operation && member.shipping_commits?.includes(shipping));
 }
 
-function sourceWorktreeIdentity(project, path, branch, slug, run) {
+function sourceWorktreeIdentity(project, path, branch, slug, run, { findings = false } = {}) {
   const token = slug.toLowerCase();
   requireProof(branch === token || branch.startsWith(`${token}-`), 'branch does not identify this ticket');
   requireProof(basename(path) === branch, 'worktree path does not identify this branch');
@@ -314,7 +409,7 @@ function sourceWorktreeIdentity(project, path, branch, slug, run) {
     subpath && !subpath.startsWith('..') && !subpath.includes('/'),
     'worktree is outside the ticket worktree root',
   );
-  requireProof(
+  if (!findings) requireProof(
     git(run, path, 'log', '-1', '--format=%s').startsWith(`${slug} `),
     'source HEAD subject does not name this ticket',
   );
@@ -440,9 +535,10 @@ export function cleanup(options, { run = command } = {}) {
           run('git', ['merge-base', '--is-ancestor', previous.head, remote], project).status === 0,
           'interrupted source commit is not preserved',
         );
-      deleteBranch(project, previous.branch, previous.head, options.operation, run);
+      if (!options.dryRun) deleteBranch(project, previous.branch, previous.head, options.operation, run);
     }
-    return { state: 'already_removed', branch: previous.branch, reclaimedBytes: 0, ciRun: ci.id };
+    return { state: options.dryRun ? 'verified_already_removed' : 'already_removed',
+      branch: previous.branch, reclaimedBytes: 0, ciRun: ci.id };
   }
   requireProof(existsSync(path), 'worktree is missing without a cleanup intent');
   const resolved = realpathSync(path);
@@ -453,11 +549,13 @@ export function cleanup(options, { run = command } = {}) {
     'worktree has tracked or non-ignored untracked edits',
   );
   requireProof(git(run, path, 'rev-parse', 'HEAD') === head, 'worktree HEAD changed');
+  const findings = assignment?.handoff?.kind === 'findings' && !assignment.recovery_note;
+  const retiredCode = assignment?.handoff?.kind === 'code' && Boolean(assignment.recovery_note);
   const superseded = Boolean(options.operation && !assignment.handoff);
-  const batchPassed = options.operation && !superseded
-    ? batchGate(project, store, common, identity, options.operation, shipping, remote, run)
+  const batchPassed = options.operation && !superseded && !findings && !retiredCode
+    ? batchGate(project, store, common, identity, options.operation, shipping, remote, ci, run)
     : false;
-  if (!batchPassed && !superseded) {
+  if (!batchPassed && !superseded && !findings && !retiredCode) {
     // Direct and nonbatch handoffs still require their existing exact-tree root-gate marker.
     const gateCheckout = options.operation ? project : path;
     const gateDir = resolve(gateCheckout, git(run, gateCheckout, 'rev-parse', '--git-path', 'hotsheet-root-gate'));
@@ -468,7 +566,11 @@ export function cleanup(options, { run = command } = {}) {
     );
   }
   if (superseded)
-    supersededMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, assignments, remote, run);
+    supersededMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, assignments, remote, ci, run);
+  else if (findings)
+    findingsMapping(project, identity, options.operation, path, branch, head, shipping, assignment, remote, run);
+  else if (retiredCode)
+    retiredCodeMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, assignments, remote, ci, run);
   else if (options.operation)
     handoffMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, batchPassed, run);
   else directMapping(project, path, branch, head, slug, run);
@@ -477,7 +579,8 @@ export function cleanup(options, { run = command } = {}) {
     'source commit is not preserved on origin/main or an integration archive ref',
   );
   liveHandles(path, project, run);
-  if (superseded) {
+  if (options.dryRun) return { state: 'verified', branch, head, shipping, ciRun: ci.id };
+  if (superseded || retiredCode) {
     const archive = `refs/hotsheet/integration-source/${head}`;
     const existing = run('git', ['rev-parse', '--verify', archive], project);
     if (existing.status === 0) requireProof(existing.stdout.trim() === head, 'old source archive ref differs');
@@ -507,6 +610,12 @@ function args(values) {
   for (let index = 0; index < values.length; index += 2) {
     const key = values[index],
       value = values[index + 1];
+    if (key === '--dry-run') {
+      if (parsed.dryRun) throw new Error('duplicate --dry-run');
+      parsed.dryRun = true;
+      index -= 1;
+      continue;
+    }
     if (
       !['--project', '--store', '--ticket', '--worktree', '--shipping', '--operation'].includes(key) ||
       !value ||
