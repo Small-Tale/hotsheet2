@@ -110,11 +110,13 @@ describe('inline advanced-search tokens', () => {
     expect(sameInlineSearchState('find', [token], 'find', [{ ...token, offset: 3 }])).toBe(false);
     expect(sameInlineSearchState('find', [token], 'other', [{ ...token }])).toBe(false);
   });
-  it('normalizes machine-local and ISO dates and rejects impossible dates', () => {
-    expect(parseSearchDate('09/01/2026 11:05 AM', 'en-US')).toMatch(/^2026-09-01T/);
-    expect(parseSearchDate('01/09/2026 23:05', 'en-GB')).toMatch(/^2026-09-01T/);
-    expect(parseSearchDate('2026-09-01T11:05')).toMatch(/^2026-09-01T/);
+  it('normalizes machine-local and ISO dates across timezones and rejects impossible dates (HS2-8F6SN3)', () => {
+    const localMorning = new Date(2026, 8, 1, 11, 5).toISOString();
+    expect(parseSearchDate('09/01/2026 11:05 AM', 'en-US')).toBe(localMorning);
+    expect(parseSearchDate('01/09/2026 23:05', 'en-GB')).toBe(new Date(2026, 8, 1, 23, 5).toISOString());
+    expect(parseSearchDate('2026-09-01T11:05')).toBe(localMorning);
     expect(parseSearchDate('2026-09-01T11:05:00Z')).toBe('2026-09-01T11:05:00.000Z');
+    expect(parseSearchDate('2026-09-01T11:05:00+09:00')).toBe('2026-09-01T02:05:00.000Z');
     expect(parseSearchDate('2026/09/07')).toBe(new Date(2026, 8, 7).toISOString());
     expect(parseSearchDate('4h ago', 'en-US', new Date('2026-09-01T12:00:00Z'))).toBe('2026-09-01T08:00:00.000Z');
     expect(parseSearchDate('31/02/2026', 'en-GB')).toBeUndefined();
