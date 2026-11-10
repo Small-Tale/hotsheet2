@@ -1,5 +1,5 @@
 // HS2-RS0FFT: affected local verification and exact-input evidence.
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { removeGitRepositoryEnv, withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -15,9 +15,15 @@ import { readTicketProfile } from './gate-ticket-profile.mjs';
 import { sandboxFailureNotice } from './sandbox-notice.mjs';
 import {
   importCiReports,
+  importCiJobs,
   loadTimingHistory,
   recordCompletedGate,
+  recordAttempt,
+  reportCaseObservations,
+  reportFileObservations,
   reportFileTimings,
+  observationStageKey,
+  summarizeObservations,
   summarizeTimings,
 } from './gate-timings.mjs';
 import { verifyInstalledDependencies } from './installed-dependencies.mjs';
@@ -118,14 +124,22 @@ export function importCiTimings(repo, directory) {
     playwright: join(directory, 'playwright-report.json'),
   };
   const reports = Object.fromEntries(Object.entries(paths).filter(([, path]) => existsSync(path)));
-  if (!Object.keys(reports).length) throw new Error('No CI timing artifacts found in the named directory.');
+  const jobs = join(directory, 'jobs.json');
+  if (!Object.keys(reports).length && !existsSync(jobs)) throw new Error('No CI timing artifacts found in the named directory.');
   const roots = { nextest: repo, vitest: join(repo, 'clients/web'), playwright: join(repo, 'clients/web') };
   mkdirSync(dirname(timingPath(repo)), { recursive: true });
-  return importCiReports(timingPath(repo), reports, roots);
+  const manifest = read(join(directory, 'manifest.json')) ?? {};
+  if (Object.keys(reports).length) importCiReports(timingPath(repo), reports, roots, manifest);
+  if (existsSync(jobs)) importCiJobs(timingPath(repo), readFileSync(jobs, 'utf8'), manifest);
+  return loadTimingHistory(timingPath(repo));
 }
 
 export function inspectTimings(repo) {
   return summarizeTimings(loadTimingHistory(timingPath(repo)));
+}
+
+export function inspectObservations(repo) {
+  return summarizeObservations(loadTimingHistory(timingPath(repo)));
 }
 
 /**
@@ -692,7 +706,20 @@ export function runGate(options = {}) {
     );
   }
   const existing = read(receiptPath);
+  const selectedChecks = before.checks.map(observationStageKey);
+  const deferredChecks = before.deferred.map(observationStageKey);
+  const attempt = {
+    id: `local:${randomUUID()}`, source: 'local', cohort: `local-${before.mode}-${before.tier ?? 'T1'}`,
+    startedAt: gateStarted, selected: selectedChecks, deferred: deferredChecks, checks: [], cases: [],
+  };
+  const remember = () => {
+    try { recordAttempt(timingPath(repo), attempt); }
+    catch (error) { console.warn(`Gate observation history unavailable: ${error.message}`); }
+  };
   if (existing?.key === before.key && existing.tree === before.tree) {
+    attempt.endedAt = Date.now();
+    attempt.checks = selectedChecks.map((id) => ({ id, outcome: 'reused' }));
+    remember();
     writeMarker();
     log(`Local gate already passed for tree ${before.tree}; reused exact receipt for budget ${budgetLabel}`);
     logPlatformCfg(before, log);
@@ -700,12 +727,15 @@ export function runGate(options = {}) {
   }
   clearMarker();
   if (verify) throw new Error('No valid exact-input local gate receipt; run scripts/check.sh before pushing.');
+  remember();
   const results = [];
   const observations = [];
   for (const stage of before.checks) {
     const stagePath = join(before.cache, `stage-${stage.key}.json`);
     if (read(stagePath)?.key === stage.key) {
       results.push({ command: stage.command, reused: true });
+      attempt.checks.push({ id: observationStageKey(stage), outcome: 'reused' });
+      remember();
       continue;
     }
     log(`Run ${stage.cwd}: ${stage.command} (${stage.budgetReason}; ${stage.reasons.join('; ')})`);
@@ -715,11 +745,30 @@ export function runGate(options = {}) {
       rmSync(report.path, { force: true });
     }
     const started = Date.now();
+    const check = { id: observationStageKey(stage), outcome: 'interrupted', startedAt: started };
+    attempt.checks.push(check);
+    remember();
     const result = execute([stage], {
       repo,
       runner: runner ?? ((current) => instrumentedRunner(current, repo, report)),
     });
     results.push(...result.results);
+    const finished = Date.now();
+    const outcome = result.results[0];
+    check.endedAt = finished;
+    check.ms = finished - started;
+    check.outcome = outcome.signal ? 'interrupted' : result.status === 0 ? 'pass' : 'fail';
+    check.category = outcome.signal ? `signal:${outcome.signal}` : result.status === 0 ? null : `exit:${result.status}`;
+    if (report) {
+      try {
+        if (statSync(report.path).mtimeMs >= started) {
+          const body = readFileSync(report.path, 'utf8');
+          attempt.cases.push(...reportCaseObservations(report.kind, body, report.root));
+          attempt.checks.push(...reportFileObservations(report.kind, body, report.root));
+        }
+      } catch { /* A missing runner report leaves case observations unknown. */ }
+    }
+    remember();
     if (result.status !== 0) {
       log(`Local gate failed after ${Date.now() - gateStarted}ms; budget ${budgetLabel}. No receipt recorded.`);
       const notice = sandboxFailureNotice(env);
@@ -755,6 +804,8 @@ export function runGate(options = {}) {
   );
   // Preserve the coordination/completion contract before recording an observation.
   writeMarker();
+  attempt.endedAt = Date.now();
+  remember();
   try {
     recordCompletedGate(timingPath(repo), observations);
   } catch (error) {
@@ -802,7 +853,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     if (args.includes('--timings') || args.includes('--import-ci-timings')) {
       if (args.includes('--import-ci-timings')) importCiTimings(root, args[args.indexOf('--import-ci-timings') + 1]);
-      console.log(JSON.stringify(inspectTimings(root), null, 2));
+      console.log(JSON.stringify({ ...inspectTimings(root), observations: inspectObservations(root) }, null, 2));
     } else {
       process.exitCode = runGate({
         inspect: args.includes('--plan'),

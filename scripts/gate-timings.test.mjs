@@ -1,16 +1,22 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { inspectObservations, runGate } from './local-gate.mjs';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 import {
   appendTiming,
   importCiReports,
+  importCiJobs,
   loadTimingHistory,
+  recordAttempt,
   recordCompletedGate,
+  reportCaseObservations,
   reportFileTimings,
   stageTimingKey,
+  summarizeObservations,
   summarizeTimings,
   timingEstimate,
 } from './gate-timings.mjs';
@@ -139,7 +145,7 @@ test('HS2-TCCKRZ concurrent workers retain both timing samples', async (t) => {
   const source = `import { recordCompletedGate } from ${JSON.stringify(moduleUrl)}; recordCompletedGate(process.argv[1], [{ cwd: '.', command: 'cargo lint', status: 0, ms: 100 }]);`;
   const run = () =>
     new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, ['--input-type=module', '-e', source, history]);
+      const child = spawn(process.execPath, ['--input-type=module', '-e', source, history], { env: withoutGitRepositoryEnv(process.env) });
       let stderr = '';
       child.stderr.on('data', (chunk) => {
         stderr += chunk;
@@ -149,4 +155,93 @@ test('HS2-TCCKRZ concurrent workers retain both timing samples', async (t) => {
     });
   await Promise.all([run(), run()]);
   assert.equal(loadTimingHistory(history).stages['.: cargo lint'].length, 2);
+});
+
+test('HS2-5RDMEV records failed, interrupted, reused and deferred checks without false fast passes', (t) => {
+  const { history } = fixture(t);
+  const base = { id: 'local:run-1', source: 'local', cohort: 'local-T2', startedAt: 100,
+    selected: ['rust', 'web'], deferred: ['browser'], checks: [
+      { id: 'rust', outcome: 'pass', startedAt: 110, endedAt: 210, ms: 100 },
+      { id: 'web', outcome: 'interrupted', startedAt: 220 },
+    ] };
+  recordAttempt(history, base);
+  recordAttempt(history, { ...base, endedAt: 300, checks: [
+    base.checks[0], { id: 'web', outcome: 'fail', startedAt: 220, endedAt: 300, ms: 80, category: 'exit:1' },
+  ] });
+  recordAttempt(history, { id: 'local:run-2', source: 'local', selected: ['rust'], deferred: ['web', 'browser'],
+    checks: [{ id: 'rust', outcome: 'reused' }] });
+  const summary = summarizeObservations(loadTimingHistory(history), ['missing']);
+  assert.equal(summary.attempts, 2);
+  assert.deepEqual(summary.checks.find((row) => row.id === 'web'), {
+    id: 'web', selected: 1, deferred: 1, attempted: 1, pass: 0, fail: 1, skip: 0, reused: 0,
+    interrupted: 0, successMs: { samples: 0, p50: null, p75: null, p90: null },
+    failureMs: { samples: 1, p50: 80, p75: 80, p90: 80 }, unknown: false,
+  });
+  assert.equal(summary.checks.find((row) => row.id === 'missing').unknown, true);
+  assert.equal(summary.checks.find((row) => row.id === 'rust').reused, 1);
+  assert.deepEqual(summary.cohorts.map((row) => [row.cohort, row.attempts]), [['local', 1], ['local-T2', 1]]);
+  assert.equal(summary.cohorts.find((row) => row.cohort === 'local-T2').checks.find((row) => row.id === 'rust').reused, 0);
+});
+
+test('HS2-5RDMEV bounds attempts and rejects path or raw diagnostic identities', (t) => {
+  const { history } = fixture(t);
+  for (let index = 0; index < 25; index += 1) recordAttempt(history, {
+    id: `local:${index}`, source: 'local', selected: ['check'], checks: [{ id: 'check', outcome: 'fail', category: 'exit:1' }],
+  });
+  assert.equal(loadTimingHistory(history).attempts.length, 20);
+  assert.throws(() => recordAttempt(history, { id: 'local:private', source: 'local', selected: ['/Users/private/secret'], checks: [] }), /Invalid/);
+  assert.throws(() => recordAttempt(history, { id: 'local:private', source: 'local', selected: [], checks: [{ id: 'x', outcome: 'raw error: /Users/private' }] }), /Invalid/);
+});
+
+test('HS2-5RDMEV imports failed CI case observations and deduplicates run attempts', (t) => {
+  const { dir, history } = fixture(t);
+  const file = join(dir, 'vitest.json');
+  writeFileSync(file, JSON.stringify({ success: false, testResults: [{ name: join(dir, 'clients/web/src/a.test.ts'),
+    startTime: 0, endTime: 100, assertionResults: [{ fullName: 'dynamic private title', status: 'failed', duration: 40, failureMessages: ['secret'] }] }] }));
+  const roots = { vitest: join(dir, 'clients/web') };
+  const meta = { runId: '123', runAttempt: '2', cohort: 'ci-main', os: 'Linux-X64' };
+  importCiReports(history, { vitest: file }, roots, meta);
+  importCiReports(history, { vitest: file }, roots, meta);
+  const jobs = { jobs: [{ id: 7, name: 'test', started_at: '2026-11-10T00:00:00Z', completed_at: '2026-11-10T00:00:02Z', steps: [
+    { name: 'web', started_at: '2026-11-10T00:00:00Z', completed_at: '2026-11-10T00:00:02Z', conclusion: 'failure' },
+    { name: 'browser', conclusion: 'skipped' },
+  ] }] };
+  importCiJobs(history, jobs, meta);
+  importCiJobs(history, jobs, meta);
+  const data = loadTimingHistory(history);
+  assert.equal(data.attempts.length, 2);
+  assert.equal(data.attempts[0].cases[0].outcome, 'fail');
+  assert.equal(data.attempts[0].host, 'ci-runner');
+  assert.equal(data.attempts[0].cases[0].id.includes('dynamic private title'), false);
+  assert.equal(JSON.stringify(data).includes('secret'), false);
+  assert.equal(data.attempts[1].checks[0].ms, 2000);
+  assert.equal(data.attempts[1].checks[1].outcome, 'skip');
+  assert.deepEqual(data.attempts[1].deferred, ['ci:test:browser']);
+  assert.equal(reportCaseObservations('vitest', readFileSync(file, 'utf8'), roots.vitest).length, 1);
+  assert.equal(reportCaseObservations('vitest', JSON.stringify({ testResults: [{ name: 'C:\\ci\\clients\\web\\src\\win.test.ts', assertionResults: [{ fullName: 'works', status: 'passed', duration: 2 }] }] }), roots.vitest)[0].id.startsWith('vitest:src/win.test.ts#'), true);
+});
+
+test('HS2-5RDMEV real gate records failed execution, passing retry, and receipt reuse without changing status', (t) => {
+  const { dir } = fixture(t);
+  const git = (...args) => execFileSync('git', args, { cwd: dir, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' }).trim();
+  const put = (file, body) => { mkdirSync(dirname(join(dir, file)), { recursive: true }); writeFileSync(join(dir, file), body); };
+  git('init', '--quiet', '-b', 'main');
+  git('config', 'user.name', 'Synthetic');
+  git('config', 'user.email', 'synthetic@invalid.example');
+  put('scripts/check-full.sh', readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8'));
+  put('scripts/gate-budget.json', JSON.stringify({ defaultBudgetMs: 300000 }));
+  put('clients/web/src/example.ts', 'export const value = 1;\n');
+  git('add', '.'); git('commit', '--quiet', '-m', 'base'); git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  put('clients/web/src/example.ts', 'export const value = 2;\n');
+  git('commit', '--quiet', '-am', 'change');
+  const options = { repo: dir, versions: [['synthetic-toolchain', '1']], log: () => {} };
+  assert.equal(runGate({ ...options, runner: () => ({ status: 7 }) }), 7);
+  assert.equal(runGate({ ...options, runner: () => ({ status: 0 }) }), 0);
+  assert.equal(runGate({ ...options, runner: () => { throw new Error('receipt should be reused'); } }), 0);
+  const data = loadTimingHistory(join(dir, '.git/hotsheet-gate-timings.json'));
+  assert.equal(data.attempts.length, 3);
+  assert.deepEqual(data.attempts.map((entry) => entry.checks[0].outcome), ['fail', 'pass', 'reused']);
+  assert.equal(data.attempts[0].checks.length, 1, 'first failure still stops');
+  assert.equal(data.attempts[2].checks[0].ms, null, 'receipt reuse has no synthetic duration');
+  assert.equal(inspectObservations(dir).attempts, 3);
 });

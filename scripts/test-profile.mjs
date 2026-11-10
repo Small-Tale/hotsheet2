@@ -27,6 +27,57 @@ export function nextestTimings(xml) {
   }));
 }
 
+/** HS2-5RDMEV: JUnit case outcomes, including cases in a failed run. */
+export function nextestOutcomes(xml) {
+  return [...xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g)].map(([, tag, body = '']) => ({
+    name: `${attribute(tag, 'classname')} ${attribute(tag, 'name')}`,
+    seconds: Number(attribute(tag, 'time') ?? 0),
+    outcome: /<(?:failure|error)\b/.test(body) ? 'fail' : /<skipped\b/.test(body) ? 'skip' : 'pass',
+  }));
+}
+
+/** Jest-compatible Vitest JSON names and final outcomes, never failure messages. */
+export function vitestOutcomes(report, root = '') {
+  const cases = [];
+  for (const file of report.testResults ?? []) {
+    const name = root ? path.relative(root, file.name) : file.name;
+    for (const result of file.assertionResults ?? []) {
+      const status = result.status;
+      cases.push({
+        name: `${name} > ${result.fullName ?? result.title}`,
+        seconds: (result.duration ?? 0) / 1000,
+        outcome: status === 'passed' ? 'pass' : status === 'pending' || status === 'skipped' ? 'skip' : 'fail',
+      });
+    }
+  }
+  return cases;
+}
+
+/** Playwright JSON keeps each retry as a distinct attempted case. */
+export function playwrightOutcomes(report) {
+  const cases = [];
+  const visit = (suite, titles) => {
+    const nextTitles = suite.title && !suite.file?.endsWith(suite.title) ? [...titles, suite.title] : titles;
+    for (const spec of suite.specs ?? []) {
+      for (const test of spec.tests ?? []) {
+        const project = test.projectName ? `[${test.projectName}] ` : '';
+        const name = `${project}${spec.file}:${spec.line} › ${[...nextTitles, spec.title].join(' › ')}`;
+        for (const [attempt, result] of (test.results ?? []).entries()) {
+          cases.push({
+            name: `${name} #${attempt + 1}`,
+            seconds: (result.duration ?? 0) / 1000,
+            outcome: result.status === 'passed' ? 'pass' : result.status === 'skipped' ? 'skip' : result.status === 'interrupted' ? 'interrupted' : 'fail',
+          });
+        }
+        if (!(test.results ?? []).length) cases.push({ name, seconds: 0, outcome: 'skip' });
+      }
+    }
+    for (const child of suite.suites ?? []) visit(child, nextTitles);
+  };
+  for (const suite of report.suites ?? []) visit(suite, []);
+  return cases;
+}
+
 /** Vitest JSON (Jest-compatible): per-test durations plus per-file wall time. */
 export function vitestTimings(report, root = "") {
   const tests = [];
