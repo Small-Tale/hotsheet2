@@ -4,12 +4,12 @@
 //! - **Usage-limit pause.** A terminal halt whose error type is the tool's usage or rate
 //!   limit. Claude's `StopFailure` hook reports `rate_limit`; a Codex rollout's failed turn
 //!   reports `codex_error_info` `usage_limit_exceeded`. Neither carries a structured reset
-//!   time, so [`reported_reset`] reads one from the message only when the message states an
-//!   absolute or relative instant that needs no time zone. A local or named-zone time such as
-//!   "resets 3pm (America/Los_Angeles)" stays unknown (`None`): Hot Sheet does not guess.
+//!   time, so [`reported_reset`] reads one from the message when its instant or time zone is
+//!   explicit, or when the host's local zone is discoverable (HS2-Z28AD3).
 //! - **Awaiting input** is read from hook state (a bridged permission request or a pending
 //!   `AskUserQuestion`), not from terminal output, so it needs no classification here.
 
+use jiff::{Timestamp, civil, tz::TimeZone};
 use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime, Time};
 
@@ -28,22 +28,31 @@ pub fn is_usage_limit(error_type: &str) -> bool {
     )
 }
 
-/// The reset time a usage-limit message states, read from forms that need no time zone:
+/// The reset time a usage-limit message states:
 ///
 /// - Claude's legacy `… usage limit reached|<unix seconds or ms>`.
 /// - An RFC 3339 instant anywhere in the message.
 /// - A relative time after "reset(s) in" or "try again in" (`2h 15m`, `3 hours`, `45 minutes`).
-/// - A time of day after "reset(s) (at)" or "try again at" that names UTC or GMT; it is the
-///   next such time at or after `halted_at`.
+/// - A time of day after "reset(s) (at)" or "try again at" with UTC/GMT, an IANA zone, or
+///   the host's discoverable local zone. It is the next such unambiguous time.
 ///
 /// Returns `None` (unknown) for anything else and for any instant outside
 /// `halted_at - 5 minutes ..= halted_at + 8 days`.
 pub fn reported_reset(message: &str, halted_at: OffsetDateTime) -> Option<OffsetDateTime> {
+    let local_zone = TimeZone::try_system().ok();
+    reported_reset_with_local_zone(message, halted_at, local_zone.as_ref())
+}
+
+fn reported_reset_with_local_zone(
+    message: &str,
+    halted_at: OffsetDateTime,
+    local_zone: Option<&TimeZone>,
+) -> Option<OffsetDateTime> {
     let lower = message.to_ascii_lowercase();
     let found = epoch_after_limit(&lower)
         .or_else(|| rfc3339_in(message))
         .or_else(|| relative_reset(&lower, halted_at))
-        .or_else(|| utc_time_of_day(&lower, halted_at))?;
+        .or_else(|| clock_reset(&lower, halted_at, local_zone))?;
     (found >= halted_at - EARLIEST_RESET && found <= halted_at + LATEST_RESET).then_some(found)
 }
 
@@ -125,26 +134,46 @@ fn duration_prefix(text: &str) -> Option<Duration> {
     (parts > 0 && total > Duration::ZERO).then_some(total)
 }
 
-fn utc_time_of_day(lower: &str, halted_at: OffsetDateTime) -> Option<OffsetDateTime> {
+fn clock_reset(
+    lower: &str,
+    halted_at: OffsetDateTime,
+    local_zone: Option<&TimeZone>,
+) -> Option<OffsetDateTime> {
     after_keywords(
         lower,
         &["resets at ", "reset at ", "resets ", "try again at "],
     )
     .into_iter()
     .find_map(|rest| {
-        let time = utc_clock_prefix(rest)?;
-        let utc = halted_at.to_offset(time::UtcOffset::UTC);
-        let today = utc.replace_time(time);
-        Some(if today >= utc {
-            today
+        let (time, zone) = clock_prefix(rest, local_zone)?;
+        let halted = Timestamp::from_second(halted_at.unix_timestamp()).ok()?;
+        let date = zone.to_datetime(halted).date();
+        let candidate = |date: civil::Date| {
+            let local = civil::DateTime::new(
+                date.year(),
+                date.month(),
+                date.day(),
+                time.hour() as i8,
+                time.minute() as i8,
+                0,
+                0,
+            )
+            .ok()?;
+            let instant = zone.to_ambiguous_timestamp(local).unambiguous().ok()?;
+            OffsetDateTime::from_unix_timestamp(instant.as_second()).ok()
+        };
+        // A gap or repeated hour is unknown, even if tomorrow has the same clock time.
+        let today = candidate(date)?;
+        if today >= halted_at - EARLIEST_RESET {
+            Some(today)
         } else {
-            today + Duration::days(1)
-        })
+            candidate(date.tomorrow().ok()?)
+        }
     })
 }
 
-/// `3pm UTC`, `15:10 utc`, `3:10 pm (gmt)` at the start of `text`.
-fn utc_clock_prefix(text: &str) -> Option<Time> {
+/// `3pm UTC`, `15:10 (America/Los_Angeles)`, or `3:10 pm.` at the start of `text`.
+fn clock_prefix(text: &str, local_zone: Option<&TimeZone>) -> Option<(Time, TimeZone)> {
     let hour_len = text.bytes().take_while(u8::is_ascii_digit).count();
     if hour_len == 0 || hour_len > 2 {
         return None;
@@ -152,12 +181,14 @@ fn utc_clock_prefix(text: &str) -> Option<Time> {
     let mut hour: u8 = text[..hour_len].parse().ok()?;
     let mut rest = &text[hour_len..];
     let mut minute: u8 = 0;
+    let mut has_minutes = false;
     if let Some(after) = rest.strip_prefix(':') {
         let minute_len = after.bytes().take_while(u8::is_ascii_digit).count();
         if minute_len != 2 {
             return None;
         }
         minute = after[..2].parse().ok()?;
+        has_minutes = true;
         rest = &after[2..];
     }
     rest = rest.trim_start();
@@ -181,16 +212,34 @@ fn utc_clock_prefix(text: &str) -> Option<Time> {
             (h, false) => h,
         };
     }
-    let zone = rest.trim_start().trim_start_matches('(');
-    let named_utc = ["utc", "gmt"].iter().any(|name| {
-        zone.strip_prefix(name).is_some_and(|after| {
-            !after.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '+' || c == '-')
-        })
-    });
-    if !named_utc {
+    let rest = rest.trim_start();
+    let (zone, trailing) = if let Some(parenthesized) = rest.strip_prefix('(') {
+        let (name, trailing) = parenthesized.split_once(')')?;
+        (Some(name), trailing)
+    } else if rest.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        let len = rest
+            .bytes()
+            .take_while(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'-' | b'+'))
+            .count();
+        (Some(&rest[..len]), &rest[len..])
+    } else {
+        (None, rest)
+    };
+    if !trailing.trim_start().is_empty() && !trailing.trim_start().starts_with(['.', '!', '?']) {
         return None;
     }
-    Time::from_hms(hour, minute, 0).ok()
+    let zone = match zone {
+        Some("gmt" | "utc") => TimeZone::UTC,
+        Some(name) if !name.is_empty() => {
+            TimeZone::get(name).ok().filter(|zone| !zone.is_unknown())?
+        }
+        Some(_) => return None,
+        None if meridiem.is_some() || has_minutes => {
+            local_zone.filter(|zone| !zone.is_unknown())?.clone()
+        }
+        None => return None,
+    };
+    Some((Time::from_hms(hour, minute, 0).ok()?, zone))
 }
 
 #[cfg(test)]
@@ -229,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn hs2_egkka0_claude_fixtures_read_only_zone_free_resets() {
+    fn hs2_egkka0_claude_fixtures_preserve_zone_free_resets() {
         // Legacy Claude transcript form: unix seconds, or milliseconds, after the pipe.
         assert_eq!(
             reset("Claude AI usage limit reached|1794023400"),
@@ -258,23 +307,18 @@ mod tests {
             Some(23 * 60 + 30)
         );
         assert_eq!(reset("limit reached, resets 1:00 am gmt"), Some(0));
-        // Local and named-zone times need a zone database: unknown, never guessed.
+        // A named IANA zone resolves the next local clock time.
         assert_eq!(
             reset("You've hit your limit · resets 3pm (America/Los_Angeles)"),
-            None
+            Some(22 * 60)
         );
-        assert_eq!(reset("You've hit your limit · resets 3pm"), None);
         assert_eq!(reset("resets 3pm utc+2"), None);
         assert_eq!(reset("Claude usage limit reached."), None);
     }
 
     #[test]
-    fn hs2_egkka0_codex_fixtures_read_only_zone_free_resets() {
-        // Codex prints a local time; that is unknown here.
-        assert_eq!(
-            reset("You've hit your usage limit. Upgrade to Pro or try again at 3:10 PM."),
-            None
-        );
+    fn hs2_egkka0_codex_fixtures_preserve_zone_free_resets() {
+        // A local clock is tested with an injected zone below.
         assert_eq!(
             reset("You've hit your usage limit. Try again in 45 minutes."),
             Some(45)
@@ -314,5 +358,61 @@ mod tests {
         // A reset a few minutes before the halt is clock skew; an hour before is not.
         assert_eq!(reset("try again at 2026-11-07T00:57:00Z"), Some(-3));
         assert_eq!(reset("try again at 2026-11-07T00:00:00Z"), None);
+    }
+
+    fn reset_in_zone(message: &str, at: OffsetDateTime, zone: Option<&str>) -> Option<i64> {
+        let zone = zone.map(|name| TimeZone::get(name).unwrap());
+        reported_reset_with_local_zone(message, at, zone.as_ref())
+            .map(|found| (found - at).whole_minutes())
+    }
+
+    #[test]
+    fn hs2_z28ad3_codex_local_and_claude_named_zone() {
+        let codex = "You've hit your usage limit. Upgrade to Pro or try again at 3:10 PM.";
+        assert_eq!(
+            reset_in_zone(codex, halted(), Some("Asia/Manila")),
+            Some(6 * 60 + 10)
+        );
+        assert_eq!(reset_in_zone(codex, halted(), None), None);
+        assert_eq!(
+            reset_in_zone("resets 3pm", halted(), Some("Asia/Manila")),
+            Some(6 * 60)
+        );
+        assert_eq!(reset_in_zone("resets 3pm", halted(), None), None);
+        assert_eq!(
+            reset_in_zone("resets 3pm", halted(), Some("Etc/Unknown")),
+            None
+        );
+        assert_eq!(
+            reset_in_zone("resets 3.", halted(), Some("Asia/Manila")),
+            None
+        );
+        assert_eq!(reset("resets 3pm (America/Los_Angeles)"), Some(22 * 60));
+        assert_eq!(reset("resets 3pm (No/Such_Zone)"), None);
+        assert_eq!(reset("resets 3pm (America/Los_Angeles"), None);
+        assert_eq!(reset("presets 3pm (UTC)"), None);
+        assert_eq!(reset("resets 3pm (UTC) or later"), None);
+    }
+
+    #[test]
+    fn hs2_z28ad3_dst_gap_and_fold_are_unknown() {
+        let before_gap = OffsetDateTime::parse("2026-03-08T09:00:00Z", &Rfc3339).unwrap();
+        assert_eq!(
+            reset_in_zone("resets 2:30am (America/Los_Angeles)", before_gap, None),
+            None
+        );
+        assert_eq!(
+            reset_in_zone("resets 3:30am (America/Los_Angeles)", before_gap, None),
+            Some(90)
+        );
+        let before_fold = OffsetDateTime::parse("2026-11-01T07:00:00Z", &Rfc3339).unwrap();
+        assert_eq!(
+            reset_in_zone("resets 1:30am (America/Los_Angeles)", before_fold, None),
+            None
+        );
+        assert_eq!(
+            reset_in_zone("resets 2:30am (America/Los_Angeles)", before_fold, None),
+            Some(210)
+        );
     }
 }

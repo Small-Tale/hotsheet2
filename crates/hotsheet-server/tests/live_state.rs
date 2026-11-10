@@ -354,12 +354,33 @@ async fn hs2_egkka0_usage_limit_pause_carries_its_reset_and_clears_on_resume() {
         "2h 15m after the report: {since} -> {resets}"
     );
 
-    // A reset stated only as a local time is unknown, never guessed.
+    // A named-zone reset reaches the live state through the real halt route.
     call(
         &router,
         "POST",
         "/terminals/lim/halt",
-        Some(json!({"error_type":"usage_limit_exceeded","message":"You've hit your usage limit. Try again at 3:10 PM.","agent":"codex"})),
+        Some(json!({"error_type":"usage_limit_exceeded","message":"You've hit your usage limit. Try again at 12:10 PM (America/Los_Angeles).","agent":"codex"})),
+    )
+    .await;
+    let named = next_live(&mut events, &h.store_id, |live| {
+        causes(live)
+            .first()
+            .and_then(|cause| cause["resets_at_ms"].as_i64())
+            .is_some()
+    })
+    .await;
+    let named_cause = &causes(&named)[0];
+    let named_since = named_cause["since_ms"].as_i64().unwrap();
+    let named_reset = named_cause["resets_at_ms"].as_i64().unwrap();
+    assert!(named_reset >= named_since - 5 * 60_000);
+    assert!(named_reset <= named_since + 26 * 60 * 60_000);
+
+    // An invalid named zone is unknown rather than guessed from the host.
+    call(
+        &router,
+        "POST",
+        "/terminals/lim/halt",
+        Some(json!({"error_type":"usage_limit_exceeded","message":"Try again at 3:10 PM (No/Such_Zone).","agent":"codex"})),
     )
     .await;
     let unknown = next_live(&mut events, &h.store_id, |live| {

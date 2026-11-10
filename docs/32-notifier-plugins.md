@@ -516,8 +516,8 @@ keep one vocabulary; a glance surface shows the cause in place of the word it re
 **Usage-limit pause** (`usage_limit`). A terminal halt (§32.8.1) whose tool error type is a
 usage or rate limit: Claude's `StopFailure` `rate_limit`, or a Codex rollout's
 `usage_limit_exceeded` ([05](05-ai-tool-plugins.md), halted sessions). Neither tool sends a
-structured reset time, so `resets_at_ms` is read from the halt message only when the message
-states an instant that needs no time-zone guess:
+structured reset time, so `resets_at_ms` is read from the halt message when its instant or
+time zone can be resolved (HS2-Z28AD3):
 
 | Form                                                  | Example                                       |
 | ----------------------------------------------------- | --------------------------------------------- |
@@ -525,9 +525,11 @@ states an instant that needs no time-zone guess:
 | An RFC 3339 instant                                   | `try again at 2026-11-07T03:10:00Z`           |
 | A relative time after "reset(s) in" or "try again in" | `resets in 2h 15m`, `try again in 45 minutes` |
 | A time of day that names UTC or GMT                   | `resets 3pm (UTC)`                            |
+| A time of day with an IANA zone                       | `resets 3pm (America/Los_Angeles)`            |
+| A time of day in the host's discoverable local zone   | `try again at 3:10 PM`                        |
 
-Anything else, including a local time ("try again at 3:10 PM") or a named zone ("resets 3pm
-(America/Los_Angeles)"), is `resets_at_ms: null`: the reset is unknown, never guessed. A
+An unknown zone, an undiscoverable local zone, or a daylight-saving gap or repeated local
+hour yields `resets_at_ms: null`: the reset is unknown, never guessed. A
 reset more than 5 minutes before the halt or more than 8 days after it is also unknown. The
 cause ends with its halt: the session resumes or prompts again, it progresses on its claim,
 or it loses its claims. A reset time passing does not end it, because the session still
