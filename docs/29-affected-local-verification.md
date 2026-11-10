@@ -429,6 +429,39 @@ estimates are a different-host seed and must be scaled or distrusted by any
 budget planner. Import and `--timings` never create gate receipts or change test
 selection. A missing report or step duration remains unknown rather than zero.
 
+## Periodic gate review (HS2-6QEZB0)
+
+After importing the latest CI artifacts, run the headless review from any checkout:
+
+```sh
+HS2_GIT_COMMON=$(git rev-parse --git-common-dir)
+node scripts/gate-review.mjs --history "$HS2_GIT_COMMON/hotsheet-gate-timings.json"
+node scripts/gate-review.mjs --history "$HS2_GIT_COMMON/hotsheet-gate-timings.json" --format json --source ci --sort failures
+```
+
+`--os`, `--cohort`, and `--area` select comparable slices; `--sort cost|failures|name`
+orders the hierarchy, and `--period-days N` compares the latest two N-day windows
+anchored to the newest observation in each cohort. The JSON export contains
+area → stage → file → hashed case identifiers, pass/fail/skip/reused/interrupted
+counts, selected/deferred denominators, safe failure categories, observed CI
+retry and fail-then-pass counts, p50/p75/p90, sample counts, and observed compute
+time. File and case compute durations may overlap; never add them as gate wall time.
+Nextest case identities name a binary and test, without a reliable case-to-source-file
+link in the ledger. The report groups them under `unknown-source-file`; separately
+mapped Rust file observations remain visible without a fabricated join.
+
+Review the report weekly after a covering CI run, while the relevant observations
+are still inside the rolling 20-attempt ledger. Keep any exported snapshot local and
+delete it when the review is done; do not commit identifiers or machine paths.
+Fewer than five observations in a cohort are marked sparse, and period trends need
+at least two observations in each period to be comparable. These selected local
+worktree and CI attempts are not a representative failure-rate sample. The ledger
+does not identify runner concurrency or warm/cold state; both remain unknown,
+while receipt reuse is explicit. A fail-then-pass observation is not a population
+flake rate or proof that a check found a product defect. Hashed stage labels without
+a safe command mapping remain unknown. `lint:web` substage history remains partial
+until HS2-9N8ZMD connects its package entrypoint.
+
 ## Measurement and limitations (2026-10-28)
 
 The current UI batch's full package gate passed 2,225 Rust tests, 2,806 web unit

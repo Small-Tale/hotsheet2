@@ -53,6 +53,7 @@ export const ROOT_TOOLING_TESTS = [
   'test-quiet',
   'test-profile',
   'gate-timings',
+  'gate-review',
   'playwright-retries',
   'ci-gate',
   'ci-completion-proposal',
