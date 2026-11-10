@@ -13,7 +13,11 @@ describe('web ESLint policy', () => {
       "name: 'eslint-policy', include: ['src/eslint-policy.test.ts'], sequence: { groupOrder: 0 }",
     );
     expect(config).toContain("...BINARY_SUITES, 'src/eslint-policy.test.ts'");
-    expect(config.match(/sequence: \{ groupOrder: 1 \}/g)).toHaveLength(2);
+    // HS2-3FQNGT adds one isolated jsdom pilot after the policy route.
+    expect(config.match(/sequence: \{ groupOrder: 1 \}/g)).toHaveLength(3);
+    expect(config).toContain("'src/**/*.dom.test.ts'");
+    expect(config).toContain("name: 'dom-pilot'");
+    expect(config).toContain("environment: 'jsdom'");
     expect(packageJson.scripts['test:unit:fast']).toContain('--project eslint-policy --project unit');
     expect(config).not.toMatch(/\b(?:hookTimeout|testTimeout|maxWorkers)\b/);
   });

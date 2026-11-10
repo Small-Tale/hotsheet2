@@ -169,6 +169,7 @@ and don't imply reading order — read by group.
 **C · Data & storage**
 
 Local verification: [29-affected-local-verification.md](29-affected-local-verification.md)
+The measured browser-like test investigation is [dom-test-pilot-2026-11-10.md](dom-test-pilot-2026-11-10.md) (HS2-3FQNGT).
 defines the affected package/browser gate, receipt invalidation, and full CI boundary
 (HS2-RS0FFT; implemented with conservative fallback; controlled throughput validation
 remains HS2-DAA8AB/HS2-K1QNGC).
