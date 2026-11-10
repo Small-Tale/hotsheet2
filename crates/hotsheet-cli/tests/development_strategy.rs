@@ -58,6 +58,33 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
         "{}",
         String::from_utf8_lossy(&allowed.stderr)
     );
+    let batch = run(
+        project,
+        &[
+            "strategy-allow",
+            "--strategy",
+            "batch",
+            "--reason",
+            "reviewed existing batch policy",
+        ],
+    );
+    assert!(
+        batch.status.success(),
+        "{}",
+        String::from_utf8_lossy(&batch.stderr)
+    );
+    let batch_default = run(project, &["strategy-default", "--strategy", "batch"]);
+    assert!(
+        batch_default.status.success(),
+        "{}",
+        String::from_utf8_lossy(&batch_default.stderr)
+    );
+    let migrated = run(project, &["development-strategies"]);
+    assert!(migrated.status.success());
+    let migrated: serde_json::Value = serde_json::from_slice(&migrated.stdout).unwrap();
+    assert_eq!(migrated["effective"]["source"], "unconfigured-project");
+    assert_eq!(migrated["effective"]["integration"], "batch");
+    assert_eq!(migrated["effective"]["local_gate"], "risk-selected");
     for preset in ["steady-main", "risk-guided", "ticket-assured"] {
         let saved = run(
             project,
@@ -77,6 +104,10 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
         let value: serde_json::Value = serde_json::from_slice(&saved.stdout).unwrap();
         assert_eq!(value["effective"]["preset"], preset);
         assert_eq!(value["policy"]["green_main_goal_minutes"], 420);
+        if preset == "ticket-assured" {
+            assert_eq!(value["effective"]["integration"], "serial");
+            assert_eq!(value["effective"]["local_gate"], "full-local");
+        }
     }
     let resolved = run(
         project,

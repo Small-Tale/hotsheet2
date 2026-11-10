@@ -46,6 +46,31 @@ fn hs2_bf79yx_unset_project_preserves_legacy_serial_and_migration_default() {
 }
 
 #[test]
+fn hs2_bf79yx_unset_project_reports_existing_batch_default() {
+    let root = tempfile::tempdir().unwrap();
+    let settings = Settings::for_project(root.path());
+    let mut integration = StrategyPolicy::default();
+    integration
+        .allow(IntegrationStrategy::Batch, "reviewed existing batch policy")
+        .unwrap();
+    integration.default = IntegrationStrategy::Batch;
+    integration.write(&settings).unwrap();
+
+    let policy = DevelopmentPolicy::read(&settings).unwrap();
+    let effective = policy.resolve(&integration, None, None).unwrap();
+    assert_eq!(effective.source, SelectionSource::UnconfiguredProject);
+    assert_eq!(effective.integration, IntegrationStrategy::Batch);
+    assert_eq!(effective.local_gate, LocalGate::RiskSelected);
+    assert_eq!(policy.report(&integration).unwrap().effective, effective);
+
+    let explicit_ticket = policy
+        .resolve(&integration, None, Some(DevelopmentPreset::TicketAssured))
+        .unwrap();
+    assert_eq!(explicit_ticket.integration, IntegrationStrategy::Serial);
+    assert_eq!(explicit_ticket.local_gate, LocalGate::FullLocal);
+}
+
+#[test]
 fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
     let root = tempfile::tempdir().unwrap();
     let settings = Settings::for_project(root.path());
@@ -132,8 +157,10 @@ fn hs2_bf79yx_ticket_then_session_then_project_precedence_keeps_gates() {
 fn hs2_bf79yx_rejects_invalid_policy_and_unauthorized_staging() {
     let root = tempfile::tempdir().unwrap();
     let settings = Settings::for_project(root.path());
-    let mut policy = DevelopmentPolicy::default();
-    policy.default = DevelopmentPreset::SteadyMain;
+    let mut policy = DevelopmentPolicy {
+        default: DevelopmentPreset::SteadyMain,
+        ..DevelopmentPolicy::default()
+    };
     assert!(
         policy
             .write(&settings)

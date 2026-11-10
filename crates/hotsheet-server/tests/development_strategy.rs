@@ -87,6 +87,26 @@ async fn hs2_bf79yx_authenticated_rest_and_headless_policy_share_one_setting() {
     let mut integration = hotsheet_cli::coordination::StrategyPolicy::read(&settings).unwrap();
     integration
         .allow(
+            hotsheet_cli::coordination::IntegrationStrategy::Batch,
+            "reviewed existing batch policy",
+        )
+        .unwrap();
+    integration
+        .set_default(hotsheet_cli::coordination::IntegrationStrategy::Batch)
+        .unwrap();
+    integration.write(&settings).unwrap();
+    let migrated = server
+        .clone()
+        .oneshot(request("GET", &route, None))
+        .await
+        .unwrap();
+    assert_eq!(migrated.status(), StatusCode::OK);
+    let migrated = json(migrated).await;
+    assert_eq!(migrated["effective"]["source"], "unconfigured-project");
+    assert_eq!(migrated["effective"]["integration"], "batch");
+    assert_eq!(migrated["effective"]["local_gate"], "risk-selected");
+    integration
+        .allow(
             hotsheet_cli::coordination::IntegrationStrategy::CiStaged,
             "synthetic exact-SHA staging",
         )

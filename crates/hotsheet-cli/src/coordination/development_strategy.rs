@@ -148,15 +148,18 @@ impl DevelopmentPolicy {
             }
             (None, None) => (self.default, SelectionSource::Project),
         };
-        let integration = preset.integration();
-        integration_policy
-            .resolve(Some(integration))
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "development preset {} conflicts with project integration policy: {error}",
-                    preset.name()
-                )
-            })?;
+        let integration = if source == SelectionSource::UnconfiguredProject {
+            integration_policy.resolve(None)?
+        } else {
+            integration_policy
+                .resolve(Some(preset.integration()))
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "development preset {} conflicts with project integration policy: {error}",
+                        preset.name()
+                    )
+                })?
+        };
         Ok(DevelopmentSelection {
             preset,
             source,
@@ -181,7 +184,7 @@ impl DevelopmentPolicy {
         })
     }
 
-    /// An unset project retains the legacy serial, per-ticket behavior. A value is
+    /// An unset project retains its existing integration policy and risk-tier gate. A value is
     /// shared with all linked clients; machine-local settings never select policy.
     pub fn read(settings: &Settings) -> Result<Self> {
         let Some(value) = settings.get(DEVELOPMENT_POLICY_SETTING, Scope::Shared)? else {
