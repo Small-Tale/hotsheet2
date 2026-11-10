@@ -5,6 +5,7 @@
 // listed here.
 export const BINARY_SUITES = [
   'scripts/local-host.e2e.test.mjs',
+  'scripts/project-reopen-trace.e2e.test.mjs',
   'scripts/real-ticket-server-owner.e2e.test.mjs',
   'scripts/stable-dev.e2e.test.mjs',
   'src/checkouts-server-integration.test.ts',
