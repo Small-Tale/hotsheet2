@@ -65,6 +65,10 @@ pub struct DevelopmentPolicy {
     pub default: DevelopmentPreset,
     #[serde(default = "default_green_main_goal")]
     pub green_main_goal_minutes: u32,
+    /// This is runtime provenance, never a committed policy field. An absent
+    /// shared setting preserves the pre-BF risk-tier gate (HS2-BF79YX).
+    #[serde(skip)]
+    pub configured: bool,
 }
 
 const fn default_green_main_goal() -> u32 {
@@ -77,6 +81,7 @@ impl Default for DevelopmentPolicy {
             version: DEVELOPMENT_POLICY_VERSION,
             default: DevelopmentPreset::TicketAssured,
             green_main_goal_minutes: DEFAULT_GREEN_MAIN_GOAL_MINUTES,
+            configured: false,
         }
     }
 }
@@ -84,6 +89,7 @@ impl Default for DevelopmentPolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SelectionSource {
+    UnconfiguredProject,
     Project,
     Session,
     Ticket,
@@ -137,6 +143,9 @@ impl DevelopmentPolicy {
         let (preset, source) = match (ticket, session) {
             (Some(preset), _) => (preset, SelectionSource::Ticket),
             (None, Some(preset)) => (preset, SelectionSource::Session),
+            (None, None) if !self.configured => {
+                (self.default, SelectionSource::UnconfiguredProject)
+            }
             (None, None) => (self.default, SelectionSource::Project),
         };
         let integration = preset.integration();
@@ -152,7 +161,11 @@ impl DevelopmentPolicy {
             preset,
             source,
             integration,
-            local_gate: preset.local_gate(),
+            local_gate: if source == SelectionSource::UnconfiguredProject {
+                LocalGate::RiskSelected
+            } else {
+                preset.local_gate()
+            },
             require_green_main_sha: true,
             attribute_red_ci_before_completion: true,
             green_main_goal_minutes: (preset == DevelopmentPreset::SteadyMain)
@@ -174,16 +187,19 @@ impl DevelopmentPolicy {
         let Some(value) = settings.get(DEVELOPMENT_POLICY_SETTING, Scope::Shared)? else {
             return Ok(Self::default());
         };
-        let policy: Self = serde_json::from_value(value).map_err(|error| {
+        let mut policy: Self = serde_json::from_value(value).map_err(|error| {
             anyhow::anyhow!("invalid {DEVELOPMENT_POLICY_SETTING} setting: {error}")
         })?;
+        policy.configured = true;
         policy.validate()?;
         Ok(policy)
     }
 
     pub fn write(&self, settings: &Settings) -> Result<()> {
         let integration_policy = StrategyPolicy::read(settings)?;
-        self.resolve(&integration_policy, None, None)?;
+        let mut configured = self.clone();
+        configured.configured = true;
+        configured.resolve(&integration_policy, None, None)?;
         settings.set(
             DEVELOPMENT_POLICY_SETTING,
             serde_json::to_value(self)?,

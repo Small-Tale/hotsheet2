@@ -70,6 +70,8 @@ async fn hs2_bf79yx_authenticated_rest_and_headless_policy_share_one_setting() {
     assert_eq!(default["policy"]["version"], 1);
     assert_eq!(default["effective"]["preset"], "ticket-assured");
     assert_eq!(default["effective"]["integration"], "serial");
+    assert_eq!(default["effective"]["source"], "unconfigured-project");
+    assert_eq!(default["effective"]["local_gate"], "risk-selected");
     let rejected = server
         .clone()
         .oneshot(request(
@@ -102,6 +104,7 @@ async fn hs2_bf79yx_authenticated_rest_and_headless_policy_share_one_setting() {
     assert_eq!(saved.status(), StatusCode::OK);
     let saved = json(saved).await;
     assert_eq!(saved["effective"]["integration"], "ci-staged");
+    assert_eq!(saved["effective"]["source"], "project");
     assert_eq!(saved["effective"]["green_main_goal_minutes"], 420);
     let headless = hotsheet_cli::coordination::DevelopmentPolicy::read(&settings).unwrap();
     assert_eq!(headless.green_main_goal_minutes, 420);

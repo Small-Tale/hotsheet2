@@ -27,6 +27,8 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
     let value: serde_json::Value = serde_json::from_slice(&default.stdout).unwrap();
     assert_eq!(value["effective"]["preset"], "ticket-assured");
     assert_eq!(value["effective"]["integration"], "serial");
+    assert_eq!(value["effective"]["source"], "unconfigured-project");
+    assert_eq!(value["effective"]["local_gate"], "risk-selected");
     let refused = run(
         project,
         &["development-strategy-set", "--preset", "steady-main"],

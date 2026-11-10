@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(230); // HS2-7DBJMS remote-auth routes
+  expect(Object.keys(openapi.paths)).toHaveLength(231); // HS2-BF79YX development strategy route
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(230); // HS2-7DBJMS remote-auth routes
+  expect(Object.keys(openapi.paths)).toHaveLength(231); // HS2-BF79YX development strategy route
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -279,7 +279,7 @@ test('client contracts accept real ticket and replay responses', async () => {
 /**
  * HS2-3KNAPN: the WorkerView schema forbids unknown members, so a server field the contract
  * misses fails every real response. Validate real `/workers` (default and `include_past`) and
- * `/integration-strategies` responses from a seeded throwaway pool: worker preferences with a
+ * `/integration-strategies` and `/development-strategy` responses from a seeded throwaway pool: worker preferences with a
  * refused request, unmatched tickets, a departed (past) worker, and a batch policy with
  * circuit-breaker thresholds.
  */
@@ -299,6 +299,7 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
     });
   const workerView = validator('/checkouts/{reference}/workers');
   const strategyReport = validator('/checkouts/{reference}/integration-strategies');
+  const developmentReport = validator('/checkouts/{reference}/development-strategy');
   const run = promisify(execFile);
   let refused = '';
   const server = await realTicketServer({
@@ -488,6 +489,18 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
     );
     expect(strategyReport(strategies), JSON.stringify(strategyReport.errors)).toBe(true);
     expect(strategies.policy.allowed[0]?.circuit_breaker).toEqual({ max_red_batches: 2, max_red_minutes: 45 });
+    const development = await server.request<{
+      policy: { version: number };
+      effective: { preset: string; source: string; integration: string; local_gate: string };
+    }>(`/checkouts/${server.checkoutId}/development-strategy`);
+    expect(developmentReport(development), JSON.stringify(developmentReport.errors)).toBe(true);
+    expect(development.policy.version).toBe(1);
+    expect(development.effective).toMatchObject({
+      preset: 'ticket-assured',
+      source: 'unconfigured-project',
+      integration: 'serial',
+      local_gate: 'risk-selected',
+    });
   } finally {
     await server.stop();
   }

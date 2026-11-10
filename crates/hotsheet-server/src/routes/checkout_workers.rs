@@ -260,6 +260,8 @@ pub(crate) async fn put_development_strategy(
     policy
         .write(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let policy = DevelopmentPolicy::read(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     let integration = StrategyPolicy::read(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     Ok(Json(policy.report(&integration).map_err(|error| {

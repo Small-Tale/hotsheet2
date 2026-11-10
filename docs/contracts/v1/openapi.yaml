@@ -16163,6 +16163,7 @@ components:
         source:
           type: string
           enum:
+            - unconfigured-project
             - project
             - session
             - ticket

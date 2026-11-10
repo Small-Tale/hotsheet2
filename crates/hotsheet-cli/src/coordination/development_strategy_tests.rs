@@ -22,12 +22,21 @@ fn hs2_bf79yx_unset_project_preserves_legacy_serial_and_migration_default() {
         .resolve(&StrategyPolicy::default(), None, None)
         .unwrap();
     assert_eq!(selection.preset, DevelopmentPreset::TicketAssured);
-    assert_eq!(selection.source, SelectionSource::Project);
+    assert_eq!(selection.source, SelectionSource::UnconfiguredProject);
     assert_eq!(selection.integration, IntegrationStrategy::Serial);
-    assert_eq!(selection.local_gate, LocalGate::FullLocal);
+    assert_eq!(selection.local_gate, LocalGate::RiskSelected);
     assert!(selection.require_green_main_sha);
     assert!(selection.attribute_red_ci_before_completion);
     assert_eq!(selection.green_main_goal_minutes, None);
+    let explicit_ticket = policy
+        .resolve(
+            &StrategyPolicy::default(),
+            None,
+            Some(DevelopmentPreset::TicketAssured),
+        )
+        .unwrap();
+    assert_eq!(explicit_ticket.source, SelectionSource::Ticket);
+    assert_eq!(explicit_ticket.local_gate, LocalGate::FullLocal);
     assert!(
         settings
             .get(DEVELOPMENT_POLICY_SETTING, Scope::Shared)
@@ -47,13 +56,21 @@ fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
             version: DEVELOPMENT_POLICY_VERSION,
             default: preset,
             green_main_goal_minutes: 420,
+            configured: true,
         };
         policy.write(&settings).unwrap();
         assert_eq!(DevelopmentPolicy::read(&settings).unwrap(), policy);
+        assert!(
+            serde_json::to_value(&policy)
+                .unwrap()
+                .get("configured")
+                .is_none()
+        );
         let effective = policy.resolve(&integration, None, None).unwrap();
         assert_eq!(effective.preset, preset);
         assert_eq!(effective.integration, preset.integration());
         assert_eq!(effective.local_gate, preset.local_gate());
+        assert_eq!(effective.source, SelectionSource::Project);
         assert!(effective.require_green_main_sha);
         assert!(effective.attribute_red_ci_before_completion);
         assert_eq!(
@@ -86,6 +103,7 @@ fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
 fn hs2_bf79yx_ticket_then_session_then_project_precedence_keeps_gates() {
     let policy = DevelopmentPolicy {
         default: DevelopmentPreset::SteadyMain,
+        configured: true,
         ..DevelopmentPolicy::default()
     };
     let allowed = staged_allowed();
