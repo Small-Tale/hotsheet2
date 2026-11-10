@@ -267,7 +267,12 @@ preview/download, server directory browser) are separate design work.
   advanced record chooses the section (integrating, remote CI, handoff or verifying,
   live claim, accepted, offered, done, expired claim, then a review-returned blocked
   operation), and a tie keeps the later assignment (HS2-8SZBJJ). The same ticket
-  still appears under each other worker that holds it.
+  still appears under each other worker that holds it. Render a ticket card only
+  when its authoritative, source-qualified details say **Started**; completion
+  removes the card and updates every section count while the selected inspector
+  and unsaved edit remain available (HS2-D5KXBA). Keep the worker header and
+  its empty state when no Started tickets remain. Missing details do not prove a
+  ticket is Started. Removal animation belongs to HS2-PM42ZM.
   If a source or tool cannot be observed, say that coverage is
   unknown rather than showing zero workers. Keep idle workers visible and give a
   genuine zero-worker state.
