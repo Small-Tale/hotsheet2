@@ -7279,6 +7279,42 @@
       }
     },
     {
+      "id": "development-strategy-settings",
+      "name": "DevelopmentStrategySettings",
+      "kind": "component",
+      "purpose": "Project development policy, Custom strategy validation feedback, and live green-main cadence.",
+      "source": "src/components/development-strategy-settings.tsx",
+      "publicExports": [{ "name": "DevelopmentStrategySettings" }],
+      "sourceLinks": ["src/components/development-strategy-settings.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "child", "padding": "child" } }
+      },
+      "boundaries": {
+        "rootClass": "development-strategy-settings",
+        "publicClasses": ["development-strategy-settings"],
+        "publicTokens": [],
+        "placeableClasses": ["development-strategy-settings"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/development-strategy-settings.tsx",
+        "composition": "src/components/development-strategy-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet project settings must show and edit shared development policy and live cadence."],
+        "avoidWhen": ["The interaction does not need project development policy."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "keyboard-settings",
       "name": "KeyboardSettings",
       "kind": "component",

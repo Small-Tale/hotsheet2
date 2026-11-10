@@ -2204,6 +2204,74 @@
       }
     },
     {
+      "key": "hotsheet-web:development-strategy-settings",
+      "package": "hotsheet-web",
+      "id": "development-strategy-settings",
+      "name": "DevelopmentStrategySettings",
+      "kind": "component",
+      "purpose": "Project development policy, Custom strategy validation feedback, and live green-main cadence.",
+      "publicExports": [
+        {
+          "name": "DevelopmentStrategySettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/development-strategy-settings.tsx"
+      ],
+      "source": "src/components/development-strategy-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": "development-strategy-settings",
+        "publicClasses": [
+          "development-strategy-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "development-strategy-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/development-strategy-settings.tsx",
+        "composition": "src/components/development-strategy-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:drive-control",
       "package": "hotsheet-web",
       "id": "drive-control",

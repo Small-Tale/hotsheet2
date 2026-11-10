@@ -30,6 +30,7 @@ import {
   parseCorruptTicket,
   parseCurrentDiff,
   parseCustomView,
+  parseDevelopmentStrategyReport,
   parseDuplicateBacklinks,
   parseFeedbackDelivery,
   parseFilePath,
@@ -96,6 +97,45 @@ import { parseStandbySettings, type StandbySettingsView } from './standby';
 import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
 import { parseWorkerView } from './worker-view-model';
+
+export type DevelopmentPreset = 'ticket-assured' | 'steady-main' | 'risk-guided';
+export type IntegrationStrategy = 'serial' | 'batch' | 'ci-staged';
+export type LocalGate = 'full-local' | 'targeted' | 'risk-selected';
+export interface CustomDevelopmentStrategy {
+  integration: IntegrationStrategy;
+  local_gate: LocalGate;
+  minimum_tier: 'T0' | 'T1' | 'T2';
+  budget_minutes?: number;
+  browser: boolean;
+  platform: boolean;
+  perf: boolean;
+  test_plan_timing: 'before-work' | 'before-handoff';
+  ci_gate: string;
+  staging_branch?: string;
+  green_main_goal_minutes?: number;
+  red_ci_recovery: 'attribute-and-retry' | 'fallback-to-serial';
+}
+export interface DevelopmentStrategyPolicy {
+  version: number;
+  default: DevelopmentPreset;
+  green_main_goal_minutes: number;
+  default_custom?: string;
+  custom: Partial<Record<string, CustomDevelopmentStrategy>>;
+}
+export interface DevelopmentStrategyReport {
+  policy: DevelopmentStrategyPolicy;
+  effective: {
+    preset: string;
+    source: 'unconfigured-project' | 'project' | 'session' | 'ticket';
+    integration: IntegrationStrategy;
+    local_gate: LocalGate;
+    custom?: CustomDevelopmentStrategy;
+    require_green_main_sha: boolean;
+    attribute_red_ci_before_completion: boolean;
+    green_main_goal_minutes: number | null;
+  };
+  presets: DevelopmentPreset[];
+}
 
 export interface GuidanceOverview {
   owner: 'builtin' | 'rulesync';
@@ -1767,6 +1807,21 @@ export class Api {
       false,
     );
   };
+  developmentStrategy = (checkout: string, overrides: { session?: string; ticket?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (overrides.session) params.set('session', overrides.session);
+    if (overrides.ticket) params.set('ticket', overrides.ticket);
+    const suffix = params.size ? `?${params}` : '';
+    return this.parsed(
+      parseDevelopmentStrategyReport,
+      `/checkouts/${encodeURIComponent(checkout)}/development-strategy${suffix}`,
+    );
+  };
+  saveDevelopmentStrategy = (checkout: string, policy: DevelopmentStrategyPolicy) =>
+    this.parsed(parseDevelopmentStrategyReport, `/checkouts/${encodeURIComponent(checkout)}/development-strategy`, {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    });
   checkoutTicketPage = (checkout: string, pageSize = 200, cursor?: string, query: CheckoutTicketQuery = {}) =>
     this.parsed(
       parseCheckoutTicketPage,

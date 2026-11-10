@@ -189,6 +189,7 @@ describe('UX demo catalog', () => {
       'ticket-sources-settings',
       'accounts-settings',
       'settings-workspace',
+      'development-strategy-settings',
       'keyboard-settings',
       'trash-settings',
       'terminal-memory-settings',

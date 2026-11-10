@@ -19,6 +19,7 @@ import {
 import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
+import { DevelopmentStrategySettings, type DevelopmentStrategySettingsProps } from './development-strategy-settings';
 import { GuidanceSettings, type GuidanceSettingsProps } from './guidance-settings';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
@@ -63,6 +64,7 @@ export interface SettingsWorkspaceProps {
     legacy?: PermissionRulesSettingsProps['legacy'];
   };
   columns: { hideVerified: boolean };
+  developmentStrategy?: DevelopmentStrategySettingsProps;
   /** App Settings → General; `standby` is the machine-wide standby section (HS2-EQVZTZ). */
   general: { showLoadingActivity: boolean; standby?: StandbySettingsProps };
   keyboard: KeyboardSettingsProps;
@@ -81,6 +83,7 @@ export function SettingsWorkspace({
   notifications = {},
   permissions,
   columns,
+  developmentStrategy = {},
   general,
   keyboard,
 }: SettingsWorkspaceProps) {
@@ -103,6 +106,7 @@ export function SettingsWorkspace({
             <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
           )}
           {category === 'commands' && <CommandSettingsEditor {...commands} />}
+          {category === 'development-strategy' && <DevelopmentStrategySettings {...developmentStrategy} />}
           {category === 'lifecycle' && (
             <TrashSettings days={lifecycle.days} message={lifecycle.message} draft={lifecycle.draft} />
           )}

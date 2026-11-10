@@ -14,6 +14,7 @@ describe('SettingsNavigation', () => {
     expect(markup).not.toContain('divider-sides');
     expect(markup).toContain('data-item-id="sources"');
     expect(markup).toContain('data-item-id="ai"');
+    expect(markup).toContain('data-item-id="development-strategy"');
     expect(markup).toContain('data-item-id="guidance"');
     expect(markup).toContain('data-item-id="commands"');
     expect(markup).toContain('data-item-id="lifecycle"');
@@ -24,6 +25,7 @@ describe('SettingsNavigation', () => {
     for (const icon of [
       'database',
       'bot',
+      'git-branch',
       'book-open',
       'terminal-square',
       'archive-restore',
@@ -59,6 +61,7 @@ describe('SettingsNavigation', () => {
   it('uses the same category labels for navigation and workspace headings', () => {
     expect(settingsCategoryTitle('sources')).toBe('Ticket sources');
     expect(settingsCategoryTitle('ai')).toBe('AI tools');
+    expect(settingsCategoryTitle('development-strategy')).toBe('Development strategy');
     expect(settingsCategoryTitle('guidance')).toBe('Project guidance');
     expect(settingsCategoryTitle('commands')).toBe('Commands');
     expect(settingsCategoryTitle('lifecycle')).toBe('Lifecycle');

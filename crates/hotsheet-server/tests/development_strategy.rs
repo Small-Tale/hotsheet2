@@ -179,6 +179,39 @@ async fn hs2_bf79yx_authenticated_rest_and_headless_policy_share_one_setting() {
     assert_eq!(custom_saved["effective"]["preset"], "strict-review");
     assert_eq!(custom_saved["effective"]["source"], "project");
     assert_eq!(custom_saved["effective"]["custom"]["minimum_tier"], "T2");
+    let session = server
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("{route}?session=risk-guided"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(session.status(), StatusCode::OK);
+    let session = json(session).await;
+    assert_eq!(session["effective"]["source"], "session");
+    assert_eq!(session["effective"]["preset"], "risk-guided");
+    assert_eq!(session["policy"]["default_custom"], "strict-review");
+    let ticket = server
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("{route}?session=risk-guided&ticket=strict-review"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ticket.status(), StatusCode::OK);
+    let ticket = json(ticket).await;
+    assert_eq!(ticket["effective"]["source"], "ticket");
+    assert_eq!(ticket["effective"]["preset"], "strict-review");
+    let unknown = server
+        .clone()
+        .oneshot(request("GET", &format!("{route}?ticket=missing"), None))
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
     let reread = hotsheet_cli::coordination::DevelopmentPolicy::read(&settings).unwrap();
     assert_eq!(reread.default_custom.as_deref(), Some("strict-review"));
     let unsupported = serde_json::json!({

@@ -240,15 +240,30 @@ pub(crate) async fn put_integration_strategies(
 pub(crate) async fn get_development_strategy(
     State(state): State<AppState>,
     RoutePath(reference): RoutePath<String>,
+    Query(query): Query<DevelopmentStrategyQuery>,
 ) -> Result<Json<DevelopmentReport>, ApiError> {
     let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
     let policy = DevelopmentPolicy::read(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     let integration = StrategyPolicy::read(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-    Ok(Json(policy.report(&integration).map_err(|error| {
-        ApiError::new(StatusCode::CONFLICT, error.to_string())
-    })?))
+    let mut report = policy
+        .report(&integration)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    report.effective = policy
+        .resolve_named(
+            &integration,
+            query.session.as_deref(),
+            query.ticket.as_deref(),
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(report))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct DevelopmentStrategyQuery {
+    session: Option<String>,
+    ticket: Option<String>,
 }
 
 pub(crate) async fn put_development_strategy(

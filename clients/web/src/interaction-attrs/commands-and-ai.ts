@@ -82,6 +82,8 @@ export const COMMANDS_AND_AI_ACTIONS = {
   applyLeavingTrashSettings: action('apply-leaving-trash-settings'),
   setViewMode: action('set-view-mode'),
   selectSettingsCategory: action('select-settings-category'),
+  saveDevelopmentStrategy: action('save-development-strategy'),
+  previewDevelopmentStrategy: action('preview-development-strategy'),
   editShortcut: action('edit-shortcut'),
   cancelShortcutCapture: action('cancel-shortcut-capture'),
   resetShortcut: action('reset-shortcut'),

@@ -18,6 +18,7 @@ import type {
   CompactionResult,
   CorruptTicket,
   CustomView,
+  DevelopmentStrategyReport,
   DuplicateBacklinkResponse,
   FeedbackDelivery,
   FollowUpEvidence,
@@ -137,6 +138,65 @@ export const ignoreBody: ResponseParser<undefined> = () => undefined;
 
 export const parseStringList: ResponseParser<string[]> = (value) =>
   isStringArray(value) ? value : invalid('string list');
+
+/** Shared development policy with resolved provenance (HS2-NBDXPW). */
+export const parseDevelopmentStrategyReport: ResponseParser<DevelopmentStrategyReport> = (value) => {
+  const what = 'development strategy',
+    body = record(value, what),
+    policy = record(body.policy, what),
+    effective = record(body.effective, what),
+    presets = list(body.presets, what, (entry) => entry);
+  const presetNames = ['ticket-assured', 'steady-main', 'risk-guided'],
+    integrationNames = ['serial', 'batch', 'ci-staged'],
+    localGateNames = ['full-local', 'targeted', 'risk-selected'];
+  if (
+    !Number.isInteger(policy.version) ||
+    !presetNames.includes(String(policy.default)) ||
+    !Number.isInteger(policy.green_main_goal_minutes) ||
+    (policy.default_custom !== undefined && typeof policy.default_custom !== 'string') ||
+    !presets.every((entry) => presetNames.includes(String(entry))) ||
+    !isRecord(policy.custom ?? {}) ||
+    typeof effective.preset !== 'string' ||
+    !['unconfigured-project', 'project', 'session', 'ticket'].includes(String(effective.source)) ||
+    !integrationNames.includes(String(effective.integration)) ||
+    !localGateNames.includes(String(effective.local_gate)) ||
+    typeof effective.require_green_main_sha !== 'boolean' ||
+    typeof effective.attribute_red_ci_before_completion !== 'boolean' ||
+    (effective.green_main_goal_minutes !== null &&
+      effective.green_main_goal_minutes !== undefined &&
+      !Number.isInteger(effective.green_main_goal_minutes))
+  )
+    invalid(what);
+  const custom = (entry: unknown) => {
+    const item = record(entry, what);
+    if (
+      !integrationNames.includes(String(item.integration)) ||
+      !localGateNames.includes(String(item.local_gate)) ||
+      !['T0', 'T1', 'T2'].includes(String(item.minimum_tier)) ||
+      (item.budget_minutes !== undefined && !Number.isInteger(item.budget_minutes)) ||
+      typeof item.browser !== 'boolean' ||
+      typeof item.platform !== 'boolean' ||
+      typeof item.perf !== 'boolean' ||
+      !['before-work', 'before-handoff'].includes(String(item.test_plan_timing)) ||
+      typeof item.ci_gate !== 'string' ||
+      (item.staging_branch !== undefined && typeof item.staging_branch !== 'string') ||
+      (item.green_main_goal_minutes !== undefined && !Number.isInteger(item.green_main_goal_minutes)) ||
+      !['attribute-and-retry', 'fallback-to-serial'].includes(String(item.red_ci_recovery))
+    )
+      invalid(what);
+    return item;
+  };
+  const profiles = Object.fromEntries(
+    Object.entries(policy.custom ?? {}).map(([name, entry]) => [name, custom(entry)]),
+  );
+  if (effective.custom !== undefined) custom(effective.custom);
+  return {
+    ...body,
+    policy: { ...policy, custom: profiles },
+    effective,
+    presets,
+  } as unknown as DevelopmentStrategyReport;
+};
 
 export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) => {
   const what = 'guidance',

@@ -311,7 +311,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-teardown.ts # Closing project tabs: per-project record pruning and the next selected tab (HS2-DCTS07); createProjectTeardown runs the closeProjectIds orchestration and reader disposal (HS2-BSSWGV)
       project-refresh.ts # refreshProject: stale-response generation, git-only first paint, authoritative row/count/selection/projection merge (HS2-BSSWGV), index/source error ownership separate from mutation errors (HS2-4Q44N2)
       terminal-drawer.ts # Terminal drawer visibility, selection, tab/input focus, serialized terminal/shell/AI-chat creation, closeDrawerTabIds (HS2-BSSWGV)
-      settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV)
+      settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV) and project development strategy (HS2-NBDXPW)
       sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands, Drive (HS2-BSSWGV)
       ticket-view-surface.tsx # Ticket view titles, view action spec, ticket context-menu surface (HS2-K0VC2C)
       terminal-operations-surface.ts # Terminal operations dashboard per-project summary (HS2-K0VC2C); grid sidebar live numbers on a local minute clock, the persisted page (`hotsheet.terminals.sidebar-page`), and its Kerf PagedView wiring (HS2-EZSQDF)
@@ -1180,6 +1180,12 @@ capability validation, and the CLI/REST report shared by
 HS2-ARJNJV). The unset setting preserves the existing integration and risk-tier
 gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit setting for
 local gate selection and enforces custom minimums.
+HS2-NBDXPW exposes that route in Project Settings through
+`clients/web/src/components/development-strategy-settings.tsx` and its interaction
+module. `clients/web/src/app/runtime.tsx` keeps project-scoped drafts, previews and
+request versions, and projects 0BJ1A3 cadence only from the current checkout's
+event-driven worker stream. Authenticated GET query overrides use the same Rust
+resolver and report their source without saving a project policy.
 HS2-F9062F uses the read-only `development-strategy-resolve` CLI result in the
 shared worker, dispatcher, integrator and generic Hot Sheet skills. Canonical
 role sources live in `plugins/shared/role-skills/`; `scripts/sync-role-skills.mjs`

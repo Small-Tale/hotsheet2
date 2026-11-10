@@ -185,6 +185,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly viewMode: Signal<WorkspaceViewMode>;
   readonly refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
+  readonly updateDevelopmentStrategyField?: (field: string, value: string | boolean) => void;
+  readonly saveDevelopmentStrategy?: () => Promise<void>;
+  readonly previewDevelopmentStrategy?: () => Promise<void>;
   readonly refreshProviderConnections: (current?: Project) => Promise<void>;
   readonly refreshTerminalSettings: (current?: Project) => Promise<void>;
   /** Machine-wide terminal limits (HS2-Y5DYC0); optional so focused harnesses can omit them. */
@@ -344,6 +347,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     viewMode,
     refreshProject,
     setSettingsCategory,
+    updateDevelopmentStrategyField,
+    saveDevelopmentStrategy,
+    previewDevelopmentStrategy,
     refreshProviderConnections,
     refreshTerminalSettings,
     terminalLimitsSettings,
@@ -1088,6 +1094,28 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      '[data-component="development-strategy-settings"] [name^="development-"]',
+      (_event, target) => {
+        const control = target as HTMLInputElement;
+        const field = control.name.slice('development-'.length);
+        updateDevelopmentStrategyField?.(field, control.type === 'checkbox' ? control.checked : control.value);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.saveDevelopmentStrategy.selector, () => {
+      void saveDevelopmentStrategy?.();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.previewDevelopmentStrategy.selector, () => {
+      void previewDevelopmentStrategy?.();
     }),
   );
   lifetime.add(

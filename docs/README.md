@@ -210,10 +210,13 @@ The core, CLI, server, MCP, monitor, and client implementations remain follow-up
 **Development strategies:** [34-development-strategies.md](34-development-strategies.md)
 defines the versioned shared project policy and the Ticket Assured, Steady Main,
 and Risk Guided presets (HS2-BF79YX), plus validated named custom policies
-(HS2-ARJNJV). Headless CLI and authenticated REST use one policy workflow;
-the GUI editor remains a follow-up. HS2-0BJ1A3 ships the Steady Main green-main
-cadence in headless batch status and the live Workers view, with a target that
-escalates attention without authorizing a red promotion.
+(HS2-ARJNJV). Headless CLI, authenticated REST and the Project Settings editor
+use one policy workflow (HS2-NBDXPW); the editor previews session and ticket
+overrides without changing the saved project policy. HS2-0BJ1A3 ships the Steady
+Main green-main cadence in headless batch status and the live Workers view,
+with a target that
+escalates attention without authorizing a red promotion; Project Settings also
+shows the current checkout's live cadence and last green promotion (HS2-NBDXPW).
 HS2-F9062F makes the shared Hot Sheet worker, dispatcher and integrator skills
 resolve that policy at safe boundaries while retaining mandatory gates.
 

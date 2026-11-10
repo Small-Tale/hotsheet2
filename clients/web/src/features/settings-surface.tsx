@@ -46,6 +46,7 @@ export interface SettingsSurfaceDependencies {
   terminalLimitDeviceDefaults?: () => NonNullable<Props['terminalMemory']>['deviceDefaults'];
   /** App Settings → Notifications (HS2-DPBJJA). */
   notificationSettings?: () => Props['notifications'];
+  developmentStrategy?: (projectId: string) => Props['developmentStrategy'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
   permissionRuleEditorFor: (projectId: string, visible: boolean) => Props['permissions']['editor'];
@@ -103,6 +104,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     terminalLimitsMessage,
     terminalLimitDeviceDefaults,
     notificationSettings,
+    developmentStrategy,
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
@@ -151,6 +153,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     return (
       <SettingsWorkspace
         category={settingsCategory()}
+        developmentStrategy={developmentStrategy?.(current.id)}
         sources={projectSourcesSettings(current)}
         accounts={{
           accounts: providerAccounts.value,

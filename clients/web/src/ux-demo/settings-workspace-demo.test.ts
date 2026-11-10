@@ -18,6 +18,7 @@ describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
       'terminals',
       'permissions',
       'columns',
+      'development-strategy',
       'general',
       'accounts',
       'terminal-memory',
