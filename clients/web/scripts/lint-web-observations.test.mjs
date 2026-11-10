@@ -7,6 +7,11 @@ import { afterEach, it } from 'vitest';
 
 import { doctorStageObservations, lintWebCommands, runLintWeb } from './lint-web-observations.mjs';
 
+it('HS2-9N8ZMD package lint:web uses the observed ordered entrypoint', () => {
+  const { scripts } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(scripts['lint:web'], 'node scripts/lint-web-observations.mjs');
+});
+
 const fixtureRoots = [];
 afterEach(() => {
   for (const root of fixtureRoots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -50,8 +55,11 @@ it('HS2-5RDMEV runs the same ordered CLIs through Node on Windows without a shel
   );
   assert.ok(commands.every(({ command }) => command.file === 'C:\\node\\node.exe'));
   assert.ok(commands.every(({ command }) => Array.isArray(command.args)));
+  assert.equal(commands[0].command.args[0], '--max-old-space-size=4096');
   assert.ok(commands[0].command.args.some((arg) => arg.endsWith('eslint.js')));
+  assert.deepEqual(commands[0].command.args.slice(-3), ['.', '--max-warnings', '0']);
   assert.ok(commands[1].command.args.some((arg) => arg.endsWith('catalog.js')));
+  assert.equal(commands[2].command.args[0], '--max-old-space-size=4096');
   assert.ok(commands[2].command.args.some((arg) => arg.endsWith('cli.mjs')));
   assert.deepEqual(commands[2].command.args.slice(-5, -2), ['--full', '--format', 'json']);
   assert.deepEqual(commands[2].command.args.slice(-2), ['--output', 'C:\\synthetic\\doctor.json']);

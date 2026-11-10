@@ -399,13 +399,13 @@ Runner reports add test-case identities and outcomes when present. Vitest and
 Playwright stages write temporary JSON under ignored `target/`; nextest writes
 JUnit. Case titles are hashed and only safe project-relative source paths and
 metrics enter the history. Raw failures, user data, and machine-local paths are
-discarded. The `clients/web/scripts/lint-web-observations.mjs` helper records the
-existing ESLint, catalog, and UI doctor order and first-failure behavior. Doctor
+discarded. The `clients/web/scripts/lint-web-observations.mjs` helper is the
+`lint:web` entrypoint (HS2-9N8ZMD); it records the existing ESLint, catalog, and
+UI doctor order and first-failure behavior. Doctor
 JSON supplies catalog, TypeScript, ESLint, analyzer, and optional browser stage
 outcomes. The doctor report does not provide per-stage wall time, so that duration
-remains unknown. HS2-9N8ZMD tracks connecting the shipped `lint:web` npm entrypoint
-to this helper after the urgent package manifest work lands; HS2-5RDMEV remains
-Started until that wiring passes its gate.
+remains unknown. The entrypoint and its static policy assertions passed the real
+lint command and exact-tree gate; covering main CI supplies full browser regression.
 
 CI uploads available nextest/Vitest reports on success or failure as
 `gate-timing-reports`, with run and attempt metadata, and uploads the merged
