@@ -355,7 +355,7 @@ function batchGate(project, store, common, ticket, operation, shipping, remote, 
       /^HS2-[A-Z0-9]+$/.test(failure.follow_up ?? '') &&
       failure.follow_up_ticket?.connection_id && failure.follow_up_ticket?.native_id) &&
     ci && ci.headSha !== batch.main_commit && String(ci.id) !== batch.run &&
-    Date.parse(ci.createdAt) > batch.concluded_at * 1000 &&
+    Date.parse(ci.updatedAt) > batch.concluded_at * 1000 &&
     run('git', ['merge-base', '--is-ancestor', batch.main_commit, ci.headSha], project).status === 0;
   requireProof((batch.state === 'green' || correctedRed) && sha.test(batch.main_commit ?? ''),
     'reviewed batch is not green or corrected by an attributed covering descendant');
@@ -450,7 +450,7 @@ function greenCi(project, shipping, run) {
         '--limit',
         '100',
         '--json',
-        'databaseId,headSha,headBranch,event,workflowName,status,conclusion,createdAt,url',
+        'databaseId,headSha,headBranch,event,workflowName,status,conclusion,createdAt,updatedAt,url',
       ],
       project,
     ),
@@ -459,9 +459,10 @@ function greenCi(project, shipping, run) {
     isCovered(base, head, (binary, args) => run(binary, args, project)),
   );
   requireProof(result.state === 'success', `covering main CI is ${result.state}`);
-  return result.runs.find(
+  const passing = result.runs.find(
     (item) => item.status === 'completed' && item.conclusion === 'success' && item.coverage === 'covered',
   );
+  return { ...passing, updatedAt: listed.find((item) => item.databaseId === passing.id)?.updatedAt };
 }
 
 function deleteBranch(project, branch, head, operation, run) {

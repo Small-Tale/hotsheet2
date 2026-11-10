@@ -150,6 +150,7 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
   ] : [];
   let extraReplacement = false;
   let retiredPhase = 'done', retiredRecovery = 'review-note', ciHead = shipping;
+  let ciUpdatedAt = '2026-11-09T00:02:00Z';
   let ciCreatedAt = '2026-11-09T00:00:00Z';
   const run = (binary, args, cwd, input) => {
     if (binary === 'hotsheet-cli') {
@@ -249,6 +250,7 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
             status: 'completed',
             conclusion: ciConclusion,
             createdAt: ciCreatedAt,
+            updatedAt: ciUpdatedAt,
             url: 'https://example.invalid/1',
           },
         ]),
@@ -292,9 +294,10 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
     ci: (value) => {
       ciConclusion = value;
     },
-    ciHead: (value, createdAt = '2026-11-09T00:02:00Z') => {
+    ciHead: (value, createdAt = '2026-11-09T00:02:00Z', updatedAt = createdAt) => {
       ciHead = value;
       ciCreatedAt = createdAt;
+      ciUpdatedAt = updatedAt;
     },
     status: (value) => {
       ticketStatus = value;
@@ -537,10 +540,14 @@ test('HS2-EVHMV3 accepts an attributed red batch only after covering descendant 
   git(f.project, 'push', 'origin', 'main');
   f.ciHead(git(f.project, 'rev-parse', 'HEAD'));
   assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
+  // The correction may start before red-batch attribution while it is still running.
+  f.batchEntry.concluded_at = Date.parse('2026-11-09T00:01:30Z') / 1000;
+  f.ciHead(git(f.project, 'rev-parse', 'HEAD'), '2026-11-09T00:01:00Z', '2026-11-09T00:02:00Z');
+  assert.equal(cleanup({ ...f.options, operation: 'operation', dryRun: true }, { run: f.run }).state, 'verified');
 });
 
 test('HS2-EVHMV3 rejects unrelated or failed red-batch correction evidence', () => {
-  for (const tamper of ['unattributed', 'missing-followup', 'same-ci', 'same-head', 'old-ci',
+  for (const tamper of ['unattributed', 'missing-followup', 'same-ci', 'same-head', 'old-ci', 'early-completed-ci',
     'noncovering-ci', 'failed-ci', 'wrong-tree', 'missing-archive', 'dirty']) {
     const f = fixture({ cherryPick: true, batch: true });
     recordReviewedHandoff(f, { proposal: false });
@@ -562,6 +569,8 @@ test('HS2-EVHMV3 rejects unrelated or failed red-batch correction evidence', () 
     }
     if (tamper === 'same-head') f.ciHead(f.shipping);
     if (tamper === 'old-ci') f.ciHead(git(f.project, 'rev-parse', 'HEAD'), '2026-11-09T00:00:00Z');
+    if (tamper === 'early-completed-ci') f.ciHead(git(f.project, 'rev-parse', 'HEAD'),
+      '2026-11-09T00:00:00Z', '2026-11-09T00:00:30Z');
     if (tamper === 'noncovering-ci') f.ciHead(git(f.project, 'rev-parse', `${f.shipping}^`));
     if (tamper === 'failed-ci') f.ci('failure');
     if (tamper === 'wrong-tree') f.smokeReceipt.tree = '0'.repeat(40);
