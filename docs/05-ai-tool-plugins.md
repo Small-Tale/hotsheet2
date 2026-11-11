@@ -2939,6 +2939,30 @@ answer a feedback request. Headless setup and graphical guidance use the same
 manifest-declared skill path; the repository mirrors are byte-checked in plugin
 tests.
 
+Both manifests also install the `hotsheet-design-review` skill (HS2-C679CZ), the
+Hot Sheet half of the annotated design-mock workflow. Kerf's installed
+`kerf-ui-design-mock` skill (`@kerfjs/ui/ai/design-mock/SKILL.md`, KF-NDHN2C,
+shipped in `@kerfjs/ui` 5.0.0-beta.129) owns composing and capturing concepts. The
+Hot Sheet skill only points to it and reports the missing prerequisite when that
+file is absent. It owns the ticket loop:
+
+- re-read the whole ticket before each action;
+- attach a labeled baseline batch and labeled revision batches (`attach
+--batch-label … --purpose reference`, AI actor);
+- write a coverage and open-decision note per revision;
+- read annotations by stable attachment id and classify them by intent (a
+  text-less shape is only a location);
+- add new batches instead of replacing annotated originals;
+- record an explicit `## Design sign-off` before linked follow-ups (`new
+--follow-up-to <slug> --project <checkout>`), which keep app work and `KF-*`
+  gaps separate.
+
+It reads `providers --json` and stops explicitly when the source lacks
+`attachments`, or falls back to notes when it lacks `attachment_edit`. No new
+gallery UI or annotation API was required. A synthetic exercise (baseline, v1,
+change, question and text-less annotations, v2 with change log, sign-off, linked
+follow-up) ran end to end against the current CLI.
+
 The dispatcher reviews the whole queue and reserves only independently ready
 qualified tickets at the integrator's published safe base. It rechecks open
 dependencies independently of the visible `--unblocked` filter (HS2-BSYW6F),

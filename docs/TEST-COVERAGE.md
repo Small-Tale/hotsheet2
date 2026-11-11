@@ -2703,3 +2703,10 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
   metadata transport redirects/limits/identity confirmation, synthetic real TLS
   CLI inspect/bind and actual project/path/server MCP stdio compositions.
 - UI, grants, ticket proxying and dispatch are outside this headless model.
+
+### Hot Sheet design-review adapter skill (HS2-C679CZ)
+
+- Behavior: the first-party Claude and Codex manifests install `hotsheet-design-review` through headless setup. It defers composition and capture to the installed Kerf design-mock skill (reporting the missing prerequisite when absent) and owns labeled attachment batches, annotation mapping by stable id and intent, non-destructive revisions, explicit sign-off, and linked follow-ups, with explicit capability stops.
+- Unit: `crates/hotsheet-plugins/src/tests.rs # hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical` checks the declared skill count, manifest-installed bodies, byte-identical mirrors, and the skill's required instructions.
+- End to end: a synthetic store and linked checkout with an isolated `HOTSHEET_HOME` exercised baseline and v1 batches, maintainer annotations (change, question, text-less), a v2 batch with change log, sign-off, and a qualified follow-up through the current CLI (recorded on HS2-C679CZ; not an automated suite).
+- Manual: a live Kerf design-mock capture needs `@kerfjs/ui` 5.0.0-beta.129 or newer; non-git provider capability stops need a provider connection.

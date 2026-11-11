@@ -718,8 +718,9 @@ fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
             include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
         ),
     ];
-    assert_eq!(codex.additional_skills().len(), roles.len() + 1); // HS2-5E8Y9R note repair
-    assert_eq!(claude.additional_skills().len(), roles.len() + 1);
+    // HS2-5E8Y9R note repair and HS2-C679CZ design review.
+    assert_eq!(codex.additional_skills().len(), roles.len() + 2);
+    assert_eq!(claude.additional_skills().len(), roles.len() + 2);
     for (name, source, codex_mirror, claude_mirror) in roles {
         assert_eq!(codex_mirror, source, "Codex {name} mirror drifted");
         assert_eq!(
@@ -746,6 +747,39 @@ fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
             .find(|(target, _)| target.ends_with("/note-repair/SKILL.md"))
             .expect("HS2-5E8Y9R note repair installed by headless setup");
         assert_eq!(body, codex_repair);
+    }
+    // HS2-C679CZ: the Hot Sheet design-review adapter is installed for both tools by the
+    // same manifest-declared headless setup path, and its mirrors stay byte-identical.
+    let codex_design = include_str!("../../../.agents/skills/hotsheet-design-review/SKILL.md");
+    let claude_design = include_str!("../../../.claude/skills/hotsheet-design-review/SKILL.md");
+    assert_eq!(codex_design, claude_design);
+    for plugin in [&codex, &claude] {
+        let (_, body) = plugin
+            .additional_skills()
+            .into_iter()
+            .find(|(target, _)| target.ends_with("/hotsheet-design-review/SKILL.md"))
+            .expect("HS2-C679CZ design review installed by headless setup");
+        assert_eq!(body, codex_design);
+    }
+    let design = codex_design
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for phrase in [
+        "node_modules/@kerfjs/ui/ai/design-mock/SKILL.md",
+        "report the missing prerequisite",
+        "--batch-label",
+        "--purpose reference",
+        "stable attachment id",
+        "Never replace, rename, re-annotate or delete an annotated original",
+        "explicit design sign-off",
+        "--follow-up-to <slug> --project <checkout>",
+        "`attachments` must be true",
+    ] {
+        assert!(
+            design.contains(phrase),
+            "design review skill missing {phrase}"
+        );
     }
 
     let flatten = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
