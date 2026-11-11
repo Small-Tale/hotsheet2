@@ -2,6 +2,21 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+/** Choose `choice` in the announcer settings menu's `submenu` (HS2-PRCC6V), or a top-level item. */
+async function chooseAnnouncerSetting(
+  page: import('@playwright/test').Page,
+  overlay: import('@playwright/test').Locator,
+  submenu: string | undefined,
+  choice: string,
+) {
+  await overlay.getByRole('button', { name: 'Announcer Settings' }).click();
+  if (submenu) {
+    await page.getByRole('menuitem', { name: submenu, exact: true }).click();
+    await page.getByRole('menuitemcheckbox', { name: choice, exact: true }).click();
+  } else await page.getByRole('menuitem', { name: choice, exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Speed', exact: true })).toBeHidden();
+}
+
 test('HS2-6PZ35D keeps the phone announcer toggle in the sidebar rail', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page);
@@ -187,12 +202,14 @@ test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control gro
     const bar = await controls.boundingBox();
     const playback = await controls.getByRole('group', { name: 'Playback' }).boundingBox();
     const narration = await controls.getByRole('group', { name: 'Narration' }).boundingBox();
-    if (!bar || !playback || !narration) throw new Error('Announcer controls must be measurable');
+    const settings = await controls.getByRole('group', { name: 'Announcer Settings' }).boundingBox();
+    if (!bar || !playback || !narration || !settings) throw new Error('Announcer controls must be measurable');
     // One row: the groups share a vertical center even in the narrow docked section.
     expect(Math.abs(playback.y + playback.height / 2 - (narration.y + narration.height / 2))).toBeLessThanOrEqual(1);
     return {
       start: playback.x - bar.x,
-      end: bar.x + bar.width - (narration.x + narration.width),
+      // The settings menu (HS2-PRCC6V) joins the toggles' end of the toolbar.
+      end: bar.x + bar.width - (settings.x + settings.width),
       gap: narration.x - (playback.x + playback.width),
       playback: Math.round(playback.width),
       narration: Math.round(narration.width),
@@ -200,6 +217,14 @@ test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control gro
   };
   const docked = await measure();
   await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'corner');
+  // The compact corner card also keeps one unclipped row of controls.
+  const corner = await measure();
+  const card = await overlay.locator('.announcer__panel').boundingBox();
+  const bar = await controls.boundingBox();
+  if (!card || !bar) throw new Error('Announcer card must be measurable');
+  expect(bar.y + bar.height).toBeLessThanOrEqual(card.y + card.height + 0.5);
+  expect(corner.playback).toBe(docked.playback);
   await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
   await expect(overlay).toHaveAttribute('data-expanded', 'true');
   const expanded = await measure();
@@ -211,6 +236,118 @@ test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control gro
     expect(layout.end).toBeLessThanOrEqual(16);
   }
   if (captureDir) await overlay.screenshot({ path: `${captureDir}/hs2-yf8p38-expanded-groups.png` });
+});
+
+test('HS2-PRCC6V sets voice, speed, and clears history from the settings menu', async ({ page }) => {
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  await page.addInitScript(() => {
+    const spoken: { text: string; rate: number; voice?: string }[] = [];
+    Object.defineProperty(window, '__announcerSpoken', { value: spoken });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        rate = 1;
+        voice?: { name: string };
+        onstart?: () => void;
+        onend?: () => void;
+        constructor(readonly text: string) {}
+      },
+    });
+    const voices = [
+      { name: 'Synthetic Alto', lang: 'en-US' },
+      { name: 'Synthetic Bass', lang: 'en-GB' },
+      { name: 'Synthetique', lang: 'fr-FR' },
+    ];
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices: () => voices,
+        addEventListener() {},
+        removeEventListener() {},
+        speak(utterance: { text: string; rate: number; voice?: { name: string }; onend?: () => void }) {
+          spoken.push({ text: utterance.text, rate: utterance.rate, voice: utterance.voice?.name });
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+    Object.defineProperty(navigator, 'language', { configurable: true, get: () => 'en-US' });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  await page.route('**/tts/providers', (route) => route.fulfill({ json: [] }));
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        {
+          store_id: 'synthetic-store',
+          event: {
+            id: 'set-1',
+            ts: '2026-11-01T01:00:00Z',
+            tool: 'codex',
+            kind: 'decision',
+            summary: 'codex decided: keep the synthetic sample short',
+            importance: 'high',
+          },
+        },
+      ],
+    }),
+  );
+  const launch = page.getByRole('button', { name: 'Announcer', exact: true });
+  await launch.click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  await expect(overlay).toContainText('keep the synthetic sample short');
+  // No permanent voice row: the settings button sits with the toggles at the toolbar's end.
+  await expect(overlay.getByRole('combobox')).toHaveCount(0);
+  const settings = overlay.getByRole('button', { name: 'Announcer Settings' });
+  const audioBox = await overlay.getByRole('button', { name: 'Audio', exact: true }).boundingBox();
+  const settingsBox = await settings.boundingBox();
+  if (!audioBox || !settingsBox) throw new Error('Announcer controls must be measurable');
+  expect(settingsBox.x).toBeGreaterThan(audioBox.x + audioBox.width - 1);
+  expect(Math.abs(settingsBox.y + settingsBox.height / 2 - (audioBox.y + audioBox.height / 2))).toBeLessThanOrEqual(1);
+  await settings.click();
+  await page.getByRole('menuitem', { name: 'Voice', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Browser voice', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Synthetic Alto', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Synthetique', exact: true })).toHaveCount(0);
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-prcc6v-voice-menu.png`, animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await chooseAnnouncerSetting(page, overlay, 'Voice', 'Synthetic Bass');
+  await chooseAnnouncerSetting(page, overlay, 'Speed', '1.5×');
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  const spoken = () => page.evaluate(() => (window as unknown as { __announcerSpoken: unknown[] }).__announcerSpoken);
+  await expect
+    .poll(spoken)
+    .toEqual([{ text: 'codex decided: keep the synthetic sample short', rate: 1.5, voice: 'Synthetic Bass' }]);
+  // Settings are the device's: they survive a reload.
+  await page.reload();
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  await overlay.getByRole('button', { name: 'Announcer Settings' }).click();
+  await page.getByRole('menuitem', { name: 'Speed', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '1.5×', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-prcc6v-speed-menu.png`, animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  await expect.poll(async () => JSON.stringify(await spoken())).toContain('"rate":1.5,"voice":"Synthetic Bass"');
+  // Clear history empties the reel and keeps it cleared across closing and reopening.
+  await chooseAnnouncerSetting(page, overlay, undefined, 'Clear history');
+  await expect(overlay).toContainText('No activity');
+  await launch.click();
+  await launch.click();
+  await expect(overlay).toContainText('No activity');
+  await expect(overlay).not.toContainText('keep the synthetic sample short');
+  await overlay.getByRole('button', { name: 'Announcer Settings' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Clear history', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-prcc6v-docked-wide.png` });
 });
 
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
@@ -341,16 +478,15 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
   expect(await overlay.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(false);
   await expect(overlay).toHaveAttribute('data-presentation', 'corner');
   await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
-  await overlay.getByRole('textbox', { name: 'Announcer voice name' }).fill('synthetic-voice');
-  await overlay.getByRole('textbox', { name: 'Announcer voice name' }).blur();
-  await overlay.getByRole('combobox', { name: 'Announcer voice provider' }).selectOption('fake');
+  // The expanded card has no voice rows; the engine is chosen in the settings menu (HS2-PRCC6V).
+  await expect(overlay.getByRole('combobox')).toHaveCount(0);
+  await expect(overlay.getByRole('textbox')).toHaveCount(0);
+  await chooseAnnouncerSetting(page, overlay, 'Voice', 'fake');
   const serverSpeech = page.waitForRequest('**/tts/synthesize');
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
-  expect((await serverSpeech).postDataJSON()).toMatchObject({
-    provider: 'fake',
-    text: 'Updated the synthetic sample file',
-    voice: 'synthetic-voice',
-  });
+  const serverRequest = (await serverSpeech).postDataJSON() as Record<string, unknown>;
+  expect(serverRequest).toMatchObject({ provider: 'fake', text: 'Updated the synthetic sample file' });
+  expect(serverRequest.voice).toBeUndefined();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
     .toContain('server:blob:synthetic-speech');

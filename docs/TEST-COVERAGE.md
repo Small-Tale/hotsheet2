@@ -339,6 +339,11 @@ zones, pressed state and Audio icon in both directions, no app CSS on the toolba
 buttons) and `announcer.spec.ts` (painted on/off chrome swapping after a toggle and
 back, one row in the docked section, and fixed-size groups with a growing gap in the
 expanded card).
+HS2-PRCC6V is covered in `announcer-settings.test.ts` (per-device persistence and
+fallbacks, language-filtered capped voice choices, menu entries, checks, icons, and
+the disabled empty clear) and `announcer.spec.ts` (no voice row, the settings button
+beside Audio, voice and speed applied to narration, reload persistence, server engine
+without a voice name, and clear history kept across reopening).
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

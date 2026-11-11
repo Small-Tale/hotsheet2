@@ -33,7 +33,7 @@
 }
 
 .announcer__panel {
-  width: min(240px, calc(100vw - 24px));
+  width: min(272px, calc(100vw - 24px));
   max-height: min(300px, calc(100dvh - 24px));
   display: flex;
   flex-direction: column;
@@ -187,32 +187,4 @@
 .announcer__reel span {
   font-weight: 700;
   margin-right: var(--wa-space-xs);
-}
-
-.announcer__voice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wa-space-xs);
-  padding: var(--wa-space-xs) var(--wa-space-s);
-  font-size: var(--wa-font-size-xs);
-}
-
-.announcer__voice select,
-.announcer__voice input {
-  max-width: 75%;
-  min-width: 0;
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  border: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: var(--wa-border-radius-s);
-  font: inherit;
-}
-
-@media (max-width: 600px) {
-  /* HS2-5PSQJQ: editable controls stay at the touch input floor on phones. */
-  .announcer__voice select,
-  .announcer__voice input {
-    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-s));
-  }
 }

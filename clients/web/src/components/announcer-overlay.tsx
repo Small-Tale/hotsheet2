@@ -1,13 +1,29 @@
 import './announcer-overlay.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Play, Radio, Square, Volume2, VolumeX } from 'lucide';
+import {
+  AudioLines,
+  ChevronLeft,
+  ChevronRight,
+  Gauge,
+  ListX,
+  Maximize2,
+  Minimize2,
+  Play,
+  Radio,
+  Settings,
+  Square,
+  Volume2,
+  VolumeX,
+} from 'lucide';
 
 import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID } from '../announcer-layout';
 import type { AnnouncerReelItem } from '../announcer-reel';
+import { announcerSettingsMenu } from '../announcer-settings';
 
 /** Where the open announcer shows (HS2-BS0XFK): `docked` in the left sidebar's footer under a resizable
  * separator, or `corner` as a card over the work area while that sidebar is not shown. */
@@ -28,6 +44,10 @@ export interface AnnouncerOverlayProps {
   providers?: readonly string[];
   provider?: string;
   voice?: string;
+  /** Browser voice names the settings menu offers (HS2-PRCC6V). */
+  voices?: readonly string[];
+  /** Speech rate (HS2-PRCC6V). */
+  rate?: number;
   presentation?: AnnouncerPresentation;
   /** The docked section's height, as the device last stored it. */
   dockSize?: number;
@@ -52,6 +72,8 @@ export function AnnouncerOverlay({
   providers = [],
   provider = 'browser',
   voice = '',
+  voices = [],
+  rate = 1,
   presentation = 'corner',
   dockSize = ANNOUNCER_DOCK_BOUNDS.fallback,
 }: AnnouncerOverlayProps) {
@@ -147,35 +169,41 @@ export function AnnouncerOverlay({
             </ToolbarControlGroup>
           }
           trailing={
-            <ToolbarControlGroup size="compact" density="compact" label="Narration">
-              <button type="button" aria-label="Live" aria-pressed={String(live)} {...action('live')}>
-                <LucideIcon icon={Radio} name="radio" />
-              </button>
-              <button type="button" aria-label="Audio" aria-pressed={String(audible)} {...action('audio')}>
-                <LucideIcon icon={audible ? Volume2 : VolumeX} name={audible ? 'volume-2' : 'volume-x'} />
-              </button>
-            </ToolbarControlGroup>
+            <>
+              <ToolbarControlGroup size="compact" density="compact" label="Narration">
+                <button type="button" aria-label="Live" aria-pressed={String(live)} {...action('live')}>
+                  <LucideIcon icon={Radio} name="radio" />
+                </button>
+                <button type="button" aria-label="Audio" aria-pressed={String(audible)} {...action('audio')}>
+                  <LucideIcon icon={audible ? Volume2 : VolumeX} name={audible ? 'volume-2' : 'volume-x'} />
+                </button>
+              </ToolbarControlGroup>
+              {/* HS2-PRCC6V: voice, speed, and clearing history live in one settings menu beside Audio. */}
+              <ToolbarControlGroup size="compact" density="compact" single nestedDropdown label="Announcer Settings">
+                <PopupMenu
+                  label="Announcer Settings"
+                  icon={<LucideIcon icon={Settings} name="settings" />}
+                  caret={false}
+                  placement="top-end"
+                  rootAttributes={{ 'data-announcer-settings': '' }}
+                  items={announcerSettingsMenu({
+                    providers,
+                    provider,
+                    voices,
+                    voice,
+                    rate,
+                    hasHistory: items.length > 0,
+                    icons: {
+                      voice: <LucideIcon icon={AudioLines} name="audio-lines" />,
+                      speed: <LucideIcon icon={Gauge} name="gauge" />,
+                      clear: <LucideIcon icon={ListX} name="list-x" />,
+                    },
+                  })}
+                />
+              </ToolbarControlGroup>
+            </>
           }
         />
-        <label class="announcer__voice">
-          Voice
-          <select aria-label="Announcer voice provider" data-announcer-provider>
-            <option value="browser" selected={provider === 'browser'}>
-              Browser voice
-            </option>
-            {providers.map((id) => (
-              <option value={id} selected={provider === id}>
-                {id === 'macos-say' ? 'Mac voice on server' : id}
-              </option>
-            ))}
-          </select>
-        </label>
-        {expanded && (
-          <label class="announcer__voice">
-            Voice name
-            <input data-announcer-voice value={voice} placeholder="Default voice" aria-label="Announcer voice name" />
-          </label>
-        )}
         {expanded && (
           <ol class="announcer__reel" aria-label="Cross-Project Activity Reel">
             {items.map((item, itemIndex) => (

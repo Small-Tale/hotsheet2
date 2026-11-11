@@ -1,4 +1,5 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { closePopupMenu, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { delegate, type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Radio } from 'lucide';
@@ -11,6 +12,12 @@ import {
   mergeAnnouncerReel,
   retainedAnnouncerReel,
 } from '../announcer-reel';
+import {
+  ANNOUNCER_RATES,
+  announcerVoiceChoices,
+  loadAnnouncerSettings,
+  saveAnnouncerSettings,
+} from '../announcer-settings';
 import { type ActivityEvent, Api } from '../api';
 import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
@@ -45,8 +52,28 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   const diffLoading = signal(false);
   const diffError = signal<string | undefined>();
   const providers = signal<string[]>([]);
-  const provider = signal('browser');
-  const voice = signal('');
+  // HS2-PRCC6V: voice, speed, and the cleared-history mark are per-device settings.
+  const stored = loadAnnouncerSettings(localStorage);
+  const provider = signal(stored.provider);
+  const voice = signal(stored.voice);
+  const rate = signal(stored.rate);
+  let clearedAt = stored.clearedAt;
+  const browserVoices = signal<string[]>([]);
+  const persistSettings = () => {
+    saveAnnouncerSettings(localStorage, {
+      provider: provider.peek(),
+      voice: voice.peek(),
+      rate: rate.peek(),
+      clearedAt,
+    });
+  };
+  const refreshVoices = () => {
+    if (typeof speechSynthesis === 'undefined' || typeof speechSynthesis.getVoices !== 'function') return;
+    browserVoices.value = announcerVoiceChoices(speechSynthesis.getVoices(), navigator.language, voice.peek());
+  };
+  /** Activity cleared from this device's reel stays out of it (HS2-PRCC6V). */
+  const uncleared = (reel: AnnouncerReelItem[]) =>
+    clearedAt ? reel.filter((item) => item.event.ts > clearedAt) : reel;
   const dockSize = signal(loadAnnouncerDockSize(localStorage));
   const unrouteDock = regionCommitRoutes.route(ANNOUNCER_DOCK_REGION_ID, (size) => {
     dockSize.value = saveAnnouncerDockSize(localStorage, size);
@@ -128,6 +155,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         if (generation !== speechGeneration) return;
         currentUrl = URL.createObjectURL(blob);
         const audio = new Audio(currentUrl);
+        audio.playbackRate = rate.peek();
         currentAudio = audio;
         audio.onended = onEnd;
         audio.onerror = () => {
@@ -151,6 +179,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       return;
     }
     const utterance = new SpeechSynthesisUtterance(item.narration);
+    utterance.rate = rate.peek();
     if (voice.peek()) {
       const selected = speechSynthesis.getVoices().find((candidate) => candidate.name === voice.peek());
       if (selected) utterance.voice = selected;
@@ -193,7 +222,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     const loaded = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
     if (loaded.length === 0 && results.length > 0) error.value = 'Activity could not be loaded.';
     const selectedKey = items.peek().at(index.peek())?.key;
-    items.value = mergeAnnouncerReel(items.peek(), retainedAnnouncerReel(loaded));
+    items.value = uncleared(mergeAnnouncerReel(items.peek(), retainedAnnouncerReel(loaded)));
     if (speaking.peek() && selectedKey) {
       const selection = items.peek().findIndex((item) => item.key === selectedKey);
       if (selection >= 0) {
@@ -213,6 +242,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
 
   function onActivity(project: Project, storeId: string, activity: ActivityEvent) {
     const item = announcerItem(project.id, project.name, storeId, activity);
+    if (clearedAt && item.event.ts <= clearedAt) return;
     const isNew = !items.peek().some((entry) => entry.key === item.key);
     items.value = mergeAnnouncerReel(items.peek(), [item]);
     if (live.peek() && open.peek() && isNew && !speaking.peek()) {
@@ -278,17 +308,53 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         break;
     }
   });
-  const unbindProvider = delegate(document.body, 'change', '[data-announcer-provider]', (_event, target) => {
-    const selected = (target as HTMLSelectElement).value;
-    if (selected === 'browser' || providers.peek().includes(selected)) {
-      cancelSpeech();
-      provider.value = selected;
+  function applySetting(setting: string, value: string) {
+    switch (setting) {
+      case 'provider':
+        if (value !== provider.peek() && (value === 'browser' || providers.peek().includes(value))) {
+          cancelSpeech();
+          provider.value = value;
+          // A voice name belongs to its engine; the new engine starts at its default voice.
+          voice.value = '';
+        }
+        break;
+      case 'voice':
+        cancelSpeech();
+        voice.value = value;
+        break;
+      case 'rate': {
+        const chosen = ANNOUNCER_RATES.find((choice) => String(choice) === value);
+        if (chosen !== undefined) rate.value = chosen;
+        break;
+      }
+      case 'clear-history': {
+        cancelSpeech();
+        clearDiff();
+        const latest = items.peek().reduce((max, item) => (item.event.ts > max ? item.event.ts : max), clearedAt);
+        clearedAt = latest;
+        items.value = [];
+        index.value = 0;
+        break;
+      }
+      default:
+        return;
     }
+    persistSettings();
+  }
+  const unbindSettings = delegate(document.body, 'kui-menu-select', '[data-announcer-settings]', (event) => {
+    const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
+    // A host update can replace the menu before Kerf's post-event close runs (HS2-2055AY).
+    closePopupMenu(event.target as PopupMenuElement);
+    const { announcerSetting, announcerValue } = item.dataset;
+    if (announcerSetting) applySetting(announcerSetting, announcerValue ?? '');
   });
-  const unbindVoice = delegate(document.body, 'change', '[data-announcer-voice]', (_event, target) => {
-    cancelSpeech();
-    voice.value = (target as HTMLInputElement).value.trim();
-  });
+  // Some engines (and test doubles) expose speech without events; their voice list is read once.
+  const voicesSource =
+    typeof speechSynthesis !== 'undefined' && typeof speechSynthesis.addEventListener === 'function'
+      ? speechSynthesis
+      : undefined;
+  voicesSource?.addEventListener('voiceschanged', refreshVoices);
+  refreshVoices();
   return {
     trigger: () => (
       <button
@@ -321,6 +387,8 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
           providers={providers.value}
           provider={provider.value}
           voice={voice.value}
+          voices={browserVoices.value}
+          rate={rate.value}
         />
       );
       return { docked: overlay('docked'), corner: overlay('corner') };
@@ -329,8 +397,8 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     dispose: () => {
       unrouteDock();
       unbind();
-      unbindProvider();
-      unbindVoice();
+      unbindSettings();
+      voicesSource?.removeEventListener('voiceschanged', refreshVoices);
       cancelSpeech();
       clearDiff();
     },

@@ -97,7 +97,12 @@ The `activity` capability turns native signals → events; the host owns the str
   `aria-pressed`, and Audio's icon switches between volume and muted. Both carry the retained
   cross-project digest, live narration over the change stream, a bounded reel,
   browser speech or a configured server provider. The macOS server offers a local
-  `macos-say` provider. The overlay has no separate close button. While the sidebar
+  `macos-say` provider. A settings menu beside the toggles (HS2-PRCC6V) chooses the
+  engine, a browser voice for the page's language (up to 24; a server engine uses its
+  default voice), the speed (0.75×–2×, applied as the utterance rate or audio playback
+  rate), and **Clear history**, which hides activity recorded up to the newest shown
+  item on this device. Engine, voice, speed, and the cleared mark are kept per device
+  in local storage. The overlay has no separate close button. While the sidebar
   is collapsed the toggle follows it into the workspace toolbar. A phone keeps it,
   like Standby, in the overlay rail, leaving the one-row toolbar to search. Edit events carry
   path, operation, and optional file count;
