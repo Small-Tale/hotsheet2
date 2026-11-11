@@ -41,6 +41,8 @@ export interface TicketCollectionBindings {
   readonly setContextMenu: (menu: TicketCollectionMenu | undefined) => void;
   /** A context-menu field choice for its target tickets (the selection, or the menu's ticket). */
   readonly onContextField: (field: TicketContextField, value: string, slugs: string[]) => void;
+  /** An Add to Group choice for its target tickets; an empty name asks for a new group (HS2-TX17CM). */
+  readonly onContextGroup?: (group: string, slugs: string[]) => void;
   /** A context-menu action for its target tickets, plus the ticket the menu was opened on. */
   readonly onContextAction: (action: string, slugs: string[], menuSlug: string) => void;
 }
@@ -109,6 +111,19 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
       batch(() => {
         bindings.setContextMenu(undefined);
         bindings.onContextField(contextField as TicketContextField, contextValue, slugs);
+      });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', '[data-context-group]', (event, target) => {
+      event.stopPropagation();
+      const menu = bindings.contextMenu(),
+        group = (target as HTMLElement).dataset.contextGroup;
+      if (!menu || group === undefined) return;
+      const slugs = menuTargets(menu);
+      batch(() => {
+        bindings.setContextMenu(undefined);
+        bindings.onContextGroup?.(group, slugs);
       });
     }),
   );

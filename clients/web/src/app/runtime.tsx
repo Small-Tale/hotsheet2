@@ -162,6 +162,7 @@ import { createTerminalOperationsSurface } from '../features/terminal-operations
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalRailSurface } from '../features/terminal-rail-surface';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
+import { createTicketGroupsController } from '../features/ticket-groups';
 import { createTicketViewSurface } from '../features/ticket-view-surface';
 import { createTicketWorkflows } from '../features/ticket-workflows';
 import { createWorkspaceSearchController, type SidebarSearchCounts } from '../features/workspace-search';
@@ -235,6 +236,7 @@ import {
   reconcileReaderNoteDraft,
   type TicketFieldConflict,
 } from '../ticket-field-reconciliation';
+import { clusterTicketsByGroup, ticketGroupName } from '../ticket-groups';
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
 import { waitForTicketMotionSettled } from '../ticket-motion';
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
@@ -727,9 +729,9 @@ export async function startHotSheetWebClient() {
     });
   const selectedCorruptKey = signal<string | undefined>(undefined);
   const selectedTicketSlugs = signal<string[]>([]);
-  const ticketContextMenu = signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>(
-    undefined,
-  );
+  const ticketContextMenu = signal<
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+  >(undefined);
   const ticketCloseDialog = signal<TicketCloseDialogState | undefined>(undefined);
   const appTabContextMenu = signal<
     { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
@@ -2413,6 +2415,7 @@ export async function startHotSheetWebClient() {
     searchTokens,
     // The workspace search controller is created later; resolve it lazily.
     availableSearchTags: () => availableSearchTags(),
+    availableSearchGroups: () => availableSearchGroups(),
     selectTicketView,
     showToast,
   });
@@ -3342,6 +3345,7 @@ export async function startHotSheetWebClient() {
     ),
     showSourceIcon: (defaultProviders.value[project()?.id ?? '']?.sources.length ?? 0) > 1,
     tags: ticket.tags,
+    group: ticketGroupName(ticket),
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
     feedbackNeeded: ticket.needs_review ?? ticket.feedback_needed,
@@ -3453,8 +3457,11 @@ export async function startHotSheetWebClient() {
         matched = matches ? tickets.value.filter((ticket) => matches.has(ticketSearchKey(ticket))) : [];
       result = matched;
     } else result = ticketsForView(tickets.value, selectedView.value);
-    const active = activeWorkspaceSort();
-    return result.slice().sort((a, b) => compareWorkspaceTickets(a, b, active.sort, active.sortDirection));
+    const active = activeWorkspaceSort(),
+      sorted = result.slice().sort((a, b) => compareWorkspaceTickets(a, b, active.sort, active.sortDirection));
+    // A list gathers each group where its first ticket sorts, so selection and keyboard order
+    // follow the rows as drawn; each board column gathers its own members instead (HS2-WZ3JGZ).
+    return viewMode.value === 'board' ? sorted : clusterTicketsByGroup(sorted);
   }
   const {
     searchBarActive,
@@ -3468,6 +3475,7 @@ export async function startHotSheetWebClient() {
     sortedTicketQuery,
     refreshTicketSearch,
     availableSearchTags,
+    availableSearchGroups,
     focusWorkspaceSearch,
     scheduleTicketSearch,
     flushWorkspaceSearch,
@@ -5265,6 +5273,7 @@ export async function startHotSheetWebClient() {
     ticketCloseDialog,
     ticketContextMenu,
     tickets,
+    ticketGroupNames: () => ticketGroups.groupNames(),
   });
   const terminalOperationsSurface = createTerminalOperationsSurface({
     partialSourcesByProject,
@@ -5384,7 +5393,18 @@ export async function startHotSheetWebClient() {
     titleDraft,
     titleEditingSurface,
   });
+  const ticketGroups = createTicketGroupsController({
+    project,
+    api,
+    tickets,
+    selectedView,
+    capabilitiesFor,
+    executeBulkTicketAction,
+    refreshProject: (options) => refreshProject(options),
+    showToast,
+  });
   const { workspaceSurfaceProps } = createWorkspaceSurface({
+    ticketGroups,
     searchScope,
     boardColumnLoading,
     boardColumnPages,
@@ -5427,6 +5447,7 @@ export async function startHotSheetWebClient() {
     selectedTicketQualifiedId: () => selectedTicket.value?.qualified_id,
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
+    ticketGroups,
     activeWorkspaceSort,
     allTicketsSearchAvailable,
     capabilitiesFor,
@@ -5895,6 +5916,7 @@ export async function startHotSheetWebClient() {
   }
 
   const interactionBindingsPort: InteractionBindingsPort = {
+    ticketGroups,
     openProjectPicker,
     openRemoteProjectDialog,
     chooseAndOpenProject,

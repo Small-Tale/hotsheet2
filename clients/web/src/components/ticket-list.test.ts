@@ -119,4 +119,51 @@ describe('TicketList', () => {
     expect(markup.match(/data-confidence-badge=/gu)).toHaveLength(1);
     expect(markup).toContain('data-band="verified"');
   });
+
+  it('splits a grouped list into segment cards with per-segment row edges (HS2-WZ3JGZ)', () => {
+    const row = (slug: string, group?: string): TicketRowProps => ({ ...ticket, slug, group });
+    const markup = String(
+      TicketList({
+        tickets: [row('HS2-A'), row('HS2-G1', 'Board drag & drop'), row('HS2-B'), row('HS2-G2', 'board drag & drop')],
+        collapsedGroups: [],
+      }),
+    );
+    expect(markup).toContain('data-grouped="true"');
+    expect(markup).toContain('data-ticket-drop-ungroup="true"');
+    // Ungrouped runs are their own cards on either side of the group, which gathers both members.
+    expect(markup.match(/class="ticket-list__segment"/g)).toHaveLength(2);
+    expect(markup.match(/data-component="ticket-group"/g)).toHaveLength(1);
+    const order = [...markup.matchAll(/data-ticket-slug="([^"]+)"/g)].map((match) => match[1]);
+    expect(order).toEqual(['HS2-A', 'HS2-G1', 'HS2-G2', 'HS2-B']);
+    const edge = (slug: string) =>
+      new RegExp(`<[^>]*data-ticket-slug="${slug}"[^>]*>`).exec(markup)![0].match(/data-list-edge="(\w+)"/)?.[1];
+    expect([edge('HS2-A'), edge('HS2-G1'), edge('HS2-G2'), edge('HS2-B')]).toEqual(['only', 'start', 'end', 'only']);
+    expect(markup).toContain('data-ticket-group="Board drag &amp; drop"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('aria-label="Board drag &amp; drop, 2 tickets"');
+  });
+
+  it('keeps a collapsed group header and count, hides its rows, and outlines a drop target', () => {
+    const row = (slug: string, group?: string): TicketRowProps => ({ ...ticket, slug, group });
+    const markup = String(
+      TicketList({
+        tickets: [row('HS2-G1', 'Board'), row('HS2-H1', 'Search')],
+        collapsedGroups: ['board'],
+        dropGroup: 'search',
+      }),
+    );
+    expect(markup).not.toContain('data-ticket-slug="HS2-G1"');
+    expect(markup).toContain('data-ticket-slug="HS2-H1"');
+    expect(markup).toMatch(/data-ticket-group="Board"[^>]*data-collapsed="true"/);
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup.match(/data-drop-target="true"/g)).toHaveLength(1);
+    expect(markup).toMatch(/data-ticket-group="Search"[^>]*data-drop-target="true"/);
+  });
+
+  it('renders an ungrouped list exactly as one card without group markup', () => {
+    const markup = String(TicketList({ tickets: [ticket] }));
+    expect(markup).not.toContain('data-grouped');
+    expect(markup).not.toContain('ticket-list__segment');
+    expect(markup).not.toContain('data-ticket-drop-ungroup');
+  });
 });

@@ -1,4 +1,6 @@
 import type { Capabilities, CheckoutTicketCounts, TicketRow } from './api';
+import type { TicketGroupMenuModel } from './components/ticket-row-context-menu';
+import { ticketGroupKey, ticketGroupName } from './ticket-groups';
 import type { TicketPatch } from './ticket-operations';
 import { isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket } from './ticket-views';
 
@@ -8,6 +10,8 @@ export type BulkTicketAction =
   | { kind: 'reopen' }
   | { kind: 'add-tag'; tag: string }
   | { kind: 'remove-tag'; tag: string }
+  /** Set (a name) or clear (null) the group, optionally with a board column's status (HS2-PRXD39). */
+  | { kind: 'group'; group: string | null; status?: string }
   | { kind: 'delete' };
 
 /**
@@ -91,11 +95,58 @@ export function canAtomicallyBulkUpdate(
   );
 }
 
+/** Why the tickets cannot be grouped, or undefined when every provider supports it (HS2-TX17CM). */
+export function ticketGroupDisabledReason(
+  tickets: readonly TicketRow[],
+  capabilitiesFor: (connectionId: string) => Capabilities | undefined,
+): string | undefined {
+  if (!canBulkUpdate(tickets, capabilitiesFor)) return 'One or more selected ticket providers do not support updates.';
+  return tickets.every((ticket) => capabilitiesFor(ticket.connection_id)?.groups === true)
+    ? undefined
+    : 'One or more selected ticket providers do not support groups.';
+}
+
+/** The ticket menu's group entries for the target tickets, given every known group name (HS2-TX17CM). */
+export function ticketGroupMenuModel(
+  targets: readonly TicketRow[],
+  groups: readonly string[],
+  capabilitiesFor: (connectionId: string) => Capabilities | undefined,
+): TicketGroupMenuModel | undefined {
+  if (targets.length === 0) return undefined;
+  const names = targets.map(ticketGroupName),
+    first = names[0],
+    shared =
+      first !== undefined &&
+      names.every((name) => name !== undefined && ticketGroupKey(name) === ticketGroupKey(first));
+  return {
+    names: groups,
+    current: shared ? first : undefined,
+    removable: names.some((name) => name !== undefined),
+    disabledReason: ticketGroupDisabledReason(targets, capabilitiesFor),
+  };
+}
+
 export function bulkTagChoices(tickets: readonly TicketRow[]): string[] {
   return [...new Set(tickets.flatMap((ticket) => ticket.tags))].sort((left, right) => left.localeCompare(right));
 }
 
-export function bulkTicketPatch(ticket: Pick<TicketRow, 'tags'>, action: BulkTicketAction): TicketPatch | undefined {
+export function bulkTicketPatch(
+  ticket: Pick<TicketRow, 'tags' | 'group' | 'status'>,
+  action: BulkTicketAction,
+): TicketPatch | undefined {
+  if (action.kind === 'group') {
+    const patch: TicketPatch = {},
+      current = ticketGroupName(ticket);
+    // A group's stored spelling is shared, so the same group in another casing is no change.
+    if (
+      action.group === null
+        ? current !== undefined
+        : !current || ticketGroupKey(current) !== ticketGroupKey(action.group)
+    )
+      patch.group = action.group;
+    if (action.status !== undefined && ticket.status !== action.status) patch.status = action.status;
+    return Object.keys(patch).length ? patch : undefined;
+  }
   if (action.kind === 'field') return { [action.field]: action.value };
   if (action.kind === 'up-next') return { up_next: action.value };
   if (action.kind === 'reopen') return { status: 'not_started', up_next: true };

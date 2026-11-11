@@ -6,7 +6,8 @@ import { type TicketStatus } from '../components/status-badge';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { type TicketPriority } from '../components/ticket-row';
 import { type TicketViewActionSpec } from '../components/workspace-header';
-import { canBulkUpdate } from '../ticket-bulk-operations';
+import { canBulkUpdate, ticketGroupDisabledReason, ticketGroupMenuModel } from '../ticket-bulk-operations';
+import { ticketGroupKey, ticketGroupName } from '../ticket-groups';
 import {
   ALL_TICKETS_SCOPE,
   isArchivedTicket,
@@ -25,8 +26,12 @@ export interface TicketViewSurfaceDependencies {
   selectedTicketSlugs: Signal<string[]>;
   status: (value?: string) => TicketStatus;
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
-  ticketContextMenu: Signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>;
+  ticketContextMenu: Signal<
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+  >;
   tickets: Signal<WireTicketRow[]>;
+  /** Every known group name in the project, for the Add to Group submenu (HS2-TX17CM). */
+  ticketGroupNames: () => readonly string[];
 }
 
 /**
@@ -45,6 +50,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
     ticketCloseDialog,
     ticketContextMenu,
     tickets,
+    ticketGroupNames,
   } = dependencies;
   function ticketViewTitle(view: TicketScope) {
     if (view === ALL_TICKETS_SCOPE) return 'All Tickets';
@@ -73,6 +79,22 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
   function ticketContextMenuSurface() {
     const menu = ticketContextMenu.value;
     let props: TicketContextMenuSurfaceProps['menu'];
+    if (menu?.group) {
+      const members = tickets.value.filter(
+        (item) => ticketGroupKey(ticketGroupName(item) ?? '') === ticketGroupKey(menu.group!),
+      );
+      return (
+        <TicketContextMenuSurface
+          groupMenu={{
+            x: menu.x,
+            y: menu.y,
+            group: menu.group,
+            disabledReason: ticketGroupDisabledReason(members, capabilitiesFor),
+          }}
+          closeDialog={ticketCloseDialog.value}
+        />
+      );
+    }
     if (menu) {
       const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug),
         slugs = selectedTicketSlugs.value.length ? selectedTicketSlugs.value : [menu.ticketSlug],
@@ -104,6 +126,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
         allInBacklog: selected.length > 0 && selected.every((item) => item.status === 'backlog'),
         allInArchive: selected.length > 0 && selected.every(isArchivedTicket),
         allInTrash: selected.length > 0 && selected.every(isTrashedTicket),
+        group: ticketGroupMenuModel(selected, ticketGroupNames(), capabilitiesFor),
       };
     }
     return <TicketContextMenuSurface menu={props} closeDialog={ticketCloseDialog.value} />;

@@ -1367,6 +1367,18 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
   confirmation, and the Empty Trash confirmation with its busy and error states. The
   `bulk-ticket-dialog` UX demo's Presentation setting previews each of these, and Reset returns to
   add-tag. Fixture stand-ins handle Cancel, choice, submit, confirm, and dismissal (HS2-PS9BQV).
+- `TicketGroup` — **demo built**: one collapsible ticket group for the list and for each board
+  column (HS2-WZ3JGZ, HS2-HV8S4Y). A Kerf `SunkenPanel` holds a `ListHeader` disclosure (size
+  `m`, wrapping, with a count) and the group's tickets; the panel's `outlined` state marks a
+  drag target. The app-owned wrapper sets only `--kui-layout-inline-margin` so the title starts
+  on the ticket type icons' left edge, following the 24rem width at which `SummaryRow` compacts
+  (`KF-J8GMA2` asks Kerf for a public alignment). The `ticket-group` demo has name, collapsed,
+  and drop-target settings with Reset, and a right-click on its header opens the production
+  `TicketGroupContextMenu` (Rename Group…, Ungroup). Behavior: [35-ticket-groups.md](35-ticket-groups.md).
+- `TicketGroupDialog` — **demo built**: the New Group and Rename Group dialog (HS2-TX17CM,
+  HS2-8CDFKR) on Kerf `DialogSurface` with a required Group Name `TextField`, live inline
+  duplicate-name validation, and busy and failed-write states. The `ticket-group-dialog` demo's
+  Presentation setting previews each state, and Reset returns to New Group.
 - `CopyMoveTicketDialog` — tracked by HS2-77M88K.
 - `UndoToast` / `UndoHistory` — tracked by HS2-4CAN74.
 

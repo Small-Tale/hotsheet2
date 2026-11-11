@@ -5,6 +5,8 @@ import {
   COMPLETED_TICKET_CONTEXT_ACTIONS,
   COPY_TICKET_IDS_CONTEXT_ACTION,
   eventTargetsContextMenu,
+  NEW_TICKET_GROUP_CHOICE,
+  REMOVE_FROM_GROUP_CONTEXT_ACTION,
   REOPEN_TICKET_CONTEXT_ACTION,
   RESTORE_TICKET_CONTEXT_ACTION,
   TICKET_CONTEXT_ACTIONS,
@@ -231,5 +233,51 @@ describe('TicketRowContextMenu', () => {
     expect(available).toContain(`data-context-action="${CLOSE_TICKET_CONTEXT_ACTION.action}"`);
     expect(available).toContain(`data-lucide="${CLOSE_TICKET_CONTEXT_ACTION.iconName}"`);
     expect(String(TicketRowContextMenu({ x: 0, y: 0 }))).not.toContain('data-context-action="Close ticket"');
+  });
+
+  it('offers Add to Group with New Group first, a divider, then existing groups (HS2-TX17CM)', () => {
+    const none = String(TicketRowContextMenu({ x: 0, y: 0 }));
+    expect(none).not.toContain('Add to Group');
+    const markup = String(
+      TicketRowContextMenu({
+        x: 0,
+        y: 0,
+        selectionCount: 2,
+        group: { names: ['Board drag & drop', 'Search syntax'], current: 'Search syntax', removable: true },
+      }),
+    );
+    expect(markup).toContain('data-context-submenu="group"');
+    expect(markup).toContain('data-lucide="group"');
+    const newGroup = markup.indexOf('data-context-group-new="true"'),
+      divider = markup.indexOf('role="separator"', newGroup),
+      first = markup.indexOf('data-context-group="Board drag &amp; drop"'),
+      second = markup.indexOf('data-context-group="Search syntax"');
+    expect(newGroup).toBeGreaterThan(-1);
+    expect(itemTag(markup, `data-context-group="${NEW_TICKET_GROUP_CHOICE}"`)).toContain(
+      'data-context-group-new="true"',
+    );
+    expect(divider).toBeGreaterThan(newGroup);
+    expect(first).toBeGreaterThan(divider);
+    expect(second).toBeGreaterThan(first);
+    expect(itemTag(markup, 'data-context-group="Search syntax"')).toContain('aria-checked="true"');
+    expect(itemTag(markup, 'data-context-group="Board drag &amp; drop"')).toContain('aria-checked="false"');
+    // Add to Group sits in the same section as the other field submenus, before Change category.
+    expect(markup.indexOf('Add to Group')).toBeLessThan(markup.indexOf('Change category'));
+    expect(markup).toContain(`data-context-action="${REMOVE_FROM_GROUP_CONTEXT_ACTION.action}"`);
+    expect(markup).toContain('data-lucide="ungroup"');
+  });
+
+  it('hides Remove from Group for ungrouped targets and disables grouping with a reason', () => {
+    const ungrouped = String(TicketRowContextMenu({ x: 0, y: 0, group: { names: [], removable: false } }));
+    expect(ungrouped).toContain('Add to Group');
+    expect(ungrouped).not.toContain(REMOVE_FROM_GROUP_CONTEXT_ACTION.action);
+    expect(ungrouped).toContain('data-context-group-new="true"');
+    const reason = 'One or more selected ticket providers do not support groups.',
+      unsupported = String(
+        TicketRowContextMenu({ x: 0, y: 0, group: { names: ['Board'], removable: true, disabledReason: reason } }),
+      );
+    expect(disabledItem(unsupported, 'data-context-submenu="group"')).toBe(true);
+    expect(itemTag(unsupported, 'data-context-submenu="group"')).toContain(`title="${reason}"`);
+    expect(disabledItem(unsupported, `data-context-action="${REMOVE_FROM_GROUP_CONTEXT_ACTION.action}"`)).toBe(true);
   });
 });

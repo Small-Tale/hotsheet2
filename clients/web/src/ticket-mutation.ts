@@ -11,6 +11,7 @@ const projectedFields = new Set([
   'up_next',
   'blocked_by',
   'blocked_reason',
+  'group',
 ]);
 
 export function projectTicketPatch<T extends TicketRow>(ticket: T, patch: TicketPatch): T {

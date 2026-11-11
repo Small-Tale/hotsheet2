@@ -753,7 +753,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/tickets:
-    parameters:
+    parameters: &a3
       - $ref: '#/components/parameters/CheckoutReference'
     get:
       operationId: listCheckoutTickets
@@ -872,7 +872,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
   /providers/{connection_id}/tickets:
-    parameters:
+    parameters: &a2
       - $ref: '#/components/parameters/Connection'
     get:
       operationId: listProviderTickets
@@ -1272,6 +1272,15 @@ paths:
           schema:
             type: boolean
         - name: blocked
+          in: query
+          schema:
+            type: boolean
+        - name: group
+          in: query
+          description: Only tickets in this group; letter case and spacing do not matter (HS2-PDSHNN).
+          schema:
+            type: string
+        - name: has_group
           in: query
           schema:
             type: boolean
@@ -6230,6 +6239,15 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: group
+          in: query
+          description: Only tickets in this group; letter case and spacing do not matter (HS2-PDSHNN).
+          schema:
+            type: string
+        - name: has_group
+          in: query
+          schema:
+            type: boolean
         - name: has_attachment
           in: query
           schema:
@@ -6299,7 +6317,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateTicket'
-    parameters:
+    parameters: &a1
       - name: store_id
         in: path
         required: true
@@ -13080,7 +13098,9 @@ paths:
           type: string
     get:
       operationId: get_development_strategy
-      description: Read the versioned shared project development policy and effective selection (HS2-BF79YX, HS2-NBDXPW). A ticket override takes precedence over a session override.
+      description:
+        Read the versioned shared project development policy and effective selection (HS2-BF79YX, HS2-NBDXPW). A
+        ticket override takes precedence over a session override.
       parameters:
         - name: session
           in: query
@@ -13123,6 +13143,397 @@ paths:
                 $ref: '#/components/schemas/DevelopmentStrategyReport'
         default:
           description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /groups:
+    get:
+      operationId: list_groups
+      description: Ticket groups in use with member counts (HS2-PDSHNN). A group exists while a ticket outside Trash names it.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketGroups'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /groups/rename:
+    post:
+      operationId: rename_group
+      description:
+        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
+        is allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameTicketGroup'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names `from`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_name_taken`: `to` is a different existing group.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /groups/ungroup:
+    post:
+      operationId: ungroup
+      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UngroupTickets'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UngroupedTickets'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names the group.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/groups:
+    parameters: *a1
+    get:
+      operationId: list_store_groups
+      description: Ticket groups in use with member counts (HS2-PDSHNN). A group exists while a ticket outside Trash names it.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketGroups'
+        '404':
+          description: Unknown store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/groups/rename:
+    parameters: *a1
+    post:
+      operationId: rename_store_group
+      description:
+        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
+        is allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameTicketGroup'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names `from`. Also: Unknown store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_name_taken`: `to` is a different existing group.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/groups/ungroup:
+    parameters: *a1
+    post:
+      operationId: ungroup_store
+      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UngroupTickets'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UngroupedTickets'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names the group. Also: Unknown store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /providers/{connection_id}/groups:
+    parameters: *a2
+    get:
+      operationId: list_provider_groups
+      description: Ticket groups in use with member counts (HS2-PDSHNN). A group exists while a ticket outside Trash names it.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketGroups'
+        '409':
+          description: "A connection without the `groups` capability: provider connection '<id>' does not support 'groups'."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /providers/{connection_id}/groups/rename:
+    parameters: *a2
+    post:
+      operationId: rename_provider_group
+      description:
+        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
+        is allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameTicketGroup'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names `from`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: "`group_name_taken`: `to` is a different existing group. Also: A connection without the `groups`
+            capability: provider connection '<id>' does not support 'groups'."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /providers/{connection_id}/groups/ungroup:
+    parameters: *a2
+    post:
+      operationId: ungroup_provider
+      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UngroupTickets'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UngroupedTickets'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names the group.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: "A connection without the `groups` capability: provider connection '<id>' does not support 'groups'."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/groups:
+    parameters: *a3
+    get:
+      operationId: list_checkout_groups
+      description: 'Ticket groups of the project: one namespace, counts merged by name across every connection with the
+        `groups` capability (HS2-PDSHNN).'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketGroups'
+        '404':
+          description: Unknown checkout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/groups/rename:
+    parameters: *a3
+    post:
+      operationId: rename_checkout_group
+      description:
+        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
+        is allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameTicketGroup'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names `from`. Also: Unknown checkout.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_name_taken`: `to` is a different existing group.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/groups/ungroup:
+    parameters: *a3
+    post:
+      operationId: ungroup_checkout
+      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UngroupTickets'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UngroupedTickets'
+        '404':
+          description: '`group_not_found`: no ticket outside Trash names the group. Also: Unknown checkout.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
             application/json:
               schema:
@@ -14152,6 +14563,9 @@ components:
             type: string
         blocked_reason:
           type: string
+        group:
+          type: string
+          description: Ticket group display name (HS2-PDSHNN); omitted when ungrouped.
         created_at:
           anyOf:
             - type: string
@@ -14324,6 +14738,11 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: &a4
+            - type: string
+            - type: 'null'
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         created_at:
           type: string
         updated_at:
@@ -14528,6 +14947,9 @@ components:
           description: Qualified source ticket reference on checkout creation (HS2-2Z11A5).
         actor:
           $ref: '#/components/schemas/Actor'
+        group:
+          anyOf: *a4
+          description: Group to create the ticket in (HS2-PDSHNN).
       additionalProperties: false
     Actor:
       type: object
@@ -14592,6 +15014,9 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: *a4
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         note:
           type: string
         ai_feedback:
@@ -14929,6 +15354,9 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: *a4
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         created_at:
           type: string
         updated_at:
@@ -15120,6 +15548,9 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: *a4
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         created_at:
           type: string
         updated_at:
@@ -15270,6 +15701,9 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: *a4
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         note:
           type: string
         ai_feedback:
@@ -15410,6 +15844,9 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: *a4
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         created_at:
           type: string
         updated_at:
@@ -15562,6 +15999,9 @@ components:
                 anyOf:
                   - type: string
                   - type: 'null'
+              group:
+                anyOf: *a4
+                description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
               note:
                 type: string
               ai_feedback:
@@ -17186,49 +17626,65 @@ components:
     WorkerCadence:
       type: object
       required:
-        [
-          goal_minutes,
-          last_green_main_at,
-          next_target_at,
-          oldest_staging_at,
-          staging_age_seconds,
-          ci_failures_since_promotion,
-          correction_wall_seconds,
-          tickets_promoted_in_goal_window,
-          ready_batch,
-          action,
-          missed_goal_reason,
-        ]
+        - goal_minutes
+        - last_green_main_at
+        - next_target_at
+        - oldest_staging_at
+        - staging_age_seconds
+        - ci_failures_since_promotion
+        - correction_wall_seconds
+        - tickets_promoted_in_goal_window
+        - ready_batch
+        - action
+        - missed_goal_reason
       properties:
         goal_minutes:
           type: integer
           minimum: 1
         last_green_main_at:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
         next_target_at:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
         oldest_staging_at:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
         staging_age_seconds:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
           minimum: 0
         ci_failures_since_promotion:
           type: integer
           minimum: 0
         correction_wall_seconds:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
           minimum: 0
         tickets_promoted_in_goal_window:
           type: integer
           minimum: 0
           description: Tickets promoted to main within the rolling goal interval ending at the status read.
         ready_batch:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         action:
           type: string
-          enum: [promote_green_tip, attribute_and_restage, await_exact_sha_ci, no_ready_work]
+          enum:
+            - promote_green_tip
+            - attribute_and_restage
+            - await_exact_sha_ci
+            - no_ready_work
         missed_goal_reason:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
       additionalProperties: false
     ProviderConnections:
       type: array
@@ -17490,6 +17946,9 @@ components:
           type: boolean
           default: false
           description: Atomic persisted note kind correction. Git supports it; remote providers refuse before mutation.
+        groups:
+          type: boolean
+          description: Tickets carry `group` and the connection lists, renames, and clears groups (HS2-PDSHNN).
       additionalProperties: false
     ProviderDescriptor:
       type: object
@@ -21700,6 +22159,9 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        group:
+          anyOf: *a4
+          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
@@ -22483,4 +22945,74 @@ components:
           type: boolean
           description: Suppressed by quiet hours or the hourly limit, and reported by a later notifications.held summary
             (HS2-CFMSP2).
+      additionalProperties: false
+    TicketGroups:
+      type: object
+      required:
+        - groups
+      properties:
+        groups:
+          type: array
+          description: Sorted by name without regard to case.
+          items:
+            type: object
+            required:
+              - name
+              - count
+            properties:
+              name:
+                type: string
+              count:
+                type: integer
+                minimum: 1
+                description: Member tickets outside Trash.
+            additionalProperties: false
+      additionalProperties: false
+    RenameTicketGroup:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          description: Current name; letter case and spacing do not matter.
+        to:
+          type: string
+          description: 'New name: at most 120 characters and no control characters.'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    RenamedTicketGroup:
+      type: object
+      required:
+        - name
+        - updated
+      properties:
+        name:
+          type: string
+          description: The stored new name.
+        updated:
+          type: integer
+          minimum: 0
+          description: Member tickets outside Trash.
+      additionalProperties: false
+    UngroupTickets:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    UngroupedTickets:
+      type: object
+      required:
+        - updated
+      properties:
+        updated:
+          type: integer
+          minimum: 0
       additionalProperties: false

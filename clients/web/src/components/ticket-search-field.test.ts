@@ -146,7 +146,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     // HS2-2GCMY1: help lists every supported is: value except spelling aliases.
     for (const value of SEARCH_LIFECYCLES)
       expect(help.includes(`data-item-id="is:${value}"`), value).toBe(!SEARCH_LIFECYCLE_ALIASES.has(value));
-    expect(help.match(/data-item-id="/g)).toHaveLength(25);
+    expect(help.match(/data-item-id="/g)).toHaveLength(28);
     expect(help).toContain('data-item-id="(client OR server) AND NOT is:archived"');
     expect(help).toContain('<strong>Combine filters</strong>');
     expect(help).toContain('updated-after:2026-09-01T11:05');

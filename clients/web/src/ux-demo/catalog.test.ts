@@ -86,6 +86,7 @@ describe('UX demo catalog', () => {
       'notification-navigation',
       'quick-ticket-composer',
       'ticket-list',
+      'ticket-group',
       'ticket-page-more',
       'ticket-row',
       'ticket-board',
@@ -123,6 +124,7 @@ describe('UX demo catalog', () => {
       'ticket-close-dialog',
       'not-working-dialog',
       'bulk-ticket-dialog',
+      'ticket-group-dialog',
       'saved-view-dialog',
       'ticket-link-choice-dialog',
       'project-dialog',
@@ -208,6 +210,7 @@ describe('UX demo catalog', () => {
     expect(demosUsing('tag-chip').map((entry) => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
     expect(demosUsing('ticket-row').map((entry) => entry.id)).toEqual([
       'ticket-list',
+      'ticket-group',
       'ticket-board-column',
       'worker-columns',
     ]);
@@ -319,6 +322,7 @@ describe('UX demo catalog', () => {
     expect(ticketList?.entries.map((entry) => entry.id)).toEqual([
       'quick-ticket-composer',
       'ticket-list',
+      'ticket-group',
       'ticket-page-more',
       'ticket-row',
     ]);
@@ -332,6 +336,7 @@ describe('UX demo catalog', () => {
     ]);
     expect(ticketRow?.related?.filter((entry) => entry.group === 'Used by').map((entry) => entry.id)).toEqual([
       'ticket-list',
+      'ticket-group',
       'ticket-board-column',
       'worker-columns',
     ]);
@@ -446,6 +451,7 @@ describe('UX demo catalog', () => {
         'State adapter composing the cataloged TicketInspector and its placeholder/corrupt variants.',
       'ticket-notes': 'Notes section composed into TicketInspector / TicketInfoPanel (demoed).',
       'ticket-row-context-menu': 'Context menu for TicketRow (demoed via TicketList/TicketBoard).',
+      'ticket-group-context-menu': 'Group header menu for TicketGroup (demoed via TicketGroup).',
       'ticket-source-icon':
         'Source identity glyph composed into the cataloged TicketRow, TicketInspector, and TicketSourcesSettings demos.',
       'ticket-source-color-picker':

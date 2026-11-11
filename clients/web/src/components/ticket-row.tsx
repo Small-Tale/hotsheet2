@@ -79,6 +79,8 @@ export interface TicketRowProps {
   presentation?: TicketRowPresentation;
   draggable?: boolean;
   listEdge?: TicketRowListEdge;
+  /** The ticket's group (HS2-PDSHNN); the list and the board columns gather grouped rows. */
+  group?: string;
 }
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;

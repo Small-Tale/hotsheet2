@@ -7891,6 +7891,142 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-group",
+      "package": "hotsheet-web",
+      "id": "ticket-group",
+      "name": "TicketGroup",
+      "kind": "component",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "publicExports": [
+        {
+          "name": "TicketGroup"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-group.tsx"
+      ],
+      "source": "src/components/ticket-group.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-group"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-group"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group.tsx",
+        "composition": "src/components/ticket-group.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-group-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-group-dialog",
+      "name": "TicketGroupDialog",
+      "kind": "component",
+      "purpose": "Name a new ticket group or rename an existing one, with inline duplicate-name validation.",
+      "publicExports": [
+        {
+          "name": "TicketGroupDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-group-dialog.tsx"
+      ],
+      "source": "src/components/ticket-group-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-group-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-group-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-dialog.tsx",
+        "composition": "src/components/ticket-group-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-info-panel",
       "package": "hotsheet-web",
       "id": "ticket-info-panel",

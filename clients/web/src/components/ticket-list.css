@@ -11,3 +11,19 @@
 .ticket-list[data-empty='true'] > .ticket-list__tickets {
   min-height: remify(288px);
 }
+/* A grouped list has no surface of its own: each segment below carries one, and the gap between
+   segments gives every group clear space above and below (HS2-WZ3JGZ). */
+.ticket-list[data-grouped='true'] {
+  background: transparent;
+}
+.ticket-list[data-grouped='true'] > .ticket-list__tickets {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-m);
+}
+/* One run of ungrouped tickets: the same rounded card the ungrouped list is. */
+.ticket-list__segment {
+  min-width: 0;
+  border-radius: remify(10.4px);
+  background: var(--wa-color-surface-default);
+}

@@ -370,6 +370,7 @@ impl GitLabProvider {
         // Same projection as Markdown tickets, details marker included (HS2-NVD36W).
         let feedback_needed = hotsheet_ticketing::wire::api_feedback_needed(&notes, &details);
         ApiTicket {
+            group: None,
             connection_id: self.config.connection_id.clone(),
             native_id: native_id.clone(),
             qualified_id: format!("{}:{native_id}", self.config.connection_id),
@@ -475,6 +476,7 @@ impl TicketProvider for GitLabProvider {
             .into_iter()
             .map(|issue| self.ticket(issue, vec![]))
             .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
+            .filter(|ticket| hotsheet_ticketing::provider_group_matches(ticket, query))
             .filter(|ticket| query.status.is_none_or(|value| ticket.status == value))
             .filter(|ticket| query.priority.is_none_or(|value| ticket.priority == value))
             .filter(|ticket| {
@@ -650,6 +652,9 @@ impl TicketProvider for GitLabProvider {
     }
 
     fn create(&self, _: MutationContext, draft: ProviderDraft) -> Result<ApiTicket, ProviderError> {
+        if draft.group.is_some() {
+            return self.unsupported("groups");
+        }
         if !draft.blocked_by.is_empty() {
             return self.unsupported("dependencies");
         }
@@ -699,6 +704,10 @@ impl TicketProvider for GitLabProvider {
         patch: ProviderPatch,
     ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
         let mut timing = ProviderMutationTiming::default();
+        // HS2-PDSHNN: no native group mapping yet; never drop the field silently.
+        if patch.group.is_some() {
+            return self.unsupported("groups");
+        }
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
         }
@@ -978,6 +987,7 @@ struct GitLabNote {
 
 fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
+        groups: false,
         create: true,
         update: true,
         close: true,
@@ -1537,6 +1547,31 @@ mod tests {
     }
 
     #[test]
+    fn hs2_pdshnn_group_writes_are_explicitly_unsupported() {
+        let fake = Arc::new(Fake::default());
+        let provider = provider(fake.clone());
+        assert!(!provider.descriptor().capabilities.groups);
+        assert!(provider.group_directory().is_err());
+        for group in [Some(Some("Sprint".into())), Some(None)] {
+            assert!(matches!(
+                provider.update(
+                    "9",
+                    Timestamp::new("x"),
+                    ProviderPatch {
+                        group,
+                        ..Default::default()
+                    },
+                ),
+                Err(ProviderError::Unsupported {
+                    capability: "groups",
+                    ..
+                })
+            ));
+        }
+        assert!(fake.requests.lock_or_recover().is_empty());
+    }
+
+    #[test]
     fn gitlab_applies_date_bounds_after_incremental_fetch() {
         let fake = Arc::new(Fake {
             responses: Mutex::new(
@@ -1641,6 +1676,7 @@ mod tests {
             .create(
                 ctx(),
                 ProviderDraft {
+                    group: None,
                     title: format!("Hot Sheet reopen live test {}", hotsheet_model::Ulid::new()),
                     category: "test".into(),
                     priority: Priority::Default,

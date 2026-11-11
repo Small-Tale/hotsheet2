@@ -114,4 +114,27 @@ describe('ticket search model (HS2-5JXBQY)', () => {
       expect(inlineSearchTokens(model.state.value).map((token) => token.raw)).toEqual([raw]);
     }
   });
+
+  it('completes group: from project groups and commits group chips (HS2-44W3TP)', () => {
+    const groups = ['Board drag & drop', 'Search syntax'],
+      model = createTicketSearchModel({ tags: () => tags, groups: () => groups });
+    model.edit({ query: 'group:', tokens: [] });
+    expect(model.suggestions.value.map((item) => item.label)).toEqual([
+      'group:"Board drag & drop"',
+      'group:"Search syntax"',
+    ]);
+    model.edit({ query: 'group:"sea', tokens: [] });
+    expect(model.suggestions.value.map((item) => item.label)).toEqual(['group:"Search syntax"']);
+    model.edit({ query: 'group:"search  SYNTAX" has:group ', tokens: [] });
+    // The chip keeps the typed casing with whitespace normalized; matching is case-insensitive.
+    expect(inlineSearchTokens(model.state.value).map((token) => token.raw)).toEqual([
+      'group:"search SYNTAX"',
+      'has:group',
+    ]);
+    // An unknown group still commits, so a search for it reports no results rather than plain text.
+    const plain = createTicketSearchModel({ tags: () => tags });
+    plain.edit({ query: 'group:missing ', tokens: [] });
+    expect(inlineSearchTokens(plain.state.value).map((token) => token.raw)).toEqual(['group:missing']);
+    expect(plain.suggestions.value).toEqual([]);
+  });
 });

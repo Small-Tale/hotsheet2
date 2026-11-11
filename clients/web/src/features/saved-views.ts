@@ -21,6 +21,7 @@ export interface SavedViewsControllerDependencies {
   readonly searchTokens: Signal<InlineSearchToken[]>;
   /** Every project tag, canonical casing, for the query field's tag completion. */
   readonly availableSearchTags: () => readonly string[];
+  readonly availableSearchGroups: () => readonly string[];
   readonly selectTicketView: (view: TicketView) => void;
   readonly showToast: (message: string) => void;
 }
@@ -36,6 +37,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
       searchQuery,
       searchTokens,
       availableSearchTags,
+      availableSearchGroups,
       selectTicketView,
       showToast,
     } = dependencies,
@@ -57,6 +59,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
   // (HS2-5JXBQY); `savedViewQuery`/`savedViewQueryTokens` are projections of its state.
   const savedViewSearchModel = createTicketSearchModel({
     tags: availableSearchTags,
+    groups: availableSearchGroups,
     onClear: () => {
       savedViewHelpOpen.value = false;
       savedViewError.value = '';

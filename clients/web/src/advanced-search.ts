@@ -1,6 +1,7 @@
 import { isTicketActivelyWorkedOn } from './active-ticket-work';
 import type { TicketRow } from './api';
 import { type InlineSearchToken, SEARCH_LIFECYCLE_PATTERN, type SearchLifecycle, tokenFromRaw } from './inline-search';
+import { ticketGroupKey, ticketGroupName } from './ticket-groups';
 
 const normalized = (value: string) => value.trim().toLowerCase();
 type SearchExpression =
@@ -174,6 +175,15 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
       name = raw.startsWith('"') ? raw.slice(1, -1).replaceAll('\\"', '"') : raw;
     return ticket.tags.some((item) => normalized(item) === normalized(name));
   }
+  // HS2-44W3TP: group terms read the row itself, so they need no provider lookup.
+  const group = value.match(/^group:("(?:\\.|[^"])*"|\S+)$/i);
+  if (group) {
+    const raw = group[1],
+      name = raw.startsWith('"') ? raw.slice(1, -1).replaceAll('\\"', '"') : raw,
+      current = ticketGroupName(ticket);
+    return current !== undefined && ticketGroupKey(current) === ticketGroupKey(name);
+  }
+  if (/^has:group$/i.test(value)) return ticketGroupName(ticket) !== undefined;
   if (!/^is:./i.test(value)) return ticketContains(ticket, value);
   const state = lifecyclePattern.exec(value)?.[1].toLowerCase() as SearchLifecycle | undefined;
   return state ? lifecyclePredicates[state](ticket, now) : false;
@@ -181,6 +191,7 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
 type StructuredTerm = Extract<InlineSearchToken, { kind: 'has' | 'attachment' | 'date' }>;
 function structuredTerm(value: string): StructuredTerm | undefined {
   const token = tokenFromRaw(value);
+  if (token?.kind === 'has' && token.value === 'group') return undefined;
   return token?.kind === 'has' || token?.kind === 'attachment' || token?.kind === 'date' ? token : undefined;
 }
 export function structuredSearchTerms(query: string): StructuredTerm[] {

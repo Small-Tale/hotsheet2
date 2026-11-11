@@ -747,6 +747,38 @@ data — a conflict is surfaced, never a silent overwrite. `hotsheet doctor` fla
 any store missing the `.gitattributes` registration so the automatic path can't be
 silently bypassed.
 
+### 2.7.1 Ticket groups (HS2-PDSHNN, HS2-8CDFKR)
+
+A ticket may name one **group** in its optional `group` frontmatter field
+([17](17-ticket-file-format.md) §17.2, §17.4). There is no group registry and no empty
+group: a group exists while at least one ticket outside Trash names it, and its member
+count is the number of such tickets. A ticket in Trash keeps its `group`, so restoring it
+puts it back, but it does not keep the group alive. A moved tombstone is never a member.
+
+- **Names are unique without regard to case or spacing.** Setting `group` to a name whose
+  comparison key matches an existing group stores the existing spelling. When the tickets
+  being written are that group's only members, the new spelling wins. Every surface
+  resolves the name through `hotsheet_ticketing::groups::resolve_group_change`.
+- **Namespace.** One store is one namespace. A project (checkout) that links several Git
+  stores shares one namespace across them: the server's checkout routes and the serverless
+  MCP checkout paths list, resolve, rename, and ungroup across every linked Git store. The
+  store-level CLI (`-C <store>`) and the default-store routes see one store.
+- **Rename and ungroup** rewrite every member, tickets in Trash included, in one locked
+  write and one commit per store (`FsStore::write_ticket_changes_committing`); a failed
+  write restores the tickets already rewritten. A rename to a different existing group is
+  refused; a change of only case or spacing is allowed. A project spanning several stores
+  is validated once against the merged namespace and then written store by store.
+- **Not a content edit.** Like `up_next` and `priority`, a group change does not bump
+  `updated_at`.
+- **Merge.** `group` is a last-writer-wins scalar in the semantic merge (layer 3 above):
+  when two clones choose different groups, the side with the newer `updated_at` wins and
+  the ticket ends in exactly one group. Two clones may introduce different spellings of
+  one name; they remain one group by key, listed under its earliest-created member's
+  spelling, until a rename unifies them.
+- **Copy and move.** A same-provider copy or move carries the group. A cross-provider copy
+  carries it only to a destination with the `groups` capability and otherwise drops it
+  ([16](16-external-sync-interface.md) §16.4).
+
 ## 2.8 Where a project's default store lives
 
 Two supported shapes — **both are git repos** (§2.1):
@@ -854,7 +886,7 @@ maps to exactly one tier:
 
 | Datum                                                                                                                                                            | Tier                     | Home                                                                                                                                                   |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `title` · `details` · `category` · `priority` · `status` · `up_next` · `tags` · `blocked_by` · `blocked_reason`                                                  | A (shared)               | committed ticket frontmatter/body                                                                                                                      |
+| `title` · `details` · `category` · `priority` · `status` · `up_next` · `tags` · `blocked_by` · `blocked_reason` · `group`                                        | A (shared)               | committed ticket frontmatter/body                                                                                                                      |
 | `notes` (kind `regular` / `feedback_needed` / `status`)                                                                                                          | A (shared)               | committed `## Notes`                                                                                                                                   |
 | `assignees` · `review_requests` · `external`                                                                                                                     | A (shared)               | committed frontmatter                                                                                                                                  |
 | `attachments`                                                                                                                                                    | A (shared)               | committed `attachments/<ulid>/`                                                                                                                        |

@@ -1,0 +1,31 @@
+/* The app-owned wrapper around one group's SunkenPanel. It is a size container so the frame below
+   can follow the width at which Kerf's SummaryRow compacts. */
+.ticket-group {
+  min-width: 0;
+  container-type: inline-size;
+}
+/* Moves the Kerf header's label onto the left edge of the ticket type icons below it, through the
+   public inline-margin token only (HS2-WZ3JGZ, HS2-HV8S4Y). A SummaryRow wider than 24rem insets
+   its leading icon 4px further than a compact one, and the panel's inset makes a row 1rem narrower
+   than the group, so the label follows at 25rem. Kerf has no public way to align a header label
+   with nested row content (KF-J8GMA2); a browser test measures the alignment at each width. */
+.ticket-group__frame {
+  --kui-layout-inline-margin: remify(4px);
+}
+@container (max-width: 25rem) {
+  .ticket-group__frame {
+    --kui-layout-inline-margin: 0px;
+  }
+}
+/* A list group's members sit on their own rounded card, so no surface shows behind the group
+   itself and the edge rows' corners follow this card (HS2-WZ3JGZ). */
+.ticket-group[data-presentation='list'] .ticket-group__tickets {
+  border-radius: remify(10.4px);
+  background: var(--wa-color-surface-default);
+}
+/* A column group stacks its cards with the column's own card gap. */
+.ticket-group[data-presentation='column'] .ticket-group__tickets {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-xs);
+}

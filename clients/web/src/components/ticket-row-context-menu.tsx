@@ -12,7 +12,9 @@ import {
   Copy,
   Gauge,
   GitBranch,
+  Group,
   type IconNode,
+  Plus,
   RotateCcw,
   Shapes,
   SquareArrowOutUpRight,
@@ -20,6 +22,7 @@ import {
   Tag,
   Tags,
   Trash2,
+  Ungroup,
   XCircle,
 } from 'lucide';
 
@@ -160,6 +163,61 @@ function metadataSubmenu({
   };
 }
 
+/** The value a New Group… submenu choice reports; no group can have an empty name. */
+export const NEW_TICKET_GROUP_CHOICE = '';
+
+/** What the ticket menu offers for groups (HS2-TX17CM). */
+export interface TicketGroupMenuModel {
+  /** Existing group names in the project, sorted. */
+  names: readonly string[];
+  /** The one group every target ticket is in, shown checked. */
+  current?: string;
+  /** Some target ticket is in a group, so Remove from Group applies. */
+  removable: boolean;
+  /** Why grouping is unavailable for the targets, such as a provider without group support. */
+  disabledReason?: string;
+}
+
+export const ADD_TO_GROUP_CONTEXT_ACTION = { label: 'Add to Group', icon: Group, iconName: 'group' } as const;
+export const REMOVE_FROM_GROUP_CONTEXT_ACTION = {
+  action: 'Remove from group',
+  label: 'Remove from Group',
+  icon: Ungroup,
+  iconName: 'ungroup',
+} as const;
+
+/** **Add to Group ›**: New Group… first, then a divider, then the existing groups (HS2-TX17CM). */
+function groupSubmenu(model: TicketGroupMenuModel): PopupMenuItem {
+  const disabled = Boolean(model.disabledReason);
+  return {
+    label: ADD_TO_GROUP_CONTEXT_ACTION.label,
+    disabled,
+    disabledReason: model.disabledReason,
+    icon: (
+      <LucideIcon
+        size="s"
+        icon={ADD_TO_GROUP_CONTEXT_ACTION.icon}
+        name={ADD_TO_GROUP_CONTEXT_ACTION.iconName}
+        color={uiColor('neutral-on-quiet')}
+      />
+    ),
+    attributes: { 'data-context-submenu': 'group' },
+    submenu: [
+      {
+        label: 'New Group…',
+        icon: <LucideIcon size="s" icon={Plus} name="plus" color={uiColor('neutral-on-quiet')} />,
+        attributes: { 'data-context-group': NEW_TICKET_GROUP_CHOICE, 'data-context-group-new': 'true' },
+      },
+      ...(model.names.length ? [{ kind: 'divider' } as const] : []),
+      ...model.names.map((name): PopupMenuItem => ({
+        label: name,
+        checked: name === model.current,
+        attributes: { 'data-context-group': name },
+      })),
+    ],
+  };
+}
+
 export interface TicketRowContextMenuProps {
   x: number;
   y: number;
@@ -178,6 +236,8 @@ export interface TicketRowContextMenuProps {
   allInBacklog?: boolean;
   allInArchive?: boolean;
   allInTrash?: boolean;
+  /** Group choices for the targets; absent hides the group entries (HS2-TX17CM). */
+  group?: TicketGroupMenuModel;
 }
 
 /** Shadow-DOM-safe containment check for capture-phase context-menu dismissal. */
@@ -209,6 +269,7 @@ export function TicketRowContextMenu({
   allInBacklog = false,
   allInArchive = false,
   allInTrash = false,
+  group,
 }: TicketRowContextMenuProps) {
   const priorityChoices = PRIORITIES.map((choice) => {
     const option = getPriorityPresentation(choice.value);
@@ -233,6 +294,11 @@ export function TicketRowContextMenu({
     }),
     { kind: 'divider' },
   );
+  if (group) {
+    entries.push(groupSubmenu(group));
+    if (group.removable)
+      entries.push(contextEntry(REMOVE_FROM_GROUP_CONTEXT_ACTION, Boolean(group.disabledReason), group.disabledReason));
+  }
   entries.push(
     metadataSubmenu({
       field: 'category',

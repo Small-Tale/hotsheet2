@@ -556,6 +556,7 @@ impl JiraProvider {
         // Same projection as Markdown tickets, details marker included (HS2-NVD36W).
         let feedback_needed = hotsheet_ticketing::wire::api_feedback_needed(&notes, &details);
         ApiTicket {
+            group: None,
             connection_id: self.config.connection_id.clone(),
             native_id: issue.key.clone(),
             qualified_id: format!("{}:{}", self.config.connection_id, issue.key),
@@ -655,6 +656,7 @@ impl TicketProvider for JiraProvider {
             .into_iter()
             .map(|issue| self.ticket(issue, vec![]))
             .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
+            .filter(|ticket| hotsheet_ticketing::provider_group_matches(ticket, query))
             .filter(|ticket| query.status.is_none_or(|value| ticket.status == value))
             .filter(|ticket| query.priority.is_none_or(|value| ticket.priority == value))
             .filter(|ticket| {
@@ -838,6 +840,9 @@ impl TicketProvider for JiraProvider {
     }
 
     fn create(&self, _: MutationContext, draft: ProviderDraft) -> Result<ApiTicket, ProviderError> {
+        if draft.group.is_some() {
+            return self.unsupported("groups");
+        }
         if !draft.blocked_by.is_empty() {
             return self.unsupported("dependencies");
         }
@@ -889,6 +894,10 @@ impl TicketProvider for JiraProvider {
         patch: ProviderPatch,
     ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
         let mut timing = ProviderMutationTiming::default();
+        // HS2-PDSHNN: no native group mapping yet; never drop the field silently.
+        if patch.group.is_some() {
+            return self.unsupported("groups");
+        }
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
         }
@@ -1441,6 +1450,7 @@ fn jql_escape(value: &str) -> String {
 
 fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
+        groups: false,
         create: true,
         update: true,
         close: false,
@@ -3075,6 +3085,31 @@ mod tests {
                 ),
                 Err(ProviderError::Unsupported {
                     capability: "blocked_reason",
+                    ..
+                })
+            ));
+        }
+        assert!(fake.requests.lock_or_recover().is_empty());
+    }
+
+    #[test]
+    fn hs2_pdshnn_group_writes_are_explicitly_unsupported() {
+        let fake = Arc::new(Fake::default());
+        let provider = provider(fake.clone());
+        assert!(!provider.descriptor().capabilities.groups);
+        assert!(provider.group_directory().is_err());
+        for group in [Some(Some("Sprint".into())), Some(None)] {
+            assert!(matches!(
+                provider.update(
+                    "ENG-9",
+                    Timestamp::new("x"),
+                    ProviderPatch {
+                        group,
+                        ..Default::default()
+                    },
+                ),
+                Err(ProviderError::Unsupported {
+                    capability: "groups",
                     ..
                 })
             ));

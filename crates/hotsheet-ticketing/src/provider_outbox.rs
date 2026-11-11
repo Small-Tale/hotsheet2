@@ -228,6 +228,7 @@ pub fn project_pending_ticket(
             ("up_next", patch.up_next.is_some()),
             ("blocked_by", patch.blocked_by.is_some()),
             ("blocked_reason", patch.blocked_reason.is_some()),
+            ("group", patch.group.is_some()),
         ];
         if let Some((field, _)) = unsupported.into_iter().find(|(_, set)| *set) {
             return Err(OutboxError::UnsupportedProjectionField {

@@ -18,6 +18,9 @@ import {
   parseFeedbackDelivery,
   parseFullTicket,
   parseGitHubAuthStatus,
+  parseGroupList,
+  parseGroupRename,
+  parseGroupUngroup,
   parseGuidanceBatchReview,
   parseGuidanceInterviewReview,
   parseGuidanceOverview,
@@ -326,6 +329,9 @@ describe('server response parsers (HS2-34P6XY)', () => {
     expect(parseCorruptTicketPaths([{ path: '/x.md', error: 'bad' }])).toEqual([{ path: '/x.md', error: 'bad' }]);
     expect(parseAccountIdentity({ identity: 'me' })).toEqual({ identity: 'me' });
     expect(parseTrashPurge({ purged: 1, tickets: ['a'] })).toEqual({ purged: 1, tickets: ['a'] });
+    expect(parseGroupRename({ name: 'Board', updated: 2 })).toEqual({ name: 'Board', updated: 2 });
+    expect(parseGroupUngroup({ updated: 2 })).toEqual({ updated: 2 });
+    expect(parseGroupList({ groups: [{ name: 'Board', count: 2 }] }).groups).toEqual([{ name: 'Board', count: 2 }]);
     expect(parseStringList(['a'])).toEqual(['a']);
   });
 
@@ -342,6 +348,9 @@ describe('server response parsers (HS2-34P6XY)', () => {
     ['corrupt ticket', () => parseCorruptTicketPaths([{}])],
     ['account identity', () => parseAccountIdentity([])],
     ['trash purge', () => parseTrashPurge({ purged: '1', tickets: [] })],
+    ['group rename', () => parseGroupRename({ name: 'Board', updated: '2' })],
+    ['group ungroup', () => parseGroupUngroup({})],
+    ['group list', () => parseGroupList({ groups: [{ name: 'Board' }] })],
     ['string list', () => parseStringList(['a', 1])],
   ])('rejects a malformed %s body', (what, parse) => {
     expect(parse).toThrow(new ServerResponseShapeError(what));

@@ -51,6 +51,8 @@ import { demoModule as tagChip } from './tag-chip-demo';
 import { demoModule as terminalComponents } from './terminal-components-demo';
 import { demoModule as terminalVisibility } from './terminal-visibility-demo';
 import { demoModule as ticketCollections } from './ticket-collections-demo';
+import { demoModule as ticketGroup } from './ticket-group-demo';
+import { demoModule as ticketGroupDialog } from './ticket-group-dialog-demo';
 import { demoModule as ticketMetadata } from './ticket-metadata-demo';
 import { demoModule as ticketRow } from './ticket-row-demo';
 import { demoModule as ticketSearchField } from './ticket-search-field-demo';
@@ -98,6 +100,8 @@ export const demoModules: readonly DemoModule[] = [
   toolbarControlGroup,
   contentComponents,
   bulkTicketDialog,
+  ticketGroup,
+  ticketGroupDialog,
   ticketMetadata,
   ticketRow,
   ticketCollections,

@@ -8,6 +8,8 @@ import {
   canAtomicallyBulkUpdate,
   canBulkUpdate,
   projectBulkTicketCounts,
+  ticketGroupDisabledReason,
+  ticketGroupMenuModel,
 } from './ticket-bulk-operations';
 
 const ticket = (slug: string, connection_id = 'git', tags: string[] = []): TicketRow => ({
@@ -143,5 +145,53 @@ describe('bulk ticket operations', () => {
     await expect(sequencer.enqueue('other', async () => 'ready')).resolves.toBe('ready');
     releaseDemo();
     await demo;
+  });
+
+  it('builds group patches that skip unchanged tickets and can carry a column status (HS2-PRXD39)', () => {
+    const ungrouped = { ...ticket('HS2-U'), status: 'not_started' },
+      grouped = { ...ticket('HS2-G'), status: 'started', group: 'Board' };
+    expect(bulkTicketPatch(ungrouped, { kind: 'group', group: 'Board' })).toEqual({ group: 'Board' });
+    // The same group in another casing is no change; its stored spelling is shared.
+    expect(bulkTicketPatch(grouped, { kind: 'group', group: ' board ' })).toBeUndefined();
+    expect(bulkTicketPatch(grouped, { kind: 'group', group: 'Search' })).toEqual({ group: 'Search' });
+    expect(bulkTicketPatch(grouped, { kind: 'group', group: null })).toEqual({ group: null });
+    expect(bulkTicketPatch(ungrouped, { kind: 'group', group: null })).toBeUndefined();
+    expect(bulkTicketPatch({ ...ungrouped, group: null }, { kind: 'group', group: null })).toBeUndefined();
+    expect(bulkTicketPatch(ungrouped, { kind: 'group', group: 'Board', status: 'started' })).toEqual({
+      group: 'Board',
+      status: 'started',
+    });
+    expect(bulkTicketPatch(grouped, { kind: 'group', group: 'Board', status: 'completed' })).toEqual({
+      status: 'completed',
+    });
+    expect(bulkTicketPatch(grouped, { kind: 'group', group: 'Board', status: 'started' })).toBeUndefined();
+  });
+
+  it('offers grouping only when every target provider supports groups (HS2-TX17CM)', () => {
+    const git = { update: true, groups: true } as Capabilities,
+      github = { update: true } as Capabilities,
+      readOnly = { update: false, groups: true } as Capabilities,
+      lookup = (id: string) => ({ git, github, readOnly })[id];
+    const a = { ...ticket('HS2-A'), group: 'Board' },
+      b = { ...ticket('HS2-B'), group: 'board' },
+      c = ticket('HS2-C'),
+      external = ticket('GH-1', 'github');
+    expect(ticketGroupDisabledReason([a, c], lookup)).toBeUndefined();
+    expect(ticketGroupDisabledReason([a, external], lookup)).toBe(
+      'One or more selected ticket providers do not support groups.',
+    );
+    expect(ticketGroupDisabledReason([ticket('X', 'readOnly')], lookup)).toBe(
+      'One or more selected ticket providers do not support updates.',
+    );
+    expect(ticketGroupMenuModel([], ['Board'], lookup)).toBeUndefined();
+    expect(ticketGroupMenuModel([a, b], ['Board', 'Search'], lookup)).toEqual({
+      names: ['Board', 'Search'],
+      current: 'Board',
+      removable: true,
+      disabledReason: undefined,
+    });
+    expect(ticketGroupMenuModel([a, c], ['Board'], lookup)).toMatchObject({ current: undefined, removable: true });
+    expect(ticketGroupMenuModel([c], [], lookup)).toMatchObject({ names: [], removable: false });
+    expect(ticketGroupMenuModel([c, external], [], lookup)?.disabledReason).toContain('groups');
   });
 });

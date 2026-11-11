@@ -16,10 +16,11 @@ import {
   tokenFromRaw,
   toTokenSearchToken,
 } from './inline-search';
+import { existingTicketGroup, normalizeTicketGroupName, ticketGroupKey } from './ticket-groups';
 
 /**
  * The ticket search grammar as Kerf `SearchFieldModel` rules (HS2-5JXBQY, evaluated in
- * HS2-HHRYP9 / HS2-06Q4MG): `tag`, `is`, `has`, and `attachment`, plus the twelve lifecycle date
+ * HS2-HHRYP9 / HS2-06Q4MG): `tag`, `group`, `is`, `has`, and `attachment`, plus the twelve lifecycle date
  * filters as hyphenated rule names. Every rule parses through the app's own `tokenFromRaw`, so a
  * chip Kerf commits is exactly a chip the app parser would have produced, and the `tag` rule's
  * suggestions exclude tags already committed as chips.
@@ -45,13 +46,18 @@ const parseAs = (kind: InlineSearchToken['kind'], name: string) => (input: strin
 export interface TicketSearchModelOptions {
   /** Every tag the project offers, canonical casing, read lazily when a `tag:` prefix is typed. */
   readonly tags: () => readonly string[];
+  /** Every group the project's loaded tickets name, read lazily when a `group:` prefix is typed. */
+  readonly groups?: () => readonly string[];
   readonly initial?: SearchFieldValue;
   /** Runs after Kerf's managed clear, for app state that belongs to the field (open help, errors). */
   readonly onClear?: () => void;
 }
 
 /** The grammar rules for one ticket search model. */
-export function ticketSearchRules(tags: () => readonly string[]): SearchFieldRule[] {
+export function ticketSearchRules(
+  tags: () => readonly string[],
+  groups: () => readonly string[] = () => [],
+): SearchFieldRule[] {
   return [
     {
       name: 'tag',
@@ -67,6 +73,22 @@ export function ticketSearchRules(tags: () => readonly string[]): SearchFieldRul
           .filter((tag) => !committed.has(tag.toLowerCase()) && tag.toLowerCase().startsWith(prefix))
           .slice(0, TICKET_SEARCH_TAG_SUGGESTION_LIMIT)
           .map((tag) => ({ value: tag, label: `tag:${quoteTag(tag)}` }));
+      },
+    },
+    {
+      // HS2-44W3TP: `group:` completes existing group names; one group filter applies at a time.
+      name: 'group',
+      parse: (input) => {
+        const typed = normalizeTicketGroupName(input);
+        return existingTicketGroup(typed, groups()) ?? (typed || undefined);
+      },
+      label: (value) => `group:${value}`,
+      suggest: (input) => {
+        const prefix = ticketGroupKey(input.replace(/^"/, ''));
+        return groups()
+          .filter((group) => ticketGroupKey(group).startsWith(prefix))
+          .slice(0, TICKET_SEARCH_TAG_SUGGESTION_LIMIT)
+          .map((group) => ({ value: group, label: `group:${quoteTag(group)}` }));
       },
     },
     { name: 'is', parse: parseAs('is', 'is') },
@@ -90,8 +112,13 @@ export function ticketSearchRules(tags: () => readonly string[]): SearchFieldRul
  * A Kerf-managed ticket search model: parsing, chips, suggestions, edit/remove/clear/commit/replace
  * all belong to Kerf; the app projects `state` into its own signals and reacts to clears.
  */
-export function createTicketSearchModel({ tags, initial, onClear }: TicketSearchModelOptions): SearchFieldModel {
-  const model = createSearchFieldModel({ rules: ticketSearchRules(tags), initial });
+export function createTicketSearchModel({
+  tags,
+  groups,
+  initial,
+  onClear,
+}: TicketSearchModelOptions): SearchFieldModel {
+  const model = createSearchFieldModel({ rules: ticketSearchRules(tags, groups), initial });
   const normalized = (value: SearchFieldValue): SearchFieldValue => ({
     ...value,
     query: quoteRelativeDates(value.query),

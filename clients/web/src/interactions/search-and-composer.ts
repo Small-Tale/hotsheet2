@@ -58,7 +58,9 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly persistWorkspacePreferences: () => void;
   readonly selectedRows: () => WireTicketRow[];
   readonly executeBulkTicketAction: (action: BulkTicketAction, targetSlugs?: string[]) => Promise<boolean>;
-  readonly ticketContextMenu: Signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>;
+  readonly ticketContextMenu: Signal<
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+  >;
   readonly viewMode: Signal<WorkspaceViewMode>;
   readonly openTicketComposer: (trigger?: HTMLElement) => void;
   readonly composerSubmitting: Signal<boolean>;

@@ -2390,7 +2390,181 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
         .collect::<Vec<_>>();
     assert_eq!(
         (SCHEMA_VERSION, projection),
-        (22, vec![true, true, false, true, false]),
+        // 23: the group columns (HS2-PDSHNN); the feedback projection is unchanged.
+        (23, vec![true, true, false, true, false]),
         "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
     );
+}
+
+/// HS2-PDSHNN / HS2-44W3TP: the group column is populated by a rebuild, follows upserts,
+/// and answers the exact-group and has-group filters identically to the file scan.
+#[test]
+fn hs2_pdshnn_group_column_filters_and_directory_follow_the_files() {
+    let (_d, store, ix) = seeded();
+    let (a, b, c) = (
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2"),
+    );
+    let regroup = |id: &Ulid, group: Option<&str>| {
+        ops::update(
+            &store,
+            id,
+            Timestamp::new("2026-11-01T00:00:00Z"),
+            TicketPatch {
+                group: Some(group.map(str::to_string)),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    regroup(&a, Some("Board Drag & Drop"));
+    regroup(&b, Some("Überarbeitung"));
+    assert!(ix.group_members().unwrap().is_empty(), "not indexed yet");
+    ix.rebuild_from_store(&store).unwrap();
+
+    let by_id = |id: &Ulid| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+    };
+    assert_eq!(by_id(&a).group.as_deref(), Some("Board Drag & Drop"));
+    assert_eq!(by_id(&c).group, None);
+    assert!(
+        !serde_json::to_value(by_id(&c))
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("group"),
+        "an ungrouped row omits the field, like blocked_reason"
+    );
+    assert_eq!(
+        serde_json::to_value(by_id(&a)).unwrap()["group"],
+        "Board Drag & Drop"
+    );
+
+    let queries = [
+        TicketQuery {
+            group: Some("  board   DRAG & drop ".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            group: Some("ÜBERARBEITUNG".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            group: Some("board".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            group: Some("  ".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            has_group: Some(true),
+            ..Default::default()
+        },
+        TicketQuery {
+            has_group: Some(false),
+            ..Default::default()
+        },
+        TicketQuery {
+            has_group: Some(true),
+            group: Some("überarbeitung".into()),
+            open_only: true,
+            ..Default::default()
+        },
+    ];
+    let expected: [&[Ulid]; 7] = [&[a], &[b], &[], &[], &[a, b], &[c], &[b]];
+    for (query, expected) in queries.iter().zip(expected) {
+        let want: HashSet<String> = expected.iter().map(Ulid::to_string).collect();
+        assert_eq!(index_ids(&ix.query(query).unwrap()), want, "{query:?}");
+        assert_eq!(ops_ids(&store, query), want, "scan parity for {query:?}");
+    }
+
+    let directory = hotsheet_ticketing::groups::GroupDirectory::new(ix.group_members().unwrap());
+    assert_eq!(
+        directory,
+        hotsheet_ticketing::groups::GroupDirectory::scan(&store).unwrap()
+    );
+    assert_eq!(directory.summaries().len(), 2);
+
+    // An upsert follows a regroup, a clear, and a move to Trash.
+    let reindex = |id: &Ulid| {
+        let ticket = store.read_ticket(id).unwrap();
+        ix.upsert(&ticket, "p", "h").unwrap();
+    };
+    regroup(&c, Some("board drag & drop"));
+    reindex(&c);
+    regroup(&a, None);
+    reindex(&a);
+    ops::update(
+        &store,
+        &b,
+        Timestamp::new("2026-11-02T00:00:00Z"),
+        TicketPatch {
+            status: Some(Status::Deleted),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    reindex(&b);
+    let directory = hotsheet_ticketing::groups::GroupDirectory::new(ix.group_members().unwrap());
+    assert_eq!(
+        directory,
+        hotsheet_ticketing::groups::GroupDirectory::scan(&store).unwrap()
+    );
+    let summaries = directory.summaries();
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(
+        (summaries[0].name.as_str(), summaries[0].count),
+        ("board drag & drop", 1)
+    );
+    assert_eq!(directory.member_ids("überarbeitung"), vec![b]);
+}
+
+/// HS2-PDSHNN: an index file written before the group columns existed is rebuilt, so
+/// the group filter works without any manual step.
+#[test]
+fn hs2_pdshnn_an_index_from_before_groups_is_rebuilt_with_the_column() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("HS")).unwrap();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    ops::create(
+        &store,
+        id,
+        "HS",
+        Timestamp::new("2026-11-01T00:00:00Z"),
+        NewTicket {
+            title: "grouped".into(),
+            group: Some("Sprint".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let db = dir.path().join("i.sqlite");
+    drop(Index::open_reconciled(&db, &store).unwrap());
+
+    // Recreate the previous generation's shape: no group columns, the prior version.
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "DROP INDEX idx_tickets_group; ALTER TABLE tickets DROP COLUMN group_key; \
+         ALTER TABLE tickets DROP COLUMN group_name; \
+         UPDATE index_meta SET value='22' WHERE key='schema_version';",
+    )
+    .unwrap();
+    drop(conn);
+
+    let reopened = Index::open_reconciled(&db, &store).unwrap();
+    let rows = reopened
+        .query(&TicketQuery {
+            group: Some("sprint".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(index_ids(&rows), HashSet::from([id.to_string()]));
+    assert_eq!(rows[0].group.as_deref(), Some("Sprint"));
+    assert_eq!(reopened.group_members().unwrap().len(), 1);
 }

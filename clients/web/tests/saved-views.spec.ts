@@ -530,7 +530,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   // Syntax help opens over the dialog and closes again from the same button.
   await dialog.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = dialog.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Groups', 'Content', 'Workflow', 'Dates']);
   // The help is a Kerf anchored surface hosted inside the Kerf dialog (KF-F52T5D, HS2-8TE69P,
   // HS2-BH7NZ4): it floats outside the field's flow, stays in the viewport, and keeps focus in the field.
   await expect(help).toBeVisible();

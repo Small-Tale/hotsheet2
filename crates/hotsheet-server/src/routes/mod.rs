@@ -9,6 +9,7 @@ pub(crate) mod checkout_workers;
 pub(crate) mod checkouts;
 pub(crate) mod claims;
 pub(crate) mod feedback_session;
+pub(crate) mod groups;
 pub(crate) mod guidance;
 pub(crate) mod mcp_presence;
 pub(crate) mod notifiers;

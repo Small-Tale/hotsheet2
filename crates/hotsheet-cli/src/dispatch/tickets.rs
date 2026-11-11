@@ -85,6 +85,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         } => cmd_assign(path, &id, to, clear, review),
         Cmd::People { cmd } => cmd_people(path, cmd),
         Cmd::Read { id } => cmd_read(path, &id),
+        Cmd::Groups { json } => super::groups::cmd_groups(path, json),
+        Cmd::TicketGroup { cmd } => super::groups::cmd_group(path, cmd),
         Cmd::ConfidenceReport { json } => cmd_confidence_report(path, json),
         Cmd::PhaseReport { since, until, json } => {
             cmd_phase_report(path, since.as_deref(), until.as_deref(), json)
@@ -125,6 +127,7 @@ pub(crate) fn cmd_new(
         blocked_by,
         follow_up_to,
         project,
+        group,
     } = args;
     let priority = priority.as_str();
     let title = title
@@ -133,6 +136,7 @@ pub(crate) fn cmd_new(
     let store = FsStore::open(path)?;
     let prefix = store.metadata()?.ticket_prefix;
     let blocked_by = ops::resolve_blockers(&store, None, &blocked_by)?;
+    let group = super::groups::resolve_for_store(&store, group.map(Some), &[])?.flatten();
     let source = follow_up_to
         .as_deref()
         .map(|id| resolve(&store, id))
@@ -164,6 +168,7 @@ pub(crate) fn cmd_new(
         &prefix,
         now_ts(),
         NewTicket {
+            group,
             title,
             category,
             priority: parse_priority(priority)?,
@@ -258,6 +263,8 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         review_by: resolve_person(&f.review_by)?,
         claimed: f.claimed.then_some(true),
         blocked: f.blocked_filter(),
+        group: f.group.clone(),
+        has_group: f.has_group_filter(),
         min_confidence: f.min_confidence,
         max_confidence: f.max_confidence,
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
@@ -291,8 +298,14 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             .latest_confidence
             .map(|score| format!("  [{score}% confidence]"))
             .unwrap_or_default();
+        // HS2-PDSHNN: a grouped ticket names its group; ungrouped rows are unchanged.
+        let group = t
+            .group
+            .as_deref()
+            .map(|name| format!("  {{{name}}}"))
+            .unwrap_or_default();
         println!(
-            "{up}{unread} {:<12} {:<12} {}{confidence}",
+            "{up}{unread} {:<12} {:<12} {}{group}{confidence}",
             t.slug,
             t.status.as_deref().unwrap_or_default(),
             t.title
@@ -924,6 +937,8 @@ pub(crate) fn cmd_edit(
         clear_blocked_by,
         blocked_reason,
         clear_blocked_reason,
+        group,
+        group_resolved,
         up_next,
         no_up_next,
         note,
@@ -966,7 +981,13 @@ pub(crate) fn cmd_edit(
             &blocked_by,
         )?)
     };
+    let group = if group_resolved {
+        group
+    } else {
+        super::groups::resolve_for_store(&store, group, &[ticket.id])?
+    };
     let patch = TicketPatch {
+        group,
         actor: hotsheet_ticketing::actor::note_actor(actor),
         title,
         details,
@@ -1075,7 +1096,18 @@ pub(crate) fn cmd_batch(
     ids: &[String],
     update: TicketEditArgs,
 ) -> Result<()> {
-    let edit = TicketEdit::prepare(update)?;
+    let mut edit = TicketEdit::prepare(update)?;
+    // HS2-PDSHNN: choose the group spelling once for the whole selection.
+    if matches!(edit.group, Some(Some(_))) {
+        let store = FsStore::open(path)?;
+        let patched: Vec<Ulid> = ids
+            .iter()
+            .filter_map(|id| resolve(&store, id).ok())
+            .map(|ticket| ticket.id)
+            .collect();
+        edit.group = super::groups::resolve_for_store(&store, edit.group.take(), &patched)?;
+        edit.group_resolved = true;
+    }
     let mut updated = Vec::new();
     let mut errors = Vec::new();
     for id in ids {
@@ -1288,6 +1320,9 @@ pub(crate) struct NewArgs {
     /// Project checkout id for the qualified follow-up identity.
     #[arg(long, requires = "follow_up_to")]
     project: Option<String>,
+    /// Put the new ticket in this group (HS2-PDSHNN). An existing group's spelling is reused.
+    #[arg(long)]
+    group: Option<String>,
 }
 
 #[derive(Args)]
@@ -1371,6 +1406,13 @@ pub(crate) struct TicketEditArgs {
     /// Clear the blocked reason without changing dependency blockers.
     #[arg(long)]
     clear_blocked_reason: bool,
+    /// Put the ticket in this group; a ticket has at most one (HS2-PDSHNN). An existing
+    /// group's spelling is reused.
+    #[arg(long, conflicts_with = "clear_group")]
+    group: Option<String>,
+    /// Remove the ticket from its group.
+    #[arg(long)]
+    clear_group: bool,
     /// Mark Up Next.
     #[arg(long, conflicts_with = "no_up_next")]
     up_next: bool,
@@ -1458,6 +1500,15 @@ pub(crate) struct LsFilters {
     /// Only tickets without a blocked reason; dependencies may still be open (HS2-BSYW6F).
     #[arg(long)]
     unblocked: bool,
+    /// Only tickets in this group, matched without regard to case or spacing (HS2-PDSHNN).
+    #[arg(long)]
+    group: Option<String>,
+    /// Only tickets that are in a group.
+    #[arg(long, conflicts_with = "no_group")]
+    has_group: bool,
+    /// Only tickets that are in no group.
+    #[arg(long, conflicts_with = "group")]
+    no_group: bool,
     /// Only completed/verified tickets whose derived confidence is at least this (0-100).
     #[arg(long, value_name = "0-100", value_parser = clap::value_parser!(u8).range(0..=100))]
     min_confidence: Option<u8>,
@@ -1481,6 +1532,15 @@ impl LsFilters {
     /// `Some(true)` for `--blocked`, `Some(false)` for `--unblocked`, else `None`.
     fn blocked_filter(&self) -> Option<bool> {
         match (self.blocked, self.unblocked) {
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
+        }
+    }
+
+    /// `Some(true)` for `--has-group`, `Some(false)` for `--no-group`, else `None`.
+    fn has_group_filter(&self) -> Option<bool> {
+        match (self.has_group, self.no_group) {
             (true, _) => Some(true),
             (_, true) => Some(false),
             _ => None,
@@ -1515,6 +1575,10 @@ pub(crate) struct TicketEdit {
     clear_blocked_by: bool,
     blocked_reason: Option<String>,
     clear_blocked_reason: bool,
+    /// Absent leaves the group; `Some(None)` clears it (HS2-PDSHNN).
+    group: Option<Option<String>>,
+    /// A batch already chose the spelling for its whole selection.
+    group_resolved: bool,
     up_next: bool,
     no_up_next: bool,
     note: Option<String>,
@@ -1558,6 +1622,12 @@ impl TicketEdit {
             clear_blocked_by: args.clear_blocked_by,
             blocked_reason: args.blocked_reason,
             clear_blocked_reason: args.clear_blocked_reason,
+            group: if args.clear_group {
+                Some(None)
+            } else {
+                args.group.map(Some)
+            },
+            group_resolved: false,
             up_next: args.up_next,
             no_up_next: args.no_up_next,
             note,

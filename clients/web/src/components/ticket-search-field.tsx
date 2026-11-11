@@ -98,6 +98,7 @@ export function ticketSearchFieldId(target: Element): string | undefined {
 /** The syntax examples, grouped; each example renders as an insertable chip (HS2-65XJ6C, HS2-FR1Y70). */
 const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[] }[] = [
   { label: 'Tags', examples: ['tag:client', 'tag:"needs design"'] },
+  { label: 'Groups', examples: ['group:onboarding', 'group:"board polish"', 'has:group'] },
   { label: 'Content', examples: ['has:attachment', 'has:media-annotation', 'has:commit', 'attachment:*.png'] },
   {
     label: 'Workflow',

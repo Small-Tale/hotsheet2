@@ -21,7 +21,9 @@ import {
   reanchorReplacedContextPopupMenus,
   revealContextPopupMenu,
 } from '../context-menu-position';
+import type { TicketGroupsController } from '../features/ticket-groups';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
+import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
@@ -29,6 +31,8 @@ import { cycleTabId } from '../tab-cycle';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
+import { ticketGroupDropTarget } from '../ticket-group-state';
+import { ticketGroupKey, ticketGroupName } from '../ticket-groups';
 import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
 import { data } from './dom';
 import { type AttachmentMenu, type Project } from './types';
@@ -83,6 +87,8 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly history: (projectId?: string) => TicketHistory;
   readonly executeBulkTicketAction: (action: BulkTicketAction, targetSlugs?: string[]) => Promise<boolean>;
   readonly copyDraggedTickets: (destination: Project, drag: { slugs: string[]; source: Project }) => Promise<void>;
+  /** Group membership changes made by drag and drop (HS2-PRXD39). */
+  readonly ticketGroups: Pick<TicketGroupsController, 'disabledReason' | 'setGroup'>;
   readonly projects: Signal<Project[]>;
   readonly capturingShortcutId: Signal<string | undefined>;
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
@@ -108,7 +114,9 @@ export interface ShellAndGlobalInteractionsDependencies {
   clipboard: { tickets: ClipboardTicket[]; cut: boolean; source: Project } | undefined;
   readonly copySelection: (cut: boolean) => void;
   readonly pasteSelection: () => Promise<void>;
-  readonly ticketContextMenu: Signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>;
+  readonly ticketContextMenu: Signal<
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+  >;
   readonly appTabContextMenu: Signal<
     { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
   >;
@@ -181,6 +189,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     copySelection,
     pasteSelection,
     ticketContextMenu,
+    ticketGroups,
     appTabContextMenu,
     terminalContextMenu,
     terminalEditMenu,
@@ -333,6 +342,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;
+    ticketGroupDropTarget.value = undefined;
     document.querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]').forEach((target) => {
       clearDragTarget(target);
     });
@@ -362,6 +372,11 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         const destinationProject = data(target).ticketDropProject;
         if (destinationProject === drag.source.id) return;
         event.preventDefault();
+        // Over a group inside a column, the group alone shows as the target (HS2-PRXD39).
+        if (groupDropElement(event, target)) {
+          clearDragTarget(target as HTMLElement);
+          return;
+        }
         markDragTarget(target as HTMLElement);
         if ((event as DragEvent).dataTransfer)
           (event as DragEvent).dataTransfer!.dropEffect =
@@ -379,12 +394,102 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       },
     ),
   );
+  // Ticket groups (HS2-PRXD39): dragging over a group outlines the whole group, and dropping sets
+  // the group on the dragged tickets. There is no insertion line, since order follows the sort.
+  /** The group container under the pointer, when it belongs to `within` (or anywhere when absent). */
+  function groupDropElement(event: Event, within?: Element) {
+    const group = (event.target as Element | null)?.closest<HTMLElement>('[data-ticket-drop-group]');
+    return group && (!within || within.contains(group)) ? group : undefined;
+  }
+  const groupableDrag = () => {
+    const drag = dependencies.draggedTickets,
+      // The handler-transition tests wire this module with partial dependencies, so the controller may be absent.
+      groups = ticketGroups as typeof ticketGroups | undefined;
+    return drag && groups && project()?.id === drag.source.id && !groups.disabledReason(drag.slugs) ? drag : undefined;
+  };
+  const draggedRows = (slugs: readonly string[]) => tickets.value.filter((ticket) => slugs.includes(ticket.slug));
+  function overTicketGroup(event: Event, target: Element) {
+    if (!groupableDrag()) return;
+    event.preventDefault();
+    const { ticketGroup = '', ticketGroupScope = '' } = data(target),
+      key = ticketGroupKey(ticketGroup),
+      current = ticketGroupDropTarget.value;
+    if (current?.scope !== ticketGroupScope || current.key !== key)
+      ticketGroupDropTarget.value = { scope: ticketGroupScope, key };
+    if ((event as DragEvent).dataTransfer) (event as DragEvent).dataTransfer!.dropEffect = 'move';
+  }
+  // Entering outlines the group at once; a browser's first dragover can trail the enter.
+  lifetime.add(delegate(document.body, 'dragenter', '[data-ticket-drop-group]', overTicketGroup));
+  lifetime.add(delegate(document.body, 'dragover', '[data-ticket-drop-group]', overTicketGroup));
+  lifetime.add(
+    delegate(document.body, 'dragleave', '[data-ticket-drop-group]', (event, target) => {
+      // Moving between a group's children also fires dragleave, and browsers often report no
+      // related target for it, so only a pointer outside the group's box leaves the group.
+      const { clientX, clientY } = event as DragEvent,
+        box = target.getBoundingClientRect();
+      if (clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) return;
+      ticketGroupDropTarget.value = undefined;
+    }),
+  );
+  // A list has no status targets, so its groups take the drop directly; a group inside a board
+  // column is handled with the column's status below, as one update.
+  lifetime.add(
+    delegate(document.body, 'drop', '[data-ticket-drop-group]', (event, target) => {
+      if (target.closest('[data-ticket-drop-status]')) return;
+      const drag = groupableDrag(),
+        group = data(target).ticketGroup;
+      if (!drag || !group) return;
+      event.preventDefault();
+      event.stopPropagation();
+      clearTicketDrag();
+      void ticketGroups.setGroup(drag.slugs, group);
+    }),
+  );
+  // Dropping a grouped ticket on the list outside every group removes its group.
+  lifetime.add(
+    delegate(document.body, 'dragover', TICKET_GROUP_TARGETS.ungroupDropZone.selector, (event) => {
+      const drag = groupableDrag();
+      if (!drag || groupDropElement(event) || !draggedRows(drag.slugs).some(ticketGroupName)) return;
+      event.preventDefault();
+      if ((event as DragEvent).dataTransfer) (event as DragEvent).dataTransfer!.dropEffect = 'move';
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'drop', TICKET_GROUP_TARGETS.ungroupDropZone.selector, (event) => {
+      const drag = groupableDrag();
+      if (!drag || groupDropElement(event)) return;
+      const grouped = draggedRows(drag.slugs)
+        .filter(ticketGroupName)
+        .map((ticket) => ticket.slug);
+      if (!grouped.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      clearTicketDrag();
+      void ticketGroups.setGroup(grouped, null);
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'drop', '[data-ticket-drop-status]', (event, target) => {
       const drag = dependencies.draggedTickets;
       if (!drag || project()?.id !== drag.source.id) return;
       event.preventDefault();
       event.stopPropagation();
+      const dropGroup = groupDropElement(event, target)?.dataset.ticketGroup;
+      if (dropGroup && groupableDrag()) {
+        // The column's status change and the group assignment go out as one update.
+        clearTicketDrag();
+        void ticketGroups.setGroup(drag.slugs, dropGroup, data(target).ticketDropStatus);
+        return;
+      }
+      // Dropped in its own board column outside every group, a grouped ticket leaves its group;
+      // a drop in another column changes only the status and keeps the group.
+      const leaving =
+        target.matches('[data-component="ticket-board-column"]') && groupableDrag()
+          ? draggedRows(drag.slugs)
+              .filter((ticket) => ticket.status === data(target).ticketDropStatus && ticketGroupName(ticket))
+              .map((ticket) => ticket.slug)
+          : [];
+      if (leaving.length) void ticketGroups.setGroup(leaving, null);
       const nextStatus = data(target).ticketDropStatus,
         itemId = data(target).itemId,
         rows = tickets.value.filter((ticket) => drag.slugs.includes(ticket.slug)),

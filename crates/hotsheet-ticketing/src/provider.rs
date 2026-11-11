@@ -489,6 +489,10 @@ pub struct ProviderCapabilities {
     pub history: bool,
     pub watch: bool,
     pub provider_idempotency: bool,
+    /// Tickets carry an optional `group`, and the connection lists, renames, and clears
+    /// groups (HS2-PDSHNN). A provider without it rejects a group write explicitly.
+    #[serde(default)]
+    pub groups: bool,
     pub query_fields: Vec<String>,
 }
 
@@ -539,6 +543,7 @@ impl ProviderCapabilities {
             history: true,
             watch: true,
             provider_idempotency: false,
+            groups: true,
             query_fields: vec![
                 "status",
                 "priority",
@@ -551,6 +556,7 @@ impl ProviderCapabilities {
                 "review",
                 "claimed",
                 "blocked",
+                "group",
                 "created_at",
                 "updated_at",
             ]
@@ -575,6 +581,9 @@ pub struct ProviderDraft {
     /// Who is creating the ticket (HS2-9FPHWY). Providers that can record it store it as the
     /// ticket's creator; `None` is an unspecified caller.
     pub created_by: Option<hotsheet_model::NoteActor>,
+    /// The group to create the ticket in (HS2-PDSHNN). A provider without the `groups`
+    /// capability rejects a present value.
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -596,6 +605,9 @@ pub struct ProviderPatch {
     pub up_next: Option<bool>,
     pub blocked_by: Option<Vec<String>>,
     pub blocked_reason: Option<Option<String>>,
+    /// Set, clear (`Some(None)`), or leave the ticket's group (HS2-PDSHNN).
+    #[serde(default)]
+    pub group: Option<Option<String>>,
     /// Who is making the change (HS2-32QDZ3). The git provider attributes the status
     /// activity it appends; external trackers attribute changes to their own account.
     pub actor: Option<hotsheet_model::NoteActor>,
@@ -844,6 +856,18 @@ pub fn keyset_page_from_native_pages(
     }
 }
 
+/// The `group` and `has_group` filters over a provider row (HS2-PDSHNN). A provider
+/// without the `groups` capability reports every ticket ungrouped, so every adapter can
+/// answer both filters through this one comparison instead of rejecting them.
+pub fn provider_group_matches(ticket: &ApiTicket, query: &TicketQuery) -> bool {
+    let key = ticket.group.as_deref().map(hotsheet_model::group_key);
+    query
+        .group
+        .as_deref()
+        .is_none_or(|name| key.is_some() && key == hotsheet_model::group_key_of_input(name))
+        && query.has_group.is_none_or(|want| key.is_some() == want)
+}
+
 /// Apply provider-neutral filters to one bounded native page. Adapters remain responsible
 /// for rejecting fields their native records cannot represent and for requesting a stable
 /// native ordering before calling this helper.
@@ -861,6 +885,7 @@ pub fn filter_provider_ticket_page(
     }
     tickets.retain(|ticket| {
         provider_text_matches(ticket, query.text.as_deref())
+            && provider_group_matches(ticket, query)
             && query.status.is_none_or(|value| ticket.status == value)
             && query.collection.is_none_or(|collection| match collection {
                 crate::TicketCollection::Queue => !matches!(
@@ -1105,6 +1130,28 @@ pub trait TicketProvider: Send + Sync {
         self.descriptor().capabilities.note_confidence
     }
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
+    /// Every grouped ticket of the connection (HS2-PDSHNN). Only a provider with the
+    /// `groups` capability answers.
+    fn group_directory(&self) -> Result<crate::groups::GroupDirectory, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "groups",
+        })
+    }
+    /// Move every member of the group with `from_key` to `to` (`None` ungroups) as one
+    /// mutation (HS2-8CDFKR). `directory` is the namespace the caller validated against.
+    fn set_group_of_members(
+        &self,
+        _directory: &crate::groups::GroupDirectory,
+        _from_key: &str,
+        _to: Option<&str>,
+        _now: Timestamp,
+    ) -> Result<crate::groups::GroupWrite, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "groups",
+        })
+    }
     fn ai_feedback_records(&self) -> Result<Vec<AiFeedbackRecord>, ProviderError> {
         Err(ProviderError::Unsupported {
             connection_id: self.descriptor().connection_id,
@@ -1530,6 +1577,37 @@ impl GitProvider {
         }
         ProviderCapabilities::git()
     }
+
+    fn require_groups(&self) -> Result<(), ProviderError> {
+        if self.capabilities().groups {
+            return Ok(());
+        }
+        Err(ProviderError::Unsupported {
+            connection_id: self.connection_id.clone(),
+            capability: "groups",
+        })
+    }
+
+    /// Validate a requested group and reuse the spelling other tickets of this store
+    /// already carry (HS2-PDSHNN). The store walk runs only when a name is being set.
+    fn group_change(
+        &self,
+        change: Option<Option<String>>,
+        patched: &[Ulid],
+    ) -> Result<Option<Option<String>>, ProviderError> {
+        if change.is_none() {
+            return Ok(None);
+        }
+        self.require_groups()?;
+        if !matches!(change, Some(Some(_))) {
+            return Ok(change);
+        }
+        let directory = crate::groups::GroupDirectory::scan(&self.store)?;
+        Ok(
+            crate::groups::resolve_group_change(&directory, change, patched)
+                .map_err(StoreError::from)?,
+        )
+    }
 }
 
 impl TicketProvider for GitProvider {
@@ -1559,6 +1637,28 @@ impl TicketProvider for GitProvider {
             .iter()
             .map(|ticket| ApiTicket::from_provider(ticket, &self.connection_id, None))
             .collect())
+    }
+
+    fn group_directory(&self) -> Result<crate::groups::GroupDirectory, ProviderError> {
+        self.require_groups()?;
+        Ok(crate::groups::GroupDirectory::scan(&self.store)?)
+    }
+
+    fn set_group_of_members(
+        &self,
+        directory: &crate::groups::GroupDirectory,
+        from_key: &str,
+        to: Option<&str>,
+        now: Timestamp,
+    ) -> Result<crate::groups::GroupWrite, ProviderError> {
+        self.require_groups()?;
+        Ok(crate::groups::set_group_of_members(
+            &self.store,
+            directory,
+            from_key,
+            to,
+            now,
+        )?)
     }
 
     fn ai_feedback_records(&self) -> Result<Vec<AiFeedbackRecord>, ProviderError> {
@@ -1657,6 +1757,7 @@ impl TicketProvider for GitProvider {
     ) -> Result<ApiTicket, ProviderError> {
         let prefix = self.store.metadata()?.ticket_prefix;
         let blocked_by = self.blockers(None, &draft.blocked_by)?;
+        let group = self.group_change(draft.group.map(Some), &[])?.flatten();
         let _transfer_guard = if draft.transfer.is_some() {
             Some(self.transfer_lock.lock_or_recover())
         } else {
@@ -1687,6 +1788,7 @@ impl TicketProvider for GitProvider {
                 tags: draft.tags,
                 up_next: draft.up_next,
                 blocked_by,
+                group,
             },
             draft.created_by,
         )?;
@@ -1730,6 +1832,7 @@ impl TicketProvider for GitProvider {
             // A ticket cannot block itself, matching the server route.
             .map(|v| self.blockers(Some(&ticket.id), v))
             .transpose()?;
+        let group = self.group_change(patch.group, &[ticket.id])?;
         let updated = ops::update(
             &self.store,
             &ticket.id,
@@ -1747,6 +1850,7 @@ impl TicketProvider for GitProvider {
                 blocked_by,
                 follow_ups: None,
                 blocked_reason: patch.blocked_reason,
+                group,
             },
         )?;
         Ok(ApiTicket::from_provider(
@@ -2428,6 +2532,9 @@ pub fn copy_between(
         }),
         // A copy or move keeps the original creator, as pasted notes keep their authors.
         created_by: ticket.created_by,
+        // HS2-PDSHNN: the group travels only to a destination that has groups; elsewhere
+        // it is dropped rather than failing the transfer.
+        group: ticket.group.filter(|_| capabilities.groups),
     };
     let created = destination.create(
         MutationContext {
@@ -2597,6 +2704,7 @@ mod tests {
 
     fn draft(title: &str, blocked_by: Vec<String>) -> ProviderDraft {
         ProviderDraft {
+            group: None,
             title: title.into(),
             category: "task".into(),
             priority: Priority::Default,
@@ -2721,6 +2829,7 @@ mod tests {
                 .create(
                     ctx(Ulid::new(), &format!("2026-08-26T00:0{index}:00Z")),
                     ProviderDraft {
+                        group: None,
                         title: format!("ticket {index}"),
                         category: "task".into(),
                         priority: Priority::Default,
@@ -2941,6 +3050,7 @@ mod tests {
                 .create(
                     ctx(Ulid::new(), &format!("2026-08-26T00:0{index}:00Z")),
                     ProviderDraft {
+                        group: None,
                         title: format!("ticket {index}"),
                         category: "task".into(),
                         priority: Priority::Default,
@@ -2991,6 +3101,7 @@ mod tests {
                 .create(
                     ctx(Ulid::new(), at),
                     ProviderDraft {
+                        group: None,
                         title: title.into(),
                         category: "task".into(),
                         priority: Priority::High,
@@ -3046,6 +3157,7 @@ mod tests {
                 .create(
                     ctx(id, "2026-08-26T00:00:00Z"),
                     ProviderDraft {
+                        group: None,
                         title: "details mention".into(),
                         category: "task".into(),
                         priority: Priority::Default,
@@ -3089,6 +3201,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T00:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "details pointer".into(),
                     category: "task".into(),
                     priority: Priority::High,
@@ -3189,6 +3302,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T00:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "provider ticket".into(),
                     category: "task".into(),
                     priority: Priority::High,
@@ -3257,6 +3371,7 @@ mod tests {
             .create(
                 ctx(claim_id, "2026-08-26T00:04:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "claimable".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -3313,6 +3428,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T00:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "with evidence".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -3369,6 +3485,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T00:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "deferred provider ticket".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -3698,6 +3815,7 @@ mod tests {
             .create(
                 ctx(source_id, "2026-08-26T01:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "transfer me".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -3844,6 +3962,7 @@ mod tests {
             .create(
                 ctx(source_id, "2026-08-26T02:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "recoverable move".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -3900,6 +4019,203 @@ mod tests {
     }
 
     #[test]
+    fn hs2_pdshnn_git_provider_writes_groups_and_reuses_the_stored_spelling() {
+        let (_dir, provider) = git_provider();
+        assert!(provider.descriptor().capabilities.groups);
+        let first = provider
+            .create(
+                ctx(Ulid::new(), "2026-11-01T00:00:00Z"),
+                ProviderDraft {
+                    group: Some("  Board   Drag ".into()),
+                    ..draft("first", vec![])
+                },
+            )
+            .unwrap();
+        assert_eq!(first.group.as_deref(), Some("Board Drag"));
+        let second = provider
+            .create(
+                ctx(Ulid::new(), "2026-11-01T00:00:01Z"),
+                draft("second", vec![]),
+            )
+            .unwrap();
+        assert_eq!(second.group, None);
+        let patch = |group: Option<&str>| ProviderPatch {
+            group: Some(group.map(str::to_string)),
+            ..Default::default()
+        };
+        let joined = provider
+            .update(
+                &second.id,
+                Timestamp::new("2026-11-01T00:01:00Z"),
+                patch(Some("BOARD drag")),
+            )
+            .unwrap();
+        assert_eq!(joined.group.as_deref(), Some("Board Drag"));
+        assert_eq!(
+            provider.group_directory().unwrap().summaries(),
+            vec![crate::groups::GroupSummary {
+                name: "Board Drag".into(),
+                count: 2
+            }]
+        );
+        assert!(matches!(
+            provider.update(
+                &second.id,
+                Timestamp::new("2026-11-01T00:02:00Z"),
+                patch(Some("a\nb"))
+            ),
+            Err(ProviderError::Store(StoreError::InvalidGroupName(_)))
+        ));
+        let cleared = provider
+            .update(
+                &second.id,
+                Timestamp::new("2026-11-01T00:03:00Z"),
+                patch(None),
+            )
+            .unwrap();
+        assert_eq!(cleared.group, None);
+
+        let directory = provider.group_directory().unwrap();
+        let write = provider
+            .set_group_of_members(
+                &directory,
+                "board drag",
+                Some("Renamed"),
+                Timestamp::new("2026-11-01T00:04:00Z"),
+            )
+            .unwrap();
+        assert_eq!(write.updated, 1);
+        assert_eq!(
+            provider.get(&first.id).unwrap().group.as_deref(),
+            Some("Renamed")
+        );
+    }
+
+    #[test]
+    fn hs2_pdshnn_a_provider_without_groups_rejects_every_group_operation() {
+        let (_dir, provider) = git_provider();
+        let existing = provider
+            .create(
+                ctx(Ulid::new(), "2026-11-01T00:00:00Z"),
+                draft("existing", vec![]),
+            )
+            .unwrap();
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.groups = false;
+        let provider = provider.with_test_capabilities(capabilities);
+        let unsupported = |result: Result<(), ProviderError>| {
+            assert!(matches!(
+                result,
+                Err(ProviderError::Unsupported {
+                    capability: "groups",
+                    ..
+                })
+            ));
+        };
+        for group in [Some("Sprint".to_string()), None] {
+            unsupported(
+                provider
+                    .update(
+                        &existing.id,
+                        Timestamp::new("2026-11-01T00:01:00Z"),
+                        ProviderPatch {
+                            group: Some(group),
+                            ..Default::default()
+                        },
+                    )
+                    .map(drop),
+            );
+        }
+        unsupported(
+            provider
+                .create(
+                    ctx(Ulid::new(), "2026-11-01T00:02:00Z"),
+                    ProviderDraft {
+                        group: Some("Sprint".into()),
+                        ..draft("refused", vec![])
+                    },
+                )
+                .map(drop),
+        );
+        unsupported(provider.group_directory().map(drop));
+        unsupported(
+            provider
+                .set_group_of_members(
+                    &crate::groups::GroupDirectory::default(),
+                    "sprint",
+                    None,
+                    Timestamp::new("2026-11-01T00:03:00Z"),
+                )
+                .map(drop),
+        );
+        assert_eq!(provider.store.list_tickets().unwrap().len(), 1);
+        // A patch that does not touch the group still works.
+        provider
+            .update(
+                &existing.id,
+                Timestamp::new("2026-11-01T00:04:00Z"),
+                ProviderPatch {
+                    title: Some("renamed".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        // An old descriptor without the field reads as unsupported.
+        let mut json = serde_json::to_value(ProviderCapabilities::git()).unwrap();
+        assert_eq!(json["groups"], true);
+        json.as_object_mut().unwrap().remove("groups");
+        assert!(
+            !serde_json::from_value::<ProviderCapabilities>(json)
+                .unwrap()
+                .groups
+        );
+    }
+
+    #[test]
+    fn hs2_pdshnn_a_copy_carries_the_group_only_to_a_destination_with_groups() {
+        for destination_has_groups in [true, false] {
+            let (_source_dir, source) = git_provider();
+            let destination_dir = tempfile::tempdir().unwrap();
+            let destination_store =
+                FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+            let mut capabilities = ProviderCapabilities::git();
+            capabilities.groups = destination_has_groups;
+            let destination = GitProvider::new("destination", destination_store.clone())
+                .with_test_capabilities(capabilities);
+            let source_id = Ulid::new();
+            source
+                .create(
+                    ctx(source_id, "2026-11-01T00:00:00Z"),
+                    ProviderDraft {
+                        group: Some("Sprint".into()),
+                        ..draft("grouped", vec![])
+                    },
+                )
+                .unwrap();
+            let registry = ProviderRegistry::default();
+            registry.register(Arc::new(source)).unwrap();
+            registry.register(Arc::new(destination)).unwrap();
+            copy_between(
+                &registry,
+                TicketRef {
+                    connection_id: "local".into(),
+                    native_id: source_id.to_string(),
+                },
+                "destination",
+                "group-copy",
+                Timestamp::new("2026-11-01T00:01:00Z"),
+            )
+            .unwrap();
+            let copied = destination_store.list_tickets().unwrap();
+            assert_eq!(copied.len(), 1);
+            assert_eq!(
+                copied[0].group.as_deref(),
+                destination_has_groups.then_some("Sprint")
+            );
+        }
+    }
+
+    #[test]
     fn transfer_rejects_source_fields_the_destination_cannot_represent() {
         let (_source_dir, source) = git_provider();
         let destination_dir = tempfile::tempdir().unwrap();
@@ -3914,6 +4230,7 @@ mod tests {
             .create(
                 ctx(source_id, "2026-08-26T03:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "has unsupported note".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -3975,6 +4292,7 @@ mod tests {
             .create(
                 ctx(source_id, "2026-08-26T03:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "has evidence".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -4064,6 +4382,7 @@ mod tests {
         let (_source_dir, source) = git_provider();
         let source_id = Ulid::new();
         let draft = || ProviderDraft {
+            group: None,
             title: "scored".into(),
             category: "task".into(),
             priority: Priority::Default,
@@ -4277,6 +4596,7 @@ mod tests {
             .create(
                 ctx(source_id, "2026-08-26T03:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "agent filed".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -4324,6 +4644,7 @@ mod tests {
             .create(
                 ctx(source_id, "2026-08-26T03:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "rated".into(),
                     category: "task".into(),
                     priority: Priority::Default,
@@ -4514,6 +4835,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T04:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "completed work".into(),
                     category: "bug".into(),
                     priority: Priority::Default,
@@ -4604,6 +4926,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T05:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "still in progress".into(),
                     category: "bug".into(),
                     priority: Priority::Default,
@@ -4647,6 +4970,7 @@ mod tests {
             .create(
                 ctx(id, "2026-08-26T06:00:00Z"),
                 ProviderDraft {
+                    group: None,
                     title: "completed".into(),
                     category: "bug".into(),
                     priority: Priority::Default,
@@ -4722,6 +5046,7 @@ mod tests {
                 .create(
                     ctx(*id, &format!("2026-08-26T04:0{index}:00Z")),
                     ProviderDraft {
+                        group: None,
                         title: format!("source {index}"),
                         category: "task".into(),
                         priority: Priority::Default,

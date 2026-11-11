@@ -1449,6 +1449,47 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets/{id}/copy", post(copy_ticket_route))
         .route("/tickets/{id}/move", post(move_ticket_route))
         .route("/batch", post(batch_update))
+        // Ticket groups (HS2-PDSHNN, HS2-8CDFKR): default store, one hosted store, one
+        // provider connection, and the project-wide checkout namespace.
+        .route("/groups", get(routes::groups::list_groups))
+        .route("/groups/rename", post(routes::groups::rename_group))
+        .route("/groups/ungroup", post(routes::groups::ungroup))
+        .route(
+            "/stores/{store_id}/groups",
+            get(routes::groups::list_store_groups),
+        )
+        .route(
+            "/stores/{store_id}/groups/rename",
+            post(routes::groups::rename_store_group),
+        )
+        .route(
+            "/stores/{store_id}/groups/ungroup",
+            post(routes::groups::ungroup_store),
+        )
+        .route(
+            "/providers/{connection_id}/groups",
+            get(routes::groups::list_provider_groups),
+        )
+        .route(
+            "/providers/{connection_id}/groups/rename",
+            post(routes::groups::rename_provider_group),
+        )
+        .route(
+            "/providers/{connection_id}/groups/ungroup",
+            post(routes::groups::ungroup_provider),
+        )
+        .route(
+            "/checkouts/{reference}/groups",
+            get(routes::groups::list_checkout_groups),
+        )
+        .route(
+            "/checkouts/{reference}/groups/rename",
+            post(routes::groups::rename_checkout_group),
+        )
+        .route(
+            "/checkouts/{reference}/groups/ungroup",
+            post(routes::groups::ungroup_checkout),
+        )
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.

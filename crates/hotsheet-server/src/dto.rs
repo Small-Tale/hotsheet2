@@ -43,6 +43,10 @@ pub(crate) struct ListParams {
     claimed: Option<bool>,
     /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
     blocked: Option<bool>,
+    /// Only tickets in this group, matched without regard to case or spacing (HS2-PDSHNN).
+    group: Option<String>,
+    /// `true` = only grouped tickets; `false` = only ungrouped (HS2-PDSHNN).
+    has_group: Option<bool>,
     /// ISO-8601 `created_at` / `updated_at` range bounds (inclusive).
     created_after: Option<String>,
     created_before: Option<String>,
@@ -163,6 +167,8 @@ impl ListParams {
             }
         }
         Ok(TicketQuery {
+            group: self.group,
+            has_group: self.has_group,
             status: opt_parse(self.status.as_deref())?,
             collection: opt_parse(self.collection.as_deref())?,
             priority: opt_parse(self.priority.as_deref())?,
@@ -232,6 +238,12 @@ pub(crate) struct CreateReq {
     pub(crate) blocked_by: Option<Vec<String>>,
     /// Qualified source ticket when this creation is an explicit follow-up.
     pub(crate) follow_up_to: Option<String>,
+    /// The group to create the ticket in (HS2-PDSHNN); absent, null, or empty = ungrouped.
+    #[serde(default)]
+    pub(crate) group: Option<String>,
+    /// The route already chose the spelling against its project-wide namespace.
+    #[serde(skip)]
+    pub(crate) group_resolved: bool,
     /// Who is creating the ticket (HS2-9FPHWY), recorded as its `created_by`. Absent is
     /// unspecified, never assumed human or AI.
     #[serde(default)]
@@ -255,6 +267,13 @@ pub(crate) struct UpdateReq {
     /// Set, clear with JSON null, or leave unchanged when absent.
     #[serde(default, deserialize_with = "deserialize_nullable_patch")]
     pub(crate) blocked_reason: Option<Option<String>>,
+    /// Set the group, clear it with JSON null, or leave it unchanged when absent
+    /// (HS2-PDSHNN).
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    pub(crate) group: Option<Option<String>>,
+    /// The route already chose the spelling against its project-wide namespace.
+    #[serde(skip)]
+    pub(crate) group_resolved: bool,
     /// Optional note to append alongside the field update.
     pub(crate) note: Option<String>,
     /// Rating revision. This is a feedback-only update; repeated ratings from the
@@ -305,6 +324,7 @@ impl UpdateReq {
             || self.up_next.is_some()
             || self.blocked_by.is_some()
             || self.blocked_reason.is_some()
+            || self.group.is_some()
             || self.note.is_some()
             || self.note_id.is_some()
             || self.edit_feedback_prompt

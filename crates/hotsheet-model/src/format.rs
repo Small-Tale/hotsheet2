@@ -39,6 +39,7 @@ const KNOWN_KEYS: &[&str] = &[
     "blocked_by",
     "follow_ups",
     "blocked_reason",
+    "group",
     "created_at",
     "created_by",
     "updated_at",
@@ -1227,6 +1228,55 @@ mod tests {
         assert!(!legacy.contains("endHead:"));
     }
 
+    fn group_file(group_line: &str) -> String {
+        format!(
+            "---\nid: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nslug: HS-XXXXXX\ntitle: t\ncategory: issue\n\
+             {group_line}created_at: t0\nupdated_at: t1\nschema: 2\n---\n\nbody\n"
+        )
+    }
+
+    #[test]
+    fn hs2_pdshnn_group_round_trips_and_is_omitted_when_absent() {
+        let absent = parse_file(&group_file("")).expect("parses");
+        assert_eq!(absent.group, None);
+        assert!(!to_file_string(&absent).contains("group"));
+
+        let null = parse_file(&group_file("group: null\n")).expect("parses");
+        assert_eq!(null.group, None);
+        assert!(!to_file_string(&null).contains("group"));
+
+        let mut grouped = absent.clone();
+        grouped.group = Some("Board drag & drop — Ünïcode 日本".into());
+        let text = to_file_string(&grouped);
+        assert!(text.contains("group: Board drag & drop — Ünïcode 日本\n"));
+        assert_eq!(parse_file(&text).unwrap(), grouped);
+        assert_eq!(to_file_string(&parse_file(&text).unwrap()), text);
+        assert!(grouped.extra.is_empty());
+    }
+
+    #[test]
+    fn hs2_pdshnn_group_parsing_is_tolerant() {
+        for (line, expected) in [
+            ("group: \"  Board   drag  \"\n", Some("Board drag")),
+            ("group: \"a\\nb\\tc\"\n", Some("a b c")),
+            ("group: \"   \"\n", None),
+            ("group: 42\n", Some("42")),
+            ("group: true\n", Some("true")),
+            ("group:\n- a\n- b\n", None),
+            ("group:\n  nested: x\n", None),
+        ] {
+            let parsed = parse_file(&group_file(line)).expect("a group value never fails a ticket");
+            assert_eq!(parsed.group.as_deref(), expected, "{line:?}");
+            assert!(!parsed.extra.contains_key("group"));
+        }
+        let long = format!("group: {}\n", "x".repeat(300));
+        let parsed = parse_file(&group_file(&long)).unwrap();
+        assert_eq!(
+            parsed.group.as_deref().map(|name| name.chars().count()),
+            Some(crate::GROUP_NAME_MAX_CHARS)
+        );
+    }
+
     #[test]
     fn unknown_frontmatter_keys_are_preserved() {
         let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
@@ -1715,6 +1765,7 @@ mod tests {
         t.duplicate_of = Some("01ARZ3NDEKTSV4RRFFQ69G5FC0".into());
         t.blocked_by = vec![ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1")];
         t.blocked_reason = Some("x".into());
+        t.group = Some("g".into());
         t.claimed_by = Some("w".into());
         t.claim_lease_expires_at = Some("x".into());
         t.worker_label = Some("w".into());

@@ -2622,6 +2622,52 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "ticket-group",
+      "name": "TicketGroup",
+      "kind": "component",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "useWhen": [
+        "Hot Sheet needs one collapsible ticket group on a lowered panel, in a list or a board column."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketGroup behavior."
+      ],
+      "publicClasses": [
+        "ticket-group"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-group.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-group-dialog",
+      "name": "TicketGroupDialog",
+      "kind": "component",
+      "purpose": "Name a new ticket group or rename an existing one, with inline duplicate-name validation.",
+      "useWhen": [
+        "Hot Sheet needs name a new ticket group or rename an existing one, with inline duplicate-name validation."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketGroupDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-group-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-group-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ticket-info-panel",
       "name": "TicketInfoPanel",
       "kind": "composition",

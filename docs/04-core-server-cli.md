@@ -888,6 +888,11 @@ hotsheet phase-report [--since D] [--until D] [--json]  # time per started_phase
                                            # (also GET /phase-report, /checkouts/{ref}/phase-report, MCP hotsheet_phase_report; HS2-8N7QZ2)
 hotsheet checkout repo-size [ref] [--json] # git object + attachment sizes vs. GitHub's 5 GB / 10 GB limits (HS2-QF44T7)
 hotsheet ls --text "flicker"              # text search via the local index
+hotsheet edit HS-7f3k9q --group "Board drag"   # at most one group per ticket; --clear-group removes it (HS2-PDSHNN)
+hotsheet ls --group "board drag"          # also --has-group / --no-group; names ignore case and spacing
+hotsheet groups [--json]                  # groups in use with member counts (also GET /groups, MCP hotsheet_groups)
+hotsheet group rename "Board drag" "Board DnD"   # every member in one write; refuses another group's name (HS2-8CDFKR)
+hotsheet group ungroup "Board DnD"        # dissolve the group
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
 hotsheet attach HS-7f3k9q ./proof.png --json # [{"id":"...","filename":"proof.png"}]
@@ -1303,6 +1308,54 @@ If target creation succeeds but the source link write fails, creation returns th
 target with `follow_up_link_error`. Retry only the idempotent
 `/checkouts/{reference}/follow-up-links` operation, `hotsheet-cli link-follow-up
 <source> <qualified-target>`, or MCP `hotsheet_link_follow_up`.
+
+#### Ticket groups (HS2-PDSHNN, HS2-8CDFKR)
+
+A ticket belongs to at most one group ([02](02-ticket-storage.md) §2.7.1). `group` is a
+presence-aware nullable field on the same write routes as `blocked_reason`: `POST
+/tickets` accepts an optional `group`; `PATCH /tickets/{id}` and each update of `POST
+/batch` accept `group` as a string (set), JSON `null` or an empty string (clear), or
+absent (unchanged). The checkout routes (`/checkouts/{reference}/tickets`,
+`/tickets/{id}`, `/batch`), the store routes, and the provider routes accept the same
+field. List rows carry `"group"` when set (omitted otherwise, like `blocked_reason`) and
+ticket details always carry it (`null` when ungrouped). Lists filter with
+`group=<name>` and `has_group=true|false` ([03](03-indexing-and-query.md) §3.5). Each
+provider descriptor's `capabilities.groups` says whether a connection supports any of
+this.
+
+A requested name is normalized and, when it names an existing group, stored in that
+group's spelling. A batch chooses one spelling for its whole selection before the first
+write, and an invalid name refuses the request before any write.
+
+| Route                                                            | Body                                    | Response                                 |
+| ---------------------------------------------------------------- | --------------------------------------- | ---------------------------------------- |
+| `GET /groups` · `/stores/{id}/groups` · `/providers/{id}/groups` |                                         | `{"groups":[{"name":"…","count":3}]}`    |
+| `GET /checkouts/{reference}/groups`                              |                                         | the same, merged across the Git sources  |
+| `POST …/groups/rename` (same four prefixes)                      | `{"from":"Old","to":"New","actor":{…}}` | `{"name":"<stored name>","updated":<n>}` |
+| `POST …/groups/ungroup` (same four prefixes)                     | `{"name":"X","actor":{…}}`              | `{"updated":<n>}`                        |
+
+Groups are sorted by name without regard to case, and `count` and `updated` count
+tickets outside Trash. A checkout is one namespace: its listing merges counts by name
+across every connection with the `groups` capability, and rename and ungroup rewrite the
+members in each of them, one locked write and one commit per store, publishing the same
+index updates and change events as a batch update. Errors use the standard
+`{"error":"…","code":"…"}` body:
+
+| Status | `code`               | When                                                                                 |
+| ------ | -------------------- | ------------------------------------------------------------------------------------ |
+| 400    | `invalid_group_name` | The name is empty (rename target), over 120 characters, or holds a control character |
+| 404    | `group_not_found`    | No ticket outside Trash names `from` / `name`                                        |
+| 409    | `group_name_taken`   | `to` is a different existing group; a case- or spacing-only change is allowed        |
+| 409    | (none)               | `provider connection '<id>' does not support 'groups'`                               |
+
+Headless parity: `hotsheet-cli new --group`, `edit --group/--clear-group`, `batch
+--group/--clear-group`, `ls --group/--has-group/--no-group`, `groups [--json]`, `group
+rename <from> <to>`, and `group ungroup <name>` call the same
+`hotsheet_ticketing::groups` operations against one store; MCP `hotsheet_create`,
+`hotsheet_update`, and `hotsheet_batch` take `group`, `hotsheet_query` takes `group` and
+`has_group`, and `hotsheet_groups` (`action: list | rename | ungroup`) calls the routes
+above, with or without a running server ([05](05-ai-tool-plugins.md)).
+
 `blocked_reason` is an independently presence-aware nullable update field and the single
 source of truth for whether a ticket is blocked: omission
 leaves the current reason unchanged, a string sets its trimmed value, and JSON `null`
@@ -1646,7 +1699,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Store setup                           | `init`, `bootstrap`, `link`, `prefix`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [02](02-ticket-storage.md) §2.8                                                            |
 | Format compatibility                  | `activate-format`, `compatibility`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | [19](19-format-compatibility.md), [02](02-ticket-storage.md)                               |
-| Ticket CRUD and query                 | `new`, `ls`, `show`, `edit`, `close`, `batch`, `delete-note`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | [02](02-ticket-storage.md), [03](03-indexing-and-query.md), [17](17-ticket-file-format.md) |
+| Ticket CRUD and query                 | `new`, `ls`, `show`, `edit`, `close`, `batch`, `delete-note`, `groups`, `group`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [02](02-ticket-storage.md), [03](03-indexing-and-query.md), [17](17-ticket-file-format.md) |
 | Trash                                 | `restore`, `purge-trash`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [02](02-ticket-storage.md)                                                                 |
 | Attachments                           | `attach`, `attachment-rename`, `attachment-delete`, `attachment-metadata`, `attachment-actor`, `annotate`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | [02](02-ticket-storage.md), [17](17-ticket-file-format.md)                                 |
 | Ticket providers                      | `providers`, `provider-ls`, `provider-get`, `provider-new`, `provider-edit`, `provider-close`, `provider-assign`, `provider-restore`, `provider-report-not-working`, `provider-delete-note`, `provider-attach`, `provider-disable`, `provider-enable`, `provider-remove`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [16](16-external-sync-interface.md)                                                        |

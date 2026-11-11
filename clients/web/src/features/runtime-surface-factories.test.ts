@@ -41,6 +41,7 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
       status: (value) => (value ?? 'not_started') as TicketStatus,
       ticketCloseDialog: signal(undefined),
       ticketContextMenu: signal(undefined),
+      ticketGroupNames: () => [],
       tickets: signal([]),
     });
     expect(
@@ -71,6 +72,7 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
       status: (value) => (value ?? 'not_started') as TicketStatus,
       ticketCloseDialog: signal(undefined),
       ticketContextMenu: menu,
+      ticketGroupNames: () => [],
       tickets: signal(
         [row('EXTERNAL', 'started'), row('GIT', 'started')].map((item) =>
           item.slug === 'EXTERNAL' ? { ...item, connection_id: 'jira' } : item,

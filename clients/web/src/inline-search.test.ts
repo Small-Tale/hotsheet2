@@ -189,6 +189,48 @@ describe('inline advanced-search tokens', () => {
   });
 });
 
+describe('group tokens (HS2-44W3TP)', () => {
+  it('parses group: and has:group into chips with canonical raw text', () => {
+    expect(tokenFromRaw('group:onboarding')).toEqual({
+      kind: 'group',
+      value: 'onboarding',
+      raw: 'group:onboarding',
+      label: 'group:onboarding',
+    });
+    expect(tokenFromRaw('GROUP:"Board drag & drop"')).toMatchObject({
+      kind: 'group',
+      value: 'Board drag & drop',
+      raw: 'group:"Board drag & drop"',
+    });
+    expect(tokenFromRaw('group:"a \\"b\\" c"')).toMatchObject({ value: 'a "b" c', raw: 'group:"a \\"b\\" c"' });
+    expect(tokenFromRaw('group:""')).toBeUndefined();
+    expect(tokenFromRaw('has:group')).toEqual({ kind: 'has', value: 'group', raw: 'has:group', label: 'has group' });
+  });
+
+  it('consumes complete group tokens and leaves an unfinished quote as text', () => {
+    expect(consumeSearchToken('parser group:"Search syntax" ')).toMatchObject({
+      text: 'parser',
+      token: { kind: 'group', value: 'Search syntax' },
+    });
+    expect(consumeSearchToken('parser group:"Search ').token).toBeUndefined();
+    expect(consumeSearchTokens('NOT has:group AND group:x ', true).tokens.map((token) => token.raw)).toEqual([
+      'has:group',
+      'group:x',
+    ]);
+  });
+
+  it('maps group tokens to the server query and keeps them out of plain text', () => {
+    expect(tokenQuery([tokenFromRaw('group:"Board drag & drop"')!, tokenFromRaw('has:group')!])).toEqual({
+      group: 'Board drag & drop',
+      has_group: true,
+    });
+    expect(tokenQuery([tokenFromRaw('group:a')!, tokenFromRaw('group:b')!])).toEqual({ group: 'b' });
+    expect(effectiveSearch('words group:x', []).text).toBe('words');
+    expect(effectiveSearch('NOT has:group', []).text).toBe('NOT has:group');
+    expect(toTokenSearchToken(tokenFromRaw('group:x')!).accessibleLabel).toBe('group x');
+  });
+});
+
 describe('HS2-2GCMY1 one is: vocabulary', () => {
   it('turns every supported is: value into a chip and marks it as an advanced expression', () => {
     for (const value of SEARCH_LIFECYCLES) {

@@ -103,6 +103,7 @@ pub fn ensure_ticket(
             &prefix,
             Timestamp::from_datetime(time::OffsetDateTime::now_utc()),
             NewTicket {
+                group: None,
                 title: TITLE.into(),
                 category: "task".into(),
                 priority: Priority::Default,
@@ -137,6 +138,7 @@ pub fn ensure_provider_ticket(
             generated_id: Ulid::new(),
         },
         ProviderDraft {
+            group: None,
             title: TITLE.into(),
             category: "task".into(),
             priority: Priority::Default,

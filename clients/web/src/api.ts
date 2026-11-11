@@ -38,6 +38,9 @@ import {
   parseGitHubAuthStart,
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
+  parseGroupList,
+  parseGroupRename,
+  parseGroupUngroup,
   parseGuidanceBatchReview,
   parseGuidanceInterviewReview,
   parseGuidanceOverview,
@@ -328,6 +331,8 @@ export type Capabilities = Record<
   write_behind?: boolean;
   /** Provider-native advisory process markers; separate from exclusive claims. */
   advisory_claims?: boolean;
+  /** Tickets can name a group (HS2-PDSHNN). Older servers and external providers omit it. */
+  groups?: boolean;
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };
@@ -717,6 +722,8 @@ export interface TicketRow {
   blocked_by: string[];
   follow_ups?: ProjectTicketRef[];
   blocked_reason?: string;
+  /** The ticket's group name (HS2-PDSHNN); absent or null when ungrouped. */
+  group?: string | null;
   claimed_by?: string;
   claim_lease_expires_at?: string;
   /** The live claim holder's estimated completion time (HS2-DQQ0AX). */
@@ -1518,7 +1525,12 @@ export function isActorAwareRequest(method: string, path: string): boolean {
   if (method === 'PATCH') return /\/tickets\/[^/]+$/u.test(pathname);
   // A ticket create records its actor as the ticket's creator (HS2-9FPHWY).
   if (method === 'POST')
-    return pathname.endsWith('/tickets') || /\/tickets\/[^/]+\/close$/u.test(pathname) || pathname.endsWith('/batch');
+    return (
+      pathname.endsWith('/tickets') ||
+      /\/tickets\/[^/]+\/close$/u.test(pathname) ||
+      pathname.endsWith('/batch') ||
+      /\/groups\/(?:rename|ungroup)$/u.test(pathname)
+    );
   return false;
 }
 
@@ -2117,6 +2129,21 @@ export class Api {
     this.parsed(parseStoredTicket.list, `/checkouts/${encodeURIComponent(checkout)}/batch`, {
       method: 'POST',
       body: JSON.stringify({ updates: updates.map(({ id, patch }) => ({ id, ...prioritiesToWire(patch) })) }),
+    });
+  /** Every group in the project with its member count (HS2-PDSHNN). */
+  checkoutGroups = (checkout: string) =>
+    this.parsed(parseGroupList, `/checkouts/${encodeURIComponent(checkout)}/groups`);
+  /** Rename a group on every member in one atomic write (HS2-8CDFKR). */
+  renameCheckoutGroup = (checkout: string, from: string, to: string) =>
+    this.parsed(parseGroupRename, `/checkouts/${encodeURIComponent(checkout)}/groups/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ from, to }),
+    });
+  /** Clear a group from every member in one atomic write (HS2-8CDFKR). */
+  ungroupCheckoutGroup = (checkout: string, name: string) =>
+    this.parsed(parseGroupUngroup, `/checkouts/${encodeURIComponent(checkout)}/groups/ungroup`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
     });
   deleteCheckoutNote = (checkout: string, id: string, noteId: string) =>
     this.parsed(

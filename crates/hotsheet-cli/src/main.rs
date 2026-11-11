@@ -612,6 +612,19 @@ enum Cmd {
     },
     /// Mark a ticket read on this machine (per-user local state; never committed).
     Read { id: String },
+    /// List the ticket groups in use, with how many tickets each holds (HS2-PDSHNN). A
+    /// group exists while at least one ticket outside Trash names it.
+    Groups {
+        /// Print `{"groups":[{"name":…,"count":…}]}` instead of the table.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rename a ticket group or dissolve it (HS2-8CDFKR).
+    #[command(name = "group")]
+    TicketGroup {
+        #[command(subcommand)]
+        cmd: dispatch::groups::GroupCmd,
+    },
     /// Sync the store with its git remote now: fetch, integrate incoming changes through
     /// the semantic merge driver (rebase), and push local commits. Normally automatic — this
     /// is the explicit "sync now" (docs/02 §2.12).
@@ -1056,6 +1069,7 @@ fn writes_tickets(cmd: &Cmd) -> bool {
                 | Cmd::Show { .. }
                 | Cmd::Note { .. }
                 | Cmd::Read { .. }
+                | Cmd::Groups { .. }
                 | Cmd::People { .. }
                 | Cmd::ConfidenceReport { .. }
                 | Cmd::PhaseReport { .. }
@@ -1628,6 +1642,7 @@ mod server_wrapper_tests {
             "SRC",
             Timestamp::new("2026-08-26T02:00:00Z"),
             NewTicket {
+                group: None,
                 title: "copy from cli".into(),
                 category: "task".into(),
                 priority: Priority::Default,

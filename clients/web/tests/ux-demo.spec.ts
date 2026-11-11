@@ -4873,7 +4873,7 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
   await header.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
   const helpBody = help.locator('.ticket-search-field__help');
-  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Groups', 'Content', 'Workflow', 'Dates']);
   await expect(help.getByRole('button', { name: 'Add is:needs-review to the search' })).toBeVisible();
   await expect(help).toContainText('Combine filters');
   await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-demo-wide.png', fullPage: true });
@@ -10311,7 +10311,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   const helpButton = demo.getByRole('button', { name: 'Search Syntax Help' }).first();
   await helpButton.click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Groups', 'Content', 'Workflow', 'Dates']);
   await expect(helpButton).toHaveAttribute('aria-expanded', 'true');
   // Kerf's anchored surface floats below the field's end edge, outside the clipped group (HS2-8TE69P).
   const placement = await help.evaluate(

@@ -316,6 +316,24 @@ query(filter, sort, text?, paging) -> TicketRow[]
   Blocked/unblocked uses the normalized, non-empty `blocked_reason` as its single source
   of truth. `blocked_by` edges remain indexed dependency context, but never create a
   blocked state without visible explanatory text.
+  **Groups (HS2-PDSHNN, HS2-44W3TP):** `group=<name>` matches the tickets of one group and
+  `has_group=true|false` matches grouped or ungrouped tickets. The index stores the
+  display name in `group_name` and its comparison key in `group_key` (the
+  Unicode-lowercased name, computed in Rust because SQLite's `lower()` folds only ASCII),
+  with a partial index on `(store_id, group_key)`; the filter compares keys, so letter
+  case and whitespace runs in the requested name do not matter, and a name that
+  normalizes to nothing matches no ticket. `Index::group_members` feeds the group
+  directory (listing, spelling reuse, rename and ungroup candidates) without a store
+  walk. The columns arrived with index schema 23, so an older index file is rebuilt on
+  open like any other schema change (§3.2). CLI `ls --group/--has-group/--no-group`,
+  server `GET /tickets?group=&has_group=` (and the checkout and provider lists), and MCP
+  `hotsheet_query` share the contract; the file scan (`ops::query`) and the index agree.
+  A provider without the `groups` capability reports every ticket ungrouped, so both
+  filters are answered for it rather than rejected. In the saved-view and notification
+  query language (`hotsheet_ticketing::saved_views`), `group:name` and
+  `group:"name with spaces"` match by the same key with the quoting and `\"` escaping of
+  `tag:`, `has:group` matches any grouped ticket, and `NOT has:group` finds ungrouped
+  tickets. Every list row carries `group` when set.
 - **sort:** priority-then-recency (the worklist order), created, updated, title,
   confidence (least confident first, unscored last; `checkout_order::confidence_rank`
   in memory and `coalesce(latest_confidence,255)` in SQL, so keyset pages agree);

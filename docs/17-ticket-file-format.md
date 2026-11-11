@@ -36,6 +36,7 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `blocked_by`                                                                             | list<ULID>                                                                                                                                   | no (def `[]`)  | shared | Flat dependency gate; cycle-checked                                                                                                                                                                        |
 | `follow_ups`                                                                             | list<{project_id, connection_id, native_id}>                                                                                                 | no (def `[]`)  | shared | Explicit source-to-follow-up links; qualified across project sources (HS2-2Z11A5)                                                                                                                          |
 | `blocked_reason`                                                                         | string                                                                                                                                       | no             | shared | Free-text "waiting on"                                                                                                                                                                                     |
+| `group`                                                                                  | string                                                                                                                                       | no             | shared | The one ticket group this ticket belongs to (HS2-PDSHNN); absent = ungrouped. Normalized display name, at most 120 characters; see §17.4                                                                   |
 | `created_at`                                                                             | RFC3339                                                                                                                                      | yes            | shared |                                                                                                                                                                                                            |
 | `created_by`                                                                             | { role:`human\|ai\|system`, id:string? } \| null                                                                                             | no             | shared | Who created the ticket (HS2-9FPHWY), from the creating call's actor; write-once. Absent on older tickets and for unspecified callers, which mean unknown, never human or AI.                               |
 | `updated_at`                                                                             | RFC3339                                                                                                                                      | yes            | shared | Drives last-writer-wins merges (§2.7)                                                                                                                                                                      |
@@ -320,6 +321,17 @@ fields and continue using the v3 shape guard unless another feature raises the v
 - **Enums validated**; an invalid value degrades (kept as-is + a `status`-kind note)
   rather than panicking (fuzz target, [12](12-code-organization-and-testing.md) §12.7.2).
 - **`duplicate_of` presence** is tied to `close_reason == duplicate` (validation).
+- **`group` is normalized, never fatal (HS2-PDSHNN).** The stored value is the display
+  name: trimmed, with each internal whitespace run collapsed to one space. Names compare
+  by their Unicode-lowercased form (`hotsheet_model::group_key`), so `Board Drag` and
+  `board  drag` are one group. Writers reject a name holding a control character (line
+  breaks and tabs included) or longer than 120 characters, and treat an empty name as a
+  clear. The parser is tolerant: control characters read as spaces, an overlong name is
+  truncated to 120 characters, a numeric or boolean scalar reads as its text, and a list,
+  mapping, or `null` reads as ungrouped, so a hand-edited value never fails the ticket.
+  The key is omitted when the ticket is ungrouped. It is an ordinary optional field, so it
+  needs no schema guard: a reader that predates it keeps the key as an unknown
+  frontmatter key and writes it back unchanged.
 
 ## 17.5 Cross-references
 

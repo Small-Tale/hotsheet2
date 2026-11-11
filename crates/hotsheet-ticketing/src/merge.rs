@@ -87,6 +87,8 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         &theirs.blocked_reason,
         ours_wins,
     );
+    // HS2-PDSHNN: one group per ticket, so divergent choices resolve like any scalar.
+    m.group = pick3(&base.group, &ours.group, &theirs.group, ours_wins);
     m.completed_at = pick3(
         &base.completed_at,
         &ours.completed_at,
@@ -476,6 +478,38 @@ mod tests {
         let m = merge_tickets(&base, &ours, &theirs).ticket;
         assert_eq!(m.priority, Priority::Low, "the newer side wins");
         assert_eq!(m.updated_at.as_str(), "2026-08-19T02:00:00Z");
+    }
+
+    #[test]
+    fn hs2_pdshnn_divergent_groups_resolve_like_any_scalar() {
+        let base = base_ticket();
+        // Only one clone grouped the ticket: that choice survives.
+        let mut ours = base.clone();
+        ours.group = Some("Sprint".into());
+        let m = merge_tickets(&base, &ours, &base.clone()).ticket;
+        assert_eq!(m.group.as_deref(), Some("Sprint"));
+        let m = merge_tickets(&base, &base.clone(), &ours).ticket;
+        assert_eq!(m.group.as_deref(), Some("Sprint"));
+
+        // Two clones chose different groups: the newer side wins, never both.
+        let mut theirs = base.clone();
+        theirs.group = Some("Backlog cleanup".into());
+        theirs.updated_at = ts("2026-08-19T02:00:00Z");
+        ours.updated_at = ts("2026-08-19T01:00:00Z");
+        let m = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(m.group.as_deref(), Some("Backlog cleanup"));
+        let m = merge_tickets(&base, &theirs, &ours).ticket;
+        assert_eq!(m.group.as_deref(), Some("Backlog cleanup"));
+
+        // One clone ungrouped while the other left the group alone.
+        let grouped = ours.clone();
+        let mut cleared = grouped.clone();
+        cleared.group = None;
+        let m = merge_tickets(&grouped, &cleared, &grouped.clone()).ticket;
+        assert_eq!(m.group, None);
+        // Both chose the same group: no conflict.
+        let m = merge_tickets(&base, &ours, &ours.clone()).ticket;
+        assert_eq!(m.group.as_deref(), Some("Sprint"));
     }
 
     #[test]

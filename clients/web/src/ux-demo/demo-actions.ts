@@ -47,6 +47,7 @@ export const DEMO_ACTIONS = {
   openRepositoryReview: attr('data-action', 'open-repository-review'),
   openRepositoryStatus: attr('data-action', 'open-repository-status'),
   openSelectedTicketActions: attr('data-action', 'open-selected-ticket-actions'),
+  openTicketGroupDialogDemo: attr('data-action', 'open-ticket-group-dialog-demo'),
   openTerminalContextMenu: attr('data-action', 'open-terminal-context-menu'),
   previousGalleryImage: attr('data-action', 'previous-gallery-image'),
   projectTabContextAction: attr('data-action', 'project-tab-context-action'),

@@ -182,4 +182,22 @@ describe('wireTicketCollection (HS2-RWY78R)', () => {
     dblclick(event('dblclick', {}, true), row('C'));
     expect(state.openReader).toHaveBeenCalledOnce();
   });
+
+  it('routes an Add to Group choice to the menu’s targets and closes the menu (HS2-TX17CM)', () => {
+    const state = { ...bindings(['A', 'B']), onContextGroup: vi.fn() };
+    wireTicketCollection(root, state);
+    const choose = handler('click', '[data-context-group]'),
+      choice = (contextGroup?: string) => ({ dataset: { contextGroup } }) as unknown as Element;
+    // No open menu: nothing happens.
+    choose(event('click'), choice('Board'));
+    expect(state.onContextGroup).not.toHaveBeenCalled();
+    handler('contextmenu', rowSelector)(event('contextmenu', { clientX: 10, clientY: 20 }), row('A'));
+    choose(event('click'), choice('Board'));
+    expect(state.onContextGroup).toHaveBeenCalledWith('Board', ['A', 'B']);
+    expect(state.contextMenu()).toBeUndefined();
+    // New Group… reports the empty choice.
+    handler('contextmenu', rowSelector)(event('contextmenu', { clientX: 10, clientY: 20 }), row('A'));
+    choose(event('click'), choice(''));
+    expect(state.onContextGroup).toHaveBeenLastCalledWith('', ['A', 'B']);
+  });
 });

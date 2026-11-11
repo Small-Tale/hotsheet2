@@ -5,6 +5,8 @@ import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import { ticketGroupSegments } from '../ticket-groups';
+import { TicketGroup } from './ticket-group';
 import { TicketPageMore } from './ticket-page-more';
 import { TicketRow, type TicketRowProps } from './ticket-row';
 
@@ -16,6 +18,10 @@ export interface TicketBoardColumnProps {
   countPartial?: boolean;
   selectionRoot?: boolean;
   continuation?: { loading: boolean };
+  /** Keys of the groups collapsed in this view; a collapsed group collapses in every column. */
+  collapsedGroups?: readonly string[];
+  /** Key of the group in this column that a dragged ticket is over (HS2-PRXD39). */
+  dropGroup?: string;
 }
 
 export function TicketBoardColumn({
@@ -26,6 +32,8 @@ export function TicketBoardColumn({
   countPartial = false,
   selectionRoot = true,
   continuation,
+  collapsedGroups = [],
+  dropGroup,
 }: TicketBoardColumnProps) {
   const dropStatus = id === 'not-started' ? 'not_started' : id;
   return (
@@ -66,9 +74,26 @@ export function TicketBoardColumn({
         aria-label={`${title} tickets`}
         aria-multiselectable={selectionRoot ? 'true' : undefined}
       >
-        {tickets.map((ticket) => (
-          <TicketRow {...ticket} presentation="column" />
-        ))}
+        {/* Each column gathers only its own members of a group, where the group's first ticket in
+            this column sorts, so one group can appear in several columns (HS2-HV8S4Y). */}
+        {ticketGroupSegments(tickets).map((segment) =>
+          segment.kind === 'group' ? (
+            <TicketGroup
+              name={segment.name}
+              count={segment.items.length}
+              scope={id}
+              presentation="column"
+              collapsed={collapsedGroups.includes(segment.key)}
+              dropTarget={dropGroup === segment.key}
+            >
+              {segment.items.map((ticket) => (
+                <TicketRow {...ticket} presentation="column" />
+              ))}
+            </TicketGroup>
+          ) : (
+            segment.items.map((ticket) => <TicketRow {...ticket} presentation="column" />)
+          ),
+        )}
         {continuation ? (
           <TicketPageMore loading={continuation.loading} />
         ) : (

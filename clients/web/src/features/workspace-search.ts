@@ -14,6 +14,7 @@ import { restoreInlineSearchCaret } from '../inline-search-caret';
 import type { Project } from '../interactions/types';
 import { customViewSearch } from '../saved-views';
 import { createSearchProjection } from '../search-projection-coalescing';
+import { ticketGroupKey, ticketGroupName, ticketGroupSummaries } from '../ticket-groups';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import {
   ALL_TICKETS_SCOPE,
@@ -147,6 +148,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   // of the app, and every change schedules the debounced ticket search.
   const workspaceSearchModel = createTicketSearchModel({
     tags: () => availableSearchTags(),
+    groups: () => availableSearchGroups(),
     onClear: () => {
       searchHelpOpen.value = false;
     },
@@ -207,9 +209,18 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
       tags = effective.tokens
         .filter((token): token is Extract<InlineSearchToken, { kind: 'tag' }> => token.kind === 'tag')
         .map((token) => token.value.toLowerCase());
-    return boolean
-      ? matched
-      : matched.filter((ticket) => tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)));
+    if (boolean) return matched;
+    // HS2-44W3TP: group filters also apply locally, so a provider that ignores them cannot widen the result.
+    const group = [...effective.tokens].reverse().find((token) => token.kind === 'group')?.value,
+      grouped = effective.tokens.some((token) => token.kind === 'has' && token.value === 'group');
+    return matched.filter((ticket) => {
+      const name = ticketGroupName(ticket);
+      return (
+        tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)) &&
+        (group === undefined || (name !== undefined && ticketGroupKey(name) === ticketGroupKey(group))) &&
+        (!grouped || name !== undefined)
+      );
+    });
   }
   async function prepareStructuredMembership(
     client: Api,
@@ -477,6 +488,16 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     }
     return availableSearchTagsValue;
   }
+  /** Group names for `group:` completion, recomputed with the ticket collection (HS2-44W3TP). */
+  let availableSearchGroupsSource: WireTicketRow[] | undefined,
+    availableSearchGroupsValue: string[] = [];
+  function availableSearchGroups() {
+    if (availableSearchGroupsSource !== tickets.value) {
+      availableSearchGroupsSource = tickets.value;
+      availableSearchGroupsValue = ticketGroupSummaries(tickets.value).map((group) => group.name);
+    }
+    return availableSearchGroupsValue;
+  }
   function focusWorkspaceSearch(offset?: number) {
     restoreInlineSearchCaret(document, '[data-search-field-editor="workspace-search"]', offset);
   }
@@ -516,6 +537,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     sortedTicketQuery,
     refreshTicketSearch,
     availableSearchTags,
+    availableSearchGroups,
     focusWorkspaceSearch,
     scheduleTicketSearch,
     flushWorkspaceSearch,

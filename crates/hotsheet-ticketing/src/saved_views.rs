@@ -272,6 +272,9 @@ enum DateField {
 #[derive(Debug, Clone, PartialEq)]
 enum Term {
     Tag(String),
+    /// `group:name`, holding the normalized comparison key (HS2-44W3TP).
+    Group(String),
+    HasGroup,
     Is(String),
     HasAttachment,
     HasMediaAnnotation,
@@ -294,8 +297,17 @@ fn classify(raw: &str, now: OffsetDateTime) -> Term {
             "attachment" => return Term::HasAttachment,
             "media-annotation" => return Term::HasMediaAnnotation,
             "commit" => return Term::HasCommit,
+            "group" => return Term::HasGroup,
             _ => {}
         }
+    }
+    // HS2-44W3TP: the same quoting as `tag:`, compared by the normalized group key. A
+    // value that names no group (only spaces) stays plain text, like an empty `tag:`.
+    if let Some(key) = strip_prefix_ci(raw, "group:")
+        .map(unquote)
+        .and_then(|name| hotsheet_model::group_key_of_input(&name))
+    {
+        return Term::Group(key);
     }
     if let Some(name) = strip_prefix_ci(raw, "tag:")
         .map(unquote)
@@ -531,6 +543,8 @@ fn term_matches(raw: &str, at: &At<'_>) -> bool {
     let (t, now) = (at.ticket, at.now);
     match classify(raw, now) {
         Term::Tag(name) => t.tags.iter().any(|tag| tag.eq_ignore_ascii_case(&name)),
+        Term::Group(key) => t.group.as_deref().map(hotsheet_model::group_key) == Some(key),
+        Term::HasGroup => t.group.is_some(),
         Term::Is(state) => is_state(&state, t, now),
         Term::HasAttachment => !t.attachments.is_empty(),
         Term::HasMediaAnnotation => t.attachments.iter().any(|a| !a.annotations.is_empty()),
@@ -721,6 +735,58 @@ mod tests {
         );
         assert!(matches("tag:\"web ui\" and login", &t));
         assert!(matches("\"login page\" or nothing", &t));
+    }
+
+    #[test]
+    fn hs2_44w3tp_group_terms_match_by_normalized_name() {
+        let mut t = ticket();
+        t.group = Some("Board Drag & Drop".into());
+        assert!(matches("group:\"board drag & drop\"", &t));
+        assert!(matches("GROUP:\"  BOARD   drag &  DROP \"", &t));
+        assert!(matches("has:group", &t));
+        assert!(matches("HAS:GROUP login", &t));
+        assert!(
+            !matches("group:board", &t),
+            "a group name is not a prefix match"
+        );
+        assert!(!matches("group:\"no such group\"", &t));
+        assert!(!matches("NOT has:group", &t));
+
+        t.group = Some("Sprint".into());
+        assert!(matches("group:sprint", &t));
+        assert!(matches("group:SPRINT login", &t));
+        assert!(!matches("group:sprint nothing-here", &t));
+
+        t.group = Some("Say \"hi\" now".into());
+        assert!(matches(r#"group:"say \"HI\" now""#, &t), "escaped quotes");
+        assert!(!matches(r#"group:"say hi now""#, &t));
+
+        t.group = Some("Überarbeitung".into());
+        assert!(matches("group:überarbeitung", &t));
+        assert!(matches("group:ÜBERARBEITUNG", &t), "Unicode case folding");
+    }
+
+    #[test]
+    fn hs2_44w3tp_group_terms_combine_with_boolean_operators() {
+        let mut grouped = ticket();
+        grouped.group = Some("Sprint 12".into());
+        let ungrouped = ticket();
+
+        assert!(matches("NOT has:group", &ungrouped));
+        assert!(!matches("has:group", &ungrouped));
+        assert!(!matches("group:\"sprint 12\"", &ungrouped));
+        assert!(matches("NOT group:\"sprint 12\"", &ungrouped));
+
+        assert!(matches("group:\"sprint 12\" AND tag:docs", &grouped));
+        assert!(!matches("group:\"sprint 12\" AND tag:nope", &grouped));
+        assert!(matches("group:other OR group:\"sprint 12\"", &grouped));
+        assert!(matches("has:group AND NOT group:other", &grouped));
+        assert!(!matches("NOT (has:group OR tag:nope)", &grouped));
+        assert!(matches("(NOT has:group OR tag:docs) AND login", &grouped));
+        assert!(matches("NOT has:group OR tag:docs", &ungrouped));
+        assert!(!matches("has:group AND is:completed", &grouped));
+        // An empty group value is plain text, exactly like an empty tag value.
+        assert!(!matches("group:\"\" OR has:group", &ungrouped));
     }
 
     #[test]

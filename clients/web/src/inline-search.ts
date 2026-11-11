@@ -1,6 +1,6 @@
 export type SearchDateField = 'created' | 'completed' | 'started' | 'verified' | 'archived' | 'updated';
 export type SearchDateDirection = 'before' | 'after';
-export type SearchPresence = 'attachment' | 'media-annotation' | 'commit';
+export type SearchPresence = 'attachment' | 'media-annotation' | 'commit' | 'group';
 /**
  * Every supported `is:` search value, the one source the chip tokenizer, the Boolean evaluator,
  * advanced-expression detection, and the syntax help derive from (HS2-2GCMY1). The server's
@@ -31,6 +31,8 @@ export const SEARCH_LIFECYCLE_PATTERN = SEARCH_LIFECYCLES.join('|');
 
 type InlineSearchTokenValue =
   | { kind: 'tag'; value: string; raw: string; label: string }
+  /** `group:name` (HS2-44W3TP): the ticket's group, compared like the server's group key. */
+  | { kind: 'group'; value: string; raw: string; label: string }
   | { kind: 'has'; value: SearchPresence; raw: string; label: string }
   | { kind: 'attachment'; value: string; raw: string; label: string }
   | { kind: 'is'; value: SearchLifecycle; raw: string; label: string }
@@ -55,7 +57,7 @@ export function toTokenSearchToken(token: InlineSearchToken): TokenSearchTokenLi
     value: token.raw,
     label: token.label,
     offset: token.offset,
-    accessibleLabel: token.label.replace(/^tag:/, 'tag '),
+    accessibleLabel: token.label.replace(/^(tag|group):/, '$1 '),
   };
 }
 
@@ -228,7 +230,7 @@ export function tokenFromRaw(raw: string): InlineSearchToken | undefined {
     const value = lifecycle[1].toLowerCase() as SearchLifecycle;
     return { kind: 'is', value, raw: `is:${value}`, label: `is:${value}` };
   }
-  const presence = source.match(/^has:(attachment|media-annotation|commit)$/i);
+  const presence = source.match(/^has:(attachment|media-annotation|commit|group)$/i);
   if (presence) {
     const value = presence[1].toLowerCase() as SearchPresence;
     return { kind: 'has', value, raw: `has:${value}`, label: `has ${value.replace('-', ' ')}` };
@@ -237,6 +239,11 @@ export function tokenFromRaw(raw: string): InlineSearchToken | undefined {
   if (tag) {
     const value = unquote(tag[1]);
     return value ? { kind: 'tag', value, raw: `tag:${quoteIfNeeded(value)}`, label: `tag:${value}` } : undefined;
+  }
+  const group = source.match(/^group:("(?:\\.|[^"])*"|[^"\s]\S*)$/i);
+  if (group) {
+    const value = unquote(group[1]).trim().replace(/\s+/gu, ' ');
+    return value ? { kind: 'group', value, raw: `group:${quoteIfNeeded(value)}`, label: `group:${value}` } : undefined;
   }
   const attachment = source.match(/^attachment:("(?:\\.|[^"])*"|[^"\s]\S*)$/i);
   if (attachment) {
@@ -271,7 +278,7 @@ export function consumeSearchToken(input: string, force = false): { text: string
   const trimmed = input.trimEnd();
   const starts = [
     ...trimmed.matchAll(
-      /(?:^|\s)(is:|tag:|has:|attachment:|(?:created|completed|started|verified|archived|updated)-(?:before|after):)/gi,
+      /(?:^|\s)(is:|tag:|group:|has:|attachment:|(?:created|completed|started|verified|archived|updated)-(?:before|after):)/gi,
     ),
   ];
   const start = starts.at(-1)?.index;
@@ -288,7 +295,7 @@ export function consumeSearchTokens(
   force = false,
 ): { text: string; tokens: InlineSearchToken[]; removed: ReadonlyArray<{ start: number; end: number }> } {
   const pattern =
-      /(?:^|[\s(])((?:is|tag|has|attachment):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*)|(?:created|completed|started|verified|archived|updated)-(?:before|after):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*(?:\s+ago)?))(?=$|[\s)])/gi,
+      /(?:^|[\s(])((?:is|tag|group|has|attachment):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*)|(?:created|completed|started|verified|archived|updated)-(?:before|after):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*(?:\s+ago)?))(?=$|[\s)])/gi,
     result: InlineSearchToken[] = [],
     removed: Array<{ start: number; end: number }> = [];
   let text = '',
@@ -383,6 +390,11 @@ export function tokenQuery(tokens: readonly InlineSearchToken[]) {
   if (tokens.some((token) => token.kind === 'has' && token.value === 'media-annotation'))
     query.has_media_annotation = true;
   if (tokens.some((token) => token.kind === 'has' && token.value === 'commit')) query.has_commit = true;
+  if (tokens.some((token) => token.kind === 'has' && token.value === 'group')) query.has_group = true;
+  const group = [...tokens]
+    .reverse()
+    .find((token): token is Extract<InlineSearchToken, { kind: 'group' }> => token.kind === 'group');
+  if (group) query.group = group.value;
   const attachment = [...tokens]
     .reverse()
     .find((token): token is Extract<InlineSearchToken, { kind: 'attachment' }> => token.kind === 'attachment');

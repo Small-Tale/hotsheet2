@@ -993,6 +993,7 @@ mod tests {
                     generated_id: hotsheet_model::Ulid::new(),
                 },
                 ProviderDraft {
+                    group: None,
                     title: format!(
                         "Hot Sheet attachment live test {}",
                         hotsheet_model::Ulid::new()

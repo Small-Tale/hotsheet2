@@ -478,6 +478,7 @@ mod tests {
                     generated_id: Ulid::new(),
                 },
                 ProviderDraft {
+                    group: None,
                     title: title.into(),
                     details: "original details".into(),
                     category: "task".into(),

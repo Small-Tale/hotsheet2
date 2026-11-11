@@ -109,6 +109,42 @@ offline mutation, history, watch/webhooks, and provider-side idempotency. A
 conformance suite verifies both implemented behavior and honest rejection of absent
 capabilities.
 
+### Ticket groups (HS2-PDSHNN)
+
+`groups` (default `false` when a stored descriptor predates it) means tickets carry the
+optional `group` field and the connection lists, renames, and clears groups
+([02](02-ticket-storage.md) §2.7.1). The Markdown/Git provider reports `groups: true`.
+GitHub, GitLab, and Jira report `groups: false` for now: a create or update that carries
+`group` (a name or an explicit clear) and the provider's group routes fail with
+`provider connection '<id>' does not support 'groups'` before any request reaches the
+tracker, their tickets read as ungrouped (`group: null`), and the `group` / `has_group`
+list filters are answered for them as for any ungrouped ticket. A queued write-behind
+edit cannot carry `group`. A cross-provider copy drops the group when the destination
+lacks the capability.
+
+#### Native mapping investigation (HS2-TEN9X5)
+
+No external provider enables `groups` yet. Each candidate mapping reuses a native
+concept that teams already give their own meaning, so none is safe to turn on by
+default; the tracker stays authoritative and nothing is mirrored into Git.
+
+| Provider | Candidate                              | Fit                                                       | Risk                                                                                                               |
+| -------- | -------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| GitHub   | Milestone                              | One per issue, unique title per repository, native filter | Milestones usually mean a release or due date; grouping would overwrite that                                       |
+| GitHub   | Reserved label prefix (`group:<name>`) | Works on every plan, visible in the tracker               | An issue can carry several such labels, names are limited to 50 characters, and each group adds a repository label |
+| GitHub   | Projects single-select field           | Exactly one value per item                                | Needs a project, extra token scopes, and GraphQL; issues outside the project cannot be grouped                     |
+| GitLab   | Scoped label (`group::<name>`)         | Mutually exclusive by design on tiers with scoped labels  | Exclusivity is not enforced on the free tier; adds project labels                                                  |
+| GitLab   | Milestone or epic                      | One per issue                                             | Same planning-meaning conflict as GitHub; epics need a paid tier                                                   |
+| Jira     | Parent epic                            | One per issue, native board grouping                      | Epics are work items with their own workflow, and creating one per group changes the project's backlog             |
+| Jira     | Label or component                     | Simple                                                    | Labels cannot contain spaces; an issue can carry several                                                           |
+
+The recommended direction is an explicit per-connection setting that names the
+mapping (off by default), with the reserved label for GitHub and the scoped label
+for GitLab as the first candidates, because they add information without replacing
+an existing field. A ticket that carries several mapped labels would read as the
+first in name order and report a warning. Enabling any mapping needs a maintainer
+decision on that setting and provider live tests against the safe test repositories.
+
 ### Advisory process claims (HS2-BPKM76)
 
 `claims` continues to mean an exclusive provider lease; GitHub, GitLab, and Jira

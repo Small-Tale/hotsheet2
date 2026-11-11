@@ -125,6 +125,7 @@ fn create_issue(provider: &GitHubProvider, title: &str) -> String {
         .create(
             ctx(),
             ProviderDraft {
+                group: None,
                 title: format!("Hot Sheet live attachment test: {title} {}", Ulid::new()),
                 category: "test".into(),
                 priority: Priority::Default,

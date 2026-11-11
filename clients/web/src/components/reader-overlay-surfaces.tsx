@@ -13,6 +13,7 @@ import { PermissionRequestPopup } from './permission-request-card';
 import { AppTabContextMenu } from './project-tab-context-menu';
 import { ChangeEvidenceDialog, RepositoryStatusPopover } from './repository-status-popover';
 import { TicketCloseDialog } from './ticket-close-dialog';
+import { TicketGroupContextMenu, type TicketGroupContextMenuProps } from './ticket-group-context-menu';
 import { TicketReader, type TicketReaderProps } from './ticket-reader';
 import { TicketRowContextMenu } from './ticket-row-context-menu';
 
@@ -105,12 +106,14 @@ export function ChangeEvidenceSurface({ evidence }: { evidence?: ChangeEvidenceD
 
 export interface TicketContextMenuSurfaceProps {
   menu?: TicketRowContextMenuProps;
+  /** The group header menu, shown in place of the ticket menu (HS2-8CDFKR). */
+  groupMenu?: TicketGroupContextMenuProps;
   closeDialog: TicketCloseDialogProps['state'];
 }
-export function TicketContextMenuSurface({ menu, closeDialog }: TicketContextMenuSurfaceProps) {
+export function TicketContextMenuSurface({ menu, groupMenu, closeDialog }: TicketContextMenuSurfaceProps) {
   return (
     <>
-      {menu && <TicketRowContextMenu {...menu} />}
+      {groupMenu ? <TicketGroupContextMenu {...groupMenu} /> : menu && <TicketRowContextMenu {...menu} />}
       <TicketCloseDialog state={closeDialog} />
     </>
   );

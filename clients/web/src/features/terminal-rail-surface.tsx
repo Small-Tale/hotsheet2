@@ -38,9 +38,12 @@ import {
 import type { WorkspaceSortPreference } from '../workspace-preferences';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import type { createInspectorSurface } from './inspector-surface';
+import type { TicketGroupsController } from './ticket-groups';
 
 /** Live application bindings createTerminalRailSurface reads (HS2-K0VC2C). */
 export interface TerminalRailSurfaceDependencies {
+  /** Group collapse and drop-target state for the rail's collections (HS2-WZ3JGZ). */
+  ticketGroups: Pick<TicketGroupsController, 'collectionProps'>;
   activeWorkspaceSort: () => WorkspaceSortPreference;
   allTicketsSearchAvailable: () => boolean;
   capabilitiesFor: (connectionId: string) => Capabilities;
@@ -103,6 +106,7 @@ export function railDetailSource(
  */
 export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDependencies) {
   const {
+    ticketGroups,
     activeWorkspaceSort,
     allTicketsSearchAvailable,
     capabilitiesFor,
@@ -178,13 +182,16 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
                 ...group,
                 totalCount: group.tickets.length,
                 tickets: group.tickets.map(row),
+                ...ticketGroups.collectionProps(group.id),
               }))}
               label="Project board"
               layout="paged"
             />
           );
         case 'list':
-          return <TicketList tickets={shown.map(row)} label="Project Tickets" />;
+          return (
+            <TicketList tickets={shown.map(row)} label="Project Tickets" {...ticketGroups.collectionProps('list')} />
+          );
         default:
           return mode satisfies never;
       }

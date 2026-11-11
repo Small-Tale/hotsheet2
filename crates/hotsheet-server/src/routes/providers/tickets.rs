@@ -129,7 +129,14 @@ pub(crate) fn do_provider_create(
     let created_by =
         hotsheet_ticketing::actor::note_actor(parse_actor(req.actor.as_ref())?.as_ref());
     let provider = provider_for(state, connection_id)?;
+    // HS2-PDSHNN: an invalid name is the caller's error (400) whatever the provider.
+    let group = match req.group.as_deref() {
+        Some(name) => hotsheet_model::normalize_group_name(name)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+        None => None,
+    };
     let new = ops::normalize_new_ticket_input(NewTicket {
+        group: None,
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".into()),
         priority,
@@ -146,6 +153,7 @@ pub(crate) fn do_provider_create(
                 generated_id: Ulid::new(),
             },
             ProviderDraft {
+                group,
                 title: new.title,
                 category: new.category,
                 priority: new.priority,
@@ -387,6 +395,13 @@ pub(crate) fn do_provider_update(
             scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
         )?;
     }
+    let group = match req.group.clone() {
+        Some(Some(name)) => Some(
+            hotsheet_model::normalize_group_name(&name)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+        ),
+        other => other,
+    };
     let timestamp = now();
     let note = req.note.clone();
     let note_id = req.note_id.clone();
@@ -398,6 +413,7 @@ pub(crate) fn do_provider_update(
             id,
             timestamp.clone(),
             ProviderPatch {
+                group,
                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                 expected_token: req.expected_token,
                 title: req.title,

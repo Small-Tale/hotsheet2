@@ -182,3 +182,44 @@ describe('advanced search semantics', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('group search terms (HS2-44W3TP)', () => {
+  const rows = [
+    row('HS2-A', 'not_started', { group: 'Board drag & drop' }),
+    row('HS2-B', 'started', { group: 'Search syntax', tags: ['client'] }),
+    row('HS2-C', 'started'),
+    row('HS2-D', 'started', { group: null }),
+  ];
+  const matching = (query: string) =>
+    rows.filter((item) => matchesSearchExpression(item, query)).map((item) => item.slug);
+
+  it('matches group: case-insensitively, quoted or bare, by normalized name', () => {
+    expect(matching('group:"board  DRAG & drop"')).toEqual(['HS2-A']);
+    expect(matching('group:"Search syntax" AND tag:client')).toEqual(['HS2-B']);
+    expect(matching('group:search')).toEqual([]);
+    expect(matching('group:unknown OR group:"search syntax"')).toEqual(['HS2-B']);
+  });
+
+  it('reads an escaped quote inside a quoted group name', () => {
+    const quoted = row('HS2-Q', 'started', { group: 'The "big" one' });
+    expect(matchesSearchExpression(quoted, 'group:"The \\"big\\" one" AND is:started')).toBe(true);
+    expect(matchesSearchExpression(quoted, 'group:"The big one" AND is:started')).toBe(false);
+  });
+
+  it('finds grouped and ungrouped tickets with has:group and NOT', () => {
+    expect(matching('has:group AND is:open')).toEqual(['HS2-A', 'HS2-B']);
+    expect(matching('NOT has:group')).toEqual(['HS2-C', 'HS2-D']);
+    expect(matching('NOT group:"search syntax" AND is:started')).toEqual(['HS2-C', 'HS2-D']);
+    expect(matching('(group:"Search syntax" OR NOT has:group) AND is:started')).toEqual(['HS2-B', 'HS2-C', 'HS2-D']);
+  });
+
+  it('evaluates group terms on the row, never through the provider resolver', () => {
+    expect(structuredSearchTerms('NOT has:group AND has:commit AND group:x').map((term) => term.raw)).toEqual([
+      'has:commit',
+    ]);
+    const resolve = () => {
+      throw new Error('group terms need no lookup');
+    };
+    expect(matchesSearchExpression(rows[0], 'has:group AND group:"board drag & drop"', Date.now(), resolve)).toBe(true);
+  });
+});

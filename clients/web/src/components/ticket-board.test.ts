@@ -220,4 +220,50 @@ describe('TicketBoard', () => {
     expect(markup.match(/data-confidence-badge=/gu)).toHaveLength(1);
     expect(markup).toMatch(/data-ticket-slug="HS2-DONE"[\s\S]*data-band="unverified"/u);
   });
+
+  it('gathers each column’s own members of a group with a per-column count (HS2-HV8S4Y)', () => {
+    const card = (slug: string, group?: string): TicketRowProps => ({ ...ticket, slug, group });
+    const markup = String(
+      TicketBoard({
+        columns: [
+          { id: 'not-started', title: 'Not Started', tickets: [card('HS2-A'), card('HS2-G1', 'Board'), card('HS2-B')] },
+          {
+            id: 'started',
+            title: 'Started',
+            tickets: [card('HS2-G2', 'Board'), card('HS2-C'), card('HS2-G3', 'board')],
+            dropGroup: 'board',
+          },
+          { id: 'completed', title: 'Completed', tickets: [card('HS2-D')] },
+        ],
+      }),
+    );
+    expect(markup.match(/data-component="ticket-group"/g)).toHaveLength(2);
+    expect(markup).toMatch(/data-ticket-group-scope="not-started"/);
+    expect(markup).toMatch(/data-ticket-group-scope="started"/);
+    expect(markup).toContain('aria-label="Board, 1 ticket"');
+    expect(markup).toContain('aria-label="Board, 2 tickets"');
+    expect([...markup.matchAll(/data-ticket-slug="([^"]+)"/g)].map((match) => match[1])).toEqual([
+      'HS2-A',
+      'HS2-G1',
+      'HS2-B',
+      'HS2-G2',
+      'HS2-G3',
+      'HS2-C',
+      'HS2-D',
+    ]);
+    // Only the hovered column's copy of the group is the drop target.
+    expect(markup.match(/data-drop-target="true"/g)).toHaveLength(1);
+    expect(markup).toMatch(/data-ticket-group-scope="started"[^>]*data-drop-target="true"/);
+  });
+
+  it('collapses a group in every column that shows it', () => {
+    const card = (slug: string, group?: string): TicketRowProps => ({ ...ticket, slug, group });
+    const column = (id: string, slug: string) =>
+      String(TicketBoardColumn({ id, title: id, tickets: [card(slug, 'Board')], collapsedGroups: ['board'] }));
+    for (const markup of [column('not-started', 'HS2-G1'), column('started', 'HS2-G2')]) {
+      expect(markup).toContain('data-collapsed="true"');
+      expect(markup).not.toContain('data-ticket-slug=');
+      expect(markup).toContain('aria-expanded="false"');
+    }
+  });
 });

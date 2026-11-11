@@ -60,6 +60,10 @@ pub struct ApiTicket {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow_up_link_error: Option<String>,
     pub blocked_reason: Option<String>,
+    /// The ticket's group display name (HS2-PDSHNN); null when ungrouped or when the
+    /// provider has no `groups` capability.
+    #[serde(default)]
+    pub group: Option<String>,
     pub created_at: String,
     /// Who created the ticket (HS2-9FPHWY): `{"role":"human|ai|system","id":...}`. Omitted
     /// when unknown (older tickets, unspecified callers, and external providers).
@@ -279,6 +283,7 @@ impl ApiTicket {
             follow_ups: t.follow_ups.clone(),
             follow_up_link_error: None,
             blocked_reason: t.blocked_reason.clone(),
+            group: t.group.clone(),
             created_at: t.created_at.as_str().to_string(),
             created_by: t.created_by.clone(),
             updated_at: t.updated_at.as_str().to_string(),
@@ -407,6 +412,9 @@ pub struct TicketRow {
     pub blocked_by: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
+    /// The ticket's group display name (HS2-PDSHNN); omitted when ungrouped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     pub created_at: Option<String>,
     /// Who created the ticket (HS2-9FPHWY); omitted when unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -468,6 +476,7 @@ impl From<&Ticket> for TicketRow {
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             blocked_reason: t.blocked_reason.clone(),
+            group: t.group.clone(),
             created_at: Some(t.created_at.as_str().to_string()),
             created_by: t.created_by.clone(),
             updated_at: Some(t.updated_at.as_str().to_string()),
@@ -515,6 +524,7 @@ impl From<&ApiTicket> for TicketRow {
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.clone(),
             blocked_reason: t.blocked_reason.clone(),
+            group: t.group.clone(),
             created_at: Some(t.created_at.clone()),
             created_by: t.created_by.clone(),
             updated_at: Some(t.updated_at.clone()),
@@ -626,6 +636,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "feedback_needed",
     "follow_up_link_error",
     "follow_ups",
+    "group",
     "id",
     "latest_confidence",
     "legacy_number",

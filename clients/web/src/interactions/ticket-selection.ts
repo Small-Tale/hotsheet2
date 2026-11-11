@@ -7,11 +7,14 @@ import { wireBulkTicketDialog } from '../components/bulk-ticket-dialog-interacti
 import { PENDING_ATTACHMENT_PICKER } from '../components/pending-attachment-picker';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { wireTicketCollection } from '../components/ticket-collection-interactions';
+import { wireTicketGroups } from '../components/ticket-group-interactions';
+import { NEW_TICKET_GROUP_CHOICE, REMOVE_FROM_GROUP_CONTEXT_ACTION } from '../components/ticket-row-context-menu';
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput } from '../debounced-autosave';
 import { draftFiles } from '../draft-file-recovery';
+import type { TicketGroupsController } from '../features/ticket-groups';
 import { routeFilePicker } from '../file-picker-routes';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
@@ -43,7 +46,9 @@ export interface TicketSelectionInteractionsDependencies {
   ticketSelectionAnchor: string | undefined;
   readonly setInspectorVisible: (visible: boolean) => void;
   readonly openTicketReader: (slug: string, ordered?: string[], trigger?: HTMLElement) => Promise<void>;
-  readonly ticketContextMenu: Signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>;
+  readonly ticketContextMenu: Signal<
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+  >;
   readonly selectedRows: () => WireTicketRow[];
   readonly executeBulkTicketAction: (action: BulkTicketAction, targetSlugs?: string[]) => Promise<boolean>;
   readonly tickets: Signal<WireTicketRow[]>;
@@ -78,6 +83,8 @@ export interface TicketSelectionInteractionsDependencies {
   readonly closeNotWorking: (clearStored?: boolean) => void;
   readonly notWorkingSubmitting: Signal<boolean>;
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
+  /** Ticket group membership, collapse, rename, and ungroup (HS2-3XNTSD). */
+  readonly ticketGroups: TicketGroupsController;
   readonly appleShortcutPlatform: boolean;
 }
 
@@ -131,6 +138,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     notWorkingSubmitting,
     keyboardShortcutOverrides,
     appleShortcutPlatform,
+    ticketGroups,
   } = dependencies;
   const closeTargetSearchInput = createCoalescedInput<string>((query) => {
       searchTicketCloseTargets(query);
@@ -185,7 +193,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
             ? [...board.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
                 (ticket) => data(ticket).ticketSlug!,
               )
-            : visibleTickets().map((ticket) => ticket.slug),
+            : ticketGroups.navigable(visibleTickets()).map((ticket) => ticket.slug),
           next = selectAllTickets(selectable);
         dependencies.ticketSelectionAnchor = next.anchor;
         selectedTicketSlugs.value = [...next.selected];
@@ -208,8 +216,16 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       onContextField: (field, value, slugs) => {
         void executeBulkTicketAction({ kind: 'field', field, value }, slugs);
       },
+      onContextGroup: (group, slugs) => {
+        if (group === NEW_TICKET_GROUP_CHOICE) ticketGroups.openNewGroup(slugs);
+        else void ticketGroups.setGroup(slugs, group);
+      },
       onContextAction: (action, slugs, menuSlug) => {
         const selected = tickets.value.filter((item) => slugs.includes(item.slug));
+        if (action === REMOVE_FROM_GROUP_CONTEXT_ACTION.action) {
+          void ticketGroups.setGroup(slugs, null);
+          return;
+        }
         if (action === 'Report not working' || action === 'Reopen ticket' || action === 'Close ticket') {
           // These act on the ticket the menu was opened on, not the whole selection.
           const ticket = menuTicket(menuSlug);
@@ -326,6 +342,33 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           },
         );
       ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };
+    }),
+  );
+  lifetime.add(
+    wireTicketGroups(document.body, {
+      toggle: (group) => {
+        ticketGroups.toggleGroup(group);
+      },
+      openMenu: (group, x, y) => {
+        ticketContextMenu.value = { x, y, ticketSlug: '', group };
+      },
+      rename: (group) => {
+        ticketContextMenu.value = undefined;
+        ticketGroups.openRenameGroup(group);
+      },
+      ungroup: (group) => {
+        ticketContextMenu.value = undefined;
+        void ticketGroups.ungroup(group);
+      },
+      editName: (name) => {
+        ticketGroups.editDialogName(name);
+      },
+      submitName: (name) => {
+        void ticketGroups.submitDialog(name);
+      },
+      dismissDialog: () => {
+        ticketGroups.closeDialog();
+      },
     }),
   );
   lifetime.add(

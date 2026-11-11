@@ -24,6 +24,7 @@ pub mod distclaim;
 pub mod distwork;
 pub mod git;
 pub mod github_endpoint;
+pub mod groups;
 pub mod host_health;
 pub mod identity;
 pub mod image_crop;
@@ -79,7 +80,8 @@ pub use provider::{
     ProviderTicketSummary, TicketProvider, TicketRef, TransferError, TransferOutcome,
     TransferProvenance, compare_provider_tickets, copy_between, filter_provider_ticket_page,
     generate_connection_id, git_connection_id, keyset_page_from_native_pages,
-    keyset_page_from_rows, move_between, provider_text_matches, unbounded_query,
+    keyset_page_from_rows, move_between, provider_group_matches, provider_text_matches,
+    unbounded_query,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};

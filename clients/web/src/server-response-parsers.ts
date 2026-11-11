@@ -519,6 +519,37 @@ export const parseTrashPurge: ResponseParser<{ purged: number; tickets: string[]
   return body as { purged: number; tickets: string[] };
 };
 
+/** `GET /checkouts/{id}/groups` (HS2-PDSHNN). */
+export const parseGroupList: ResponseParser<{ groups: Array<{ name: string; count: number }> }> = (value) => {
+  const body = record(value, 'group list');
+  if (
+    !Array.isArray(body.groups) ||
+    !body.groups.every(
+      (group: unknown) =>
+        typeof group === 'object' &&
+        group !== null &&
+        typeof (group as { name?: unknown }).name === 'string' &&
+        typeof (group as { count?: unknown }).count === 'number',
+    )
+  )
+    invalid('group list');
+  return body as { groups: Array<{ name: string; count: number }> };
+};
+
+/** `POST /checkouts/{id}/groups/rename` (HS2-8CDFKR). */
+export const parseGroupRename: ResponseParser<{ name: string; updated: number }> = (value) => {
+  const body = record(value, 'group rename');
+  if (typeof body.name !== 'string' || typeof body.updated !== 'number') invalid('group rename');
+  return body as { name: string; updated: number };
+};
+
+/** `POST /checkouts/{id}/groups/ungroup` (HS2-8CDFKR). */
+export const parseGroupUngroup: ResponseParser<{ updated: number }> = (value) => {
+  const body = record(value, 'group ungroup');
+  if (typeof body.updated !== 'number') invalid('group ungroup');
+  return body as { updated: number };
+};
+
 /* ---- Declarative DTO shapes (HS2-E0AG5E) -------------------------------------------------
  * Each shape names the fields callers rely on. Required fields must have the stated type;
  * optional fields may be absent or `null` (the Rust DTOs serialize `Option::None` as `null`

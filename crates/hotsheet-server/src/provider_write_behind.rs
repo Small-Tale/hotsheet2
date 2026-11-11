@@ -456,6 +456,7 @@ fn validate_edit(edit: &QueuedProviderEdit) -> Result<(), ApiError> {
         || patch.up_next.is_some()
         || patch.blocked_by.is_some()
         || patch.blocked_reason.is_some()
+        || patch.group.is_some()
     {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,

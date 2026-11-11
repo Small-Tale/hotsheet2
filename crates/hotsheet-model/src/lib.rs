@@ -11,6 +11,7 @@
 pub mod enums;
 pub mod feedback_choices;
 pub mod format;
+pub mod group;
 pub mod ids;
 pub mod note_doctor;
 pub mod ticket;
@@ -19,6 +20,10 @@ pub mod timestamp;
 
 pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
 pub use format::{ParseError, parse_file, to_file_string};
+pub use group::{
+    GROUP_NAME_MAX_CHARS, GroupNameError, group_key, group_key_of_input, normalize_group_name,
+    normalize_group_name_lossy,
+};
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{
     AiFeedback, AiFeedbackRating, AnnotationArrowHead, AnnotationPoint, AnnotationShape,

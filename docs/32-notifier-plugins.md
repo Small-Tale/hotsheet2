@@ -135,6 +135,8 @@ The delivery record notes `truncated` and `omitted_attachments`.
   - `AND`, `OR`, `NOT`, and parentheses, with implicit `AND`. Without any of them the
     plain words form one phrase, as in the search bar; with an operator, each word is a
     term.
+  - `group:` (one group by name, without regard to case or spacing; quote a name with
+    spaces) and `has:group` (HS2-44W3TP).
   - `tag:`, `is:` (`up-next`, `active`, `needs-review`, `open`, `closed`, `duplicate`,
     and the statuses), `has:attachment`, `has:media-annotation`, `attachment:` with `*`
     globs, and `created|updated|completed|verified|started|archived-before|after:` dates.

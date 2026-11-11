@@ -52,6 +52,14 @@ does not fork Kerf's guidance.
   Discard Changes cover it; withdrawing an AI rating confirms because it drops the
   explanation, and declining edits the feedback instead.
 
+- Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) carry two interim
+  decisions that wait on Kerf. A group's Rename and Ungroup actions open from a
+  context menu on the group header, because `ListHeader` cannot pair its toggle
+  with a trailing action (`KF-X2MRCT`); replace it with a visible overflow button
+  when that ships. The group title follows `SummaryRow`'s compaction width in an
+  app container query to stay aligned with the ticket type icons (`KF-J8GMA2`);
+  remove the query when Kerf offers a public alignment (HS2-8CDFKR, HS2-WZ3JGZ).
+
 ## Hot Sheet ticket lessons
 
 Kerf's house grammar carries the general rules. These ticket clusters explain

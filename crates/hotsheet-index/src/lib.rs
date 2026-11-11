@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 /// content hash are never re-derived, and an older process sharing the file would keep
 /// writing the old projection (21: explicit note kinds, HS2-4ZFB8K; 22: the ticket
 /// creator column, HS2-9FPHWY).
-const SCHEMA_VERSION: i64 = 22;
+const SCHEMA_VERSION: i64 = 23;
 
 /// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
 const GIT_OWNER_META: &str = "git_owner";
@@ -78,6 +78,8 @@ CREATE TABLE tickets (
   tags_json       TEXT NOT NULL DEFAULT '[]',
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
   blocked_reason  TEXT,
+  group_name      TEXT,
+  group_key       TEXT,
   legacy_number   TEXT,
   created_by_json TEXT,
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
@@ -90,6 +92,8 @@ CREATE TABLE tickets (
   UNIQUE(store_id, id)
 );
 CREATE INDEX idx_tickets_status ON tickets(store_id, status);
+CREATE INDEX idx_tickets_group ON tickets(store_id, group_key)
+  WHERE group_key IS NOT NULL;
 CREATE INDEX idx_tickets_duplicate_target ON tickets(store_id, duplicate_of)
   WHERE close_reason = 'duplicate';
 CREATE TABLE phase_spans (store_id TEXT NOT NULL, ticket_id TEXT NOT NULL, phase TEXT NOT NULL, duration_ms INTEGER NOT NULL);
@@ -501,8 +505,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json,group_name,group_key) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -515,7 +519,8 @@ impl Index {
              content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
              legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
              latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase,\
-             started_phase_since=excluded.started_phase_since,created_by_json=excluded.created_by_json",
+             started_phase_since=excluded.started_phase_since,created_by_json=excluded.created_by_json,\
+             group_name=excluded.group_name,group_key=excluded.group_key",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -532,6 +537,7 @@ impl Index {
                 t.started_phase.as_ref().map(enum_str),
                 hotsheet_ticketing::phase_timing::started_phase_since(t).map(|at| at.as_str().to_string()),
                 t.created_by.as_ref().and_then(|actor| serde_json::to_string(actor).ok()),
+                t.group, t.group.as_deref().map(hotsheet_model::group_key),
             ],
         )?;
 
@@ -941,6 +947,36 @@ impl Index {
         Ok((upserted, deleted))
     }
 
+    /// Every grouped ticket of this store, for the group directory (HS2-PDSHNN): listing,
+    /// canonical spelling reuse, and rename/ungroup candidates without a store walk.
+    pub fn group_members(
+        &self,
+    ) -> Result<Vec<hotsheet_ticketing::groups::GroupMember>, IndexError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, group_name, status FROM tickets \
+             WHERE store_id=?1 AND group_key IS NOT NULL AND status IS NOT 'moved' ORDER BY id",
+        )?;
+        let rows = stmt
+            .query_map(params![self.store_id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, name, status)| {
+                Some(hotsheet_ticketing::groups::GroupMember {
+                    id: Ulid::from_string(&id).ok()?,
+                    name,
+                    live: status.as_deref() != Some("deleted"),
+                })
+            })
+            .collect())
+    }
+
     /// Run a structured + full-text query, returning list rows.
     pub fn query(&self, q: &TicketQuery) -> Result<Vec<TicketRow>, IndexError> {
         let mut wheres = vec!["t.store_id = ?".to_string()];
@@ -1054,6 +1090,24 @@ impl Index {
                 is_blocked.into()
             } else {
                 format!("NOT {is_blocked}")
+            });
+        }
+        // Group filters (HS2-PDSHNN): `group_key` is the Unicode-lowercased name, computed
+        // in Rust because SQLite's lower() only folds ASCII.
+        if let Some(name) = &q.group {
+            match hotsheet_model::group_key_of_input(name) {
+                Some(key) => {
+                    wheres.push("t.group_key = ?".into());
+                    args.push(Box::new(key));
+                }
+                None => wheres.push("0".into()),
+            }
+        }
+        if let Some(want) = q.has_group {
+            wheres.push(if want {
+                "t.group_key IS NOT NULL".into()
+            } else {
+                "t.group_key IS NULL".into()
             });
         }
         // Date-range filters (HS2-T84F9F) — lexical compare on RFC3339 timestamps.
@@ -1263,7 +1317,7 @@ impl Index {
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since,\
              (t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id)),\
-             t.created_by_json \
+             t.created_by_json,t.group_name \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1290,6 +1344,7 @@ impl Index {
                     tags: json_vec(r.get::<_, String>(8)?),
                     blocked_by: json_vec(r.get::<_, String>(9)?),
                     blocked_reason: r.get(10)?,
+                    group: r.get(31)?,
                     created_at: r.get(11)?,
                     created_by: r
                         .get::<_, Option<String>>(30)?

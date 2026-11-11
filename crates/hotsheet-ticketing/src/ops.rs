@@ -151,6 +151,12 @@ pub struct TicketQuery {
     /// `Some(true)` = a non-empty `blocked_reason`; `Some(false)` = no blocked reason.
     /// Dependency eligibility is checked separately (HS2-BSYW6F, docs/03 §3.3).
     pub blocked: Option<bool>,
+    /// Only tickets in this group, compared by the normalized group key so letter case
+    /// and whitespace runs do not matter (HS2-PDSHNN). A name that normalizes to nothing
+    /// matches no ticket.
+    pub group: Option<String>,
+    /// `Some(true)` = only grouped tickets; `Some(false)` = only ungrouped (HS2-PDSHNN).
+    pub has_group: Option<bool>,
     /// Half-open `created_at` / `updated_at` range filters (ISO-8601 strings; inclusive
     /// lower, inclusive upper — lexical compare works on RFC3339). Custom-view dimensions.
     pub created_after: Option<String>,
@@ -255,6 +261,7 @@ impl StoreReadBound {
 pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError> {
     let mut tickets = store.list_tickets()?;
     let text = q.text.as_deref().map(str::to_lowercase);
+    let group_key = q.group.as_deref().map(hotsheet_model::group_key_of_input);
     // Keep the done set for is_blocked's compatibility signature; the filter itself
     // uses only blocked_reason (HS2-BSYW6F).
     let done: HashSet<Ulid> = tickets
@@ -310,6 +317,10 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             })
             && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
             && q.blocked.is_none_or(|want| is_blocked(t, &done) == want)
+            && group_key.as_ref().is_none_or(|key| {
+                key.is_some() && t.group.as_deref().map(hotsheet_model::group_key) == *key
+            })
+            && q.has_group.is_none_or(|want| t.group.is_some() == want)
             && q.created_after
                 .as_deref()
                 .is_none_or(|a| t.created_at.as_str() >= a)
@@ -572,6 +583,8 @@ pub struct NewTicket {
     pub up_next: bool,
     /// Blockers, already resolved to ULIDs (see [`resolve_blockers`]).
     pub blocked_by: Vec<Ulid>,
+    /// The group to create the ticket in (HS2-PDSHNN); empty text means ungrouped.
+    pub group: Option<String>,
 }
 
 /// Expand leading `[tag]` title shorthand for every core-backed creation path.
@@ -681,6 +694,10 @@ pub fn create_by(
     created_by: Option<hotsheet_model::NoteActor>,
 ) -> Result<Ticket, StoreError> {
     let new = normalize_new_ticket_input(new);
+    let group = match new.group.as_deref() {
+        Some(name) => hotsheet_model::normalize_group_name(name)?,
+        None => None,
+    };
     let mut t = Ticket::new(
         id,
         derive_slug(&id, prefix),
@@ -696,6 +713,7 @@ pub fn create_by(
     t.tags = new.tags;
     t.up_next = new.up_next && t.status.is_active();
     t.blocked_by = new.blocked_by;
+    t.group = group;
     t.created_by = created_by;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -721,6 +739,10 @@ pub struct TicketPatch {
     pub follow_ups: Option<Vec<ProjectTicketRef>>,
     /// Absent leaves the reason unchanged; present `None` clears it.
     pub blocked_reason: Option<Option<String>>,
+    /// Absent leaves the group unchanged; present `None` (or empty text) clears it
+    /// (HS2-PDSHNN). Callers that know the store's other groups pass the spelling
+    /// [`crate::groups::resolve_group_change`] chose.
+    pub group: Option<Option<String>>,
     /// Who is making the change; stamped on the status-transition activity it produces
     /// (HS2-32QDZ3). Never a field change by itself.
     pub actor: Option<hotsheet_model::NoteActor>,
@@ -736,11 +758,20 @@ pub fn update(
     now: Timestamp,
     patch: TicketPatch,
 ) -> Result<Ticket, StoreError> {
+    // Validate before the transaction so an invalid group name writes nothing.
+    let group = match patch.group {
+        Some(Some(name)) => Some(hotsheet_model::normalize_group_name(&name)?),
+        Some(None) => Some(None),
+        None => None,
+    };
     store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
         let before = t.clone();
         let previous_status = t.status;
         let previous_phase = t.started_phase;
+        if let Some(v) = group {
+            t.group = v;
+        }
         if let Some(v) = patch.title {
             t.title = v;
         }
@@ -865,6 +896,8 @@ fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
     let after = after.clone();
     before.up_next = after.up_next;
     before.priority = after.priority;
+    // Grouping is organization, like the queue flag (HS2-PDSHNN).
+    before.group.clone_from(&after.group);
     before.updated_at = after.updated_at.clone();
     before != after
 }

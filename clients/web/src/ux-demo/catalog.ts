@@ -113,6 +113,7 @@ export const demoCatalog: DemoCategory[] = [
         demos: [
           cataloged('quick-ticket-composer', ['ticket-category-select', 'ticket-list']),
           cataloged('ticket-list', ['ticket-row', 'ticket-page-more']),
+          cataloged('ticket-group', ['list-header', 'ticket-row']),
           cataloged('ticket-page-more'),
           cataloged('ticket-row', ['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner']),
         ],
@@ -200,6 +201,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('ticket-close-dialog', ['select', 'list-item']),
           cataloged('not-working-dialog', ['pending-attachment-picker']),
           cataloged('bulk-ticket-dialog', ['surface-scaffold', 'list', 'text', 'row']),
+          cataloged('ticket-group-dialog', ['surface-scaffold', 'list', 'text-field', 'row']),
           cataloged('saved-view-dialog', ['ticket-search-field']),
           cataloged('ticket-link-choice-dialog', ['surface-scaffold', 'list', 'text', 'row', 'list-item']),
           cataloged('project-dialog', ['list-item']),

@@ -31,6 +31,7 @@ const ROW_OVERLAY_FIELDS = [
   'tags',
   'blocked_by',
   'blocked_reason',
+  'group',
   'claimed_by',
   'claim_lease_expires_at',
   'claim_eta_at',

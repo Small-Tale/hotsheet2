@@ -67,6 +67,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             path,
             &connection,
             ProviderDraft {
+                group: None,
                 title,
                 category,
                 priority: parse_priority(&priority)?,

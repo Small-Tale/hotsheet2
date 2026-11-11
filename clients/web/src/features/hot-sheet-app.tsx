@@ -58,6 +58,7 @@ import {
   type TerminalVisibilityNamePrompt,
 } from '../components/terminal-visibility-dialog';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
+import { TicketGroupDialog } from '../components/ticket-group-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { type WorkspaceViewMode } from '../components/workspace-header';
@@ -68,6 +69,7 @@ import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecover
 import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
 import type { RenderMetrics } from '../render-metrics';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
+import { ticketGroupDialog } from '../ticket-group-state';
 import type { TicketLinkMatch, TicketLinkReference } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
 import {
@@ -541,6 +543,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         {repositoryStatusSurface()}
         {changeEvidenceSurface()}
         <BulkTicketDialog state={bulkTicketDialog.value} />
+        <TicketGroupDialog state={ticketGroupDialog.value} />
         <TicketCloseDialog state={ticketCloseDialog.value} />
         <ConfirmationDialog request={confirmation.current.value} />
         <QuickTicketComposer

@@ -144,6 +144,7 @@ fn reply_order_round_trip(provider: Arc<dyn TicketProvider>, name: &str, categor
         .create(
             ctx(),
             ProviderDraft {
+group: None,
                 title: format!("Hot Sheet feedback reply live test {}", Ulid::new()),
                 category: category.into(),
                 priority: Priority::Default,

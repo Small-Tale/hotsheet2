@@ -16,6 +16,7 @@ use crate::dto::{CloseReq, CreateReq, DuplicateOfReq, UpdateReq};
 use crate::multistore::StoreEntry;
 use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
 use crate::routes::feedback_session::{self, Delivery};
+use crate::routes::groups;
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::providers::{
     connection_disabled, do_provider_create, do_provider_update, provider_for,
@@ -314,6 +315,13 @@ pub(crate) async fn create_checkout_ticket(
     // The checkout route owns the relation write; the provider adapter receives only
     // fields it can authoritatively create in the target provider.
     req.follow_up_to = None;
+    // HS2-PDSHNN: a project is one group namespace across its Git sources.
+    if source.provider == "git" && req.group.is_some() {
+        req.group =
+            groups::resolve_for_checkout(&state, &reference, req.group.take().map(Some), &[])?
+                .flatten();
+        req.group_resolved = true;
+    }
     let mut ticket = if source.provider == "git" {
         let entry = state.hosted_source(&source).ok_or_else(|| {
             ApiError::new(
@@ -784,7 +792,7 @@ pub(crate) async fn get_checkout_ticket_duplicate_backlinks(
 pub(crate) async fn update_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
-    Json(req): Json<UpdateReq>,
+    Json(mut req): Json<UpdateReq>,
 ) -> Result<(HeaderMap, Json<CheckoutUpdateResult>), ApiError> {
     let started = Instant::now();
     let (checkout, settings) = checkout_settings(&state, &reference)?;
@@ -832,6 +840,16 @@ pub(crate) async fn update_checkout_ticket(
     let notify = req.note.as_deref().is_some_and(|note| !note.is_empty())
         && req.note_id.is_none()
         && req.ai_feedback.is_none();
+    // HS2-PDSHNN: a project is one group namespace across its Git sources.
+    if matches!(req.group, Some(Some(_))) && req.ai_feedback.is_none() {
+        let patched: Vec<Ulid> = entry
+            .resolve(&native_id)?
+            .map(|ticket| ticket.id)
+            .into_iter()
+            .collect();
+        req.group = groups::resolve_for_checkout(&state, &reference, req.group.take(), &patched)?;
+        req.group_resolved = true;
+    }
     let (mut api, ticket) = do_update_with_ticket(&state, &entry, &native_id, req, true)?;
     let feedback_delivery = if notify {
         feedback_session::after_human_note(
@@ -925,6 +943,31 @@ pub(crate) async fn batch_update_checkout_tickets(
             )));
         }
         resolved.push((entry, ticket.id.to_string(), item));
+    }
+    // HS2-PDSHNN: one spelling per group for the whole selection, chosen against the
+    // project-wide namespace before the first write. An invalid name refuses the batch.
+    let mut regrouped = std::collections::BTreeMap::<String, Vec<Ulid>>::new();
+    for (_, native_id, item) in &resolved {
+        if let Some(Some(name)) = &item.update.group
+            && let Some(key) = hotsheet_model::group_key_of_input(name)
+            && let Ok(id) = Ulid::from_string(native_id)
+        {
+            regrouped.entry(key).or_default().push(id);
+        }
+    }
+    for (_, _, item) in &mut resolved {
+        if let Some(Some(name)) = &item.update.group {
+            let patched = hotsheet_model::group_key_of_input(name)
+                .and_then(|key| regrouped.get(&key).cloned())
+                .unwrap_or_default();
+            item.update.group = groups::resolve_for_checkout(
+                &state,
+                &reference,
+                item.update.group.take(),
+                &patched,
+            )?;
+            item.update.group_resolved = true;
+        }
     }
     let admission_time = started.elapsed();
     let mut updated = Vec::with_capacity(resolved.len());

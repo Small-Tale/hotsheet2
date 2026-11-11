@@ -194,6 +194,9 @@ pub enum StoreError {
     InvalidAnnotations(&'static str),
     #[error("{0}")]
     InvalidFeedbackResponse(&'static str),
+    /// A requested ticket group name failed validation (HS2-PDSHNN).
+    #[error(transparent)]
+    InvalidGroupName(#[from] hotsheet_model::GroupNameError),
     #[error(transparent)]
     ImageCrop(#[from] crate::image_crop::ImageCropError),
     #[error(transparent)]
@@ -785,6 +788,42 @@ impl FsStore {
     /// bare for bulk writers (import) that do their own single commit.
     pub fn write_ticket_committing(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
         self.write_ticket_with_paths_committing(ticket, &[])
+    }
+
+    /// Replace several tickets as one mutation with one commit (HS2-8CDFKR). Each pair is
+    /// `(before, after)`: when a write fails, the tickets already written are restored
+    /// from `before`, so a group rename never lands on only part of its members.
+    pub fn write_ticket_changes_committing(
+        &self,
+        changes: &[(Ticket, Ticket)],
+        message: &str,
+    ) -> Result<(), StoreError> {
+        let mut paths = Vec::with_capacity(changes.len() + 1);
+        for (written, (_, after)) in changes.iter().enumerate() {
+            match self.write_ticket(after) {
+                Ok(path) => paths.push(path),
+                Err(error) => {
+                    for (before, _) in &changes[..written] {
+                        // Best effort: the original failure is what the caller must see.
+                        let _ = self.write_ticket(before);
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        if self.defer_autocommit || paths.is_empty() {
+            return Ok(());
+        }
+        paths.push(self.root.join(".gitignore"));
+        let job = CommitJob {
+            store: self.clone(),
+            message: message.to_owned(),
+            paths,
+        };
+        if let Some(job) = pending_commits::defer(job) {
+            job.run();
+        }
+        Ok(())
     }
 
     fn write_ticket_with_paths_committing(

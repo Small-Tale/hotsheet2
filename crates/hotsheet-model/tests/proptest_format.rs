@@ -237,8 +237,11 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
         vec(arb_external(), 0..2),
         vec(arb_note(), 0..3),
     );
+    // HS2-PDSHNN: a stored group is always a normalized display name.
+    let group = option::of(scalar())
+        .prop_map(|name| name.and_then(|name| hotsheet_model::normalize_group_name_lossy(&name)));
 
-    (core, times, close_coord, collections).prop_map(
+    (core, times, close_coord, collections, group).prop_map(
         |(
             (id, slug, title, category, priority, status, up_next, details),
             (created_at, updated_at, completed_at, verified_at, closed_at, created_by),
@@ -254,6 +257,7 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
                 claim_eta_at,
             ),
             (tags, blocked_by, blocked_reason, assignees, review_requests, external, notes),
+            group,
         )| {
             let mut t = Ticket::new(id, slug, title, category, created_at, updated_at);
             t.priority = priority;
@@ -276,6 +280,7 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
             t.tags = tags;
             t.blocked_by = blocked_by;
             t.blocked_reason = blocked_reason;
+            t.group = group;
             t.assignees = assignees;
             t.review_requests = review_requests;
             t.external = external;

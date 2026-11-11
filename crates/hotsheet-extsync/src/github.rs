@@ -733,6 +733,7 @@ impl GitHubProvider {
         // Same projection as Markdown tickets, details marker included (HS2-NVD36W).
         let feedback_needed = hotsheet_ticketing::wire::api_feedback_needed(&notes, &details);
         ApiTicket {
+            group: None,
             connection_id: self.config.connection_id.clone(),
             native_id: native_id.clone(),
             qualified_id: format!("{}:{native_id}", self.config.connection_id),
@@ -1031,6 +1032,7 @@ impl TicketProvider for GitHubProvider {
                 .into_iter()
                 .map(|issue| self.api_ticket(issue, vec![]))
                 .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
+                .filter(|ticket| hotsheet_ticketing::provider_group_matches(ticket, query))
                 .filter(|ticket| query.status.is_none_or(|status| ticket.status == status))
                 .filter(|ticket| !query.up_next_only || ticket.up_next)
                 .filter(|ticket| {
@@ -1231,6 +1233,9 @@ impl TicketProvider for GitHubProvider {
         _ctx: MutationContext,
         draft: ProviderDraft,
     ) -> Result<ApiTicket, ProviderError> {
+        if draft.group.is_some() {
+            return self.unsupported("groups");
+        }
         if !draft.blocked_by.is_empty() {
             return Err(ProviderError::Unsupported {
                 connection_id: self.config.connection_id.clone(),
@@ -1291,6 +1296,10 @@ impl TicketProvider for GitHubProvider {
     ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
         let mut timing = ProviderMutationTiming::default();
         validate_number(native_id)?;
+        // HS2-PDSHNN: no native group mapping yet; never drop the field silently.
+        if patch.group.is_some() {
+            return self.unsupported("groups");
+        }
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
         }
@@ -2158,6 +2167,7 @@ fn attachment_comment_revision(body: &str) -> String {
 
 fn github_capabilities(attachments: bool) -> ProviderCapabilities {
     ProviderCapabilities {
+        groups: false,
         create: true,
         update: true,
         close: true,
@@ -3905,6 +3915,7 @@ mod tests {
         ]);
         let provider = provider(transport.clone());
         let draft = ProviderDraft {
+            group: None,
             title: "copied".into(),
             category: "task".into(),
             priority: Priority::Default,
@@ -3996,6 +4007,31 @@ mod tests {
     }
 
     #[test]
+    fn hs2_pdshnn_group_writes_are_explicitly_unsupported() {
+        let transport = FakeTransport::with(vec![]);
+        let provider = provider(transport.clone());
+        assert!(!provider.descriptor().capabilities.groups);
+        assert!(provider.group_directory().is_err());
+        for group in [Some(Some("Sprint".into())), Some(None)] {
+            assert!(matches!(
+                provider.update(
+                    "42",
+                    Timestamp::new("2026-08-26T01:00:00Z"),
+                    ProviderPatch {
+                        group,
+                        ..Default::default()
+                    },
+                ),
+                Err(ProviderError::Unsupported {
+                    capability: "groups",
+                    ..
+                })
+            ));
+        }
+        assert!(transport.requests.lock_or_recover().is_empty());
+    }
+
+    #[test]
     fn webhook_is_an_invalidation_reference_not_a_mirrored_ticket() {
         let event = parse_webhook(
             "issue_comment",
@@ -4056,6 +4092,7 @@ mod tests {
                     generated_id: hotsheet_model::Ulid::new(),
                 },
                 ProviderDraft {
+group: None,
                     title: format!("Hot Sheet provider live test {}", hotsheet_model::Ulid::new()),
                     category: "test".into(),
                     priority: Priority::Default,

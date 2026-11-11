@@ -1662,6 +1662,69 @@
       }
     },
     {
+      "id": "ticket-group",
+      "name": "TicketGroup",
+      "kind": "component",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "source": "src/components/ticket-group.tsx",
+      "publicExports": [
+        {
+          "name": "TicketGroup"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-group.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-group"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-group"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group.tsx",
+        "composition": "src/components/ticket-group.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs one collapsible ticket group on a lowered panel, in a list or a board column."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketGroup behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "ticket-page-more",
       "name": "TicketPageMore",
       "kind": "component",
@@ -3784,6 +3847,71 @@
           "Hot Sheet needs confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific BulkTicketDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "ticket-group-dialog",
+      "name": "TicketGroupDialog",
+      "kind": "component",
+      "purpose": "Name a new ticket group or rename an existing one, with inline duplicate-name validation.",
+      "source": "src/components/ticket-group-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "TicketGroupDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-group-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-group-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-group-dialog"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-dialog.tsx",
+        "composition": "src/components/ticket-group-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet needs name a new ticket group or rename an existing one, with inline duplicate-name validation."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketGroupDialog behavior."],
         "documentation": "../../docs/ux-components.md"
       }
     },

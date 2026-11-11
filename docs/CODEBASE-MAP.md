@@ -519,7 +519,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/github-sign-in-origin.ts # Typed sign-in origin validation without collapsing an explicit default port or aliasing configured hosts (HS2-VKNA12)
     src/github-account-endpoint.ts # Saved-account complete API endpoint validation/transport, separate from the display origin; explicit invalid/unknown metadata refusal (HS2-WV6QCR)
     src/new-ticket-source.ts # Project ticket sources from provider descriptors; the composer's writable-source choices and last-used/default target resolution (HS2-NZMJBJ)
-      src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
+      src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, group, and soft-delete patch planning; group menu model
+    src/ticket-groups.ts     #   Ticket group names, clustering, and list/column segments (HS2-3XNTSD); requirements in docs/35-ticket-groups.md
+    src/ticket-group-state.ts #  Device-local group state: persisted collapse preference, drag target, open name dialog, server-reported names
+    src/features/ticket-groups.ts # Group controller shared by the menu, dialog, header, and drag and drop
+    src/components/ticket-group{,-dialog,-context-menu,-interactions}.ts(x) # Shared group container (SunkenPanel + ListHeader), New/Rename dialog, header menu, `wireTicketGroups`
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
     src/project-bridge.ts    #   Vite-only singleton bootstrap-server discovery/detached start (stderr appended to `$HOTSHEET_HOME/logs/server.log`, rotated past 8 MiB, HS2-DSYPTN) + multi-store project attach and credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery and backup-gated legacy registration cleanup (`HOTSHEET_LEGACY_HOME` overrides the old app's global directory); authenticated corrupt-path validation, shell-free platform reveal, and shared CLI-bootstrap/Git remote/first-push setup
     src/migration-progress.ts # Versioned phase counters, job/attempt snapshots, phase-local labels and stale revision guards
@@ -1307,3 +1311,17 @@ HS2-CV5NMC: `hotsheet-model::Note::infer_kind` owns legacy note inference and
 `kind_explicit` file/wire metadata preserves author intent. Ticketing `ops` owns
 atomic note-kind correction and its id/kind audit; provider `note_kind_edit` gates
 correction. External `note_trailer` carries append intent in native comments.
+
+Ticket groups (HS2-3XNTSD, [35-ticket-groups.md](35-ticket-groups.md)):
+`crates/hotsheet-model/src/group.rs` owns group-name normalization and the comparison
+key every reader and writer uses. `crates/hotsheet-ticketing/src/groups.rs` derives the
+group directory and implements canonical-spelling reuse, rename, and ungroup;
+`saved_views.rs` parses `group:` and `has:group`. The index (schema 23) stores
+`group_name` and `group_key` and filters on `group` and `has_group`.
+`crates/hotsheet-server/src/routes/groups.rs` serves `GET …/groups` and
+`POST …/groups/rename|ungroup` for the default store, `/stores/{id}`,
+`/providers/{id}`, and `/checkouts/{ref}` (the checkout routes share one namespace
+across a project's Git stores). `crates/hotsheet-cli/src/dispatch/groups.rs` provides
+`groups` and `group rename|ungroup`; the MCP tool is `hotsheet_groups`.
+`ProviderCapabilities.groups` is true for Markdown/Git only. The web client's real-app
+coverage is `clients/web/tests/ticket-groups.spec.ts`.

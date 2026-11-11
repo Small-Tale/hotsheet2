@@ -105,6 +105,8 @@ import {
   ticketFieldLabel,
   ticketFieldText,
 } from '../ticket-field-reconciliation';
+import { ticketGroupCollapsed } from '../ticket-group-state';
+import { withoutCollapsedGroupMembers } from '../ticket-groups';
 import { type TicketLinkMatch, ticketLinkMatchKey } from '../ticket-link-resolution';
 import { projectTicketPatch, reportMutationTiming, ticketRowFromFull } from '../ticket-mutation';
 import {
@@ -1458,7 +1460,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           return {
             slug: operation.slug,
             id: operation.id,
-            patch: Object.fromEntries([...keys].map((key) => [key, ticket[key as keyof typeof ticket]])),
+            patch: Object.fromEntries(
+              // An ungrouped ticket has no `group` value; undo must send null to clear it again.
+              [...keys].map((key) => [
+                key,
+                key === 'group' ? (ticket.group ?? null) : ticket[key as keyof typeof ticket],
+              ]),
+            ),
           };
         }),
         succeededOperations = operations.filter((operation) => result.succeeded.has(operation.slug)),
@@ -2005,7 +2013,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       ? [...column.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
           (item) => data(item).ticketSlug!,
         )
-      : visibleTickets().map((ticket) => ticket.slug);
+      : navigableTickets().map((ticket) => ticket.slug);
+  }
+  /** Visible tickets a person can reach: a collapsed group hides its members (HS2-WZ3JGZ). */
+  function navigableTickets() {
+    const current = project();
+    return withoutCollapsedGroupMembers(visibleTickets(), (group) =>
+      Boolean(current && ticketGroupCollapsed(current.id, selectedView.value, group)),
+    );
   }
   function presentTicket(ticket: FullTicket) {
     flushDraftInputs();
@@ -2136,7 +2151,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function selectTickets(
     slug: string,
     intent: { range?: boolean; toggle?: boolean } = {},
-    ordered = visibleTickets().map((ticket) => ticket.slug),
+    ordered = navigableTickets().map((ticket) => ticket.slug),
     qualifiedId?: string,
   ) {
     const selectionIntent = qualifiedId ? {} : intent;

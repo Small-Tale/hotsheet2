@@ -7,6 +7,7 @@ use crate::dto::{
 use crate::events::{AssignmentEvent, ChangeEvent};
 use crate::multistore::{StoreEntry, StoreInfo};
 use crate::routes::checkout_tickets::resolve_project_ticket_ref;
+use crate::routes::groups;
 use crate::routes::providers::do_rate_ai_feedback;
 use crate::routes::tickets::{api_ticket, list_entry_tickets};
 use crate::{AppState, initial_status, multistore, notifications, now, opt_parse};
@@ -93,7 +94,13 @@ pub(crate) fn do_create(
     let blocked_by = ops::resolve_blockers_with(None, &req.blocked_by.unwrap_or_default(), |n| {
         entry.resolve(n)
     })?;
+    let group = if req.group_resolved {
+        req.group
+    } else {
+        groups::resolve_for_write(std::slice::from_ref(entry), req.group.map(Some), &[])?.flatten()
+    };
     let new = NewTicket {
+        group,
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".to_string()),
         priority: opt_parse(req.priority.as_deref())?.unwrap_or_default(),
@@ -210,7 +217,13 @@ pub(crate) fn do_update_with_ticket(
         None => None,
     };
     let actor = parse_actor(req.actor.as_ref())?;
+    let group = if req.group_resolved {
+        req.group
+    } else {
+        groups::resolve_for_write(std::slice::from_ref(entry), req.group, &[ticket.id])?
+    };
     let patch = TicketPatch {
+        group,
         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
         title: req.title,
         details: req.details,
@@ -648,9 +661,26 @@ pub(crate) async fn close_ticket(
 /// abort the rest: each ticket's outcome is reported. Default-store.
 pub(crate) async fn batch_update(
     State(state): State<AppState>,
-    Json(req): Json<BatchReq>,
-) -> Json<BatchResult> {
+    Json(mut req): Json<BatchReq>,
+) -> Result<Json<BatchResult>, ApiError> {
     let entry = state.default_entry();
+    // HS2-PDSHNN: choose the group spelling once for the whole selection, so tickets
+    // that are the group's only members can respell it together. An invalid name
+    // refuses the batch before any write.
+    if matches!(req.update.group, Some(Some(_))) {
+        let patched: Vec<Ulid> = req
+            .ids
+            .iter()
+            .filter_map(|id| entry.resolve(id).ok().flatten())
+            .map(|ticket| ticket.id)
+            .collect();
+        req.update.group = groups::resolve_for_write(
+            std::slice::from_ref(&entry),
+            req.update.group.take(),
+            &patched,
+        )?;
+        req.update.group_resolved = true;
+    }
     let mut updated = Vec::new();
     let mut errors = Vec::new();
     for id in &req.ids {
@@ -662,5 +692,5 @@ pub(crate) async fn batch_update(
             }),
         }
     }
-    Json(BatchResult { updated, errors })
+    Ok(Json(BatchResult { updated, errors }))
 }

@@ -18,6 +18,7 @@ import { BOARD_COLUMN_PAGE_SIZE } from '../project-ticket-refresh';
 import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
 import { type TicketScope, type TicketView } from '../ticket-views';
 import type { WorkerCoverageSource, WorkerSourceError, WorkerTicketDetails, WorkerView } from '../worker-view-model';
+import type { TicketGroupsController } from './ticket-groups';
 
 /** Live application bindings createWorkspaceSurface reads (HS2-K0VC2C). */
 export interface WorkspaceSurfaceDependencies {
@@ -37,6 +38,8 @@ export interface WorkspaceSurfaceDependencies {
   projectPermissionHistory: (projectId?: string) => PermissionHistoryItem[];
   renderedTicketLimit: Signal<number>;
   row: (ticket: WireTicketRow) => TicketRowProps;
+  /** Group collapse and drop-target state for the rendered collections (HS2-WZ3JGZ). */
+  ticketGroups: Pick<TicketGroupsController, 'collectionProps'>;
   searchMatchKeys: Signal<Set<string> | undefined>;
   searchQuery: Signal<string>;
   searchTokens: Signal<InlineSearchToken[]>;
@@ -93,6 +96,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     selectedCorruptKey,
     selectedProjectId,
     selectedView,
+    ticketGroups,
     settingsWorkspace,
     ticketCollectionState,
     ticketCountsByProject,
@@ -238,6 +242,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
           countPartial: partialSourcesByProject.value[selectedProjectId.value] ?? false,
           tickets: group.tickets.slice(0, Math.min(renderedTicketLimit.value, perColumn ? visible : Infinity)).map(row),
           continuation,
+          ...ticketGroups.collectionProps(group.id),
         };
       });
       // Phones page through one snapped column at a time instead of shrinking the grid (HS2-ZYJMDP).
@@ -251,6 +256,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
         totalCount: shown.length,
         label: 'Project Tickets',
         emptyState,
+        ...ticketGroups.collectionProps('list'),
       },
       more,
     };

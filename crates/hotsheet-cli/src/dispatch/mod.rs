@@ -9,6 +9,7 @@ mod checkout_remove;
 mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;
+pub(crate) mod groups;
 pub(crate) mod notify;
 pub(crate) mod orchestration;
 pub(crate) mod providers;
@@ -93,6 +94,8 @@ impl Cmd {
             | Assign { .. }
             | People { .. }
             | Read { .. }
+            | Groups { .. }
+            | TicketGroup { .. }
             | ConfidenceReport { .. }
             | PhaseReport { .. }
             | Metrics { .. }

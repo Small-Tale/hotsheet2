@@ -30178,7 +30178,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
     );
   await page.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Groups', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('has:media-annotation');
   await expect(help).toContainText('updated-after:4h ago');
   await expect(help).toContainText('started, verified, archived, and updated');
@@ -30236,7 +30236,7 @@ for (const width of [1280, 390])
     const help = page.getByRole('dialog', { name: 'Search syntax' });
     await expect(help).toBeVisible();
     // Every example is an activatable chip, including the combined-filter example.
-    await expect(help.getByRole('button', { name: /^Add .+ to the search$/ })).toHaveCount(25);
+    await expect(help.getByRole('button', { name: /^Add .+ to the search$/ })).toHaveCount(28);
     await expect(help.getByRole('button', { name: 'Add is:ai-created to the search' })).toBeVisible();
     await expect(help.getByRole('button', { name: 'Add is:needs-review to the search' })).toBeVisible();
     await page.screenshot({ path: `target/visual-captures/hs2-fr1y70-syntax-help-${width}.png` });
