@@ -72,7 +72,7 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (!path.startsWith('/__hotsheet/')) return route.continue();
-    if (path === '/__hotsheet/projects/open')
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
       return route.fulfill({
         status: 201,
         json: request.postDataJSON().root === otherProject.root ? otherProject : project,

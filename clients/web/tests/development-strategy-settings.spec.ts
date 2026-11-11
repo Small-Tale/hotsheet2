@@ -34,7 +34,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'Synthetic Strategy', stores: [server.store], apiPath },
@@ -191,7 +191,7 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
       void route.close();
     });
     await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: second.root } }));
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: {

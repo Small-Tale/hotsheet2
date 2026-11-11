@@ -46,7 +46,7 @@ test('each image in one note opens its own gallery attachment', async ({ page })
       url = new URL(request.url()),
       path = url.pathname;
     if (!path.startsWith('/__hotsheet/')) return route.continue();
-    if (path === '/__hotsheet/projects/open')
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
       return route.fulfill({
         status: 201,
         json: {

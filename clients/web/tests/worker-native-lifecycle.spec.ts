@@ -96,7 +96,7 @@ test('HS2-R0E39D crashed worker lease expires before a synthetic claim is taken 
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'Synthetic Workers', stores: [store], apiPath },

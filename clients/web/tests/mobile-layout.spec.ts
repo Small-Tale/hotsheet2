@@ -640,7 +640,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
       url = new URL(request.url()),
       path = url.pathname,
       other = path.includes('other-checkout');
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = request.postDataJSON().root as string;
       return route.fulfill({
         status: 201,

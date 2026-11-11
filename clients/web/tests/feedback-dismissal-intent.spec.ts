@@ -24,7 +24,7 @@ async function openFeedbackProjects(
   await page.routeWebSocket(/.*/, (route) => {
     void route.close();
   });
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const server = route.request().postDataJSON().root === target.root ? target : source;
     return route.fulfill({
       status: 201,

@@ -53,7 +53,7 @@ for (const viewport of [
         bridgePosts.push(route.request().postDataJSON() as { reports: Report[] });
         await route.fulfill({ status: 200, json: { accepted: 1 } });
       });
-      await page.route('**/__hotsheet/projects/open', (route) =>
+      await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
         route.fulfill({
           status: 201,
           json: { id: server.checkoutId, root: server.root, name: 'latency', stores: [server.store], apiPath },

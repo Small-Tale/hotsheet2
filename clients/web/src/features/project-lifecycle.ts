@@ -9,7 +9,7 @@ import {
   type ProviderConnection,
   type ProviderDescriptor,
 } from '../api';
-import { isRemoteClient } from '../client-origin';
+import { opensProjectsRemotely } from '../client-origin';
 import { copyWhenReady } from '../clipboard-when-ready';
 import { resolveTicketSourceColor } from '../components/customization-palette';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
@@ -1227,7 +1227,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     error.value = '';
     projectDialogError.value = '';
     unhealthyServerRecovery.value = undefined;
-    if (isRemoteClient()) void openRemoteProjectDialog();
+    if (opensProjectsRemotely()) void openRemoteProjectDialog();
     else projectDialogOpen.value = true;
   }
 

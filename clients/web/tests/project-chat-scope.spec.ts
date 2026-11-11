@@ -77,7 +77,7 @@ async function installFixture(page: import('@playwright/test').Page) {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = request.postDataJSON().root as string;
       return route.fulfill({ status: 201, json: root === other.root ? other : demo });
     }

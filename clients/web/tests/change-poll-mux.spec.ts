@@ -145,7 +145,7 @@ async function installBridge(
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = (request.postDataJSON() as { root: string }).root;
       return route.fulfill({ status: 201, json: projects.find((project) => project.root === root) ?? projects[0] });
     }
@@ -486,7 +486,7 @@ for (const advertisesMux of [true, false]) {
     await page.route('**/*', async (route) => {
       const request = route.request(),
         path = decodeURIComponent(new URL(request.url()).pathname);
-      if (path === '/__hotsheet/projects/open') {
+      if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
         const root = (request.postDataJSON() as { root: string }).root;
         const selected = projects.find((project) => project.root === root) ?? projects[0];
         return route.fulfill({

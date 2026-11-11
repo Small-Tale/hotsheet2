@@ -90,7 +90,7 @@ async function installWorkspace(page: Page) {
   await page.route('**/*', async (route) => {
     const request = route.request(),
       path = decodeURIComponent(new URL(request.url()).pathname);
-    if (path === '/__hotsheet/projects/open' && request.method() === 'POST') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path) && request.method() === 'POST') {
       const root = (request.postDataJSON() as { root: string }).root;
       return route.fulfill({ status: 201, json: projects.find((item) => item.root === root) ?? projects[0] });
     }

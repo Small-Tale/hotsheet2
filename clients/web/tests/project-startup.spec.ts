@@ -97,7 +97,7 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       url = new URL(request.url()),
       path = url.pathname;
     calls.push(`${path}${url.search}`);
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const body = request.postDataJSON() as Record<string, unknown>;
       openBodies.push(body);
       const name = (body.root as string).split('/').at(-1)!;

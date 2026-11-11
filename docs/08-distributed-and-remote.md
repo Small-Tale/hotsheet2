@@ -199,6 +199,8 @@ server-side session and checks it on REST, polling and WebSocket routes;
 the browser-facing bridge authenticates before proxying and never passes its
 loopback secret for a remote request. The session catalog is private to each
 server store and bound to the machine's durable server identity.
+An approved session opens only projects the host has already registered,
+through a separate remote open route (HS2-3HC9HT, [06](06-clients.md) §6.2).
 
 The browser host must opt in with `HOTSHEET_BROWSER_AUTH_MODE=remote` even when
 a proxy reaches it through loopback. Its HTTPS session cookie is Secure,

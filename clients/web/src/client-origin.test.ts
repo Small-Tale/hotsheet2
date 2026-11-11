@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isLoopbackHostname, isRemoteClient } from './client-origin';
+import { isLoopbackHostname, isRemoteClient, opensProjectsRemotely, stampedBrowserAuthMode } from './client-origin';
 
 describe('client origin', () => {
   it('treats loopback hostnames as same-device', () => {
@@ -23,5 +23,22 @@ describe('client origin', () => {
   it('honors the ?device override', () => {
     expect(isRemoteClient({ hostname: 'localhost', search: '?device=remote' })).toBe(true);
     expect(isRemoteClient({ hostname: '100.64.0.1', search: '?device=local' })).toBe(false);
+  });
+});
+
+describe('HS2-3HC9HT stamped browser auth mode', () => {
+  const doc = (content?: string) => ({
+    querySelector: () => (content === undefined ? null : ({ content } as HTMLMetaElement)),
+  });
+
+  it('reads only the two stamped modes', () => {
+    expect(stampedBrowserAuthMode(doc('remote') as Pick<Document, 'querySelector'>)).toBe('remote');
+    expect(stampedBrowserAuthMode(doc('local') as Pick<Document, 'querySelector'>)).toBe('local');
+    expect(stampedBrowserAuthMode(doc('other') as Pick<Document, 'querySelector'>)).toBeUndefined();
+    expect(stampedBrowserAuthMode(doc() as Pick<Document, 'querySelector'>)).toBeUndefined();
+  });
+
+  it('opens projects locally when there is no document', () => {
+    expect(opensProjectsRemotely()).toBe(false);
   });
 });

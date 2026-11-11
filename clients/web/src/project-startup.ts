@@ -1,4 +1,5 @@
 import { Api, type ProviderDescriptor } from './api';
+import { opensProjectsRemotely } from './client-origin';
 import type { Project, UnhealthyServerRecovery } from './interactions/types';
 import { isRecord } from './json-value';
 import { localBridge, LocalBridgeHttpError, parseUnhealthyServerRecovery } from './local-bridge-client';
@@ -13,9 +14,13 @@ export async function openProjectFetch(
   ticketStore?: string,
   request: typeof fetch = fetch,
   providers: (project: Project) => Promise<ProviderDescriptor[]> = (project) => new Api(project.apiPath).providers(),
+  remote: boolean = opensProjectsRemotely(),
 ): Promise<ProjectOpenResult> {
   try {
-    const project = await localBridge.openProject(root, 'Could not open project.', request, ticketStore);
+    // A remote browser may only open a checkout the host registered; it never names a ticket store (HS2-3HC9HT).
+    const project = remote
+      ? await localBridge.openRemoteProject(root, 'Could not open project.', request)
+      : await localBridge.openProject(root, 'Could not open project.', request, ticketStore);
     return { ok: true, project, providers: await providers(project).catch(() => []) };
   } catch (reason) {
     if (reason instanceof LocalBridgeHttpError) {

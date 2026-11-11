@@ -35,7 +35,7 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
     });
     await rememberProject(page);
     await installTerminalFixture(page, false, false, { nativeSocket: true, warmLimit: 0 });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({ status: 201, json: { ...project, root: server.store } }),
     );
     await page.route('**/__hotsheet/project-api/terminal-feedback/terminals**', async (route) => {

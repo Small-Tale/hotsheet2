@@ -44,7 +44,7 @@ async function mockSavedViews(page: Page) {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path.endsWith('/views') && request.method() === 'PUT') {
       views = request.postDataJSON();
       return route.fulfill({ json: views });

@@ -99,7 +99,7 @@ async function mockProject(page: Page, usageResponse: unknown = usage) {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path.endsWith('/providers'))
       return route.fulfill({
         json: [

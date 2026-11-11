@@ -17,7 +17,7 @@ test('quietly paints ordinary AI ticket surfaces without dimming content', async
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'synthetic', stores: [server.store], apiPath },

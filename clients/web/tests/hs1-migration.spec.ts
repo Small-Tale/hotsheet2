@@ -26,7 +26,7 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' | 're
       url = new URL(request.url()),
       path = url.pathname;
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/other' } });
-    if (path === '/__hotsheet/projects/open' && request.postDataJSON().root === '/work/other')
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path) && request.postDataJSON().root === '/work/other')
       return route.fulfill({
         status: 201,
         json: {
@@ -75,7 +75,7 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' | 're
         await new Promise<void>((resolve) => listeners.add(resolve));
       return route.fulfill({ json: { job } }).catch(() => {});
     }
-    if (path === '/__hotsheet/projects/open')
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
       return route.fulfill({
         status: 201,
         json: state.imported

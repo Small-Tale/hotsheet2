@@ -22,3 +22,19 @@ export function isRemoteClient(location: { hostname: string; search?: string } =
   if (override === 'local') return false;
   return !isLoopbackHostname(location.hostname);
 }
+
+/** The browser-auth mode the serving host stamped into the document (HS2-7DBJMS), if any. */
+export function stampedBrowserAuthMode(
+  doc: Pick<Document, 'querySelector'> = document,
+): 'local' | 'remote' | undefined {
+  const mode = doc.querySelector<HTMLMetaElement>('meta[name="hotsheet-browser-auth"]')?.content;
+  return mode === 'local' || mode === 'remote' ? mode : undefined;
+}
+
+/** Whether project opens must use the registered-checkout remote route (HS2-3HC9HT): a host in remote
+ * browser-auth mode serves only that route, whatever hostname reached it, and a remote device never
+ * browses the host's folders. */
+export function opensProjectsRemotely(): boolean {
+  if (typeof document === 'undefined') return false;
+  return stampedBrowserAuthMode() === 'remote' || isRemoteClient();
+}

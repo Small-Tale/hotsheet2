@@ -107,7 +107,7 @@ async function installProjects(page: Page) {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = (request.postDataJSON() as { root: string }).root;
       return route.fulfill({ status: 201, json: root === projects.beta.root ? projects.beta : projects.alpha });
     }
@@ -549,7 +549,7 @@ test('a worker-owned bridge socket relays the host client build to the newer-ver
       );
       return route.fulfill({ response, body: html });
     }
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = (request.postDataJSON() as { root: string }).root;
       return route.fulfill({
         status: 201,

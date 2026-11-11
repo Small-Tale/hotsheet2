@@ -27,7 +27,7 @@ test('keeps rows appended by Load more when a concurrent change refreshes the li
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'archive', stores: [server.store], apiPath },

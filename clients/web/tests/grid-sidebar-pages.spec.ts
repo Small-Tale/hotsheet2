@@ -88,7 +88,7 @@ async function openWorkspaceGrid(page: Page) {
       url = new URL(request.url()),
       path = url.pathname,
       now = Date.now();
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = request.postDataJSON().root as string,
         id = `${root.split('/').at(-1)}-checkout`;
       return route.fulfill({

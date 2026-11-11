@@ -1410,7 +1410,7 @@ test('opens a halted session in its originating project and follows another wind
 }) => {
   const fixture = await haltedSessionFixture(page);
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -2112,7 +2112,7 @@ async function mockProject(
       // The checkout API accepts both native and qualified ticket routes; use the native fixture
       // lookup below while retaining the original request URL for route assertions.
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const opened = hs1Migration
         ? {
             ...project,
@@ -3613,7 +3613,7 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
   await mockProject(page);
   let failOpen = true,
     recoveryBody: unknown;
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     if (failOpen) {
       failOpen = false;
       return route.fulfill({
@@ -3745,7 +3745,7 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
     'The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed.';
   await mockProject(page);
   // The bridge's real open response: the project plus why its setup refresh was skipped.
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, setupWarning: warning } }),
   );
   for (const width of [1280, 390]) {
@@ -3779,7 +3779,7 @@ test('keeps a project usable through a mismatched shared server and explains it 
   // The bridge's real open response when the pinned host could not restart the shared server yet.
   // The compatibility assessment reports the same mismatch; the notice replaces the alert banner.
   const compatibility = { kind: 'compatible', revisionMismatch: true, sourceStale: false, canRestartServer: true };
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, compatibility, serverBuildNotice: notice } }),
   );
   for (const width of [1280, 390]) {
@@ -3813,7 +3813,7 @@ test('explains changed Codex hooks without a setup-failure warning and dismisses
 }) => {
   await mockProject(page);
   let changed = true;
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({
       status: 201,
       json: { ...project, ...(changed ? { codexHooksChanged: '.codex/hooks.json' } : {}) },
@@ -3859,7 +3859,7 @@ test('clears a failed project-open error when retrying successfully', async ({ p
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   let failNextOpen = true;
-  await page.route('**/__hotsheet/projects/open', async (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, async (route) => {
     if (failNextOpen) {
       failNextOpen = false;
       return route.fulfill({ status: 409, json: { error: 'The previous detached server only supports schema 2.' } });
@@ -3894,7 +3894,7 @@ test('opens the native folder chooser directly from Add project and only onboard
   let configured = false;
   const openedRoots: string[] = [];
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     openedRoots.push(root);
     return route.fulfill({
@@ -4261,7 +4261,7 @@ test('opens GitHub sign-in directly when the desktop shell returns no popup wind
     };
   });
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
   );
   await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
@@ -4279,7 +4279,7 @@ test('opens GitHub sign-in directly when the desktop shell returns no popup wind
 
 test('links the first GitHub installation and refreshes granted repositories (HS2-FDTJ98)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
   );
   await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
@@ -4341,7 +4341,7 @@ for (const width of [1280, 390])
   }) => {
     await page.setViewportSize({ width, height: 860 });
     await mockProject(page, true, false, 0, 0, 0, true);
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
     );
     await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
@@ -4433,7 +4433,7 @@ for (const width of [1280, 390])
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({
       status: 201,
       json: { ...project, root: '/work/best-in-manila', stores: [], needsTicketSetup: true },
@@ -4922,7 +4922,7 @@ for (const width of [1280, 390])
   }) => {
     await page.setViewportSize({ width, height: 860 });
     await mockProject(page, true, false, 0, 0, 0, true);
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
     );
     const signIns: unknown[] = [],
@@ -5088,7 +5088,7 @@ test('removes an orphaned account source while keeping its sign-in (HS2-G0E8ZS)'
 test('names an unused GitHub Enterprise sign-in by its host and reuses its server (HS2-16MYXN)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
   );
   // The server's shape for sign-ins no source uses yet: the host and endpoint of the site each
@@ -5173,7 +5173,7 @@ for (const width of [1280, 390])
   }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockProject(page, true, false, 0, 0, 0, true);
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
     );
     // The server's `GET /accounts` shape for GitLab and Jira sign-ins other projects already use.
@@ -5311,7 +5311,7 @@ for (const width of [1280, 390])
 test('signs in to GitHub Enterprise from its server address before connecting (HS2-1JT25R)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, root: '/work/enterprise', stores: [], needsTicketSetup: true } }),
   );
   await page
@@ -5371,7 +5371,7 @@ for (const [typed, origin] of [
 ]) {
   test(`HS2-VKNA12 sign-in form preserves configured origin ${origin}`, async ({ page }) => {
     await mockProject(page, true, false, 0, 0, 0, true);
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({ status: 201, json: { ...project, root: '/work/origin', stores: [], needsTicketSetup: true } }),
     );
     await page
@@ -5421,7 +5421,7 @@ for (const [typed, origin] of [
 
 test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request (HS2-338S9K)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, root: '/work/origin', stores: [], needsTicketSetup: true } }),
   );
   await page
@@ -14900,7 +14900,7 @@ test('retries a temporarily failed remembered project and restores every project
   await mockProject(page);
   const restoredRoot = '/work/restarting-server';
   let attempts = 0;
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     if (route.request().postDataJSON().root !== restoredRoot) return route.fallback();
     attempts += 1;
     return attempts === 1
@@ -14938,7 +14938,7 @@ test('keeps a persistently failed project remembered without obscuring a success
   await mockProject(page);
   const failedRoot = '/work/older-server';
   let available = false;
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     if (route.request().postDataJSON().root !== failedRoot) return route.fallback();
     return available
       ? route.fulfill({
@@ -21116,7 +21116,7 @@ test('keeps primary 138-ticket interactions within the painted UI budget @quaran
   });
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -21313,7 +21313,7 @@ for (const viewport of [
         });
       });
     await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-    await page.route('**/__hotsheet/projects/open', (route) => {
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
       const root = route.request().postDataJSON().root as string;
       return route.fulfill({
         status: 201,
@@ -25571,7 +25571,7 @@ test('keeps project Stats attached to the selected project until its tab returns
 }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -31303,7 +31303,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   };
   await page.setViewportSize({ width: 1180, height: 760 });
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -32261,7 +32261,7 @@ test('previews rows with a border-only outline and keeps column cards borderless
 test('drops selected tickets on another project tab to copy them there', async ({ page }) => {
   const creates: Record<string, unknown>[] = [];
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     if (root === '/work/other')
       return route.fulfill({
@@ -32336,7 +32336,7 @@ test('drops files on another project tab to stage a new ticket in that project (
   const creates: string[] = [],
     uploads: string[] = [];
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -32425,7 +32425,7 @@ test('switches already-open projects from cache within one frame and rejects sta
   const release = (key: string, json: object[]) =>
     Promise.all(pending.get(key)!.map((route) => route.fulfill({ json: ticketsJson(route.request(), json) })));
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     if (root === '/work/other')
       return route.fulfill({
@@ -32606,7 +32606,7 @@ test('keeps the new-ticket composer open when it is opened right after a project
   let holdRefreshes = false;
   const pending = new Map<string, import('@playwright/test').Route>();
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     if (root === '/work/other')
       return route.fulfill({
@@ -32702,7 +32702,7 @@ test('keeps a ticket selected right after a project tab switch when the session 
   let holdRefreshes = false;
   const pending = new Map<string, import('@playwright/test').Route>();
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     if (root === '/work/other')
       return route.fulfill({
@@ -32755,7 +32755,7 @@ test('keeps an inspector tab chosen during a held activation refresh when the se
   let holdRefreshes = false;
   const pending = new Map<string, import('@playwright/test').Route>();
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     if (root === '/work/other')
       return route.fulfill({
@@ -32833,7 +32833,7 @@ test('reorders project and terminal tabs while preserving project order and comp
   };
   await page.setViewportSize({ width: 1100, height: 840 });
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -33228,7 +33228,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   );
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -33818,7 +33818,7 @@ test('shares the settings category across projects but scopes command drafts to 
   const demoCommands = [{ id: 'demo-command', title: 'Demo checks', program: 'npm', args: ['test'] }],
     otherCommands = [{ id: 'other-command', title: 'Other checks', program: 'cargo', args: ['test'] }];
   await mockProject(page);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -33988,7 +33988,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await page.route('**/*', async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname;
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: proj });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: proj });
     if (path.endsWith('/providers'))
       return route.fulfill({
         json: [
@@ -34241,7 +34241,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   const otherRows = makeRows('B');
   await installFakeTerminalSockets(page, true);
   await mockProject(page, true, false, 0, 0, 0, false, 12);
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,
@@ -34450,7 +34450,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   await page.route('**/*', async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path.endsWith('/providers'))
       return route.fulfill({
         json: [
@@ -36947,7 +36947,7 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
 }) => {
   await mockProject(page);
   let opened = 0;
-  await page.route('**/__hotsheet/projects/open', (route) => {
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     if (root.startsWith('/work/extra-')) {
       const name = root.slice('/work/'.length);
@@ -38950,7 +38950,7 @@ function wvSavedAccount(id: string, base_url?: string, host = 'ghe.test') {
 
 async function wvPrepareAccountPicker(page: Page, accounts: ReturnType<typeof wvSavedAccount>[]) {
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
   );
   await page.route('**/accounts', (route) =>
@@ -39106,7 +39106,7 @@ test('HS2-FE0HBN drifted null account metadata offers no saved account, then a v
     valid = [wvSavedAccount('fe-valid', 'https://ghe.test:8443/Gateway/API')];
   let reads = 0;
   await mockProject(page, true, false, 0, 0, 0, true);
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
   );
   await page.route('**/accounts', (route) =>
@@ -39297,7 +39297,7 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     });
     const actual = server;
     await mockProject(page, true, false, 0, 0, 0, true);
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
     );
     // Only unrelated shell/repository-choice surfaces remain mocked. Accounts, create, persistence

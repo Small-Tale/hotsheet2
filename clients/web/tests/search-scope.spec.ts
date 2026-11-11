@@ -82,7 +82,7 @@ async function mockSearchProject(page: Page, views: Array<{ id: string; name: st
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))
       return route.fulfill({

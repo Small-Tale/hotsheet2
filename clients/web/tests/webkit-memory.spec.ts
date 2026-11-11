@@ -77,7 +77,7 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
       localStorage.setItem('hotsheet.open-projects', JSON.stringify([root]));
       localStorage.setItem('hotsheet.terminals.drawer-open', 'true');
     }, server.root);
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: {

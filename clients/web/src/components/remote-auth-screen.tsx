@@ -2,6 +2,8 @@ import './remote-auth-screen.css';
 
 import { mount, signal } from 'kerfjs';
 
+import { stampedBrowserAuthMode } from '../client-origin';
+
 type Pairing = { id: string; server_id: string; challenge: string; expires_at: number };
 
 export function RemoteAuthScreen({
@@ -70,8 +72,8 @@ export function RemoteAuthScreen({
 export async function ensureRemoteBrowserSession(): Promise<boolean> {
   // The serving host stamps this into the document. A separate mode request can be intercepted by
   // project API fixtures and would leave an otherwise local application blank (HS2-7DBJMS).
-  const mode = document.querySelector<HTMLMetaElement>('meta[name="hotsheet-browser-auth"]')?.content;
-  if (mode !== 'local' && mode !== 'remote') throw new Error('Could not determine browser authentication mode.');
+  const mode = stampedBrowserAuthMode();
+  if (!mode) throw new Error('Could not determine browser authentication mode.');
   if (mode === 'local') return false;
   const current = await fetch('/__hotsheet/remote-auth/me', { credentials: 'same-origin' });
   if (current.ok) return true;

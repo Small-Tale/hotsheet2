@@ -175,7 +175,7 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     }),
   );
   const appOrigin = origins[0];
-  await context.route('**/__hotsheet/projects/open', (route) => {
+  await context.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
     const root = route.request().postDataJSON().root as string;
     return route.fulfill({
       status: 201,

@@ -60,7 +60,7 @@ for (const width of [390, 1280]) {
       await page.addInitScript((root) => {
         localStorage.setItem('hotsheet.open-projects', JSON.stringify([root]));
       }, server.root);
-      await page.route('**/__hotsheet/projects/open', (route) =>
+      await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
         route.fulfill({
           status: 201,
           json: {

@@ -143,7 +143,7 @@ async function installHost(page: Page, withTicket = false) {
       );
       return route.fulfill({ response, body: html });
     }
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path === MUX) {
       // A genuine long poll: idle, it stays pending until its bounded timeout.
       const polls = (request.postDataJSON() as { polls: { project: string; since?: number; timeout_ms: number }[] })

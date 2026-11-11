@@ -9,7 +9,7 @@ type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
 async function openProject(page: Page, server: Server) {
   const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({
       status: 201,
       json: { id: server.checkoutId, root: server.root, name: 'synthetic', stores: [server.store], apiPath },

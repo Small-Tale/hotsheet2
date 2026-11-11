@@ -48,6 +48,15 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-3HC9HT: `clients/web/src/remote-auth-bridge.test.ts` covers registered-only
+remote project open (by root or id, the checkout's own store, unregistered and
+empty roots refused, 201/403/400 answers, session required, local open route
+off the remote allowlist); `project-startup.test.ts` and `client-origin.test.ts`
+cover route selection. `remote-auth-server-integration.test.ts` opens a
+registered checkout through the real session (cross-origin and unregistered
+roots refused) and from the shipped remote picker in a browser. No customer
+content was copied into fixtures.
+
 HS2-BCCF8J: `scripts/platform-matrix.test.mjs` checks that both native Windows arm64
 jobs install the exact upstream gas-preprocessor SHA-256 and verify Perl syntax
 before their Rust builds. Native assembly and build evidence comes from the

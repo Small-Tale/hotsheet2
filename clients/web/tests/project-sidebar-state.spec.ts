@@ -55,7 +55,7 @@ test('never renders one project sidebar with another Project Statistics', async 
       url = new URL(request.url()),
       path = url.pathname,
       other = path.includes('other-checkout');
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = request.postDataJSON().root as string;
       return route.fulfill({
         status: 201,
@@ -207,7 +207,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
       url = new URL(request.url()),
       path = url.pathname,
       other = path.includes('other-checkout');
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = request.postDataJSON().root as string;
       return route.fulfill({
         status: 201,
@@ -353,7 +353,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
-    if (path === '/__hotsheet/projects/open')
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
       return route.fulfill({ status: 201, json: project('demo-checkout', request.postDataJSON().root as string) });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))

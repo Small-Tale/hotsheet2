@@ -29,7 +29,7 @@ async function openWithCompatibility(
 ) {
   await page.route('**/*', (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/__hotsheet/projects/open')
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
       return route.fulfill({
         status: 201,
         json: {
@@ -187,7 +187,7 @@ test('presents newer local source as a globally dismissible info notice, not an 
   let current = { compatibility: staleOnly('source-sha256:old', 'source-sha256:new'), id: 'first' };
   await openWithCompatibility(page, current.compatibility);
   // Registered after the helper's catch-all so reloads see each step's project and build pair.
-  await page.route('**/__hotsheet/projects/open', (route) =>
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({
       status: 201,
       json: {

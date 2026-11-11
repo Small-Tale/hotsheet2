@@ -209,6 +209,16 @@ from desktop to phone widths. The project picker that follows successful
 authentication retains its existing remote-project limitations until
 HS2-BT4KN6.
 
+**Remote project open (HS2-3HC9HT).** A remote browser opens projects through
+`POST /__hotsheet/remote/projects/open` rather than the local
+`/__hotsheet/projects/open`, which stays off the remote allowlist. The remote
+route takes only a root or checkout id. It opens a checkout only when the host
+server already lists it, using that checkout's own linked store, and it skips
+the project setup refresh that writes into the host repository. An unregistered
+root answers 403. The client uses this route, and the open-projects picker in
+place of the folder chooser, whenever the page is stamped with the remote auth
+mode or loaded from a non-loopback origin.
+
 **Host-only actions on remote clients (HS2-F78B1S).** Some actions launch a process or
 native dialog on the machine running the server: the configured `git difftool` (ticket
 commits/Code Review, repository status ranges and worktree files), attachment and

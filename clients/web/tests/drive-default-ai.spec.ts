@@ -99,7 +99,7 @@ async function mockTwoProjects(page: import('@playwright/test').Page) {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
-    if (path === '/__hotsheet/projects/open' && request.method() === 'POST') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path) && request.method() === 'POST') {
       const root = (request.postDataJSON() as { root: string }).root,
         { defaultAi, ...project } = (projects as Record<string, MockProject>)[root] ?? projects['/work/alpha'];
       void defaultAi;

@@ -88,7 +88,7 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'profile', stores: [server.store], apiPath },

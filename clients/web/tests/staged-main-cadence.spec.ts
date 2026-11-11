@@ -34,7 +34,7 @@ test('HS2-0BJ1A3 rebuilt Workers view shows the real source cadence across sizes
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'Synthetic Cadence', stores: [server.store], apiPath },

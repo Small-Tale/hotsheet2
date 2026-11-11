@@ -106,7 +106,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);
-    if (path === '/__hotsheet/projects/open') {
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
       const root = (request.postDataJSON() as { root: string }).root;
       return route.fulfill({ status: 201, json: root === '/work/target' ? targetProject : sourceProject });
     }

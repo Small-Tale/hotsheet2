@@ -11,6 +11,7 @@ import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createDevLatencyLog } from './dev-latency-log';
 import { traceDevBridgeRequest } from './dev-request-timing';
+import { REMOTE_PROJECT_OPEN_PATH } from './local-bridge-client';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
 import {
@@ -22,6 +23,7 @@ import {
   listServerCheckouts,
   migrateHs1Project,
   openLocalProject,
+  openRegisteredProject,
   proxyProjectRequest,
   recoverUnhealthyServer,
   remoteBrowserAuthRequired,
@@ -30,6 +32,7 @@ import {
   revealCorruptTicket,
   type UnhealthyServerRecovery,
   unhealthyServerRecovery,
+  UnregisteredRemoteProjectError,
 } from './project-bridge';
 
 export function createDevApp(
@@ -46,6 +49,7 @@ export function createDevApp(
   latencyLog: Pick<ReturnType<typeof createDevLatencyLog>, 'record' | 'recent' | 'file'> = createDevLatencyLog(),
   forwardChangePoll: ChangeMuxForward = (project, path, signal) =>
     proxyProjectRequest(project, path, new Request(new URL(path, 'http://bridge.invalid')), signal),
+  openRemote: (root: string) => Promise<unknown> = openRegisteredProject,
 ): Hono {
   const app = new Hono();
   app.use('/__hotsheet/*', async (context, next) => {
@@ -60,6 +64,7 @@ export function createDevApp(
     if (path.startsWith('/__hotsheet/remote-auth/owner')) return context.json({ error: 'Trusted host required.' }, 403);
     const allowed =
       path === '/__hotsheet/checkouts' ||
+      path === REMOTE_PROJECT_OPEN_PATH ||
       path.startsWith('/__hotsheet/project-api/') ||
       ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
     if (!allowed) return context.notFound();
@@ -115,6 +120,23 @@ export function createDevApp(
         { error: error instanceof Error ? error.message : 'Could not list the projects open on the Hot Sheet server.' },
         502,
       );
+    }
+  });
+  // Remote browsers open only checkouts the host already registered; the local route below can set up any
+  // folder on this machine, so it stays off the remote allowlist (HS2-3HC9HT).
+  app.post(REMOTE_PROJECT_OPEN_PATH, async (context) => {
+    let root: unknown;
+    try {
+      root = (await context.req.json<{ root?: unknown }>()).root;
+    } catch {
+      return context.json({ error: 'Expected a JSON body with a project root.' }, 400);
+    }
+    if (typeof root !== 'string' || !root.trim()) return context.json({ error: 'Expected a project root.' }, 400);
+    try {
+      return context.json(await openRemote(root), 201);
+    } catch (error) {
+      if (error instanceof UnregisteredRemoteProjectError) return context.json({ error: error.message }, 403);
+      return context.json({ error: error instanceof Error ? error.message : 'Could not open project.' }, 400);
     }
   });
   app.post('/__hotsheet/projects/open', async (context) => {

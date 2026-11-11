@@ -226,6 +226,9 @@ export function parseConversationExportOpen(value: unknown): { conversation?: Co
 
 // ---- Endpoints ----
 
+/** Remote browsers open a host-registered checkout here instead of `/__hotsheet/projects/open` (HS2-3HC9HT). */
+export const REMOTE_PROJECT_OPEN_PATH = '/__hotsheet/remote/projects/open';
+
 /** Native dialogs open on the server's machine, so a remote client is refused with an explanation (HS2-F78B1S). */
 async function hostOnly<T>(action: HostOnlyAction, run: () => Promise<T>): Promise<T> {
   assertHostAction(action);
@@ -254,6 +257,14 @@ export const localBridge = {
     localBridgeRequest('/__hotsheet/projects/open', {
       method: 'POST',
       body: { root, ticketStore },
+      parse: parseOpenedProject,
+      fallbackError,
+      request,
+    }),
+  openRemoteProject: (root: string, fallbackError = 'Could not open project.', request?: typeof fetch) =>
+    localBridgeRequest(REMOTE_PROJECT_OPEN_PATH, {
+      method: 'POST',
+      body: { root },
       parse: parseOpenedProject,
       fallbackError,
       request,

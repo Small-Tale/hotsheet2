@@ -1700,6 +1700,34 @@ async function openPreparedLocalProject(
   };
 }
 
+/** A remote browser asked to open a root the host server has not registered. */
+export class UnregisteredRemoteProjectError extends Error {
+  constructor() {
+    super('This project is not open on the Hot Sheet server. Open it on the host first.');
+    this.name = 'UnregisteredRemoteProjectError';
+  }
+}
+
+/** Open a checkout for an approved remote browser (HS2-3HC9HT). The remote client names a root or
+ * checkout id, never a ticket-store path; only a checkout the host server already lists is opened,
+ * with its own linked store, and the setup refresh that writes into the host repository is skipped. */
+export async function openRegisteredProject(
+  rootOrId: string,
+  list: () => Promise<Checkout[]> = listServerCheckouts,
+  open: (root: string, ticketStore: string | undefined) => Promise<ProjectSession> = (root, ticketStore) =>
+    openPreparedLocalProject(root, ticketStore, {}),
+  linkedStore: (root: string) => Promise<string | undefined> = linkedTicketStore,
+): Promise<ProjectSession> {
+  const wanted = rootOrId.trim();
+  if (!wanted) throw new UnregisteredRemoteProjectError();
+  const canonical = await realpath(wanted).catch(() => wanted);
+  const checkout = (await list()).find(
+    (entry) => entry.id === wanted || entry.root === wanted || entry.root === canonical,
+  );
+  if (!checkout) throw new UnregisteredRemoteProjectError();
+  return open(checkout.root, await linkedStore(checkout.root));
+}
+
 /** List openable checkouts for the remote/cross-device project picker: a non-loopback client
  * can't browse the server filesystem, so it picks from these (HS2-VFNCXG, HS2-HFP3HM).
  * This queries the same singleton bootstrap server `openLocalProject` opens projects through — it was

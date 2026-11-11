@@ -1,7 +1,7 @@
 import { delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { isRemoteClient } from '../client-origin';
+import { opensProjectsRemotely } from '../client-origin';
 import { dismissClientUpdateNotice } from '../client-update-notice';
 import { type ExternalProviderKind } from '../components/provider-setup-form';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
@@ -100,7 +100,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
   );
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.chooseProject.selector, () => {
-      if (isRemoteClient()) void openRemoteProjectDialog();
+      if (opensProjectsRemotely()) void openRemoteProjectDialog();
       else void chooseAndOpenProject();
     }),
   );

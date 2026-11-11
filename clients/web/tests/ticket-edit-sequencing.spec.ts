@@ -91,7 +91,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))
       return route.fulfill({
@@ -224,7 +224,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))
       return route.fulfill({
@@ -345,7 +345,7 @@ test('typing never writes to the server and one blur saves the whole edit withou
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))
       return route.fulfill({
@@ -485,7 +485,7 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))
       return route.fulfill({
@@ -614,7 +614,8 @@ for (const keepTyping of [true, false])
         url = new URL(request.url()),
         path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
         method = request.method();
-      if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+      if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
+        return route.fulfill({ status: 201, json: project });
       if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
       if (path.endsWith('/providers'))
         return route.fulfill({

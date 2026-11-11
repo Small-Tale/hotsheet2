@@ -25,13 +25,13 @@ describe('project dialog lifecycle', () => {
     expect(source).not.toMatch(/delegate\(document\.body,'wa-request-close','\[data-ticket-source-setup-dialog\]'/);
   });
 
-  it('routes the project-tab plus through the native chooser on same-device clients and the open-projects list on remote clients (HS2-VFNCXG)', () => {
+  it('routes the project-tab plus through the native chooser on same-device clients and the open-projects list on remote clients or a remote-auth host (HS2-VFNCXG, HS2-3HC9HT)', () => {
     const source = ['./app/runtime.tsx', './features/project-lifecycle.ts', './interactions/project-lifecycle.ts']
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
       .join('\n');
 
     expect(source).toMatchSource(
-      /delegate\(document\.body,'click',PROJECT_LIFECYCLE_ACTIONS\.chooseProject\.selector,\(\)=>\{if\(isRemoteClient\(\)\)void openRemoteProjectDialog\(\);else void chooseAndOpenProject\(\)\}\)/,
+      /delegate\(document\.body,'click',PROJECT_LIFECYCLE_ACTIONS\.chooseProject\.selector,\(\)=>\{if\(opensProjectsRemotely\(\)\)void openRemoteProjectDialog\(\);else void chooseAndOpenProject\(\)\}\)/,
     );
     expect(source).toMatchSource(/if\(result\.path\)await openProject\(result\.path\)/);
   });

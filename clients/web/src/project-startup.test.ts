@@ -45,6 +45,20 @@ describe('project open preparation', () => {
     });
     expect(providers).toHaveBeenCalledWith(value);
   });
+  it('opens through the remote route on a remote client and never sends a ticket store (HS2-3HC9HT)', async () => {
+    const value = project('alpha');
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json(value, { status: 201 }));
+    expect(await openProjectFetch('alpha', '/tickets', request, async () => [], true)).toEqual(success('alpha'));
+    expect(request).toHaveBeenCalledWith('/__hotsheet/remote/projects/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ root: 'alpha' }),
+    });
+    request.mockResolvedValueOnce(Response.json({ error: 'This project is not open.' }, { status: 403 }));
+    expect(await openProjectFetch('beta', undefined, request, async () => [], true)).toEqual(
+      failure('This project is not open.'),
+    );
+  });
   it('keeps recovery identity local to each concurrently failed request', async () => {
     const recovery = { store: '/a.hs2', expected: { pid: 42, url: 'http://local', started_at: 'now' } };
     const request = vi

@@ -53,7 +53,7 @@ test('HS2-KX87JC replays a short worker lease into the rebuilt Workers view with
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'Synthetic Workers', stores: [server.store], apiPath },
@@ -166,7 +166,7 @@ test('HS2-KX87JC source failure must not leave a stale Available worker card', a
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
     });
-    await page.route('**/__hotsheet/projects/open', (route) =>
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
       route.fulfill({
         status: 201,
         json: { id: server.checkoutId, root: server.root, name: 'Synthetic Workers', stores: [server.store], apiPath },

@@ -37,6 +37,7 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
   let store = '';
   let project = '';
   let checkoutId = '';
+  let checkoutRoot = '';
   let origin = '';
   let host: Server | undefined;
   let previousHome: string | undefined;
@@ -50,7 +51,9 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     process.env.HOTSHEET_HOME = home;
     project = await mkdtemp(join(workspace, 'synthetic-project-'));
     store = await createLocalGitTicketStore(project);
-    checkoutId = (await openLocalProject(project, store)).id;
+    const opened = await openLocalProject(project, store);
+    checkoutId = opened.id;
+    checkoutRoot = opened.root;
     process.env.HOTSHEET_BROWSER_AUTH_MODE = 'remote';
     host = await startLocalHost({ port: 0, distRoot: fileURLToPath(new URL('../dist', import.meta.url)) });
     origin = `http://127.0.0.1:${(host.address() as AddressInfo).port}`;
@@ -144,6 +147,19 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
         })
       ).status,
     ).toBe(401);
+    // HS2-3HC9HT: the remote session opens only registered checkouts, through its own route.
+    const sessionPost = (path: string, value: unknown, from = origin) =>
+      bridge.request(url(path), {
+        method: 'POST',
+        headers: { cookie, origin: from, 'content-type': 'application/json' },
+        body: JSON.stringify(value),
+      });
+    expect((await sessionPost('/projects/open', { root: project })).status).toBe(404);
+    expect((await sessionPost('/remote/projects/open', { root: workspace })).status).toBe(403);
+    expect((await sessionPost('/remote/projects/open', { root: project }, 'http://foreign.invalid')).status).toBe(401);
+    const remoteOpen = await sessionPost('/remote/projects/open', { root: project });
+    expect(remoteOpen.status).toBe(201);
+    expect(((await remoteOpen.json()) as { id: string }).id).toBe(checkoutId);
     const deniedWrite = await bridge.request(url(`/project-api/${checkoutId}/tickets`), {
       method: 'POST',
       headers: { ...headers, 'x-hotsheet-csrf': csrf },
@@ -204,6 +220,16 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
             `Post-pairing app failed: ${errors.join(' | ')}; body=${(await page.locator('body').innerText()).slice(0, 300)}`,
           );
         });
+      // HS2-3HC9HT: the approved session opens a registered checkout from the remote picker.
+      const opens: number[] = [];
+      page.on('response', (response) => {
+        if (new URL(response.url()).pathname.endsWith('/projects/open')) opens.push(response.status());
+      });
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.locator(`[data-checkout-root="${checkoutRoot}"]`).click();
+      await page.getByText('Open a Hot Sheet Project').waitFor({ state: 'detached', timeout: 20_000 });
+      expect(opens).toEqual([201]);
+      await page.screenshot({ path: '/private/tmp/hs2-3hc9ht-remote-project-open.png', fullPage: true });
     } finally {
       await browser.close();
     }

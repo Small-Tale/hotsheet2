@@ -91,7 +91,7 @@ async function mockTickets(page: Page, fixture: { note?: string; noteKind?: stri
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       method = request.method();
     if (url.hostname === 'example.invalid') return route.fulfill({ body: 'external guide' });
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
     if (path.endsWith('/providers'))
       return route.fulfill({
         json: [
