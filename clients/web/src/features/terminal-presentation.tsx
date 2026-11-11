@@ -1,3 +1,4 @@
+import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import type { Signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
@@ -72,6 +73,8 @@ export interface TerminalPresentationDependencies {
     viewportMobile: Signal<boolean>;
     /** Whether the primary pointer is coarse (touch-first device), for desktop-width Copy/Paste (HS2-5DHHPV). */
     coarsePointer: Signal<boolean>;
+    /** The drawer's collapsible terminal search (HS2-TWZSZF). */
+    terminalSearch: { model: SearchFieldModel; open: Signal<boolean> };
   };
   conversations: {
     conversationStates: Signal<Record<string, ConversationState>>;
@@ -132,6 +135,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     mobileMagnifiedTerminal,
     viewportMobile,
     coarsePointer,
+    terminalSearch,
   } = dependencies.terminals;
   // Phones already carry Copy/Paste in their own chrome; a touch-first desktop layout adds them (HS2-5DHHPV).
   const touchClipboard = () => coarsePointer.value && !viewportMobile.value;
@@ -348,6 +352,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       defaultAiProvider: effectiveDriveSelection(current.id).tool,
       mobile: viewportMobile.value,
       touchClipboard: touchClipboard(),
+      search: { model: terminalSearch.model, open: terminalSearch.open.value },
     };
   }
 

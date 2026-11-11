@@ -4,6 +4,7 @@ import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns'
 import { TERMINAL_CLEAR_EVENT } from './terminal-clear';
 import { TERMINAL_EDIT_MENU_EVENT } from './terminal-clipboard';
 import { applyTerminalLimits } from './terminal-limits';
+import { TERMINAL_SEARCH_EVENT, type TerminalSearchDetail } from './terminal-search';
 import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_VIEWPORT_PARK_EVENT,
@@ -146,6 +147,25 @@ vi.mock('@xterm/addon-fit', () => ({
   },
 }));
 const webglAddons = vi.hoisted(() => [] as Array<{ disposed: boolean }>);
+// HS2-TWZSZF: the search addon loads lazily on a viewport's first query.
+const searchAddons = vi.hoisted(
+  () =>
+    [] as Array<{
+      findNext: ReturnType<typeof vi.fn>;
+      findPrevious: ReturnType<typeof vi.fn>;
+    }>,
+);
+vi.mock('@xterm/addon-search', () => ({
+  SearchAddon: class {
+    findNext = vi.fn((query: string) => query !== 'missing');
+    findPrevious = vi.fn(() => true);
+    constructor() {
+      searchAddons.push(this);
+    }
+    activate() {}
+    dispose() {}
+  },
+}));
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: class {
     disposed = false;
@@ -369,6 +389,54 @@ describe('Clear Terminal (HS2-N2AG8V)', () => {
   );
 });
 
+describe('terminal search (HS2-TWZSZF)', () => {
+  it('loads the search addon on the first query, steps both ways, clears the selection, and ignores previews', () => {
+    searchAddons.length = 0;
+    const { viewport, listeners } = element();
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    const search = listeners.mock.calls.find(([name]) => name === TERMINAL_SEARCH_EVENT)?.[1] as (event: Event) => void;
+    const ask = (query: string, direction: 'next' | 'previous' = 'next', incremental = true) => {
+      const detail: TerminalSearchDetail = { query, direction, incremental };
+      search(new CustomEvent(TERMINAL_SEARCH_EVENT, { detail }));
+      return detail.found;
+    };
+    // An empty query before any search clears nothing and loads nothing.
+    expect(ask('')).toBe(false);
+    expect(searchAddons).toHaveLength(0);
+    expect(ask('nano')).toBe(true);
+    expect(ask('nano', 'next', false)).toBe(true);
+    expect(ask('nano', 'previous', false)).toBe(true);
+    expect(ask('missing')).toBe(false);
+    expect(ask('missing', 'next', false)).toBe(false);
+    expect(searchAddons).toHaveLength(1);
+    // A manual step that misses once (stepping back from a single match) retries and wraps; an
+    // absent query fails both tries, and a typed (incremental) miss is not retried.
+    searchAddons[0].findPrevious.mockReturnValueOnce(false);
+    expect(ask('nano', 'previous', false)).toBe(true);
+    expect(searchAddons[0].findNext.mock.calls.filter(([query]) => query === 'missing')).toHaveLength(3);
+    const [addon] = searchAddons;
+    expect(addon.findNext).toHaveBeenNthCalledWith(1, 'nano', expect.objectContaining({ incremental: true }));
+    expect(addon.findNext).toHaveBeenNthCalledWith(2, 'nano', expect.objectContaining({ incremental: false }));
+    expect(addon.findPrevious).toHaveBeenCalledWith('nano', expect.objectContaining({ incremental: false }));
+    // No decorations: they need xterm's proposed API, which stays off.
+    expect(addon.findNext.mock.calls[0]?.[1]).toEqual({ incremental: true });
+    const terminal = allocated.terminals.at(-1) as unknown as { clearSelection: ReturnType<typeof vi.fn> };
+    terminal.clearSelection.mockClear();
+    expect(ask('')).toBe(false);
+    expect(terminal.clearSelection).toHaveBeenCalledTimes(1);
+    dispose();
+
+    const preview = element();
+    Object.assign(preview.viewport.dataset, { displayMode: 'scaled-preview', gridPolicy: 'dashboard-80x24' });
+    const disposePreview = mountTerminalViewportRuntime(preview.viewport, {
+      url: 'ws://lan/terminal',
+      viewerId: 'two',
+    });
+    expect(preview.listeners.mock.calls.some(([name]) => name === TERMINAL_SEARCH_EVENT)).toBe(false);
+    disposePreview();
+  });
+});
+
 describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
   it('disposes allocations after socket setup throws, then mounts and disposes a fresh viewer exactly once', () => {
     const { viewport, removed } = element();
@@ -409,6 +477,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'hotsheet-terminal-key',
         'hotsheet-terminal-paste',
         'hotsheet-terminal-read-text',
+        // HS2-TWZSZF: the drawer search reaches the interactive emulator.
+        'hotsheet-terminal-search',
         // HS2-1YX5VS: typing, pasting, and text entry are the human input that keeps sizing authority.
         'input',
         'keydown',

@@ -71,6 +71,8 @@ export const TERMINALS_TARGETS = {
   terminalPasteDialog: attr('data-dialog-component', 'terminal-paste-dialog'),
   terminalEditMenu: attr('data-context-menu', 'terminal-edit'),
   terminalViewport: attr('data-component', 'terminal-viewport'),
+  /** The drawer's terminal search editor (HS2-TWZSZF). */
+  terminalSearchEditor: attr('data-search-field-editor', 'terminal-search'),
   terminalVisibilityGroupField: attr('name', 'terminal-visibility-group'),
   workspaceChatTile: attr('data-component', 'workspace-chat-tile'),
   projectCloseDialog: attr('data-dialog-component', 'project-close-dialog'),

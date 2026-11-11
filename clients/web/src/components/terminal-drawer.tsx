@@ -7,6 +7,8 @@ import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
+import { SearchField } from '@kerfjs/ui/search-field';
+import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -44,6 +46,7 @@ import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionLabel } from '../terminal-ai-connection';
 import { terminalGridContentSize } from '../terminal-grid-layout';
+import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import {
   type MobileMagnifiedTerminal,
   type TerminalContextMenuAction,
@@ -114,6 +117,16 @@ export interface TerminalDrawerProps {
   touchClipboard?: boolean;
   /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
   hostActionsAvailable?: boolean;
+  /**
+   * The rail's collapsible terminal search (HS2-TWZSZF): a borderless search icon beside Hide until it
+   * is activated, then a field that searches the selected terminal. Omitted where search is unavailable.
+   */
+  search?: TerminalDrawerSearch;
+}
+/** The Kerf-managed model and open state of the drawer's terminal search field. */
+export interface TerminalDrawerSearch {
+  model: SearchFieldModel;
+  open: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -194,6 +207,7 @@ export function TerminalDrawer({
   mobile = false,
   touchClipboard = false,
   hostActionsAvailable = hostActionsAvailableHere(),
+  search,
 }: TerminalDrawerProps) {
   const liveIds = new Set([...sessions.map((session) => session.id), ...chatTabs.map((chat) => chat.id)]),
     view = drawerSelectionView(selectedId, liveIds, pendingTabs),
@@ -449,6 +463,30 @@ export function TerminalDrawer({
               end={
                 <>
                   {selectedChat?.toolbar}
+                  {selectedSession && search && (
+                    // Search the selected terminal (HS2-TWZSZF): an iconic, borderless trigger until it is
+                    // activated, then Kerf's expanded field; Kerf collapses it again when it empties and blurs.
+                    <ToolbarControlGroup
+                      appearance={search.open ? 'contained' : 'borderless'}
+                      expanded={search.open}
+                      single
+                      content="search"
+                      focusRing="halo"
+                      visibility="hide-collapsed-tiny"
+                    >
+                      <SearchField
+                        presentation="toolbar-group"
+                        id={TERMINAL_SEARCH_FIELD_ID}
+                        label="Search Terminal"
+                        model={search.model}
+                        placeholder="Search terminal"
+                        clearLabel="Clear Terminal Search"
+                        collapsible
+                        expanded={search.open}
+                        expandLabel="Search Terminal"
+                      />
+                    </ToolbarControlGroup>
+                  )}
                   <ToolbarControlGroup
                     className="terminal-drawer__actions"
                     appearance="borderless"

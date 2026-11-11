@@ -1,6 +1,7 @@
 import '@xterm/xterm/css/xterm.css';
 
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 
@@ -44,6 +45,7 @@ import {
   terminalReplayMaxBytes,
   type TerminalStreamPosition,
 } from './terminal-replay-stream';
+import { TERMINAL_SEARCH_EVENT, type TerminalSearchDetail } from './terminal-search';
 import { followTerminalTheme, resolveTerminalTheme } from './terminal-theme';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
@@ -1598,6 +1600,33 @@ function initializeTerminalViewport(
     own(() => {
       element.removeEventListener(TERMINAL_READ_TEXT_EVENT, readText);
       element.removeEventListener(TERMINAL_PASTE_EVENT, paste);
+    });
+    // Terminal search (HS2-TWZSZF): xterm's search addon loads on the first query. It selects the active
+    // match and scrolls it into view; match decorations would need xterm's proposed API, which stays off.
+    let searchAddon: SearchAddon | undefined;
+    const search = (event: Event) => {
+      const detail = (event as CustomEvent<TerminalSearchDetail>).detail;
+      if (!detail.query) {
+        if (searchAddon) terminal.clearSelection();
+        detail.found = false;
+        return;
+      }
+      if (!searchAddon) {
+        searchAddon = new SearchAddon();
+        terminal.loadAddon(searchAddon);
+      }
+      const options = { incremental: detail.incremental },
+        step = () =>
+          detail.direction === 'previous'
+            ? searchAddon!.findPrevious(detail.query, options)
+            : searchAddon!.findNext(detail.query, options);
+      // Stepping back from the only match reports no match and drops the selection once before the addon
+      // wraps, so a manual step retries once; a query that is really absent fails both times.
+      detail.found = step() || (!detail.incremental && step());
+    };
+    element.addEventListener(TERMINAL_SEARCH_EVENT, search);
+    own(() => {
+      element.removeEventListener(TERMINAL_SEARCH_EVENT, search);
     });
   }
   connect();

@@ -1,4 +1,5 @@
-import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
+import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type AiToolDefaults } from '../api';
@@ -52,6 +53,7 @@ import {
   type TerminalModifiers,
   toggleTerminalModifier,
 } from '../terminal-keys';
+import { searchTerminalViewport } from '../terminal-search';
 import { type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
@@ -154,6 +156,8 @@ export interface TerminalInteractionsDependencies {
   readonly saveTerminalName: (projectId: string, terminalId: string, name: string) => void;
   /** Clear a terminal's saved name so its tab shows the derived default again (HS2-2Q7KTX). */
   readonly resetTerminalName: (projectId: string, terminalId: string) => void;
+  /** The terminal drawer's Kerf-managed search field model (HS2-TWZSZF). */
+  readonly terminalSearchModel: SearchFieldModel;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -216,6 +220,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     closeDrawerTabIds,
     saveTerminalName,
     resetTerminalName,
+    terminalSearchModel,
   } = dependencies;
   // The magnified terminal (HS2-Z9PQSC) and the shell's permission popup (HS2-ZESCM2) are manual
   // popovers; keep them in the top layer as Kerf renders them.
@@ -488,6 +493,36 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       event.preventDefault();
       event.stopPropagation();
       clearTerminal(viewport);
+    }),
+  );
+  // Terminal search (HS2-TWZSZF): typing in the drawer's search field searches the selected terminal
+  // incrementally, and Enter or Shift-Enter moves to the next or previous match. An emptied field
+  // clears the highlights. Kerf owns the field's text, clear button, and collapse.
+  const searchViewport = () =>
+    document.querySelector<HTMLElement>(
+      '[data-component="terminal-drawer"] .terminal-session:not([hidden]) [data-display-mode="interactive"]',
+    );
+  let searchedQuery = '';
+  lifetime.add(
+    effect(() => {
+      const { query } = terminalSearchModel.state.value;
+      if (query === searchedQuery) return;
+      searchedQuery = query;
+      const viewport = searchViewport();
+      if (viewport) searchTerminalViewport(viewport, query, 'next', true);
+    }),
+  );
+  lifetime.add(
+    delegateCapture(document.body, 'keydown', TERMINALS_TARGETS.terminalSearchEditor.selector, (event) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'Enter' || keyboard.isComposing || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey)
+        return;
+      // The terminal search has no submit: Enter steps through matches instead of reaching Kerf's submit.
+      keyboard.preventDefault();
+      keyboard.stopPropagation();
+      const query = terminalSearchModel.state.peek().query,
+        viewport = searchViewport();
+      if (query && viewport) searchTerminalViewport(viewport, query, keyboard.shiftKey ? 'previous' : 'next', false);
     }),
   );
   // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard

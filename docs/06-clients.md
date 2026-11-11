@@ -3609,7 +3609,13 @@ hide action (pressing it leaves keyboard focus in the terminal), and physical Co
 reaches the shell. Clearing is a view action in this client: every mounted viewport of that
 terminal (dedicated, grid preview, parked) drops its scrollback and screen but keeps the cursor
 line, and nothing is sent to the shell. The server replay ring is unchanged, so a reload or
-another client replays earlier output (shared clear: HS2-HA0Z3A). Its grid tab
+another client replays earlier output (shared clear: HS2-HA0Z3A). Beside them, a
+borderless Kerf search icon (collapsible `SearchField` in its own toolbar group) expands into a
+field when activated and searches the selected terminal with xterm's search addon (HS2-TWZSZF):
+typing selects the next match incrementally and scrolls it into view, Enter and Shift-Enter step
+to the next and previous match, an emptied field clears the selection, and Escape or blur on an
+empty field collapses it back to the icon. Only the active match is highlighted; match
+decorations need xterm's proposed API, which stays off. Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action

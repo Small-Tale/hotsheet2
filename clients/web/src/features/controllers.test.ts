@@ -1,3 +1,4 @@
+import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { effect, type Signal, signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -2459,6 +2460,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     ai: state.ai,
     permissions,
     terminals: {
+      terminalSearch: { model: createSearchFieldModel(), open: signal(false) },
       terminalGroups: groups,
       terminalGridFullscreen: signal(false),
       terminalDrawerPendingByProject: signal({}),

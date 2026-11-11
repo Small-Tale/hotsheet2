@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { describe, expect, it } from 'vitest';
 
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from './ai-conversation';
@@ -409,6 +410,36 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toMatch(/class="terminal-session"[^>]*hidden/);
     expect(markup).not.toContain('data-component="terminal-tile"');
     expect(markup).not.toContain('Workspace tile zoom');
+  });
+  it('HS2-TWZSZF places a borderless iconic terminal search before the actions until it opens', () => {
+    const drawer = (selectedId: string, open: boolean | undefined) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId,
+          ...(open === undefined ? {} : { search: { model: createSearchFieldModel(), open } }),
+        }),
+      );
+    const collapsed = drawer('one', false);
+    // Its own single search group, borderless while collapsed (Kerf's iconic expand button only), then
+    // Clear and Hide in the actions group.
+    expect(collapsed).toMatch(
+      /kui-tab-bar__end[\s\S]*data-appearance="borderless"[^>]*data-content="search"[\s\S]*data-search-field-id="terminal-search"[^>]*data-collapsible="true" data-expanded="false"[\s\S]*data-action="expand-search-field" aria-label="Search Terminal"[\s\S]*data-lucide="search"[\s\S]*terminal-drawer__actions[\s\S]*clear-terminal[\s\S]*toggle-terminal-drawer/,
+    );
+    expect(collapsed).not.toContain('data-search-field-editor="terminal-search"');
+    const open = drawer('one', true);
+    expect(open).toMatch(/data-appearance="contained"[^>]*data-expanded="true"[^>]*data-content="search"/);
+    expect(open).toContain('data-search-field-editor="terminal-search"');
+    expect(open).toContain('Search terminal');
+    // Only a selected terminal can be searched; a host without search state renders none.
+    expect(drawer('grid', false)).not.toContain('terminal-search');
+    expect(drawer('one', undefined)).not.toContain('terminal-search');
   });
   it('HS2-N2AG8V offers Clear Terminal before Hide only while a terminal is selected', () => {
     const terminal = render('one');

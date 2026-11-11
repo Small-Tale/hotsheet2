@@ -54,6 +54,7 @@
     "@kerfjs/ui": "5.0.0-beta.126",
     "@tauri-apps/plugin-notification": "2.8.0",
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "hono": "^4.13.7",

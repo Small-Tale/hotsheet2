@@ -81,6 +81,16 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
         );
         focusDrawerTab(current.id, sourceId);
       },
+      // A narrower drawer (a window resize, or rail actions such as terminal search, HS2-TWZSZF) can
+      // scroll the selected drawer tab out of its strip; Kerf reports each fit change, so bring the
+      // selected tab back into view without moving focus.
+      onFitChange: ({ barId }) => {
+        if (barId !== TERMINAL_DRAWER_TAB_BAR_ID) return;
+        for (const tab of document.querySelectorAll<HTMLElement>(
+          `[data-tab-bar-id="${TERMINAL_DRAWER_TAB_BAR_ID}"] [role="tab"][aria-selected="true"]`,
+        ))
+          tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      },
     }),
   );
   lifetime.add(

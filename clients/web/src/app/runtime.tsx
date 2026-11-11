@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
+import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
@@ -596,6 +597,9 @@ export async function startHotSheetWebClient() {
   const guidanceLoading = signal(false);
   const guidanceMessage = signal('');
   const guidanceSearchOpen = signal(false);
+  // The terminal drawer's collapsible search (HS2-TWZSZF): Kerf owns the text, clear, and open state.
+  const terminalSearchModel = createSearchFieldModel(),
+    terminalSearchOpen = signal(false);
   const guidanceSearchModel = createGuidanceSearchModel(() => guidanceOverview.value);
   const guidanceOwnerFilter = signal('');
   const guidanceTagFilter = signal('');
@@ -5243,6 +5247,7 @@ export async function startHotSheetWebClient() {
         mobileMagnifiedTerminal,
         viewportMobile,
         coarsePointer,
+        terminalSearch: { model: terminalSearchModel, open: terminalSearchOpen },
       },
       conversations: {
         conversationStates,
@@ -6302,6 +6307,8 @@ export async function startHotSheetWebClient() {
     cancelTicketLinkChoice,
     searchOpen,
     guidanceSearchOpen,
+    terminalSearchOpen,
+    terminalSearchModel,
     workspaceSearchModel,
     guidanceSearchModel,
     guidanceSearchActive: () => viewMode.value === 'settings' && settingsCategory() === 'guidance',

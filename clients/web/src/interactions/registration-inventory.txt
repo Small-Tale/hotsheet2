@@ -80,6 +80,7 @@ terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-vie
 terminals	delegate	document.body	'mousedown'	'[data-action="clear-terminal"]'
 terminals	delegate	document.body	'click'	'[data-action="clear-terminal"]'
 terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-viewport"]'
+terminals	delegateCapture	document.body	'keydown'	'[data-search-field-editor="terminal-search"]'
 terminals	wireTerminalClipboardActions	document.body
 terminals	wireTerminalClipboardSheets	document.body
 terminals	delegateCapture	document.body	'close'	'[data-dialog-component="terminal-paste-dialog"]'

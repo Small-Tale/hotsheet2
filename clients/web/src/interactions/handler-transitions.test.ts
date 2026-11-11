@@ -1,3 +1,4 @@
+import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -416,6 +417,7 @@ it('closes a project from Project Settings through the same entry point as its t
   const requested: string[][] = [];
   let current: Pick<Project, 'id'> | undefined = { id: 'b' };
   wireTerminalInteractions({
+    terminalSearchModel: createSearchFieldModel(),
     requestProjectClose: (ids: readonly string[]) => {
       requested.push([...ids]);
     },
@@ -453,6 +455,7 @@ it('keeps LAN visibility identities stable on rename and distinct after delete/r
     prompt = signal<TerminalVisibilityNamePrompt | undefined>({ mode: 'add', value: '' }),
     menu = signal<{ id: string; x: number; y: number } | undefined>(undefined);
   wireTerminalInteractions({
+    terminalSearchModel: createSearchFieldModel(),
     terminalVisibility: state,
     terminalVisibilityNamePrompt: prompt,
     terminalVisibilityContextMenu: menu,

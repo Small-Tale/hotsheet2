@@ -20,6 +20,7 @@ import { draftFiles } from '../draft-file-recovery';
 import { type InlineSearchToken } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { isWhitespaceOnlySearch, keepSearchOpenForShadowTarget } from '../search-collapse';
+import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
@@ -31,6 +32,9 @@ import { type PendingEvidence, type Project } from './types';
 export interface SearchAndComposerInteractionsDependencies {
   readonly searchOpen: Signal<boolean>;
   readonly guidanceSearchOpen: Signal<boolean>;
+  /** The terminal drawer's collapsible search (HS2-TWZSZF); its searching is wired with the terminals. */
+  readonly terminalSearchOpen: Signal<boolean>;
+  readonly terminalSearchModel: SearchFieldModel;
   readonly guidanceRecommendationsOpen: Signal<boolean>;
   readonly guidanceUpdatesOpen: Signal<boolean>;
   readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
@@ -91,6 +95,8 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     searchOpen,
     guidanceSearchOpen,
     guidanceSearchModel,
+    terminalSearchOpen,
+    terminalSearchModel,
     guidanceSearchActive,
     workspaceSearchModel,
     savedViewSearchModel,
@@ -209,9 +215,14 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       'workspace-search': workspaceSearchModel,
       'saved-view-query': savedViewSearchModel,
       'guidance-search': guidanceSearchModel,
+      [TERMINAL_SEARCH_FIELD_ID]: terminalSearchModel,
     },
     collapsible: {
-      signals: { 'workspace-search': searchOpen, 'guidance-search': guidanceSearchOpen },
+      signals: {
+        'workspace-search': searchOpen,
+        'guidance-search': guidanceSearchOpen,
+        [TERMINAL_SEARCH_FIELD_ID]: terminalSearchOpen,
+      },
       keepOpenOn: keepSearchOpenForShadowTarget,
     },
     // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
