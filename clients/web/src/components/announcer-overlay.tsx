@@ -2,7 +2,9 @@ import './announcer-overlay.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Play, Radio, Square, Volume2 } from 'lucide';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Play, Radio, Square, Volume2, VolumeX } from 'lucide';
 
 import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID } from '../announcer-layout';
 import type { AnnouncerReelItem } from '../announcer-reel';
@@ -116,28 +118,45 @@ export function AnnouncerOverlay({
             {error}
           </p>
         )}
-        <footer class="announcer__controls">
-          <button type="button" aria-label="Previous Activity" disabled={index <= 0} {...action('previous')}>
-            <LucideIcon icon={ChevronLeft} name="chevron-left" />
-          </button>
-          <button
-            type="button"
-            aria-label={speaking ? 'Stop Narration' : 'Play Narration'}
-            disabled={!selected}
-            {...action('play')}
-          >
-            <LucideIcon icon={speaking ? Square : Play} name={speaking ? 'square' : 'play'} />
-          </button>
-          <button type="button" aria-label="Next Activity" disabled={index >= items.length - 1} {...action('next')}>
-            <LucideIcon icon={ChevronRight} name="chevron-right" />
-          </button>
-          <button type="button" aria-pressed={live} {...action('live')}>
-            <LucideIcon icon={Radio} name="radio" /> Live
-          </button>
-          <button type="button" aria-pressed={audible} {...action('audio')}>
-            <LucideIcon icon={Volume2} name="volume-2" /> Audio
-          </button>
-        </footer>
+        {/* HS2-YF8P38: playback stays together at the start and the narration toggles at the end; spare
+            width goes between the groups. HS2-EYW4H8: the toggles are Kerf pressed controls whose raised
+            chrome, aria-pressed state, and icon (Audio) show on or off without relying on color. They are
+            icon-only so both groups share one row in the narrowest docked sidebar (250px). */}
+        <Toolbar
+          label="Announcer Controls"
+          position="footer"
+          density="compact"
+          dividerSides="t"
+          responsive="wrap-groups"
+          leading={
+            <ToolbarControlGroup size="compact" density="compact" label="Playback">
+              <button type="button" aria-label="Previous Activity" disabled={index <= 0} {...action('previous')}>
+                <LucideIcon icon={ChevronLeft} name="chevron-left" />
+              </button>
+              <button
+                type="button"
+                aria-label={speaking ? 'Stop Narration' : 'Play Narration'}
+                disabled={!selected}
+                {...action('play')}
+              >
+                <LucideIcon icon={speaking ? Square : Play} name={speaking ? 'square' : 'play'} />
+              </button>
+              <button type="button" aria-label="Next Activity" disabled={index >= items.length - 1} {...action('next')}>
+                <LucideIcon icon={ChevronRight} name="chevron-right" />
+              </button>
+            </ToolbarControlGroup>
+          }
+          trailing={
+            <ToolbarControlGroup size="compact" density="compact" label="Narration">
+              <button type="button" aria-label="Live" aria-pressed={String(live)} {...action('live')}>
+                <LucideIcon icon={Radio} name="radio" />
+              </button>
+              <button type="button" aria-label="Audio" aria-pressed={String(audible)} {...action('audio')}>
+                <LucideIcon icon={audible ? Volume2 : VolumeX} name={audible ? 'volume-2' : 'volume-x'} />
+              </button>
+            </ToolbarControlGroup>
+          }
+        />
         <label class="announcer__voice">
           Voice
           <select aria-label="Announcer voice provider" data-announcer-provider>

@@ -334,6 +334,11 @@ height bounds and the root region-commit routing; `announcer.spec.ts` checks the
 separator sits between the drive row and the section, keyboard and pointer resize,
 reopen and reload persistence, reachable views at 1280×600, and the phone drawer and
 corner card across wide, narrow, and returned-wide sizes.
+HS2-EYW4H8 and HS2-YF8P38 are covered in `announcer-overlay.test.ts` (group order and
+zones, pressed state and Audio icon in both directions, no app CSS on the toolbar's
+buttons) and `announcer.spec.ts` (painted on/off chrome swapping after a toggle and
+back, one row in the docked section, and fixed-size groups with a growing gap in the
+expanded card).
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

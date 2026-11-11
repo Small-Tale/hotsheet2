@@ -90,7 +90,11 @@ The `activity` capability turns native signals → events; the host owns the str
   announcer docks in its footer below the drive row, under a separator that drags
   or arrow-keys its height (144–480 px, kept per device in local storage). While the
   sidebar is hidden (collapsed, a closed phone drawer, or a mode without the rail),
-  it shows as a compact or expanded picture-in-picture card instead. Both carry the retained
+  it shows as a compact or expanded picture-in-picture card instead. Its controls are
+  two Kerf toolbar groups (HS2-EYW4H8, HS2-YF8P38): playback (previous, play, next)
+  at the start and the icon-only Live and Audio toggles at the end, with any extra
+  width between them. The toggles show on and off through pressed chrome and
+  `aria-pressed`, and Audio's icon switches between volume and muted. Both carry the retained
   cross-project digest, live narration over the change stream, a bounded reel,
   browser speech or a configured server provider. The macOS server offers a local
   `macos-say` provider. The overlay has no separate close button. While the sidebar

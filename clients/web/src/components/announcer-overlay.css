@@ -6,7 +6,10 @@
   font: inherit;
 }
 
-.announcer button {
+/* App-owned buttons only; the controls toolbar's buttons belong to Kerf's ToolbarControlGroup (HS2-EYW4H8). */
+.announcer__header button,
+.announcer__change button,
+.announcer__reel button {
   border: 0;
   border-radius: var(--wa-border-radius-m);
   background: transparent;
@@ -15,12 +18,16 @@
   cursor: pointer;
 }
 
-.announcer button:focus-visible {
+.announcer__header button:focus-visible,
+.announcer__change button:focus-visible,
+.announcer__reel button:focus-visible {
   outline: 2px solid var(--wa-color-focus);
   outline-offset: 2px;
 }
 
-.announcer button:disabled {
+.announcer__header button:disabled,
+.announcer__change button:disabled,
+.announcer__reel button:disabled {
   opacity: 0.42;
   cursor: default;
 }
@@ -67,8 +74,7 @@
   max-height: min(720px, calc(100dvh - 24px));
 }
 
-.announcer__header,
-.announcer__controls {
+.announcer__header {
   display: flex;
   align-items: center;
   gap: var(--wa-space-2xs);
@@ -90,8 +96,7 @@
   opacity: 0.7;
 }
 
-.announcer__header button,
-.announcer__controls button {
+.announcer__header button {
   min-height: 30px;
   display: inline-flex;
   align-items: center;
@@ -102,19 +107,8 @@
 }
 
 .announcer__header button:hover,
-.announcer__controls button:hover,
 .announcer__reel button:hover {
   background: var(--wa-color-neutral-fill-quiet);
-}
-
-.announcer__controls {
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-  justify-content: space-between;
-}
-
-.announcer__controls [aria-pressed='true'] {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
 }
 
 .announcer__screen {

@@ -146,6 +146,73 @@ test('HS2-BS0XFK docks the announcer under a resizable separator in the sidebar 
   }
 });
 
+test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control groups', async ({ page }) => {
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) => route.fulfill({ json: [] }));
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  const controls = overlay.locator('[data-component="toolbar"][aria-label="Announcer Controls"]');
+  const live = controls.getByRole('button', { name: 'Live', exact: true });
+  const audio = controls.getByRole('button', { name: 'Audio', exact: true });
+  const paint = (button: typeof live) =>
+    button.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return `${style.backgroundColor}|${style.boxShadow}`;
+    });
+  // Off and on differ in pressed state and painted chrome, and Audio's icon changes with it.
+  await expect(live).toHaveAttribute('aria-pressed', 'false');
+  await expect(audio).toHaveAttribute('aria-pressed', 'true');
+  const liveOff = await paint(live);
+  const audioOn = await paint(audio);
+  expect(liveOff).not.toBe(audioOn);
+  await expect(audio.locator('[data-lucide="volume-2"]')).toHaveCount(1);
+  await live.click();
+  await audio.click();
+  await expect(live).toHaveAttribute('aria-pressed', 'true');
+  await expect(audio).toHaveAttribute('aria-pressed', 'false');
+  await expect(audio.locator('[data-lucide="volume-x"]')).toHaveCount(1);
+  // Away from the pointer's hover surface, once the chrome transition settles, the states swap paint.
+  await page.mouse.move(0, 0);
+  await expect.poll(() => paint(live)).toBe(audioOn);
+  await expect.poll(() => paint(audio)).toBe(liveOff);
+  if (captureDir) await overlay.screenshot({ path: `${captureDir}/hs2-eyw4h8-toggles-on-off.png` });
+  await live.click();
+  await audio.click();
+  await expect(live).toHaveAttribute('aria-pressed', 'false');
+  await expect(audio).toHaveAttribute('aria-pressed', 'true');
+  // Playback hugs the start and the toggles hug the end; widening only grows the gap between them.
+  const measure = async () => {
+    const bar = await controls.boundingBox();
+    const playback = await controls.getByRole('group', { name: 'Playback' }).boundingBox();
+    const narration = await controls.getByRole('group', { name: 'Narration' }).boundingBox();
+    if (!bar || !playback || !narration) throw new Error('Announcer controls must be measurable');
+    // One row: the groups share a vertical center even in the narrow docked section.
+    expect(Math.abs(playback.y + playback.height / 2 - (narration.y + narration.height / 2))).toBeLessThanOrEqual(1);
+    return {
+      start: playback.x - bar.x,
+      end: bar.x + bar.width - (narration.x + narration.width),
+      gap: narration.x - (playback.x + playback.width),
+      playback: Math.round(playback.width),
+      narration: Math.round(narration.width),
+    };
+  };
+  const docked = await measure();
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
+  await expect(overlay).toHaveAttribute('data-expanded', 'true');
+  const expanded = await measure();
+  expect(expanded.gap).toBeGreaterThan(docked.gap + 200);
+  expect(expanded.playback).toBe(docked.playback);
+  expect(expanded.narration).toBe(docked.narration);
+  for (const layout of [docked, expanded]) {
+    expect(layout.start).toBeLessThanOrEqual(16);
+    expect(layout.end).toBeLessThanOrEqual(16);
+  }
+  if (captureDir) await overlay.screenshot({ path: `${captureDir}/hs2-yf8p38-expanded-groups.png` });
+});
+
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
   const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
   const settleViewport = async (mobile: boolean) => {
