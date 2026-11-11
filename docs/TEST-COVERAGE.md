@@ -348,6 +348,10 @@ HS2-7YD7S9 is covered in `announcer.spec.ts`: the expanded card has no list or
 per-item buttons, its current-item area takes most of the card's height and fits a
 long item without scrolling, previous and next reach every item, and a short window
 keeps the card inside the viewport.
+HS2-YJK0G9 is covered in `announcer-overlay.test.ts` (inline code, emphasis, and escaped
+raw HTML through the shared Markdown renderer) and `announcer.spec.ts` (a monospaced
+command distinct from the prose font, no literal backticks, and a long command wrapping
+inside the docked section).
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

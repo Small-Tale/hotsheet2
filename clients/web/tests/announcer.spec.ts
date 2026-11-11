@@ -405,6 +405,47 @@ test('HS2-7YD7S9 grows the current item instead of listing history', async ({ pa
     .toBeLessThanOrEqual(420);
 });
 
+test('HS2-YJK0G9 shows announcer items as Markdown with monospaced commands', async ({ page }) => {
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        {
+          store_id: 'synthetic-store',
+          event: {
+            id: 'md-1',
+            ts: '2026-11-01T01:00:00Z',
+            tool: 'claude',
+            kind: 'command',
+            summary:
+              "claude ran `cat > /tmp/synthetic/sample.md <<'EOF' ## Result synthetic-package bumped in lockstep` and **pushed** it",
+            importance: 'high',
+          },
+        },
+      ],
+    }),
+  );
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  const code = overlay.locator('[data-component="markdown-preview"] code').first();
+  await expect(code).toContainText("cat > /tmp/synthetic/sample.md <<'EOF' ## Result");
+  await expect(overlay.locator('[data-component="markdown-preview"] strong')).toHaveText('pushed');
+  await expect(overlay).not.toContainText('`cat');
+  const fonts = await code.evaluate((node) => {
+    const prose = node.closest('[data-component="markdown-preview"]');
+    return { code: getComputedStyle(node).fontFamily, prose: prose ? getComputedStyle(prose).fontFamily : '' };
+  });
+  expect(fonts.code).not.toBe(fonts.prose);
+  expect(fonts.code.toLowerCase()).toMatch(/mono|menlo|courier|consolas/);
+  // A long command wraps inside the narrow docked section instead of widening it.
+  await expect
+    .poll(() => overlay.locator('.announcer__screen').evaluate((node) => node.scrollWidth <= node.clientWidth))
+    .toBe(true);
+  if (captureDir) await overlay.screenshot({ path: `${captureDir}/hs2-yjk0g9-markdown-docked.png` });
+});
+
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
   const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
   const settleViewport = async (mobile: boolean) => {

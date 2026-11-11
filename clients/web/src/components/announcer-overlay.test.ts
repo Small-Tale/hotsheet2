@@ -91,3 +91,25 @@ describe('AnnouncerOverlay expanded card (HS2-7YD7S9)', () => {
     }
   });
 });
+
+describe('AnnouncerOverlay Markdown item (HS2-YJK0G9)', () => {
+  const command = announcerItem('demo', 'Demo project', 'demo-store', {
+    id: 'cmd',
+    ts: '2026-11-01T12:00:00Z',
+    tool: 'claude',
+    kind: 'command',
+    summary: "claude ran `cat > notes.md <<'EOF' <b>synthetic</b>` then **checked** it",
+    importance: 'normal',
+  });
+
+  it('renders inline code as code and emphasis as Markdown, escaping raw HTML', () => {
+    const html = render({ items: [command], index: 0 });
+    expect(html).toContain('data-component="markdown-preview"');
+    expect(html).toMatch(
+      /<code>cat &gt; notes\.md &lt;&lt;(?:'|&#39;)EOF(?:'|&#39;) &lt;b&gt;synthetic&lt;\/b&gt;<\/code>/,
+    );
+    expect(html).toContain('<strong>checked</strong>');
+    expect(html).not.toContain('<b>synthetic</b>');
+    expect(html).not.toContain('`cat');
+  });
+});

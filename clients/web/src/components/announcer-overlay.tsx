@@ -24,6 +24,7 @@ import {
 import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID } from '../announcer-layout';
 import type { AnnouncerReelItem } from '../announcer-reel';
 import { announcerSettingsMenu } from '../announcer-settings';
+import { MarkdownPreview } from './markdown-preview';
 
 /** Where the open announcer shows (HS2-BS0XFK): `docked` in the left sidebar's footer under a resizable
  * separator, or `corner` as a card over the work area while that sidebar is not shown. */
@@ -105,7 +106,10 @@ export function AnnouncerOverlay({
               <div class="announcer__source">
                 {selected.projectName} · {selected.event.tool}
               </div>
-              <p class="announcer__summary">{selected.narration}</p>
+              {/* HS2-YJK0G9: the shared note renderer shows Markdown, with commands and code monospaced. */}
+              <div class="announcer__summary">
+                <MarkdownPreview source={selected.narration} density="compact" size="inherit" />
+              </div>
               {selected.change && (
                 <div class="announcer__change">
                   <code>{selected.change.path}</code>
