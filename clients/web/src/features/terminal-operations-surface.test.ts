@@ -85,6 +85,24 @@ describe('grid sidebar live numbers and page (HS2-EZSQDF)', () => {
     surface.dispose();
   });
 
+  it('counts All projects workers only for loaded projects with a tab (HS2-0ZVS5W)', () => {
+    const liveStates = createLiveStateStore();
+    liveStates.apply(store('s1', ['p1'], { workers: { live: 2, expected: 3 } }));
+    liveStates.apply(store('s2', ['p2'], { workers: { live: 1, expected: 4 } }));
+    // A registered project without an open tab still has a hosted store with workers.
+    liveStates.apply(store('closed', ['p3'], { workers: { live: 5, expected: 9 } }));
+    const projects = signal([{ id: 'p1', name: 'One' } as Project, { id: 'p2', name: 'Two' } as Project]);
+    const surface = surfaceWith({ liveStates, projects });
+    const props = surface.terminalOperationsSurfaceProps();
+    expect(props.allLive).toMatchObject({ workersLive: 3, workersExpected: 7 });
+    // Closing a tab drops its store from the count; opening one adds it.
+    projects.value = [{ id: 'p1', name: 'One' } as Project];
+    expect(surface.terminalOperationsSurfaceProps().projects.map((item) => item.id)).toEqual(['p1']);
+    projects.value = [{ id: 'p1', name: 'One' } as Project, { id: 'p3', name: 'Three' } as Project];
+    expect(surface.terminalOperationsSurfaceProps().allLive).toMatchObject({ workersLive: 7, workersExpected: 12 });
+    surface.dispose();
+  });
+
   it('leaves live numbers out before any store reports, and arms no clock', () => {
     const liveStates = createLiveStateStore();
     const surface = surfaceWith({ liveStates });

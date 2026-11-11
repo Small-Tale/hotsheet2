@@ -211,7 +211,10 @@ pages (option A) over a single integrated line.
    share the All projects maximum (HS2-C9JM65).
 3. **Triage:** `m2-grid-sidebar-projects`. One row per project with state glyph and state word, current
    ticket and phase, sorted by need, stopped-as-expected rows dimmed, durations on hover only (§34.4).
-   The All projects group lists Needs you (only when non-zero) and workers live versus expected.
+   The All projects group lists Needs you (only when non-zero) and workers live versus expected. Both count
+   only the stores of loaded projects whose tabs are shown, each store once (HS2-0ZVS5W). Expected is each
+   store's distinct workers that held a claim in its current active period (§32.8.3), so finished workers
+   still count; a worker-plan source is HS2-BHPPAS.
 
 Before a project's live state arrives, its gauges rest at zero without a glyph and its triage row
 reads "No live state". Every body opens that project's statistics, as the completion chart does.
