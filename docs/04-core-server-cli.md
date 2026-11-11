@@ -487,7 +487,10 @@ unknown reference. Provider and GitHub sign-in routes are listed in
 
 Command runs are started with `POST /commands/{id}/run` (or the checkout form) as
 described above; restart semantics are in §4.3.1. Every run carries a `started_at`
-timestamp. Shell and AI commands run in a client terminal or AI session rather than on the
+timestamp. A program run publishes `exit_code` and its `completed` (or `failed`) state
+only after its stdout and stderr readers reach end of file, so a finished run already
+carries all of its output (HS2-WDNJ0X). A descendant that keeps a pipe open delays
+completion by at most two seconds; output it writes later is not guaranteed. Shell and AI commands run in a client terminal or AI session rather than on the
 server, so the client records each launch with `POST /commands/{id}/launches`: the run
 completes immediately, its `launch` names the opened terminal or the queued ticket and the
 AI tool signaled, and it joins the same bounded, project-scoped in-memory history as program
