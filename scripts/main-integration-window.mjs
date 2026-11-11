@@ -5,7 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { loadavg } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMainPushArgs, validStagingBranch } from './main-integration-options.mjs';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
@@ -46,6 +46,15 @@ function commonDir(repo) {
   return realpathSync(resolve(repo, git(repo, ['rev-parse', '--git-common-dir'])));
 }
 
+export function selectedSourceStore(repo, explicit) {
+  if (explicit) return resolve(explicit);
+  const link = join(repo, '.hotsheet2', 'store');
+  if (!existsSync(link)) return repo;
+  const store = readFileSync(link, 'utf8').trim();
+  if (!isAbsolute(store)) throw new Error('The .hotsheet2/store link must contain an absolute store path');
+  return store;
+}
+
 // HS2-GT57BQ: a promotion pushes a recorded SHA, not the checkout, so it needs no clean HEAD.
 function promotionSnapshot(repo, sha) {
   if (gitResult(repo, ['cat-file', '-e', `${sha}^{commit}`]).status !== 0)
@@ -68,9 +77,16 @@ class UnresolvedWindowError extends Error {}
 
 export function readWindow(repo, query = gitResult) {
   // HS2-W110HQ: release/replacement may follow this lookup; only read its immutable oid.
-  const resolved = query(repo, ['rev-parse', '--verify', '--quiet', ref]);
-  if (resolved.error || resolved.signal || resolved.stderr) throw new Error('Cannot read main integration ref');
+  const args = ['rev-parse', '--verify', '--quiet', ref];
+  let resolved = query(repo, args);
+  // HS2-822EVF: a transient Git read failure during a long gate must not discard its
+  // reservation. A second read still has to resolve the exact ref and token below.
+  if (resolved.error || resolved.signal || (resolved.status !== 0 && (resolved.status !== 1 || resolved.stderr)))
+    resolved = query(repo, args);
+  if (resolved.error || resolved.signal || (resolved.status !== 0 && resolved.status !== 1))
+    throw new Error(`Cannot read main integration ref: ${resolved.error?.message ?? resolved.stderr?.trim() ?? `exit ${resolved.status}`}`);
   if (resolved.status === 1) {
+    if (resolved.stderr) throw new Error(`Cannot read main integration ref: ${resolved.stderr.trim()}`);
     if (resolved.stdout) throw new Error('Cannot read main integration ref: unexpected lookup output');
     // No OID was captured. Git's typed existence result distinguishes absence from quiet corruption.
     const exists = query(repo, ['show-ref', '--exists', ref]);
@@ -577,7 +593,7 @@ export function gateDiagnostics(list = () => spawnSync('ps', ['-axo', 'pid=,etim
 
 export async function pushMain(repo, args) {
   const options = parseMainPushArgs(args);
-  options.sourceStore = resolve(options.sourceStore ?? repo);
+  options.sourceStore = selectedSourceStore(repo, options.sourceStore);
   if (!acceptedHooksPath(repo, git(repo, ['config', '--get', 'core.hooksPath'])))
     throw new Error('Run scripts/install-git-hooks.sh before main push');
   let window = await acquire(repo, options);

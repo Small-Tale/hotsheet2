@@ -17,7 +17,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
-import { acceptedHooksPath, gateDiagnostics, readWindow, verifyMainPush } from './main-integration-window.mjs';
+import { acceptedHooksPath, gateDiagnostics, readWindow, selectedSourceStore, verifyMainPush } from './main-integration-window.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = (program, args, cwd, env = withoutGitRepositoryEnv(process.env), input) =>
@@ -205,6 +205,62 @@ test('HS2-W110HQ absent reservations differ from Git failures and malformed snap
       run('git', ['update-ref', ref, oid], f.repo);
       assert.throws(() => readWindow(f.repo));
     }
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-822EVF retries one transient ref read and keeps a valid reservation', () => {
+  const f = fixture();
+  const ref = 'refs/hotsheet/main-integration-window';
+  try {
+    const value = {
+      version: 1,
+      token: 'synthetic-transient',
+      pid: process.pid,
+      expiresAt: Date.now() + 60_000,
+      phase: 'gating',
+      remote: 'origin',
+      target: 'refs/heads/main',
+      head: run('git', ['rev-parse', 'HEAD'], f.repo),
+      tree: run('git', ['rev-parse', 'HEAD^{tree}'], f.repo),
+    };
+    const oid = run('git', ['hash-object', '-w', '--stdin'], f.repo, f.env, JSON.stringify(value));
+    run('git', ['update-ref', ref, oid], f.repo, f.env);
+    let reads = 0;
+    const result = readWindow(f.repo, (repo, args) => {
+      reads++;
+      if (reads === 1) return { status: 128, stderr: 'synthetic transient read failure' };
+      return spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
+    });
+    assert.equal(reads, 2);
+    assert.deepEqual(result, { oid, value });
+    assert.throws(
+      () => readWindow(f.repo, () => ({ status: 128, stderr: 'persistent synthetic failure' })),
+      /Cannot read main integration ref: persistent synthetic failure/,
+    );
+    assert.deepEqual(
+      readWindow(f.repo, (repo, args) => {
+        const result = spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
+        return { ...result, stderr: 'benign Git warning' };
+      }),
+      { oid, value },
+    );
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-822EVF selects the linked ticket store and preserves an explicit source override', () => {
+  const f = fixture();
+  try {
+    const store = resolve(f.root, 'tickets');
+    assert.equal(selectedSourceStore(f.repo), f.repo);
+    put(resolve(f.repo, '.hotsheet2/store'), `${store}\n`);
+    assert.equal(selectedSourceStore(f.repo), store);
+    assert.equal(selectedSourceStore(f.repo, f.repo), f.repo);
+    put(resolve(f.repo, '.hotsheet2/store'), 'relative/store\n');
+    assert.throws(() => selectedSourceStore(f.repo), /absolute store path/);
   } finally {
     f.dispose();
   }
@@ -738,6 +794,31 @@ test('HS2-BND42N a live pool fences standalone push without mutating its state',
   }
 });
 
+test('HS2-822EVF standalone push uses the linked store for pool authority', () => {
+  const f = fixture();
+  try {
+    const store = resolve(f.root, 'tickets');
+    mkdirSync(store);
+    put(resolve(f.repo, '.gitignore'), '/.hotsheet2/store\n');
+    run('git', ['add', '.gitignore'], f.repo, f.env);
+    run('git', ['commit', '-m', 'Ignore local store link'], f.repo, f.env);
+    put(resolve(f.repo, '.hotsheet2/store'), `${store}\n`);
+    const canonical = realpathSync(f.repo);
+    const state = JSON.stringify({
+      version: 9,
+      project_id: `repo-${createHash('sha256').update(canonical).digest('hex').slice(0, 12)}`,
+      source_id: createHash('sha256').update(realpathSync(store)).digest('hex'),
+      integrator: null,
+      assignments: {},
+    });
+    put(resolve(f.repo, '.git/hotsheet-coordination/state.json'), state);
+    run('bash', ['scripts/push.sh', '--standalone'], f.repo, f.env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), run('git', ['rev-parse', 'HEAD'], f.repo));
+  } finally {
+    f.dispose();
+  }
+});
+
 test('HS2-BND42N ticket phase advances at the gate and confirmed-push boundaries', () => {
   const f = fixture();
   try {
@@ -941,6 +1022,59 @@ test(
     }
   },
 );
+
+test('HS2-822EVF a transient heartbeat ref read keeps the gate and push alive', { timeout: 60_000 }, async () => {
+  const f = fixture();
+  const hold = resolve(f.root, 'hold');
+  const glitch = resolve(f.root, 'ref-read-glitch');
+  const seen = resolve(f.root, 'ref-read-seen');
+  let running;
+  try {
+    run('bash', ['scripts/push.sh'], f.repo, f.env);
+    commit(f.repo, 'transient-ref-read', f.env);
+    const head = run('git', ['rev-parse', 'HEAD'], f.repo, f.env);
+    const realGit = run('sh', ['-c', 'command -v git'], f.repo, f.env);
+    put(
+      resolve(f.root, 'bin/git'),
+      `#!/bin/sh
+if [ "$1" = rev-parse ] && [ "$2" = --verify ] && [ "$3" = --quiet ] && [ "$4" = refs/hotsheet/main-integration-window ] && [ -f "$HS2_TEST_GLITCH" ]; then
+  /bin/rm "$HS2_TEST_GLITCH"
+  printf 'seen\\n' > "$HS2_TEST_GLITCH_SEEN"
+  printf 'synthetic transient Git read failure\\n' >&2
+  exit 128
+fi
+exec "${realGit}" "$@"
+`,
+      true,
+    );
+    put(hold, 'hold');
+    running = runAsync('bash', ['scripts/push.sh'], f.repo, {
+      ...f.env,
+      HS2_TEST_HOLD: hold,
+      HS2_TEST_GLITCH: glitch,
+      HS2_TEST_GLITCH_SEEN: seen,
+      HOTSHEET_MAIN_WINDOW_HEARTBEAT_MS: '500',
+    });
+    await waitForFile(f.env.HS2_TEST_STARTED, running);
+    put(glitch, 'fail the next ref read');
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(seen) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 100));
+    assert.equal(existsSync(seen), true, 'heartbeat encountered the injected Git read failure');
+    rmSync(hold);
+    const result = await running.completed;
+    assert.equal(result.code, 0, result.output);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head);
+  } finally {
+    rmSync(hold, { force: true });
+    if (running?.child.exitCode === null)
+      try {
+        process.kill(-running.child.pid, 'SIGTERM');
+      } catch {
+        /* exited */
+      }
+    f.dispose();
+  }
+});
 
 test('HS2-RY0ZMX gate diagnostics list other gates and windows, never this push, with the load', () => {
   const listing = [
