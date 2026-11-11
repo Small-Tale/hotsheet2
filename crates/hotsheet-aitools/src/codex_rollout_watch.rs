@@ -656,8 +656,11 @@ mod tests {
     }
 
     fn next(signals: &Receiver<Vec<RolloutSignal>>) -> Vec<RolloutSignal> {
+        // HS2-AY33TG: the Home -> Sessions -> Rollout path can cross three
+        // three-second settle windows plus delayed macOS stream startup under
+        // full-suite load. The channel still waits for the event, not a fixed delay.
         signals
-            .recv_timeout(Duration::from_secs(10))
+            .recv_timeout(Duration::from_secs(30))
             .expect("the rollout watch reports appended records")
     }
 
@@ -703,7 +706,7 @@ mod tests {
         file.flush().unwrap();
         // The dropped watch's thread ends and releases its callback without another report.
         assert_eq!(
-            signals.recv_timeout(Duration::from_secs(10)),
+            signals.recv_timeout(Duration::from_secs(30)),
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
         );
     }
