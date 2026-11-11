@@ -156,7 +156,14 @@ export function AppShell({
   const railsAllowed = !gridFullscreen && !(mobile && mode === 'stats');
   const sidebarPanel = sidebar ? workbenchSidebarPanel(sidebar) : undefined;
   const announcerControl = announcerTrigger && (
-    <ToolbarControlGroup appearance="borderless" single label="Announcer" relocateOnCollapse>
+    // A phone's expanded workspace search takes the whole one-row toolbar, so the announcer then waits
+    // in the hidden rail rather than narrowing the search field (HS2-RDFY4A, HS2-C5Y899).
+    <ToolbarControlGroup
+      appearance="borderless"
+      single
+      label="Announcer"
+      relocateOnCollapse={!(mobile && workspaceSearchOpen)}
+    >
       {announcerTrigger}
     </ToolbarControlGroup>
   );

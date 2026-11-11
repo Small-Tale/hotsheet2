@@ -49,13 +49,14 @@ const inspectorParts = (content: string, name = 'Ticket Inspector'): SidebarPane
 
 describe('application shell components', () => {
   it('places the announcer in the left sidebar toolbar and relocates its control when collapsed (HS2-6PZ35D)', () => {
-    const render = (sidebarVisible: boolean, mobile = false) =>
+    const render = (sidebarVisible: boolean, mobile = false, workspaceSearchOpen = false) =>
       String(
         AppShell({
           tabs: [],
           sidebar: sidebarParts('Project Sidebar'),
           sidebarVisible,
           mobile,
+          workspaceSearchOpen,
           announcerTrigger: 'announcer-control' as never,
           header: 'head' as never,
           workspace: 'work' as never,
@@ -70,6 +71,12 @@ describe('application shell components', () => {
     expect(collapsed).toContain('aria-label="Show Project Sidebar"');
     expect(collapsed).toContain('announcer-control');
     expect(render(false, true)).toContain('announcer-control');
+    // A phone's expanded search keeps the whole toolbar row; the announcer stays in the hidden rail.
+    // A relocated group renders in the rail and again in the workspace toolbar.
+    const relocates = (html: string) => html.split('announcer-control').length - 1 === 2;
+    expect(relocates(render(false, true))).toBe(true);
+    expect(relocates(render(false, true, true))).toBe(false);
+    expect(relocates(render(false, false, true))).toBe(true);
   });
 
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {

@@ -270,7 +270,9 @@ The macOS server voice and browser voice are the two local provider choices.
 the fake adapter keeps server HTTP behavior deterministic on other platforms.
 HS2-6PZ35D checks that the sidebar toggle opens and closes the Announcer, follows a
 collapsed sidebar, and stays clear of the phone drawer restore control; the overlay
-has no close button. `clients/web/tests/providers.spec.ts` also checks the project
+has no close button. `app-shell-components.test.ts` pins that a phone's expanded
+search keeps the announcer in the hidden rail, and `project-tab-warm-cache.spec.ts`
+(HS2-RDFY4A, HS2-C5Y899) checks the phone search width. `clients/web/tests/providers.spec.ts` also checks the project
 strip launcher and tab geometry after the toggle moves out of that strip.
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
