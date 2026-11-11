@@ -973,11 +973,13 @@ always retain native clipboard behavior.
   inline formatting flow, with a two-line limit in lists and four lines in board columns.
   The earlier three-line inset-list clamp is deferred pending a responsive Kerf prop
   (HS2-W5GA81).
-  The comfortable list keeps the category in its dedicated
-  leading slot; compact board rows remove that empty left gutter and place a reduced
-  category icon inline immediately before and vertically centered against the slug's
-  first line. A compact identifier wrapper groups the category icon, optional source mark,
-  and ticket number in that order. The remaining flow is ordered
+  List rows and board cards render the same internal layout (HS2-J5ZESX): neither uses
+  a leading slot, so wrapped title lines and metadata start at the row's content edge, and
+  a reduced category icon sits inline immediately before and vertically centered against
+  the slug's first line. A compact identifier wrapper groups the category icon, optional
+  source mark, and ticket number in that order. Only Kerf's outer surface (flat row or
+  rounded card) and its default title line budget differ, plus the list-only status badge
+  and completed-row dimming. The remaining flow is ordered
   slug → priority → title so bounded priority remains visible before an arbitrarily
   long title (the slug is a stable-width inline block). Kerf's trailing metadata places
   updated time at the end of the title line, allowing later lines to use the space beneath it.

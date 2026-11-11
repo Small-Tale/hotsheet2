@@ -20,11 +20,6 @@
 .ticket-list-row__identity {
   display: inline;
 }
-.ticket-list-row__leading {
-  display: inline-flex;
-  align-items: start;
-  gap: var(--kui-space-xs);
-}
 .ticket-list-row__title {
   display: inline;
   white-space: normal;
@@ -49,37 +44,26 @@
 }
 .ticket-list-row__category {
   display: inline-grid;
-  width: remify(32px);
-  height: remify(32px);
+  width: remify(17.6px);
+  height: remify(17.6px);
+  margin-right: remify(5.6px);
   place-items: center;
+  vertical-align: -0.125em;
 }
 .ticket-list-row__category-icon {
   display: inline-flex;
-  width: remify(26.4px);
-  height: remify(26.4px);
+  width: remify(15.2px);
+  height: remify(15.2px);
 }
 .ticket-list-row__category--label {
+  width: auto;
   overflow: visible;
   color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-2xs);
+  font-size: var(--wa-font-size-3xs);
   font-weight: 700;
   letter-spacing: 0.035em;
   text-transform: uppercase;
   white-space: nowrap;
-}
-.ticket-list-row-container[data-row-presentation='column'] .ticket-list-row__category {
-  width: remify(17.6px);
-  height: remify(17.6px);
-  margin-right: remify(5.6px);
-  vertical-align: -0.125em;
-}
-.ticket-list-row-container[data-row-presentation='column'] .ticket-list-row__category-icon {
-  width: remify(15.2px);
-  height: remify(15.2px);
-}
-.ticket-list-row-container[data-row-presentation='column'] .ticket-list-row__category--label {
-  width: auto;
-  font-size: var(--wa-font-size-3xs);
 }
 .ticket-list-row__priority {
   display: inline;

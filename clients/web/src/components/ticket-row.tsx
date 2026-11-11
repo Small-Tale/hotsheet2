@@ -168,11 +168,7 @@ export function TicketRow(raw: TicketRowProps) {
       aria-label={`${props.category} category`}
     >
       <span class="ticket-list-row__category-icon">
-        <LucideIcon
-          icon={categoryIcon}
-          name={props.categoryIcon!}
-          size={props.presentation === 'column' ? 15.2 : 26.4}
-        />
+        <LucideIcon icon={categoryIcon} name={props.categoryIcon!} size={15.2} />
       </span>
     </span>
   ) : (
@@ -213,30 +209,19 @@ export function TicketRow(raw: TicketRowProps) {
           'data-cut-pending': String(Boolean(props.cutPending)),
           ...TICKET_SELECTION_ACTIONS.selectTicketRow.attrs,
         }}
-        leading={
-          props.presentation === 'list' ? (
-            <span class="ticket-list-row__leading">
-              {category}
-              {cardSource && <TicketSourceIcon source={cardSource} />}
-            </span>
-          ) : undefined
-        }
         trailingMeta={props.updatedLabel}
         title={
           <span class="ticket-list-row__identity">
-            {props.presentation === 'column' ? (
-              <span class="ticket-list-row__identifier">
-                {category}
-                {cardSource && (
-                  <span class="ticket-list-row__source">
-                    <TicketSourceIcon source={cardSource} size="compact" />
-                  </span>
-                )}
-                <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
-              </span>
-            ) : (
+            {/* List rows and column cards share this inline identity layout (HS2-J5ZESX). */}
+            <span class="ticket-list-row__identifier">
+              {category}
+              {cardSource && (
+                <span class="ticket-list-row__source">
+                  <TicketSourceIcon source={cardSource} size="compact" />
+                </span>
+              )}
               <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
-            )}
+            </span>
             <span
               class="ticket-list-row__priority"
               style={`color: ${priority.color}`}

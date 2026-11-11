@@ -11,6 +11,7 @@ import {
   ticketRowIndicator,
   type TicketRowProps,
 } from './ticket-row';
+import type { TicketSourceIdentity } from './ticket-source-icon';
 
 describe('TicketRow', () => {
   it('shows the testing-phase estimate beside the phase chip in list rows and column cards (HS2-YDGM04)', () => {
@@ -288,6 +289,30 @@ describe('TicketRow', () => {
     );
     expect(markup).toContain('data-component="ticket-list-row-container"');
     expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(markup.indexOf('data-component="summary-row"'));
+  });
+
+  it('HS2-J5ZESX renders the same internal identity layout in list rows and column cards', () => {
+    const ticket = {
+        slug: 'HS2-SAME',
+        title: 'Shared layout',
+        status: 'not_started' as const,
+        priority: 'default' as const,
+        category: 'bug',
+        tags: ['client'],
+        source: { provider: 'github', name: 'Issues', color: '#3b82f6' } satisfies TicketSourceIdentity,
+      },
+      identity = (markup: string) =>
+        markup.slice(markup.indexOf('<span class="ticket-list-row__identity">'), markup.indexOf('</strong>'));
+    const list = String(TicketRow({ ...ticket, presentation: 'list' })),
+      column = String(TicketRow({ ...ticket, presentation: 'column' }));
+    expect(identity(list)).toBe(identity(column));
+    expect(identity(list)).toContain('ticket-list-row__identifier');
+    for (const markup of [list, column]) {
+      expect(markup).not.toContain('kui-summary-row__leading');
+    }
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(css).not.toContain('ticket-list-row__leading');
+    expect(css).not.toMatch(/data-row-presentation='column'\] \.ticket-list-row__category/);
   });
 
   it('uses an explicit presentation variant for the title line limit', () => {

@@ -3182,7 +3182,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   });
   await expect(row.locator('.ticket-list-row__category--label')).toHaveText('BUG');
   await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('color', 'rgb(156, 163, 175)');
-  await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('width', '32px');
+  // The text fallback sits inline in the shared identifier, not in a leading gutter (HS2-J5ZESX).
+  await expect(row.locator('.ticket-list-row__identifier .ticket-list-row__category--label')).toHaveCount(1);
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCount(0);
@@ -3219,7 +3220,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Build the first client ticket list');
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
-  await expect(row.locator('.ticket-list-row__category')).toHaveCSS('width', '32px');
+  // List rows use the column card's compact inline category icon (HS2-J5ZESX).
+  expect((await row.locator('.ticket-list-row__category').boundingBox())!.width).toBeCloseTo(17.6, 0);
+  await expect(row.locator('.kui-summary-row__leading')).toHaveCount(0);
   await expect(row).toHaveAttribute('data-rail', 'warning');
   const upNextRailColor = await row
     .locator('.kui-summary-row__rail')
@@ -3316,13 +3319,19 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   expect(identityBox!.height - titleRingRoom).toBeLessThanOrEqual(43);
   await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'inline');
   await expect(row.locator('.kui-summary-row__trailing')).toHaveCSS('float', 'inline-end');
-  await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
+  // List rows share the column card's inline identifier: category, source, then number (HS2-J5ZESX).
+  await expect(row.locator('.ticket-list-row__identifier')).toHaveCSS('display', 'inline-flex');
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('display', 'inline');
   expect(
     await row
       .locator('.ticket-list-row__identity > *')
       .evaluateAll((elements) => elements.map((element) => element.className || element.tagName.toLowerCase())),
-  ).toEqual(['ticket-list-row__slug', 'ticket-list-row__priority', 'ticket-list-row__title']);
+  ).toEqual(['ticket-list-row__identifier', 'ticket-list-row__priority', 'ticket-list-row__title']);
+  expect(
+    (
+      await row.locator('.ticket-list-row__identifier > *').evaluateAll((elements) => elements.map((e) => e.className))
+    ).at(-1),
+  ).toBe('ticket-list-row__slug');
   expect(titleLineBoxes.length).toBeGreaterThan(1);
   for (const line of titleLineBoxes) {
     expect(line.x + line.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
@@ -10049,7 +10058,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   await multipleSources.click();
   await expect(page.locator('input[name="show-source-icon"]')).not.toBeChecked();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
-  await expect(row.locator('.kui-summary-row__leading')).toBeVisible();
+  await expect(row.locator('.ticket-list-row__identifier .ticket-list-row__category')).toBeVisible();
   await multipleSources.click();
   await expect(page.locator('input[name="show-source-icon"]')).toBeChecked();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
