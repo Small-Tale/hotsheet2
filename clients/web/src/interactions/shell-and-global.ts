@@ -28,6 +28,7 @@ import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection'
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
 import { cycleTabId } from '../tab-cycle';
+import { terminalClearKeyTarget } from '../terminal-clear';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
@@ -599,6 +600,9 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       // would reach the workspace behind the modal — suppress them so e.g. Cmd-K cannot focus the background
       // search from inside a dialog (HS2-FW4PYZ). The modal keeps its own text-field editing and shortcuts.
       if (document.querySelector('wa-dialog[open], dialog:modal')) return;
+      // Command-K inside a terminal clears it (HS2-N2AG8V, handled by the terminal interactions) instead of
+      // opening search, as in macOS Terminal.
+      if (terminalClearKeyTarget(event)) return;
       const overrides = keyboardShortcutOverrides.value,
         editable = isEditableEvent(event);
       if (matchesShortcut('open-search', event, overrides, appleShortcutPlatform)) {

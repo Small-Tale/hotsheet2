@@ -17,6 +17,7 @@ import {
   Circle,
   ClipboardPaste,
   Copy,
+  Eraser,
   FolderOpen,
   LayoutGrid,
   MessageSquare,
@@ -451,7 +452,7 @@ export function TerminalDrawer({
                   <ToolbarControlGroup
                     className="terminal-drawer__actions"
                     appearance="borderless"
-                    single={!railClipboard}
+                    single={!railClipboard && !selectedSession}
                   >
                     {railClipboard && (
                       <button
@@ -471,6 +472,18 @@ export function TerminalDrawer({
                         title="Paste"
                       >
                         <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+                      </button>
+                    )}
+                    {selectedSession && (
+                      // Clear the selected terminal's display, like Command-K in macOS Terminal (HS2-N2AG8V).
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.clearTerminal.attrs}
+                        data-terminal-id={selectedSession.id}
+                        aria-label="Clear Terminal"
+                        title="Clear terminal"
+                      >
+                        <LucideIcon icon={Eraser} name="eraser" />
                       </button>
                     )}
                     <button

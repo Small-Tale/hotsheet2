@@ -42,6 +42,7 @@ export const KEYBOARD_SHORTCUT_GROUPS = [
   'Views & panels',
   'Tickets',
   'Navigation & tabs',
+  'Terminals',
   'Media gallery',
 ] as const;
 
@@ -311,6 +312,16 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowDown', mod: true, alt: true, shift: true },
     editable: true,
+  },
+  // Terminal chords act only while a terminal holds the keyboard (HS2-N2AG8V). Physical Command-K
+  // matches macOS Terminal; Control-K stays with the shell (readline kill-line) on every platform.
+  {
+    id: 'clear-terminal',
+    label: 'Clear Terminal',
+    description: 'Clear the focused terminal display, keeping the current line.',
+    group: 'Terminals',
+    defaultChord: { key: 'k', meta: true },
+    editable: false,
   },
   {
     id: 'gallery-previous',

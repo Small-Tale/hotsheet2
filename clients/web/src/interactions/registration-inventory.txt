@@ -77,6 +77,9 @@ terminals	wireTerminalKeyBar	document.body
 terminals	delegate	document.body	TERMINAL_EDIT_MENU_EVENT	'[data-component="terminal-viewport"]'
 terminals	document.addEventListener	'toggle'
 terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-viewport"]'
+terminals	delegate	document.body	'mousedown'	'[data-action="clear-terminal"]'
+terminals	delegate	document.body	'click'	'[data-action="clear-terminal"]'
+terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-viewport"]'
 terminals	wireTerminalClipboardActions	document.body
 terminals	wireTerminalClipboardSheets	document.body
 terminals	delegateCapture	document.body	'close'	'[data-dialog-component="terminal-paste-dialog"]'

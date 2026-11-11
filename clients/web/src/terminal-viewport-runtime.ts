@@ -11,6 +11,7 @@ import {
   normalizeMobileTerminalColumns,
 } from './mobile-terminal-columns';
 import { isPopupMenuOpen } from './popup-menu-state';
+import { TERMINAL_CLEAR_EVENT } from './terminal-clear';
 import {
   TERMINAL_EDIT_MENU_EVENT,
   TERMINAL_PASTE_EVENT,
@@ -1547,6 +1548,15 @@ function initializeTerminalViewport(
   });
   own(() => {
     input.dispose();
+  });
+  // Clear Terminal (HS2-N2AG8V) is a view action for every viewport of the terminal, previews included:
+  // xterm drops the scrollback and screen but keeps the cursor's line, so the prompt stays usable.
+  const clearDisplay = () => {
+    terminal.clear();
+  };
+  element.addEventListener(TERMINAL_CLEAR_EVENT, clearDisplay);
+  own(() => {
+    element.removeEventListener(TERMINAL_CLEAR_EVENT, clearDisplay);
   });
   if (!scaledPreview) {
     const sendSpecialKey = (event: Event) => {

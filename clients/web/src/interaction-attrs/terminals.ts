@@ -20,6 +20,7 @@ export const TERMINALS_ACTIONS = {
   copyTerminalText: action('copy-terminal-text'),
   copyTerminalSelection: action('copy-terminal-selection'),
   pasteTerminalText: action('paste-terminal-text'),
+  clearTerminal: action('clear-terminal'),
   confirmTerminalCopy: action('confirm-terminal-copy'),
   closeTerminalCopy: action('close-terminal-copy'),
   submitTerminalPaste: action('submit-terminal-paste'),

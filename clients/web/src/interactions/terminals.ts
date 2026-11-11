@@ -27,6 +27,7 @@ import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-orde
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { closedPopupMenuRoot } from '../popup-menu-state';
 import { type DrawerAIChat } from '../project-drive';
+import { clearTerminalViewports, terminalClearKeyTarget, terminalViewportIdentity } from '../terminal-clear';
 import {
   pasteIntoTerminalViewport,
   readClipboardText,
@@ -458,6 +459,35 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       keyboard.stopPropagation();
       editMenuViewport = undefined;
       terminalEditMenu.value = undefined;
+    }),
+  );
+  // Clear Terminal (HS2-N2AG8V): the rail button clears the selected terminal, and Command-K clears the
+  // focused one. The key is captured before xterm, so it never reaches the shell, and the global
+  // dispatcher skips Open Search for the same chord inside a terminal (`terminalClearKeyTarget`).
+  const clearTerminal = (viewport: HTMLElement | null | undefined) => {
+    const identity = viewport ? terminalViewportIdentity(viewport) : undefined;
+    if (identity) clearTerminalViewports(document, identity);
+  };
+  // Pressing Clear leaves the keyboard in the terminal, as the key bar does, so typing continues.
+  lifetime.add(
+    delegate(document.body, 'mousedown', TERMINALS_ACTIONS.clearTerminal.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.clearTerminal.selector, (_event, target) => {
+      const viewport = keyBarViewport(target);
+      clearTerminal(viewport);
+      keepTerminalFocus(viewport);
+    }),
+  );
+  lifetime.add(
+    delegateCapture(document.body, 'keydown', TERMINALS_TARGETS.terminalViewport.selector, (event) => {
+      const viewport = terminalClearKeyTarget(event as KeyboardEvent);
+      if (!viewport) return;
+      event.preventDefault();
+      event.stopPropagation();
+      clearTerminal(viewport);
     }),
   );
   // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard

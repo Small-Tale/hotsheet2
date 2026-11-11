@@ -3602,7 +3602,14 @@ grid, one undecorated interactive xterm session, or one embedded AI conversation
 the content area. The drawer renders only the selected dedicated session. On a tab switch,
 the viewport controller parks the previous live xterm outside the page and restores it on
 return while it remains in the bounded warm cache; the terminal connection and its scroll,
-fit, and input state survive that cycle (HS2-V93PYF, HS2-9B8QHF). Its grid tab
+fit, and input state survive that cycle (HS2-V93PYF, HS2-9B8QHF). While a terminal tab is
+selected, the rail's borderless end group shows **Clear Terminal** (Lucide `eraser`) before the
+hide action (pressing it leaves keyboard focus in the terminal), and physical Command-K clears the focused terminal, like Command-K in macOS Terminal
+(HS2-N2AG8V). Inside a terminal, Command-K clears instead of opening search; Control-K still
+reaches the shell. Clearing is a view action in this client: every mounted viewport of that
+terminal (dedicated, grid preview, parked) drops its scrollback and screen but keeps the cursor
+line, and nothing is sent to the shell. The server replay ring is unchanged, so a reload or
+another client replays earlier output (shared clear: HS2-HA0Z3A). Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action

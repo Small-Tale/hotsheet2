@@ -410,6 +410,16 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('data-component="terminal-tile"');
     expect(markup).not.toContain('Workspace tile zoom');
   });
+  it('HS2-N2AG8V offers Clear Terminal before Hide only while a terminal is selected', () => {
+    const terminal = render('one');
+    // A native button in the existing borderless end group, with a Lucide eraser and an accessible name.
+    expect(terminal).toMatch(
+      /terminal-drawer__actions[\s\S]*data-action="clear-terminal" data-terminal-id="one" aria-label="Clear Terminal" title="Clear terminal"[^>]*>[\s\S]*data-lucide="eraser"[\s\S]*data-action="toggle-terminal-drawer"/,
+    );
+    // The grid has no single terminal to clear, and the hide action keeps its single-control group there.
+    expect(render('grid')).not.toContain('clear-terminal');
+    expect(render('missing')).not.toContain('clear-terminal');
+  });
   it('offers rail Copy and Paste for a selected terminal on a touch-first desktop only (HS2-5DHHPV)', () => {
     const drawer = (selectedId: string, touchClipboard: boolean, focusMode = false) =>
       String(

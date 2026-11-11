@@ -47,6 +47,28 @@ describe('keyboard-shortcuts registry', () => {
       expect(KEYBOARD_SHORTCUTS.find((s) => s.id === id)?.editable).toBe(true);
   });
 
+  it('HS2-N2AG8V clears a focused terminal on physical Command-K only, leaving Control-K to the shell', () => {
+    const clear = KEYBOARD_SHORTCUTS.find((s) => s.id === 'clear-terminal');
+    expect(clear).toMatchObject({ group: 'Terminals', editable: false, defaultChord: { key: 'k', meta: true } });
+    // Fixed chords never count as conflicts for rebinding Open Search, which shares Command-K outside terminals.
+    expect(findChordConflict('open-search', { key: 'k', mod: true }, {}, true)).toBeUndefined();
+    for (const apple of [true, false]) {
+      expect(matchesShortcut('clear-terminal', key({ key: 'k', metaKey: true }), {}, apple)).toBe(true);
+      expect(matchesShortcut('clear-terminal', key({ key: 'K', metaKey: true }), {}, apple)).toBe(true);
+      expect(matchesShortcut('clear-terminal', key({ key: 'k', ctrlKey: true }), {}, apple)).toBe(false);
+      expect(matchesShortcut('clear-terminal', key({ key: 'k', metaKey: true, shiftKey: true }), {}, apple)).toBe(
+        false,
+      );
+    }
+    // An override saved under the fixed id is ignored.
+    expect(
+      matchesShortcut('clear-terminal', key({ key: 'l', metaKey: true }), {
+        'clear-terminal': { key: 'l', meta: true },
+      }),
+    ).toBe(false);
+    expect(formatChord(clear?.defaultChord, true)).toBe('⌘K');
+  });
+
   it('defines the view/panel and tab-cycling command shortcuts as rebindable (HS2-9SHYWD)', () => {
     const expected: Record<string, ShortcutChord> = {
       'toggle-left-sidebar': { key: 'b', mod: true },

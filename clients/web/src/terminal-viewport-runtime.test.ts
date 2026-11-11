@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns';
+import { TERMINAL_CLEAR_EVENT } from './terminal-clear';
 import { TERMINAL_EDIT_MENU_EVENT } from './terminal-clipboard';
 import { applyTerminalLimits } from './terminal-limits';
 import {
@@ -58,6 +59,7 @@ vi.mock('@xterm/xterm', () => ({
     scrollToBottom = vi.fn();
     scrollLines = vi.fn();
     paste = vi.fn();
+    clear = vi.fn();
     modes = { applicationCursorKeysMode: false };
     selection = '';
     hasSelection = vi.fn(() => this.selection !== '');
@@ -346,6 +348,27 @@ describe('reparented live viewports (HS2-AMNNBR, HS2-TBQQ00)', () => {
   });
 });
 
+describe('Clear Terminal (HS2-N2AG8V)', () => {
+  it.each(['interactive', 'scaled-preview'])(
+    'clears a %s viewport on every request and stops listening after disposal',
+    (displayMode) => {
+      const { viewport, listeners } = element();
+      Object.assign(
+        viewport.dataset,
+        { displayMode },
+        displayMode === 'scaled-preview' ? { gridPolicy: 'dashboard-80x24' } : {},
+      );
+      const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+      const terminal = allocated.terminals.at(-1) as unknown as { clear: ReturnType<typeof vi.fn> };
+      const clear = listeners.mock.calls.find(([name]) => name === TERMINAL_CLEAR_EVENT)?.[1] as () => void;
+      clear();
+      clear();
+      expect(terminal.clear).toHaveBeenCalledTimes(2);
+      dispose();
+    },
+  );
+});
+
 describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
   it('disposes allocations after socket setup throws, then mounts and disposes a fresh viewer exactly once', () => {
     const { viewport, removed } = element();
@@ -381,6 +404,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'focusin',
         'pointerdown',
         'focusout',
+        // HS2-N2AG8V: Clear Terminal reaches every viewport of the terminal.
+        'hotsheet-terminal-clear',
         'hotsheet-terminal-key',
         'hotsheet-terminal-paste',
         'hotsheet-terminal-read-text',
