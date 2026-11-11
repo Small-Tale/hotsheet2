@@ -205,7 +205,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
     // HS2-2055AY/HS2-7DBJMS: Kerf overlay wiring and remote approval remain in the bounded browser entry.
-    expect(main.split('\n')).toHaveLength(57);
+    expect(main.split('\n')).toHaveLength(58);
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
@@ -223,8 +223,9 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
     // The single page-lifetime scroll-divider instance lives at the entry (HS2-TF76Z2).
     expect(main).toContain('void wireScrollDividers(appRoot, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] });');
     expect(runtime).not.toContain('wireScrollDividers(');
-    // SplitView's page-lifetime resize wiring contract lives beside it (HS2-3B8345).
-    expect(main).toContain('void wireResizableRegions(appRoot, { onCommit: () => undefined });');
+    // SplitView's page-lifetime resize wiring contract lives beside it (HS2-3B8345) and routes standalone
+    // region commits to their owners (HS2-BS0XFK).
+    expect(main).toContain('void wireResizableRegions(appRoot, { onCommit: regionCommitRoutes.commit });');
     expect(runtime).not.toContain('wireResizableRegions(');
     // ChoiceChips' documented wiring contract (Kerf beta.106, HS2-BH7NZ4).
     expect(main).toContain('void wireChoiceChips(appRoot);');

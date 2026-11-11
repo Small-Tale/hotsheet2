@@ -28,6 +28,124 @@ test('HS2-6PZ35D keeps the phone announcer toggle in the sidebar rail', async ({
   await expect(page.locator('[data-component="announcer-overlay"]')).toHaveCount(0);
 });
 
+test('HS2-BS0XFK docks the announcer under a resizable separator in the sidebar footer', async ({ page }) => {
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        {
+          store_id: 'synthetic-store',
+          event: {
+            id: 'dock-1',
+            ts: '2026-11-01T01:00:00Z',
+            tool: 'codex',
+            kind: 'decision',
+            summary: 'codex decided: keep the synthetic sample short',
+            importance: 'high',
+          },
+        },
+      ],
+    }),
+  );
+  const rail = page.locator('aside[data-region-id="app-left-rail"]');
+  const launch = page.getByRole('button', { name: 'Announcer', exact: true });
+  await launch.click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  await expect(overlay).toHaveAttribute('data-presentation', 'docked');
+  await expect(overlay).toContainText('keep the synthetic sample short');
+  const dock = rail.getByRole('region', { name: 'Announcer Dock' });
+  const handle = page.getByRole('separator', { name: 'Resize Announcer Dock' });
+  await expect(dock).toBeVisible();
+  // The separator sits between the drive row and the section, and the section reaches the rail's bottom.
+  const drive = await rail
+    .getByRole('button', { name: /Drive with/ })
+    .first()
+    .boundingBox();
+  const handleBox = await handle.boundingBox();
+  const dockBox = await dock.boundingBox();
+  const railBox = await rail.boundingBox();
+  if (!drive || !handleBox || !dockBox || !railBox) throw new Error('Docked announcer must be measurable');
+  // The separator's hit area straddles its line; the line (the handle's center) lies below the drive row.
+  expect(handleBox.y + handleBox.height / 2).toBeGreaterThanOrEqual(drive.y + drive.height);
+  expect(Math.abs(handleBox.y + handleBox.height / 2 - dockBox.y)).toBeLessThanOrEqual(2);
+  expect(Math.round(dockBox.y + dockBox.height)).toBeLessThanOrEqual(Math.round(railBox.y + railBox.height));
+  expect(dockBox.width).toBeGreaterThan(railBox.width - 24);
+  const initial = Number(await handle.getAttribute('aria-valuenow'));
+  expect(initial).toBe(232);
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-bs0xfk-docked-wide.png` });
+  // Keyboard resize grows the section upward, by step and to its bound.
+  await handle.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect(handle).toHaveAttribute('aria-valuenow', String(initial + 16));
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(handle).toHaveAttribute('aria-valuenow', String(initial + 80));
+  await expect.poll(async () => Math.round((await dock.boundingBox())?.height ?? 0)).toBe(initial + 80);
+  // Pointer drag on the separator: down shrinks.
+  const grip = await handle.boundingBox();
+  if (!grip) throw new Error('Separator must be measurable');
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  // The separator stays on top of the section it resizes (a press at its line reaches the handle).
+  expect(
+    await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.getAttribute('aria-label'),
+      [grip.x + grip.width / 2, grip.y + grip.height / 2],
+    ),
+  ).toBe('Resize Announcer Dock');
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 60, { steps: 6 });
+  await page.mouse.up();
+  await expect(handle).toHaveAttribute('aria-valuenow', String(initial + 20));
+  // The height is the device's: it survives closing, reopening, and a reload.
+  await launch.click();
+  await expect(overlay).toHaveCount(0);
+  await launch.click();
+  await expect(handle).toHaveAttribute('aria-valuenow', String(initial + 20));
+  await page.reload();
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  await expect(page.getByRole('separator', { name: 'Resize Announcer Dock' })).toHaveAttribute(
+    'aria-valuenow',
+    String(initial + 20),
+  );
+  // At a short window the sidebar's views stay reachable above the section.
+  await page.setViewportSize({ width: 1280, height: 600 });
+  const queue = rail.getByRole('navigation', { name: 'Ticket Views' }).getByText('Queue', { exact: true });
+  await queue.scrollIntoViewIfNeeded();
+  await expect(queue).toBeInViewport();
+  const views = await queue.boundingBox();
+  const shortDock = await dock.boundingBox();
+  if (!views || !shortDock) throw new Error('Views and dock must be measurable');
+  expect(views.y + views.height).toBeLessThanOrEqual(shortDock.y);
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-bs0xfk-docked-short.png` });
+  // The phone drawer docks it while open; closing the drawer leaves the corner card on screen.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
+  await expect(overlay).toHaveAttribute('data-presentation', 'corner');
+  await expect
+    .poll(() => overlay.evaluate((node) => node.getBoundingClientRect().right <= window.innerWidth))
+    .toBe(true);
+  if (captureDir) {
+    // Captures wait for the Workbench's rail motion across the desktop/phone boundary to settle.
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${captureDir}/hs2-bs0xfk-corner-narrow.png` });
+  }
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'docked');
+  await expect(overlay).toHaveCount(1);
+  if (captureDir) {
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${captureDir}/hs2-bs0xfk-docked-narrow.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'false');
+  await expect(overlay).toHaveCount(1);
+  if (captureDir) {
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${captureDir}/hs2-bs0xfk-return-wide.png` });
+  }
+});
+
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
   const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
   const settleViewport = async (mobile: boolean) => {
@@ -147,6 +265,14 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
     .toEqual(['Updated the synthetic sample file']);
+  // Shown beside an open sidebar, the announcer docks in its footer without an expand control (HS2-BS0XFK).
+  expect(await overlay.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(true);
+  await expect(overlay.getByRole('button', { name: 'Expand Announcer' })).toHaveCount(0);
+  // Hiding the sidebar keeps the announcer visible as its corner card, which still expands.
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  await expect(overlay).toHaveCount(1);
+  expect(await overlay.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(false);
+  await expect(overlay).toHaveAttribute('data-presentation', 'corner');
   await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
   await overlay.getByRole('textbox', { name: 'Announcer voice name' }).fill('synthetic-voice');
   await overlay.getByRole('textbox', { name: 'Announcer voice name' }).blur();
@@ -163,6 +289,8 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
     .toContain('server:blob:synthetic-speech');
   await expect(overlay.getByRole('list', { name: 'Cross-Project Activity Reel' })).toContainText('demo');
   await overlay.getByRole('button', { name: 'Shrink Announcer' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'docked');
   await settleViewport(false);
   if (captureDir) {
     await page.screenshot({ path: `${captureDir}/hs2-announcer-wide.png` });

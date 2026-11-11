@@ -38,6 +38,30 @@
   box-shadow: var(--wa-shadow-l);
 }
 
+/* HS2-BS0XFK: docked in the sidebar footer the section fills the Kerf region below its separator, so it
+   drops the card's float, frame, and fixed height and lets the current item take the spare height. */
+.announcer[data-presentation='docked'] {
+  position: static;
+  /* A flex item honors z-index even when static; the region's separator must stay above the section. */
+  z-index: auto;
+  height: 100%;
+}
+
+.announcer[data-presentation='docked'] .announcer__panel {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.announcer[data-presentation='docked'] .announcer__screen {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .announcer[data-expanded='true'] .announcer__panel {
   width: min(960px, calc(100vw - 24px));
   max-height: min(720px, calc(100dvh - 24px));

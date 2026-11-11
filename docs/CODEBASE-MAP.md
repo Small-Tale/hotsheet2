@@ -301,7 +301,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
     src/announcer-reel.ts     #   Retained and live cross-project activity merge and metadata-only edit model (HS2-5PSQJQ, HS2-A93BHS)
     src/features/announcer-controller.tsx # Announcer playback, provider choice, live-stream composition and on-demand current diff (HS2-5PSQJQ, HS2-A93BHS)
-    src/components/announcer-overlay.tsx # Responsive picture-in-picture digest and reel (HS2-5PSQJQ)
+    src/announcer-layout.ts   #   Docked announcer height bounds and per-device persistence (HS2-BS0XFK)
+    src/resizable-region-commits.ts # Routes the root wireResizableRegions commits to their owners by region id (HS2-BS0XFK)
+    src/components/announcer-overlay.tsx # Sidebar-docked section or picture-in-picture card with digest and reel (HS2-5PSQJQ, HS2-BS0XFK)
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition

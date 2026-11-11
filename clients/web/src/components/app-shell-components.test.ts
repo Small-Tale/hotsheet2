@@ -77,6 +77,52 @@ describe('application shell components', () => {
     expect(relocates(render(false, true))).toBe(false);
   });
 
+  it('docks the open announcer below the sidebar footer and falls back to its corner card (HS2-BS0XFK)', () => {
+    const render = ({
+      sidebarVisible = true,
+      mobile = false,
+      mode = 'project' as const,
+      gridFullscreen = false,
+      open = true,
+    } = {}) =>
+      String(
+        AppShell({
+          tabs: [],
+          sidebar: { ...sidebarParts('Project Sidebar'), footer: 'drive-row' as never },
+          sidebarVisible,
+          mobile,
+          mode,
+          gridFullscreen,
+          announcerTrigger: 'announcer-control' as never,
+          announcer: open ? { docked: 'announcer-docked' as never, corner: 'announcer-corner' as never } : undefined,
+          header: 'head' as never,
+          workspace: 'work' as never,
+        }),
+      );
+    const shown = render();
+    expect(shown).toContain('announcer-docked');
+    expect(shown).not.toContain('announcer-corner');
+    // The dock sits after the drive row, inside the rail.
+    expect(shown.indexOf('drive-row')).toBeLessThan(shown.indexOf('announcer-docked'));
+    expect(shown.indexOf('announcer-docked')).toBeLessThan(shown.indexOf('data-component="project-tab-bar"'));
+    // Every state without a shown rail keeps exactly the corner card.
+    for (const hidden of [
+      render({ sidebarVisible: false }),
+      render({ sidebarVisible: false, mobile: true }),
+      render({ gridFullscreen: true, mode: 'terminals' as never }),
+    ]) {
+      expect(hidden).not.toContain('announcer-docked');
+      expect(hidden.split('announcer-corner').length - 1).toBe(1);
+    }
+    // A phone's open drawer docks it like the desktop rail.
+    expect(render({ mobile: true })).toContain('announcer-docked');
+    // Closed: neither placement, and the footer keeps only its own content.
+    const closed = render({ open: false });
+    expect(closed).toContain('drive-row');
+    expect(closed).not.toContain('announcer-docked');
+    expect(closed).not.toContain('announcer-corner');
+  });
+
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');

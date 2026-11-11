@@ -1,9 +1,15 @@
 import './announcer-overlay.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Play, Radio, Square, Volume2 } from 'lucide';
 
+import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID } from '../announcer-layout';
 import type { AnnouncerReelItem } from '../announcer-reel';
+
+/** Where the open announcer shows (HS2-BS0XFK): `docked` in the left sidebar's footer under a resizable
+ * separator, or `corner` as a card over the work area while that sidebar is not shown. */
+export type AnnouncerPresentation = 'docked' | 'corner';
 
 export interface AnnouncerOverlayProps {
   open: boolean;
@@ -20,6 +26,9 @@ export interface AnnouncerOverlayProps {
   providers?: readonly string[];
   provider?: string;
   voice?: string;
+  presentation?: AnnouncerPresentation;
+  /** The docked section's height, as the device last stored it. */
+  dockSize?: number;
 }
 
 const action = (name: string) => ({ 'data-announcer-action': name });
@@ -28,7 +37,7 @@ const action = (name: string) => ({ 'data-announcer-action': name });
  * (HS2-5PSQJQ). The parent owns playback state; this component only renders it. */
 export function AnnouncerOverlay({
   open,
-  expanded,
+  expanded: expandedRequest,
   live,
   speaking,
   audible,
@@ -41,18 +50,30 @@ export function AnnouncerOverlay({
   providers = [],
   provider = 'browser',
   voice = '',
+  presentation = 'corner',
+  dockSize = ANNOUNCER_DOCK_BOUNDS.fallback,
 }: AnnouncerOverlayProps) {
   if (!open) return <></>;
   const selected = items.at(index);
-  return (
-    <aside class="announcer" data-component="announcer-overlay" data-expanded={String(expanded)}>
+  const docked = presentation === 'docked';
+  // The dock's height is the region's, so only the corner card grows when expanded.
+  const expanded = expandedRequest && !docked;
+  const announcer = (
+    <aside
+      class="announcer"
+      data-component="announcer-overlay"
+      data-presentation={presentation}
+      data-expanded={String(expanded)}
+    >
       <section class="announcer__panel" aria-label="Announcer">
         <header class="announcer__header">
           <strong>Announcer</strong>
           <span class="announcer__count">{items.length ? `${index + 1} / ${items.length}` : 'No activity'}</span>
-          <button type="button" aria-label={expanded ? 'Shrink Announcer' : 'Expand Announcer'} {...action('expand')}>
-            <LucideIcon icon={expanded ? Minimize2 : Maximize2} name={expanded ? 'minimize-2' : 'maximize-2'} />
-          </button>
+          {!docked && (
+            <button type="button" aria-label={expanded ? 'Shrink Announcer' : 'Expand Announcer'} {...action('expand')}>
+              <LucideIcon icon={expanded ? Minimize2 : Maximize2} name={expanded ? 'minimize-2' : 'maximize-2'} />
+            </button>
+          )}
         </header>
         <div class="announcer__screen" aria-live="polite">
           {selected ? (
@@ -149,5 +170,20 @@ export function AnnouncerOverlay({
         )}
       </section>
     </aside>
+  );
+  if (!docked) return announcer;
+  // Kerf's region owns the separator line above the section and its pointer and keyboard resizing.
+  return (
+    <ResizableRegion
+      id={ANNOUNCER_DOCK_REGION_ID}
+      label="Announcer Dock"
+      axis="vertical"
+      edge="start"
+      size={dockSize}
+      min={ANNOUNCER_DOCK_BOUNDS.min}
+      max={ANNOUNCER_DOCK_BOUNDS.max}
+    >
+      {announcer}
+    </ResizableRegion>
   );
 }

@@ -85,8 +85,12 @@ The `activity` capability turns native signals → events; the host owns the str
 
 ## 15.6 Consumers
 
-- **Announcer (HS2-5PSQJQ, HS2-A93BHS, HS2-6PZ35D)** — a toggle in the left sidebar
-  toolbar opens and closes the compact or expanded picture-in-picture, retained
+- **Announcer (HS2-5PSQJQ, HS2-A93BHS, HS2-6PZ35D, HS2-BS0XFK)** — a toggle in the left sidebar
+  toolbar opens and closes the announcer. While the sidebar is shown, the open
+  announcer docks in its footer below the drive row, under a separator that drags
+  or arrow-keys its height (144–480 px, kept per device in local storage). While the
+  sidebar is hidden (collapsed, a closed phone drawer, or a mode without the rail),
+  it shows as a compact or expanded picture-in-picture card instead. Both carry the retained
   cross-project digest, live narration over the change stream, a bounded reel,
   browser speech or a configured server provider. The macOS server offers a local
   `macos-say` provider. The overlay has no separate close button. While the sidebar

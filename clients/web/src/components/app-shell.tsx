@@ -47,6 +47,9 @@ export interface AppShellProps {
   headerActions?: SafeHtml;
   /** Announcer toggles from the left sidebar's top controls (HS2-6PZ35D). */
   announcerTrigger?: SafeHtml;
+  /** The open announcer (HS2-BS0XFK): docked in the left sidebar's footer while that sidebar shows,
+   * otherwise its corner card, so the pressed toggle always has a visible announcer. */
+  announcer?: { docked: SafeHtml; corner: SafeHtml };
   /** Expanded workspace search uses the whole available toolbar row. */
   workspaceSearchOpen?: boolean;
   /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
@@ -116,6 +119,7 @@ export function AppShell({
   header,
   headerActions,
   announcerTrigger,
+  announcer,
   workspaceSearchOpen = false,
   projectTabAction,
   pageHeader,
@@ -189,6 +193,16 @@ export function AppShell({
                   trailing: [sidebarPanel.toolbar?.trailing, announcerControl, standbyButton],
                 }
               : sidebarPanel.toolbar,
+          // The announcer docks below the rail's own footer (the drive row), under its own separator.
+          footer:
+            announcer && sidebarVisible ? (
+              <>
+                {sidebarPanel.footer}
+                {announcer.docked}
+              </>
+            ) : (
+              sidebarPanel.footer
+            ),
           // Rail names stay distinct from the landmarks inside them (the panel's content, the inspector).
           label: mode === 'terminals' ? 'Operations rail' : 'Sidebar rail',
           collapsed: !sidebarVisible,
@@ -372,6 +386,7 @@ export function AppShell({
           </main>
         }
       />
+      {announcer && !(leftRail && sidebarVisible) && announcer.corner}
       {viewportOverlay}
     </section>
   );

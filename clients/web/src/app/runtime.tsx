@@ -5531,6 +5531,7 @@ export async function startHotSheetWebClient() {
   });
   const { HotSheetShell } = createHotSheetShell({
     announcerTrigger: announcerController.trigger,
+    announcerPanel: announcerController.panel,
     searchScope,
     allTicketsSearchAvailable,
     appRegionSize,
@@ -5670,7 +5671,6 @@ export async function startHotSheetWebClient() {
     (window as typeof window & { __hotsheetRenderMetrics?: typeof renderMetrics }).__hotsheetRenderMetrics =
       renderMetrics;
   const { HotSheetApp } = createHotSheetApp({
-    announcerSurface: announcerController.surface,
     activeTicketCollectionKey,
     aiConversationSurface,
     aiFeedbackDialog,

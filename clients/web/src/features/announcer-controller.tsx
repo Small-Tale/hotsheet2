@@ -3,6 +3,7 @@ import { delegate, type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Radio } from 'lucide';
 
+import { ANNOUNCER_DOCK_REGION_ID, loadAnnouncerDockSize, saveAnnouncerDockSize } from '../announcer-layout';
 import {
   announcerDigest,
   announcerItem,
@@ -13,10 +14,18 @@ import {
 import { type ActivityEvent, Api } from '../api';
 import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
+import { regionCommitRoutes } from '../resizable-region-commits';
+
+/** The open announcer in both of its places; AppShell shows the one that fits the rail (HS2-BS0XFK). */
+export interface AnnouncerPlacements {
+  docked: SafeHtml;
+  corner: SafeHtml;
+}
 
 export interface AnnouncerController {
   trigger: () => SafeHtml;
-  surface: () => ReturnType<typeof AnnouncerOverlay>;
+  /** The open announcer's placements, or nothing while it is closed. */
+  panel: () => AnnouncerPlacements | undefined;
   onActivity: (project: Project, storeId: string, activity: ActivityEvent) => void;
   dispose: () => void;
 }
@@ -38,6 +47,10 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   const providers = signal<string[]>([]);
   const provider = signal('browser');
   const voice = signal('');
+  const dockSize = signal(loadAnnouncerDockSize(localStorage));
+  const unrouteDock = regionCommitRoutes.route(ANNOUNCER_DOCK_REGION_ID, (size) => {
+    dockSize.value = saveAnnouncerDockSize(localStorage, size);
+  });
   let requestGeneration = 0;
   let diffGeneration = 0;
   let speechGeneration = 0;
@@ -288,26 +301,33 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         <LucideIcon icon={Radio} name="radio" />
       </button>
     ),
-    surface: () => (
-      <AnnouncerOverlay
-        open={open.value}
-        expanded={expanded.value}
-        live={live.value}
-        speaking={speaking.value}
-        audible={audible.value}
-        items={items.value}
-        index={index.value}
-        error={error.value}
-        currentDiff={currentDiff.value}
-        diffLoading={diffLoading.value}
-        diffError={diffError.value}
-        providers={providers.value}
-        provider={provider.value}
-        voice={voice.value}
-      />
-    ),
+    panel: () => {
+      if (!open.value) return undefined;
+      const overlay = (presentation: 'docked' | 'corner') => (
+        <AnnouncerOverlay
+          open
+          presentation={presentation}
+          dockSize={dockSize.value}
+          expanded={expanded.value}
+          live={live.value}
+          speaking={speaking.value}
+          audible={audible.value}
+          items={items.value}
+          index={index.value}
+          error={error.value}
+          currentDiff={currentDiff.value}
+          diffLoading={diffLoading.value}
+          diffError={diffError.value}
+          providers={providers.value}
+          provider={provider.value}
+          voice={voice.value}
+        />
+      );
+      return { docked: overlay('docked'), corner: overlay('corner') };
+    },
     onActivity,
     dispose: () => {
+      unrouteDock();
       unbind();
       unbindProvider();
       unbindVoice();

@@ -132,7 +132,6 @@ export interface HotSheetAppDependencies {
   gallerySurface: () => SafeHtml;
   githubAuth: Signal<GithubAuthState | undefined>;
   HotSheetShell: () => SafeHtml;
-  announcerSurface: () => SafeHtml;
   hs1MigrationBusy: Signal<boolean>;
   hs1MigrationError: Signal<string>;
   hs1MigrationProject: Signal<Project | undefined>;
@@ -273,7 +272,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     gallerySurface,
     githubAuth,
     HotSheetShell,
-    announcerSurface,
     hs1MigrationBusy,
     hs1MigrationError,
     hs1MigrationProject,
@@ -439,7 +437,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     return (
       <>
         <HotSheetShell />
-        {announcerSurface()}
         {aiConversationSurface()}
         <ProjectDialog
           open={projectDialogOpen.value}

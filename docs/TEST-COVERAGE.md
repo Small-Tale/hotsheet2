@@ -327,6 +327,13 @@ that a phone keeps the announcer in the overlay rail; `project-tab-warm-cache.sp
 (HS2-RDFY4A, HS2-C5Y899) checks the phone search width and `providers.spec.ts`
 (HS2-GRAQ2K) the search focus handoff. `clients/web/tests/providers.spec.ts` also checks the project
 strip launcher and tab geometry after the toggle moves out of that strip.
+HS2-BS0XFK pins the docked placement: `app-shell-components.test.ts` checks the dock
+follows the sidebar footer and every hidden-rail state keeps one corner card;
+`announcer-layout.test.ts` and `resizable-region-commits.test.ts` cover the per-device
+height bounds and the root region-commit routing; `announcer.spec.ts` checks the
+separator sits between the drive row and the section, keyboard and pointer resize,
+reopen and reload persistence, reachable views at 1280×600, and the phone drawer and
+corner card across wide, narrow, and returned-wide sizes.
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

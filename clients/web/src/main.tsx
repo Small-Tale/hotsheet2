@@ -26,6 +26,7 @@ import { TERMINAL_VISIBILITY_SCROLL_TARGET } from './components/terminal-visibil
 import { installDesktopClose } from './desktop-close';
 import { initializeDesktopStorage } from './desktop-storage';
 import { installDocumentScrollRestore } from './document-scroll-restore';
+import { regionCommitRoutes } from './resizable-region-commits';
 
 const remoteBrowser = await ensureRemoteBrowserSession();
 // The release shell marks this window; ordinary browser and Vite sessions keep their own storage.
@@ -40,9 +41,9 @@ installDocumentScrollRestore(window);
 void wireScrollDividers(appRoot, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] });
 // Opens the corner loading status in the top layer whenever it renders (KF-PZCPHQ, HS2-5C4Y5Q).
 void wireCornerStatus(appRoot);
-// SplitView's documented wiring contract (Repository Status list-detail, HS2-3B8345). Its split is not
-// resizable today, so there is no size to persist; a future resizable region commits through here.
-void wireResizableRegions(appRoot, { onCommit: () => undefined });
+// SplitView's wiring contract (HS2-3B8345) and every standalone ResizableRegion, one delegated root
+// wiring that routes each commit to its owner by region id (the docked announcer, HS2-BS0XFK).
+void wireResizableRegions(appRoot, { onCommit: regionCommitRoutes.commit });
 // ChoiceChips' documented wiring (Kerf beta.106): a `multiple: true` group's listbox selection. The
 // app's multi-choice groups are `multiple: 'toggle'` checkboxes today, which need none (HS2-BH7NZ4).
 void wireChoiceChips(appRoot);
