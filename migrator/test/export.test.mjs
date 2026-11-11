@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { PGlite as PGliteOld } from 'pglite-old';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
@@ -10,16 +10,71 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, win32 } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { exportFromDb, exportDatadir, resolveCustomCommands, stageAttachments } from '../src/export.mjs';
+import { exportFromDb, exportDatadir, isDirectEntry, resolveCustomCommands, stageAttachments } from '../src/export.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
+
+describe('direct entry detection (HS2-WE1AW4)', () => {
+  const exporter = join(HERE, '..', 'src', 'export.mjs');
+
+  it('recognizes a native Windows entry path that the old file:// concatenation missed', () => {
+    const argv1 = 'C:\\Users\\RUNNER~1\\work\\migrator\\src\\export.mjs';
+    const moduleUrl = pathToFileURL(argv1, { windows: true }).href;
+    const windows = { realpath: (file) => file, toPath: (url) => fileURLToPath(url, { windows: true }) };
+    expect(moduleUrl).not.toBe(`file://${argv1}`);
+    expect(isDirectEntry(moduleUrl, argv1, windows)).toBe(true);
+    expect(isDirectEntry(moduleUrl, 'C:\\Users\\RUNNER~1\\work\\other.mjs', windows)).toBe(false);
+  });
+
+  // Symlink creation needs extra rights on Windows; progress.test.mjs covers the native
+  // Windows entry there through the real standalone migrator.
+  it.skipIf(process.platform === 'win32')('matches the real module, an npm-style bin symlink, and spaces', () => {
+    const root = mkdtempSync(join(tmpdir(), 'hs2-entry with space-'));
+    try {
+      const url = pathToFileURL(exporter).href;
+      expect(isDirectEntry(url, exporter)).toBe(true);
+      const link = join(root, 'hotsheet-export');
+      symlinkSync(exporter, link);
+      expect(isDirectEntry(url, link)).toBe(true);
+      const spaced = join(root, 'export.mjs');
+      writeFileSync(spaced, '');
+      expect(isDirectEntry(pathToFileURL(spaced).href, spaced)).toBe(true);
+      expect(isDirectEntry(url, spaced)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('is false without an entry script and for a path that does not exist', () => {
+    const url = pathToFileURL(exporter).href;
+    expect(isDirectEntry(url, undefined)).toBe(false);
+    expect(isDirectEntry(url, '')).toBe(false);
+    expect(isDirectEntry(url, join(tmpdir(), 'hs2-missing-entry', 'export.mjs'))).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')('runs main when started through a bin symlink with spaces', () => {
+    const root = mkdtempSync(join(tmpdir(), 'hs2-entry run-'));
+    try {
+      const link = join(root, 'hotsheet export');
+      symlinkSync(exporter, link);
+      const result = spawnSync(process.execPath, [link, join(root, 'no such .hotsheet')], { encoding: 'utf8' });
+      // main() ran: it reports the missing datadir with a failing exit code. The old check
+      // compared `file://${argv1}` and exited 0 silently, which the HS1 import saw on Windows.
+      expect(result.status).not.toBe(0);
+      expect(result.stderr.trim()).not.toBe('');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 // A minimal stand-in for the HS1 schema (columns observed from the live API).
 async function makeHs1Db() {

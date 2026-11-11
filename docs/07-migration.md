@@ -422,7 +422,9 @@ exporter against a copy of the old database and imports the result. It is a
 **separate binary** from the live `hotsheet` CLI on purpose — migration is rarely
 used, one-time, and needs Node + the bundled exporter, which the always-on ticket
 commands should not carry. (Under the hood it is the two-step `node
-migrator/src/export.mjs …` + `hotsheet import …`, which remain available separately.)
+migrator/src/export.mjs …` + `hotsheet import …`, which remain available separately.
+The exporter recognizes its direct run by canonical native path, so a Windows drive
+path, a path with spaces, or an npm bin symlink still runs it (HS2-WE1AW4).)
 Re-running the standalone migrator is a clean success: deterministic tickets and the
 completed-import receipt remain unchanged, no extra Git commit is created, and a clean
 index does not emit a failure-shaped `git commit` warning. Staging, index inspection,

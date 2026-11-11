@@ -122,6 +122,13 @@ HS2-2MEZPW: the migrator export test checks portable slash-delimited JSON
 destination. A Unix export/import fixture round-trips staged payload bytes
 through the built CLI. Native Windows migrator coverage remains required.
 
+HS2-WE1AW4: `migrator/test/export.test.mjs # direct entry detection` pins the
+exporter's direct-entry check against a synthetic Windows drive path, an npm-style
+bin symlink, a path with spaces, and a missing entry, and runs the exporter through
+a spaced symlink to prove `main` executes. On Windows the old `file://${argv1}`
+comparison never matched, so the standalone migrator saw a missing export instead of
+the missing-payload diagnostic; `progress.test.mjs` is the native Windows proof.
+
 HS2-0AJP3T: existing Unix HTTP terminal tests exercise the three helpers now
 guarded with `cfg(unix)`. Native Windows x86_64 test compilation must confirm
 they no longer produce dead-code warnings.

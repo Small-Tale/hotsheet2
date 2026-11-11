@@ -20,6 +20,10 @@
 //
 // Usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json]
 
+import nodeFs from 'node:fs';
+import nodePath from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /** The export-file version the Rust importer understands (`docs/07`). */
 export const EXPORT_VERSION = 1;
 
@@ -553,7 +557,28 @@ async function main(argv) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/**
+ * Whether Node is running `moduleUrl` as its entry script `argv1` (HS2-WE1AW4). A hand-built
+ * `file://${argv1}` never equals the module URL on Windows (`file:///C:/…` against
+ * `C:\…`), so compare canonical native paths, which also resolves an npm bin symlink.
+ */
+export function isDirectEntry(
+  moduleUrl,
+  argv1,
+  { realpath = nodeFs.realpathSync.native, toPath = fileURLToPath } = {},
+) {
+  if (typeof argv1 !== 'string' || argv1 === '') return false;
+  const canonical = (file) => {
+    try {
+      return realpath(file);
+    } catch {
+      return nodePath.resolve(file);
+    }
+  };
+  return canonical(toPath(moduleUrl)) === canonical(argv1);
+}
+
+if (isDirectEntry(import.meta.url, process.argv[1])) {
   main(process.argv).catch((err) => {
     console.error(err.message);
     process.exitCode = 1;
