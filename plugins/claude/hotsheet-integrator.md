@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 26 -->
+<!-- hotsheet-skill-version: 27 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -511,7 +511,10 @@ For a code handoff, follow these integration steps:
    before cleanup. It also rechecks idle status, clean tree, source
    preservation, exact-tree gate and green covering CI before removing the
    worktree, its ignored build output and branch. On refusal, record the precise
-   reason and retry the same command after resolving it (HS2-HR3ZX4). On a ticket-caused CI failure, return to working,
+   reason and retry the same command after resolving it (HS2-HR3ZX4). A `partial`
+   result (exit 2) means the worktree was removed but its branch was preserved;
+   record `branchReason` and rerun the same command to finish only the branch
+   (HS2-EBART6). On a ticket-caused CI failure, return to working,
    repair and verify it; record an independent failure as a follow-up ticket.
 
 If a handoff is missing, a claim conflicts, integration fails, or the main checkout

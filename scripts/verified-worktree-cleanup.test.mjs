@@ -270,7 +270,8 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
         stderr: '',
       };
     if (binary === 'lsof') return { status: handles ? 0 : 1, stdout: handles ? 'synthetic process\n' : '', stderr: '' };
-    if (binary === 'git' && args[0] === 'branch' && failBranchOnce) {
+    if (binary === 'git' && args[0] === 'update-ref' && args[1] === '-d' && args[2]?.startsWith('refs/heads/') &&
+      failBranchOnce) {
       failBranchOnce = false;
       return { status: 1, stdout: '', stderr: 'synthetic interruption after worktree removal' };
     }
@@ -752,11 +753,18 @@ test('HS2-VKGV08 and HS2-54M43C reject red, mismatched, and unsuccessful batch e
   }
 });
 
-test('HS2-HR3ZX4 resumes a branch deletion interrupted after worktree removal', () => {
+const hasBranch = (f) =>
+  command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status === 0;
+
+test('HS2-HR3ZX4 HS2-EBART6 reports a partial cleanup, then resumes only the branch deletion', () => {
   const f = fixture();
   f.phase(null);
   f.interrupt();
-  assert.throws(() => cleanup(f.options, { run: f.run }), /synthetic interruption/);
+  const partial = cleanup(f.options, { run: f.run });
+  assert.equal(partial.state, 'partial');
+  assert.deepEqual(partial.mutations, { worktree: 'removed', branch: 'preserved' });
+  assert.match(partial.branchReason, /synthetic interruption/);
+  assert.equal(partial.branch, f.branch);
   assert.equal(existsSync(f.worktree), false);
   assert.equal(command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status, 0);
   const canonical = join(realpathSync(join(f.project, '.claude', 'worktrees')), f.branch);
@@ -766,19 +774,105 @@ test('HS2-HR3ZX4 resumes a branch deletion interrupted after worktree removal', 
     `${createHash('sha256').update(`${slug}\n${canonical}`).digest('hex')}.json`,
   );
   assert.equal(JSON.parse(readFileSync(intent, 'utf8')).branch, f.branch);
-  assert.equal(cleanup({ ...f.options, dryRun: true }, { run: f.run }).state, 'verified_already_removed');
+  const dry = cleanup({ ...f.options, dryRun: true }, { run: f.run });
+  assert.equal(dry.state, 'verified_already_removed');
+  assert.deepEqual(dry.mutations, { worktree: 'already_removed', branch: 'verified' });
   assert.equal(command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status, 0);
-  assert.equal(cleanup(f.options, { run: f.run }).state, 'already_removed');
+  const resumed = cleanup(f.options, { run: f.run });
+  assert.equal(resumed.state, 'already_removed');
+  assert.deepEqual(resumed.mutations, { worktree: 'already_removed', branch: 'removed' });
   assert.equal(command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status, 1);
+  const repeated = cleanup(f.options, { run: f.run });
+  assert.equal(repeated.state, 'already_removed');
+  assert.deepEqual(repeated.mutations, { worktree: 'already_removed', branch: 'absent' });
 });
 
 test('HS2-HR3ZX4 refuses an interrupted retry when its branch moved', () => {
   const f = fixture();
   f.phase(null);
   f.interrupt();
-  assert.throws(() => cleanup(f.options, { run: f.run }), /synthetic interruption/);
+  assert.equal(cleanup(f.options, { run: f.run }).state, 'partial');
   const base = git(f.project, 'rev-parse', `${f.source}^`);
   git(f.project, 'update-ref', `refs/heads/${f.branch}`, base);
   assert.throws(() => cleanup(f.options, { run: f.run }), /branch moved/);
   assert.equal(command('git', ['show-ref', '--verify', '--quiet', `refs/heads/${f.branch}`], f.project).status, 0);
+});
+
+// Rewind the primary checkout's local main (and its tracking ref) to the synthetic base
+// while the bare remote keeps the green pushed main that contains the ticket commit.
+function lagLocalMain(f) {
+  const base = git(f.project, 'rev-parse', `${f.source}^`);
+  git(f.project, 'reset', '--hard', base);
+  git(f.project, 'update-ref', 'refs/remotes/origin/main', base);
+  assert.notEqual(git(f.project, 'rev-parse', 'HEAD'), f.shipping);
+  return base;
+}
+
+test('HS2-EBART6 removes the branch by confirmed origin/main ancestry while local main lags', () => {
+  const f = fixture();
+  f.phase(null);
+  lagLocalMain(f);
+  // `git branch -d` would refuse here: the tip is not merged into the lagging local HEAD.
+  assert.notEqual(command('git', ['merge-base', '--is-ancestor', f.source, 'HEAD'], f.project).status, 0);
+  const result = cleanup(f.options, { run: f.run });
+  assert.equal(result.state, 'removed');
+  assert.deepEqual(result.mutations, { worktree: 'removed', branch: 'removed' });
+  assert.equal(existsSync(f.worktree), false);
+  assert.equal(hasBranch(f), false);
+});
+
+test('HS2-EBART6 finishes an interrupted cleanup while local main lags origin/main', () => {
+  const f = fixture();
+  f.phase(null);
+  lagLocalMain(f);
+  f.interrupt();
+  assert.equal(cleanup(f.options, { run: f.run }).state, 'partial');
+  assert.equal(hasBranch(f), true);
+  const resumed = cleanup(f.options, { run: f.run });
+  assert.deepEqual(resumed.mutations, { worktree: 'already_removed', branch: 'removed' });
+  assert.equal(hasBranch(f), false);
+});
+
+function divergeRemote(f) {
+  const base = git(f.project, 'rev-parse', `${f.source}^`);
+  const diverged = git(f.project, 'commit-tree', `${base}^{tree}`, '-p', base, '-m', 'Synthetic divergent main');
+  git(f.project, 'push', '--force', 'origin', `${diverged}:refs/heads/main`);
+  return diverged;
+}
+
+test('HS2-EBART6 preserves the worktree and branch when origin/main is missing, stale, or diverged', () => {
+  for (const condition of ['missing', 'stale', 'diverged']) {
+    const f = fixture();
+    f.phase(null);
+    lagLocalMain(f);
+    const remote = join(f.root, 'remote.git');
+    if (condition === 'missing') git(remote, 'update-ref', '-d', 'refs/heads/main');
+    if (condition === 'diverged') divergeRemote(f);
+    if (condition === 'stale') {
+      // Another clone advances origin/main to a commit this checkout has never fetched.
+      const other = join(f.root, 'other');
+      git(f.root, 'clone', '-q', remote, other);
+      git(other, 'config', 'user.name', 'Synthetic Test');
+      git(other, 'config', 'user.email', 'synthetic@example.invalid');
+      git(other, 'commit', '--allow-empty', '-m', 'Synthetic unfetched main');
+      git(other, 'push', 'origin', 'main');
+    }
+    assert.throws(
+      () => cleanup(f.options, { run: f.run }),
+      condition === 'stale' ? /not available locally/ : condition === 'diverged' ? /not on origin\/main/ : /refs\/heads\/main|ls-remote|failed/,
+      condition,
+    );
+    assert.equal(existsSync(f.worktree), true, condition);
+    assert.equal(hasBranch(f), true, condition);
+  }
+});
+
+test('HS2-EBART6 keeps the branch when origin/main diverges after a partial cleanup', () => {
+  const f = fixture();
+  f.phase(null);
+  f.interrupt();
+  assert.equal(cleanup(f.options, { run: f.run }).state, 'partial');
+  divergeRemote(f);
+  assert.throws(() => cleanup(f.options, { run: f.run }), /not on origin\/main/);
+  assert.equal(hasBranch(f), true);
 });

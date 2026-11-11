@@ -418,10 +418,13 @@ function sourceWorktreeIdentity(project, path, branch, slug, run, { findings = f
   );
 }
 
-function directMapping(project, path, branch, head, slug, run) {
+// HS2-EBART6: `remote` is the live `ls-remote` origin/main SHA, already present
+// locally. Neither the primary checkout's local `main` nor a possibly stale
+// `refs/remotes/origin/main` tracking ref is evidence either way.
+function directMapping(project, path, branch, head, slug, remote, run) {
   sourceWorktreeIdentity(project, path, branch, slug, run);
   requireProof(
-    run('git', ['merge-base', '--is-ancestor', head, 'refs/remotes/origin/main'], project).status === 0,
+    run('git', ['merge-base', '--is-ancestor', head, remote], project).status === 0,
     'source commit is not preserved on origin/main',
   );
 }
@@ -468,12 +471,35 @@ function greenCi(project, shipping, run) {
   return { ...passing, updatedAt: listed.find((item) => item.databaseId === passing.id)?.updatedAt };
 }
 
-function deleteBranch(project, branch, head, operation, run) {
-  if (operation) {
-    // A reviewed cherry-pick may retain the source only under its archive ref.
-    // Compare-and-delete the exact local branch tip; no force push or ref rewrite.
-    git(run, project, 'update-ref', '-d', `refs/heads/${branch}`, head);
-  } else git(run, project, 'branch', '-d', '--', branch);
+// HS2-EBART6: prove the exact branch tip is preserved, then compare-and-delete it.
+// `git branch -d` judged merge status against the primary checkout's local `main`,
+// which can lag a confirmed origin/main; that refused a proven-safe deletion after
+// the worktree was already gone. A direct branch must be an ancestor of the live
+// origin/main SHA; a reviewed operation keeps its exact archive-ref proof. Any
+// failed proof or ref update preserves the branch and reports why.
+function removeBranch(project, branch, head, operation, remote, run) {
+  const ref = `refs/heads/${branch}`;
+  if (run('git', ['show-ref', '--verify', '--quiet', ref], project).status !== 0) return { branch: 'absent' };
+  const tip = run('git', ['rev-parse', '--verify', ref], project);
+  if (tip.status !== 0 || tip.stdout.trim() !== head)
+    return { branch: 'preserved', branchReason: 'branch moved after verification' };
+  // A findings handoff's source is the shipped base itself, so remote ancestry also
+  // preserves a reviewed operation's tip without an archive ref.
+  const preserved =
+    run('git', ['merge-base', '--is-ancestor', head, remote], project).status === 0 ||
+    (Boolean(operation) &&
+      run('git', ['rev-parse', '--verify', `refs/hotsheet/integration-source/${head}`], project).stdout?.trim() === head);
+  if (!preserved)
+    return {
+      branch: 'preserved',
+      branchReason: operation
+        ? 'source commit is neither on the confirmed origin/main nor preserved by its integration archive ref'
+        : 'source commit is not contained in the confirmed origin/main',
+    };
+  const deleted = run('git', ['update-ref', '-d', ref, head], project);
+  if (deleted.status !== 0)
+    return { branch: 'preserved', branchReason: deleted.stderr?.trim() || 'branch ref deletion failed' };
+  return { branch: 'removed' };
 }
 
 export function cleanup(options, { run = command } = {}) {
@@ -509,7 +535,7 @@ export function cleanup(options, { run = command } = {}) {
   const remoteLine = git(run, project, 'ls-remote', '--exit-code', 'origin', 'refs/heads/main');
   const remote = /^([0-9a-f]{40})\s+refs\/heads\/main$/i.exec(remoteLine)?.[1]?.toLowerCase();
   requireProof(
-    remote && git(run, project, 'cat-file', '-e', `${remote}^{commit}`) === '',
+    remote && run('git', ['cat-file', '-e', `${remote}^{commit}`], project).status === 0,
     'origin/main commit is not available locally; fetch it first',
   );
   requireProof(
@@ -539,9 +565,16 @@ export function cleanup(options, { run = command } = {}) {
           run('git', ['merge-base', '--is-ancestor', previous.head, remote], project).status === 0,
           'interrupted source commit is not preserved',
         );
-      if (!options.dryRun) deleteBranch(project, previous.branch, previous.head, options.operation, run);
     }
-    return { state: options.dryRun ? 'verified_already_removed' : 'already_removed',
+    // HS2-EBART6: an idempotent retry finishes only the remaining branch step and
+    // never claims it removed the worktree again.
+    if (options.dryRun)
+      return { state: 'verified_already_removed', mutations: { worktree: 'already_removed',
+        branch: ref.status === 0 ? 'verified' : 'absent' }, branch: previous.branch, reclaimedBytes: 0, ciRun: ci.id };
+    const outcome = removeBranch(project, previous.branch, previous.head, options.operation, remote, run);
+    return { state: outcome.branch === 'preserved' ? 'partial' : 'already_removed',
+      mutations: { worktree: 'already_removed', branch: outcome.branch },
+      ...(outcome.branchReason ? { branchReason: outcome.branchReason } : {}),
       branch: previous.branch, reclaimedBytes: 0, ciRun: ci.id };
   }
   requireProof(existsSync(path), 'worktree is missing without a cleanup intent');
@@ -577,7 +610,7 @@ export function cleanup(options, { run = command } = {}) {
     retiredCodeMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, assignments, remote, ci, run);
   else if (options.operation)
     handoffMapping(project, common, identity, options.operation, path, branch, head, shipping, assignment, batchPassed, run);
-  else directMapping(project, path, branch, head, slug, run);
+  else directMapping(project, path, branch, head, slug, remote, run);
   requireProof(
     run('git', ['merge-base', '--is-ancestor', head, remote], project).status === 0 || options.operation,
     'source commit is not preserved on origin/main or an integration archive ref',
@@ -604,9 +637,18 @@ export function cleanup(options, { run = command } = {}) {
   }
   const before = freeBytes(project);
   git(run, project, 'worktree', 'remove', path);
-  deleteBranch(project, branch, head, options.operation, run);
+  // HS2-EBART6: the worktree is gone from here on; report each mutation separately
+  // so a preserved branch is a truthful partial success, not an opaque failure.
+  const outcome = removeBranch(project, branch, head, options.operation, remote, run);
   const reclaimedBytes = Number(freeBytes(project) - before);
-  return { state: 'removed', branch, reclaimedBytes: Math.max(0, reclaimedBytes), ciRun: ci.id };
+  return {
+    state: outcome.branch === 'removed' ? 'removed' : 'partial',
+    mutations: { worktree: 'removed', branch: outcome.branch },
+    ...(outcome.branchReason ? { branchReason: outcome.branchReason } : {}),
+    branch,
+    reclaimedBytes: Math.max(0, reclaimedBytes),
+    ciRun: ci.id,
+  };
 }
 
 function args(values) {
@@ -635,7 +677,13 @@ function args(values) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    console.log(JSON.stringify(cleanup(args(process.argv.slice(2)))));
+    const result = cleanup(args(process.argv.slice(2)));
+    console.log(JSON.stringify(result));
+    if (result.state === 'partial') {
+      // HS2-EBART6: distinct exit status; rerun the same command to finish the branch step.
+      console.error(`worktree ${result.mutations.worktree}; branch ${result.branch} preserved: ${result.branchReason}`);
+      process.exitCode = 2;
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

@@ -253,10 +253,18 @@ batch and CI proof (HS2-X4MM1P). Active, ambiguous, or unmatched handoffs refuse
 The command rechecks ownership, no live claim or work, an unlocked clean worktree,
 source preservation, remote `main` ancestry, the exact-tree local gate receipt,
 and covering green `main` CI immediately before removal. It uses ordinary
-`git worktree remove` and `git branch -d` for direct worktrees; reviewed handoffs
-delete only the expected branch tip after confirming its archive ref. Ignored
-`target/` output leaves with the worktree. A durable intent in the Git common
-directory lets a retry finish branch deletion after an interruption. It reports
+`git worktree remove`, then compare-and-deletes only the verified branch tip
+(HS2-EBART6). A direct branch must be an ancestor of the live `origin/main` SHA
+from `git ls-remote`, never the primary checkout's possibly lagging local `main`
+or a stale tracking ref; a reviewed handoff may instead be preserved by its
+archive ref. A missing, unfetched, or diverged `origin/main` refuses before any
+mutation. Ignored `target/` output leaves with the worktree. The JSON result
+reports each mutation in `mutations` (`worktree`: `removed` or `already_removed`;
+`branch`: `removed`, `preserved`, `absent`, or `verified` on a dry run). If the
+worktree was removed but the branch was preserved, `state` is `partial`, a
+`branchReason` names why, and the command exits 2. A durable intent in the Git
+common directory lets the same command, rerun, finish only the remaining verified
+branch deletion without claiming the worktree removal again. It reports
 reclaimed filesystem bytes; a refusal keeps the checkout intact and names the missing proof. Historical
 dirty worktrees and stashes need the separate HS2-J37WRT review.
 

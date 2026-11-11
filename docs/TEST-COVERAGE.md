@@ -179,6 +179,12 @@ Git origin, linked worktrees, exact-tree gate and covering CI evidence. It cover
 eligible direct and reviewed-handoff cleanup; dirty, locked, claimed, active,
 unmerged and missing-record refusal; and interrupted retry after worktree removal.
 `scripts/ci-completion-proposal.test.mjs` covers reviewed handoff registration.
+HS2-EBART6 adds a bare-remote case where the primary checkout's local `main` and
+tracking ref lag a green pushed `origin/main` (branch removed by live remote
+ancestry), a `partial` report with separate worktree and branch mutations followed
+by an idempotent retry, and refusals with the worktree and branch kept for a
+missing, unfetched, or diverged `origin/main`, including divergence after a
+partial cleanup.
 
 HS2-AYPN79: the cleanup suite also proves a completed reviewed handoff may be
 removed after its worker takes a later ticket, while a live claim on the original

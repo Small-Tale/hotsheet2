@@ -439,7 +439,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         ))
     );
     assert!(worker.contains("<!-- hotsheet-skill-version: 49 -->")); // HS2-F9062F
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 26 -->")); // HS2-F9062F
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 27 -->")); // HS2-EBART6
+    assert!(flatten(integrator).contains("A `partial` result (exit 2)")); // HS2-EBART6
     assert!(flatten(worker).contains("Record the selected source and test plan in the ticket"));
     assert!(
         flatten(integrator).contains("finish or return active work under its accepted strategy")
