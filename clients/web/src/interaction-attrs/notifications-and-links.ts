@@ -55,6 +55,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   addNotificationChannel: action('add-notification-channel'),
   editNotificationChannel: action('edit-notification-channel'),
   chooseNotificationNotifier: action('choose-notification-notifier'),
+  chooseNotificationChannelField: action('choose-notification-channel-field'),
   saveNotificationChannel: action('save-notification-channel'),
   closeNotificationChannel: action('close-notification-channel'),
   testNotificationChannel: action('test-notification-channel'),

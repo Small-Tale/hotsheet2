@@ -6,9 +6,11 @@ import {
   channelDraftFromForm,
   channelFormFields,
   channelIdFrom,
+  deviceTimeLabel,
   deviceTimeZone,
   eventLabel,
   notifierIconName,
+  quietTimeChoices,
   quietZoneChoices,
   RULE_FIELD,
   ruleFromForm,
@@ -279,5 +281,26 @@ describe('quietZoneChoices (HS2-9T27WQ)', () => {
     expect(zone.value).toBe('offset:+09:00');
     expect(zone.choices[1]).toEqual({ value: 'offset:+09:00', label: 'Fixed offset (UTC+09:00)' });
     expect(quietZoneChoices('UTC', { start: '22:00', end: '07:00' }, []).value).toBe('offset:+00:00');
+  });
+});
+
+describe('quiet-hours times in the device clock format (HS2-NNC8BG)', () => {
+  it('labels a time in the 12- or 24-hour form the locale prefers', () => {
+    expect(deviceTimeLabel('22:00', 'en-US')).toMatch(/^10:00\sPM$/);
+    expect(deviceTimeLabel('07:30', 'en-US')).toMatch(/^7:30\sAM$/);
+    expect(deviceTimeLabel('22:00', 'en-GB')).toBe('22:00');
+    expect(deviceTimeLabel('00:15', 'de-DE')).toBe('00:15');
+  });
+
+  it('offers every quarter hour and keeps an off-grid saved time in order', () => {
+    const plain = quietTimeChoices(undefined, (hhmm) => hhmm);
+    expect(plain).toHaveLength(96);
+    expect(plain[0]).toEqual({ value: '00:00', label: '00:00' });
+    expect(plain.at(-1)).toEqual({ value: '23:45', label: '23:45' });
+    const saved = quietTimeChoices('23:59', (hhmm) => `t${hhmm}`);
+    expect(saved).toHaveLength(97);
+    expect(saved.at(-1)).toEqual({ value: '23:59', label: 't23:59' });
+    expect(quietTimeChoices('22:00', (hhmm) => hhmm)).toHaveLength(96);
+    expect(quietTimeChoices('bogus', (hhmm) => hhmm)).toHaveLength(96);
   });
 });

@@ -605,8 +605,11 @@ from the notifier's settings schema:
 - a password input for a credential.
 
 A credential input never shows a stored value ("Stored; leave empty to keep it"), and it is
-written only through the secret route. Quiet hours and the hourly limit sit below. The
-quiet-hours **Time Zone** defaults to the device's zone, labeled "Local time zone
+written only through the secret route. Quiet hours and the hourly limit sit below.
+**Quiet From** and **Quiet Until** are selects of every quarter hour, shown in the device's own
+clock format (for example "10:00 PM" where the locale uses a 12-hour clock, "22:00" where it
+uses 24 hours) and saved as `HH:MM`; a saved time off that grid, such as one set from the CLI,
+stays a choice (HS2-NNC8BG). The quiet-hours **Time Zone** defaults to the device's zone, labeled "Local time zone
 (America/New York)", and lists every zone the browser knows; a window saved with only a
 fixed offset keeps it as a "Fixed offset" choice until another zone is picked. The CLI's
 `--quiet` likewise defaults to the machine's local zone unless `--quiet-zone` or

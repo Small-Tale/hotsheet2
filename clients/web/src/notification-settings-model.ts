@@ -149,6 +149,32 @@ export function quietZoneChoices(
   return { value, choices };
 }
 
+/**
+ * A time of day (`HH:MM`) in the device's own clock format, 12- or 24-hour as the locale prefers
+ * (HS2-NNC8BG). The clock is read in UTC so no zone or daylight-saving change can shift the label.
+ */
+export function deviceTimeLabel(hhmm: string, locale?: string): string {
+  const [hours = 0, minutes = 0] = hhmm.split(':').map(Number);
+  return new Intl.DateTimeFormat(locale, { timeStyle: 'short', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(2000, 0, 1, hours, minutes)),
+  );
+}
+
+/**
+ * Quiet-hours time choices every 15 minutes, valued `HH:MM` and labeled in the device's clock format
+ * (HS2-NNC8BG). A saved time off that grid, such as one set from the CLI, stays a choice in order.
+ */
+export function quietTimeChoices(
+  saved?: string,
+  label: (hhmm: string) => string = (hhmm) => deviceTimeLabel(hhmm),
+): { value: string; label: string }[] {
+  const times: string[] = [];
+  for (let minute = 0; minute < 24 * 60; minute += 15)
+    times.push(`${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
+  if (saved && /^\d\d:\d\d$/.test(saved) && !times.includes(saved)) times.push(saved);
+  return times.sort().map((value) => ({ value, label: label(value) }));
+}
+
 /** Form values as the dialog reads them: text inputs by name, checkboxes as booleans. */
 export type FormValues = Readonly<Record<string, string | boolean | undefined>>;
 

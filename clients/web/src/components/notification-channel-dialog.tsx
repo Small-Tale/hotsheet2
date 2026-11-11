@@ -21,6 +21,7 @@ import {
   type ChannelFormField,
   channelFormFields,
   deviceTimeZone,
+  quietTimeChoices,
   quietZoneChoices,
 } from '../notification-settings-model';
 
@@ -78,7 +79,11 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
   const descriptor = notifiers.find((item) => item.id === editor.notifier),
     adding = !editor.id,
     fields = descriptor ? channelFormFields(descriptor, channel) : [],
-    zone = quietZoneChoices(deviceTimeZone(), channel?.quiet_hours);
+    zone = quietZoneChoices(deviceTimeZone(), channel?.quiet_hours),
+    // Quiet-hours selects are controlled: a re-render (a resize, a notifier change) shows what the person
+    // chose, not the stored value (HS2-NNC8BG).
+    chosen = (name: string, stored: string) => editor.fields?.[name] ?? stored,
+    choose = NOTIFICATIONS_AND_LINKS_ACTIONS.chooseNotificationChannelField.attrs;
   return (
     <DialogSurface
       label={adding ? 'Add Channel' : 'Edit Channel'}
@@ -122,21 +127,31 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
         {fields.map(settingControl)}
         <ListHeader label="Quiet Hours and Limits" />
         <Grid minColumnWidth={rem(9)} gap="m">
-          <TextField
+          <Select
             name={CHANNEL_FIELD.quietStart}
             label="Quiet From"
-            placeholder="22:00"
-            value={channel?.quiet_hours?.start ?? ''}
+            placeholderText="Choose a time"
+            value={chosen(CHANNEL_FIELD.quietStart, channel?.quiet_hours?.start ?? '')}
+            choices={quietTimeChoices(channel?.quiet_hours?.start)}
+            rootAttributes={choose}
           />
-          <TextField
+          <Select
             name={CHANNEL_FIELD.quietEnd}
             label="Quiet Until"
-            placeholder="07:00"
-            value={channel?.quiet_hours?.end ?? ''}
+            placeholderText="Choose a time"
+            value={chosen(CHANNEL_FIELD.quietEnd, channel?.quiet_hours?.end ?? '')}
+            choices={quietTimeChoices(channel?.quiet_hours?.end)}
+            rootAttributes={choose}
           />
         </Grid>
         {/* Full width so the zone name is never truncated (HS2-9T27WQ). */}
-        <Select name={CHANNEL_FIELD.quietZone} label="Time Zone" value={zone.value} choices={zone.choices} />
+        <Select
+          name={CHANNEL_FIELD.quietZone}
+          label="Time Zone"
+          value={chosen(CHANNEL_FIELD.quietZone, zone.value)}
+          choices={zone.choices}
+          rootAttributes={choose}
+        />
         <TextField
           name={CHANNEL_FIELD.maxPerHour}
           label="Max per Hour"

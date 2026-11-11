@@ -73,6 +73,18 @@ export function wireNotificationSettings(root: HTMLElement, settings: Notificati
     }),
   );
   lifetime.add(
+    delegate(
+      root,
+      'change',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.chooseNotificationChannelField.selector,
+      (_event, target) => {
+        const name = target.getAttribute('name'),
+          { value } = target as Control;
+        if (name && typeof value === 'string') settings.chooseChannelField(name, value);
+      },
+    ),
+  );
+  lifetime.add(
     delegate(root, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.saveNotificationChannel.selector, (_event, target) => {
       const dialog = target.closest(NOTIFICATIONS_AND_LINKS_TARGETS.notificationChannelDialog.selector);
       if (dialog) void settings.saveChannel(dialogValues(dialog).values);

@@ -42,6 +42,8 @@ export interface NotificationSettingsApi {
 export interface ChannelEditorState {
   id?: string;
   notifier: string;
+  /** Controlled select values chosen in the open dialog, by control name, kept across re-renders (HS2-NNC8BG). */
+  fields?: Readonly<Record<string, string>>;
   busy: boolean;
   error?: string;
 }
@@ -139,6 +141,12 @@ export function createNotificationSettings(dependencies: {
   function chooseNotifier(notifier: string) {
     const editor = channelEditor.value;
     if (editor && !editor.id) channelEditor.value = { ...editor, notifier, error: undefined };
+  }
+
+  /** Remember a controlled select's choice in the open channel dialog (HS2-NNC8BG). */
+  function chooseChannelField(name: string, value: string) {
+    const editor = channelEditor.value;
+    if (editor) channelEditor.value = { ...editor, fields: { ...editor.fields, [name]: value } };
   }
 
   function closeChannelEditor() {
@@ -296,6 +304,7 @@ export function createNotificationSettings(dependencies: {
     refresh,
     openChannelEditor,
     chooseNotifier,
+    chooseChannelField,
     closeChannelEditor,
     saveChannel,
     testChannel,

@@ -147,6 +147,26 @@ describe('notification settings controller (HS2-DPBJJA)', () => {
     expect(settings.channelEditor.value?.notifier).toBe('email');
   });
 
+  it('keeps controlled select choices across re-renders until the dialog closes (HS2-NNC8BG)', async () => {
+    const fake = fakeApi();
+    const settings = createNotificationSettings({ api: () => fake.api });
+    await settings.refresh();
+    settings.chooseChannelField(CHANNEL_FIELD.quietStart, '22:00');
+    expect(settings.channelEditor.value).toBeUndefined();
+    settings.openChannelEditor();
+    settings.chooseChannelField(CHANNEL_FIELD.quietStart, '22:00');
+    settings.chooseChannelField(CHANNEL_FIELD.quietEnd, '07:15');
+    settings.chooseChannelField(CHANNEL_FIELD.quietStart, '23:00');
+    settings.chooseNotifier('email');
+    expect(settings.channelEditor.value?.fields).toEqual({
+      [CHANNEL_FIELD.quietStart]: '23:00',
+      [CHANNEL_FIELD.quietEnd]: '07:15',
+    });
+    settings.closeChannelEditor();
+    settings.openChannelEditor();
+    expect(settings.channelEditor.value?.fields).toBeUndefined();
+  });
+
   it('tests, disables, trusts, and removes, reporting a failed test in place', async () => {
     const fake = fakeApi({ testOutcome: 'failed' });
     const settings = createNotificationSettings({ api: () => fake.api });

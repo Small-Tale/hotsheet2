@@ -300,9 +300,10 @@ async function captureQuietHours(page: Page, name: string) {
 }
 
 test.describe('quiet hours follow the device', () => {
-  test.use({ timezoneId: 'America/New_York' });
+  test.use({ timezoneId: 'America/New_York', locale: 'en-US' });
 
   // HS2-9T27WQ: a new channel's quiet hours default to the device's named zone, which the server stores.
+  // HS2-NNC8BG: its times are picked in the device's clock format.
   test('defaults the quiet-hours zone to the device time zone', async ({ page }) => {
     const server = await realTicketServer();
     try {
@@ -322,16 +323,28 @@ test.describe('quiet hours follow the device', () => {
       await expect(zone).toContainText('Local time zone (America/New York)');
       await dialog.getByLabel('Name').fill('Night Voice');
       await dialog.getByLabel('Custom Command').fill('true');
-      await dialog.getByLabel('Quiet From').fill('22:00');
-      await dialog.getByLabel('Quiet Until').fill('07:00');
-      await captureQuietHours(page, 'hs2-9t27wq-quiet-zone');
+      // HS2-NNC8BG: times are chosen, valued HH:MM, and shown in the device's 12-hour format.
+      await choose(page, 'notification-channel-quiet-start', '22:00');
+      await choose(page, 'notification-channel-quiet-end', '07:15');
+      await expect(page.locator('kui-select[name="notification-channel-quiet-start"]')).toContainText('10:00 PM');
+      await expect(page.locator('kui-select[name="notification-channel-quiet-end"]')).toContainText('7:15 AM');
+      await captureQuietHours(page, 'hs2-nnc8bg-quiet-times');
+      // The wide-narrow-wide re-renders keep the chosen times (controlled selects, HS2-NNC8BG).
+      await expect(page.locator('kui-select[name="notification-channel-quiet-start"]')).toHaveJSProperty(
+        'value',
+        '22:00',
+      );
+      await expect(page.locator('kui-select[name="notification-channel-quiet-end"]')).toHaveJSProperty(
+        'value',
+        '07:15',
+      );
       await dialog.getByRole('button', { name: 'Add Channel' }).click();
       await expect(dialog).toBeHidden();
       await expect
         .poll(async () => (await server.request<QuietConfig>('/notification-config')).channels[0]?.quiet_hours)
         .toEqual({
           start: '22:00',
-          end: '07:00',
+          end: '07:15',
           time_zone: 'America/New_York',
           utc_offset: '+00:00',
           allow_errors: true,
