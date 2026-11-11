@@ -335,8 +335,8 @@ export const demoCatalog: DemoCategory[] = [
     demos: [
       cataloged('hs1-migration-dialog', ['value-table']),
       cataloged('hs1-migration-banner', ['shell-banner']),
-      cataloged('codex-hooks-notice-banner', ['list', 'state-banner']),
-      cataloged('shell-banner', ['state-banner']),
+      cataloged('codex-hooks-notice-banner', ['shell-banner']),
+      cataloged('shell-banner', ['list', 'state-banner']),
       cataloged('project-setup-warning-banner', ['shell-banner']),
       cataloged('server-build-notice-banner', ['shell-banner']),
       cataloged('source-stale-notice-banner', ['shell-banner']),

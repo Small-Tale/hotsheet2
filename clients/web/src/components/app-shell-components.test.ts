@@ -821,6 +821,7 @@ describe('application shell components', () => {
 
   it('renders all connection semantics and only valid actions', () => {
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('data-component="state-banner"');
+    expect(String(ConnectionStateBanner({ state: 'offline' }))).toContain('data-control-insets="trl"'); // HS2-YCB15Z
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('role="status"');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).not.toContain('<button');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('data-component="loading-spinner"');

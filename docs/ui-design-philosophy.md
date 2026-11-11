@@ -52,6 +52,12 @@ does not fork Kerf's guidance.
   Discard Changes cover it; withdrawing an AI rating confirms because it drops the
   explanation, and declining edits the feedback instead.
 
+- Application banners above the workspace (setup warnings, Codex hook review, update and
+  source notices, repository size, paused notifications, Hot Sheet 1 migration, and the
+  connection banner) use one inset treatment: Kerf's rounded `StateBanner` inset by a
+  Kerf `List` (`controlInsets="trl"`) on the header surface, through `ShellBanner`
+  (HS2-YCB15Z). No banner is a flush full-width strip.
+
 - App Settings → General offers a **Theme** choice (HS2-EFTHS6): Auto (the default,
   following `prefers-color-scheme`), Light, or Dark, per browser in
   `localStorage hotsheet.theme`. This is a maintainer-requested departure from

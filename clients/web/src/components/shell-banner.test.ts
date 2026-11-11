@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { ShellBanner } from './shell-banner';
 
 describe('ShellBanner (HS2-BF8C76)', () => {
-  it('composes a stacked status StateBanner inside a toned full-width strip', () => {
+  it('composes a stacked status StateBanner inset by a Kerf List (HS2-YCB15Z)', () => {
     const markup = String(
       ShellBanner({
         component: 'example-banner',
@@ -21,12 +21,15 @@ describe('ShellBanner (HS2-BF8C76)', () => {
     expect(markup).toContain('Done');
     expect(markup).toContain('All set.');
     expect(markup).not.toContain('role="alert"');
+    expect(markup).toMatch(
+      /data-component="list"[^>]*data-control-insets="trl"|data-control-insets="trl"[^>]*data-component="list"/,
+    );
   });
 
-  it('configures StateBanner only through public tokens', () => {
+  it('keeps the inset rounded StateBanner and only paints the header surface behind it (HS2-YCB15Z)', () => {
     const css = readFileSync(new URL('./shell-banner.css', import.meta.url), 'utf8');
     expect(css).not.toContain('.kui-');
-    expect(css).toContain('--kui-state-banner-border: transparent');
-    expect(css).toContain('--kui-layout-rounded-radius: 0');
+    expect(css).not.toMatch(/--kui-(?:state-banner|layout)-/);
+    expect(css).toContain('background: var(--kui-color-surface)');
   });
 });

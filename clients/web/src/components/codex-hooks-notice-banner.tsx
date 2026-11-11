@@ -1,36 +1,28 @@
-import './codex-hooks-notice-banner.css';
-
-import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { StateBanner } from '@kerfjs/ui/state-banner';
 import { ShieldCheck } from 'lucide';
 
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+import { ShellBanner } from './shell-banner';
 
 /**
- * Successful setup changed Codex hook hashes; review is per checkout (HS2-4AR09Z). The rounded
- * banner sits on the header surface, not the sunken pane content tint (HS2-0YPWH8). Dismiss is a native
- * button so StateBanner's action styling matches the other shell banners (HS2-7S60S4).
+ * Successful setup changed Codex hook hashes; review is per checkout (HS2-4AR09Z). It is a shell banner,
+ * so it shares the inset treatment and header surface of every other application banner (HS2-0YPWH8,
+ * HS2-YCB15Z). Dismiss is a native button so StateBanner's action styling matches (HS2-7S60S4).
  */
 export function CodexHooksNoticeBanner({ path }: { path: string }) {
   return (
-    <div class="codex-hooks-notice-banner" data-component="codex-hooks-notice-banner">
-      <List controlInsets="trbl" rootAttributes={{ 'data-codex-hooks-notice': 'true' }}>
-        <StateBanner
-          title="Review Updated Codex Hooks"
-          detail={`Hot Sheet updated ${path}. Run /hooks in Codex for this checkout to review and trust the updated hooks.`}
-          tone="warning"
-          urgency="status"
-          copyLayout="stacked"
-          actionPlacement="below"
-          icon={<LucideIcon icon={ShieldCheck} name="shield-check" />}
-          action={
-            <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissCodexHooksNotice.attrs}>
-              Dismiss
-            </button>
-          }
-        />
-      </List>
-    </div>
+    <ShellBanner
+      component="codex-hooks-notice-banner"
+      title="Review Updated Codex Hooks"
+      detail={`Hot Sheet updated ${path}. Run /hooks in Codex for this checkout to review and trust the updated hooks.`}
+      tone="warning"
+      actionPlacement="below"
+      icon={<LucideIcon icon={ShieldCheck} name="shield-check" />}
+      action={
+        <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissCodexHooksNotice.attrs}>
+          Dismiss
+        </button>
+      }
+    />
   );
 }

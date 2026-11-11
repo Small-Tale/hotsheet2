@@ -92,6 +92,8 @@ export async function openDemoProject(
     standbySettings?: { get: () => unknown; put?: (body: unknown) => unknown };
     /** Fail `/ws/poll`, as when the server is unreachable. */
     pollDown?: () => boolean;
+    /** Extra fields of the `projects/open` answer, such as banner triggers (HS2-YCB15Z). */
+    openExtras?: Record<string, unknown>;
   } = {},
 ) {
   let repositoryInitialized = false;
@@ -117,6 +119,7 @@ export async function openDemoProject(
               }
             : {}),
           ...(populated.bundledGuidanceBlocked ? { bundledGuidanceBlocked: populated.bundledGuidanceBlocked } : {}),
+          ...populated.openExtras,
         },
       });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });

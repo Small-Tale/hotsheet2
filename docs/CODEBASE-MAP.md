@@ -497,7 +497,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-scroll-state.ts # In-session project/mode/view scroll snapshots, deferred restoration, and content-bound clamping
     src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
     src/ai-provider-defaults.ts # Per-provider AI default model/effort/permission-mode resolution, save and default-switch helpers (HS2-EK24KF, HS2-NHRDMW)
-    src/components/shell-banner.tsx # Shared full-width shell status strip around Kerf StateBanner (info/success/warning) used by the setup, notification-pause, and HS1 banners (HS2-BF8C76)
+    src/components/shell-banner.tsx # Shared application banner: Kerf StateBanner (info/success/warning) inset by a Kerf List on the header surface, used by the setup, Codex hooks, source-stale, update, size, pause, and HS1 banners; the connection banner uses the same inset (HS2-BF8C76, HS2-YCB15Z)
     src/components/project-setup-warning-banner.tsx # Dismissible warning when opening a project skipped its setup refresh (HS2-0TXM8S)
     src/components/server-build-notice-banner.tsx # Dismissible info strip when a pinned host serves a project through a mismatched shared machine server it could not restart yet (HS2-46BKH7)
     src/components/source-stale-notice-banner.tsx # Dismissible info strip when workspace source is newer than the running server build but the client/server pair matches (HS2-B84P1S)

@@ -469,9 +469,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific CodexHooksNoticeBanner behavior."
       ],
-      "publicClasses": [
-        "codex-hooks-notice-banner"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/codex-hooks-notice-banner.tsx",
       "geometry": {

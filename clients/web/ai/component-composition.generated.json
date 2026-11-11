@@ -1431,13 +1431,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": [
-          "codex-hooks-notice-banner"
-        ],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": [
-          "codex-hooks-notice-banner"
-        ]
+        "placeableClasses": []
       },
       "diagnostics": [],
       "provenance": {

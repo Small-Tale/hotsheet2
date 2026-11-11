@@ -1238,8 +1238,8 @@ test('renders keyboard shortcut rows edge-to-edge without a transparent left gut
 test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-banner');
-  const migration = page.locator('[data-component="hs1-migration-banner"] > [data-component="state-banner"]'),
-    cleanup = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
+  const migration = page.locator('[data-component="hs1-migration-banner"] [data-component="state-banner"]'),
+    cleanup = page.locator('[data-component="hs1-cleanup-banner"] [data-component="state-banner"]');
   for (const [banner, tone] of [
     [migration, 'info'],
     [cleanup, 'success'],
@@ -1262,7 +1262,8 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
         };
       }),
       // The action buttons keep Kerf's own StateBanner padding; the app no longer restyles them (HS2-9ME409).
-    ).toEqual({ padding: '8px 16px', gap: '16px', copyGap: '4px', buttonPadding: ['11.2px', '11.2px'] });
+      // The banner itself keeps Kerf's inset StateBanner spacing like every application banner (HS2-YCB15Z).
+    ).toEqual({ padding: '8px', gap: '8px', copyGap: '4px 8px', buttonPadding: ['11.2px', '11.2px'] });
   }
   await expect(cleanup.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
   await page

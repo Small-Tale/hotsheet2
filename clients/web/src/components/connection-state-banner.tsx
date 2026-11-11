@@ -1,3 +1,4 @@
+import { List } from '@kerfjs/ui/list';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
@@ -103,18 +104,21 @@ export function ConnectionStateBanner({ state, detail }: ConnectionStateBannerPr
       {item.actionLabel}
     </button>
   ) : undefined;
+  // Inset like every other application banner (HS2-YCB15Z, see ShellBanner).
   return (
-    <StateBanner
-      title={item.label}
-      detail={detail}
-      tone={item.tone}
-      urgency={state === 'connecting' ? 'status' : 'alert'}
-      // The detail gets its own wrapping line, so long recovery copy stays readable at phone width
-      // instead of truncating beside the title (HS2-TM2D7J).
-      copyLayout="stacked"
-      className={`connection-state-banner connection-state-banner--${state}`}
-      icon={state === 'connecting' ? <LoadingSpinner /> : <LucideIcon icon={item.icon} name={item.iconName} />}
-      action={action}
-    />
+    <List controlInsets="trl">
+      <StateBanner
+        title={item.label}
+        detail={detail}
+        tone={item.tone}
+        urgency={state === 'connecting' ? 'status' : 'alert'}
+        // The detail gets its own wrapping line, so long recovery copy stays readable at phone width
+        // instead of truncating beside the title (HS2-TM2D7J).
+        copyLayout="stacked"
+        className={`connection-state-banner connection-state-banner--${state}`}
+        icon={state === 'connecting' ? <LoadingSpinner /> : <LucideIcon icon={item.icon} name={item.iconName} />}
+        action={action}
+      />
+    </List>
   );
 }

@@ -3826,7 +3826,7 @@ test('explains changed Codex hooks without a setup-failure warning and dismisses
       await page.getByRole('button', { name: 'Open Project' }).click();
       await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     }
-    const banner = page.locator('[data-codex-hooks-notice="true"]');
+    const banner = page.locator('[data-component="codex-hooks-notice-banner"]');
     await expect(banner).toContainText('Review Updated Codex Hooks');
     await expect(banner).toContainText('Run /hooks in Codex for this checkout');
     await expect(banner).toContainText('.codex/hooks.json');
@@ -3848,7 +3848,7 @@ test('explains changed Codex hooks without a setup-failure warning and dismisses
   changed = false;
   await page.reload();
   await expect(page.getByText('Use real project tickets').first()).toBeVisible();
-  await expect(page.locator('[data-codex-hooks-notice="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="codex-hooks-notice-banner"]')).toHaveCount(0);
 });
 
 test('clears a failed project-open error when retrying successfully', async ({ page }) => {
@@ -5584,7 +5584,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect.poll(dialogOpacity).toBe('1');
   await page.screenshot({ path: 'target/visual-captures/hs2-k4306s-hs1-source-dialog-wide.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Not Now' }).click();
-  const banner = page.locator('[data-component="hs1-migration-banner"] > [data-component="state-banner"]');
+  const banner = page.locator('[data-component="hs1-migration-banner"] [data-component="state-banner"]');
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(250);
   await expect(banner).toHaveAttribute('data-component', 'state-banner');
