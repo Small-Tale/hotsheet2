@@ -204,17 +204,6 @@ export function AnnouncerOverlay({
             </>
           }
         />
-        {expanded && (
-          <ol class="announcer__reel" aria-label="Cross-Project Activity Reel">
-            {items.map((item, itemIndex) => (
-              <li data-current={String(itemIndex === index)}>
-                <button type="button" data-announcer-action="select" data-index={itemIndex}>
-                  <span>{item.projectName}</span> {item.narration}
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
       </section>
     </aside>
   );

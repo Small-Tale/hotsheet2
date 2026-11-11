@@ -344,6 +344,10 @@ fallbacks, language-filtered capped voice choices, menu entries, checks, icons, 
 the disabled empty clear) and `announcer.spec.ts` (no voice row, the settings button
 beside Audio, voice and speed applied to narration, reload persistence, server engine
 without a voice name, and clear history kept across reopening).
+HS2-7YD7S9 is covered in `announcer.spec.ts`: the expanded card has no list or
+per-item buttons, its current-item area takes most of the card's height and fits a
+long item without scrolling, previous and next reach every item, and a short window
+keeps the card inside the viewport.
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

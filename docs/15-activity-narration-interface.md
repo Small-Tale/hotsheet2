@@ -95,7 +95,9 @@ The `activity` capability turns native signals → events; the host owns the str
   at the start and the icon-only Live and Audio toggles at the end, with any extra
   width between them. The toggles show on and off through pressed chrome and
   `aria-pressed`, and Audio's icon switches between volume and muted. Both carry the retained
-  cross-project digest, live narration over the change stream, a bounded reel,
+  cross-project digest, live narration over the change stream, a bounded reel stepped
+  with previous and next (the expanded card shows no history list and gives its height
+  to the current item, HS2-7YD7S9),
   browser speech or a configured server provider. The macOS server offers a local
   `macos-say` provider. A settings menu beside the toggles (HS2-PRCC6V) chooses the
   engine, a browser voice for the page's language (up to 24; a server engine uses its

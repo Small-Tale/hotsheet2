@@ -304,7 +304,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/announcer-layout.ts   #   Docked announcer height bounds and per-device persistence (HS2-BS0XFK)
     src/announcer-settings.ts #   Announcer engine, voice, speed, cleared-history persistence and settings menu entries (HS2-PRCC6V)
     src/resizable-region-commits.ts # Routes the root wireResizableRegions commits to their owners by region id (HS2-BS0XFK)
-    src/components/announcer-overlay.tsx # Sidebar-docked section or picture-in-picture card with digest and reel (HS2-5PSQJQ, HS2-BS0XFK)
+    src/components/announcer-overlay.tsx # Sidebar-docked section or picture-in-picture card with the current activity item (HS2-5PSQJQ, HS2-BS0XFK, HS2-7YD7S9)
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition

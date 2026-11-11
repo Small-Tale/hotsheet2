@@ -80,3 +80,14 @@ describe('AnnouncerOverlay controls (HS2-EYW4H8, HS2-YF8P38)', () => {
     expect(css).not.toMatch(/aria-pressed/);
   });
 });
+
+describe('AnnouncerOverlay expanded card (HS2-7YD7S9)', () => {
+  it('shows only the current item, without a history list or per-item buttons', () => {
+    for (const expanded of [false, true]) {
+      const html = render({ expanded, index: 1 });
+      expect(html).not.toContain('<ol');
+      expect(html).not.toContain('data-announcer-action="select"');
+      expect(html.split('keep the synthetic sample short').length - 1).toBe(1);
+    }
+  });
+});

@@ -8,8 +8,7 @@
 
 /* App-owned buttons only; the controls toolbar's buttons belong to Kerf's ToolbarControlGroup (HS2-EYW4H8). */
 .announcer__header button,
-.announcer__change button,
-.announcer__reel button {
+.announcer__change button {
   border: 0;
   border-radius: var(--wa-border-radius-m);
   background: transparent;
@@ -19,15 +18,13 @@
 }
 
 .announcer__header button:focus-visible,
-.announcer__change button:focus-visible,
-.announcer__reel button:focus-visible {
+.announcer__change button:focus-visible {
   outline: 2px solid var(--wa-color-focus);
   outline-offset: 2px;
 }
 
 .announcer__header button:disabled,
-.announcer__change button:disabled,
-.announcer__reel button:disabled {
+.announcer__change button:disabled {
   opacity: 0.42;
   cursor: default;
 }
@@ -64,14 +61,17 @@
   background: transparent;
 }
 
-.announcer[data-presentation='docked'] .announcer__screen {
+.announcer[data-presentation='docked'] .announcer__screen,
+.announcer[data-expanded='true'] .announcer__screen {
   flex: 1 1 auto;
   min-height: 0;
 }
 
+/* HS2-7YD7S9: the expanded card has no history list; the current item's text area takes its height. */
 .announcer[data-expanded='true'] .announcer__panel {
   width: min(960px, calc(100vw - 24px));
-  max-height: min(720px, calc(100dvh - 24px));
+  height: min(560px, calc(100dvh - 24px));
+  max-height: none;
 }
 
 .announcer__header {
@@ -106,8 +106,7 @@
   font-size: var(--wa-font-size-xs);
 }
 
-.announcer__header button:hover,
-.announcer__reel button:hover {
+.announcer__header button:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
 
@@ -162,29 +161,4 @@
   margin: 0 var(--wa-space-xs) var(--wa-space-xs);
   color: var(--wa-color-danger-on-quiet);
   font-size: var(--wa-font-size-xs);
-}
-
-.announcer__reel {
-  list-style: none;
-  margin: 0;
-  padding: var(--wa-space-xs);
-  overflow: auto;
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-}
-
-.announcer__reel li[data-current='true'] {
-  background: var(--wa-color-neutral-fill-quiet);
-  border-radius: var(--wa-border-radius-s);
-}
-
-.announcer__reel button {
-  width: 100%;
-  text-align: left;
-  padding: var(--wa-space-xs);
-  font-size: var(--wa-font-size-xs);
-}
-
-.announcer__reel span {
-  font-weight: 700;
-  margin-right: var(--wa-space-xs);
 }

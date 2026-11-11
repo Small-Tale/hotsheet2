@@ -350,6 +350,61 @@ test('HS2-PRCC6V sets voice, speed, and clears history from the settings menu', 
   if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-prcc6v-docked-wide.png` });
 });
 
+test('HS2-7YD7S9 grows the current item instead of listing history', async ({ page }) => {
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  const long = Array.from(
+    { length: 14 },
+    (_, at) => `Synthetic step ${at + 1} kept the sample deliberately short.`,
+  ).join(' ');
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: ['one', 'two', 'three'].map((id, at) => ({
+        store_id: 'synthetic-store',
+        event: {
+          id,
+          ts: `2026-11-01T01:0${at}:00Z`,
+          tool: 'codex',
+          kind: 'decision',
+          summary: at === 2 ? long : `codex decided: synthetic choice ${id}`,
+          importance: 'high',
+        },
+      })),
+    }),
+  );
+  const launch = page.getByRole('button', { name: 'Announcer', exact: true });
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  await launch.click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  await expect(overlay).toContainText('synthetic choice one');
+  const screen = overlay.locator('.announcer__screen');
+  const compact = await screen.boundingBox();
+  await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
+  await expect(overlay).toHaveAttribute('data-expanded', 'true');
+  await expect(overlay.getByRole('list')).toHaveCount(0);
+  await expect(overlay.getByRole('button', { name: /synthetic choice/ })).toHaveCount(0);
+  const panel = await overlay.locator('.announcer__panel').boundingBox();
+  const grown = await screen.boundingBox();
+  if (!compact || !grown || !panel) throw new Error('Announcer must be measurable');
+  // The current item's area takes the expanded card's spare height.
+  expect(grown.height).toBeGreaterThan(compact.height * 3);
+  expect(grown.height).toBeGreaterThan(panel.height * 0.6);
+  // Previous and next still reach every item without the list.
+  await overlay.getByRole('button', { name: 'Next Activity' }).click();
+  await overlay.getByRole('button', { name: 'Next Activity' }).click();
+  await expect(overlay).toContainText('Synthetic step 14');
+  await expect.poll(() => screen.evaluate((node) => node.scrollHeight <= node.clientHeight)).toBe(true);
+  await overlay.getByRole('button', { name: 'Previous Activity' }).click();
+  await expect(overlay).toContainText('synthetic choice two');
+  if (captureDir) await overlay.screenshot({ path: `${captureDir}/hs2-7yd7s9-expanded.png` });
+  // On a short window the card stays inside the viewport and the item area scrolls rather than the page.
+  await page.setViewportSize({ width: 1280, height: 420 });
+  await expect
+    .poll(() => overlay.locator('.announcer__panel').evaluate((node) => node.getBoundingClientRect().bottom))
+    .toBeLessThanOrEqual(420);
+});
+
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
   const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
   const settleViewport = async (mobile: boolean) => {
@@ -490,7 +545,8 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
     .toContain('server:blob:synthetic-speech');
-  await expect(overlay.getByRole('list', { name: 'Cross-Project Activity Reel' })).toContainText('demo');
+  // HS2-7YD7S9: no history list; the expanded card gives its height to the current item.
+  await expect(overlay.getByRole('list')).toHaveCount(0);
   await overlay.getByRole('button', { name: 'Shrink Announcer' }).click();
   await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(overlay).toHaveAttribute('data-presentation', 'docked');

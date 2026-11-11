@@ -292,15 +292,6 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         audible.value = !audible.peek();
         if (!audible.peek()) cancelSpeech();
         break;
-      case 'select': {
-        const selected = Number(element.dataset.index);
-        if (Number.isInteger(selected) && selected >= 0 && selected < items.peek().length) {
-          clearDiff();
-          cancelSpeech();
-          index.value = selected;
-        }
-        break;
-      }
       case 'current-diff':
         void loadCurrentDiff();
         break;
