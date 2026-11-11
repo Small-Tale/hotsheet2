@@ -35,14 +35,29 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     expect(markup).not.toContain('data-live-row');
   });
 
-  it('labels the header action for the mode it switches to', () => {
+  it('has no header bar: the content itself is the toggle, named for the mode it switches to (HS2-9J6PPR)', () => {
     const compact = String(ProjectLiveSection({ summary: quiet }));
-    expect(compact).toContain('data-action="toggle-live-section"');
-    expect(compact).toContain('Show live details');
-    expect(compact).toContain('chevrons-up-down');
-    const expanded = String(ProjectLiveSection({ summary: quiet, expanded: true }));
-    expect(expanded).toContain('Show compact live summary');
-    expect(expanded).toContain('chevrons-down-up');
+    expect(compact).not.toContain('data-component="list-header"');
+    expect(compact).not.toContain('chevrons-up-down');
+    // One native button wraps the gauges and chips and carries the delegated toggle.
+    expect(count(compact, /<button/)).toBe(1);
+    expect(compact).toMatch(
+      /<button type="button" class="project-live-section__toggle" data-action="toggle-live-section" aria-expanded="false" aria-label="Show live details\. Active · 2 workers live, last progress 2m ago">/,
+    );
+    const gaugesAt = compact.indexOf('data-component="glance-gauge"');
+    expect(gaugesAt).toBeGreaterThan(compact.indexOf('<button'));
+    expect(gaugesAt).toBeLessThan(compact.indexOf('</button>'));
+    const expanded = String(ProjectLiveSection({ summary: attention, expanded: true }));
+    expect(expanded).toContain('aria-expanded="true"');
+    expect(expanded).toContain('aria-label="Show compact live summary. Active · 2 workers live, last progress 2m ago"');
+    expect(expanded).not.toContain('chevrons-down-up');
+    expect(expanded.indexOf('data-live-row="overrun"')).toBeLessThan(expanded.indexOf('</button>'));
+    // Host callouts are not toggles: they sit outside the button.
+    const callouts = hostCallouts(demoHostHealth('disk-critical'));
+    const withCallout = String(ProjectLiveSection({ summary: quiet, callouts }));
+    expect(withCallout.indexOf('data-host-callout')).toBeGreaterThan(withCallout.indexOf('</button>'));
+    // Before any store reports there is nothing to toggle.
+    expect(String(ProjectLiveSection({}))).not.toContain('<button');
   });
 
   it('shows only the rows that have something to say when expanded', () => {

@@ -79,20 +79,43 @@ test('project sidebar Live section is compact by default and remembers the detai
     ).toHaveCount(0);
     await expect(live.locator('[data-live-row]')).toHaveCount(0);
 
-    // The header action switches to the detail rows and names the way back.
-    await live.getByRole('button', { name: 'Show live details' }).click();
+    // No header bar (HS2-9J6PPR): clicking the gauges themselves switches to the detail rows, and the
+    // one toggle names the mode it switches to; the gauges keep their hover titles.
+    await expect(live.locator('[data-component="list-header"]')).toHaveCount(0);
+    await expect(live.getByText('Live', { exact: true })).toHaveCount(0);
+    const toggle = live.getByRole('button', { name: /^Show live details\. / });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(gauges.nth(0).locator('title')).toHaveText(/^Token rate: 0 tokens\/min/);
+    await gauges.nth(1).click();
     await expect(live).toHaveAttribute('data-mode', 'expanded');
+    await expect(live.getByRole('button', { name: /^Show compact live summary\. / })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     await expect(live.locator('svg.glance-gauge[data-variant="full"]')).toHaveCount(2);
     await expect(live.locator('[data-live-row="state"]')).toBeVisible();
     await expect(live.locator('[data-live-row="runway"], [data-live-row="waiting"]')).toHaveCount(0);
+    // Captures show the resting state: no hover fill or focus ring.
+    await page.mouse.move(640, 880);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-expanded-1280.png' });
 
     // The choice persists per viewer across a reload, which restores the open project.
     await page.reload();
     await expect(live).toHaveAttribute('data-mode', 'expanded', { timeout: 30_000 });
-    await live.getByRole('button', { name: 'Show compact live summary' }).click();
+    // The keyboard path: focus the content's toggle and press Enter, then Space toggles back.
+    await live.getByRole('button', { name: /^Show compact live summary\. / }).focus();
+    await page.keyboard.press('Enter');
+    await expect(live).toHaveAttribute('data-mode', 'compact');
+    await live.getByRole('button', { name: /^Show live details\. / }).focus();
+    await page.keyboard.press('Space');
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    // Clicking the detail rows (not only the gauges) toggles too.
+    await live.locator('[data-live-row="state"]').click();
     await expect(live).toHaveAttribute('data-mode', 'compact');
     await expect(live.locator('[data-live-row]')).toHaveCount(0);
+    await page.mouse.move(640, 880);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-compact-1280.png' });
   } finally {
     await server.stop();

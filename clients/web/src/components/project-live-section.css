@@ -1,0 +1,27 @@
+/* The Live section's content is one app-owned native button that toggles compact and expanded mode
+   (HS2-9J6PPR), like the ProjectSummary and GridSidebarGauges tiles: no header bar, the gauges and chips
+   themselves are the target. These rules only reset the native button so the Kerf rows inside keep
+   their own insets, and give it the shared hover and inset focus treatment. */
+.project-live-section__toggle {
+  display: block;
+  /* The native button's form-control height would clip the gauges; the content sizes it. */
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-m);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+/* Hover feedback for the content's native button. */
+.project-live-section__toggle:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+/* An inset focus ring, so the ring stays inside the sidebar's inline inset. */
+.project-live-section__toggle:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: -2px;
+}

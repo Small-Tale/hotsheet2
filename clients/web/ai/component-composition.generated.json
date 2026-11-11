@@ -4697,7 +4697,7 @@
       "id": "project-live-section",
       "name": "ProjectLiveSection",
       "kind": "component",
-      "purpose": "Project sidebar Live section: compact bare gauges and glyph chips, or expanded detail rows, with full-width host callouts.",
+      "purpose": "Project sidebar Live section: compact bare gauges and glyph chips, or expanded detail rows, as one native toggle button without a header bar (HS2-9J6PPR), with full-width host callouts.",
       "publicExports": [
         {
           "name": "ProjectLiveSection"
@@ -4705,6 +4705,7 @@
       ],
       "sourceLinks": [
         "src/components/project-live-section.tsx",
+        "src/components/project-live-section.css",
         "src/project-live-summary.ts"
       ],
       "source": "src/components/project-live-section.tsx",

@@ -175,8 +175,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   removed (HS2-5A83MR, TWD45K #6). A
   likely-critical callout (for example disk, §34.8) keeps its full width.
 - **Expanded:** the detailed rows of `m1`: work state and last-progress age, Needs you, overdue ETA, `main`
-  CI, and a machine warning only past a threshold. The queue runway row was removed (HS2-5A83MR, TWD45K #5). A toggle in the section header switches
-  modes, and the choice persists per viewer.
+  CI, and a machine warning only past a threshold. The queue runway row was removed (HS2-5A83MR, TWD45K #5). The section has no
+  header bar (HS2-9J6PPR, TWD45K #1/#2): clicking anywhere on its gauges, chips, or rows switches modes.
+  That content is one native button, so Tab and Enter or Space reach it too, and its accessible name
+  states the mode it switches to ("Show live details" or "Show compact live summary") followed by the
+  work-state sentence. Gauge and chip hover titles still show. The choice persists per viewer. Host
+  callouts are not part of the toggle.
 - **Shipped (HS2-F788GW).** `ProjectLiveSection` renders the compact line and the expanded rows from the
   live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
   change stream. Ages and decaying rates re-render from a local 30-second render clock that runs only while

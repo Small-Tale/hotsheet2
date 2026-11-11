@@ -348,8 +348,10 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   updated/h) and Kerf `Badge` chips with a glyph and a raw number: a problem state, Needs you, the
   worst ETA overrun, each only when it has something to say (queue runway removed, HS2-5A83MR). Every explanation
   is in the chip's title and accessible name. Expanded shows two medium full gauges and the `m1`
-  detail rows (work state and last-progress age, Needs you, past ETA). The `ListHeader`
-  action `toggle-live-section` switches modes and the choice persists in the workspace preferences.
+  detail rows (work state and last-progress age, Needs you, past ETA). There is no
+  header bar (HS2-9J6PPR): the content is one app-owned native button carrying the
+  `toggle-live-section` action, named for the mode it switches to, and the choice persists in the
+  workspace preferences.
   Host conditions past a threshold (HS2-DTAVQA) are full-width Kerf `StateBanner` callouts in both
   modes. Numbers derive in `project-live-summary.ts`; ages re-render from a local render-only clock.
 

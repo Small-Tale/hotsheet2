@@ -1,23 +1,13 @@
+import './project-live-section.css';
+
 import { Badge } from '@kerfjs/ui/badge';
 import { List } from '@kerfjs/ui/list';
-import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Spacer } from '@kerfjs/ui/spacer';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
-import {
-  BatteryWarning,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  Cpu,
-  HardDrive,
-  type IconNode,
-  MemoryStick,
-  Thermometer,
-  Timer,
-  WifiOff,
-} from 'lucide';
+import { BatteryWarning, Cpu, HardDrive, type IconNode, MemoryStick, Thermometer, Timer, WifiOff } from 'lucide';
 
 import type { HostHealthSignalId } from '../host-health';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -123,66 +113,16 @@ export function ProjectLiveSection({ summary, callouts = [], expanded = false }:
       aria-label="Live"
     >
       <List gap="xs">
-        <ListHeader
-          label="Live"
-          action={COMMANDS_AND_AI_ACTIONS.toggleLiveSection.value}
-          actionLabel={expanded ? 'Show compact live summary' : 'Show live details'}
-          actionIcon={
-            expanded ? (
-              <LucideIcon icon={ChevronsDownUp} name="chevrons-down-up" />
-            ) : (
-              <LucideIcon icon={ChevronsUpDown} name="chevrons-up-down" />
-            )
-          }
-        />
-        {summary && !expanded && (
-          <Row
-            gap="xs"
-            vAlign="middle"
-            wrap
-            textInsets="rl"
-            ariaLabel={`${liveStateDescription(summary)}, ${lastProgressDescription(summary)}`}
+        {summary && (
+          <button
+            type="button"
+            class="project-live-section__toggle"
+            {...COMMANDS_AND_AI_ACTIONS.toggleLiveSection.attrs}
+            aria-expanded={String(expanded)}
+            aria-label={`${liveToggleLabel(expanded)}. ${liveStateDescription(summary)}, ${lastProgressDescription(summary)}`}
           >
-            {gauges(summary, false)}
-            {chips.map((chip) => {
-              const icon = chipIcon(chip, summary);
-              return (
-                <Badge
-                  tone={chip.tone}
-                  appearance="quiet"
-                  shape="pill"
-                  title={chip.title}
-                  label={chip.title}
-                  rootAttributes={{ 'data-live-chip': chip.kind }}
-                  {...(chip.text ? { icon: <LucideIcon icon={icon.icon} name={icon.name} /> } : {})}
-                >
-                  {chip.text || <LucideIcon icon={icon.icon} name={icon.name} />}
-                </Badge>
-              );
-            })}
-          </Row>
-        )}
-        {summary && expanded && (
-          <List gap="xs" textInsets="rl">
-            <Row gap="m" vAlign="middle">
-              {gauges(summary, true)}
-            </Row>
-            {detailRow(
-              'state',
-              LIVE_STATE_ICONS[summary.activity],
-              liveStateDescription(summary),
-              summary.progressAgeMs === undefined ? '' : `${formatGlanceDuration(summary.progressAgeMs)} ago`,
-            )}
-            {summary.waiting > 0 &&
-              detailRow('waiting', LIVE_STATE_ICONS.waiting_on_you, 'Needs you', String(summary.waiting))}
-            {summary.overrun &&
-              detailRow(
-                'overrun',
-                { icon: Timer, name: 'timer' },
-                `${summary.overrun.slug} past ETA`,
-                `+${formatGlanceDuration(summary.overrun.ms)}`,
-              )}
-          </List>
+            {expanded ? expandedContent(summary) : compactContent(summary, chips)}
+          </button>
         )}
         {callouts.map((callout) => (
           <StateBanner
@@ -195,5 +135,61 @@ export function ProjectLiveSection({ summary, callouts = [], expanded = false }:
         ))}
       </List>
     </section>
+  );
+}
+
+/** The toggle's action, naming the mode a press switches to (HS2-9J6PPR). */
+function liveToggleLabel(expanded: boolean): string {
+  return expanded ? 'Show compact live summary' : 'Show live details';
+}
+
+/** Compact (`r3`): one line of two bare gauges and the chips that have something to say. */
+function compactContent(summary: ProjectLiveSummary, chips: readonly LiveChip[]) {
+  return (
+    <Row gap="xs" vAlign="middle" wrap textInsets="rl">
+      {gauges(summary, false)}
+      {chips.map((chip) => {
+        const icon = chipIcon(chip, summary);
+        return (
+          <Badge
+            tone={chip.tone}
+            appearance="quiet"
+            shape="pill"
+            title={chip.title}
+            label={chip.title}
+            rootAttributes={{ 'data-live-chip': chip.kind }}
+            {...(chip.text ? { icon: <LucideIcon icon={icon.icon} name={icon.name} /> } : {})}
+          >
+            {chip.text || <LucideIcon icon={icon.icon} name={icon.name} />}
+          </Badge>
+        );
+      })}
+    </Row>
+  );
+}
+
+/** Expanded (`m1`): two full gauges and the detail rows that have something to say. */
+function expandedContent(summary: ProjectLiveSummary) {
+  return (
+    <List gap="xs" textInsets="rl">
+      <Row gap="m" vAlign="middle">
+        {gauges(summary, true)}
+      </Row>
+      {detailRow(
+        'state',
+        LIVE_STATE_ICONS[summary.activity],
+        liveStateDescription(summary),
+        summary.progressAgeMs === undefined ? '' : `${formatGlanceDuration(summary.progressAgeMs)} ago`,
+      )}
+      {summary.waiting > 0 &&
+        detailRow('waiting', LIVE_STATE_ICONS.waiting_on_you, 'Needs you', String(summary.waiting))}
+      {summary.overrun &&
+        detailRow(
+          'overrun',
+          { icon: Timer, name: 'timer' },
+          `${summary.overrun.slug} past ETA`,
+          `+${formatGlanceDuration(summary.overrun.ms)}`,
+        )}
+    </List>
   );
 }
