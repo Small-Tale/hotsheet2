@@ -48,6 +48,12 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-CD8YNK: `clients/web/src/remote-auth-bridge.test.ts` sends proxy-shaped writes
+(https paired origin, http request URL) and refuses foreign, request-URL, missing,
+and unpaired origins, a missing CSRF cookie, or a dead session;
+`remote-auth-server-integration.test.ts` repeats the proxied open against the real
+server's paired origin.
+
 HS2-3HC9HT: `clients/web/src/remote-auth-bridge.test.ts` covers registered-only
 remote project open (by root or id, the checkout's own store, unregistered and
 empty roots refused, 201/403/400 answers, session required, local open route

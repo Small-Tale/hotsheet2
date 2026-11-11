@@ -65,7 +65,10 @@ describe('HS2-3HC9HT remote project open', () => {
     }
   });
 
-  function bridge(openRemote: (root: string) => Promise<unknown>) {
+  function bridge(
+    openRemote: (root: string) => Promise<unknown>,
+    checkRemoteSession?: (headers: Headers) => Promise<Response>,
+  ) {
     // Every injectable between `dev` and `openRemote` keeps its default.
     const defaults = Array.from({ length: 11 }, () => undefined) as [
       undefined,
@@ -80,7 +83,7 @@ describe('HS2-3HC9HT remote project open', () => {
       undefined,
       undefined,
     ];
-    return createDevApp(true, ...defaults, openRemote);
+    return createDevApp(true, ...defaults, openRemote, checkRemoteSession);
   }
   const post = (app: ReturnType<typeof createDevApp>, body: string) =>
     app.request('/__hotsheet/remote/projects/open', {
@@ -115,6 +118,68 @@ describe('HS2-3HC9HT remote project open', () => {
       body: JSON.stringify({ root: '/synthetic/registered' }),
     });
     expect(local.status).toBe(404);
+    expect(openRemote).not.toHaveBeenCalled();
+  });
+});
+
+describe('HS2-CD8YNK remote writes behind a TLS-terminating proxy', () => {
+  const PAIRED = 'https://synthetic-host.example.ts.net';
+  // Tailscale Serve hands the host a plain-HTTP request for the browser's https page.
+  const PROXIED = 'http://synthetic-host.example.ts.net/__hotsheet/remote/projects/open';
+  const session = (device: unknown, ok = true) =>
+    vi.fn<(headers: Headers) => Promise<Response>>(async () =>
+      ok ? Response.json(device) : Response.json({ error: 'no' }, { status: 401 }),
+    );
+  function app(check: (headers: Headers) => Promise<Response>) {
+    vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
+    const openRemote = vi.fn<(root: string) => Promise<unknown>>(async () => ({ id: 'synthetic' }));
+    const defaults = Array.from({ length: 11 }, () => undefined) as [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    return { openRemote, app: createDevApp(true, ...defaults, openRemote, check) };
+  }
+  const post = (target: ReturnType<typeof createDevApp>, headers: Record<string, string>) =>
+    target.request(PROXIED, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ root: '/synthetic/registered' }),
+    });
+  const cookie = 'hs2_remote=synthetic-session; hs2_remote_csrf=synthetic-csrf';
+
+  it('accepts the paired https origin although the proxied request URL is http', async () => {
+    const { app: target, openRemote } = app(session({ id: 'device', origin: PAIRED }));
+    const response = await post(target, { cookie, origin: PAIRED });
+    expect(response.status).toBe(201);
+    expect(openRemote).toHaveBeenCalledWith('/synthetic/registered');
+  });
+
+  it('refuses a write whose origin, CSRF cookie, or paired origin is missing or different', async () => {
+    for (const [reason, check, headers] of [
+      ['foreign origin', session({ origin: PAIRED }), { cookie, origin: 'https://foreign.example' }],
+      ['request-URL origin', session({ origin: PAIRED }), { cookie, origin: 'http://synthetic-host.example.ts.net' }],
+      ['no origin', session({ origin: PAIRED }), { cookie }],
+      ['no CSRF cookie', session({ origin: PAIRED }), { cookie: 'hs2_remote=synthetic-session', origin: PAIRED }],
+      ['no paired origin', session({ id: 'device' }), { cookie, origin: PAIRED }],
+    ] as const) {
+      const { app: target, openRemote } = app(check);
+      expect((await post(target, headers)).status, reason).toBe(403);
+      expect(openRemote, reason).not.toHaveBeenCalled();
+    }
+  });
+
+  it('requires a live session before any origin check', async () => {
+    const { app: target, openRemote } = app(session({}, false));
+    expect((await post(target, { cookie, origin: PAIRED })).status).toBe(401);
     expect(openRemote).not.toHaveBeenCalled();
   });
 });

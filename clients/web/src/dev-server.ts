@@ -11,6 +11,7 @@ import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createDevLatencyLog } from './dev-latency-log';
 import { traceDevBridgeRequest } from './dev-request-timing';
+import { isRecord } from './json-value';
 import { REMOTE_PROJECT_OPEN_PATH } from './local-bridge-client';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
@@ -50,6 +51,8 @@ export function createDevApp(
   forwardChangePoll: ChangeMuxForward = (project, path, signal) =>
     proxyProjectRequest(project, path, new Request(new URL(path, 'http://bridge.invalid')), signal),
   openRemote: (root: string) => Promise<unknown> = openRegisteredProject,
+  checkRemoteSession: (headers: Headers) => Promise<Response> = (headers) =>
+    browserAuthRequest('/remote-auth/me', new Request('http://bridge.invalid/remote-auth/me', { headers })),
 ): Hono {
   const app = new Hono();
   app.use('/__hotsheet/*', async (context, next) => {
@@ -69,16 +72,16 @@ export function createDevApp(
       ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
     if (!allowed) return context.notFound();
     if (!context.req.header('cookie')) return context.json({ error: 'Remote session required.' }, 401);
-    const checked = await browserAuthRequest(
-      '/remote-auth/me',
-      new Request('http://bridge.invalid/remote-auth/me', {
-        headers: context.req.raw.headers,
-      }),
-    );
+    const checked = await checkRemoteSession(context.req.raw.headers);
     if (!checked.ok) return context.json({ error: 'Remote session required.' }, 401);
     if (context.req.method !== 'GET' && context.req.method !== 'HEAD') {
+      // HS2-CD8YNK: compare with the origin the device paired from, as the server does. A
+      // TLS-terminating proxy (Tailscale Serve) hands this host a plain-HTTP request, so the
+      // request URL's origin is never the browser's https origin.
+      const device: unknown = await checked.json().catch(() => undefined);
+      const paired = isRecord(device) && typeof device.origin === 'string' ? device.origin : undefined;
       const origin = context.req.header('origin');
-      if (!origin || origin !== new URL(context.req.url).origin || !remoteCsrfCookie(context.req.raw.headers))
+      if (!origin || !paired || origin !== paired || !remoteCsrfCookie(context.req.raw.headers))
         return context.json({ error: 'Origin and CSRF token required.' }, 403);
     }
     return next();

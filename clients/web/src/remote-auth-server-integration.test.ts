@@ -160,6 +160,13 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     const remoteOpen = await sessionPost('/remote/projects/open', { root: project });
     expect(remoteOpen.status).toBe(201);
     expect(((await remoteOpen.json()) as { id: string }).id).toBe(checkoutId);
+    // HS2-CD8YNK: behind Tailscale Serve the host sees a different request URL than the paired origin.
+    const proxied = await bridge.request('http://synthetic-proxy.invalid/__hotsheet/remote/projects/open', {
+      method: 'POST',
+      headers: { cookie, origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ root: project }),
+    });
+    expect(proxied.status).toBe(201);
     const deniedWrite = await bridge.request(url(`/project-api/${checkoutId}/tickets`), {
       method: 'POST',
       headers: { ...headers, 'x-hotsheet-csrf': csrf },

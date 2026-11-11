@@ -208,7 +208,10 @@ HttpOnly, host-only and SameSite=Strict; the separate CSRF cookie is readable
 by the browser on that same host. Direct HTTP is an explicit
 `--remote-transport http` choice; HTTPS uses a server certificate without
 requiring a device certificate, and mTLS retains certificate roles. Origin and
-CSRF checks protect writes and upgrades. Host revocation ends live streams
+CSRF checks protect writes and upgrades. Both the server and the browser bridge
+compare a write's `Origin` with the origin the device paired from, never with the
+request URL, which a TLS-terminating proxy such as Tailscale Serve rewrites to plain
+HTTP (HS2-CD8YNK). Host revocation ends live streams
 promptly. The off-loopback default remains mTLS for existing deployments;
 HTTP never becomes the default. HS2-747RTD adds
 Serve/direct TLS launch, and HS2-WSGZZY owns their cross-transport acceptance.
