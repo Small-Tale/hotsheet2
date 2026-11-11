@@ -444,12 +444,16 @@ the default-on path is checked by hand.
     with overlay scrollbars (no gutter), so it asserts pointer interactivity and hit-testing, not
     the drag itself.
 
-### Local production host over the LAN
+### Local production host over Tailscale Serve
 
-HS2-587N4D — run `npm run prod:rebuild-lan` in `clients/web`, then open
-`http://<machine-LAN-address>:4175/` on a phone. Confirm the app loads quickly, a project opens, a
-terminal attaches and streams, and live ticket changes arrive. Stop the host with Ctrl-C and
-confirm the machine server keeps running. Automated coverage runs the real host on loopback only.
+HS2-587N4D — run `HOTSHEET_BROWSER_AUTH_MODE=remote npm run prod:rebuild` in `clients/web`,
+then run `tailscale serve 4175` in another terminal. Open the HTTPS tailnet URL printed by
+Serve on a phone, request access, and approve its browser session on the host Mac. Confirm
+the app loads quickly, a project opens, a terminal attaches and streams, and live ticket
+changes arrive. Open `http://127.0.0.1:4175/` on the Mac and confirm the local client
+behavior; this browser also needs pairing while remote auth mode is enabled. Stop the host
+with Ctrl-C and confirm the machine server keeps running. Automated coverage runs the real
+host on loopback only.
 
 HS2-EFEWSC / HS2-6VQ5RV — after an explicit production rebuild and relaunch, keep the
 host and server running while editing a Rust source file in the disposable checkout

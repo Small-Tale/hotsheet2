@@ -58,7 +58,7 @@ struct Cli {
     stop: bool,
 
     /// With --stop, also stop a server owned by the pinned production host
-    /// (`local-host-snapshot`). For deliberate relaunches such as `npm run prod:rebuild-lan`.
+    /// (`local-host-snapshot`). For deliberate relaunches such as `npm run prod:rebuild`.
     #[arg(long, requires = "stop")]
     force: bool,
 

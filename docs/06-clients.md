@@ -584,8 +584,10 @@ preview/download, server directory browser) are separate design work.
   directory (`cargo install --path`), and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
   open starts the new binary, unless the production host owns that server (see pinned-server
-  ownership below; `npm run server:rebuild -- --force` overrides); `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
-  for other devices on the LAN. Both debug and release rebuild scripts first check the installed
+  ownership below; `npm run server:rebuild -- --force` overrides); `dev:rebuild`
+  runs it and then serves the dev client on `127.0.0.1`. To reach that loopback
+  host from another device, set `HOTSHEET_BROWSER_AUTH_MODE=remote` on the host
+  and proxy it through Tailscale Serve. Both debug and release rebuild scripts first check the installed
   web dependencies against the committed lockfile; a stale install reports the `npm ci` fix
   before Rust installation or any server stop (HS2-R0XY7S). The production host prefers
   **release** binaries (HS2-D2JQ9A): when
@@ -620,9 +622,9 @@ preview/download, server directory browser) are separate design work.
   A pinned host that finds a server another host launched, even one with the selected build,
   restarts it onto its own snapshot when idle (silently deferred while busy) so the protection
   holds after a dev host started first. Two pinned hosts still reconcile against each other as
-  above. `server:rebuild`, `server:rebuild:release`, and `dev:rebuild-lan` end with an ordinary
+  above. `server:rebuild`, `server:rebuild:release`, and `dev:rebuild` end with an ordinary
   `serve --stop`, which the server refuses for a pinned owner with a message naming its pid and
-  build; `prod:rebuild-lan` is the production host's own deliberate relaunch and passes
+  build; `prod:rebuild` is the production host's own deliberate relaunch and passes
   `--force`. A pinned server whose production host has exited stays protected until a forced stop.
   That selected revision stays pinned for the host's lifetime: at startup the host copies
   its client bundle and selected local executables into a private temporary snapshot, then
@@ -637,7 +639,7 @@ preview/download, server directory browser) are separate design work.
   Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set,
   installs `hotsheet-cli` and `hotsheet-mcp` into Cargo's bin directory as `server:rebuild` does
   (HS2-4G2EA2), and stops the running machine server (refused while the production host owns it), and
-  `prod:rebuild-lan` runs it with `--force` before serving the production client on `0.0.0.0`.
+  `prod:rebuild` runs it with `--force` before serving the production client on `127.0.0.1`.
 
 - **Project and ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV, HS2-R4209F).** The local client accepts
   `/?project=<registered-checkout-id|alias|absolute-project-path|ticket-store-path>` with an optional

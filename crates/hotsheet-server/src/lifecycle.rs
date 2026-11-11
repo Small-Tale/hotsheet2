@@ -70,7 +70,7 @@ pub enum StopDecision {
 }
 
 /// Decide an explicit stop. Only a pinned server without `force` is refused; a forced stop is
-/// a deliberate relaunch (for example `npm run prod:rebuild-lan`).
+/// a deliberate relaunch (for example `npm run prod:rebuild`).
 pub fn stop_decision(running: Option<InstanceInfo>, force: bool) -> StopDecision {
     match running {
         None => StopDecision::NotRunning,
@@ -87,7 +87,7 @@ pub fn pinned_stop_refusal(info: &InstanceInfo, store_path: &Path) -> String {
         "refusing to stop the Hot Sheet server for {store}: it belongs to the pinned production \
          host (launcher={launcher} pid={pid} build={build}). Stopping it would let another host \
          replace it with a different build. Stop the production host first, relaunch it \
-         deliberately with `npm run prod:rebuild-lan`, or rerun with --force if that host is no \
+         deliberately with `npm run prod:rebuild`, or rerun with --force if that host is no \
          longer running.",
         store = store_path.display(),
         launcher = info.launcher.as_deref().unwrap_or("unknown"),
@@ -655,7 +655,7 @@ mod tests {
             "pid=4242",
             "build=source-sha256:abc",
             "--force",
-            "npm run prod:rebuild-lan",
+            "npm run prod:rebuild",
         ] {
             assert!(refusal.contains(expected), "{expected} in {refusal}");
         }

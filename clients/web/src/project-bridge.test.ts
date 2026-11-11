@@ -1786,7 +1786,7 @@ describe('pinned server ownership (HS2-9AWEX5)', () => {
     expect(error.message).toMatch(/pinned production host/);
     expect(error.message).toContain('local-host-snapshot');
     expect(error.message).toContain('source-sha256:abc');
-    expect(error.message).toContain('npm run prod:rebuild-lan');
+    expect(error.message).toContain('npm run prod:rebuild');
     expect(error.message).not.toMatch(/server:rebuild /);
     expect(new ServerOwnedByPinnedHostError(undefined).message).toContain('build unknown');
   });

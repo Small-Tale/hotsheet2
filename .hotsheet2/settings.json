@@ -1,6 +1,5 @@
 {
   "$hotsheetSchema": 1,
-  "push_policy": "push-per-ticket",
   "appName": "Hot Sheet 2",
   "commands": [
     {
@@ -40,6 +39,16 @@
       "title": "Everything"
     }
   ],
+  "integration_strategies": {
+    "allowed": [
+      {
+        "reason": "Maintainer requested batch integration mode on 2026-11-06",
+        "strategy": "batch"
+      }
+    ],
+    "default": "serial"
+  },
+  "push_policy": "push-per-ticket",
   "terminals": [
     {
       "command": "{{aiCommand}}",
@@ -48,5 +57,12 @@
       "name": "AI"
     }
   ],
-  "ticketPrefix": "HS2"
+  "ticketPrefix": "HS2",
+  "views": [
+    {
+      "id": "reminders",
+      "name": "Reminders",
+      "query": "tag:human-reminder"
+    }
+  ]
 }

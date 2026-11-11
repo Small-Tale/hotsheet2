@@ -764,7 +764,7 @@ refuse a server whose registration names the pinned launcher `local-host-snapsho
 production local host): `hotsheet-server --stop` and `hotsheet-cli serve --stop` exit non-zero
 without signalling, print the owner's pid and build plus the deliberate alternatives, and skip
 `--kill-all-terminals` cleanup. `--force` (which requires `--stop`) stops it anyway, for
-deliberate relaunches such as `npm run prod:rebuild-lan`. Servers launched by `cli`,
+deliberate relaunches such as `npm run prod:rebuild`. Servers launched by `cli`,
 `dev-bridge`, `stable-dev`, an unspecified launcher, or a legacy registration without a launcher
 stop as before. The decision to isolate the production host this way rather than through a
 second per-profile machine server, and the bridge-side half (dev hosts never restart a pinned
@@ -837,7 +837,7 @@ loses that race fails quietly instead of rebuilding the folder with `.codex/` or
 (HS2-4YEA4M). Machine-local targets outside the project, such as a client's user config,
 still create their parent directories.
 
-The stable local hosts (`npm run {prod,dev}:rebuild-lan`) are deliberately pinned until the
+The stable local hosts (`npm run {prod,dev}:rebuild`) are deliberately pinned until the
 user restarts them: the production host runs startup copies of its client bundle and
 binaries (`HOTSHEET_LOCAL_HOST_SNAPSHOT=1`) and the stable dev server sets
 `HOTSHEET_WEB_STABLE_DEV=1`. Template edits made in the checkout after such a host started are

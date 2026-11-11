@@ -2,6 +2,7 @@
 # `.hotsheet/` belongs to HS1. HS2 keeps its checkout-local files separate so both
 # applications can operate in one repository without overwriting each other.
 /.hotsheet/
+/.hs2-recovery/
 # HS2 project metadata is local except for the shared project settings file.
 /.hotsheet2/*
 !/.hotsheet2/settings.json
@@ -26,8 +27,8 @@
 secret.json
 
 # --- Rust build output (future core/server/CLI) ---
-/target/
-**/target/
+/target
+**/target
 
 # --- Node (bundled migrator + any tooling) ---
 node_modules/
@@ -69,3 +70,4 @@ Thumbs.db
 !/.glassbox/settings.json
 .hotsheet2/settings.local.json
 /.rulesync/rules/.curated/
+/scripts/.*

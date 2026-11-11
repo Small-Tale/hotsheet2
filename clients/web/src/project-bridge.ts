@@ -362,7 +362,7 @@ export const LOCAL_HOST_SNAPSHOT_ENV = 'HOTSHEET_LOCAL_HOST_SNAPSHOT';
  * in-tree template edits. Expected drift between deliberate restarts, not a broken build. */
 export class SetupTemplatesChangedSinceHostStartError extends Error {}
 
-/** True for the hosts `npm run {prod,dev}:rebuild-lan` start: they stay on what they started with. */
+/** True for the hosts `npm run {prod,dev}:rebuild` start: they stay on what they started with. */
 export function isStableLocalHost(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return environment[LOCAL_HOST_SNAPSHOT_ENV] === '1' || environment.HOTSHEET_WEB_STABLE_DEV === '1';
 }
@@ -1276,7 +1276,7 @@ export function serverNeedsOwnership(hostLauncher: string, server: ServerCompati
 export class ServerOwnedByPinnedHostError extends Error {
   constructor(readonly server: ServerCompatibility | undefined) {
     super(
-      `The Hot Sheet server on this machine belongs to the pinned production host (launcher ${PINNED_SERVER_LAUNCHER}, build ${server?.build_revision ?? 'unknown'}) and is older than this host needs. This host will not restart or replace it. Stop the production host, or relaunch it deliberately with npm run prod:rebuild-lan to move it onto the newer build.`,
+      `The Hot Sheet server on this machine belongs to the pinned production host (launcher ${PINNED_SERVER_LAUNCHER}, build ${server?.build_revision ?? 'unknown'}) and is older than this host needs. This host will not restart or replace it. Stop the production host, or relaunch it deliberately with npm run prod:rebuild to move it onto the newer build.`,
     );
   }
 }
@@ -1496,9 +1496,9 @@ export function serverBuildNoticeText(reason: ServerBuildDeferral): string {
     case 'busy':
       return `${shared} It is busy with active work; this host will restart it onto its own build when the work finishes. The project stays usable meanwhile.`;
     case 'unsupported':
-      return `${shared} It cannot be restarted safely from here. The project stays usable; relaunch this host deliberately (npm run prod:rebuild-lan or dev:rebuild-lan) to replace it.`;
+      return `${shared} It cannot be restarted safely from here. The project stays usable; relaunch this host deliberately (npm run prod:rebuild or dev:rebuild) to replace it.`;
     case 'still_mismatched':
-      return `${shared} A restart did not produce the selected build, so this host is serving the project through the running server. Relaunch this host deliberately (npm run prod:rebuild-lan or dev:rebuild-lan) to replace it.`;
+      return `${shared} A restart did not produce the selected build, so this host is serving the project through the running server. Relaunch this host deliberately (npm run prod:rebuild or dev:rebuild) to replace it.`;
     case 'recently_attempted':
       return `${shared} A restart was requested recently; this host will try again shortly. The project stays usable meanwhile.`;
     case 'owned_by_pinned_host':
