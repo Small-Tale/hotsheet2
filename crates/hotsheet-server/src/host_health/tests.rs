@@ -506,7 +506,7 @@ fn disk_crossings_escalate_at_once_and_recover_only_after_a_margin_and_three_sam
 }
 
 #[test]
-fn disk_projection_fits_the_last_hour_and_calls_out_time_to_full() {
+fn disk_projection_fits_the_trend_and_calls_out_time_to_full() {
     let thresholds = default_thresholds(); // warn under 24 h, critical under 2 h
     let mut monitor = Monitor::new(host());
     // 100 GiB free, losing 2 GiB per minute (120 GiB/h): full in well under an hour.
@@ -561,6 +561,166 @@ fn disk_projection_fits_the_last_hour_and_calls_out_time_to_full() {
         )));
     }
     assert!(emitted.is_empty(), "{emitted:?}");
+}
+
+/// Free bytes for a fractional GiB amount.
+fn disk_gib(free_gib: f64) -> HostReading {
+    HostReading {
+        disk: Probe::Value(DiskReading {
+            free_bytes: (free_gib * GIB as f64) as u64,
+            total_bytes: 1000 * GIB,
+        }),
+        ..healthy()
+    }
+}
+
+/// A deterministic ±`amplitude` GiB wobble, standing in for temp-file churn.
+fn wobble(minute: u64, amplitude: f64) -> f64 {
+    match minute % 4 {
+        0 => amplitude,
+        1 => -amplitude,
+        2 => amplitude / 2.0,
+        _ => -amplitude / 2.0,
+    }
+}
+
+#[test]
+fn disk_trend_stays_steady_through_bursty_writes_hs2_y2hgy9() {
+    // 60 GiB free, really losing 3 GiB/h (full in ~20 h, a warning), while a build writes and
+    // then deletes 20 GiB every 45 minutes. The old one-hour least-squares fit swung the
+    // estimate between a few hours and a day; the robust trend holds it near the truth.
+    let thresholds = default_thresholds();
+    let mut monitor = Monitor::new(host());
+    let mut statuses = Vec::new();
+    let mut worst_ratio: f64 = 1.0;
+    for minute in 0..=8 * 60_u64 {
+        let trend = 60.0 - 3.0 * minute as f64 / 60.0;
+        let burst = if minute % 45 >= 30 && minute % 45 < 34 {
+            20.0
+        } else {
+            0.0
+        };
+        let free = trend - burst + wobble(minute, 0.3);
+        monitor.observe(disk_gib(free), T0 + minute * MINUTE, &thresholds);
+        let disk = &monitor.snapshot().signals.disk;
+        statuses.push(disk.header.status);
+        if minute >= 60 && burst == 0.0 {
+            let truth = trend / 3.0;
+            let hours = disk.hours_to_full.expect("a projection after an hour");
+            let ratio = (hours / truth).max(truth / hours);
+            worst_ratio = worst_ratio.max(ratio);
+        }
+    }
+    assert!(
+        worst_ratio < 1.3,
+        "estimate strayed {worst_ratio:.2}x from the truth"
+    );
+    let rate = monitor
+        .snapshot()
+        .signals
+        .disk
+        .consumption_bytes_per_hour
+        .unwrap() as f64;
+    assert!((rate / GIB as f64 - 3.0).abs() < 0.3, "{rate}");
+    // Warning once the trend settles, never critical, and no flapping back to normal.
+    assert!(!statuses.contains(&super::Status::Critical), "{statuses:?}");
+    let first_warning = statuses
+        .iter()
+        .position(|status| *status == super::Status::Warning)
+        .expect("a 20-hour projection warns");
+    assert!(
+        statuses[first_warning..]
+            .iter()
+            .all(|status| *status == super::Status::Warning),
+        "the warning flapped"
+    );
+}
+
+#[test]
+fn disk_trend_ignores_idle_periods_and_kept_steps_but_catches_a_sustained_fill_hs2_y2hgy9() {
+    let thresholds = default_thresholds();
+    // Idle for eight hours with churn: no consumption worth projecting, no callout.
+    let mut idle = Monitor::new(host());
+    for minute in 0..=8 * 60_u64 {
+        let emitted = crossings(&idle.observe(
+            disk_gib(200.0 + wobble(minute, 0.5)),
+            T0 + minute * MINUTE,
+            &thresholds,
+        ));
+        assert!(
+            emitted.is_empty(),
+            "idle disk called out at minute {minute}"
+        );
+        let disk = &idle.snapshot().signals.disk;
+        if let Some(hours) = disk.hours_to_full {
+            assert!(hours > 24.0 * 30.0, "idle projected full in {hours} h");
+        }
+    }
+
+    // One 30 GiB write that stays (a checkout or a download) on an otherwise idle disk is not
+    // an emergency, whenever it lands in the window.
+    let mut step = Monitor::new(host());
+    for minute in 0..=8 * 60_u64 {
+        let free = if minute < 3 * 60 { 200.0 } else { 170.0 };
+        step.observe(disk_gib(free), T0 + minute * MINUTE, &thresholds);
+        assert_ne!(
+            step.snapshot().signals.disk.header.status,
+            super::Status::Critical,
+            "a kept step went critical at minute {minute}"
+        );
+    }
+
+    // Four idle hours, then a sustained fill of 1 GiB a minute with 80 GiB free: the six-hour
+    // trend is still mostly idle, but the recent rate projects full in under two hours, so it
+    // goes critical within half an hour of the fill starting.
+    let mut filling = Monitor::new(host());
+    let mut critical_at = None;
+    for minute in 0..=5 * 60_u64 {
+        let free = if minute < 4 * 60 {
+            80.0
+        } else {
+            80.0 - (minute - 4 * 60) as f64
+        };
+        let emitted =
+            crossings(&filling.observe(disk_gib(free), T0 + minute * MINUTE, &thresholds));
+        if emitted.contains(&("disk", "critical")) && critical_at.is_none() {
+            critical_at = Some(minute - 4 * 60);
+        }
+    }
+    let critical_at = critical_at.expect("a sustained fill goes critical");
+    assert!(
+        critical_at <= 30,
+        "critical only after {critical_at} minutes"
+    );
+    assert_eq!(
+        filling.snapshot().signals.disk.header.reason,
+        Some("projected_full")
+    );
+}
+
+#[test]
+fn disk_trend_keeps_one_point_a_minute_whatever_the_cadence_hs2_y2hgy9() {
+    let mut history = std::collections::VecDeque::new();
+    // Ten-second samples for seven hours: one point per minute inside six hours survives.
+    for tick in 0..=(7 * 60 * 6_u64) {
+        super::push_disk_point(&mut history, T0 + tick * 10_000, tick as f64);
+    }
+    assert!(history.len() <= 6 * 60 + 2, "{}", history.len());
+    let newest = history.back().unwrap().0;
+    assert_eq!(newest, T0 + 7 * 60 * 6 * 10_000);
+    assert!(newest - history.front().unwrap().0 <= 6 * 60 * MINUTE);
+    // An even and an odd number of slopes both take the median.
+    let points = |values: &[f64]| {
+        values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| (T0 + index as u64 * 5 * MINUTE, *value))
+            .collect::<std::collections::VecDeque<_>>()
+    };
+    let odd = super::robust_slope_per_hour(&points(&[0.0, 1.0, 2.0]), u64::MAX).unwrap();
+    assert!((odd - 12.0).abs() < 1e-9, "{odd}");
+    let even = super::robust_slope_per_hour(&points(&[0.0, 1.0, 2.0, 3.0]), u64::MAX).unwrap();
+    assert!((even - 12.0).abs() < 1e-9, "{even}");
 }
 
 #[test]

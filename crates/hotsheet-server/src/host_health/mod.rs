@@ -81,10 +81,21 @@ impl From<Level> for Status {
 
 /// Consecutive lower samples a signal needs before its callout clears (no flapping).
 pub(crate) const RECOVERY_SAMPLES: u32 = 3;
-/// The window disk and swap rates are fitted over, and the shortest span a rate needs.
+/// The window swap growth is fitted over, and the shortest span a rate needs.
 const RATE_WINDOW_MS: u64 = 60 * 60 * 1000;
 const RATE_MIN_SPAN_MS: u64 = 10 * 60 * 1000;
 const RATE_MAX_POINTS: usize = 400;
+/// Disk consumption uses a longer, robust trend (HS2-Y2HGY9): the median pairwise slope
+/// (Theil–Sen) over up to six hours, so one build's burst or an idle stretch does not swing the
+/// time to full. Points closer than a minute replace each other, which bounds the fit at 360
+/// points whatever `sample_seconds` is.
+const DISK_TREND_WINDOW_MS: u64 = 6 * 60 * 60 * 1000;
+const DISK_POINT_SPACING_MS: u64 = 60 * 1000;
+/// A sustained fast fill must still call out promptly: the recent rate, the smaller of the
+/// last hour's and last 20 minutes' robust slopes, replaces the long trend when it projects the
+/// disk full sooner than the critical line.
+const DISK_RECENT_WINDOW_MS: u64 = 60 * 60 * 1000;
+const DISK_SHORT_WINDOW_MS: u64 = 20 * 60 * 1000;
 /// Coarse snapshot notices go out at most this often, and only when the coarse values moved.
 pub(crate) const SNAPSHOT_MIN_INTERVAL_MS: u64 = 5 * 60 * 1000;
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
@@ -162,7 +173,8 @@ pub(crate) struct DiskSignal {
     pub(crate) header: SignalHeader,
     pub(crate) free_bytes: Option<u64>,
     pub(crate) total_bytes: Option<u64>,
-    /// Fitted consumption over the last hour; `0` when free space is steady or growing.
+    /// Robust consumption trend over up to six hours (HS2-Y2HGY9); `0` when free space is
+    /// steady or growing.
     pub(crate) consumption_bytes_per_hour: Option<u64>,
     /// Projected hours until the volume is full at that rate.
     pub(crate) hours_to_full: Option<f64>,
@@ -303,6 +315,81 @@ fn push_point(history: &mut VecDeque<(u64, f64)>, now: u64, value: f64) {
         || history.len() > RATE_MAX_POINTS
     {
         history.pop_front();
+    }
+}
+
+/// Append a disk point, replacing the newest one while the point before it is no more than
+/// [`DISK_POINT_SPACING_MS`] old, and drop points outside [`DISK_TREND_WINDOW_MS`].
+fn push_disk_point(history: &mut VecDeque<(u64, f64)>, now: u64, value: f64) {
+    if history.len() > 1
+        && history
+            .get(history.len() - 2)
+            .is_some_and(|(before, _)| now.saturating_sub(*before) <= DISK_POINT_SPACING_MS)
+    {
+        history.pop_back();
+    }
+    history.push_back((now, value));
+    while history
+        .front()
+        .is_some_and(|(at, _)| now.saturating_sub(*at) > DISK_TREND_WINDOW_MS)
+    {
+        history.pop_front();
+    }
+}
+
+/// Theil–Sen slope in units per hour over the points no older than `window_ms` before the
+/// newest: the median of every pairwise slope. A burst that is written and then deleted, or
+/// one noisy sample, moves only the few pairs that touch it, so the median stays on the
+/// trend. `None` until the points span [`RATE_MIN_SPAN_MS`].
+fn robust_slope_per_hour(history: &VecDeque<(u64, f64)>, window_ms: u64) -> Option<f64> {
+    let newest = history.back()?.0;
+    let points: Vec<(u64, f64)> = history
+        .iter()
+        .filter(|(at, _)| newest.saturating_sub(*at) <= window_ms)
+        .copied()
+        .collect();
+    let first = points.first()?.0;
+    if points.len() < 3 || newest.saturating_sub(first) < RATE_MIN_SPAN_MS {
+        return None;
+    }
+    let mut slopes = Vec::with_capacity(points.len() * (points.len() - 1) / 2);
+    for (index, (at, value)) in points.iter().enumerate() {
+        for (later_at, later_value) in &points[index + 1..] {
+            let hours = later_at.saturating_sub(*at) as f64 / 3_600_000.0;
+            if hours > 0.0 {
+                slopes.push((later_value - value) / hours);
+            }
+        }
+    }
+    if slopes.is_empty() {
+        return None;
+    }
+    let (count, middle) = (slopes.len(), slopes.len() / 2);
+    let (lower, upper, _) = slopes.select_nth_unstable_by(middle, f64::total_cmp);
+    let upper = *upper;
+    Some(if count % 2 == 0 {
+        let below = lower.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        f64::midpoint(below, upper)
+    } else {
+        upper
+    })
+}
+
+/// The disk consumption rate in bytes per hour (`0` when free space is steady or growing):
+/// the six-hour robust trend, or the recent rate when that alone projects the volume full
+/// sooner than `critical_hours` (a sustained fast fill).
+fn disk_consumption(history: &VecDeque<(u64, f64)>, free: f64, critical_hours: u64) -> Option<f64> {
+    let trend = robust_slope_per_hour(history, DISK_TREND_WINDOW_MS).map(|slope| (-slope).max(0.0));
+    let recent = robust_slope_per_hour(history, DISK_RECENT_WINDOW_MS)
+        .zip(robust_slope_per_hour(history, DISK_SHORT_WINDOW_MS))
+        .map(|(hour, short)| (-hour).min(-short).max(0.0));
+    match (trend, recent) {
+        (Some(trend), Some(recent))
+            if recent > trend && critical_hours > 0 && free / recent < critical_hours as f64 =>
+        {
+            Some(recent)
+        }
+        (trend, _) => trend,
     }
 }
 
@@ -537,9 +624,12 @@ impl Monitor {
                 return (missing(&other), None);
             }
         };
-        push_point(&mut self.disk_history, now, disk.free_bytes as f64);
-        let slope = slope_per_hour(&self.disk_history);
-        let consumption = slope.map(|slope| (-slope).max(0.0));
+        push_disk_point(&mut self.disk_history, now, disk.free_bytes as f64);
+        let consumption = disk_consumption(
+            &self.disk_history,
+            disk.free_bytes as f64,
+            thresholds.disk_critical_hours_to_full,
+        );
         let hours = consumption
             .filter(|rate| *rate > 0.0)
             .map(|rate| disk.free_bytes as f64 / rate);

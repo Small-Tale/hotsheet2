@@ -19368,7 +19368,7 @@ components:
         - unavailable
     HostHealthDisk:
       type: object
-      description: Free space on the primary store's volume with a time-to-full projection fitted over the last hour.
+      description: Free space on the primary store's volume with a time-to-full projection from a robust six-hour trend (HS2-Y2HGY9).
       required:
         - status
         - reason
