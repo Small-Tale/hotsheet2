@@ -198,6 +198,11 @@ Unix, assert its explicit unsupported result elsewhere, and compare isolated Git
 worktree metadata through native path components. The focused and full local Rust
 gates passed; native Windows x86_64 and ARM64 Rust reruns remain platform proof.
 
+HS2-1H407P: `launch_safety.rs # shim_execs_the_cli_and_wins_on_path` uses the
+native shim name (`hotsheet` on Unix, `hotsheet.cmd` on Windows), a native CLI
+script, and `std::env::join_paths` for the shim-not-first PATH, then runs the shim
+on every platform. Native Windows proof comes from the `Platforms` Rust step.
+
 HS2-2TD7M7 keeps detached terminal brokers Unix-only and selects the in-process
 manager on Windows. `hotsheet-server/src/main.rs #
 hs2_2td7m7_detached_broker_is_unix_only_with_an_explicit_opt_out` and

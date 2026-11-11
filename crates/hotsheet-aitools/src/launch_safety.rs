@@ -815,16 +815,30 @@ mod tests {
 
     #[test]
     fn shim_execs_the_cli_and_wins_on_path() {
+        // HS2-1H407P: Windows writes a `hotsheet.cmd` shim and joins PATH with `;`, so the
+        // fixture uses each platform's native shim name, CLI script, and PATH separator.
         let cli = tempfile::tempdir().unwrap();
-        let cli_bin = cli.path().join("hotsheet-cli");
-        std::fs::write(&cli_bin, "#!/bin/sh\necho ran-cli\n").unwrap();
         #[cfg(unix)]
-        {
+        let cli_bin = {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&cli_bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+            let bin = cli.path().join("hotsheet-cli");
+            std::fs::write(&bin, "#!/bin/sh\necho ran-cli\n").unwrap();
+            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            bin
+        };
+        #[cfg(not(unix))]
+        let cli_bin = {
+            let bin = cli.path().join("hotsheet-cli.cmd");
+            std::fs::write(&bin, "@echo ran-cli\r\n").unwrap();
+            bin
+        };
         let shim = ShimDir::create(&cli_bin).unwrap();
-        assert!(shim.path().join("hotsheet").is_file());
+        let shim_file = shim.path().join(if cfg!(unix) {
+            "hotsheet"
+        } else {
+            "hotsheet.cmd"
+        });
+        assert!(shim_file.is_file());
 
         // The shim must win over another `hotsheet` later on PATH.
         let other = tempfile::tempdir().unwrap();
@@ -838,18 +852,19 @@ mod tests {
         let path = prepend_path(&[shim.path(), other.path()], "");
         assert!(assert_hotsheet_resolves(&path, shim.path()).is_ok());
 
-        // If the shim isn't first, the check fails.
-        let unsafe_path = format!("{}:{}", other.path().display(), shim.path().display());
-        assert!(assert_hotsheet_resolves(&unsafe_path, shim.path()).is_err());
+        // If the shim isn't first, the check fails because it finds the other `hotsheet`.
+        let unsafe_path = std::env::join_paths([other.path(), shim.path()])
+            .unwrap()
+            .into_string()
+            .unwrap();
+        let err = assert_hotsheet_resolves(&unsafe_path, shim.path())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("instead of the Hot Sheet shim"), "{err}");
 
         // Running the shim actually execs the CLI.
-        #[cfg(unix)]
-        {
-            let out = std::process::Command::new(shim.path().join("hotsheet"))
-                .output()
-                .unwrap();
-            assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "ran-cli");
-        }
+        let out = std::process::Command::new(&shim_file).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "ran-cli");
     }
 
     #[test]
