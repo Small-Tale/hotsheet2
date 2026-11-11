@@ -90,7 +90,7 @@ test('HS2-F9062F makes effective strategy resolution and precedence executable g
     assert.match(text, /development-strategies/);
     assert.match(text, /development-strategy-resolve/);
     assert.match(text, /user instruction takes precedence over a ticket strategy, then a\s+session strategy/);
-    assert.match(text, /mandatory affected gates/);
+    assert.match(text, /ticket and integration\s+gates, exact-tree verification, and green-main promotion remain mandatory unless/);
     assert.match(text, /unset\s+project setting preserves the\s+existing integration default and risk-selected/);
     assert.match(text, /next safe boundary/);
     assert.match(text, /user-selected\s+strategy as the highest-priority `--ticket` override/);
@@ -116,5 +116,13 @@ test('HS2-F9062F makes effective strategy resolution and precedence executable g
     assert.match(text, /development-strategy-resolve/);
     assert.match(text, /ticket, session, then project/);
     assert.match(text, /unconfigured-project/);
+  }
+});
+
+test('HS2-Q390N2 pins the explicit standalone fast-push deviation', () => {
+  for (const source of [read('.rulesync/rules/project-local.md'), read('AGENTS.md')]) {
+    assert.match(source, /scripts\/push\.sh --standalone --skip-tests/);
+    assert.match(source, /still requires a clean checkout, the main-writer\s+reservation, a fast-forward update, remote SHA confirmation/);
+    assert.match(source, /The override\s+is not available to a ticket integrator/);
   }
 });

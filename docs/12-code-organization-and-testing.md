@@ -861,13 +861,14 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   changes), and `hs2_zwbsh1_every_hook_fixture_uses_the_isolated_child` fails when a new
   hook fixture bypasses the helper or the rerun list. Toolchain and home settings stay
   inherited.
-- **Local push gate (HS2-CD3D2T, HS2-BND42N):** Run `scripts/install-git-hooks.sh` once per
+- **Local push gate (HS2-CD3D2T, HS2-BND42N, HS2-Q390N2):** Run `scripts/install-git-hooks.sh` once per
   checkout. The push accepts a `core.hooksPath` that resolves to this repository's own
   `.githooks`, relative or absolute, from the main checkout or any linked worktree; worktree
-  creation can leave the absolute form behind. Any other location is refused (HS2-Z333GJ). For each clean, committed main ticket, inspect `scripts/check.sh --plan`, then
-  use `scripts/push.sh origin main`. The wrapper reserves the Git common directory's main
-  integration ref before reading remote main, runs the selected exact-input gate inside that
-  reservation, verifies its receipt, makes a fast-forward push of the frozen commit, and
+  creation can leave the absolute form behind. Any other location is refused (HS2-Z333GJ).
+  At the ticket or integration boundary, inspect `scripts/check.sh --plan` and run the
+  selected gate on the committed tree. Then use `scripts/push.sh origin main`. The wrapper
+  reserves the Git common directory's main integration ref before reading remote main,
+  reuses an existing exact-input receipt or runs the selected gate, makes a fast-forward push of the frozen commit, and
   confirms remote main contains it. A live coordination integrator must supply
   `--integrator-id <id> --integrator-session <generation>` and the active code handoff's
   `--assignment <id>` when one holds the integration fence. An inactive retained pool
@@ -882,8 +883,12 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   ref, replaced owner, expired lease, gone process, or changed phase) instead of only the
   gate's exit (HS2-RXYJ6G). A transient Git read is retried once, while a persistent
   read error reports Git's diagnostic and stops the gate (HS2-822EVF). Running
-  `scripts/check.sh` first and then the wrapper reuses its
-  exact receipt and keeps the reservation short.
+  `scripts/check.sh` first and then the wrapper reuses its exact receipt and keeps the
+  reservation short. An explicit `scripts/push.sh --standalone --skip-tests` skips local
+  tests and receipt verification when the maintainer explicitly accepts CI-based verification. It
+  still requires a clean checkout, reservation, fast-forward push, remote confirmation,
+  and covering main CI; record the reason in the ticket. Integrator and staged pushes
+  cannot use this override.
   Every signalled gate names who stopped it (HS2-RY0ZMX). One message covers each source:
   - the heartbeat: `… was stopped by SIGTERM from this window because the heartbeat failed: …`;
   - a SIGINT or SIGTERM sent to the push itself: `Main integration push received SIGTERM and stopped its gate`;
@@ -894,13 +899,12 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   any worktree, and the load average. Before HS2-RY0ZMX, all of these printed the same
   `bash scripts/check.sh failed (null):`. That is exactly what the two 2026-11-04 stops
   reported, and a SIGTERM to the push reproduces it. An agent tool that ends a long
-  foreground command at its timeout sends such a signal, and a full or browser-profile gate
-  can run past 30 minutes, longer still beside another worktree's gate. Run the push as a
-  background command, or pre-run `scripts/check.sh` in the background, so that no tool
-  timeout bounds the window.
+  foreground command at its timeout sends such a signal. Run long gates before push so
+  they are outside the reservation window.
   The pre-push hook checks the live reservation before and after exact receipt
-  verification. Direct main pushes without the reservation fail; other branch pushes keep
-  their previous gate behavior. A dirty tree cannot produce an exact-input receipt.
+  verification, except for the explicit reserved override. Direct main pushes without the
+  reservation fail; other branch pushes retain their existing gate. A dirty tree cannot
+  produce an exact-input receipt or use the override.
 
 - **Batch push (HS2-9G0M3V):** A batch integrator, allowed by the project's recorded
   strategy policy, pushes several integrated handoffs once. Its command is

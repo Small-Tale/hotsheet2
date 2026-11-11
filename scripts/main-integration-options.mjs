@@ -32,6 +32,7 @@ export function parseMainPushArgs(args) {
     assignments: [],
     phaseTickets: [],
     standalone: false,
+    skipTests: false,
     // HS2-GT57BQ: `main` (default), `staged` (push HEAD to the integration branch) or
     // `promote` (fast-forward main to an exact green staged SHA).
     mode: 'main',
@@ -58,6 +59,7 @@ export function parseMainPushArgs(args) {
     else if (value === '--assignment') result.assignments.push(next(index++, value));
     else if (value === '--phase-ticket') result.phaseTickets.push(next(index++, value));
     else if (value === '--standalone') result.standalone = true;
+    else if (value === '--skip-tests') result.skipTests = true;
     else if (value === '--staged') result.mode = result.mode === 'main' ? 'staged' : 'conflict';
     else if (value === '--staging-branch') result.stagingBranch = next(index++, value);
     else if (value === '--promote') {
@@ -114,6 +116,10 @@ export function parseMainPushArgs(args) {
   if (result.phaseTickets.length && !result.assignment) throw new Error('--phase-ticket requires --assignment');
   if (result.standalone && identity.id) throw new Error('Standalone conflicts with integrator identity');
   if (result.mode !== 'main' && !identity.id) throw new Error(`--${result.mode} requires integrator identity`);
+  if (result.skipTests && !result.standalone)
+    throw new Error('--skip-tests requires --standalone');
+  if (result.skipTests && result.gateArgs.length)
+    throw new Error('--skip-tests cannot be combined with gate options');
   if (identity.id) result.identity = identity;
   const singleGateFlags = new Set(['--full', '--smoke', '--ticket', '--base', '--budget', '--tier']);
   const seenGateFlags = new Set();

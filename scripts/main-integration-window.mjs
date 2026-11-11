@@ -68,7 +68,7 @@ function snapshot(repo, requested = 'HEAD') {
   const selected = git(repo, ['rev-parse', requested]);
   if (head !== selected) throw new Error('Push source is no longer the checked-out HEAD');
   if (git(repo, ['status', '--porcelain', '--untracked-files=normal']))
-    throw new Error('Main integration requires a clean checkout and exact-tree gate receipt');
+    throw new Error('Main integration requires a clean checkout');
   return { head, tree };
 }
 
@@ -124,6 +124,7 @@ export function readWindow(repo, query = gitResult) {
     !['gating', 'ready'].includes(value.phase) ||
     !fullSha.test(value.head) ||
     !fullSha.test(value.tree) ||
+    (value.skipTests !== undefined && typeof value.skipTests !== 'boolean') ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value.remote) ||
     !['main', 'staged', 'promote'].includes(value.mode ?? 'main') ||
     ((value.mode ?? 'main') === 'staged'
@@ -208,6 +209,7 @@ async function acquire(repo, options) {
           head: selected.head,
           tree: selected.tree,
           gateArgs: options.gateArgs,
+          skipTests: options.skipTests,
           identity: options.identity,
           assignment: options.assignment,
           assignments: options.assignments,
@@ -628,7 +630,7 @@ export async function pushMain(repo, args) {
     check();
     // HS2-GT57BQ: a promotion's gate is the green CI run on the exact SHA, not a local receipt.
     if (options.mode === 'promote' && before === window.value.head) return window.value.head;
-    if (options.mode !== 'promote') {
+    if (options.mode !== 'promote' && !options.skipTests) {
       await child(repo, 'bash', ['scripts/check.sh', ...options.gateArgs], { signal: control.signal });
       check();
       await child(repo, 'bash', ['scripts/check.sh', '--verify-receipt', ...options.gateArgs], {
@@ -724,7 +726,7 @@ async function main() {
     if (args.length !== 4) throw new Error('verify needs remote, target, local SHA and remote SHA');
     const value = verifyMainPush(project, process.env.HOTSHEET_MAIN_WINDOW_TOKEN, remote, target, localSha, remoteSha);
     // HS2-GT57BQ: a promotion was gated by its green CI run, which authority() re-read.
-    if (value.mode !== 'promote')
+    if (value.mode !== 'promote' && !value.skipTests)
       await child(project, 'bash', ['scripts/check.sh', '--verify-receipt', ...value.gateArgs]);
     verifyMainPush(project, process.env.HOTSHEET_MAIN_WINDOW_TOKEN, remote, target, localSha, remoteSha);
   } else if (command === 'push') {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# HS2-BND42N: direct main pushes need the live reserved writer and exact receipt.
+# HS2-Q390N2: push verifies an existing gate receipt or an explicit reserved test override.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 remote_name="${1:-}"

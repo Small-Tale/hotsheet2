@@ -819,6 +819,20 @@ test('HS2-822EVF standalone push uses the linked store for pool authority', () =
   }
 });
 
+test('HS2-Q390N2 explicit standalone push skips local gate but verifies its reservation', () => {
+  const f = fixture();
+  try {
+    put(f.env.HS2_TEST_FAIL, 'fail gate if it runs\n');
+    const head = run('git', ['rev-parse', 'HEAD'], f.repo);
+    run('bash', ['scripts/push.sh', '--standalone', '--skip-tests'], f.repo, f.env);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head);
+    assert.equal(existsSync(f.env.HS2_TEST_GATE_LOG), false);
+    assert.equal(readWindow(f.repo), null);
+  } finally {
+    f.dispose();
+  }
+});
+
 test('HS2-BND42N ticket phase advances at the gate and confirmed-push boundaries', () => {
   const f = fixture();
   try {

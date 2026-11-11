@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseMainPushArgs } from './main-integration-options.mjs';
 
+test('HS2-Q390N2 explicit test override is standalone only', () => {
+  assert.equal(parseMainPushArgs(['--standalone', '--skip-tests']).skipTests, true);
+  assert.equal(parseMainPushArgs(['--standalone']).skipTests, false);
+  assert.throws(() => parseMainPushArgs(['--skip-tests']), /requires --standalone/);
+  assert.throws(
+    () => parseMainPushArgs(['--standalone', '--skip-tests', '--gate-arg', '--ticket', '--gate-arg', 'HS2-Q390N2']),
+    /cannot be combined with gate options/,
+  );
+});
+
 test('HS2-BND42N freezes one named remote and main target', () => {
   assert.deepEqual(parseMainPushArgs([]).remote, 'origin');
   assert.deepEqual(parseMainPushArgs(['--atomic', 'origin', 'HEAD:main']).target, 'refs/heads/main');

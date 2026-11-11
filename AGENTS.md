@@ -65,7 +65,20 @@ moves, edits after save, and reload recovery.
 Push policy: `push-per-ticket`. The maintainer has authorized routine
 fast-forward pushes of verified ticket commits to `origin/main`; do not ask again.
 After pushing, check the covering `main` CI run with `node scripts/ci-gate.mjs
-status --covers <full-sha>`. A remote run never replaces a failing local gate.
+status --covers <full-sha>`. A remote run never replaces a failing ticket or
+integration gate except for the explicit standalone override below.
+
+Fast-push deviation (HS2-Q390N2): ticket and integration checks should run before
+push and record an exact-tree receipt. `scripts/push.sh` reuses that receipt;
+without one it runs the selected gate. Run `scripts/check.sh` at the appropriate
+ticket or integration boundary to keep the push itself fast.
+For an urgent standalone push when the maintainer explicitly accepts CI-based
+verification, use
+`scripts/push.sh --standalone --skip-tests`. This explicit override skips local
+tests and the receipt, but still requires a clean checkout, the main-writer
+reservation, a fast-forward update, remote SHA confirmation, and a covering
+`main` CI run. Record the reason for the override in the ticket. The override
+is not available to a ticket integrator, staged push, or promotion.
 
 Batch deviation (HS2-9G0M3V): only while the maintainer allows the `batch`
 integration strategy (`coordination strategy-allow --strategy batch --reason
@@ -127,8 +140,9 @@ with `hotsheet-cli coordination --project . development-strategy-resolve` at ses
 start and safe ticket or integration boundaries. The command's `--session` and
 `--ticket` values name development strategies, not coordination generations.
 An explicit user instruction takes precedence over a ticket strategy, then a
-session strategy, then the project default, except that no instruction can waive
-mandatory affected gates, exact-tree verification, or green-main promotion.
+session strategy, then the project default, except that ticket and integration
+gates, exact-tree verification, and green-main promotion remain mandatory unless
+the maintainer explicitly selects the standalone fast-push deviation above.
 Report and refuse a conflict with those requirements. Supply a user-selected
 strategy as the highest-priority `--ticket` override and record its user
 provenance separately. A ticket strategy takes precedence over a session
