@@ -21,6 +21,7 @@ import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels'
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+import { printThenEcho } from './terminal-fixture-command';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
@@ -1505,8 +1506,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
   try {
     await server.request('/terminals', 'POST', {
       id: 'real-halt',
-      command: '/bin/sh',
-      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      ...printThenEcho('\\033]7;file://localhost/work/demo\\007'),
       cwd: server.root,
     });
     await expect
@@ -9647,8 +9647,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
   try {
     await server.request('/terminals', 'POST', {
       id: 'codex-session',
-      command: '/bin/sh',
-      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      ...printThenEcho('\\033]7;file://localhost/work/demo\\007'),
       cwd: server.root,
     });
     await expect
@@ -9734,8 +9733,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
   try {
     await server.request('/terminals', 'POST', {
       id: 'claude-session',
-      command: '/bin/sh',
-      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      ...printThenEcho('\\033]7;file://localhost/work/demo\\007'),
       cwd: server.root,
     });
     await expect
@@ -9881,8 +9879,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await server.request('/terminals', 'POST', {
       id: 'codex-shell',
       connect: 'codex',
-      command: '/bin/sh',
-      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      ...printThenEcho('\\033]7;file://localhost/work/demo\\007'),
       cwd: server.root,
     });
     // A live hotsheet-mcp lease names this terminal, as the shim registers it (HS2-670ADP): the
@@ -10140,8 +10137,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     // spawn size. The replay wraps that line at whatever grid the viewer renders.
     await server.request('/terminals', 'POST', {
       id: 'wide-shell',
-      command: '/bin/sh',
-      args: ['-c', `printf "\\033]7;file://localhost/work/demo\\007${wideLine}\\r\\n"; exec cat`],
+      ...printThenEcho(`\\033]7;file://localhost/work/demo\\007${wideLine}\\r\\n`),
       cwd: server.root,
     });
     await expect
@@ -11276,8 +11272,7 @@ test('shares a terminal rename with other devices and restores it through the re
     // terminal to its project.
     await server.request('/terminals', 'POST', {
       id: 'shared-shell',
-      command: '/bin/sh',
-      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      ...printThenEcho('\\033]7;file://localhost/work/demo\\007'),
       cwd: server.root,
     });
     await expect

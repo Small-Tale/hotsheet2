@@ -3,6 +3,7 @@ import { chromium, expect, type Locator, type Page, test } from '@playwright/tes
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
+import { printThenEcho } from './terminal-fixture-command';
 
 async function rememberProject(page: Page) {
   await page.addInitScript((root) => {
@@ -30,8 +31,7 @@ async function withDrawerTerminal(
   try {
     await server.request('/terminals', 'POST', {
       id: 'live',
-      command: '/bin/sh',
-      args: ['-c', 'printf "LIVE READY\\r\\n"; exec cat'],
+      ...printThenEcho('LIVE READY\\r\\n'),
       cwd: server.store,
     });
     await rememberProject(page);

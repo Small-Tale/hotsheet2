@@ -3,6 +3,7 @@ import { chromium, expect, type Page, test } from '@playwright/test';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
+import { printThenReportSize } from './terminal-fixture-command';
 
 async function rememberProject(page: Page) {
   await page.addInitScript((root) => {
@@ -29,8 +30,7 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
   try {
     await server.request('/terminals', 'POST', {
       id: 'nano',
-      command: '/bin/sh',
-      args: ['-c', 'printf "ZOOM REFIT\\r\\n"; while true; do stty size; sleep 0.3; done'],
+      ...printThenReportSize('ZOOM REFIT\\r\\n', 300),
       cwd: server.store,
     });
     await rememberProject(page);

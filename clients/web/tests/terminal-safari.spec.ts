@@ -5,6 +5,7 @@ import { expect, type Locator, type Page, test, webkit } from '@playwright/test'
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
+import { printThenEcho } from './terminal-fixture-command';
 
 async function rememberProject(page: Page) {
   await page.addInitScript((root) => {
@@ -73,8 +74,7 @@ for (const width of [390, 1280]) {
     try {
       await server.request('/terminals', 'POST', {
         id: 'nano',
-        command: '/bin/sh',
-        args: ['-c', 'printf "\\033[2J\\033[HREPLAY LAN GLYPHS\\r\\n"; exec cat'],
+        ...printThenEcho('\\033[2J\\033[HREPLAY LAN GLYPHS\\r\\n'),
         cwd: server.store,
       });
       await rememberProject(page);

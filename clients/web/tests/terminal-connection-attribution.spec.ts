@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import type { PermissionRequest, PollResponse, TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
+import { printThenEcho } from './terminal-fixture-command';
 
 const TARGET = 'codex-synthetic-target';
 const OTHER = 'codex-synthetic-other';
@@ -19,8 +20,7 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
       await app.server.request('/terminals', 'POST', {
         id,
         connect: 'codex',
-        command: '/bin/sh',
-        args: ['-c', 'exec cat'],
+        ...printThenEcho(''),
         cwd: app.server.root,
       });
     const page = await app.launch();

@@ -137,6 +137,16 @@ execute-bit check is POSIX-only. The `vitest-build-binaries` fixtures use
 `fixtureBinaryName` and a compilable Windows cargo stand-in. Native Windows web unit
 selection in the `Platforms` workflow is the platform proof.
 
+HS2-TMZ13Z: real-server terminal specs create their synthetic PTY commands through
+`tests/terminal-fixture-command.ts`. Unix keeps the exact `/bin/sh -c 'printf …; exec
+cat'` and `stty size` loops; Windows, which has no `/bin/sh` for `CreateProcessW`, runs
+the same output and echo or size reports in the spec's Node binary.
+`scripts/terminal-fixture-command.test.mjs` pins both command shapes, the printf
+decoding, quote-free Node scripts, and a real echo run. Setting
+`HOTSHEET_TEST_TERMINAL_FIXTURE=node` forces the Windows shape on any host; the
+affected providers, liveness, Safari, zoom-refit, and connection-attribution specs pass
+locally both ways. The opt-in `webkit-memory.spec.ts` still uses `/bin/sh`.
+
 HS2-0AJP3T: existing Unix HTTP terminal tests exercise the three helpers now
 guarded with `cfg(unix)`. Native Windows x86_64 test compilation must confirm
 they no longer produce dead-code warnings.
