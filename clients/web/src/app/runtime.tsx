@@ -5796,7 +5796,7 @@ export async function startHotSheetWebClient() {
   const disposeGridSidebarPages = terminalOperationsSurface.wire(appRoot);
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
-  const disposeProjectTabActionFit = wireProjectTabActionFit(appRoot, (compact) => {
+  const projectTabActionFit = wireProjectTabActionFit(appRoot, (compact) => {
     projectTabActionCompact.value = compact;
   });
 
@@ -6012,6 +6012,7 @@ export async function startHotSheetWebClient() {
     terminalRailScreen,
     selectProjectTab,
     retryProjectRestore,
+    onTabBarFit: projectTabActionFit.onFit,
     terminalDrawerBounds,
     terminalDashboardSize,
     terminalGridFullscreen,
@@ -6724,7 +6725,7 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       disposeToolbarVisibility();
-      disposeProjectTabActionFit();
+      projectTabActionFit.dispose();
       disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);
       toastPresentation.dispose();

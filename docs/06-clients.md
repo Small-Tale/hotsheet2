@@ -490,7 +490,8 @@ preview/download, server directory browser) are separate design work.
   project with its attention badge at 1024px with the inspector open), the far-edge New ticket
   launcher shortens to the terminal rail's compact `Ticket…` label so the tabs fit; it returns to
   `New ticket…` once the strip has room for the full label again, so it never alternates at the
-  boundary (HS2-RNR35H). The Workspace Grid and Cross-project Stats strips keep it
+  boundary (HS2-RNR35H). The overflow and strip widths come from Kerf's public `wireTabBars`
+  `onFitChange` report and the TabBar root's width, never from TabBar's private parts (HS2-A2CSNB). The Workspace Grid and Cross-project Stats strips keep it
   beside the last project tab too, never on the far edge (HS2-YFKQT1). Workspace Grid and Cross-project
   Stats retain their existing main-toolbar titles. Mobile retains its two compact project
   and view rows, including the New ticket action in the view row (HS2-9R1F91).

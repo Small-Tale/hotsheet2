@@ -469,7 +469,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/notification-settings-interactions.ts # wireNotificationSettings: the delegated handlers the app and the catalog demo share (HS2-DPBJJA)
     src/notification-settings-model.ts # Pure schema-to-form mapping, form-to-request parsing, rule summaries, notifier icons (HS2-DPBJJA)
     src/components/ticket-sources-settings.tsx # Project Settings → Ticket sources (only this project's own sources: default choice, edit, remove-from-this-project) and App Settings → Accounts (machine-wide sign-ins with their sources/projects, Sign out when unused), HS2-3SCH1K/HS2-SM9PM8
-    src/project-tab-action-fit.ts # measures the desktop project TabBar; compact `Ticket…` launcher while its tabs overflow, with hysteresis (HS2-RNR35H)
+    src/project-tab-action-fit.ts # reads Kerf's public TabBar onFitChange report and root width; compact `Ticket…` launcher while the project tabs overflow, with hysteresis (HS2-RNR35H, HS2-A2CSNB)
     src/tracked-size-observer.ts # ResizeObserver that re-binds to whichever element currently renders a slot and ignores 0x0 hidden/detached reports (drawer + workspace grid bounds, HS2-0PF13V)
     src/trailing-task.ts     # Public TrailingTask/createTrailingTask contract for collapsed view intent; app/runtime.tsx is its production consumer (HS2-K5E2KF)
     src/trailing-task-internal.ts # Private timer mechanics; ESLint bars direct consumer imports (HS2-K5E2KF)

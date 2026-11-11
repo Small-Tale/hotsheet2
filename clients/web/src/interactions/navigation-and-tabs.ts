@@ -1,4 +1,4 @@
-import { wireTabBars } from '@kerfjs/ui/wire-tab-bars';
+import { type TabBarFit, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
 import { delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -36,6 +36,8 @@ export interface NavigationAndTabInteractionsDependencies {
   readonly selectTicketView: (next: TicketView, { refresh }?: { refresh?: boolean }) => void;
   readonly selectProjectTab: (next: string) => void;
   readonly retryProjectRestore: (root: string) => Promise<void>;
+  /** Kerf's public TabBar fit reports, which size the project strip's launcher (HS2-A2CSNB). */
+  readonly onTabBarFit: (fit: TabBarFit) => void;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -62,6 +64,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     selectTicketView,
     selectProjectTab,
     retryProjectRestore,
+    onTabBarFit,
   } = dependencies;
   lifetime.add(
     wireTabBars(document.body, {
@@ -84,8 +87,10 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
       // A narrower drawer (a window resize, or rail actions such as terminal search, HS2-TWZSZF) can
       // scroll the selected drawer tab out of its strip; Kerf reports each fit change, so bring the
       // selected tab back into view without moving focus.
-      onFitChange: ({ barId }) => {
-        if (barId !== TERMINAL_DRAWER_TAB_BAR_ID) return;
+      onFitChange: (fit) => {
+        // The project strip sizes its launcher from the same public fit report (HS2-A2CSNB).
+        onTabBarFit(fit);
+        if (fit.barId !== TERMINAL_DRAWER_TAB_BAR_ID) return;
         for (const tab of document.querySelectorAll<HTMLElement>(
           `[data-tab-bar-id="${TERMINAL_DRAWER_TAB_BAR_ID}"] [role="tab"][aria-selected="true"]`,
         ))
