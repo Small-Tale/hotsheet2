@@ -16,6 +16,7 @@ import {
   permissionDelaysFor,
   type PermissionRule,
 } from '../permission-notifications';
+import type { ThemePreference } from '../theme-preference';
 import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
@@ -27,6 +28,7 @@ import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './pe
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import { StandbySettings, type StandbySettingsProps } from './standby-settings';
 import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
+import { ThemePicker } from './theme-picker';
 import {
   AccountsSettings,
   type AccountsSettingsProps,
@@ -65,8 +67,9 @@ export interface SettingsWorkspaceProps {
   };
   columns: { hideVerified: boolean };
   developmentStrategy?: DevelopmentStrategySettingsProps;
-  /** App Settings → General; `standby` is the machine-wide standby section (HS2-EQVZTZ). */
-  general: { showLoadingActivity: boolean; standby?: StandbySettingsProps };
+  /** App Settings → General: the browser's theme (HS2-EFTHS6); `standby` is the machine-wide standby
+   *  section (HS2-EQVZTZ). */
+  general: { showLoadingActivity: boolean; theme: ThemePreference; standby?: StandbySettingsProps };
   keyboard: KeyboardSettingsProps;
 }
 
@@ -175,6 +178,7 @@ export function SettingsWorkspace({
           )}
           {category === 'general' && (
             <>
+              <ThemePicker value={general.theme} />
               <Checkbox
                 action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
                 checked={general.showLoadingActivity}

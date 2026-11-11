@@ -13,7 +13,7 @@ const props: SettingsWorkspaceProps = {
   terminals: { inheritGlobalShellHistory: false, message: '' },
   permissions: { automation: { action: 'off', delayMs: 60_000 }, delays: [15_000, 60_000] },
   columns: { hideVerified: false },
-  general: { showLoadingActivity: true },
+  general: { showLoadingActivity: true, theme: 'auto' },
   keyboard: { overrides: {}, apple: true },
 };
 

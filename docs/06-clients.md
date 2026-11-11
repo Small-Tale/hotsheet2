@@ -1062,7 +1062,7 @@ preview/download, server directory browser) are separate design work.
   | Project | Permissions          | `/checkouts/{id}/permission-automation` (`Scope::Local`)                                                 | this project, machine   |
   | Project | Column view          | `localStorage hotsheet.project.{id}.hide-verified-column`                                                | this project, browser   |
   | Project | Development strategy | `/checkouts/{id}/development-strategy` (`development_strategy`, `Scope::Shared`)                         | this project, committed |
-  | App     | General              | `localStorage hotsheet.show-loading-activity`                                                            | every project, browser  |
+  | App     | General              | `localStorage hotsheet.theme` (HS2-EFTHS6), `localStorage hotsheet.show-loading-activity`                | every project, browser  |
   | App     | Accounts             | `/accounts` (credential names from `providers.json` + `keys.json`)                                       | every project, machine  |
   | App     | Terminal memory      | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                        | every project, machine  |
   | App     | Notifications        | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1) | every project, machine  |

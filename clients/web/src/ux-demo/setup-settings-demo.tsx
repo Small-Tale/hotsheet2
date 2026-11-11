@@ -268,7 +268,7 @@ export function SettingsWorkspaceDemo() {
           report: DEMO_DEVELOPMENT_REPORT,
           draft: draftFromDevelopmentReport(DEMO_DEVELOPMENT_REPORT),
         }}
-        general={{ showLoadingActivity: true }}
+        general={{ showLoadingActivity: true, theme: 'auto' }}
         keyboard={{ overrides: {}, apple: true }}
       />
     </CatalogExample>

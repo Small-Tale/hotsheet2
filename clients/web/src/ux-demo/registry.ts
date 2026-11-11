@@ -52,6 +52,7 @@ import { demoModule as statusBadge } from './status-badge-demo';
 import { demoModule as tagChip } from './tag-chip-demo';
 import { demoModule as terminalComponents } from './terminal-components-demo';
 import { demoModule as terminalVisibility } from './terminal-visibility-demo';
+import { demoModule as themePicker } from './theme-picker-demo';
 import { demoModule as ticketCollections } from './ticket-collections-demo';
 import { demoModule as ticketGroup } from './ticket-group-demo';
 import { demoModule as ticketGroupDialog } from './ticket-group-dialog-demo';
@@ -114,6 +115,7 @@ export const demoModules: readonly DemoModule[] = [
   confirmationDialog,
   toolbar,
   toolbarText,
+  themePicker,
   providerIcon,
   select,
   searchScopeToolbar,

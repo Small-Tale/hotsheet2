@@ -54,6 +54,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   selectCommandAiEffort: action('select-command-ai-effort'),
   openCommandManualModel: action('open-command-manual-model'),
   toggleLoadingActivity: action('toggle-loading-activity'),
+  chooseTheme: action('choose-theme'),
   toggleGlobalShellHistory: action('toggle-global-shell-history'),
   registerGuidanceSource: action('register-guidance-source'),
   checkGuidanceUpdates: action('check-guidance-updates'),

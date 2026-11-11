@@ -199,6 +199,7 @@ describe('UX demo catalog', () => {
       'trash-settings',
       'terminal-memory-settings',
       'standby-settings',
+      'theme-picker',
       'notification-settings',
       'notification-channel-dialog',
       'notification-rule-dialog',

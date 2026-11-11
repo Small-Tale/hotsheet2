@@ -5,6 +5,7 @@ import type { TrashRetentionDraft } from '../components/trash-settings';
 import type { Project } from '../interactions/types';
 import type { ProjectTicketSources } from '../new-ticket-source';
 import { PERMISSION_DELAYS } from '../permission-notifications';
+import type { ThemePreference } from '../theme-preference';
 
 /** A signal as the settings projection reads it. */
 interface Readable<T> {
@@ -59,6 +60,8 @@ export interface SettingsSurfaceDependencies {
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
   showLoadingActivity: Readable<boolean>;
+  /** App Settings → General → Theme (HS2-EFTHS6). */
+  themePreference: Readable<ThemePreference>;
   /** App Settings → General → Standby (HS2-EQVZTZ). */
   standbySettings?: () => NonNullable<Props['general']['standby']>;
   keyboardShortcutOverrides: Readable<Props['keyboard']['overrides']>;
@@ -117,6 +120,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
+    themePreference,
     standbySettings,
     keyboardShortcutOverrides,
     capturingShortcutId,
@@ -217,7 +221,11 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           },
         }}
         columns={{ hideVerified: hideVerifiedColumn() }}
-        general={{ showLoadingActivity: showLoadingActivity.value, standby: standbySettings?.() }}
+        general={{
+          showLoadingActivity: showLoadingActivity.value,
+          theme: themePreference.value,
+          standby: standbySettings?.(),
+        }}
         keyboard={{
           overrides: keyboardShortcutOverrides.value,
           capturingId: capturingShortcutId.value,

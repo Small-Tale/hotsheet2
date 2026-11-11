@@ -225,6 +225,7 @@ import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
 import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
+import { applyThemePreference, readThemePreference } from '../theme-preference';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
 import { BulkTicketMutationSequencer } from '../ticket-bulk-operations';
 import { loadLastTicketCategory } from '../ticket-category-preference';
@@ -562,6 +563,9 @@ export async function startHotSheetWebClient() {
     terminalDashboardLoading = signal(false),
     terminalDashboardMessage = signal('');
   const showLoadingActivity = signal(localStorage.getItem('hotsheet.show-loading-activity') === 'true');
+  // App Settings → General → Theme (HS2-EFTHS6): pin the stored scheme before the first render.
+  const themePreference = signal(readThemePreference(localStorage));
+  applyThemePreference(document.documentElement, themePreference.value);
   const guidanceOverview = signal<GuidanceOverview | undefined>(undefined);
   const guidanceUpdates = signal<GuidanceSourceUpdate[]>([]);
   const guidanceUpdatesCheckedAt = signal<number | undefined>(undefined);
@@ -4994,6 +4998,7 @@ export async function startHotSheetWebClient() {
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
+    themePreference,
     standbySettings: () => ({ settings: standby.settings.value, message: standby.settingsMessage.value }),
     keyboardShortcutOverrides,
     capturingShortcutId,
@@ -6262,6 +6267,7 @@ export async function startHotSheetWebClient() {
     updateCommandAiSelection,
     effectiveCommandAiSelection,
     showLoadingActivity,
+    themePreference,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     trashSettingsMessagesByProject,

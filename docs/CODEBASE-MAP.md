@@ -284,6 +284,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-live-summary.ts # Project sidebar Live section numbers: linked-store summary, compact chips, host callouts; rendered by components/project-live-section.tsx (HS2-F788GW)
     src/grid-sidebar-live.ts # Grid sidebar gauge/triage numbers per project group from live state, state words, hover titles, need order (HS2-E1AQE8)
     src/away-digest.ts       # While-you-were-away digest (HS2-JJ9RYN): request-free recorder of pushed live-state and host-health changes during standby, token-minute window, completion window count, silent-exit rule, row wording
+    src/theme-preference.ts  # App Settings → General → Theme (HS2-EFTHS6): auto/light/dark per browser (`hotsheet.theme`), applied as Kerf `.kui-light`/`.kui-dark` root scope
+    src/theme-tile-art.tsx   # Theme picker tile artwork: frozen light/dark palettes, stylized window, diagonal Auto split (HS2-EFTHS6)
     src/standby.ts           # Standby (HS2-EQVZTZ): /standby-settings contract + parser, scope by entry point, display model from live state (rows, amber alerts), clock/freshness labels, request-free idle timer
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
@@ -467,6 +469,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/standby-screen.tsx # Standby night display: dark-red gauge, SVG clock and count numerals, project strip, amber callouts, freshness line; top-layer overlay or inline catalog stage (HS2-EQVZTZ)
     src/components/away-digest-dialog.tsx # While you were away dialog on leaving standby: range, Completed/Need you/Tokens tiles, event rows with Open/Answer, Dismiss and Show What Needs Me (HS2-JJ9RYN)
     src/components/standby-settings.tsx # App Settings → General → Standby: idle entry switch and threshold (HS2-EQVZTZ)
+    src/components/theme-picker.tsx # App Settings → General → Theme: Auto/Light/Dark preview tiles as native radios (HS2-EFTHS6; tile frame CSS until KF-C29WJ9)
     src/components/notification-settings.tsx # App Settings → Notifications: delivery options, channel and rule ListActionRows with menus, recent deliveries ValueTable (HS2-DPBJJA)
     src/components/notification-channel-dialog.tsx # Add/edit channel DialogSurface with fields generated from the notifier settings schema; write-only credentials (HS2-DPBJJA)
     src/components/notification-rule-dialog.tsx # Add/edit rule DialogSurface: events, channels, filters, severity, cooldown (HS2-DPBJJA)

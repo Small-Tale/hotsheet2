@@ -52,6 +52,15 @@ does not fork Kerf's guidance.
   Discard Changes cover it; withdrawing an AI rating confirms because it drops the
   explanation, and declining edits the feedback instead.
 
+- App Settings → General offers a **Theme** choice (HS2-EFTHS6): Auto (the default,
+  following `prefers-color-scheme`), Light, or Dark, per browser in
+  `localStorage hotsheet.theme`. This is a maintainer-requested departure from
+  following the system only. A pinned choice uses Kerf's root appearance scope
+  (`.kui-light` / `.kui-dark` on `<html>`), never app color overrides. Each choice
+  shows a stylized Hot Sheet window in that scheme, after news-cloud2's Appearance
+  picker. Kerf has no preview-tile choice, so the tiles are native radios with an
+  app-owned frame (`components/theme-picker.css`) until `KF-C29WJ9` ships.
+
 - Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) carry two interim
   decisions that wait on Kerf. A group's Rename and Ungroup actions open from a
   context menu on the group header, because `ListHeader` cannot pair its toggle

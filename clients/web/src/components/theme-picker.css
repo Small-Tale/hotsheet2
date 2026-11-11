@@ -1,0 +1,63 @@
+/* Theme preview tiles (HS2-EFTHS6). Kerf has no preview-tile choice yet (KF-C29WJ9): these rules draw
+   only the app-owned tile around native radios. Kerf List, Grid, FieldLabel, Text, and LucideIcon own
+   every stack, gap, label, and glyph. */
+
+/* The tile is the hit target; its radio covers it invisibly so the browser owns focus and keys. */
+.theme-picker__tile {
+  position: relative;
+  display: grid;
+  gap: var(--kui-space-xs);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.theme-picker__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The frame keeps the artwork's own palette; a 2px ring marks the choice in either scheme. */
+.theme-picker__frame {
+  display: block;
+  padding: remify(2px);
+  border-radius: var(--kui-radius-m);
+  box-shadow: 0 0 0 1px var(--kui-color-neutral-border-normal);
+  line-height: 0;
+}
+
+.theme-picker__frame svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.theme-picker__input:checked ~ .theme-picker__frame {
+  box-shadow: 0 0 0 2px var(--kui-color-brand-border-loud);
+}
+
+.theme-picker__input:focus-visible ~ .theme-picker__frame {
+  outline: var(--kui-focus-ring);
+  outline-offset: remify(2px);
+}
+
+/* The label centers under its tile; the check shows only on the selected one, so the choice does not
+   rely on the ring's color alone. */
+.theme-picker__label {
+  display: flex;
+  gap: var(--kui-space-2xs);
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.theme-picker__check {
+  display: inline-flex;
+  visibility: hidden;
+}
+
+.theme-picker__input:checked ~ .theme-picker__label .theme-picker__check {
+  visibility: visible;
+}

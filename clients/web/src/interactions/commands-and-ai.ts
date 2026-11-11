@@ -46,6 +46,12 @@ import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notificati
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
 import { loadLucideCatalog } from '../lucide-catalog';
+import {
+  applyThemePreference,
+  parseThemePreference,
+  storeThemePreference,
+  type ThemePreference,
+} from '../theme-preference';
 import { toggleCollapsedCommandGroup } from '../workspace-preferences';
 import { data } from './dom';
 import { type Control, type Project } from './types';
@@ -176,6 +182,8 @@ export interface CommandAndAiInteractionsDependencies {
   ) => void;
   readonly effectiveCommandAiSelection: (command: CommandDefinition) => AiToolDefaults;
   readonly showLoadingActivity: Signal<boolean>;
+  /** App Settings → General → Theme (HS2-EFTHS6). */
+  readonly themePreference: Signal<ThemePreference>;
   readonly inheritGlobalShellHistory: Signal<boolean>;
   readonly terminalSettingsMessage: Signal<string>;
   readonly trashSettingsMessagesByProject: Signal<Record<string, string>>;
@@ -338,6 +346,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     updateCommandAiSelection,
     effectiveCommandAiSelection,
     showLoadingActivity,
+    themePreference,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     trashSettingsMessagesByProject,
@@ -885,6 +894,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const checked = (target as HTMLInputElement).checked;
       showLoadingActivity.value = checked;
       localStorage.setItem('hotsheet.show-loading-activity', String(checked));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.chooseTheme.selector, (_event, target) => {
+      const preference = parseThemePreference((target as HTMLInputElement).value);
+      themePreference.value = preference;
+      storeThemePreference(localStorage, preference);
+      applyThemePreference(document.documentElement, preference);
     }),
   );
   lifetime.add(

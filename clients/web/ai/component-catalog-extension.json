@@ -2525,6 +2525,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "theme-picker",
+      "name": "ThemePicker",
+      "kind": "component",
+      "purpose": "Auto, Light, or Dark theme choice with a stylized preview of each scheme in App Settings → General (HS2-EFTHS6).",
+      "useWhen": [
+        "Hot Sheet needs this browser's Auto, Light, or Dark theme choice."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ThemePicker behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/theme-picker.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ticket-attachments",
       "name": "TicketAttachments",
       "kind": "component",

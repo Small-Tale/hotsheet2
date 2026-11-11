@@ -7622,6 +7622,72 @@
       }
     },
     {
+      "key": "hotsheet-web:theme-picker",
+      "package": "hotsheet-web",
+      "id": "theme-picker",
+      "name": "ThemePicker",
+      "kind": "component",
+      "purpose": "Auto, Light, or Dark theme choice with a stylized preview of each scheme in App Settings → General (HS2-EFTHS6).",
+      "publicExports": [
+        {
+          "name": "ThemePicker"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/theme-picker.tsx",
+        "src/components/theme-picker.css",
+        "src/theme-tile-art.tsx"
+      ],
+      "source": "src/components/theme-picker.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/theme-picker.tsx",
+        "composition": "src/components/theme-picker.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-attachments",
       "package": "hotsheet-web",
       "id": "ticket-attachments",

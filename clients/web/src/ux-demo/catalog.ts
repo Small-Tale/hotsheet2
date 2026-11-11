@@ -355,6 +355,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('trash-settings'),
       cataloged('terminal-memory-settings'),
       cataloged('standby-settings'),
+      cataloged('theme-picker'),
       cataloged('notification-settings', ['notification-channel-dialog', 'notification-rule-dialog']),
       cataloged('notification-channel-dialog'),
       cataloged('notification-rule-dialog'),

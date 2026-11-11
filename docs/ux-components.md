@@ -2456,7 +2456,11 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   `Checkbox` turns idle entry on or off and a `Select` picks the idle threshold (presets plus any
   value set from the CLI); both save at once to the machine-wide `PUT /standby-settings`.
 - `TerminalSettings`
-- `AppearanceSettings`
+- `ThemePicker` (the planned `AppearanceSettings`) — **demo built** (HS2-EFTHS6): App Settings →
+  General → Theme. Auto (default), Light, and Dark tiles, each a stylized Hot Sheet window in that
+  scheme (`theme-tile-art.tsx`), as native radios; the choice pins `.kui-light` / `.kui-dark` on the
+  document root and is stored per browser in `hotsheet.theme`. The tile frame is app CSS until Kerf
+  offers a preview-tile choice (KF-C29WJ9).
 
 ## 9. Later major surfaces
 

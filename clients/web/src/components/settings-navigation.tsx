@@ -106,7 +106,10 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
       server: '/checkouts/{project}/development-strategy',
     },
   ],
-  general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
+  general: [
+    { control: 'Theme', browser: 'hotsheet.theme' },
+    { control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' },
+  ],
   accounts: [{ control: 'Sign-ins and sign out', server: '/accounts' }],
   notifications: [
     { control: 'Channels, rules, and delivery options', server: '/notification-config' },

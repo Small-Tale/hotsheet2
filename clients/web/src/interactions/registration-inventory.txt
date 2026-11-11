@@ -198,6 +198,7 @@ commands-and-ai	delegateCapture	document.body	'kui-request-close'	'[data-dialog-
 commands-and-ai	delegate	document.body	'click'	'[data-action="confirm-stop-command"]'
 commands-and-ai	wireCommandSettingsEditor	document.body
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-loading-activity"]'
+commands-and-ai	delegate	document.body	'change'	'[data-action="choose-theme"]'
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-global-shell-history"]'
 commands-and-ai	delegate	document.body	'change'	'[data-action="save-terminal-limits"]'
 commands-and-ai	wireTrashSettings	document.body
