@@ -17,7 +17,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
-import { acceptedHooksPath, gateDiagnostics, readWindow, selectedSourceStore, verifyMainPush } from './main-integration-window.mjs';
+import {
+  acceptedHooksPath,
+  gateDiagnostics,
+  readWindow,
+  selectedSourceStore,
+  verifyMainPush,
+} from './main-integration-window.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = (program, args, cwd, env = withoutGitRepositoryEnv(process.env), input) =>
@@ -241,7 +247,11 @@ test('HS2-822EVF retries one transient ref read and keeps a valid reservation', 
     );
     assert.deepEqual(
       readWindow(f.repo, (repo, args) => {
-        const result = spawnSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), encoding: 'utf8' });
+        const result = spawnSync('git', args, {
+          cwd: repo,
+          env: withoutGitRepositoryEnv(process.env),
+          encoding: 'utf8',
+        });
         return { ...result, stderr: 'benign Git warning' };
       }),
       { oid, value },
@@ -341,16 +351,21 @@ test('HS2-BYDMV4 unresolved lookup diagnostics and subprocess faults cannot beco
     { status: 128 },
     { status: 0, stdout: 'invalid-object-id' },
   ]) {
-    let queries = 0;
+    const queries = [];
     assert.throws(
       () =>
-        readWindow('unused', () => {
-          queries++;
+        readWindow('unused', (_repo, args) => {
+          queries.push(args[0]);
           return result;
         }),
       /Cannot read/,
     );
-    assert.equal(queries, 1, 'a hard lookup failure never invokes the existence fallback');
+    // HS2-822EVF retries a failed read once; HS2-Z8189B: count the fallback, not the retry.
+    assert.ok(!queries.includes('show-ref'), 'a hard lookup failure never invokes the existence fallback');
+    assert.ok(
+      queries.every((command) => command === 'rev-parse') && queries.length <= 2,
+      `at most one retried read: ${queries.join(', ')}`,
+    );
   }
 });
 
