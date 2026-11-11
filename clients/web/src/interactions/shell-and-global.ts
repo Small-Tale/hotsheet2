@@ -142,6 +142,10 @@ export interface ShellAndGlobalInteractionsDependencies {
     enter: () => void;
     exit: () => void;
     saveSettings: (form: HTMLElement) => void;
+    /** The away digest (HS2-JJ9RYN): Dismiss or its close button, "Show What Needs Me", and a row's action. */
+    dismissAwayDigest?: () => void;
+    showWhatNeedsMe?: () => void;
+    openAwayEvent?: (projectId: string, slug: string) => void;
   };
 }
 
@@ -234,6 +238,28 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(
     delegate(document.body, 'change', SHELL_AND_GLOBAL_ACTIONS.saveStandbySettings.selector, (_event, target) => {
       standby?.saveSettings(target as HTMLElement);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.dismissAwayDigest.selector, () => {
+      standby?.dismissAwayDigest?.();
+    }),
+  );
+  // The close button and Escape ask to close; clear the state in the same turn (controlled-open).
+  lifetime.add(
+    delegate(document.body, 'kui-request-close', '[data-away-digest]', () => {
+      standby?.dismissAwayDigest?.();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.showWhatNeedsMe.selector, () => {
+      standby?.showWhatNeedsMe?.();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.openAwayEvent.selector, (_event, target) => {
+      const { projectId, ticketSlug } = data(target);
+      if (projectId && ticketSlug) standby?.openAwayEvent?.(projectId, ticketSlug);
     }),
   );
   lifetime.add(

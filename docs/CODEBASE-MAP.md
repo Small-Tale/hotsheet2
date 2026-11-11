@@ -282,6 +282,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/stats-this-mac.ts    # Stats This Mac card model (HS2-NS0AYR): server-host disk, memory, CPU, power, plus network/thermal only when degraded; unsupported/unavailable never show values; rendered by components/stats-this-mac.tsx from the runtime's host-health resource
     src/project-live-summary.ts # Project sidebar Live section numbers: linked-store summary, compact chips, host callouts; rendered by components/project-live-section.tsx (HS2-F788GW)
     src/grid-sidebar-live.ts # Grid sidebar gauge/triage numbers per project group from live state, state words, hover titles, need order (HS2-E1AQE8)
+    src/away-digest.ts       # While-you-were-away digest (HS2-JJ9RYN): request-free recorder of pushed live-state and host-health changes during standby, token-minute window, completion window count, silent-exit rule, row wording
     src/standby.ts           # Standby (HS2-EQVZTZ): /standby-settings contract + parser, scope by entry point, display model from live state (rows, amber alerts), clock/freshness labels, request-free idle timer
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
@@ -462,6 +463,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
     src/components/terminal-memory-settings.tsx # App Settings → Terminal memory: history, server replay buffer, and warm-terminal limit selects with memory-derived defaults (HS2-Y5DYC0)
     src/components/standby-screen.tsx # Standby night display: dark-red gauge, SVG clock and count numerals, project strip, amber callouts, freshness line; top-layer overlay or inline catalog stage (HS2-EQVZTZ)
+    src/components/away-digest-dialog.tsx # While you were away dialog on leaving standby: range, Completed/Need you/Tokens tiles, event rows with Open/Answer, Dismiss and Show What Needs Me (HS2-JJ9RYN)
     src/components/standby-settings.tsx # App Settings → General → Standby: idle entry switch and threshold (HS2-EQVZTZ)
     src/components/notification-settings.tsx # App Settings → Notifications: delivery options, channel and rule ListActionRows with menus, recent deliveries ValueTable (HS2-DPBJJA)
     src/components/notification-channel-dialog.tsx # Add/edit channel DialogSurface with fields generated from the notifier settings schema; write-only credentials (HS2-DPBJJA)

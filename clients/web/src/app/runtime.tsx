@@ -4247,6 +4247,19 @@ export async function startHotSheetWebClient() {
       const current = project();
       return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
     },
+    // The away digest (HS2-JJ9RYN): host rows from the pushed host health; completions read once on exit.
+    hostHealth: () => hostHealth.state.value.snapshot,
+    completions: async (projectIds) => {
+      const reports = await Promise.all(
+        projects
+          .peek()
+          .filter((item) => projectIds.includes(item.id))
+          .map((item) =>
+            new Api(item.apiPath, '', { trackBusy: false }).checkoutConfidenceReport(item.id).catch(() => undefined),
+          ),
+      );
+      return reports.filter((report) => report !== undefined);
+    },
   });
   let standbySettingsServer: string | undefined;
   effect(() => {
@@ -6461,6 +6474,16 @@ export async function startHotSheetWebClient() {
       exit: standby.exit,
       saveSettings: (form) => {
         void standby.saveSettings(form);
+      },
+      dismissAwayDigest: standby.dismissAwayDigest,
+      showWhatNeedsMe: () => {
+        standby.dismissAwayDigest();
+        statsProjectId.value = undefined;
+        setShellMode('stats');
+      },
+      openAwayEvent: (projectId, slug) => {
+        standby.dismissAwayDigest();
+        void selectLinkedTicket(slug, projectId);
       },
     },
     get repositoryFileSelectionAnchor() {

@@ -350,6 +350,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "away-digest-dialog",
+      "name": "AwayDigestDialog",
+      "kind": "component",
+      "purpose": "The while-you-were-away digest shown on leaving standby: the standby window, Completed, Need you, and Tokens tiles, one row per event with the single action that resolves it, Dismiss, and Show What Needs Me (HS2-JJ9RYN).",
+      "useWhen": [
+        "Standby exits after something happened while it showed."
+      ],
+      "avoidWhen": [
+        "An uneventful standby, which exits silently."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/away-digest-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "bulk-ticket-dialog",
       "name": "BulkTicketDialog",
       "kind": "component",

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { CalibrationReport, LiveStoreState } from '../api';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
-import { createLiveStateStore } from '../live-state';
+import type { HostHealthSnapshot } from '../host-health';
+import { createLiveStateStore, type LiveStateStore } from '../live-state';
 import type { StandbySettingsView } from '../standby';
 import { createStandbyController, type StandbyApi } from './standby';
 
@@ -11,15 +13,26 @@ const view = (enabled: boolean, idle: number, configured: Partial<StandbySetting
   effective: { enabled, idle_minutes: idle },
 });
 
-function harness(options: { api?: StandbyApi; touch?: boolean } = {}) {
+function harness(
+  options: {
+    api?: StandbyApi;
+    touch?: boolean;
+    liveStates?: LiveStateStore;
+    openProjectIds?: () => readonly string[];
+    hostHealth?: () => HostHealthSnapshot | undefined;
+    completions?: (projectIds: readonly string[]) => Promise<readonly CalibrationReport[]>;
+  } = {},
+) {
   let clock = 1_000_000;
   const intervals = new Map<number, () => void>();
   let nextInterval = 0;
   const released = vi.fn(() => Promise.resolve());
   const request = vi.fn(() => Promise.resolve({ release: released }));
   const controller = createStandbyController({
-    openProjectIds: () => [],
-    liveStates: createLiveStateStore(),
+    openProjectIds: options.openProjectIds ?? (() => []),
+    liveStates: options.liveStates ?? createLiveStateStore(),
+    ...(options.hostHealth ? { hostHealth: options.hostHealth } : {}),
+    ...(options.completions ? { completions: options.completions } : {}),
     api: () => options.api,
     // Fake timers drive the idle tests through the real clock.
     now: () => (vi.isFakeTimers() ? Date.now() : clock),
@@ -239,5 +252,133 @@ describe('standby controller (HS2-EQVZTZ)', () => {
     await none.controller.refreshSettings();
     await none.controller.saveSettings({} as HTMLElement);
     expect(none.controller.settings.value).toBeUndefined();
+  });
+
+  describe('away digest (HS2-JJ9RYN)', () => {
+    const live = (revision: number, overrides: Partial<LiveStoreState> = {}): LiveStoreState => ({
+      store: 'stw',
+      root: '/work/stw.hs2',
+      name: 'Small Tale Website',
+      checkouts: ['p1'],
+      epoch_ms: 1,
+      revision,
+      state: 'active',
+      activity: {
+        word: 'active',
+        active_since_ms: 1,
+        stopped_at_ms: null,
+        last_progress_ms: 1,
+        idle_deadline_ms: null,
+        stalled: [],
+        halted: [],
+        causes: [],
+      },
+      claims: [],
+      workers: { live: 1, expected: 1 },
+      waiting: { count: 0, tickets: [] },
+      runway: { ready: 1, estimate_ms: null },
+      rates: {
+        tokens: { window_minutes: 5, minutes: [], peak_per_minute: 1 },
+        tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 1 },
+      },
+      ...overrides,
+    });
+    const report = (at: string[]): CalibrationReport => ({
+      completions: at.length,
+      scored: 0,
+      bands: [],
+      events: at.map((completed_at, index) => ({ slug: `STW-${String(index)}`, completed_at, outcome: 'pending' })),
+    });
+
+    it('an uneventful standby exits silently, after one completions read', async () => {
+      const liveStates = createLiveStateStore();
+      liveStates.apply(live(1));
+      const completions = vi.fn(() => Promise.resolve([report([])]));
+      const { controller } = harness({ liveStates, openProjectIds: () => ['p1'], completions });
+      controller.enter();
+      // A snapshot that changes nothing that matters.
+      liveStates.apply(live(2));
+      controller.exit();
+      await vi.waitFor(() => {
+        expect(completions).toHaveBeenCalledWith(['p1']);
+      });
+      await Promise.resolve();
+      expect(controller.awayDigest.value).toBeUndefined();
+    });
+
+    it('records pushed changes while standby shows and opens the digest on exit', async () => {
+      const liveStates = createLiveStateStore();
+      liveStates.apply(live(1));
+      const host: HostHealthSnapshot | undefined = undefined;
+      const completions = vi.fn(() =>
+        // One completion during standby, one long before it.
+        Promise.resolve([report([new Date(1_000_500).toISOString(), new Date(0).toISOString()])]),
+      );
+      const { controller, tick } = harness({
+        liveStates,
+        openProjectIds: () => ['p1'],
+        hostHealth: () => host,
+        completions,
+      });
+      controller.enter();
+      tick(60_000);
+      liveStates.apply(
+        live(2, {
+          state: 'waiting_on_you',
+          waiting: { count: 1, tickets: [{ ticket: 'STW-7', slug: 'STW-7', title: 'Copy', reason: 'feedback' }] },
+        }),
+      );
+      // Snapshots before entry and after exit are not recorded.
+      controller.exit();
+      liveStates.apply(live(3, { activity: { ...live(3).activity, stalled: [{ slug: 'STW-8', worker: 'w' }] } }));
+      await vi.waitFor(() => {
+        expect(controller.awayDigest.value).toBeDefined();
+      });
+      const digest = controller.awayDigest.value!;
+      expect(digest.events).toMatchObject([{ kind: 'waiting', slug: 'STW-7', projectId: 'p1' }]);
+      expect(digest.needYou).toBe(1);
+      expect(digest.completed).toBe(1);
+      controller.dismissAwayDigest();
+      expect(controller.awayDigest.value).toBeUndefined();
+    });
+
+    it('re-entering standby while completions load drops the stale digest', async () => {
+      const liveStates = createLiveStateStore();
+      liveStates.apply(live(1));
+      let resolve: (value: readonly CalibrationReport[]) => void = () => undefined;
+      const completions = vi.fn(
+        () =>
+          new Promise<readonly CalibrationReport[]>((done) => {
+            resolve = done;
+          }),
+      );
+      const { controller } = harness({ liveStates, openProjectIds: () => ['p1'], completions });
+      controller.enter();
+      liveStates.apply(live(2, { activity: { ...live(2).activity, stalled: [{ slug: 'STW-8', worker: 'w' }] } }));
+      controller.exit();
+      controller.enter();
+      resolve([]);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(controller.awayDigest.value).toBeUndefined();
+      controller.exit();
+    });
+
+    it('a failed completions read still shows the events', async () => {
+      const liveStates = createLiveStateStore();
+      liveStates.apply(live(1));
+      const { controller } = harness({
+        liveStates,
+        openProjectIds: () => ['p1'],
+        completions: () => Promise.reject(new Error('offline')),
+      });
+      controller.enter();
+      liveStates.apply(live(2, { activity: { ...live(2).activity, stalled: [{ slug: 'STW-8', worker: 'w' }] } }));
+      controller.exit();
+      await vi.waitFor(() => {
+        expect(controller.awayDigest.value?.events).toMatchObject([{ kind: 'stalled', slug: 'STW-8' }]);
+      });
+      expect(controller.awayDigest.value?.completed).toBe(0);
+    });
   });
 });

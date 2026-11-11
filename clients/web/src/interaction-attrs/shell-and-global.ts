@@ -13,6 +13,10 @@ export const SHELL_AND_GLOBAL_ACTIONS = {
   enterStandby: action('enter-standby'),
   exitStandby: action('exit-standby'),
   saveStandbySettings: action('save-standby-settings'),
+  /** The while-you-were-away digest shown on leaving standby (HS2-JJ9RYN). */
+  dismissAwayDigest: action('dismiss-away-digest'),
+  showWhatNeedsMe: action('show-what-needs-me'),
+  openAwayEvent: action('open-away-event'),
 } as const;
 
 /**

@@ -1,8 +1,20 @@
 import { effect, mount, signal } from 'kerfjs';
 
-import type { ChangeEvent } from '../api';
+import type { CalibrationReport, ChangeEvent, LiveStoreState } from '../api';
+import {
+  type AwayDigest,
+  type AwayRecord,
+  beginAwayRecord,
+  completionsBetween,
+  finishAwayDigest,
+  observeAwayHost,
+  observeAwayStates,
+} from '../away-digest';
+import { AwayDigestDialog } from '../components/away-digest-dialog';
 import { StandbyScreen } from '../components/standby-screen';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
+import { withControlledOpen } from '../controlled-open';
+import type { HostHealthSnapshot } from '../host-health';
 import type { LiveStateStore } from '../live-state';
 import {
   createStandbyIdleTimer,
@@ -38,6 +50,13 @@ export interface StandbyControllerDependencies {
   wakeLock?: () => WakeLockLike | undefined;
   /** How long a dropped stream may reconnect before the freshness line says so. */
   streamGraceMs?: number;
+  /** The server host's latest health, for the away digest's host rows (HS2-JJ9RYN). Read reactively. */
+  hostHealth?: () => HostHealthSnapshot | undefined;
+  /**
+   * Each open project's completion events, read once when standby exits so the away digest can count
+   * what completed meanwhile (HS2-JJ9RYN). A failed read counts none.
+   */
+  completions?: (projectIds: readonly string[]) => Promise<readonly CalibrationReport[]>;
   /** Injected for tests. */
   setInterval?: (callback: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -80,7 +99,13 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     nowMs = signal(now()),
     /** Each project's change stream: `null` while connected, else when it dropped. */
     streams = signal<ReadonlyMap<string, number | null>>(new Map()),
-    updatedAtMs = signal<number | undefined>(undefined);
+    updatedAtMs = signal<number | undefined>(undefined),
+    /** The while-you-were-away digest to show, once standby exits after something happened (HS2-JJ9RYN). */
+    awayDigest = signal<AwayDigest | undefined>(undefined);
+  let away: AwayRecord | undefined,
+    awaySeen: ReadonlyMap<string, LiveStoreState> = new Map(),
+    awayHost: HostHealthSnapshot | undefined,
+    awayGeneration = 0;
   let ticker: unknown,
     lock: { release(): Promise<void> } | undefined,
     lockPending = false,
@@ -108,6 +133,60 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     }
     updatedAtMs.value = now();
   });
+
+  // While standby shows, note what changes in the pushed live state and host health it already
+  // receives (HS2-JJ9RYN). This reads nothing from the server.
+  const disposeAway = effect(() => {
+    void dependencies.liveStates.states.value;
+    const host = dependencies.hostHealth?.();
+    const record = away;
+    if (!record) return;
+    const open = dependencies.openProjectIds(),
+      visible = dependencies.liveStates.forProjects(open),
+      at = now();
+    observeAwayStates(record, awaySeen, visible, open, at);
+    awaySeen = new Map(visible.map((state) => [state.store, state]));
+    if (host && host !== awayHost) {
+      observeAwayHost(record, awayHost, host, at);
+      awayHost = host;
+    }
+  });
+
+  function beginAway() {
+    const open = dependencies.openProjectIds(),
+      visible = dependencies.liveStates.forProjects(open);
+    awayDigest.value = undefined;
+    awaySeen = new Map(visible.map((state) => [state.store, state]));
+    awayHost = dependencies.hostHealth?.();
+    away = beginAwayRecord(visible, now());
+  }
+
+  /** Count completions once, then show the digest only when something happened. */
+  async function finishAway(record: AwayRecord) {
+    const generation = ++awayGeneration,
+      exitedAt = now(),
+      open = dependencies.openProjectIds(),
+      // Need you counts what waits at the moment standby exits.
+      current = dependencies.liveStates.forProjects(open);
+    let reports: readonly CalibrationReport[] = [];
+    try {
+      reports = (await dependencies.completions?.(open)) ?? [];
+    } catch {
+      // Completions stay uncounted; the rest of the digest still stands.
+    }
+    // Standby re-entered (or another exit finished) while the reports loaded.
+    if (generation !== awayGeneration || away) return;
+    awayDigest.value = finishAwayDigest(
+      record,
+      current,
+      completionsBetween(reports, record.enteredAtMs, exitedAt),
+      exitedAt,
+    );
+  }
+
+  function dismissAwayDigest() {
+    awayDigest.value = undefined;
+  }
 
   async function holdWakeLock() {
     const api = touchDevice() ? wakeLock() : undefined;
@@ -137,6 +216,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     const focused = page ? page.activeElement : null;
     returnFocus = typeof HTMLElement !== 'undefined' && focused instanceof HTMLElement ? focused : undefined;
     nowMs.value = now();
+    beginAway();
     // Always every project, whichever tab or page standby was entered from (HS2-JGW031).
     scope.value = { kind: 'all' };
     ticker = startInterval(() => {
@@ -160,6 +240,9 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     const focus = returnFocus;
     returnFocus = undefined;
     if (focus?.isConnected) focus.focus({ preventScroll: true });
+    const record = away;
+    away = undefined;
+    if (record) void finishAway(record);
   }
 
   /** A project's change stream connected (`true`), dropped (`false`), or closed (`undefined`). */
@@ -301,6 +384,14 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     const onVisibility = () => {
       if (document.visibilityState === 'visible' && scope.peek()) void holdWakeLock();
     };
+    // The away digest is an ordinary modal dialog over the app once standby has exited.
+    const digestRoot = document.createElement('div');
+    digestRoot.dataset.awayDigestRoot = '';
+    host.append(digestRoot);
+    const unmountDigest = mount(
+      digestRoot,
+      withControlledOpen(digestRoot, () => <AwayDigestDialog digest={awayDigest.value} />),
+    );
     for (const type of ACTIVITY_EVENTS) window.addEventListener(type, onActivity, { capture: true, passive: true });
     window.addEventListener('keydown', onKey, { capture: true });
     document.addEventListener('visibilitychange', onVisibility);
@@ -312,8 +403,11 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
       exit();
       idle.dispose();
       disposeFreshness();
+      disposeAway();
       unmount();
       root.remove();
+      unmountDigest();
+      digestRoot.remove();
     };
   }
 
@@ -328,6 +422,8 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     refreshSettings,
     applySettingsEvents,
     resyncSettings,
+    awayDigest,
+    dismissAwayDigest,
     saveSettings,
     wire,
   };

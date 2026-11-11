@@ -354,6 +354,14 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   (docs/34-glance-surfaces.md §34.4). Like `ProjectSummary`, it is a native button that opens the
   group's statistics. Before live state arrives the gauges rest at zero with no glyph.
 
+- `AwayDigestDialog` — **demo built** (`components/away-digest-dialog.tsx`, HS2-JJ9RYN; mock
+  `m7-away-digest-light` on HS2-CT5EWR; [34-glance-surfaces.md](34-glance-surfaces.md) §34.9): the
+  while-you-were-away digest shown on leaving standby. Kerf `DialogSurface` (labelled, described by
+  the time range in a `ListInsetText`), three `ContentItem` tiles in a `Grid` (Need you takes the
+  warning appearance while non-zero), one `Row` per event inset by `ListInsetText` with its Lucide
+  glyph and a link `Button` for Open or Answer, and a footer with Dismiss and a brand primary "Show
+  What Needs Me" shown only while something needs you. The demo opens each scenario from a visible
+  trigger and reports which action closed it.
 - `StandbyScreen` — **demo built** (`components/standby-screen.tsx`, HS2-EQVZTZ; mocks `m4`–`m6` on
   HS2-CT5EWR; [34-glance-surfaces.md](34-glance-surfaces.md) §34.5): the standby night display.
   Solid black, a very large dark-red `GlanceGauge` for tokens/min, the count of tickets updated in

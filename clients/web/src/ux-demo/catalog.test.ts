@@ -114,6 +114,7 @@ describe('UX demo catalog', () => {
       'glance-sparkline',
       'grid-sidebar-gauges',
       'standby-screen',
+      'away-digest-dialog',
       'repository-size',
       'tag-chip',
       'choice-card',

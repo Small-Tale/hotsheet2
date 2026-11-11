@@ -1047,6 +1047,74 @@
       }
     },
     {
+      "key": "hotsheet-web:away-digest-dialog",
+      "package": "hotsheet-web",
+      "id": "away-digest-dialog",
+      "name": "AwayDigestDialog",
+      "kind": "component",
+      "purpose": "The while-you-were-away digest shown on leaving standby: the standby window, Completed, Need you, and Tokens tiles, one row per event with the single action that resolves it, Dismiss, and Show What Needs Me (HS2-JJ9RYN).",
+      "publicExports": [
+        {
+          "name": "AwayDigestDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/away-digest-dialog.tsx",
+        "src/away-digest.ts",
+        "src/features/standby.tsx"
+      ],
+      "source": "src/components/away-digest-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "feedback"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Named by its title and described by the standby time range."
+        ]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/away-digest-dialog.tsx",
+        "composition": "src/components/away-digest-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:bulk-ticket-dialog",
       "package": "hotsheet-web",
       "id": "bulk-ticket-dialog",

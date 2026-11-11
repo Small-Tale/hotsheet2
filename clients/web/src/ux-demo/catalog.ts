@@ -185,6 +185,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('glance-sparkline'),
           cataloged('grid-sidebar-gauges', ['glance-gauge']),
           cataloged('standby-screen', ['glance-gauge']),
+          cataloged('away-digest-dialog', ['surface-scaffold', 'button', 'list', 'text', 'row']),
           cataloged('repository-size', ['state-banner', 'value-table', 'badge']),
           cataloged('tag-chip'),
           cataloged('choice-card'),

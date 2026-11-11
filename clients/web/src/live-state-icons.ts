@@ -1,6 +1,23 @@
-import { Activity, CirclePause, Hand, Hourglass, type IconNode, Moon, OctagonAlert, ZapOff } from 'lucide';
+import {
+  Activity,
+  BatteryWarning,
+  Check,
+  CirclePause,
+  Cpu,
+  Hand,
+  HardDrive,
+  Hourglass,
+  type IconNode,
+  MemoryStick,
+  Moon,
+  OctagonAlert,
+  Thermometer,
+  WifiOff,
+  ZapOff,
+} from 'lucide';
 
 import type { LiveWord } from './api.js';
+import type { HostHealthSignalId } from './host-health.js';
 
 /** One official Lucide asset: the node for `LucideIcon`'s `icon` and its kebab-case `name`. */
 export interface GlanceIcon {
@@ -24,3 +41,16 @@ export const LIVE_STATE_ICONS: Readonly<Record<LiveWord, GlanceIcon>> = {
 
 /** The Standby button glyph (HS2-CSPKQX). */
 export const STANDBY_ICON: GlanceIcon = { icon: Moon, name: 'moon' };
+
+/** A host health signal's glyph, as the sidebar callouts show it; the away digest's host rows use these (HS2-JJ9RYN). */
+export const HOST_SIGNAL_ICONS: Readonly<Record<HostHealthSignalId, GlanceIcon>> = {
+  disk: { icon: HardDrive, name: 'hard-drive' },
+  memory: { icon: MemoryStick, name: 'memory-stick' },
+  cpu: { icon: Cpu, name: 'cpu' },
+  power: { icon: BatteryWarning, name: 'battery-warning' },
+  network: { icon: WifiOff, name: 'wifi-off' },
+  thermal: { icon: Thermometer, name: 'thermometer' },
+};
+
+/** A project that finished its queue during standby (HS2-JJ9RYN, mock `m7-away-digest-light`). */
+export const QUEUE_FINISHED_ICON: GlanceIcon = { icon: Check, name: 'check' };

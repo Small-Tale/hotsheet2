@@ -7,6 +7,7 @@ import { demoModule as appChrome } from './app-chrome-demo';
 import { demoModule as appDialogs } from './app-dialogs-demo';
 import { demoModule as appLoadingIndicator } from './app-loading-indicator-demo';
 import { demoModule as appShell } from './app-shell-demo';
+import { demoModule as awayDigest } from './away-digest-demo';
 import { demoModule as bulkTicketDialog } from './bulk-ticket-dialog-demo';
 import { demoModule as choiceCard } from './choice-card-demo';
 import { demoModule as commandRunDialog } from './command-run-dialog-demo';
@@ -125,6 +126,7 @@ export const demoModules: readonly DemoModule[] = [
   projectLiveSection,
   gridSidebar,
   standby,
+  awayDigest,
 ];
 
 const entries = new Map<string, DemoEntry>();

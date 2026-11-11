@@ -314,4 +314,131 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await expect(standby(page)).toBeVisible();
     expect(host.reads).toBe(settled + 1);
   });
+
+  test('leaving standby shows what happened while you were away, and an uneventful standby exits silently (HS2-JJ9RYN)', async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const host = await openStandbyProject(page);
+    let completedAt = 0;
+    // The server's `GET /checkouts/{id}/confidence-report` shape; one completion during standby.
+    await page.route('**/checkouts/demo-checkout/confidence-report', (route) =>
+      route.fulfill({
+        json: {
+          completions: 1,
+          scored: 0,
+          bands: [],
+          events: completedAt
+            ? [{ slug: 'HS2-M1', completed_at: new Date(completedAt).toISOString(), outcome: 'pending' }]
+            : [],
+        },
+      }),
+    );
+    await expect.poll(() => host.sockets.length).toBeGreaterThan(0);
+    const moon = page.getByRole('button', { name: 'Enter Standby' });
+    const digest = page.locator('[data-away-digest]');
+
+    // Nothing happens: the display exits silently.
+    await moon.click();
+    await expect(standby(page)).toBeVisible();
+    await page.clock.fastForward(10 * MINUTE);
+    await standby(page).click({ position: { x: 700, y: 450 } });
+    await expect(standby(page)).toHaveCount(0);
+    await page.clock.runFor(1_000);
+    await expect(digest).toHaveCount(0);
+
+    // Overnight: a store starts waiting on the user, and a ticket completes.
+    await moon.click();
+    await expect(standby(page)).toBeVisible();
+    await page.clock.fastForward(30 * MINUTE);
+    const waitingAt = await page.evaluate(() => Date.now());
+    completedAt = waitingAt + MINUTE;
+    const waiting = {
+      ...store('stw', 'Small Tale Website', 'demo-checkout', 'active', host.now, 2),
+      state: 'waiting_on_you',
+      waiting: {
+        count: 1,
+        tickets: [{ ticket: 'HS2-M1', slug: 'HS2-M1', title: 'Synthetic question', reason: 'feedback' }],
+      },
+    };
+    for (const socket of host.sockets)
+      socket.send(JSON.stringify({ cursor: 1, store: 'stw', kind: 'live_state', id: 'stw', slug: '', live: waiting }));
+    await page.clock.fastForward(3 * 60 * MINUTE);
+    await standby(page).click({ position: { x: 700, y: 450 } });
+    await expect(digest).toBeVisible();
+    await expect(digest.getByText('While you were away')).toBeVisible();
+    await expect(digest.locator('[data-away-tile="completed"]')).toContainText('1');
+    await expect(digest.locator('[data-away-tile="need-you"]')).toHaveAttribute('data-attention', 'true');
+    const row = digest.locator('[data-away-event="waiting"]');
+    await expect(row).toContainText('Small Tale Website waited on you from');
+    await expect(row).toContainText('HS2-M1');
+    await expect(digest.getByRole('button', { name: 'Show What Needs Me' })).toBeVisible();
+    for (const [width, height, name] of [
+      [1440, 900, 'wide'],
+      [1024, 768, 'medium'],
+      [390, 844, 'narrow'],
+      [1440, 900, 'wide-again'],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      // Let the dialog's enter motion finish before measuring and capturing.
+      await page.clock.runFor(1_000);
+      await digest.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((item) => item.finished)));
+      const box = await digest.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+      await page.screenshot({ path: `target/visual-captures/hs2-jj9ryn-away-digest-${name}.png` });
+    }
+
+    // Answer opens the waiting ticket in its project and closes the digest.
+    const search = page.waitForRequest(
+      (request) => request.url().includes('/checkouts/demo-checkout/tickets') && request.url().includes('HS2-M1'),
+    );
+    await row.getByRole('button', { name: 'Answer' }).click();
+    await search;
+    await expect(digest).toHaveCount(0);
+
+    // Another eventful standby: "Show What Needs Me" opens cross-project Stats.
+    await moon.click();
+    await expect(standby(page)).toBeVisible();
+    const stalled = store('stw', 'Small Tale Website', 'demo-checkout', 'stalled', host.now, 3);
+    for (const socket of host.sockets)
+      socket.send(
+        JSON.stringify({
+          cursor: 2,
+          store: 'stw',
+          kind: 'live_state',
+          id: 'stw',
+          slug: '',
+          live: { ...stalled, waiting: waiting.waiting },
+        }),
+      );
+    await page.clock.fastForward(5 * MINUTE);
+    await page.keyboard.press('Escape');
+    await expect(digest).toBeVisible();
+    await expect(digest.locator('[data-away-event="stalled"]')).toContainText('Small Tale Website stalled at');
+    await digest.getByRole('button', { name: 'Show What Needs Me' }).click();
+    await expect(digest).toHaveCount(0);
+    await expect(page.locator('[data-component="stats-right-now"]')).toBeVisible();
+
+    // Dismiss and the close button both close it.
+    await moon.click();
+    const recovered = store('stw', 'Small Tale Website', 'demo-checkout', 'active', host.now, 4);
+    for (const socket of host.sockets)
+      socket.send(
+        JSON.stringify({
+          cursor: 3,
+          store: 'stw',
+          kind: 'live_state',
+          id: 'stw',
+          slug: '',
+          live: { ...recovered, activity: { ...recovered.activity, stalled: [{ slug: 'STW-9', worker: 'w' }] } },
+        }),
+      );
+    await page.clock.fastForward(5 * MINUTE);
+    await page.keyboard.press('Escape');
+    await expect(digest).toBeVisible();
+    await digest.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(digest).toHaveCount(0);
+  });
 });

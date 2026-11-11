@@ -261,7 +261,7 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   is first; other platforms report unsupported signals explicitly. The sampler also feeds the sidebar
   callouts (§34.6) and the away digest.
 
-## 34.9 While-you-were-away digest (HS2-JJ9RYN, design only)
+## 34.9 While-you-were-away digest (HS2-JJ9RYN, shipped)
 
 Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf's dialog component.
 
@@ -274,6 +274,35 @@ Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf
 - An uneventful standby exits silently, with no digest.
 - Sources: the live state transitions (HS2-JTTQMY), host health events (HS2-DTAVQA), and the activity
   narration digest ([15-activity-narration-interface.md](15-activity-narration-interface.md)) where useful.
+
+**As shipped (HS2-JJ9RYN).**
+
+- **Recording.** While standby shows, the standby controller diffs each pushed live-state snapshot and
+  host-health snapshot it already receives (`clients/web/src/away-digest.ts`). It issues no request.
+  It notes:
+  - a newly stalled claim (Open);
+  - a ticket that newly waits on you (Answer);
+  - a usage-limit pause, with its reset time, or how long it lasted once it cleared;
+  - a host signal that rose to warning or critical, with free disk, battery, or CPU busy where known;
+  - a store that went Active to Stopped with nothing ready ("finished its queue", with the number of
+    tickets claimed during that run).
+    A store first seen during standby counts from its first snapshot. The activity narration digest is
+    not used: these rows already cover what it would add.
+- **Tiles.**
+  - Completed counts the completion events inside the standby window, deduplicated across projects
+    that share a store. It comes from each open project's `GET /checkouts/{id}/confidence-report`,
+    read once when standby exits; a failed read counts none.
+  - Need you is the waiting count at the moment standby exits.
+  - Tokens sums the distinct per-minute token buckets the pushed snapshots carried during the window.
+    A gap of more than the snapshot's 5-minute window between snapshots undercounts. The live state
+    carries no cost, so the tile shows tokens only; the cost follow-up is HS2-9V4CGN.
+- **Silent exit.** The digest shows only when some row, completion, or token was recorded; otherwise
+  standby exits silently. Re-entering standby while the exit's completions load drops that digest.
+- **Dialog.** Kerf `DialogSurface`, named "While you were away" and described by the time range. Need
+  you takes the warning appearance while non-zero, as on Stats. Rows are oldest first, each with its
+  Lucide glyph from `live-state-icons.ts`. Open and Answer open the ticket in its project through the
+  linked-ticket search. "Show What Needs Me" (the mock's "Show what needs me" in Kerf's title-case button style) opens cross-project Stats and appears only while
+  something needs you. Dismiss, the close button, and Escape close it.
 
 ## 34.10 Icons and Kerf gaps
 
@@ -320,7 +349,7 @@ HS2-GAJSX9:
 | Host health sampler and push channel                      | §34.8      | HS2-DTAVQA | none                    |
 | Stats This Mac cards                                      | §34.8      | HS2-NS0AYR | HS2-DTAVQA, HS2-ERTNJ7  |
 | Stats overnight timeline with persisted transitions       | §34.8      | HS2-9AN4DN | HS2-JTTQMY, HS2-ERTNJ7  |
-| While-you-were-away digest                                | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
+| While-you-were-away digest (shipped)                      | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
 | Stuck causes: usage-limit resume time, awaiting input     | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
 | Standardize the state icons                               | §34.10     | HS2-CSPKQX | none                    |
 | Speedometer gauge request (intake)                        | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |
