@@ -304,3 +304,40 @@ describe('quiet-hours times in the device clock format (HS2-NNC8BG)', () => {
     expect(quietTimeChoices('bogus', (hhmm) => hhmm)).toHaveLength(96);
   });
 });
+
+describe('the explicit no-quiet-time choice (HS2-WVJNYM)', () => {
+  const ntfyTopic = { [CHANNEL_FIELD.setting('topic')]: 'hs' };
+  const times = { [CHANNEL_FIELD.quietStart]: '22:00', [CHANNEL_FIELD.quietEnd]: '07:00' };
+
+  it('saves no window for "No quiet time" even when time fields still hold values', () => {
+    const draft = channelDraftFromForm(ntfy, { ...ntfyTopic, ...times, [CHANNEL_FIELD.quietMode]: 'none' });
+    expect('error' in draft ? draft : draft.quiet_hours).toBeUndefined();
+  });
+
+  it('saves the window for "Daily quiet hours" and requires both times', () => {
+    const daily = channelDraftFromForm(ntfy, {
+      ...ntfyTopic,
+      ...times,
+      [CHANNEL_FIELD.quietMode]: 'daily',
+      [CHANNEL_FIELD.quietZone]: 'UTC',
+    });
+    expect('error' in daily ? daily : daily.quiet_hours).toEqual({
+      start: '22:00',
+      end: '07:00',
+      time_zone: 'UTC',
+      allow_errors: true,
+    });
+    expect(channelDraftFromForm(ntfy, { ...ntfyTopic, [CHANNEL_FIELD.quietMode]: 'daily' })).toEqual({
+      error: 'Quiet hours need both a start and an end time.',
+    });
+  });
+
+  it('keeps the stored error allowance of an edited channel when the window changes', () => {
+    const draft = channelDraftFromForm(
+      ntfy,
+      { ...ntfyTopic, ...times, [CHANNEL_FIELD.quietMode]: 'daily', [CHANNEL_FIELD.quietZone]: 'UTC' },
+      { ...phone, quiet_hours: { start: '21:00', end: '06:00', allow_errors: false } },
+    );
+    expect('error' in draft ? draft : draft.quiet_hours?.allow_errors).toBe(false);
+  });
+});

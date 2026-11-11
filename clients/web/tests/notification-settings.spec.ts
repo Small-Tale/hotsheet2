@@ -281,7 +281,7 @@ interface QuietConfig {
 }
 
 /** Capture the channel dialog's quiet-hours section at wide, medium, and narrow widths, then return wide. */
-async function captureQuietHours(page: Page, name: string) {
+async function captureQuietHours(page: Page, name: string, anchor = 'Max per Hour') {
   for (const [label, width] of [
     ['wide', 1280],
     ['medium', 900],
@@ -290,7 +290,7 @@ async function captureQuietHours(page: Page, name: string) {
     await page.setViewportSize({ width, height: 860 });
     await page
       .getByRole('dialog', { name: /Channel$/ })
-      .getByText('During quiet hours')
+      .getByText(anchor, { exact: true })
       .scrollIntoViewIfNeeded();
     await settled(page);
     await page.screenshot({ path: `target/visual-captures/${name}-${label}.png` });
@@ -303,7 +303,7 @@ test.describe('quiet hours follow the device', () => {
   test.use({ timezoneId: 'America/New_York', locale: 'en-US' });
 
   // HS2-9T27WQ: a new channel's quiet hours default to the device's named zone, which the server stores.
-  // HS2-NNC8BG: its times are picked in the device's clock format.
+  // HS2-NNC8BG: its times are picked in the device's clock format. HS2-WVJNYM: "No quiet time" is explicit.
   test('defaults the quiet-hours zone to the device time zone', async ({ page }) => {
     const server = await realTicketServer();
     try {
@@ -318,7 +318,18 @@ test.describe('quiet hours follow the device', () => {
       const settings = page.locator('[data-component="notification-settings"]');
       await settings.getByRole('button', { name: 'Add Channel…' }).click();
       const dialog = page.getByRole('dialog', { name: 'Add Channel' });
+      const mode = page.locator('kui-select[name="notification-channel-quiet-mode"]');
       const zone = page.locator('kui-select[name="notification-channel-quiet-zone"]');
+      // HS2-WVJNYM: a new channel starts with an explicit "No quiet time"; choosing a daily window reveals it.
+      await expect(mode).toHaveJSProperty('value', 'none');
+      await expect(mode).toContainText('No quiet time');
+      await expect(zone).toHaveCount(0);
+      await captureQuietHours(page, 'hs2-wvjnym-no-quiet-time');
+      await choose(page, 'notification-channel-quiet-mode', 'daily');
+      await expect(page.locator('kui-select[name="notification-channel-quiet-start"]')).toHaveJSProperty(
+        'value',
+        '22:00',
+      );
       await expect(zone).toHaveJSProperty('value', 'America/New_York');
       await expect(zone).toContainText('Local time zone (America/New York)');
       await dialog.getByLabel('Name').fill('Night Voice');
@@ -349,6 +360,23 @@ test.describe('quiet hours follow the device', () => {
           utc_offset: '+00:00',
           allow_errors: true,
         });
+
+      // HS2-WVJNYM: choosing "No quiet time" on an edited channel removes its stored window.
+      await page.getByRole('button', { name: 'Actions for Night Voice' }).click();
+      await page.getByRole('menuitem', { name: 'Edit…' }).click();
+      const edit = page.getByRole('dialog', { name: 'Edit Channel' });
+      await expect(mode).toHaveJSProperty('value', 'daily');
+      await expect(page.locator('kui-select[name="notification-channel-quiet-end"]')).toHaveJSProperty(
+        'value',
+        '07:15',
+      );
+      await choose(page, 'notification-channel-quiet-mode', 'none');
+      await expect(zone).toHaveCount(0);
+      await edit.getByRole('button', { name: 'Save Channel' }).click();
+      await expect(edit).toBeHidden();
+      await expect
+        .poll(async () => (await server.request<QuietConfig>('/notification-config')).channels[0])
+        .not.toHaveProperty('quiet_hours');
     } finally {
       await server.stop();
     }

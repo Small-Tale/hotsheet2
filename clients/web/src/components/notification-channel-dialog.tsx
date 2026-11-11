@@ -21,6 +21,7 @@ import {
   type ChannelFormField,
   channelFormFields,
   deviceTimeZone,
+  QUIET_TIME_CHOICES,
   quietTimeChoices,
   quietZoneChoices,
 } from '../notification-settings-model';
@@ -83,7 +84,9 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
     // Quiet-hours selects are controlled: a re-render (a resize, a notifier change) shows what the person
     // chose, not the stored value (HS2-NNC8BG).
     chosen = (name: string, stored: string) => editor.fields?.[name] ?? stored,
-    choose = NOTIFICATIONS_AND_LINKS_ACTIONS.chooseNotificationChannelField.attrs;
+    choose = NOTIFICATIONS_AND_LINKS_ACTIONS.chooseNotificationChannelField.attrs,
+    // An explicit choice between no quiet time and a daily window (HS2-WVJNYM).
+    quiet = chosen(CHANNEL_FIELD.quietMode, channel?.quiet_hours ? 'daily' : 'none') === 'daily';
   return (
     <DialogSurface
       label={adding ? 'Add Channel' : 'Edit Channel'}
@@ -126,32 +129,46 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
         />
         {fields.map(settingControl)}
         <ListHeader label="Quiet Hours and Limits" />
-        <Grid minColumnWidth={rem(9)} gap="m">
-          <Select
-            name={CHANNEL_FIELD.quietStart}
-            label="Quiet From"
-            placeholderText="Choose a time"
-            value={chosen(CHANNEL_FIELD.quietStart, channel?.quiet_hours?.start ?? '')}
-            choices={quietTimeChoices(channel?.quiet_hours?.start)}
-            rootAttributes={choose}
-          />
-          <Select
-            name={CHANNEL_FIELD.quietEnd}
-            label="Quiet Until"
-            placeholderText="Choose a time"
-            value={chosen(CHANNEL_FIELD.quietEnd, channel?.quiet_hours?.end ?? '')}
-            choices={quietTimeChoices(channel?.quiet_hours?.end)}
-            rootAttributes={choose}
-          />
-        </Grid>
-        {/* Full width so the zone name is never truncated (HS2-9T27WQ). */}
         <Select
-          name={CHANNEL_FIELD.quietZone}
-          label="Time Zone"
-          value={chosen(CHANNEL_FIELD.quietZone, zone.value)}
-          choices={zone.choices}
+          name={CHANNEL_FIELD.quietMode}
+          label="Quiet Time"
+          value={quiet ? 'daily' : 'none'}
+          choices={QUIET_TIME_CHOICES}
+          hint={
+            quiet
+              ? 'During quiet hours, rule deliveries are skipped; error notifications still go through.'
+              : 'Rule deliveries go out at any time of day.'
+          }
           rootAttributes={choose}
         />
+        {quiet ? (
+          <>
+            <Grid minColumnWidth={rem(9)} gap="m">
+              <Select
+                name={CHANNEL_FIELD.quietStart}
+                label="Quiet From"
+                value={chosen(CHANNEL_FIELD.quietStart, channel?.quiet_hours?.start ?? '22:00')}
+                choices={quietTimeChoices(channel?.quiet_hours?.start)}
+                rootAttributes={choose}
+              />
+              <Select
+                name={CHANNEL_FIELD.quietEnd}
+                label="Quiet Until"
+                value={chosen(CHANNEL_FIELD.quietEnd, channel?.quiet_hours?.end ?? '07:00')}
+                choices={quietTimeChoices(channel?.quiet_hours?.end)}
+                rootAttributes={choose}
+              />
+            </Grid>
+            {/* Full width so the zone name is never truncated (HS2-9T27WQ). */}
+            <Select
+              name={CHANNEL_FIELD.quietZone}
+              label="Time Zone"
+              value={chosen(CHANNEL_FIELD.quietZone, zone.value)}
+              choices={zone.choices}
+              rootAttributes={choose}
+            />
+          </>
+        ) : null}
         <TextField
           name={CHANNEL_FIELD.maxPerHour}
           label="Max per Hour"
@@ -159,9 +176,6 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
           min={1}
           value={channel?.max_per_hour === undefined ? '' : String(channel.max_per_hour)}
         />
-        <Text tone="quiet" size="compact">
-          During quiet hours, rule deliveries are skipped; error notifications still go through.
-        </Text>
         {editor.error ? (
           <Text tone="danger" role="alert">
             {editor.error}

@@ -605,7 +605,10 @@ from the notifier's settings schema:
 - a password input for a credential.
 
 A credential input never shows a stored value ("Stored; leave empty to keep it"), and it is
-written only through the secret route. Quiet hours and the hourly limit sit below.
+written only through the secret route. Quiet hours and the hourly limit sit below. A
+**Quiet Time** select offers "No quiet time" (the default for a new channel; saving removes any
+window) or "Daily quiet hours", which reveals the window's times and zone, starting at 22:00 to
+07:00 for a new window (HS2-WVJNYM).
 **Quiet From** and **Quiet Until** are selects of every quarter hour, shown in the device's own
 clock format (for example "10:00 PM" where the locale uses a 12-hour clock, "22:00" where it
 uses 24 hours) and saved as `HH:MM`; a saved time off that grid, such as one set from the CLI,

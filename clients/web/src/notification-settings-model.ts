@@ -32,6 +32,7 @@ export const CHANNEL_FIELD = {
   notifier: 'notification-channel-notifier',
   label: 'notification-channel-label',
   setting: (key: string) => `setting:${key}`,
+  quietMode: 'notification-channel-quiet-mode',
   quietStart: 'notification-channel-quiet-start',
   quietEnd: 'notification-channel-quiet-end',
   quietZone: 'notification-channel-quiet-zone',
@@ -117,6 +118,12 @@ export function supportedTimeZones(): readonly string[] {
   const intl = Intl as { supportedValuesOf?: (key: 'timeZone') => string[] };
   return typeof intl.supportedValuesOf === 'function' ? intl.supportedValuesOf('timeZone') : [];
 }
+
+/** The channel dialog's explicit quiet-time choice (HS2-WVJNYM): none, or a daily window. */
+export const QUIET_TIME_CHOICES = [
+  { value: 'none', label: 'No quiet time' },
+  { value: 'daily', label: 'Daily quiet hours' },
+];
 
 /** A quiet-hours zone choice value that keeps a stored fixed offset (`offset:+09:00`). */
 const OFFSET_CHOICE = 'offset:';
@@ -229,9 +236,13 @@ export function channelDraftFromForm(
       return { error: `${field.label} must be one of ${field.choices.join(', ')}.` };
     else settings[field.key] = raw;
   }
-  const start = text(values, CHANNEL_FIELD.quietStart),
-    end = text(values, CHANNEL_FIELD.quietEnd);
-  if (Boolean(start) !== Boolean(end)) return { error: 'Quiet hours need both a start and an end time.' };
+  // "No quiet time" saves no window whatever the time fields held; "Daily quiet hours" needs both times
+  // (HS2-WVJNYM). Without the choice, the times alone decide.
+  const mode = values[CHANNEL_FIELD.quietMode],
+    start = mode === 'none' ? '' : text(values, CHANNEL_FIELD.quietStart),
+    end = mode === 'none' ? '' : text(values, CHANNEL_FIELD.quietEnd);
+  if (Boolean(start) !== Boolean(end) || (mode === 'daily' && !start))
+    return { error: 'Quiet hours need both a start and an end time.' };
   const zone = text(values, CHANNEL_FIELD.quietZone) || deviceTimeZone();
   const quiet_hours: NotificationQuietHours | undefined =
     start && end
