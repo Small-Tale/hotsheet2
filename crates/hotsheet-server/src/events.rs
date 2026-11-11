@@ -332,6 +332,40 @@ impl AppState {
         self.worklist_refresher.wait_idle(timeout)
     }
 
+    /// Tell clients that the sync health of the ticket store at `store_root` changed state
+    /// (HS2-ADHFKZ): one replayable `ticket_store_sync` event per checkout that links the
+    /// store (`id` = checkout id, `slug` = the new state), so an open client reloads that
+    /// project's sync health without polling. Carries no reason text or paths.
+    pub fn announce_ticket_store_sync(
+        &self,
+        store_id: &str,
+        store_root: &FsPath,
+        state: hotsheet_ticketing::sync_health::SyncState,
+    ) {
+        let Ok(checkouts) = self.checkout_registry.list() else {
+            return;
+        };
+        for checkout in checkouts.into_iter().filter(|checkout| {
+            checkout
+                .stores
+                .iter()
+                .any(|root| same_path(FsPath::new(root), store_root))
+        }) {
+            self.emit(ChangeEvent {
+                live: None,
+                cursor: None,
+                store: store_id.into(),
+                kind: "ticket_store_sync".into(),
+                id: checkout.id,
+                slug: state.as_str().into(),
+                message: None,
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+        }
+    }
+
     /// Tell clients that a sync raised the ticket store at `store_root` across a GitHub size
     /// limit (HS2-KKFEY5): one replayable `repository_size` event per checkout that links the
     /// store (`id` = checkout id, `slug` = the new level, `message` = the warning), so an

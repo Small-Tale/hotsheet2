@@ -17,6 +17,7 @@ use hotsheet_ticketing::repository_size::{
     GitObjectSize, SizeLevel, crossing_message, git_object_size,
 };
 use hotsheet_ticketing::sync::{SyncReport, sync_once};
+use hotsheet_ticketing::sync_health::SyncState;
 
 use crate::AppState;
 
@@ -60,7 +61,24 @@ pub fn sync_all_with_sizes(
             if !levels.contains(&id) {
                 levels.observe(&id, &root, measure(path));
             }
+            // HS2-ADHFKZ: tell open clients when this store's sync health changes state
+            // (for example offline -> rejected, or rejected -> synced), not on every pass.
+            let before = hotsheet_ticketing::sync_health::read_record(path)
+                .and_then(|record| record.outcome);
             let report = sync_once(path);
+            let after = SyncState::from(report);
+            // Offline becomes banner-worthy only once it persists, so that crossing is a
+            // change too.
+            let offline_became_persistent = after == SyncState::Offline
+                && hotsheet_ticketing::sync_health::read_record(path).is_some_and(|record| {
+                    record.consecutive_failures
+                        == hotsheet_ticketing::sync_health::PERSISTENT_OFFLINE_FAILURES
+                });
+            if report != SyncReport::NoRemote
+                && (before != Some(after) || offline_became_persistent)
+            {
+                state.announce_ticket_store_sync(&id, path, after);
+            }
             // Measure after every pass that reached the remote. `UpToDate` matters too: the
             // store's best-effort autocommit push can publish growth between passes, leaving
             // this pass nothing to push.
@@ -110,11 +128,14 @@ impl SizeLevels {
 }
 
 /// The delay before the next pass: the base interval when all is well, else an
-/// exponentially-backed-off delay (capped) while any store is `Offline`. A `Conflict` is a
-/// user-action-needed state, not a transient one, so it does **not** back off (the next
-/// pass re-checks cheaply once the user resolves it).
+/// exponentially-backed-off delay (capped) while any store is `Offline` or `Rejected`
+/// (HS2-ADHFKZ: a refused push re-sends the same history, so it must not hammer the remote
+/// at the base cadence). A `Conflict` or stalled rebase is a user-action-needed state
+/// whose next pass is a cheap local check, so it does **not** back off.
 pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncReport)]) -> Duration {
-    let any_offline = reports.iter().any(|(_, r)| *r == SyncReport::Offline);
+    let any_offline = reports
+        .iter()
+        .any(|(_, r)| matches!(r, SyncReport::Offline | SyncReport::Rejected));
     if any_offline {
         (current * 2).clamp(base, MAX_BACKOFF)
     } else {
@@ -373,6 +394,11 @@ mod tests {
         // A conflict is not transient → no backoff.
         let conflict = vec![("s".into(), SyncReport::Conflict)];
         assert_eq!(next_delay(base, base, &conflict), base);
+        // HS2-ADHFKZ: a refused push backs off like offline; a stalled rebase does not.
+        let rejected = vec![("s".into(), SyncReport::Rejected)];
+        assert_eq!(next_delay(base, base * 2, &rejected), base * 4);
+        let stalled = vec![("s".into(), SyncReport::RebaseInProgress)];
+        assert_eq!(next_delay(base, base * 2, &stalled), base);
     }
 
     /// HS2-KKFEY5: the loop announces each rise across a limit exactly once, re-announces

@@ -47,6 +47,7 @@ import {
   parseTerminalRead,
   parseTicket,
   parseTicketRow,
+  parseTicketStoreSyncReport,
   parseTrashPurge,
   parseTrashSettings,
   type ResponseParser,
@@ -518,4 +519,44 @@ it('accepts the best-effort not_shared feedback delivery status (HS2-H9Z9KZ)', (
   });
   expect(() => parseFeedbackDelivery({ status: 'not_shared' })).toThrow();
   expect(() => parseFeedbackDelivery({ status: 'unknown', note_id: 'note-1' })).toThrow();
+});
+
+describe('HS2-ADHFKZ ticket-store sync health parser matches the Rust SyncHealth wire shape', () => {
+  const minimal = {
+    state: 'pending',
+    syncing: false,
+    unpublished_commits: 2,
+    incoming_commits: 0,
+    consecutive_failures: 0,
+  };
+  const wire = (health: Record<string, unknown>) => ({
+    checkout_id: 'web-1a2b3c',
+    stores: [{ connection_id: 'git:web', label: 'web.hs2', locator: '/work/web.hs2', health }],
+  });
+
+  it('accepts the minimal shape (every skipped optional absent) and the full rejected shape', () => {
+    expect(parseTicketStoreSyncReport(wire(minimal)).stores[0]?.health.state).toBe('pending');
+    const full = {
+      ...minimal,
+      state: 'rejected',
+      upstream: 'origin/main',
+      last_attempt_at: '2026-11-10T01:00:00Z',
+      last_success_at: '2026-11-09T01:00:00Z',
+      consecutive_failures: 3,
+      reason: 'remote: error: GH001',
+      oversized: [{ path: 'attachments/a.bin', bytes: 118_971_148, limit_bytes: 104_857_600 }],
+      next_action: 'Run hotsheet-cli sync.',
+    };
+    expect(parseTicketStoreSyncReport(wire(full)).stores[0]?.health.oversized?.[0]?.bytes).toBe(118_971_148);
+    expect(parseTicketStoreSyncReport({ checkout_id: 'x', stores: [] }).stores).toEqual([]);
+  });
+
+  it('rejects an unknown state, a null skipped field, and a malformed oversized entry', () => {
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, state: 'broken' }))).toThrow(ServerResponseShapeError);
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, reason: null }))).toThrow(ServerResponseShapeError);
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, oversized: [{ path: 'a' }] }))).toThrow(
+      ServerResponseShapeError,
+    );
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, syncing: 'no' }))).toThrow(ServerResponseShapeError);
+  });
 });

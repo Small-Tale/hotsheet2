@@ -4922,6 +4922,21 @@ transition history (HS2-XKXE7V).
   which the server publishes when its background sync raises a ticket store across a limit
   (HS2-KKFEY5). It reloads that project's report, so the banner appears without polling.
 
+- **Ticket-store publication failures (HS2-ADHFKZ):** the client requests
+  `GET /checkouts/{id}/repository/sync` once when a project is first shown, and again only
+  on a `ticket_store_sync` change event for that checkout. A failed request keeps the last
+  report. The project shell shows `TicketStoreSyncBanner`, a warning-toned `ShellBanner`,
+  while any linked Git ticket store is `rejected`, `conflict`, `rebase_in_progress`, or
+  `history_recovery_required`, or has been `offline` for three or more passes. The banner:
+  - names the store, or the number of failing stores;
+  - says why in one sentence, naming an oversized unpublished file and its size;
+  - says that tickets are saved on this computer and how many local changes are
+    unpublished;
+  - repeats the server's next step, which names the headless `hotsheet-cli` command.
+
+  It has no dismiss and clears when a sync publishes again. The state contract is
+  [02](02-ticket-storage.md) §2.12.2.
+
 - **Narrow widths:** value tables stack under their labels.
 - **Load start:** opening the view starts both reports outside the opening effect's
   dependency tracking. Previously, starting a request synchronously inside the effect made

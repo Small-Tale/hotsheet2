@@ -4102,6 +4102,52 @@ paths:
         required: true
         schema:
           type: string
+  /checkouts/{reference}/repository/sync:
+    get:
+      operationId: checkout_repository_sync
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketStoreSyncReport'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
   /checkouts/{reference}/repository/compaction:
     get:
       operationId: checkout_repository_compaction
@@ -21236,6 +21282,97 @@ components:
             - critical
         detail:
           type: string
+      additionalProperties: false
+    TicketStoreSyncState:
+      type: string
+      description: A ticket store's published sync state (HS2-ADHFKZ, docs/02 §2.12.2).
+      enum:
+        - not_repository
+        - no_remote
+        - pending
+        - up_to_date
+        - synced
+        - offline
+        - rejected
+        - conflict
+        - rebase_in_progress
+        - history_recovery_required
+    TicketStoreOversizedObject:
+      type: object
+      required:
+        - path
+        - bytes
+        - limit_bytes
+      properties:
+        path:
+          type: string
+        bytes:
+          type: integer
+        limit_bytes:
+          type: integer
+      additionalProperties: false
+    TicketStoreSyncHealth:
+      type: object
+      required:
+        - state
+        - syncing
+        - unpublished_commits
+        - incoming_commits
+        - consecutive_failures
+      properties:
+        state:
+          $ref: '#/components/schemas/TicketStoreSyncState'
+        syncing:
+          type: boolean
+        upstream:
+          type: string
+        unpublished_commits:
+          type: integer
+        incoming_commits:
+          type: integer
+        last_attempt_at:
+          type: string
+        last_success_at:
+          type: string
+        consecutive_failures:
+          type: integer
+        reason:
+          type: string
+        oversized:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketStoreOversizedObject'
+        next_action:
+          type: string
+      additionalProperties: false
+    TicketStoreSyncReport:
+      type: object
+      description: Every linked Git ticket store's sync health (HS2-ADHFKZ).
+      required:
+        - checkout_id
+        - stores
+      properties:
+        checkout_id:
+          type: string
+        stores:
+          type: array
+          items:
+            type: object
+            required:
+              - connection_id
+              - label
+              - locator
+              - health
+            properties:
+              connection_id:
+                type: string
+              label:
+                type: string
+              locator:
+                type: string
+              health:
+                $ref: '#/components/schemas/TicketStoreSyncHealth'
+            additionalProperties: false
       additionalProperties: false
     RepositorySizeReport:
       type: object

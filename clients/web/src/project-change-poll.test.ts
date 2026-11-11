@@ -5,6 +5,7 @@ import {
   containsRepositoryChange,
   containsRepositorySizeChange,
   containsTicketChange,
+  containsTicketStoreSyncChange,
   startProjectChangeStream,
 } from './project-change-poll';
 
@@ -66,6 +67,15 @@ describe('project change long polling', () => {
     expect(containsRepositorySizeChange(crossed, 'checkout-two')).toBe(false);
     expect(containsRepositoryChange(crossed, 'checkout-one')).toBe(false);
     expect(containsTicketChange(crossed)).toBe(false);
+  });
+
+  it('scopes ticket-store sync state changes to their checkout (HS2-ADHFKZ)', () => {
+    const changed = response(4, 'ticket_store_sync');
+    changed.events[0].id = 'checkout-one';
+    expect(containsTicketStoreSyncChange(changed, 'checkout-one')).toBe(true);
+    expect(containsTicketStoreSyncChange(changed, 'checkout-two')).toBe(false);
+    expect(containsRepositorySizeChange(changed, 'checkout-one')).toBe(false);
+    expect(containsTicketChange(changed)).toBe(false);
   });
 
   it('handshakes, coalesces batches, ignores unrelated events, and refreshes overflow', async () => {

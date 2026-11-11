@@ -77,7 +77,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             cmd,
             &hotsheet_cli::resolve_store_path(path.clone(), &ctx.cwd),
         ),
-        Cmd::Sync => cmd_sync(path),
+        Cmd::Sync {
+            status,
+            json,
+            abort_stalled_rebase,
+        } => cmd_sync(path, status, json, abort_stalled_rebase),
         Cmd::Doctor { project } => cmd_doctor(path, &project),
         Cmd::Reindex { index } => cmd_reindex(path, index),
         Cmd::Worklist => cmd_worklist(path, &ctx.cwd),
@@ -486,9 +490,86 @@ pub(crate) fn cmd_link(store: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn cmd_sync(path: &Path) -> Result<()> {
+/// Render a store's sync health for `sync --status` (HS2-ADHFKZ).
+pub(crate) fn render_sync_health(health: &hotsheet_ticketing::SyncHealth) -> String {
+    use hotsheet_ticketing::repository_size::format_bytes;
+    let mut out = format!("State: {}", health.state.as_str());
+    if health.syncing {
+        out.push_str(" (a sync is running now)");
+    }
+    out.push('\n');
+    if let Some(upstream) = &health.upstream {
+        out.push_str(&format!("Upstream: {upstream}\n"));
+    }
+    out.push_str(&format!(
+        "Unpublished local commits: {}\nIncoming commits not yet integrated: {}\n",
+        health.unpublished_commits, health.incoming_commits
+    ));
+    out.push_str(&format!(
+        "Last attempt: {}\nLast success: {}\n",
+        health.last_attempt_at.as_deref().unwrap_or("never"),
+        health.last_success_at.as_deref().unwrap_or("never")
+    ));
+    if health.consecutive_failures > 0 {
+        out.push_str(&format!(
+            "Consecutive failures: {}\n",
+            health.consecutive_failures
+        ));
+    }
+    if let Some(reason) = &health.reason {
+        out.push_str("Reason:\n");
+        for line in reason.lines() {
+            out.push_str(&format!("  {line}\n"));
+        }
+    }
+    for object in &health.oversized {
+        out.push_str(&format!(
+            "Oversized unpublished file: {} ({}, limit {})\n",
+            object.path,
+            format_bytes(object.bytes),
+            format_bytes(object.limit_bytes)
+        ));
+    }
+    if let Some(action) = &health.next_action {
+        out.push_str(&format!("Next step: {action}\n"));
+    }
+    out
+}
+
+pub(crate) fn cmd_sync(
+    path: &Path,
+    status: bool,
+    json: bool,
+    abort_stalled_rebase: bool,
+) -> Result<()> {
     use hotsheet_ticketing::SyncReport;
     use hotsheet_ticketing::repository_size::{self, SizeLevel};
+    if status {
+        // Read-only: works even while a history-recovery guard blocks normal opens.
+        FsStore::open_without_maintenance(path)?;
+        let health = hotsheet_ticketing::sync_health::health(path);
+        if json {
+            println!("{}", serde_json::to_string_pretty(&health)?);
+        } else {
+            print!("{}", render_sync_health(&health));
+        }
+        return Ok(());
+    }
+    if abort_stalled_rebase {
+        FsStore::open_without_maintenance(path)?;
+        let aborted = hotsheet_ticketing::sync::abort_stalled_integration(path)?;
+        println!(
+            "Aborted the stalled {}; the branch is back at {}. Backup of the previous HEAD: {}",
+            match aborted.aborted {
+                hotsheet_ticketing::sync_health::IntegrationInProgress::Rebase => "rebase",
+                hotsheet_ticketing::sync_health::IntegrationInProgress::Merge => "merge",
+            },
+            aborted.head,
+            aborted.backup_ref
+        );
+        println!("Run `hotsheet-cli sync` to integrate and publish.");
+        return Ok(());
+    }
     FsStore::open(path)?; // validate it's a store before touching git
     // The level before the sync, so a sync that carries the store over a GitHub limit says
     // so once (HS2-P1GYWH). One `git count-objects`, no attachment walk.
@@ -513,12 +594,30 @@ pub(crate) fn cmd_sync(path: &Path) -> Result<()> {
             }
         }
         SyncReport::Offline => {
-            println!("Remote unreachable — kept working locally; the next sync will retry.")
+            let health = hotsheet_ticketing::sync_health::health(path);
+            println!(
+                "Remote unreachable — kept working locally; the next sync will retry.{}",
+                health
+                    .reason
+                    .map(|reason| format!(" ({reason})"))
+                    .unwrap_or_default()
+            );
         }
         SyncReport::Conflict => bail!(
             "a ticket had a body change on both sides that couldn't auto-merge — resolve it \
              manually, then commit (the working tree was left clean; nothing was lost)"
         ),
+        // HS2-ADHFKZ: failures that retrying cannot fix exit non-zero with the recorded
+        // reason and next step, so a headless caller sees the same state as the app.
+        SyncReport::Rejected
+        | SyncReport::RebaseInProgress
+        | SyncReport::HistoryRecoveryRequired => {
+            let health = hotsheet_ticketing::sync_health::health(path);
+            bail!(
+                "sync did not publish; local tickets are saved but not on the remote\n{}",
+                render_sync_health(&health).trim_end()
+            )
+        }
     }
     Ok(())
 }

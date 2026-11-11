@@ -666,6 +666,28 @@ pub(crate) async fn checkout_repository_size(
         })
 }
 
+/// Every linked Git ticket store's sync health (HS2-ADHFKZ): last attempt and success,
+/// unpublished commits, and a durable failure state with its reason and next step.
+/// Read-only and local (no fetch); `ticket_store_sync` change events say when to reload.
+pub(crate) async fn checkout_repository_sync(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<hotsheet_ticketing::sync_health::TicketStoreSyncReport>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    tokio::task::spawn_blocking(move || hotsheet_ticketing::sync_health::checkout_report(&checkout))
+        .await
+        .map(Json)
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("ticket store sync task failed: {error}"),
+            )
+        })
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct CompactionQuery {
     source: String,

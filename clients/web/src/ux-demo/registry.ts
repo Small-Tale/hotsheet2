@@ -58,6 +58,7 @@ import { demoModule as ticketGroupDialog } from './ticket-group-dialog-demo';
 import { demoModule as ticketMetadata } from './ticket-metadata-demo';
 import { demoModule as ticketRow } from './ticket-row-demo';
 import { demoModule as ticketSearchField } from './ticket-search-field-demo';
+import { demoModule as ticketStoreSyncBanner } from './ticket-store-sync-banner-demo';
 import { demoModule as toolbarControlGroup } from './toolbar-control-group-demo';
 import { demoModule as toolbar } from './toolbar-demo';
 import { demoModule as toolbarText } from './toolbar-text-demo';
@@ -98,6 +99,7 @@ export const demoModules: readonly DemoModule[] = [
   confidenceCalibration,
   statsDashboard,
   repositorySize,
+  ticketStoreSyncBanner,
   confidenceBadge,
   toolbarControlGroup,
   contentComponents,

@@ -17,6 +17,7 @@ import {
   containsRepositoryChange,
   containsRepositorySizeChange,
   containsTicketChange,
+  containsTicketStoreSyncChange,
   type ProjectChangeStreamOptions,
   startProjectChangeStream,
 } from '../project-change-poll';
@@ -62,6 +63,8 @@ export interface ProjectChangeStreamsDependencies {
   onActivity?: (project: Project, storeId: string, activity: ActivityEvent) => void;
   /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
   loadRepositorySize: (target: Project) => Promise<unknown>;
+  /** Reload a project's ticket-store sync health after a `ticket_store_sync` event (HS2-ADHFKZ). */
+  loadTicketStoreSync?: (target: Project) => Promise<unknown>;
   /**
    * Per-store live state for glance surfaces (HS2-JTTQMY): `live_state` events apply to it,
    * and each stream resync re-reads `GET /live-state` once. No timer reads it.
@@ -247,6 +250,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     removeClientNotifications,
     onActivity,
     loadRepositorySize,
+    loadTicketStoreSync,
     liveStates,
     hostHealth,
     standbySettings,
@@ -484,6 +488,9 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             // The server's background sync pushed a ticket store past a size limit: reload the
             // report so the shell banner updates without polling (HS2-KKFEY5).
             if (containsRepositorySizeChange(response, current.id)) void loadRepositorySize(current);
+            // A sync changed a ticket store's publication state: reload its health (HS2-ADHFKZ).
+            if (loadTicketStoreSync && containsTicketStoreSyncChange(response, current.id))
+              void loadTicketStoreSync(current);
           }),
         });
         projectChangeStreams.set(current.id, () => {

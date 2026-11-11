@@ -51,6 +51,7 @@ pub mod standby;
 pub mod store;
 pub mod store_git;
 pub mod sync;
+pub mod sync_health;
 pub mod terminal_limits;
 pub mod wire;
 pub mod worklist;
@@ -100,6 +101,7 @@ pub use store::{
     recover_ticket_identity,
 };
 pub use sync::{SyncReport, sync_once};
+pub use sync_health::{SyncHealth, SyncState};
 pub use wire::{ApiNote, ApiTicket, TicketRow};
 
 /// Mint a new ticket ULID from an injected clock + rng.

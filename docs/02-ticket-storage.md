@@ -1010,6 +1010,72 @@ production code of `hotsheet-aitools`, `hotsheet-server`, `hotsheet-cli`, and
 `hotsheet-terminals` (only signal helpers such as `kill` are exempt). A user who wants a
 hook's `GIT_DIR` inside a terminal can export it in that shell.
 
+### 2.12.2 Sync health, publication failures, and recovery
+
+A saved ticket is local until a sync publishes it. Hot Sheet records every remote-backed
+sync cycle so the app and the CLI can say when publication has stopped and why
+(HS2-ADHFKZ). The record lives in the store's private Git directory
+(`<git-dir>/hotsheet-sync-health.json`). It is never tracked, is shared by the CLI and
+every server on the machine, and survives restarts. It holds timestamps, commit ids,
+counts, object paths and sizes, and Git's rejection lines with remote URLs removed.
+It never holds credentials or ticket or attachment content.
+
+Each cycle ends in one state:
+
+| State                       | Meaning                                                                                       | Retry                                |
+| --------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `no_remote`                 | Local-only store, or a designated root whose code repository publishes (HS2-V6JEBR)           | none                                 |
+| `pending`                   | A remote exists and no outcome applies yet                                                    | next pass                            |
+| `up_to_date` / `synced`     | The remote has every local commit                                                             | base cadence                         |
+| `offline`                   | Fetch or push could not reach the remote, authentication failed, or another pusher won a race | exponential backoff                  |
+| `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit)   | exponential backoff; needs a repair  |
+| `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it                 | not replayed for the same divergence |
+| `rebase_in_progress`        | A rebase or merge is in progress or was abandoned in the store                                | none until finished or aborted       |
+| `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                          | none until recovered                 |
+
+The rules:
+
+- **A refusal is not an outage.** Git's explicit refusal markers (`[remote rejected]`,
+  `pre-receive hook declined`, GitHub's `GH001` large-file error) make a cycle
+  `rejected`. A non-fast-forward or `fetch first` race stays `offline`, because a
+  re-fetch fixes it. A rejection scans the unpublished commits once and names every
+  blob over the remote's file limit (GitHub's 100 MiB) by path and size. Local commits
+  are kept.
+- **Never stack replays.** A cycle first checks for `rebase-merge`, `rebase-apply`, or
+  `MERGE_HEAD` in the store's Git directory. If one exists, the cycle stops before
+  committing or fetching. A conflicting rebase records its `(HEAD, upstream)` pair. The
+  next pass reports the same conflict without replaying thousands of local commits
+  again, until either side moves.
+- **Durable failure counter.** Every failure state increments
+  `consecutive_failures`; a publication resets it and sets `last_success_at`.
+- **Live conditions win.** The health read checks the remote, the recovery guard, and
+  an unfinished rebase live, without contacting the remote. Unpublished and incoming
+  commit counts compare `HEAD` with the last fetched upstream.
+
+`GET /checkouts/{id}/repository/sync` returns every linked Git source's health, with
+its state, `syncing`, `unpublished_commits`, `incoming_commits`, `last_attempt_at`,
+`last_success_at`, `consecutive_failures`, `reason`, `oversized`, and `next_action`.
+The background loop emits a replayable `ticket_store_sync` change event (with the new
+state as `slug`) when a store's state changes, or when an outage reaches three
+consecutive failures. An open client reloads health only on that event. The web shell
+shows a persistent `TicketStoreSyncBanner` while any store is `rejected`, `conflict`,
+`rebase_in_progress`, `history_recovery_required`, or `offline` for three or more
+passes. The banner names the store, the cause, how many local changes are unpublished,
+and the next step.
+
+Headless parity:
+
+- `hotsheet-cli sync --status [--json]` prints the same health.
+- `hotsheet-cli sync` exits non-zero with that health for `rejected`,
+  `rebase_in_progress`, and `history_recovery_required`.
+- `hotsheet-cli sync --abort-stalled-rebase` is the explicit recovery for a stalled
+  rebase or merge. It records `refs/hotsheet/sync-backup/<timestamp>` at the current
+  `HEAD`, aborts, and keeps every local commit on the branch. It never pushes.
+
+Bounded automatic repair through the merge path (HS2-XJC62Z) and the guided
+oversized-attachment repair through Git LFS or compaction (HS2-VYPTN0) are follow-ups.
+So is deferring store autocommits while a rebase or merge is unfinished (HS2-JGH11Q).
+
 ## 2.13 Copy & move between stores
 
 Tickets need to move between stores — e.g. promote a scratch idea into the team

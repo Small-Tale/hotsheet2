@@ -3026,6 +3026,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "ticket-store-sync-banner",
+      "name": "TicketStoreSyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while any linked Git ticket store is not publishing (rejected push, conflict, stalled rebase, history recovery, or persistent outage), naming the store, the cause, the unpublished work, and the headless next step (HS2-ADHFKZ).",
+      "useWhen": [
+        "The server-computed ticket-store sync health for the open project reports a store that is not publishing."
+      ],
+      "avoidWhen": [
+        "A repository is over a GitHub size limit; RepositorySizeBanner owns that warning."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/ticket-store-sync-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ticket-timeline",
       "name": "TicketTimeline",
       "kind": "component",

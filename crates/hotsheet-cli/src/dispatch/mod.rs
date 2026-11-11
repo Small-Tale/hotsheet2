@@ -67,7 +67,7 @@ impl Cmd {
             | Compatibility { .. }
             | Import { .. }
             | Checkout { .. }
-            | Sync
+            | Sync { .. }
             | Doctor { .. }
             | Reindex { .. }
             | Worklist

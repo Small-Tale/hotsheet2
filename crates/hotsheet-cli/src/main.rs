@@ -634,8 +634,21 @@ enum Cmd {
     },
     /// Sync the store with its git remote now: fetch, integrate incoming changes through
     /// the semantic merge driver (rebase), and push local commits. Normally automatic — this
-    /// is the explicit "sync now" (docs/02 §2.12).
-    Sync,
+    /// is the explicit "sync now" (docs/02 §2.12). Every cycle records the store's durable
+    /// sync health (HS2-ADHFKZ), which `--status` prints without contacting the remote.
+    Sync {
+        /// Print the store's sync health (last attempt/success, unpublished commits,
+        /// failure state, reason, next step) instead of syncing. Read-only and local.
+        #[arg(long, conflicts_with = "abort_stalled_rebase")]
+        status: bool,
+        /// With `--status`: print the health as JSON (the server endpoint's per-store shape).
+        #[arg(long, requires = "status")]
+        json: bool,
+        /// Abort a rebase or merge left in progress in the store, after recording a backup
+        /// ref at the current HEAD. Local commits on the branch are kept; nothing is pushed.
+        #[arg(long)]
+        abort_stalled_rebase: bool,
+    },
     /// Check store health and print read-only first-run/setup/migration guidance.
     Doctor {
         /// Code-project directory to inspect for installed-tool setup and HS1 data.

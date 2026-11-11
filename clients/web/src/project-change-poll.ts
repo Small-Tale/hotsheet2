@@ -56,6 +56,10 @@ export const containsRepositoryChange = (response: PollResponse, checkoutId: str
 export const containsRepositorySizeChange = (response: PollResponse, checkoutId: string): boolean =>
   response.events.some((event) => event.kind === 'repository_size' && event.id === checkoutId);
 
+/** A sync changed the health state of one of this checkout's ticket stores (HS2-ADHFKZ). */
+export const containsTicketStoreSyncChange = (response: PollResponse, checkoutId: string): boolean =>
+  response.events.some((event) => event.kind === 'ticket_store_sync' && event.id === checkoutId);
+
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
     const timeout = globalThis.setTimeout(resolve, milliseconds);

@@ -9877,6 +9877,120 @@ fn sync_pulls_and_pushes_between_clones() {
     }
 }
 
+/// HS2-ADHFKZ headless parity: a remote that refuses the push makes `sync` fail with the
+/// remote's reason (not "unreachable"), `sync --status --json` reports the durable
+/// `rejected` state with the local ticket still saved, a stalled rebase is reported and
+/// aborted by `sync --abort-stalled-rebase`, and the store recovers to `up_to_date`.
+#[cfg(unix)]
+#[test]
+fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
+    use std::os::unix::fs::PermissionsExt;
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn status_json(dir: &Path) -> serde_json::Value {
+        let out = hs(dir)
+            .args(["sync", "--status", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&out).unwrap()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a = tempfile::tempdir().unwrap();
+    hs(a.path()).arg("init").assert().success();
+    git(a.path(), &["config", "user.email", "a@example.com"]);
+    git(a.path(), &["config", "user.name", "A"]);
+    git(a.path(), &["remote", "add", "origin", bare_url]);
+    hs(a.path()).arg("sync").assert().success();
+    assert_eq!(status_json(a.path())["state"], "synced");
+
+    // The remote starts refusing pushes (a synthetic GitHub-style hook).
+    let hook = bare.path().join("hooks").join("pre-receive");
+    std::fs::write(
+        &hook,
+        "#!/bin/sh\necho 'error: GH001: Large files detected.' >&2\nexit 1\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let slug = new_ticket(a.path(), "saved locally");
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("State: rejected"))
+        .stderr(predicate::str::contains("GH001"))
+        .stderr(predicate::str::contains("unreachable").not());
+    let rejected = status_json(a.path());
+    assert_eq!(rejected["state"], "rejected");
+    assert!(rejected["unpublished_commits"].as_u64().unwrap() >= 1);
+    assert!(rejected["last_success_at"].is_string());
+    hs(a.path()).args(["show", &slug]).assert().success();
+    hs(a.path())
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Next step:"));
+
+    // The remote accepts again: sync recovers.
+    std::fs::remove_file(&hook).unwrap();
+    hs(a.path()).arg("sync").assert().success();
+    assert_eq!(status_json(a.path())["state"], "synced");
+
+    // A rebase stopped on a conflicting plain file is detected and aborted headlessly.
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+    std::fs::write(a.path().join("notes.txt"), "local\n").unwrap();
+    assert!(git(a.path(), &["add", "notes.txt"]));
+    assert!(git(a.path(), &["commit", "--quiet", "-m", "local notes"]));
+    assert!(git(a.path(), &["fetch", "--quiet"]));
+    assert!(!git(a.path(), &["rebase", "--quiet", "@{u}"]));
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("State: rebase_in_progress"))
+        .stderr(predicate::str::contains("--abort-stalled-rebase"));
+    hs(a.path())
+        .args(["sync", "--abort-stalled-rebase"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("refs/hotsheet/sync-backup/"));
+    hs(a.path())
+        .args(["sync", "--abort-stalled-rebase"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "no rebase or merge is in progress",
+        ));
+    // The plain-file conflict remains a real conflict; resolving it by taking the remote
+    // side lets sync settle.
+    hs(a.path()).arg("sync").assert().failure();
+    assert_eq!(status_json(a.path())["state"], "conflict");
+    assert!(git(a.path(), &["reset", "--quiet", "--hard", "@{u}"]));
+    hs(a.path()).arg("sync").assert().success();
+    assert_eq!(status_json(a.path())["state"], "up_to_date");
+}
+
 /// Per-user read tracking via the gitignored local overlay (HS2-21): a fresh ticket lists
 /// as unread (●); `read` clears it; the state lives in `local/reads.json`, gitignored.
 #[test]

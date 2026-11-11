@@ -89,6 +89,7 @@ import {
   parseTerminalSettings,
   parseTicketPrefix,
   parseTicketRow,
+  parseTicketStoreSyncReport,
   parseTicketUsage,
   parseToolConnection,
   parseToolSession,
@@ -571,6 +572,43 @@ export interface RepositorySizeReport {
   thresholds: { warning_bytes: number; critical_bytes: number };
   level: RepositorySizeLevel;
   entries: RepositorySizeEntry[];
+}
+/** A ticket store's published sync state (HS2-ADHFKZ, docs/02 §2.12.2). */
+export type TicketStoreSyncState =
+  | 'not_repository'
+  | 'no_remote'
+  | 'pending'
+  | 'up_to_date'
+  | 'synced'
+  | 'offline'
+  | 'rejected'
+  | 'conflict'
+  | 'rebase_in_progress'
+  | 'history_recovery_required';
+/** An unpublished Git blob larger than the remote accepts. */
+export interface TicketStoreOversizedObject {
+  path: string;
+  bytes: number;
+  limit_bytes: number;
+}
+/** One ticket store's durable sync health; computed by the server without contacting the remote. */
+export interface TicketStoreSyncHealth {
+  state: TicketStoreSyncState;
+  syncing: boolean;
+  upstream?: string;
+  unpublished_commits: number;
+  incoming_commits: number;
+  last_attempt_at?: string;
+  last_success_at?: string;
+  consecutive_failures: number;
+  reason?: string;
+  oversized?: TicketStoreOversizedObject[];
+  next_action?: string;
+}
+/** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ): every linked Git ticket store. */
+export interface TicketStoreSyncReport {
+  checkout_id: string;
+  stores: Array<{ connection_id: string; label: string; locator: string; health: TicketStoreSyncHealth }>;
 }
 /** Read-only preview of old attached payloads and orphaned Git history. */
 export interface CompactionPlan {
@@ -1947,6 +1985,9 @@ export class Api {
   /** Git object and attachment sizes with GitHub-limit levels (HS2-QF44T7). */
   checkoutRepositorySize = (checkout: string) =>
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
+  /** Each linked Git ticket store's durable sync health (HS2-ADHFKZ). */
+  checkoutRepositorySync = (checkout: string) =>
+    this.parsed(parseTicketStoreSyncReport, `/checkouts/${encodeURIComponent(checkout)}/repository/sync`);
 
   checkoutRepositoryCompaction = (checkout: string, source: string, minAgeDays = 90, oversizedBytes = 10_000_000) =>
     this.parsed(

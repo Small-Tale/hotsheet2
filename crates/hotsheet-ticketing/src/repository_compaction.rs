@@ -1110,7 +1110,7 @@ mod tests {
         drop(held);
         assert_eq!(
             result.recv_timeout(Duration::from_secs(5)).unwrap(),
-            crate::sync::SyncReport::Offline
+            crate::sync::SyncReport::HistoryRecoveryRequired
         );
         worker.join().unwrap();
         assert_eq!(git(store.root(), &["rev-parse", "HEAD"]).unwrap(), head);
@@ -1447,7 +1447,7 @@ mod tests {
         ));
         assert_eq!(
             crate::sync::sync_once(store.root()),
-            crate::sync::SyncReport::Offline
+            crate::sync::SyncReport::HistoryRecoveryRequired
         );
         assert!(recover_store(store.root()).is_err());
         assert_eq!(

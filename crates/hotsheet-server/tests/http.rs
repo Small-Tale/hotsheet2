@@ -25362,6 +25362,138 @@ async fn background_sync_announces_a_repository_size_crossing_to_linked_checkout
     assert_eq!(announced[0].slug, "critical");
 }
 
+/// HS2-ADHFKZ: a background sync whose push the remote refuses reports `rejected` (not
+/// offline), announces one replayable `ticket_store_sync` event per state change for the
+/// linked checkout, and `GET /checkouts/{id}/repository/sync` returns the durable health;
+/// once the remote accepts again the store reports `synced` and a new event fires.
+#[cfg(unix)]
+#[tokio::test]
+async fn hs2_adhfkz_repository_sync_route_reports_a_rejected_store_and_announces_the_change() {
+    use hotsheet_server::sync_loop::sync_all;
+    use hotsheet_ticketing::sync::SyncReport;
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let store_root = dir.path().join("tickets");
+    let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
+    let remote = dir.path().join("remote.git");
+    let git = |cwd: &std::path::Path, args: &[&str]| {
+        let status = hotsheet_ticketing::git::command()
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(
+        dir.path(),
+        &["init", "--quiet", "--bare", remote.to_str().unwrap()],
+    );
+    git(&store_root, &["config", "user.name", "Sync Test"]);
+    git(&store_root, &["config", "user.email", "sync@test.invalid"]);
+    git(
+        &store_root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    let registry_path = dir.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    let code = dir.path().join("code");
+    std::fs::create_dir_all(&code).unwrap();
+    let checkout = registry
+        .register(&code, None, None, vec![store_root.clone()])
+        .unwrap();
+    let st = AppState::new(store.clone(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path);
+    let mut events = st.subscribe();
+    let sync_events = |events: &mut tokio::sync::broadcast::Receiver<_>| {
+        let mut found: Vec<hotsheet_server::ChangeEvent> = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            let event: hotsheet_server::ChangeEvent = event;
+            if event.kind == "ticket_store_sync" {
+                found.push(event);
+            }
+        }
+        found
+    };
+
+    let reports = sync_all(&st);
+    assert!(matches!(
+        reports[0].1,
+        SyncReport::Synced { pushed: true, .. }
+    ));
+    let first = sync_events(&mut events);
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert_eq!(first[0].slug, "synced");
+    assert_eq!(first[0].id, checkout.id);
+
+    // The remote starts refusing pushes; a local commit stays unpublished.
+    let hook = remote.join("hooks").join("pre-receive");
+    std::fs::write(
+        &hook,
+        "#!/bin/sh\necho 'error: GH001: Large files detected.' >&2\nexit 1\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(store_root.join("local.md"), "saved locally\n").unwrap();
+    git(&store_root, &["add", "local.md"]);
+    git(&store_root, &["commit", "--quiet", "-m", "local"]);
+    assert_eq!(sync_all(&st)[0].1, SyncReport::Rejected);
+    let rejected = sync_events(&mut events);
+    assert_eq!(rejected.len(), 1, "{rejected:?}");
+    assert_eq!(rejected[0].slug, "rejected");
+    assert!(rejected[0].cursor.is_some(), "replayable over long-poll");
+    assert!(rejected[0].message.is_none(), "events carry no reason text");
+    // The same state again is not re-announced.
+    assert_eq!(sync_all(&st)[0].1, SyncReport::Rejected);
+    assert!(sync_events(&mut events).is_empty());
+
+    let router = app(st.clone());
+    let resp = router
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{}/repository/sync", checkout.id),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let report = body_json(resp).await;
+    assert_eq!(report["checkout_id"], checkout.id.as_str());
+    let health = &report["stores"][0]["health"];
+    assert_eq!(health["state"], "rejected");
+    assert_eq!(health["consecutive_failures"], 2);
+    assert_eq!(health["unpublished_commits"], 1);
+    assert!(health["last_success_at"].is_string());
+    assert!(
+        health["reason"].as_str().unwrap().contains("GH001"),
+        "{health}"
+    );
+    assert!(
+        !health["reason"]
+            .as_str()
+            .unwrap()
+            .contains(remote.to_str().unwrap())
+    );
+    assert!(health["next_action"].is_string());
+    let missing = router
+        .oneshot(authed("GET", "/checkouts/no-such/repository/sync", None))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    // Recovery: the remote accepts the history again.
+    std::fs::remove_file(&hook).unwrap();
+    assert!(matches!(
+        sync_all(&st)[0].1,
+        SyncReport::Synced { pushed: true, .. }
+    ));
+    let recovered = sync_events(&mut events);
+    assert_eq!(recovered.len(), 1, "{recovered:?}");
+    assert_eq!(recovered[0].slug, "synced");
+}
+
 #[tokio::test]
 async fn claim_next_release_renew_over_http() {
     let (_d, st) = state();

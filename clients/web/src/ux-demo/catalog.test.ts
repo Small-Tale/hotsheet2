@@ -186,6 +186,7 @@ describe('UX demo catalog', () => {
       'source-stale-notice-banner',
       'client-update-notice-banner',
       'repository-size-banner',
+      'ticket-store-sync-banner',
       'notifications-paused-banner',
       'provider-icon',
       'ticket-source-setup-dialog',

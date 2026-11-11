@@ -9111,6 +9111,79 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-store-sync-banner",
+      "package": "hotsheet-web",
+      "id": "ticket-store-sync-banner",
+      "name": "TicketStoreSyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while any linked Git ticket store is not publishing (rejected push, conflict, stalled rebase, history recovery, or persistent outage), naming the store, the cause, the unpublished work, and the headless next step (HS2-ADHFKZ).",
+      "publicExports": [
+        {
+          "name": "TicketStoreSyncBanner"
+        },
+        {
+          "name": "failingTicketStores"
+        },
+        {
+          "name": "syncFailureSummary"
+        },
+        {
+          "name": "PERSISTENT_OFFLINE_FAILURES"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-store-sync-banner.tsx"
+      ],
+      "source": "src/components/ticket-store-sync-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-store-sync-banner.tsx",
+        "composition": "src/components/ticket-store-sync-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-timeline",
       "package": "hotsheet-web",
       "id": "ticket-timeline",

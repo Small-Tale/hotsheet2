@@ -164,6 +164,7 @@ import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalRailSurface } from '../features/terminal-rail-surface';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
 import { createTicketGroupsController } from '../features/ticket-groups';
+import { createTicketStoreSync } from '../features/ticket-store-sync';
 import { createTicketViewSurface } from '../features/ticket-view-surface';
 import { createTicketWorkflows } from '../features/ticket-workflows';
 import { createWorkspaceSearchController, type SidebarSearchCounts } from '../features/workspace-search';
@@ -1658,6 +1659,17 @@ export async function startHotSheetWebClient() {
     const state = repositorySizeByProject.value[projectId] as RepositorySizeState | undefined;
     return state?.status === 'ready' ? state.report : undefined;
   };
+  // Ticket-store sync health for the shell's publication-failure strip (HS2-ADHFKZ): loaded when
+  // a project is first shown and on `ticket_store_sync` change events, never on a timer.
+  const ticketStoreSync = createTicketStoreSync((target) => new Api(target.apiPath).checkoutRepositorySync(target.id));
+  effect(() => {
+    const current = project();
+    if (!current) return;
+    queueMicrotask(() => {
+      ticketStoreSync.loadOnce(current);
+    });
+  });
+  const ticketStoreSyncReport = ticketStoreSync.report;
   // Still-opening remembered roots stay remembered, in place, if the set is saved mid-restore (HS2-2BEJXD).
   const currentRememberedProjectRoots = () => [
     ...new Set([
@@ -4304,6 +4316,7 @@ export async function startHotSheetWebClient() {
     removeClientNotifications: clientNotifications.removeProject,
     onActivity: announcerController.onActivity,
     loadRepositorySize,
+    loadTicketStoreSync: ticketStoreSync.load,
     liveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
@@ -5551,6 +5564,7 @@ export async function startHotSheetWebClient() {
     projectTerminalDrawerProps,
     projectTicketCounts,
     repositorySizeReport,
+    ticketStoreSyncReport,
     searchHelpOpen,
     searchOpen,
     guidanceSearchOpen,

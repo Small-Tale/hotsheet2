@@ -7021,6 +7021,80 @@
       }
     },
     {
+      "id": "ticket-store-sync-banner",
+      "name": "TicketStoreSyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while any linked Git ticket store is not publishing (rejected push, conflict, stalled rebase, history recovery, or persistent outage), naming the store, the cause, the unpublished work, and the headless next step (HS2-ADHFKZ).",
+      "source": "src/components/ticket-store-sync-banner.tsx",
+      "publicExports": [
+        {
+          "name": "TicketStoreSyncBanner"
+        },
+        {
+          "name": "failingTicketStores"
+        },
+        {
+          "name": "syncFailureSummary"
+        },
+        {
+          "name": "PERSISTENT_OFFLINE_FAILURES"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-store-sync-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-store-sync-banner.tsx",
+        "composition": "src/components/ticket-store-sync-banner.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "The server-computed ticket-store sync health for the open project reports a store that is not publishing."
+        ],
+        "avoidWhen": ["A repository is over a GitHub size limit; RepositorySizeBanner owns that warning."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "notifications-paused-banner",
       "name": "NotificationsPausedBanner",
       "kind": "component",

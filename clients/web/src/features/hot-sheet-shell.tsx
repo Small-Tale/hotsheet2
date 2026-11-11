@@ -12,6 +12,7 @@ import {
   type FullTicket,
   type RepositorySizeReport,
   type TicketRow as WireTicketRow,
+  type TicketStoreSyncReport,
 } from '../api';
 import { type AppRegionId } from '../app-region-resize';
 import { showsClientUpdateNotice } from '../client-update-notice';
@@ -51,6 +52,7 @@ import {
   inspectorSkeletonPanel,
   notificationInspectorSurfacePanel,
 } from '../components/ticket-inspector-surface';
+import { TicketStoreSyncBanner } from '../components/ticket-store-sync-banner';
 import type {
   GlobalWorkspaceSurfaceProps,
   SidebarSurfaceProps,
@@ -141,6 +143,8 @@ export interface HotSheetShellDependencies {
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
   /** The project's last repository size report, when one has loaded (HS2-P1GYWH). */
   repositorySizeReport: (projectId: string) => RepositorySizeReport | undefined;
+  /** The project's last ticket-store sync health report, when one has loaded (HS2-ADHFKZ). */
+  ticketStoreSyncReport: (projectId: string) => TicketStoreSyncReport | undefined;
   searchHelpOpen: Signal<boolean>;
   searchOpen: Signal<boolean>;
   guidanceSearchOpen: Signal<boolean>;
@@ -236,6 +240,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     projectTerminalDrawerProps,
     projectTicketCounts,
     repositorySizeReport,
+    ticketStoreSyncReport,
     searchHelpOpen,
     searchOpen,
     guidanceSearchOpen,
@@ -642,6 +647,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               dismissed: current.repositorySizeWarningDismissed,
               projectId: current.id,
             })}
+            {TicketStoreSyncBanner({ report: ticketStoreSyncReport(current.id) })}
             {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
               <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
             )}

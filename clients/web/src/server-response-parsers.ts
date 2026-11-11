@@ -73,6 +73,8 @@ import type {
   TerminalSettings,
   Ticket,
   TicketRow,
+  TicketStoreSyncHealth,
+  TicketStoreSyncReport,
   TicketUsage,
   ToolConnection,
   ToolSession,
@@ -985,6 +987,50 @@ export const parseRepositorySizeReport = shape<RepositorySizeReport>('repository
   thresholds: shape('size thresholds', { warning_bytes: isNumber, critical_bytes: isNumber }).check,
   level: isSizeLevel,
   entries: listOf(repositorySizeEntry.check),
+});
+
+const TICKET_STORE_SYNC_STATES = new Set([
+  'not_repository',
+  'no_remote',
+  'pending',
+  'up_to_date',
+  'synced',
+  'offline',
+  'rejected',
+  'conflict',
+  'rebase_in_progress',
+  'history_recovery_required',
+]);
+const ticketStoreSyncHealth = shape<TicketStoreSyncHealth>(
+  'ticket store sync health',
+  {
+    state: (field) => typeof field === 'string' && TICKET_STORE_SYNC_STATES.has(field),
+    syncing: isBoolean,
+    unpublished_commits: isNumber,
+    incoming_commits: isNumber,
+    consecutive_failures: isNumber,
+  },
+  {},
+  {
+    upstream: isString,
+    last_attempt_at: isString,
+    last_success_at: isString,
+    reason: isString,
+    oversized: listOf(shape('oversized object', { path: isString, bytes: isNumber, limit_bytes: isNumber }).check),
+    next_action: isString,
+  },
+);
+/** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ). */
+export const parseTicketStoreSyncReport = shape<TicketStoreSyncReport>('ticket store sync', {
+  checkout_id: isString,
+  stores: listOf(
+    shape('ticket store sync entry', {
+      connection_id: isString,
+      label: isString,
+      locator: isString,
+      health: ticketStoreSyncHealth.check,
+    }).check,
+  ),
 });
 
 const compactionCandidate = shape<CompactionPlan['candidates'][number]>('compaction candidate', {
