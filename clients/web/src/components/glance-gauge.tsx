@@ -26,8 +26,10 @@ export type GlanceGaugeSize = 'chip' | 'medium' | 'large' | 'fill';
 export interface GlanceGaugeProps {
   /** The current reading, in `unit`. */
   value: number;
-  /** The series' 24-hour peak; it sets the full-scale end of the dial. */
+  /** The series' 24-hour peak, or a shared scale's; it sets the full-scale end of the dial. */
   peak: number;
+  /** Names a shared `peak` in the title, e.g. `All projects 24-hour peak` (HS2-VFQM4D); defaults to the series' own. */
+  scaleLabel?: string;
   /** What the gauge measures, for the hover title and accessible name, e.g. `Token rate`. */
   label: string;
   /** The reading's unit, e.g. `tokens/min`; drawn in the full dial and named in the title. */
@@ -50,6 +52,7 @@ const NEEDLE_LENGTH = GLANCE_GAUGE_RADIUS - 6;
 export function GlanceGauge({
   value,
   peak,
+  scaleLabel,
   label,
   unit,
   variant = 'full',
@@ -59,7 +62,7 @@ export function GlanceGauge({
 }: GlanceGaugeProps) {
   const fraction = glanceGaugeFraction(value, peak);
   const angle = glanceGaugeAngle(fraction);
-  const title = glanceGaugeTitle(label, value, unit, peak);
+  const title = glanceGaugeTitle(label, value, unit, peak, scaleLabel);
   const full = variant === 'full';
   const track = glanceGaugeArcPath(GLANCE_GAUGE_START_ANGLE, GLANCE_GAUGE_END_ANGLE);
   const needleTip = { x: GLANCE_GAUGE_CENTER.x, y: GLANCE_GAUGE_CENTER.y - NEEDLE_LENGTH };

@@ -204,7 +204,11 @@ pages (option A) over a single integrated line.
 1. **Completion** (default, unchanged): `r3-grid-sidebar-page1`.
 2. **Gauges:** `r4-grid-sidebar-page2-{light,dark}`. The same list header per group as page 1 (All
    projects, then each project) and the same divider under All projects. Each group's body is a pair of
-   bare gauges (tokens/min, tickets updated/h) with the project's state glyph at the row end.
+   bare gauges (tokens/min, tickets updated/h) with the project's state glyph at the row end. When All
+   projects shows (two or more open projects), each project's gauges read against the All projects scale
+   (the sum of the open stores' 24-hour peaks) so their needles compare, and their titles name that
+   scale; All projects and a lone project use their own (HS2-VFQM4D). The completion charts already
+   share the All projects maximum (HS2-C9JM65).
 3. **Triage:** `m2-grid-sidebar-projects`. One row per project with state glyph and state word, current
    ticket and phase, sorted by need, stopped-as-expected rows dimmed, durations on hover only (§34.4).
    The All projects group lists Needs you (only when non-zero) and workers live versus expected.

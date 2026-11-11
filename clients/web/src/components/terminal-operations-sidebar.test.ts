@@ -165,6 +165,27 @@ describe('TerminalOperationsSidebar', () => {
       expect(markup).toContain('data-action="open-project-stats"');
     });
 
+    it('scales project gauges to the All projects scale so needles compare (HS2-VFQM4D)', () => {
+      // All projects reads 1.2k of a 4.8k peak; each project 1.2k of its own 2.4k peak.
+      const shared = { ...allLive, tokensPeakPerMinute: 4800, ticketsPeakPerHour: 24 };
+      const markup = String(gridSidebarPageContent('gauges', { projects: live, allLive: shared }));
+      expect(markup.match(/data-gauge-scale="all-projects"/g)).toHaveLength(2);
+      expect(markup.match(/data-gauge-scale="own"/g)).toHaveLength(1);
+      // Every needle (aggregate and both projects) sits at a quarter of the shared full scale.
+      expect(markup.match(/data-tone="brand"[^>]*data-fraction="0.25"/g)).toHaveLength(3);
+      expect(markup.match(/data-tone="success"[^>]*data-fraction="0.25"/g)).toHaveLength(3);
+      // Titles name the shared scale; the aggregate names its own.
+      expect(markup.match(/Token rate: 1.2k tokens\/min \(All projects 24-hour peak 4.8k\)/g)).toHaveLength(4);
+      expect(markup.match(/Token rate: 1.2k tokens\/min \(24-hour peak 4.8k\)/g)).toHaveLength(2);
+      // A lone project has no All projects group and keeps its own scale.
+      const single = String(gridSidebarPageContent('gauges', { projects: [live[0]], allLive: shared }));
+      expect(single).not.toContain('data-gauge-scale="all-projects"');
+      expect(single).toContain('Token rate: 1.2k tokens/min (24-hour peak 2.4k)');
+      // Before All projects reports, projects keep their own scale.
+      const pending = String(gridSidebarPageContent('gauges', { projects: live }));
+      expect(pending).not.toContain('data-gauge-scale="all-projects"');
+    });
+
     it('rests the gauges at zero with no glyph before live state arrives', () => {
       const markup = String(
         gridSidebarPageContent('gauges', {

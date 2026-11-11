@@ -508,7 +508,8 @@ The web client keeps the snapshots in `clients/web/src/live-state.ts`
 (`createLiveStateStore`). Its pure helpers (`tokensPerMinute`, `ticketsUpdatedPerHour`,
 `progressAgeMs`, `etaOverrunMs`, `gaugeFraction`, `aggregateLiveStates`, `pausedUntilMs`,
 `awaitingInputCauses`) give glance surfaces their numbers. The all-projects gauges scale to the
-sum of the stores' peaks (HS2-Y11TFC).
+sum of the stores' peaks, and the workspace grid sidebar's project gauges share that scale
+(HS2-VFQM4D).
 
 ### 32.8.4 Stuck causes (HS2-EGKKA0)
 

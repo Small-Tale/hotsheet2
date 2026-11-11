@@ -355,7 +355,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
 
 - `GridSidebarGauges` — **demo built** (`components/grid-sidebar-gauges.tsx`, HS2-E1AQE8; mock
   `r4-grid-sidebar-page2`): the workspace grid sidebar's gauge-page body. Two medium bare
-  `GlanceGauge`s (blue tokens/min, green tickets updated/h, each on its own 24-hour peak) and the
+  `GlanceGauge`s (blue tokens/min, green tickets updated/h, each on its own 24-hour peak, or with
+  `scale` on the All projects peaks so project needles compare; the gauge's `scaleLabel` then names
+  that scale in its title, HS2-VFQM4D) and the
   group's state glyph (`LIVE_STATE_ICONS`, HS2-CSPKQX) at the row end; the All projects group shows
   no glyph. Values, durations, and causes are only in hover titles and the accessible name
   (docs/34-glance-surfaces.md §34.4). Like `ProjectSummary`, it is a native button that opens the

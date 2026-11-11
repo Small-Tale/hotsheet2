@@ -200,7 +200,16 @@ test('pages the workspace grid sidebar by dot, arrow key, and trackpad scroll an
   );
   await expect(gauges.locator('[data-project-id="all"] [data-live-word]')).toHaveCount(0);
   await expect(gauges.locator('[data-variant="bare"][data-empty="false"]')).not.toHaveCount(0);
+  // Project needles read against the All projects scale, the sum of the three stores' 2k peaks
+  // (HS2-VFQM4D): 900 tokens/min is 0.15 of 6k for a project and 2.7k is 0.45 for All projects.
+  const demoTokens = gauges.locator('[data-project-id="demo-checkout"] svg[data-tone="brand"]');
+  await expect(demoTokens).toHaveAttribute('data-fraction', '0.15');
+  await expect(demoTokens).toHaveAccessibleName('Token rate: 900 tokens/min (All projects 24-hour peak 6k)');
+  const allTokens = gauges.locator('[data-project-id="all"] svg[data-tone="brand"]');
+  await expect(allTokens).toHaveAttribute('data-fraction', '0.45');
+  await expect(allTokens).toHaveAccessibleName('Token rate: 2.7k tokens/min (24-hour peak 6k)');
   await page.screenshot({ path: 'target/visual-captures/hs2-ezsqdf-gauges-1440.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vfqm4d-gauges-1440.png' });
 
   // The dots stay fixed at the sidebar bottom while the page scrolls underneath them.
   const before = await dots.boundingBox();

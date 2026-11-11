@@ -93,4 +93,13 @@ describe('glance gauge text (HS2-CVE3SK)', () => {
   it('says when there is no 24-hour peak yet', () => {
     expect(glanceGaugeTitle('Token rate', 0, 'tokens/min', 0)).toBe('Token rate: 0 tokens/min (no 24-hour peak yet)');
   });
+
+  it('names a shared scale when one is given (HS2-VFQM4D)', () => {
+    expect(glanceGaugeTitle('Token rate', 1600, 'tokens/min', 6200, 'All projects 24-hour peak')).toBe(
+      'Token rate: 1.6k tokens/min (All projects 24-hour peak 6.2k)',
+    );
+    expect(glanceGaugeTitle('Token rate', 0, 'tokens/min', 0, 'All projects 24-hour peak')).toBe(
+      'Token rate: 0 tokens/min (no All projects 24-hour peak yet)',
+    );
+  });
 });

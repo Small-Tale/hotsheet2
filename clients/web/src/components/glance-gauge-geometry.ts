@@ -62,14 +62,24 @@ export function formatGlanceValue(value: number): string {
   return COMPACT_NUMBER.format(value).toLowerCase();
 }
 
+/** The scale a gauge names when it reads against its own series' peak. */
+export const GLANCE_GAUGE_OWN_SCALE = '24-hour peak';
+
 /**
  * The gauge's hover title and accessible name: what it measures, the reading with its unit, and the
- * 24-hour peak that sets its scale (HS2-CT5EWR: "just show text via title / on hover").
+ * 24-hour peak that sets its scale (HS2-CT5EWR: "just show text via title / on hover"). `scale` names a
+ * shared scale, e.g. `All projects 24-hour peak` for workspace project gauges (HS2-VFQM4D).
  */
-export function glanceGaugeTitle(label: string, value: number, unit: string, peak: number): string {
+export function glanceGaugeTitle(
+  label: string,
+  value: number,
+  unit: string,
+  peak: number,
+  scale = GLANCE_GAUGE_OWN_SCALE,
+): string {
   const reading = `${label}: ${formatGlanceValue(value)} ${unit}`;
-  if (!Number.isFinite(peak) || peak <= 0) return `${reading} (no 24-hour peak yet)`;
-  return `${reading} (24-hour peak ${formatGlanceValue(peak)})`;
+  if (!Number.isFinite(peak) || peak <= 0) return `${reading} (no ${scale} yet)`;
+  return `${reading} (${scale} ${formatGlanceValue(peak)})`;
 }
 
 function round(value: number): number {

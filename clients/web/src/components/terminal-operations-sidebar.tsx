@@ -137,6 +137,12 @@ export function gridSidebarPageContent(page: GridSidebarPage, { projects, allLiv
   const aggregate = projects.length > 1 ? aggregateTerminalProjectSummaries(projects) : undefined;
   const ordered = page === 'triage' ? triageOrder(projects) : projects;
   const groups: TerminalProjectSummary[] = aggregate ? [{ ...aggregate, live: allLive }, ...ordered] : [...ordered];
+  // Project gauges read against the All projects scale so their needles compare (HS2-VFQM4D), as the
+  // completion charts share the aggregate's maximum (HS2-C9JM65).
+  const sharedScale =
+    aggregate && allLive
+      ? { tokensPeakPerMinute: allLive.tokensPeakPerMinute, ticketsPeakPerHour: allLive.ticketsPeakPerHour }
+      : undefined;
   return (
     <List gap="m" controlInsets="trbl" rootAttributes={{ 'data-grid-sidebar-page': page }}>
       {groups.map((group) => (
@@ -149,6 +155,7 @@ export function gridSidebarPageContent(page: GridSidebarPage, { projects, allLiv
               name={group.name}
               live={group.live}
               showState={group.id !== 'all'}
+              scale={group.id === 'all' ? undefined : sharedScale}
             />
           ) : group.id === 'all' ? (
             triageSummaryBody(group.live)

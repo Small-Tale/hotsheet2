@@ -195,6 +195,17 @@ export function GridSidebarGaugesDemo() {
       <CatalogExample label="All Projects (No Glyph)" viewport={{ width: 'sidebar' }}>
         <GridSidebarGauges projectId="all" name="All projects" live={GRID_SIDEBAR_DEMO_ALL} showState={false} />
       </CatalogExample>
+      <CatalogExample label="On the All Projects Scale" viewport={{ width: 'sidebar' }}>
+        <GridSidebarGauges
+          projectId={GRID_SIDEBAR_DEMO_PROJECTS[0].id}
+          name={GRID_SIDEBAR_DEMO_PROJECTS[0].name}
+          live={GRID_SIDEBAR_DEMO_PROJECTS[0].live}
+          scale={{
+            tokensPeakPerMinute: GRID_SIDEBAR_DEMO_ALL.tokensPeakPerMinute,
+            ticketsPeakPerHour: GRID_SIDEBAR_DEMO_ALL.ticketsPeakPerHour,
+          }}
+        />
+      </CatalogExample>
       <CatalogExample label="No Live State" viewport={{ width: 'sidebar' }}>
         <GridSidebarGauges projectId="legacy" name="Legacy Archive" />
       </CatalogExample>
