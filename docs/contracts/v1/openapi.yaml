@@ -8716,6 +8716,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /live-history:
+    get:
+      operationId: get_live_history
+      description: Every hosted store's recorded live state segments and completion ticks inside a window (HS2-9AN4DN).
+        Default window is the last 12 hours, clipped to now and to the 7-day retention.
+      parameters:
+        - name: since_ms
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: until_ms
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveHistoryList'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /live-state:
     get:
       operationId: list_live_states
@@ -18478,6 +18513,84 @@ components:
           type: number
         p95:
           type: number
+      additionalProperties: false
+    HistoryState:
+      description: A store's state on the Stats overnight timeline (HS2-9AN4DN) - a live word, or waiting_on_ci while
+        every live claim is in its final remote-CI phase.
+      enum:
+        - active
+        - waiting_on_ci
+        - may_be_stuck
+        - waiting_on_you
+        - stopped
+        - stalled
+        - halted
+    LiveHistorySegment:
+      type: object
+      required:
+        - state
+        - start_ms
+        - end_ms
+      properties:
+        state:
+          $ref: '#/components/schemas/HistoryState'
+        start_ms:
+          type: integer
+        end_ms:
+          type: integer
+      additionalProperties: false
+    LiveHistoryCompletion:
+      type: object
+      required:
+        - slug
+        - at_ms
+      properties:
+        slug:
+          type: string
+        at_ms:
+          type: integer
+      additionalProperties: false
+    LiveHistoryStore:
+      type: object
+      required:
+        - store
+        - name
+        - checkouts
+        - segments
+        - completions
+      properties:
+        store:
+          type: string
+        name:
+          type: string
+        checkouts:
+          type: array
+          items:
+            type: string
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveHistorySegment'
+        completions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveHistoryCompletion'
+      additionalProperties: false
+    LiveHistoryList:
+      type: object
+      required:
+        - since_ms
+        - until_ms
+        - stores
+      properties:
+        since_ms:
+          type: integer
+        until_ms:
+          type: integer
+        stores:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveHistoryStore'
       additionalProperties: false
     LiveStateList:
       type: object

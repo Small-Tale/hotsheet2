@@ -2126,6 +2126,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "stats-overnight",
+      "name": "StatsOvernight",
+      "kind": "component",
+      "purpose": "The Stats Overnight timeline: one swimlane per project over a selectable window, segments coloured by state (Active, Waiting on CI, May be stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket (HS2-9AN4DN).",
+      "useWhen": [
+        "Showing what each project did over a past window on Stats."
+      ],
+      "avoidWhen": [
+        "A live glance; the Right now tiles and table show the present."
+      ],
+      "publicClasses": [
+        "stats-overnight"
+      ],
+      "publicTokens": [],
+      "source": "src/components/stats-overnight.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "stats-projects-table",
       "name": "StatsProjectsTable",
       "kind": "component",

@@ -50,6 +50,7 @@ import {
   parseGuidanceSourceUpdates,
   parseLegacyPermissionDiscardOutcome,
   parseLegacyPermissionPreview,
+  parseLiveHistoryList,
   parseLiveStateList,
   parseLiveStoreState,
   parseMessageConnectionReceipt,
@@ -1465,6 +1466,28 @@ export interface LiveStateList {
   epoch_ms: number;
   stores: LiveStoreState[];
 }
+/** A store's state on the Stats overnight timeline (HS2-9AN4DN): a live word, or Waiting on CI. */
+export type HistoryState = LiveWord | 'waiting_on_ci';
+/** One recorded stretch in a single state, clipped to the window; Unix milliseconds. */
+export interface LiveHistorySegment {
+  state: HistoryState;
+  start_ms: number;
+  end_ms: number;
+}
+/** One store's lane of `GET /live-history`. */
+export interface LiveHistoryStore {
+  store: string;
+  name: string;
+  checkouts: string[];
+  segments: LiveHistorySegment[];
+  completions: { slug: string; at_ms: number }[];
+}
+/** `GET /live-history?since_ms&until_ms` (HS2-9AN4DN). */
+export interface LiveHistoryList {
+  since_ms: number;
+  until_ms: number;
+  stores: LiveHistoryStore[];
+}
 /** A notification in the local server's attention inbox (HS2-ZP869N). */
 export interface ClientNotification {
   id: string;
@@ -1875,6 +1898,9 @@ export class Api {
     this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
   /** Every hosted store's live snapshot (HS2-JTTQMY); read on stream resync only, never on a timer. */
   liveStates = () => this.parsed(parseLiveStateList, '/live-state');
+  /** Recorded per-store state segments and completion ticks since `sinceMs` (HS2-9AN4DN). Read on demand only. */
+  liveHistory = (sinceMs: number) =>
+    this.parsed(parseLiveHistoryList, `/live-history?since_ms=${String(Math.floor(sinceMs))}`);
   /** One hosted store's live snapshot (HS2-JTTQMY). */
   storeLiveState = (store: string) =>
     this.parsed(parseLiveStoreState, `/stores/${encodeURIComponent(store)}/live-state`);

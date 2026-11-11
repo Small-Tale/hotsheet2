@@ -372,6 +372,7 @@ The CLI exposes the same live feed through the selected `-C` store's running ser
 ```sh
 hotsheet ticket-flow
 hotsheet live-state [--all]
+hotsheet live-history [--hours 12]
 hotsheet activity --ticket HS-7f3k9q --min-importance high --limit 20
 hotsheet notifications list --checkout web --recipient reviewer@example.com
 hotsheet notifications ack <notification-id>
@@ -379,7 +380,10 @@ hotsheet notifications ack <notification-id>
 
 All five print JSON and use the server's loopback secret. `live-state` prints the selected
 store's live snapshot from `GET /live-state`, or every hosted store's with `--all`
-([32](32-notifier-plugins.md) §32.8.3, HS2-JTTQMY). Activity accepts `--session`;
+([32](32-notifier-plugins.md) §32.8.3, HS2-JTTQMY). `live-history` is the exception that needs
+no server: it reads the selected store's recorded state transitions (`metrics/local/live-history.jsonl`)
+and tickets, and prints the segments and completions of the last `--hours` (1–168), as
+`GET /live-history` serves them ([34](34-glance-surfaces.md) §34.8, HS2-9AN4DN). Activity accepts `--session`;
 notifications can filter by `--checkout`, `--store`, `--ticket`, and `--recipient`.
 An absent server fails with a start-server instruction. The ticket-flow summary covers
 the server's selected store; activity uses its persisted rolling window, and
@@ -1723,7 +1727,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Permission hook route | `permission-hook`, `hook-diagnose` | [05](05-ai-tool-plugins.md) §5.7 |
 | AI feedback | `feedback-synthesis` | [23](23-ai-feedback-synthesis.md) |
 | Metrics and confidence | `metrics`, `confidence-report`, `phase-report` | [14](14-metrics-interface.md), §4.4 above |
-| Server-backed feeds | `commands`, `ticket-flow`, `live-state`, `activity`, `notifications` | §4.3 Headless platform APIs, [15](15-activity-narration-interface.md) |
+| Server-backed feeds | `commands`, `ticket-flow`, `live-state`, `live-history` (reads files), `activity`, `notifications` | §4.3 Headless platform APIs, [15](15-activity-narration-interface.md) |
 | Settings and keys | `settings`, `key` | §4.7, §4.7.1 |
 | Checkouts and accounts | `checkout`, `account` | §4.3 Checkout identity, [16](16-external-sync-interface.md) (HS2-SM9PM8) |
 | Migration | `import` | [07](07-migration.md) |

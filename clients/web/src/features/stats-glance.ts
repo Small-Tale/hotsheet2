@@ -1,14 +1,16 @@
 import { effect, type Signal, signal } from 'kerfjs';
 
-import type { LiveStoreState } from '../api';
+import type { LiveHistoryList, LiveStoreState } from '../api';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { StatsDashboardState } from '../components/stats-dashboard';
+import type { StatsOvernightProps } from '../components/stats-overnight';
 import type { StatsRightNowProps } from '../components/stats-right-now';
 import type { StatsThisMacProps } from '../components/stats-this-mac';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { HostHealthResourceState } from '../host-health-resource';
 import type { Project } from '../interactions/types';
 import type { LiveStateStore } from '../live-state';
+import { extendSegments, hourTicks, overnightFrom, type OvernightWindow, timelineLane } from '../overnight-timeline';
 import { completedSinceUtcMidnight, rightNowRows, rightNowTiles } from '../stats-right-now';
 
 /** How often the Stats glance re-renders ages and decaying rates. A local display timer only. */
@@ -23,6 +25,13 @@ export interface StatsGlanceDependencies {
   terminalGroups: Signal<TerminalDashboardGroup[]>;
   /** The server host's health for the This Mac cards (HS2-NS0AYR). */
   hostHealth?: { state: Signal<HostHealthResourceState> };
+  /**
+   * Read the recorded live state history since a time (HS2-9AN4DN). It is read when Stats opens, when
+   * its window changes, and on the Stats project's stream resync; pushed snapshots extend it between reads.
+   */
+  liveHistory?: (sinceMs: number) => Promise<LiveHistoryList>;
+  /** When standby was last entered in this session, for the "Since standby" window. */
+  standbyEnteredAtMs?: () => number | undefined;
   /** Injected for tests. */
   now?: () => number;
   setInterval?: (callback: () => void, ms: number) => number;
@@ -48,6 +57,48 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
   /** When a pushed snapshot last changed what the client holds. */
   const appliedAt = signal<number | undefined>(undefined);
   let timer: number | undefined;
+  /** The Overnight card's chosen window; unset means since standby when it was entered, else 12 hours. */
+  const overnightChoice = signal<OvernightWindow | undefined>(undefined);
+  const overnight = signal<{
+    status: 'loading' | 'ready' | 'error';
+    list?: LiveHistoryList;
+    readAtMs?: number;
+    message?: string;
+  }>({ status: 'loading' });
+  let overnightRead = 0;
+
+  function overnightWindow(): OvernightWindow {
+    const chosen = overnightChoice.value;
+    if (chosen === 'standby' && dependencies.standbyEnteredAtMs?.() === undefined) return '12h';
+    return chosen ?? (dependencies.standbyEnteredAtMs?.() === undefined ? '12h' : 'standby');
+  }
+
+  /** Read the history once for the current window; an older read that lands late is dropped. */
+  async function refreshOvernight(): Promise<void> {
+    const read = dependencies.liveHistory;
+    if (!read) return;
+    const request = ++overnightRead,
+      at = now(),
+      from = overnightFrom(overnightWindow(), at, dependencies.standbyEnteredAtMs?.());
+    overnight.value = { ...overnight.peek(), status: overnight.peek().list ? 'ready' : 'loading' };
+    try {
+      const list = await read(from);
+      if (request === overnightRead) overnight.value = { status: 'ready', list, readAtMs: at };
+    } catch (reason) {
+      if (request === overnightRead)
+        overnight.value = {
+          ...overnight.peek(),
+          status: 'error',
+          message: reason instanceof Error ? reason.message : String(reason),
+        };
+    }
+  }
+
+  function setOvernightWindow(window: OvernightWindow) {
+    if (window === overnightChoice.peek()) return;
+    overnightChoice.value = window;
+    void refreshOvernight();
+  }
 
   // The store's signal changes only when a newer snapshot applies, so this marks each live update.
   const disposeApplied = effect(() => {
@@ -57,6 +108,10 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     const visible = shellMode.value === 'stats';
     if (visible && timer === undefined) {
       clock.value = now();
+      // Opening Stats reads the recorded history once (HS2-9AN4DN); nothing re-reads on a timer.
+      queueMicrotask(() => {
+        void refreshOvernight();
+      });
       timer = startTimer(() => {
         clock.value = now();
       }, STATS_GLANCE_TICK_MS);
@@ -118,6 +173,39 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     };
   }
 
+  /** The Overnight card's input (HS2-9AN4DN): the read history, extended live, over the window. */
+  function overnightCard(): StatsOvernightProps | undefined {
+    if (!dependencies.liveHistory) return undefined;
+    const nowMs = Math.max(clock.value, now()),
+      window = overnightWindow(),
+      from = overnightFrom(window, nowMs, dependencies.standbyEnteredAtMs?.()),
+      read = overnight.value,
+      states = scopedStates(),
+      inScope = new Set(states.map((state) => state.store)),
+      current = new Map(states.map((state) => [state.store, state]));
+    const lanes = (read.list?.stores ?? [])
+      .filter((store) => inScope.has(store.store))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((store) =>
+        timelineLane(
+          store,
+          extendSegments(store.segments, current.get(store.store), read.readAtMs ?? nowMs, nowMs),
+          from,
+          nowMs,
+        ),
+      );
+    return {
+      window,
+      standbyAvailable: dependencies.standbyEnteredAtMs?.() !== undefined,
+      fromMs: from,
+      toMs: nowMs,
+      lanes,
+      axis: hourTicks(from, nowMs),
+      status: read.status,
+      ...(read.message === undefined ? {} : { message: read.message }),
+    };
+  }
+
   /** The This Mac cards' input: the pushed server-host snapshot (HS2-NS0AYR). */
   function thisMac(): StatsThisMacProps | undefined {
     return dependencies.hostHealth ? { state: dependencies.hostHealth.state.value } : undefined;
@@ -130,7 +218,16 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     timer = undefined;
   }
 
-  return { rightNow, thisMac, clock, appliedAt, dispose };
+  return {
+    rightNow,
+    thisMac,
+    overnight: overnightCard,
+    setOvernightWindow,
+    refreshOvernight,
+    clock,
+    appliedAt,
+    dispose,
+  };
 }
 
 export type StatsGlanceController = ReturnType<typeof createStatsGlanceController>;

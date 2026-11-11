@@ -27,6 +27,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         },
         Cmd::TicketFlow => print_local_server_json(path, "GET", "analytics/tickets"),
         Cmd::LiveState { all } => cmd_live_state(path, all),
+        Cmd::LiveHistory { hours } => cmd_live_history(path, hours),
         Cmd::Activity {
             ticket,
             session,
@@ -741,6 +742,32 @@ fn cmd_live_state(store: &Path, all: bool) -> Result<()> {
             store.display()
         ),
     }
+}
+
+/// Print the selected store's overnight timeline (HS2-9AN4DN) straight from its files, the same
+/// segments and completion ticks `GET /live-history` serves for it.
+fn cmd_live_history(store: &Path, hours: u32) -> Result<()> {
+    use hotsheet_ticketing::live_history::{
+        completions_between, history_path, read_records, segments,
+    };
+    let until = i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_millis(),
+    )?;
+    let since = until - i64::from(hours) * 60 * 60 * 1000;
+    let records = read_records(&history_path(store))?;
+    let tickets = hotsheet_ticketing::FsStore::open(store)?
+        .list_tickets_resilient()?
+        .tickets;
+    let body = serde_json::json!({
+        "since_ms": since,
+        "until_ms": until,
+        "segments": segments(&records, since, until),
+        "completions": completions_between(&tickets, since, until),
+    });
+    println!("{}", serde_json::to_string_pretty(&body)?);
+    Ok(())
 }
 
 pub(crate) fn print_local_server_json(store: &Path, method: &str, route: &str) -> Result<()> {

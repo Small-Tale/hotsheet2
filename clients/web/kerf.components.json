@@ -3009,6 +3009,73 @@
       }
     },
     {
+      "id": "stats-overnight",
+      "name": "StatsOvernight",
+      "kind": "component",
+      "purpose": "The Stats Overnight timeline: one swimlane per project over a selectable window, segments coloured by state (Active, Waiting on CI, May be stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket (HS2-9AN4DN).",
+      "source": "src/components/stats-overnight.tsx",
+      "publicExports": [
+        {
+          "name": "StatsOvernight"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/stats-overnight.tsx",
+        "src/overnight-timeline.ts",
+        "src/features/stats-glance.ts"
+      ],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "component",
+          "behaviors": ["lanes-stretch-to-width"]
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": "stats-overnight",
+        "publicClasses": ["stats-overnight"],
+        "publicTokens": [],
+        "placeableClasses": ["stats-overnight"]
+      },
+      "accessibility": {
+        "obligations": ["Each lane is an image named by its project and its states with their start times."]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-overnight.tsx",
+        "composition": "src/components/stats-overnight.tsx"
+      },
+      "selection": {
+        "useWhen": ["Showing what each project did over a past window on Stats."],
+        "avoidWhen": ["A live glance; the Right now tiles and table show the present."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "stats-this-mac",
       "name": "StatsThisMac",
       "kind": "component",

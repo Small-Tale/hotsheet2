@@ -33,6 +33,7 @@ import type {
   GuidanceRulePreview,
   GuidanceSourceReview,
   GuidanceSourceUpdate,
+  LiveHistoryList,
   LiveStateList,
   LiveStoreState,
   MessageConnectionReceipt,
@@ -929,6 +930,22 @@ export const parseLiveStoreState = shape<LiveStoreState>('live state', {
 export const parseLiveStateList = shape<LiveStateList>('live state list', {
   epoch_ms: isNumber,
   stores: listOf(parseLiveStoreState.check),
+});
+const isHistoryState: Check = (field) => field === 'waiting_on_ci' || isLiveWord(field);
+export const parseLiveHistoryList = shape<LiveHistoryList>('live history', {
+  since_ms: isNumber,
+  until_ms: isNumber,
+  stores: listOf(
+    shape('live history store', {
+      store: isString,
+      name: isString,
+      checkouts: isStringArray,
+      segments: listOf(
+        shape('live history segment', { state: isHistoryState, start_ms: isNumber, end_ms: isNumber }).check,
+      ),
+      completions: listOf(shape('live history completion', { slug: isString, at_ms: isNumber }).check),
+    }).check,
+  ),
 });
 
 export const parseCheckoutActivity: ResponseParser<CheckoutActivityEvent[]> = (value) =>

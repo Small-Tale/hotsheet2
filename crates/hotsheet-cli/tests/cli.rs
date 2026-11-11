@@ -4823,6 +4823,64 @@ fn reopening_verified_ticket_starts_a_fresh_completion_cycle() {
 }
 
 #[test]
+fn hs2_9an4dn_live_history_prints_segments_and_completions_without_a_server() {
+    // Headless parity with GET /live-history: read the store's own history file and tickets.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let slug = new_ticket(p, "Overnight work");
+    hs(p)
+        .args(["edit", &slug, "--status", "completed"])
+        .assert()
+        .success();
+    let now = i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap();
+    let path = hotsheet_ticketing::live_history::history_path(p);
+    for (at, state) in [
+        (
+            now - 3 * 3_600_000,
+            hotsheet_ticketing::live_history::HistoryState::Active,
+        ),
+        (
+            now - 3_600_000,
+            hotsheet_ticketing::live_history::HistoryState::Stopped,
+        ),
+    ] {
+        hotsheet_ticketing::live_history::append_transition(&path, at, state).unwrap();
+    }
+    let output = hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["live-history", "--hours", "2"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let body: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let segments = body["segments"].as_array().unwrap();
+    assert_eq!(segments.len(), 2, "{body}");
+    assert_eq!(segments[0]["state"], "active");
+    assert_eq!(
+        segments[0]["start_ms"], body["since_ms"],
+        "clipped to the window"
+    );
+    assert_eq!(segments[1]["state"], "stopped");
+    assert_eq!(segments[1]["end_ms"], body["until_ms"]);
+    assert_eq!(body["completions"][0]["slug"], slug.as_str());
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["live-history", "--hours", "0"])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn edit_reopens_completed_tickets_to_each_active_status_without_stale_metadata() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

@@ -101,7 +101,9 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     streams = signal<ReadonlyMap<string, number | null>>(new Map()),
     updatedAtMs = signal<number | undefined>(undefined),
     /** The while-you-were-away digest to show, once standby exits after something happened (HS2-JJ9RYN). */
-    awayDigest = signal<AwayDigest | undefined>(undefined);
+    awayDigest = signal<AwayDigest | undefined>(undefined),
+    /** When standby was last entered in this session; Stats' Overnight window can start there (HS2-9AN4DN). */
+    enteredAtMs = signal<number | undefined>(undefined);
   let away: AwayRecord | undefined,
     awaySeen: ReadonlyMap<string, LiveStoreState> = new Map(),
     awayHost: HostHealthSnapshot | undefined,
@@ -217,6 +219,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     returnFocus = typeof HTMLElement !== 'undefined' && focused instanceof HTMLElement ? focused : undefined;
     nowMs.value = now();
     beginAway();
+    enteredAtMs.value = now();
     // Always every project, whichever tab or page standby was entered from (HS2-JGW031).
     scope.value = { kind: 'all' };
     ticker = startInterval(() => {
@@ -424,6 +427,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     resyncSettings,
     awayDigest,
     dismissAwayDigest,
+    enteredAtMs,
     saveSettings,
     wire,
   };

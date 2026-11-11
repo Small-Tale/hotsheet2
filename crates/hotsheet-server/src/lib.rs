@@ -24,6 +24,7 @@ mod host_health;
 mod hosting;
 mod image_crop_cache;
 pub mod lifecycle;
+pub mod live_history;
 pub mod live_record;
 pub mod live_state;
 pub mod mcp_presence;
@@ -434,6 +435,8 @@ pub struct AppState {
     notification_delivery: notification_router::NotificationDelivery,
     /// Per-store live snapshots pushed to glance surfaces (HS2-JTTQMY).
     live_states: live_state::LiveStates,
+    /// The last recorded overnight state per store (HS2-9AN4DN).
+    live_history: Arc<live_history::LiveHistory>,
     tts: tts::TtsProviders,
     source_revision: source_revision::SourceRevisionMonitor,
     /// Who launched this server process, reported by `/health`, `/compatibility`, and every
@@ -669,6 +672,7 @@ impl AppState {
             notifications: Default::default(),
             notification_delivery: Default::default(),
             live_states: Default::default(),
+            live_history: Arc::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
             launcher: Arc::new(Mutex::new(UNSPECIFIED_LAUNCHER.to_owned())),
@@ -2059,6 +2063,8 @@ pub fn app(state: AppState) -> Router {
             "/stores/{store_id}/live-state",
             get(live_state::store_live_state),
         )
+        // Persisted per-store state transitions and completion ticks (HS2-9AN4DN).
+        .route("/live-history", get(live_history::get_live_history))
         .route("/analytics/usage", get(usage_metrics_summary))
         .route("/confidence-report", get(confidence_report))
         .route("/phase-report", get(phase_report))

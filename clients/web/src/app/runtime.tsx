@@ -4240,6 +4240,8 @@ export async function startHotSheetWebClient() {
   });
   // Standby (HS2-EQVZTZ): the idle-entered night display over the same live state; its settings are
   // machine-wide on the server the active project talks to.
+  /** Set once the Stats glance exists: a stream resync re-reads the Overnight history while Stats shows. */
+  const statsOvernight: { resync?: () => Promise<void> } = {};
   const standby = createStandbyController({
     liveStates,
     openProjectIds: () => projects.value.map((item) => item.id),
@@ -4306,6 +4308,7 @@ export async function startHotSheetWebClient() {
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
     onStreamHealth: standby.streamHealth,
+    liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });
   const {
     feedbackDelivery,
@@ -4992,7 +4995,14 @@ export async function startHotSheetWebClient() {
     analyticsByProject,
     terminalGroups,
     hostHealth,
+    // The Overnight timeline (HS2-9AN4DN) reads the recorded history through the Stats project's server.
+    liveHistory: (sinceMs) => {
+      const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
+      return new Api(target?.apiPath ?? '', '', { trackBusy: false }).liveHistory(sinceMs);
+    },
+    standbyEnteredAtMs: () => standby.enteredAtMs.value,
   });
+  statsOvernight.resync = () => (shellMode.peek() === 'stats' ? statsGlance.refreshOvernight() : Promise.resolve());
   type NoteRepairSession = {
     note: Note;
     ticket: FullTicket;
@@ -6480,6 +6490,9 @@ export async function startHotSheetWebClient() {
         standby.dismissAwayDigest();
         statsProjectId.value = undefined;
         setShellMode('stats');
+      },
+      setOvernightWindow: (window) => {
+        statsGlance.setOvernightWindow(window);
       },
       openAwayEvent: (projectId, slug) => {
         standby.dismissAwayDigest();

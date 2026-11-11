@@ -326,6 +326,13 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   terminal through `open-terminal-project`. A row with no open project or terminal has no action. A
   native table (Kerf has no tabular-data component) that scrolls sideways inside its own container.
 
+- `StatsOvernight` — **demo built** (`components/stats-overnight.tsx`, HS2-9AN4DN; mock `m3-stats-right-now`;
+  [34-glance-surfaces.md](34-glance-surfaces.md) §34.8): the Stats Overnight swimlanes. Kerf `Row`, `Select`
+  (inline, compact, named "Overnight Window"), `StateBanner`, `EmptyState`, and `Text` own the header,
+  states, and copy. The lanes are an app-owned SVG visualization (Kerf has no swimlane chart): a shared
+  name column by subgrid, a track per project with state segments and completion ticks coloured from
+  Kerf's semantic ramps, and hour labels that thin on a narrow track. The demo shows the mock night,
+  no history yet, loading, and a failed read.
 - `StatsThisMac` — **demo built** (`components/stats-this-mac.tsx`, HS2-NS0AYR): the server host's
   health cards on Stats, headed by the host name and "Server host · platform · sampled time". A Kerf
   `Grid` of framed `ContentItem` cards: disk free with rate, time to full, and total; memory pressure

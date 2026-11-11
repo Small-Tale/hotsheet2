@@ -26,6 +26,7 @@ import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interacti
 import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
+import { type OvernightWindow } from '../overnight-timeline';
 import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
 import { cycleTabId } from '../tab-cycle';
 import { terminalClearKeyTarget } from '../terminal-clear';
@@ -146,6 +147,8 @@ export interface ShellAndGlobalInteractionsDependencies {
     dismissAwayDigest?: () => void;
     showWhatNeedsMe?: () => void;
     openAwayEvent?: (projectId: string, slug: string) => void;
+    /** Stats' Overnight window select (HS2-9AN4DN). */
+    setOvernightWindow?: (window: OvernightWindow) => void;
   };
 }
 
@@ -254,6 +257,12 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(
     delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.showWhatNeedsMe.selector, () => {
       standby?.showWhatNeedsMe?.();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', 'kui-select[name="stats-overnight-window"]', (_event, target) => {
+      const value = (target as HTMLElement & { value: string }).value;
+      if (value === 'standby' || value === '12h' || value === '24h') standby?.setOvernightWindow?.(value);
     }),
   );
   lifetime.add(

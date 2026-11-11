@@ -80,6 +80,8 @@ export interface ProjectChangeStreamsDependencies {
     applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
     resync: () => Promise<void>;
   };
+  /** Stats' Overnight timeline (HS2-9AN4DN): each stream resync re-reads the recorded history once. */
+  liveHistory?: { resync: () => Promise<void> };
   /**
    * A project's change stream (re)established continuity or delivered (`true`), failed or dropped
    * (`false`), or was stopped (`undefined`). Standby's freshness line reads it (HS2-EQVZTZ).
@@ -248,6 +250,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     liveStates,
     hostHealth,
     standbySettings,
+    liveHistory,
     onStreamHealth,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
@@ -382,6 +385,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(liveStates ? [liveStates.resync(new Api(current.apiPath))] : []),
               ...(hostHealth ? [hostHealth.resync()] : []),
               ...(standbySettings ? [standbySettings.resync()] : []),
+              ...(liveHistory ? [liveHistory.resync()] : []),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),

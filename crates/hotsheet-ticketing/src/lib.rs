@@ -28,6 +28,7 @@ pub mod groups;
 pub mod host_health;
 pub mod identity;
 pub mod image_crop;
+pub mod live_history;
 pub mod merge;
 pub mod metrics;
 pub mod ops;

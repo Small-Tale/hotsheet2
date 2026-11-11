@@ -497,6 +497,13 @@ enum Cmd {
         #[arg(long)]
         all: bool,
     },
+    /// Print the selected store's recorded live state transitions as segments, plus the
+    /// tickets completed in the window (HS2-9AN4DN), read from the store itself: no server is
+    /// needed. The window is the last `--hours` (default 12, at most 168).
+    LiveHistory {
+        #[arg(long, default_value_t = 12, value_parser = clap::value_parser!(u32).range(1..=168))]
+        hours: u32,
+    },
     /// Read the local server's recent activity timeline.
     Activity {
         #[arg(long)]

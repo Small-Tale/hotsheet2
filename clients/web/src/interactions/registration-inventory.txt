@@ -442,6 +442,7 @@ shell-and-global	delegate	document.body	'change'	'[data-action="save-standby-set
 shell-and-global	delegate	document.body	'click'	'[data-action="dismiss-away-digest"]'
 shell-and-global	delegate	document.body	'kui-request-close'	'[data-away-digest]'
 shell-and-global	delegate	document.body	'click'	'[data-action="show-what-needs-me"]'
+shell-and-global	delegate	document.body	'change'	'kui-select[name="stats-overnight-window"]'
 shell-and-global	delegate	document.body	'click'	'[data-action="open-away-event"]'
 shell-and-global	delegate	document.body	'pointerdown'	'[data-kui-resize-handle]'
 shell-and-global	delegate	document.body	'keydown'	'[data-kui-resize-handle]'

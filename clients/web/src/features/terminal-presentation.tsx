@@ -43,7 +43,7 @@ export interface TerminalPresentationDependencies {
   repositorySizeByProject: Signal<Record<string, RepositorySizeState>>;
   compactionByProject: Signal<Record<string, CompactionPreviewState>>;
   /** Live glance surfaces of the Stats page (HS2-ERTNJ7). */
-  statsGlance?: Pick<StatsGlanceController, 'rightNow' | 'thisMac'>;
+  statsGlance?: Pick<StatsGlanceController, 'rightNow' | 'thisMac' | 'overnight'>;
   canGiveFeedback: () => boolean;
   terminals: {
     terminalGroups: Signal<TerminalDashboardGroup[]>;
@@ -228,6 +228,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       projectName: statsProject?.name,
       rightNow: statsGlance?.rightNow(),
       thisMac: statsGlance?.thisMac(),
+      overnight: statsGlance?.overnight(),
       analytics: statsProject
         ? [
             {

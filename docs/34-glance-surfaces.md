@@ -222,7 +222,7 @@ unreadable value shows Completion. Each page scrolls on its own beneath the dots
 with time, so a local minute clock re-renders them while any store reports live state; it never
 issues a request. A store linked by several open projects counts once in All projects.
 
-## 34.8 Stats Right now (HS2-ERTNJ7, HS2-NS0AYR shipped; HS2-9AN4DN design only; HS2-DTAVQA partial)
+## 34.8 Stats Right now (HS2-ERTNJ7, HS2-NS0AYR, HS2-9AN4DN shipped; HS2-DTAVQA partial)
 
 A **Right now** section above the existing "Ticket flow and usage" on the Stats page, approved as
 `m3-stats-right-now-{light,dark}`. Scope follows §34.3.
@@ -244,6 +244,29 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket. Hover shows state,
   start, end, and duration. It needs persisted per-store state transitions: compact append-only records
   with bounded retention, served over REST with CLI parity.
+- **Shipped (HS2-9AN4DN).**
+  - **Record format.** Each time a store's published live state changes its timeline state, the server
+    appends one line `{"v":1,"at_ms":…,"state":…}` to the store's machine-local, gitignored
+    `metrics/local/live-history.jsonl` (`hotsheet_ticketing::live_history`).
+    - The state is the live word, or `waiting_on_ci` while every live claim of an active store is in
+      `final_testing`. That is the stand-in for Waiting on CI until a CI source exists (HS2-M8HHEA).
+    - An unchanged state writes nothing. A time before the last record is clamped to it.
+    - Past 4096 records, the next append rewrites the file. It drops records older than 7 days but
+      keeps the newest older one, so a window's opening state stays known.
+    - Readers skip torn lines and unknown versions.
+  - **REST.** `GET /live-history?since_ms&until_ms` replays every hosted store's records into
+    segments clipped to the window, merging equal neighbours. Time before the first record is left
+    empty. It also adds the completion ticks inside the window, taken from each ticket's own history.
+    The default window is the last 12 hours, clipped to now and to the retention.
+  - **CLI.** `hotsheet-cli live-history [--hours N]` prints the same lane for the selected store
+    straight from its files, with no server.
+  - **Card.** The card sits under Right now, above This Mac.
+    - The window select offers Since Standby (once standby was entered in this session, and then the
+      default), Last 12 Hours (otherwise the default), and Last 24 Hours.
+    - The history is read when Stats opens, when the window changes, and on a change-stream resync.
+      Pushed snapshots extend the last segment between reads; the display clock never requests.
+    - Lanes are in name order. Each segment's and tick's title gives the state or ticket, start, end,
+      and duration. The legend lists the states, and shows Stalled and Halted only when a lane has them.
 - **This Mac cards (HS2-NS0AYR):** disk free with rate, time to full, and the largest growing directory
   when known; memory pressure with swap trend; CPU with a sparkline and top process; power and sleep (kept
   awake or at risk); network and thermal only when degraded. Cards past a threshold take the warning tone.
@@ -333,23 +356,23 @@ HS2-GAJSX9:
 
 ## 34.11 Ticket map
 
-| Requirement                                               | Section    | Ticket     | Depends on              |
-| --------------------------------------------------------- | ---------- | ---------- | ----------------------- |
-| This requirements document                                | all        | HS2-3AA1N7 | none                    |
-| Per-project live state model, rates, 30-day peaks, push   | §34.2–34.3 | HS2-JTTQMY | none                    |
-| Live state kept across restarts, minute rebuild and decay | §34.3      | HS2-MHW3SX | HS2-JTTQMY              |
-| Glance gauge, full and bare variants                      | §34.3      | HS2-CVE3SK | none                    |
-| Standby mode                                              | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
-| Standby settings pushed to running clients                | §34.5      | HS2-A5BTTK | HS2-EQVZTZ              |
-| Project sidebar Live section                              | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
-| Workers view button badge                                 | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-170258` |
-| Grid sidebar shared groups, gauge and triage page bodies  | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |
-| Grid sidebar paging with floating dots                    | §34.7      | HS2-EZSQDF | HS2-E1AQE8, `KF-0QJ2K3` |
-| Stats Right now tiles and projects table                  | §34.8      | HS2-ERTNJ7 | HS2-JTTQMY, HS2-CVE3SK  |
-| Host health sampler and push channel                      | §34.8      | HS2-DTAVQA | none                    |
-| Stats This Mac cards                                      | §34.8      | HS2-NS0AYR | HS2-DTAVQA, HS2-ERTNJ7  |
-| Stats overnight timeline with persisted transitions       | §34.8      | HS2-9AN4DN | HS2-JTTQMY, HS2-ERTNJ7  |
-| While-you-were-away digest (shipped)                      | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
-| Stuck causes: usage-limit resume time, awaiting input     | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
-| Standardize the state icons                               | §34.10     | HS2-CSPKQX | none                    |
-| Speedometer gauge request (intake)                        | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |
+| Requirement                                                   | Section    | Ticket     | Depends on              |
+| ------------------------------------------------------------- | ---------- | ---------- | ----------------------- |
+| This requirements document                                    | all        | HS2-3AA1N7 | none                    |
+| Per-project live state model, rates, 30-day peaks, push       | §34.2–34.3 | HS2-JTTQMY | none                    |
+| Live state kept across restarts, minute rebuild and decay     | §34.3      | HS2-MHW3SX | HS2-JTTQMY              |
+| Glance gauge, full and bare variants                          | §34.3      | HS2-CVE3SK | none                    |
+| Standby mode                                                  | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
+| Standby settings pushed to running clients                    | §34.5      | HS2-A5BTTK | HS2-EQVZTZ              |
+| Project sidebar Live section                                  | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
+| Workers view button badge                                     | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-170258` |
+| Grid sidebar shared groups, gauge and triage page bodies      | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |
+| Grid sidebar paging with floating dots                        | §34.7      | HS2-EZSQDF | HS2-E1AQE8, `KF-0QJ2K3` |
+| Stats Right now tiles and projects table                      | §34.8      | HS2-ERTNJ7 | HS2-JTTQMY, HS2-CVE3SK  |
+| Host health sampler and push channel                          | §34.8      | HS2-DTAVQA | none                    |
+| Stats This Mac cards                                          | §34.8      | HS2-NS0AYR | HS2-DTAVQA, HS2-ERTNJ7  |
+| Stats overnight timeline with persisted transitions (shipped) | §34.8      | HS2-9AN4DN | HS2-JTTQMY, HS2-ERTNJ7  |
+| While-you-were-away digest (shipped)                          | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
+| Stuck causes: usage-limit resume time, awaiting input         | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
+| Standardize the state icons                                   | §34.10     | HS2-CSPKQX | none                    |
+| Speedometer gauge request (intake)                            | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |

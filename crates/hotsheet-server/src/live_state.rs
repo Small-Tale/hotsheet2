@@ -437,6 +437,8 @@ pub fn refresh_at(state: &AppState, store: &str, now: OffsetDateTime) -> Option<
         changed
     };
     persist(state, store, now);
+    // The Stats overnight timeline's persisted transitions (HS2-9AN4DN).
+    crate::live_history::observe(state, &snapshot, unix_ms(now));
     if changed {
         state.emit(ChangeEvent {
             cursor: None,

@@ -135,6 +135,7 @@ impl Cmd {
             | Lifecycle { .. }
             | TicketFlow
             | LiveState { .. }
+            | LiveHistory { .. }
             | Activity { .. }
             | Notifications { .. }
             | Processes
@@ -201,6 +202,7 @@ impl Cmd {
                 | Cmd::Lifecycle { .. }
                 | Cmd::TicketFlow
                 | Cmd::LiveState { .. }
+                | Cmd::LiveHistory { .. }
                 | Cmd::Activity { .. }
                 | Cmd::Notifications { .. }
                 | Cmd::Notify { .. }

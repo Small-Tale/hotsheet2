@@ -1,0 +1,78 @@
+/* The Stats Overnight timeline (HS2-9AN4DN) is an app-owned data visualization: Kerf has no swimlane
+   chart. Kerf List, Row, Select, and Text own the stack, header, and copy; these rules only lay out
+   the lanes and colour the SVG marks from Kerf's semantic ramps, so both themes follow. */
+.stats-overnight {
+  min-width: 0;
+}
+/* One shared project-name column (as wide as the longest name, at most 160px), then the tracks. */
+.stats-overnight__lanes {
+  display: grid;
+  grid-template-columns: fit-content(remify(160px)) minmax(0, 1fr);
+  gap: remify(8px) remify(16px);
+  align-items: center;
+}
+.stats-overnight__lane {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.stats-overnight__track {
+  display: block;
+  inline-size: 100%;
+  block-size: remify(24px);
+  border-radius: remify(4px);
+  /* Time before the first record is unknown and stays empty against this outline. */
+  box-shadow: inset 0 0 0 1px var(--kui-color-neutral-border-quiet);
+}
+.stats-overnight__swatch {
+  display: block;
+  flex: none;
+  inline-size: remify(16px);
+  block-size: remify(16px);
+}
+.stats-overnight__segment[data-state='active'] {
+  fill: var(--kui-color-success-fill-loud);
+}
+.stats-overnight__segment[data-state='waiting_on_ci'] {
+  fill: var(--kui-color-brand-fill-normal);
+}
+.stats-overnight__segment[data-state='may_be_stuck'] {
+  fill: var(--kui-color-warning-fill-loud);
+}
+.stats-overnight__segment[data-state='waiting_on_you'] {
+  fill: var(--kui-color-pop-fill-loud);
+}
+.stats-overnight__segment[data-state='stopped'] {
+  fill: var(--kui-color-neutral-fill-normal);
+}
+.stats-overnight__segment[data-state='stalled'] {
+  fill: var(--kui-color-danger-fill-loud);
+}
+.stats-overnight__segment[data-state='halted'] {
+  fill: var(--kui-color-danger-fill-normal);
+}
+/* Completion ticks keep their width when the track stretches. */
+.stats-overnight__tick {
+  stroke: var(--kui-color-neutral-border-loud);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+/* Hour labels sit under their mark, positioned by the inline start the component computes. */
+.stats-overnight__axis {
+  position: relative;
+  block-size: remify(16px);
+  container-type: inline-size;
+}
+/* A narrow track keeps every other hour label so they never overlap. */
+@container (max-width: 400px) {
+  .stats-overnight__hour[data-minor] {
+    display: none;
+  }
+}
+.stats-overnight__hour {
+  position: absolute;
+  inset-block-start: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}

@@ -110,6 +110,7 @@ describe('UX demo catalog', () => {
       'stats-right-now',
       'stats-projects-table',
       'stats-this-mac',
+      'stats-overnight',
       'glance-gauge',
       'glance-sparkline',
       'grid-sidebar-gauges',

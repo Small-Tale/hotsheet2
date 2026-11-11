@@ -44,6 +44,7 @@ import { demoModule as select } from './select-demo';
 import { demoModule as setupSettings } from './setup-settings-demo';
 import { demoModule as standby } from './standby-demo';
 import { demoModule as statsDashboard } from './stats-dashboard-demo';
+import { demoModule as statsOvernight } from './stats-overnight-demo';
 import { demoModule as statsProjectsTable } from './stats-projects-table-demo';
 import { demoModule as statsRightNow } from './stats-right-now-demo';
 import { demoModule as statsThisMac } from './stats-this-mac-demo';
@@ -123,6 +124,7 @@ export const demoModules: readonly DemoModule[] = [
   statsRightNow,
   statsProjectsTable,
   statsThisMac,
+  statsOvernight,
   projectLiveSection,
   gridSidebar,
   standby,

@@ -181,6 +181,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('stats-right-now', ['glance-gauge', 'glance-sparkline', 'stats-projects-table', 'list', 'text']),
           cataloged('stats-projects-table', ['button', 'text']),
           cataloged('stats-this-mac', ['state-banner', 'list', 'text']),
+          cataloged('stats-overnight', ['select', 'state-banner', 'list', 'row', 'text']),
           cataloged('glance-gauge'),
           cataloged('glance-sparkline'),
           cataloged('grid-sidebar-gauges', ['glance-gauge']),

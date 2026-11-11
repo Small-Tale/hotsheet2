@@ -6434,6 +6434,80 @@
       }
     },
     {
+      "key": "hotsheet-web:stats-overnight",
+      "package": "hotsheet-web",
+      "id": "stats-overnight",
+      "name": "StatsOvernight",
+      "kind": "component",
+      "purpose": "The Stats Overnight timeline: one swimlane per project over a selectable window, segments coloured by state (Active, Waiting on CI, May be stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket (HS2-9AN4DN).",
+      "publicExports": [
+        {
+          "name": "StatsOvernight"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/stats-overnight.tsx",
+        "src/overnight-timeline.ts",
+        "src/features/stats-glance.ts"
+      ],
+      "source": "src/components/stats-overnight.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "component",
+        "behaviors": [
+          "lanes-stretch-to-width"
+        ]
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Each lane is an image named by its project and its states with their start times."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "stats-overnight",
+        "publicClasses": [
+          "stats-overnight"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "stats-overnight"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-overnight.tsx",
+        "composition": "src/components/stats-overnight.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:stats-projects-table",
       "package": "hotsheet-web",
       "id": "stats-projects-table",

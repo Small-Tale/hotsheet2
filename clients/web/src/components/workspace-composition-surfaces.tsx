@@ -14,6 +14,7 @@ import { type CompactionPreviewState, RepositorySize, type RepositorySizeState }
 import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
 import { inspectorToggle, type NavigationPanelParts, type SidebarPanelParts } from './sidebar-panel';
 import { StatsDashboard, type StatsDashboardProps } from './stats-dashboard';
+import { StatsOvernight, type StatsOvernightProps } from './stats-overnight';
 import { StatsRightNow, type StatsRightNowProps } from './stats-right-now';
 import { StatsThisMac, type StatsThisMacProps } from './stats-this-mac';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
@@ -103,6 +104,8 @@ export type GlobalWorkspaceSurfaceProps =
       rightNow?: StatsRightNowProps;
       /** The server host's health cards (HS2-NS0AYR). */
       thisMac?: StatsThisMacProps;
+      /** The Overnight swimlanes (HS2-9AN4DN). */
+      overnight?: StatsOvernightProps;
       calibration?: ConfidenceCalibrationState;
       /** Git object and attachment sizes against GitHub's limits (HS2-QF44T7). */
       repositorySize?: RepositorySizeState;
@@ -121,6 +124,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
             {props.projectName} project statistics
           </Text>
           {props.rightNow && <StatsRightNow {...props.rightNow} />}
+          {props.overnight && <StatsOvernight {...props.overnight} />}
           {props.thisMac && <StatsThisMac {...props.thisMac} />}
           <StatsDashboard projects={props.analytics} />
           <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
@@ -135,6 +139,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
           Cross-project statistics
         </Text>
         {props.rightNow && <StatsRightNow {...props.rightNow} />}
+        {props.overnight && <StatsOvernight {...props.overnight} />}
         {props.thisMac && <StatsThisMac {...props.thisMac} />}
         <StatsDashboard projects={props.analytics} crossProject />
       </div>
