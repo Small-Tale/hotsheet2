@@ -20,6 +20,7 @@ import {
   validateTestPlan,
   verifyTestPlanSelection,
 } from './gate-test-plan.mjs';
+import { judgeNarrowedRun, partialFromRun, readPartial, writePartial } from './gate-case-rerun.mjs';
 import { sandboxFailureNotice } from './sandbox-notice.mjs';
 import {
   importCiReports,
@@ -106,8 +107,9 @@ function reportFor(stage, repo) {
 function instrumentedRunner(stage, repo, report) {
   const env = withoutGitRepositoryEnv(process.env);
   let command = stage.command;
+  // A narrowed Vitest rerun already passes its own arguments after `--` (HS2-5340N1).
   if (report?.kind === 'vitest')
-    command += ` -- --reporter=default --reporter=json --outputFile.json=${quote(report.path)}`;
+    command += `${/\s--\s/.test(` ${command} `) ? '' : ' --'} --reporter=default --reporter=json --outputFile.json=${quote(report.path)}`;
   if (report?.kind === 'playwright') {
     command += ' --reporter=line,json';
     env.PLAYWRIGHT_JSON_OUTPUT_NAME = report.path;
@@ -697,6 +699,8 @@ export function runGate(options = {}) {
     inspect = false,
     verify = false,
     runner,
+    // Test seam: the per-case report a stage writes; production derives it from the command.
+    reportFor: stageReport = runner ? () => null : reportFor,
     versions,
     budgetMs,
     tier,
@@ -814,16 +818,27 @@ export function runGate(options = {}) {
   remember();
   const results = [];
   const observations = [];
+  const flaky = [];
   for (const stage of before.checks) {
     const stagePath = join(before.cache, `stage-${stage.key}.json`);
-    if (read(stagePath)?.key === stage.key) {
+    const recorded = read(stagePath);
+    if (recorded?.key === stage.key) {
       results.push({ command: stage.command, reused: true });
+      flaky.push(...(recorded.flaky ?? []));
       attempt.checks.push({ id: observationStageKey(stage), outcome: 'reused' });
       remember();
       continue;
     }
-    log(`Run ${stage.cwd}: ${stage.command} (${stage.budgetReason}; ${stage.reasons.join('; ')})`);
-    const report = runner ? null : reportFor(stage, repo);
+    const report = stageReport(stage, repo);
+    // HS2-5340N1: a failed suite stage on these exact inputs reruns only its failed cases.
+    const partialPath = join(before.cache, `stage-${stage.key}.partial.json`);
+    const partial = report ? readPartial(partialPath, stage.key, stage.command) : null;
+    if (partial)
+      log(
+        `Rerun only ${partial.failed.length} failed of ${partial.total} case(s) from the previous attempt on these exact inputs: ${stage.cwd}: ${stage.command}`,
+      );
+    else log(`Run ${stage.cwd}: ${stage.command} (${stage.budgetReason}; ${stage.reasons.join('; ')})`);
+    const running = partial ? { ...stage, command: partial.narrowed } : stage;
     if (report && report.kind !== 'nextest') {
       mkdirSync(dirname(report.path), { recursive: true });
       rmSync(report.path, { force: true });
@@ -832,10 +847,12 @@ export function runGate(options = {}) {
     const check = { id: observationStageKey(stage), outcome: 'interrupted', startedAt: started };
     attempt.checks.push(check);
     remember();
-    const result = execute([stage], {
+    const result = execute([running], {
       repo,
-      runner: runner ?? ((current) => instrumentedRunner(current, repo, report)),
+      runner: runner ? (current) => runner(current, report) : (current) => instrumentedRunner(current, repo, report),
     });
+    result.results[0].command = stage.command;
+    if (partial) result.results[0].narrowed = partial.narrowed;
     results.push(...result.results);
     const finished = Date.now();
     const outcome = result.results[0];
@@ -843,18 +860,62 @@ export function runGate(options = {}) {
     check.ms = finished - started;
     check.outcome = outcome.signal ? 'interrupted' : result.status === 0 ? 'pass' : 'fail';
     check.category = outcome.signal ? `signal:${outcome.signal}` : result.status === 0 ? null : `exit:${result.status}`;
+    let body = null;
     if (report) {
       try {
-        if (statSync(report.path).mtimeMs >= started) {
-          const body = readFileSync(report.path, 'utf8');
+        // Playwright and Vitest reports were removed before the run, so any report is fresh;
+        // nextest's fixed JUnit path is judged by time, allowing for coarse file timestamps.
+        if (report.kind !== 'nextest' || statSync(report.path).mtimeMs >= started - 1000)
+          body = readFileSync(report.path, 'utf8');
+      } catch {
+        /* A missing runner report leaves case observations unknown. */
+      }
+      try {
+        if (body !== null) {
           attempt.cases.push(...reportCaseObservations(report.kind, body, report.root));
           attempt.checks.push(...reportFileObservations(report.kind, body, report.root));
         }
       } catch {
-        /* A missing runner report leaves case observations unknown. */
+        /* An unparseable report leaves case observations unknown. */
       }
     }
     remember();
+    let stageFlaky = [];
+    if (partial) {
+      const judged = judgeNarrowedRun(partial, { ...outcome, status: result.status, body, root: report.root });
+      if (judged.result === 'passed') {
+        rmSync(partialPath, { force: true });
+        stageFlaky = judged.flaky;
+        log(
+          `All ${partial.failed.length} previously failed case(s) passed on the targeted rerun. They are flaky; file a ticket for each per the flake policy:\n${stageFlaky.map((name) => `  ${name}`).join('\n')}`,
+        );
+      } else if (judged.result === 'retry') {
+        writePartial(partialPath, judged.partial);
+        log(
+          `${judged.partial.failed.length} case(s) still fail; the next attempt on these inputs reruns only them:\n${judged.partial.failed.map((entry) => `  ${entry.name}`).join('\n')}`,
+        );
+      } else {
+        rmSync(partialPath, { force: true });
+        log(`Cannot trust the targeted rerun (${judged.reason}); the next attempt reruns the whole stage.`);
+      }
+      if (judged.result !== 'passed' && result.status === 0) result.status = 1;
+    } else if (report) {
+      const next = partialFromRun({
+        key: stage.key,
+        command: stage.command,
+        kind: report.kind,
+        status: result.status,
+        signal: outcome.signal,
+        body,
+        root: report.root,
+      });
+      if (next) {
+        writePartial(partialPath, next);
+        log(
+          `${next.failed.length} of ${next.total} case(s) failed; the next attempt on these inputs reruns only them:\n${next.failed.map((entry) => `  ${entry.name}`).join('\n')}`,
+        );
+      } else rmSync(partialPath, { force: true });
+    }
     if (result.status !== 0) {
       log(`Local gate failed after ${Date.now() - gateStarted}ms; budget ${budgetLabel}. No receipt recorded.`);
       const notice = sandboxFailureNotice(env);
@@ -865,8 +926,13 @@ export function runGate(options = {}) {
     if (current.dirty || current.key !== before.key)
       throw new Error('Inputs changed during the gate; evidence discarded.');
     mkdirSync(before.cache, { recursive: true });
-    writeFileSync(stagePath, JSON.stringify({ key: stage.key }));
-    observations.push({ ...result.results[0], files: observedFiles(report, started) });
+    writeFileSync(
+      stagePath,
+      JSON.stringify(stageFlaky.length ? { key: stage.key, flaky: stageFlaky } : { key: stage.key }),
+    );
+    flaky.push(...stageFlaky);
+    // A narrowed rerun's duration is not a whole-stage timing sample.
+    if (!partial) observations.push({ ...result.results[0], files: observedFiles(report, started) });
   }
   const after = prepare(repo, base, full, before.tools, selection);
   if (after.dirty || after.key !== before.key) throw new Error('Inputs changed during the gate; evidence discarded.');
@@ -902,6 +968,7 @@ export function runGate(options = {}) {
       browserCoverage: before.browserCoverage,
       platformCfg: before.platformCfg,
       results,
+      flaky,
     }),
   );
   // Preserve the coordination/completion contract before recording an observation.
@@ -923,6 +990,8 @@ export function runGate(options = {}) {
       log(`Browser engines deferred to CI: ${before.browserCoverage.deferred.summary}`);
   }
   logPlatformCfg(before, log);
+  if (flaky.length)
+    log(`Passed with ${flaky.length} flaky case(s) recorded in the receipt; each needs a flake ticket.`);
   return 0;
 }
 

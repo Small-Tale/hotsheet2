@@ -239,6 +239,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/gate-browser-exercise.mjs # Static index of the browser specs and providers.spec titles that exercise a changed client module through its class/route hooks, plain-module helpers and nearest shipped parents (HS2-N7EY18, HS2-R1D0S5; tests: local-gate.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)
   scripts/gate-test-plan.mjs # Versioned reviewed plan validation, complete deferred-stage disclosure, exact-tree/ticket/strategy identity, and atomic persistence (HS2-RRNZYN; tests: gate-test-plan.test.mjs)
+  scripts/gate-case-rerun.mjs # Failed suite stages rerun only their failed cases on the same stage key: per-runner selectors, narrowed commands, flaky recording, and whole-stage fallbacks (HS2-5340N1; tests: gate-case-rerun.test.mjs, local-gate.test.mjs)
   scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles, including shared development-policy gate selection (HS2-VQ5ND5, HS2-BF79YX; tests: gate-ticket-profile.test.mjs)
   scripts/gate-budget.json   # Checked-in five-minute T0/T1 planning target
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)

@@ -348,6 +348,21 @@ preserve local edits and verify the committed snapshot in a clean worktree.
 Inputs are rechecked after every executed stage and at completion. Failure or
 interruption stops execution and cannot produce a successful receipt.
 
+A failed suite stage does not rerun the whole suite (HS2-5340N1). When a Playwright,
+Vitest, or nextest stage fails and its fresh per-case report maps every failed case
+to a rerunnable selector, the gate stores `stage-<key>.partial.json` beside the stage
+cache. The selectors are a Playwright `/file:line` location (the stage's other options
+are kept), a Vitest file plus an anchored full-name `-t` pattern, or a nextest
+`binary_id(=…) & test(=…)` filter. The next attempt for the same stage key runs only
+those cases, and earlier passing stages stay reused as before. If each requested case
+passes, the stage passes and the cases are recorded as `flaky` in the stage record, the
+receipt, and the log; each still needs a flake ticket. If some still fail, the record
+narrows to them. An interrupted run, a missing or unreadable report, a nonzero exit
+with no failed case, a file-level failure, an unexpected command shape, or a requested
+case the narrowed run did not execute leaves no record, so the next attempt reruns
+the whole stage. A changed stage key (tree, command, or inputs) also invalidates the
+record. The gate never retries within one run; retries stay a CI-only policy.
+
 Receipts live under the Git common directory's `hotsheet-local-gate` directory.
 The existing per-worktree `hotsheet-root-gate/<tree>` compatibility marker is written
 only after successful verification. Push and its hook call the same executor;

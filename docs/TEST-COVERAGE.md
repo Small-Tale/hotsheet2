@@ -838,6 +838,15 @@ reload, unsaved drafts across project switches, live cadence, and wide, medium,
 phone and returned-wide visual states. The source exact-tree T2 gate passed
 Rust, web, migrator lint, fixture build and 1,147 selected browser cases with
 11 skips; covering main CI is recorded after integration.
+HS2-5340N1: `scripts/gate-case-rerun.test.mjs` covers command tokenizing,
+per-runner selectors and narrowing (Playwright location filters, Vitest escaped
+full-name patterns, nextest exact filters), report parsing, and every fallback.
+`scripts/local-gate.test.mjs` drives `runGate` through fail, narrowed fail,
+narrowed pass with recorded flakes, receipt verification, and whole-stage reruns
+after an unprovable failure or changed inputs. The Playwright and Vitest selector
+shapes were also checked against the real runners; nextest is not installed
+locally, so its filter is covered by unit tests and CI only.
+
 HS2-RRNZYN adds synthetic plan-persistence, changed-diff rejection, mandatory
 floor, configured-strategy resolution, complete deferral disclosure, and
 exact-input receipt tests in `scripts/gate-test-plan.test.mjs`,

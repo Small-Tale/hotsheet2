@@ -1534,3 +1534,158 @@ test('HS2-1DF5PQ a new or changed demo selects the catalog-walking audit by titl
   assert.equal(audit.length, 1);
   assert.equal(audit[0].command, `npx playwright test 'tests/touch-field-font.spec.ts' --grep '${AUDIT}'`);
 });
+
+test('HS2-5340N1 a failed suite stage reruns only its failed cases on the same inputs', (t) => {
+  const f = fixture(t);
+  const reportPath = join(f.repo, '.git', 'synthetic-playwright.json');
+  const target = (stage) => stage.command.startsWith("npx playwright test 'tests/contracts.spec.ts'");
+  const reportFor = (stage) =>
+    target(stage) ? { kind: 'playwright', path: reportPath, root: join(f.repo, 'clients/web') } : null;
+  const report = (cases) =>
+    JSON.stringify({
+      suites: [
+        {
+          title: 'contracts.spec.ts',
+          file: 'contracts.spec.ts',
+          specs: cases.map(([line, title, status]) => ({
+            title,
+            file: 'contracts.spec.ts',
+            line,
+            tests: [
+              {
+                projectName: 'chromium',
+                status: status === 'passed' ? 'expected' : 'unexpected',
+                results: [{ status, duration: 3 }],
+              },
+            ],
+          })),
+        },
+      ],
+    });
+  let script = [];
+  const seen = [];
+  const runner = (stage, stageReport) => {
+    if (!stageReport) {
+      seen.push(stage.command);
+      return { status: 0 };
+    }
+    const [status, cases, signal] = script.shift();
+    seen.push(stage.command);
+    if (cases) writeFileSync(reportPath, report(cases));
+    return { status, signal };
+  };
+  const logs = [];
+  const options = { ...f.options, runner, reportFor, log: (line) => logs.push(line) };
+  const contract = () =>
+    seen.filter((command) => command.startsWith('npx playwright test') && command.includes('contracts'));
+
+  // Full run: one pass, two failures. The gate fails and records only the failures.
+  script = [
+    [
+      1,
+      [
+        [3, 'passes', 'passed'],
+        [9, 'fails', 'failed'],
+        [20, 'flakes', 'failed'],
+      ],
+    ],
+  ];
+  assert.equal(runGate(options), 1);
+  assert.match(contract()[0], /^npx playwright test 'tests\/contracts\.spec\.ts'/);
+  assert.ok(
+    logs.some((line) => /2 of 3 case\(s\) failed; the next attempt on these inputs reruns only them/.test(line)),
+  );
+  const before = seen.length;
+
+  // Targeted rerun: one recovers, one still fails. Earlier passing stages are reused.
+  script = [
+    [
+      1,
+      [
+        [9, 'fails', 'failed'],
+        [20, 'flakes', 'passed'],
+      ],
+    ],
+  ];
+  assert.equal(runGate(options), 1);
+  assert.equal(seen.length, before + 1, 'only the narrowed contract stage ran');
+  assert.equal(seen.at(-1), "npx playwright test '/contracts.spec.ts:9' '/contracts.spec.ts:20'");
+  assert.ok(logs.some((line) => /Rerun only 2 failed of 3 case\(s\)/.test(line)));
+
+  // The remaining failure passes; later stages run and the receipt records both flakes.
+  script = [[0, [[9, 'fails', 'passed']]]];
+  assert.equal(runGate(options), 0);
+  assert.ok(contract().includes("npx playwright test '/contracts.spec.ts:9'"));
+  assert.ok(
+    !contract()
+      .slice(1)
+      .some((command) => command.includes("'tests/contracts.spec.ts'")),
+    'never the whole suite again',
+  );
+  assert.ok(logs.some((line) => /Passed with 2 flaky case\(s\) recorded in the receipt/.test(line)));
+  assert.equal(runGate({ ...f.options, verify: true }), 0);
+  const cache = join(f.repo, '.git/hotsheet-local-gate');
+  const receipt = JSON.parse(
+    readFileSync(join(cache, `${prepare(f.repo, undefined, false, f.options.versions).key}.json`), 'utf8'),
+  );
+  assert.deepEqual(receipt.flaky, [
+    '[chromium] contracts.spec.ts:20 › flakes',
+    '[chromium] contracts.spec.ts:9 › fails',
+  ]);
+});
+
+test('HS2-5340N1 an unprovable failure or changed inputs rerun the whole suite stage', (t) => {
+  const f = fixture(t);
+  const reportPath = join(f.repo, '.git', 'synthetic-playwright.json');
+  const target = (stage) => stage.command.startsWith("npx playwright test 'tests/contracts.spec.ts'");
+  const reportFor = (stage) =>
+    target(stage) ? { kind: 'playwright', path: reportPath, root: join(f.repo, 'clients/web') } : null;
+  const failing = JSON.stringify({
+    suites: [
+      {
+        title: 'contracts.spec.ts',
+        file: 'contracts.spec.ts',
+        specs: [
+          {
+            title: 'fails',
+            file: 'contracts.spec.ts',
+            line: 9,
+            tests: [{ projectName: 'chromium', status: 'unexpected', results: [{ status: 'failed', duration: 1 }] }],
+          },
+        ],
+      },
+    ],
+  });
+  let next;
+  const commands = [];
+  const runner = (stage, stageReport) => {
+    if (!stageReport) return { status: 0 };
+    commands.push(stage.command);
+    const { status, body, signal } = next;
+    rmSync(reportPath, { force: true });
+    if (body) writeFileSync(reportPath, body);
+    return { status, signal };
+  };
+  const options = { ...f.options, runner, reportFor };
+  const whole = (command) => command.startsWith("npx playwright test 'tests/contracts.spec.ts'");
+
+  for (const [reason, outcome] of [
+    ['no report', { status: 1 }],
+    ['interrupted', { status: null, signal: 'SIGINT', body: failing }],
+    ['exit without a failed case', { status: 1, body: JSON.stringify({ suites: [] }) }],
+  ]) {
+    next = outcome;
+    assert.notEqual(runGate(options), 0, reason);
+    next = { status: 1 };
+    assert.equal(runGate(options), 1, reason);
+    assert.ok(whole(commands.at(-1)), `${reason}: the next attempt reran the whole stage`);
+  }
+
+  next = { status: 1, body: failing };
+  assert.equal(runGate(options), 1);
+  f.put('clients/web/src/example.ts', 'export const value = 4;\n');
+  f.git('commit', '--quiet', '-am', 'changed inputs');
+  next = { status: 0, body: failing.replace('"unexpected"', '"expected"').replace('"failed"', '"passed"') };
+  assert.equal(runGate(options), 0);
+  assert.ok(whole(commands.at(-1)), 'changed inputs invalidate the targeted record');
+});

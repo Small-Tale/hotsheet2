@@ -65,6 +65,7 @@ export const ROOT_TOOLING_TESTS = [
   'gate-edge-plan',
   'gate-budget',
   'gate-test-plan',
+  'gate-case-rerun',
   'gate-ticket-profile',
   'local-gate',
   'installed-dependencies',
