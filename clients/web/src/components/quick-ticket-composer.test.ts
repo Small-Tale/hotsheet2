@@ -14,8 +14,16 @@ describe('QuickTicketComposer', () => {
   it('HS2-2Z11A5 identifies a follow-up source in the shared creation dialog', () => {
     const markup = String(QuickTicketComposer({ expanded: true, followUpSource: 'HS2-SOURCE' }));
     expect(markup).toContain('Create follow-up to HS2-SOURCE');
-    expect(markup).toContain('Follow-up to HS2-SOURCE');
     expect(markup).toContain('data-action="create-ticket-form"');
+  });
+  it('HS2-Y4Y7V6 renders a follow-up with the standard new-ticket form and only a different title', () => {
+    const form = (markup: string) =>
+      markup.slice(markup.indexOf('<form'), markup.indexOf('</form>') + '</form>'.length);
+    const standard = String(QuickTicketComposer({ expanded: true })),
+      followUp = String(QuickTicketComposer({ expanded: true, followUpSource: 'HS2-SOURCE' }));
+    // The title already names the source, so the body repeats nothing and the form layout is identical.
+    expect(followUp).not.toContain('Follow-up to HS2-SOURCE');
+    expect(form(followUp)).toBe(form(standard));
   });
   it('HS2-2QR67T preserves a newer composer focus intent and focuses each newly opened title', () => {
     const focused: string[] = [],

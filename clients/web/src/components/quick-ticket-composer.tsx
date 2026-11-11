@@ -179,11 +179,6 @@ export function QuickTicketComposer({
           {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
           data-submitting={String(submitting)}
         >
-          {followUpSource && (
-            <Text variant="p" size="compact" tone="quiet">
-              Follow-up to {followUpSource}
-            </Text>
-          )}
           {!sourceIsDefault && (
             <div class="quick-ticket-composer__source-warning">
               <StateBanner

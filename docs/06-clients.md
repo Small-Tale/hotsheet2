@@ -2666,7 +2666,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   row naming its state (HS2-08EPQM).
   Broken, deleted, or unavailable targets display a diagnostic while the source stays
   readable. A ticket context action opens the shared creation composer as a follow-up;
-  successful creation records the relation on its source.
+  successful creation records the relation on its source. The follow-up composer is the
+  standard new-ticket form with identical layout; only its title ("Create follow-up to
+  <slug>") and the recorded association differ, with no repeated source line in the body
+  (HS2-Y4Y7V6).
   If creation returns a target with `follow_up_link_error`, the client retries
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).

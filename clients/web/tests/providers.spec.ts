@@ -35609,8 +35609,20 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
     const dialog = page.getByRole('dialog', { name: `Create follow-up to ${source.slug}` });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Synthetic follow-up ticket');
+    // HS2-Y4Y7V6: the follow-up uses the standard composer layout, so the title leads the first
+    // row beside the category and no "Follow-up to …" line pushes it aside.
+    await expect(dialog.getByText(`Follow-up to ${source.slug}`, { exact: true })).toHaveCount(0);
+    const [titleBox, categoryBox, formBox] = await Promise.all([
+      dialog.locator('.quick-ticket-composer__title').boundingBox(),
+      dialog.locator('.quick-ticket-composer__metadata').boundingBox(),
+      dialog.locator('form.quick-ticket-composer').boundingBox(),
+    ]);
+    expect(titleBox!.x - formBox!.x).toBeLessThan(24);
+    expect(categoryBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width - 1);
+    expect(Math.abs(categoryBox!.y + categoryBox!.height - (titleBox!.y + titleBox!.height))).toBeLessThan(24);
     await page.waitForTimeout(300);
     await page.screenshot({ path: testInfo.outputPath('hs2-2z11a5-composer-wide.png') });
+    await page.screenshot({ path: 'target/visual-captures/hs2-y4y7v6-follow-up-wide.png' });
     await dialog.getByRole('button', { name: 'Create ticket' }).click();
     await expect(dialog).toBeHidden();
     await expect
