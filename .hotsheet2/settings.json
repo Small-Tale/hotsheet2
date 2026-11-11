@@ -39,14 +39,23 @@
       "title": "Everything"
     }
   ],
+  "development_strategy": {
+    "default": "risk-guided",
+    "green_main_goal_minutes": 360,
+    "version": 1
+  },
   "integration_strategies": {
     "allowed": [
       {
         "reason": "Maintainer requested batch integration mode on 2026-11-06",
         "strategy": "batch"
+      },
+      {
+        "reason": "Maintainer selected risk-guided development strategy; stage batches for CI before main promotion",
+        "strategy": "ci-staged"
       }
     ],
-    "default": "serial"
+    "default": "ci-staged"
   },
   "push_policy": "push-per-ticket",
   "terminals": [
