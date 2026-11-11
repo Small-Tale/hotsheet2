@@ -148,7 +148,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         const project = projects.peek().find((entry) => entry.id === item.projectId);
         if (!project) throw new Error('Project is no longer open.');
         const blob = await new Api(project.apiPath).synthesizeSpeech(
-          item.narration,
+          item.spoken,
           provider.peek(),
           voice.peek() || undefined,
         );
@@ -178,7 +178,8 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       error.value = 'This browser has no local speech voice.';
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(item.narration);
+    // Speech says the item's summary, never its literal command (HS2-R5Q2GY).
+    const utterance = new SpeechSynthesisUtterance(item.spoken);
     utterance.rate = rate.peek();
     if (voice.peek()) {
       const selected = speechSynthesis.getVoices().find((candidate) => candidate.name === voice.peek());

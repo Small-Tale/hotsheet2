@@ -98,7 +98,12 @@ The `activity` capability turns native signals → events; the host owns the str
   cross-project digest, live narration over the change stream, a bounded reel stepped
   with previous and next (the expanded card shows no history list and gives its height
   to the current item, HS2-7YD7S9). The shown item renders as Markdown through the
-  shared note renderer, so commands and code are monospaced (HS2-YJK0G9),
+  shared note renderer, so commands and code are monospaced (HS2-YJK0G9). Speech
+  never reads a literal command (HS2-R5Q2GY): the client derives a deterministic spoken
+  summary. A command event becomes what its program does ("claude ran tests", "codex
+  committed changes", "wrote a file", or "ran a command"). Other events keep their prose,
+  with inline code read as a short name or "a command", and code blocks and links
+  replaced by plain words. A default edit summary is read by file name,
   browser speech or a configured server provider. The macOS server offers a local
   `macos-say` provider. A settings menu beside the toggles (HS2-PRCC6V) chooses the
   engine, a browser voice for the page's language (up to 24; a server engine uses its

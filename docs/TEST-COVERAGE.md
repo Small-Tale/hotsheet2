@@ -352,6 +352,11 @@ HS2-YJK0G9 is covered in `announcer-overlay.test.ts` (inline code, emphasis, and
 raw HTML through the shared Markdown renderer) and `announcer.spec.ts` (a monospaced
 command distinct from the prose font, no literal backticks, and a long command wrapping
 inside the docked section).
+HS2-R5Q2GY is covered in `announcer-speech.test.ts` (no command text, path, flag, or
+quoted fragment in the spoken text for wrapped, heredoc, env-prefixed, and Git commands;
+command phrases; prose with code, blocks, and links; edits by file name; empty events)
+and `announcer.spec.ts` (the real shell displays the precise command and speaks only its
+summary).
 
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in

@@ -1,3 +1,4 @@
+import { announcerSpokenText } from './announcer-speech';
 import type { ActivityEvent, CheckoutActivityEvent } from './api';
 
 export interface AnnouncerReelItem {
@@ -6,7 +7,10 @@ export interface AnnouncerReelItem {
   projectName: string;
   storeId: string;
   event: ActivityEvent;
+  /** What the display shows: the event's own summary, rendered as Markdown (HS2-YJK0G9). */
   narration: string;
+  /** What speech says: a summary that never reads a literal command (HS2-R5Q2GY). */
+  spoken: string;
   change?: { path: string; operation?: string; fileCount?: number };
 }
 
@@ -37,6 +41,7 @@ export function announcerItem(
     storeId,
     event,
     narration: event.summary.trim() || `${event.tool} reported ${event.kind.replaceAll('_', ' ')}.`,
+    spoken: announcerSpokenText(event),
     change: event.kind === 'edit' ? changeDetail(event.detail) : undefined,
   };
 }
