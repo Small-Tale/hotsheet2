@@ -75,20 +75,26 @@ fn usage_since_with_prices(
     Ok(usage_from_lines(&bytes, prices))
 }
 
-/// The numeric usage of one main-chain assistant transcript row. Only the message id,
-/// timestamp, model, and counters are read; content never leaves this function.
+/// The numeric usage of one assistant transcript row of the wanted chain. Only the message
+/// id, timestamp, model, stop reason, and counters are read; content never leaves this
+/// function.
 struct MessageRow {
     id: String,
     timestamp: String,
     usage: Usage,
     cost: Option<f64>,
     categories: Option<ClaudeTokenCategories>,
+    /// The row names a stop reason: Claude wrote the message's final counters (HS2-JW6N67).
+    complete: bool,
 }
 
-fn message_row(line: &[u8], prices: Option<&Prices>) -> Option<MessageRow> {
+/// `sidechain` selects a subagent transcript's rows (`isSidechain: true`, HS2-JW6N67);
+/// otherwise only main-chain rows count, so a subagent row in the main file is never
+/// mistaken for the session's own response.
+fn message_row(line: &[u8], prices: Option<&Prices>, sidechain: bool) -> Option<MessageRow> {
     let value = serde_json::from_slice::<Value>(line).ok()?;
     if value.get("type").and_then(Value::as_str) != Some("assistant")
-        || value.get("isSidechain").and_then(Value::as_bool) == Some(true)
+        || (value.get("isSidechain").and_then(Value::as_bool) == Some(true)) != sidechain
         || value
             .get("parent_tool_use_id")
             .is_some_and(|parent| !parent.is_null())
@@ -127,7 +133,12 @@ fn message_row(line: &[u8], prices: Option<&Prices>) -> Option<MessageRow> {
     if usage.tokens_in == 0 && usage.tokens_out == 0 {
         return None;
     }
+    let complete = message
+        .get("stop_reason")
+        .and_then(Value::as_str)
+        .is_some_and(|reason| !reason.is_empty());
     Some(MessageRow {
+        complete,
         id: id.to_owned(),
         timestamp: value
             .get("timestamp")
@@ -144,7 +155,7 @@ fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<ClaudeTurnU
     let mut messages =
         BTreeMap::<String, (String, Usage, Option<f64>, Option<ClaudeTokenCategories>)>::new();
     for line in bytes.split(|byte| *byte == b'\n') {
-        let Some(row) = message_row(line, prices) else {
+        let Some(row) = message_row(line, prices, false) else {
             continue;
         };
         // A streamed assistant message may appear on several rows. The latest snapshot of
@@ -231,26 +242,41 @@ struct PendingMessage {
     /// Byte offset of the line that first named this message; a resume reads from here.
     first_offset: u64,
     message: MessageUsage,
+    /// A row of this message named a stop reason, so its counters are final (HS2-JW6N67).
+    complete: bool,
 }
 
 /// Bytes read per chunk while following; complete lines only are consumed.
 const FOLLOW_CHUNK: u64 = 8 * 1024 * 1024;
 
 /// Follows one interactive Claude transcript and yields each assistant message's usage once
-/// it is final (HS2-SSMDQ1). A message is final when a row of a later message appears, or
-/// when the caller says the turn ended. Repeated rows of one message keep its latest
-/// counter snapshot, as the turn scan does. Only usage fields are retained.
+/// it is final (HS2-SSMDQ1). A message is final when a row of a later message appears, when
+/// one of its rows names a stop reason (HS2-JW6N67), or when the caller says the turn
+/// ended. Repeated rows of one message keep its latest counter snapshot, as the turn scan
+/// does. Only usage fields are retained.
 pub struct TranscriptFollower {
     offset: u64,
     pending: Vec<PendingMessage>,
+    sidechain: bool,
 }
 
 impl TranscriptFollower {
-    /// Start following after byte `offset` (a prompt-time size, or a persisted resume point).
+    /// Start following a session's main transcript after byte `offset` (a prompt-time size,
+    /// or a persisted resume point).
     pub fn new(offset: u64) -> Self {
         Self {
             offset,
             pending: Vec::new(),
+            sidechain: false,
+        }
+    }
+
+    /// Follow one background subagent's own transcript (`<session>/subagents/agent-<id>.jsonl`),
+    /// whose rows are all sidechain rows (HS2-JW6N67).
+    pub fn subagent(offset: u64) -> Self {
+        Self {
+            sidechain: true,
+            ..Self::new(offset)
         }
     }
 
@@ -299,7 +325,7 @@ impl TranscriptFollower {
             for line in bytes[..=end].split_inclusive(|byte| *byte == b'\n') {
                 let at = line_start;
                 line_start += line.len() as u64;
-                let Some(row) = message_row(line, prices) else {
+                let Some(row) = message_row(line, prices, self.sidechain) else {
                     continue;
                 };
                 match self
@@ -308,6 +334,7 @@ impl TranscriptFollower {
                     .find(|pending| pending.message.message_id == row.id)
                 {
                     Some(pending) => {
+                        pending.complete |= row.complete;
                         // The latest snapshot is authoritative; a stale row cannot lower it.
                         if row.timestamp >= pending.message.timestamp {
                             pending.message.timestamp = row.timestamp;
@@ -320,6 +347,7 @@ impl TranscriptFollower {
                     }
                     None => self.pending.push(PendingMessage {
                         first_offset: at,
+                        complete: row.complete,
                         message: MessageUsage {
                             message_id: row.id,
                             timestamp: row.timestamp,
@@ -337,10 +365,12 @@ impl TranscriptFollower {
         Ok(())
     }
 
-    /// The final messages, oldest first: every pending one but the newest, or all of them
-    /// when `turn_ended`. They stay pending until [`Self::recorded`] confirms them.
+    /// The final messages, oldest first: every pending one but the newest, all of them when
+    /// `turn_ended` or when the newest already named its stop reason. They stay pending
+    /// until [`Self::recorded`] confirms them.
     pub fn ready(&self, turn_ended: bool) -> Vec<MessageUsage> {
-        let count = if turn_ended {
+        let newest_complete = self.pending.last().is_some_and(|pending| pending.complete);
+        let count = if turn_ended || newest_complete {
             self.pending.len()
         } else {
             self.pending.len().saturating_sub(1)
@@ -373,9 +403,50 @@ impl Drop for TranscriptWatch {
 /// native stream started is never reported to it. One read, never a repeating timer.
 const WATCH_SETTLE: std::time::Duration = std::time::Duration::from_secs(3);
 
-/// Call `on_change` from a background thread whenever `transcript`'s directory changes,
-/// once right away, and once more after [`WATCH_SETTLE`]. Wakes come from filesystem
-/// notifications and are coalesced; nothing polls. The directory must exist.
+/// The most subagent transcripts one session follows; more are ignored, never guessed.
+const MAX_SUBAGENTS: usize = 1024;
+
+/// The directory where Claude Code keeps a session's own files, beside its transcript:
+/// `<projects>/<project>/<session>/`.
+fn session_dir(transcript: &Path) -> std::path::PathBuf {
+    transcript.with_extension("")
+}
+
+/// The background subagent transcripts of the session whose main transcript is
+/// `transcript`, as `(agent id, path)` sorted by id: regular files named
+/// `<session>/subagents/agent-<id>.jsonl` with a plain id (HS2-JW6N67). Symlinks and other
+/// names are skipped; a missing directory has none.
+pub fn subagent_transcripts(transcript: &Path) -> Vec<(String, std::path::PathBuf)> {
+    let Ok(entries) = std::fs::read_dir(session_dir(transcript).join("subagents")) else {
+        return Vec::new();
+    };
+    let mut found: Vec<_> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let id = name
+                .to_str()?
+                .strip_prefix("agent-")?
+                .strip_suffix(".jsonl")?;
+            let plain = !id.is_empty()
+                && id.len() <= 128
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+            let regular = entry.file_type().ok()?.is_file();
+            (plain && regular).then(|| (id.to_owned(), entry.path()))
+        })
+        .collect();
+    found.sort();
+    found.truncate(MAX_SUBAGENTS);
+    found
+}
+
+/// Call `on_change` from a background thread whenever `transcript`'s directory or its
+/// session's own directory (where subagent transcripts live, HS2-JW6N67) changes, once
+/// right away, and once more after [`WATCH_SETTLE`]. The session directory is watched as
+/// soon as it exists. Wakes come from filesystem notifications and are coalesced; nothing
+/// polls. The transcript's directory must exist.
 pub fn watch_transcript(
     transcript: &Path,
     mut on_change: impl FnMut() + Send + 'static,
@@ -387,6 +458,7 @@ pub fn watch_transcript(
         .filter(|dir| dir.is_dir())
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no transcript directory"))?
         .to_path_buf();
+    let session = session_dir(transcript);
     let (wake, woken) = channel::<bool>();
     let notify_wake = wake.clone();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
@@ -401,6 +473,15 @@ pub fn watch_transcript(
         if watcher.watch(&dir, RecursiveMode::NonRecursive).is_err() {
             return;
         }
+        // Claude creates the session directory on first use; its creation wakes the
+        // transcript directory's watch, and the next wake starts watching it.
+        let mut session_watched = false;
+        let mut watch_session = |watcher: &mut notify::RecommendedWatcher| {
+            if !session_watched && session.is_dir() {
+                session_watched = watcher.watch(&session, RecursiveMode::Recursive).is_ok();
+            }
+        };
+        watch_session(&mut watcher);
         on_change();
         let mut settle = Some(std::time::Instant::now() + WATCH_SETTLE);
         loop {
@@ -425,6 +506,7 @@ pub fn watch_transcript(
                             return;
                         }
                     }
+                    watch_session(&mut watcher);
                     on_change();
                 }
                 Ok(false) | Err(_) => return,
@@ -556,6 +638,139 @@ mod tests {
             .expect("an append wakes the follower");
         drop(watch);
         assert!(watch_transcript(&dir.path().join("none/s.jsonl"), || {}).is_err());
+    }
+
+    fn agent_row(id: &str, at: &str, output: u64, stop: Option<&str>) -> String {
+        serde_json::json!({
+            "type": "assistant", "timestamp": at, "isSidechain": true, "agentId": "a1",
+            "message": {
+                "id": id, "model": "claude-a", "stop_reason": stop,
+                "usage": {"input_tokens": 1, "output_tokens": output}
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn hs2_jw6n67_subagent_follower_reads_only_sidechain_rows_and_finalizes_on_stop_reason() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        // A main-chain row never counts in a subagent transcript.
+        writeln!(file, "{}", row("main", "1", 5, 0, 5, "claude-a")).unwrap();
+        writeln!(file, "{}", agent_row("a", "2026-01-01T00:00:01Z", 2, None)).unwrap();
+        let mut follower = TranscriptFollower::subagent(0);
+        follower.read_appended(file.path(), None).unwrap();
+        assert!(
+            follower.ready(false).is_empty(),
+            "the newest message may grow"
+        );
+        // Its stop-reason row carries the final counters: final with no later message.
+        writeln!(
+            file,
+            "{}",
+            agent_row("a", "2026-01-01T00:00:02Z", 7, Some("tool_use"))
+        )
+        .unwrap();
+        follower.read_appended(file.path(), None).unwrap();
+        let ready = follower.ready(false);
+        assert_eq!(ready.len(), 1);
+        assert_eq!(
+            (ready[0].message_id.as_str(), ready[0].usage.tokens_out),
+            ("a", 7)
+        );
+        follower.recorded(1);
+        // A stale repeated row after the stop reason cannot reopen or lower it.
+        writeln!(file, "{}", agent_row("b", "2026-01-01T00:00:03Z", 3, None)).unwrap();
+        writeln!(
+            file,
+            "{}",
+            agent_row("b", "2026-01-01T00:00:04Z", 4, Some("end_turn"))
+        )
+        .unwrap();
+        writeln!(file, "{}", agent_row("b", "2026-01-01T00:00:03Z", 1, None)).unwrap();
+        follower.read_appended(file.path(), None).unwrap();
+        let ready = follower.ready(false);
+        assert_eq!(
+            (ready[0].message_id.as_str(), ready[0].usage.tokens_out),
+            ("b", 4)
+        );
+        follower.recorded(1);
+        assert!(!follower.has_pending());
+
+        // The main follower still ignores every sidechain row, stop reason or not.
+        let mut main = TranscriptFollower::new(0);
+        main.read_appended(file.path(), None).unwrap();
+        let main_ready = main.ready(true);
+        assert_eq!(main_ready.len(), 1);
+        assert_eq!(main_ready[0].message_id, "main");
+    }
+
+    #[test]
+    fn hs2_jw6n67_lists_only_plain_regular_subagent_transcripts() {
+        let dir = tempfile::tempdir().unwrap();
+        let transcript = dir.path().join("session.jsonl");
+        assert!(
+            subagent_transcripts(&transcript).is_empty(),
+            "no session directory"
+        );
+        let agents = dir.path().join("session").join("subagents");
+        std::fs::create_dir_all(&agents).unwrap();
+        for name in [
+            "agent-b2.jsonl",
+            "agent-a1.jsonl",
+            "agent-a1.meta.json",
+            "agent-.jsonl",
+            "agent-x.y.jsonl",
+            "other.jsonl",
+        ] {
+            std::fs::write(agents.join(name), "").unwrap();
+        }
+        std::fs::create_dir(agents.join("agent-dir.jsonl")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            agents.join("agent-a1.jsonl"),
+            agents.join("agent-link.jsonl"),
+        )
+        .unwrap();
+        let found = subagent_transcripts(&transcript);
+        let ids: Vec<_> = found.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, ["a1", "b2"]);
+        assert_eq!(found[0].1, agents.join("agent-a1.jsonl"));
+    }
+
+    #[test]
+    fn hs2_jw6n67_transcript_watch_wakes_on_subagent_appends_in_a_later_session_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let (sent, received) = std::sync::mpsc::channel();
+        let _watch = watch_transcript(&path, move || {
+            let _ = sent.send(());
+        })
+        .unwrap();
+        let wait = || {
+            received
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .expect("a wake arrives");
+        };
+        wait();
+        // The session directory appears after the watch started; its creation wakes once,
+        // and from then on appends deep inside it wake the follower too.
+        let agents = dir.path().join("session").join("subagents");
+        std::fs::create_dir_all(&agents).unwrap();
+        wait();
+        while received.try_recv().is_ok() {}
+        let agent = agents.join("agent-a1.jsonl");
+        // Retry the append until a wake proves the new directory is watched; a native stream
+        // can miss writes made in the moment the watch is being added.
+        for attempt in 0.. {
+            std::fs::write(&agent, format!("{attempt}\n")).unwrap();
+            if received
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_ok()
+            {
+                break;
+            }
+            assert!(attempt < 10, "a subagent append never woke the follower");
+        }
     }
 
     fn row(id: &str, at: &str, input: u64, cached: u64, output: u64, model: &str) -> String {

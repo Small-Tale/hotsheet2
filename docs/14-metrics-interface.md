@@ -216,6 +216,15 @@ metrics reroute-bootstrap-usage` previews moving them; `--apply` moves them. It 
   terminal's Claude or shell worker, and the turn's messages are attributed to it; a
   repeated prompt before the transcript grows keeps the snapshot. A message stays
   pending through a transient metrics failure and is retried under the same identity.
+  **Background subagents (HS2-JW6N67):** Claude writes each subagent's transcript to
+  `<session>/subagents/agent-<id>.jsonl` (all sidechain rows), not to the main
+  transcript. The same follow watches the session directory and records each subagent
+  message under `claude-message:<session>:agent-<id>:<message id>` in the same project
+  store and turn attribution, so a session that mostly waits on its agents still moves
+  tokens per minute. A message is also final once one of its rows names a stop reason,
+  because an agent can outlive the parent's turn and its last message has no successor.
+  Agent transcripts already present when a follow starts begin at their end; ones that
+  appear later begin at their start; their resume offsets persist with the follow.
   The follow's resume offset (the first row of the oldest unrecorded message), session,
   transcript path, and usage checkout persist in `${HOTSHEET_HOME}/claude-usage/<terminal>.json`;
   a restarted server resumes the follows of terminals its broker kept alive and drops

@@ -1812,7 +1812,8 @@ The same Claude prompt and turn-end hooks send only `session_id`, `transcript_pa
 and the boundary kind to `/terminals/{id}/claude-turn` (HS2-W2GNTT). The server accepts
 reports from the connected session, then follows the transcript and records numeric
 usage per assistant response as it completes rather than once per turn (HS2-SSMDQ1,
-`docs/14` §14.5). It snapshots a unique live terminal claim at the prompt,
+`docs/14` §14.5), including the responses of the session's background subagents from
+their own `<session>/subagents/` transcripts (HS2-JW6N67). It snapshots a unique live terminal claim at the prompt,
 so a claim acquired later cannot retroactively own the turn. Transient transcript
 or metrics errors leave the turn available for a repeated turn-end hook, which keeps
 the original claim and records its usage once (HS2-F8578J). Transcript and prompt

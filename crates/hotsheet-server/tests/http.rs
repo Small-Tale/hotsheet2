@@ -3372,6 +3372,173 @@ async fn hs2_ssmdq1_claude_usage_records_per_response_mid_turn_and_resumes_after
     assert!(!persisted.exists());
 }
 
+/// HS2-JW6N67: background subagents write their own transcripts under
+/// `<session>/subagents/`. Their responses count in the project's usage, each once, while
+/// the parent waits; an agent outlives the parent's Stop; transcripts that predate the
+/// follow are not back-counted; and a restarted server resumes them.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_restart() {
+    use std::io::Write as _;
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(dir.path().join("store.hs2"), &StoreMetadata::new("HS")).unwrap();
+    let machine_home = dir.path().join("machine-home");
+    let server = || {
+        AppState::new(store.clone(), SECRET.into())
+            .unwrap()
+            .with_default_codex_home(dir.path().join("no-codex-home"))
+            .with_machine_home(&machine_home)
+    };
+    let transcripts = dir.path().join("claude").join("projects").join("p");
+    let agents = transcripts.join("parent").join("subagents");
+    std::fs::create_dir_all(&agents).unwrap();
+    let transcript = transcripts.join("parent.jsonl");
+    let path = transcript.to_string_lossy().to_string();
+    let append =
+        |file: &std::path::Path, id: &str, output: u64, sidechain: bool, stop: Option<&str>| {
+            let row = serde_json::json!({
+                "type":"assistant", "isSidechain": sidechain,
+                "timestamp": time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339).unwrap(),
+                "message":{"id": id, "model":"claude-opus-4-8", "stop_reason": stop,
+                    "usage":{"input_tokens":1,"output_tokens":output}}
+            });
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(file)
+                .unwrap();
+            writeln!(file, "{row}").unwrap();
+        };
+    let agent = |id: &str| agents.join(format!("agent-{id}.jsonl"));
+    let recorded = || {
+        let mut out: Vec<u64> = hotsheet_ticketing::metrics::read_raw(&store)
+            .unwrap()
+            .iter()
+            .map(|event| event.tokens_out)
+            .collect();
+        out.sort_unstable();
+        out
+    };
+    let until = |want: &'static [u64]| {
+        let recorded = &recorded;
+        async move {
+            for _ in 0..600 {
+                if recorded() == want {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            panic!("expected {want:?} recorded, got {:?}", recorded());
+        }
+    };
+    let call = |router: axum::Router, method: &'static str, uri: &'static str, body: String| async move {
+        router
+            .oneshot(authed(method, uri, Some(&body)))
+            .await
+            .unwrap()
+            .status()
+    };
+    let turn = |event: &str| {
+        serde_json::json!({"event": event, "session_id": "parent", "transcript_path": path})
+            .to_string()
+    };
+    let connect = r#"{"agent":"claude","session_id":"parent"}"#.to_owned();
+    let terminal = r#"{"command":"cat","id":"parent-term"}"#.to_owned();
+    let endpoint = "/terminals/parent-term/claude-turn";
+
+    // An agent transcript from before the follow began is not back-counted.
+    append(&agent("old"), "old-1", 1000, true, Some("end_turn"));
+    let first = app(server());
+    call(first.clone(), "POST", "/terminals", terminal.clone()).await;
+    call(
+        first.clone(),
+        "POST",
+        "/terminals/parent-term/ai-connection",
+        connect.clone(),
+    )
+    .await;
+    assert_eq!(
+        call(first.clone(), "POST", endpoint, turn("start")).await,
+        StatusCode::NO_CONTENT
+    );
+    // A sidechain row in the main transcript never counts as the parent's response.
+    append(&transcript, "stray", 900, true, Some("end_turn"));
+    // Two concurrent agents appear mid-turn. A message is final at its stop reason or when
+    // a later message appears; the newest without a stop reason waits.
+    append(&agent("a1"), "a1-1", 1, true, Some("tool_use"));
+    append(&agent("a2"), "a2-1", 2, true, None);
+    append(&agent("a2"), "a2-2", 3, true, None);
+    until(&[1, 2]).await;
+    // The parent's turn ends while a2 still runs: a2's open message keeps waiting.
+    assert_eq!(
+        call(first.clone(), "POST", endpoint, turn("stop")).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(recorded(), [1, 2]);
+    append(&agent("a2"), "a2-2", 4, true, Some("end_turn"));
+    until(&[1, 2, 4]).await;
+    // The old agent appends again: only its new message counts.
+    append(&agent("old"), "old-2", 5, true, Some("end_turn"));
+    until(&[1, 2, 4, 5]).await;
+    let persisted = machine_home.join("claude-usage").join("parent-term.json");
+    let record: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&persisted).unwrap()).unwrap();
+    assert_eq!(
+        record["subagents"].as_object().unwrap().len(),
+        3,
+        "every followed agent's offset persists: {record}"
+    );
+    drop(first);
+
+    // While the server is down, a1 appends and a new agent starts.
+    append(&agent("a1"), "a1-2", 6, true, Some("end_turn"));
+    append(&agent("a3"), "a3-1", 7, true, Some("end_turn"));
+    let restarted = server();
+    hotsheet_server::resume_claude_usage_follows(&restarted, &["parent-term".to_owned()]);
+    let second = app(restarted);
+    until(&[1, 2, 4, 5, 6, 7]).await;
+    // Repeated rows of recorded messages add nothing.
+    append(&agent("a3"), "a3-1", 7, true, Some("end_turn"));
+    append(&agent("a3"), "a3-2", 8, true, Some("end_turn"));
+    until(&[1, 2, 4, 5, 6, 7, 8]).await;
+    // The terminal ends: its follow stops and its record goes away.
+    call(second.clone(), "POST", "/terminals", terminal).await;
+    call(
+        second.clone(),
+        "DELETE",
+        "/terminals/parent-term",
+        String::new(),
+    )
+    .await;
+    assert!(!persisted.exists());
+
+    // A record written before HS2-JW6N67 (no subagent offsets) starts existing agent
+    // transcripts at their end rather than back-counting them. It uses its own session,
+    // which no earlier server in this test follows.
+    let legacy_transcript = transcripts.join("legacy.jsonl");
+    std::fs::write(&legacy_transcript, "").unwrap();
+    let legacy_agent = transcripts
+        .join("legacy")
+        .join("subagents")
+        .join("agent-l1.jsonl");
+    std::fs::create_dir_all(legacy_agent.parent().unwrap()).unwrap();
+    append(&legacy_agent, "l1-1", 50, true, Some("end_turn"));
+    std::fs::write(
+        machine_home.join("claude-usage").join("legacy-term.json"),
+        serde_json::json!({
+            "terminal": "legacy-term", "session_id": "legacy",
+            "transcript": legacy_transcript, "offset": 0,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let legacy_server = server();
+    hotsheet_server::resume_claude_usage_follows(&legacy_server, &["legacy-term".to_owned()]);
+    let _third = app(legacy_server);
+    append(&legacy_agent, "l1-2", 9, true, Some("end_turn"));
+    until(&[1, 2, 4, 5, 6, 7, 8, 9]).await;
+}
+
 #[tokio::test]
 async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
     // HS2-EV1XK3: a session whose Hot Sheet SessionStart hook ran marks its terminal connected

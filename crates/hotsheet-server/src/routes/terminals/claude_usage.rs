@@ -9,6 +9,11 @@
 //! session, transcript path, and usage checkout persist under the machine home, so a
 //! restarted server resumes following terminals the broker kept alive. Only message ids,
 //! timestamps, models, and counters are read; no transcript content enters server state.
+//!
+//! Background subagents write their own transcripts under `<session>/subagents/`
+//! (HS2-JW6N67). The follow reads those too, so a session that mostly waits on its agents
+//! still moves its project's tokens per minute. Each subagent message is recorded once
+//! under `claude-message:<session>:agent-<id>:<message id>` in the same project store.
 
 use super::usage_store::{UsageTarget, terminal_usage_target, usage_target_for_checkout};
 use crate::{ApiError, AppState};
@@ -16,12 +21,13 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use hotsheet_aitools::claude_transcript_usage::{
-    MessageUsage, TranscriptFollower, TranscriptWatch, watch_transcript,
+    MessageUsage, TranscriptFollower, TranscriptWatch, subagent_transcripts, watch_transcript,
 };
 use hotsheet_model::Timestamp;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::metrics;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Component, Path as FilePath, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -47,6 +53,8 @@ struct FollowInner {
     session_id: String,
     transcript: PathBuf,
     reader: TranscriptFollower,
+    /// One follower per background subagent transcript, by agent id (HS2-JW6N67).
+    subagents: BTreeMap<String, TranscriptFollower>,
     usage_checkout: Option<String>,
     /// The current turn's project store and unique claim snapshot (HS2-B4EQ87); `None`
     /// until a prompt sets it or a resumed follow first records.
@@ -69,6 +77,10 @@ struct FollowRecord {
     offset: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     usage_checkout: Option<String>,
+    /// Resume offsets of the followed subagent transcripts (HS2-JW6N67). `None` in a record
+    /// written before subagents were followed: their existing transcripts start at the end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subagents: Option<BTreeMap<String, u64>>,
 }
 
 #[derive(Deserialize)]
@@ -206,6 +218,13 @@ fn persist(state: &AppState, inner: &FollowInner) {
         transcript: inner.transcript.clone(),
         offset: inner.reader.resume_offset(),
         usage_checkout: inner.usage_checkout.clone(),
+        subagents: Some(
+            inner
+                .subagents
+                .iter()
+                .map(|(agent, reader)| (agent.clone(), reader.resume_offset()))
+                .collect(),
+        ),
     };
     let write = || -> std::io::Result<()> {
         let dir = path.parent().expect("record paths have a directory");
@@ -246,9 +265,24 @@ fn message_ts(message: &MessageUsage) -> String {
     Timestamp::from_datetime(at).as_str().to_owned()
 }
 
-/// Read what the transcript appended and record every final message (all of them when the
-/// turn ended). Messages stay pending through a failed write and are retried by the next
-/// wake, prompt, or stop under the same identities. Blocking.
+/// The subagent followers for a follow that starts now: transcripts already present start
+/// at their end, like the main transcript, because their earlier rows belong to turns this
+/// server did not attribute (HS2-JW6N67).
+fn subagents_at_end(transcript: &FilePath) -> BTreeMap<String, TranscriptFollower> {
+    subagent_transcripts(transcript)
+        .into_iter()
+        .map(|(agent, path)| {
+            let end = path.metadata().map(|meta| meta.len()).unwrap_or(0);
+            (agent, TranscriptFollower::subagent(end))
+        })
+        .collect()
+}
+
+/// Read what the transcript and its subagent transcripts appended and record every final
+/// message (all of the main transcript's when the turn ended; a subagent can outlive the
+/// turn, so its newest message waits for its stop reason or a later message). Messages
+/// stay pending through a failed write and are retried by the next wake, prompt, or stop
+/// under the same identities. Blocking.
 fn record_ready(
     state: &AppState,
     inner: &mut FollowInner,
@@ -266,33 +300,69 @@ fn record_ready(
     inner
         .reader
         .read_appended(&inner.transcript, Some(&prices))?;
+    let mut subagent_ready = Vec::new();
+    for (agent, path) in subagent_transcripts(&inner.transcript) {
+        // A transcript not followed yet appeared after the follow began: read it from the
+        // start (HS2-JW6N67).
+        let reader = inner
+            .subagents
+            .entry(agent.clone())
+            .or_insert_with(|| TranscriptFollower::subagent(0));
+        reader.read_appended(&path, Some(&prices))?;
+        let ready = reader.ready(false);
+        if !ready.is_empty() {
+            subagent_ready.push((agent, ready));
+        }
+    }
     let ready = inner.reader.ready(turn_ended);
-    if ready.is_empty() {
+    if ready.is_empty() && subagent_ready.is_empty() {
         persist(state, inner);
         return Ok(0);
     }
-    let events: Vec<_> = ready
+    let event = |identity: String, message: &MessageUsage| {
+        (
+            identity,
+            metrics::UsageEvent {
+                ts: message_ts(message),
+                tool: "claude".to_owned(),
+                model: message.usage.model.clone(),
+                tokens_in: message.usage.tokens_in,
+                tokens_out: message.usage.tokens_out,
+                cost_usd: message.usage.cost_usd,
+                ticket: target.ticket.clone(),
+                session: Some(inner.session_id.clone()),
+            },
+            message.categories,
+        )
+    };
+    let mut events: Vec<_> = ready
         .iter()
         .map(|message| {
-            (
+            event(
                 format!("claude-message:{}:{}", inner.session_id, message.message_id),
-                metrics::UsageEvent {
-                    ts: message_ts(message),
-                    tool: "claude".to_owned(),
-                    model: message.usage.model.clone(),
-                    tokens_in: message.usage.tokens_in,
-                    tokens_out: message.usage.tokens_out,
-                    cost_usd: message.usage.cost_usd,
-                    ticket: target.ticket.clone(),
-                    session: Some(inner.session_id.clone()),
-                },
-                message.categories,
+                message,
             )
         })
         .collect();
+    for (agent, messages) in &subagent_ready {
+        events.extend(messages.iter().map(|message| {
+            event(
+                format!(
+                    "claude-message:{}:agent-{agent}:{}",
+                    inner.session_id, message.message_id
+                ),
+                message,
+            )
+        }));
+    }
     let added = metrics::record_many_once_with_claude_tokens(&target.store, &events)?;
     inner.reader.recorded(ready.len());
     inner.turn_messages += ready.len();
+    for (agent, messages) in &subagent_ready {
+        if let Some(reader) = inner.subagents.get_mut(agent) {
+            reader.recorded(messages.len());
+        }
+    }
     persist(state, inner);
     if added > 0 {
         // Tokens per minute moved in the project store (HS2-JTTQMY, HS2-B4EQ87).
@@ -348,6 +418,7 @@ fn ensure_follow(
             session_id: session_id.to_owned(),
             transcript: transcript.to_path_buf(),
             reader: TranscriptFollower::new(offset),
+            subagents: subagents_at_end(transcript),
             usage_checkout: super::usage_store::terminal_usage_checkout(state, terminal),
             target: None,
             turn_start: None,
@@ -490,6 +561,16 @@ pub fn resume_claude_usage_follows(state: &AppState, alive: &[String]) {
             continue;
         };
         let terminal = record.terminal.clone();
+        // Subagent transcripts missing from the record appeared after it was last written,
+        // so the first read starts them at byte zero; a record from before HS2-JW6N67 starts
+        // the existing ones at their end.
+        let subagents = match &record.subagents {
+            Some(offsets) => offsets
+                .iter()
+                .map(|(agent, offset)| (agent.clone(), TranscriptFollower::subagent(*offset)))
+                .collect(),
+            None => subagents_at_end(&record.transcript),
+        };
         let follow = start_follow(
             state,
             FollowInner {
@@ -497,6 +578,7 @@ pub fn resume_claude_usage_follows(state: &AppState, alive: &[String]) {
                 session_id: record.session_id,
                 transcript: record.transcript,
                 reader: TranscriptFollower::new(record.offset),
+                subagents,
                 usage_checkout: record.usage_checkout,
                 target: None,
                 turn_start: None,
