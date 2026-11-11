@@ -175,6 +175,11 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     });
     expect(muxed.status).toBe(200);
     expect(((await muxed.json()) as { results: Array<{ status: number }> }).results[0].status).toBe(200);
+    // HS2-9FWETT: migration status for a registered checkout, refused for anything else.
+    const status = (root: string) =>
+      bridge.request(url(`/remote/projects/migration-jobs?root=${encodeURIComponent(root)}`), { headers });
+    expect((await status(checkoutRoot)).status).toBe(200);
+    expect((await status(workspace)).status).toBe(403);
     const deniedWrite = await bridge.request(url(`/project-api/${checkoutId}/tickets`), {
       method: 'POST',
       headers: { ...headers, 'x-hotsheet-csrf': csrf },

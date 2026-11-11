@@ -137,3 +137,28 @@ it('retries a failed authoritative completion refresh when the same terminal job
   await client.join('/a');
   expect(finished).toHaveBeenCalledTimes(2);
 });
+
+it('reads status and its watch through the configured remote path (HS2-9FWETT)', async () => {
+  const job = fixture('/a');
+  const request = vi.fn<typeof fetch>(async (input) =>
+    requestUrl(input).includes('after=')
+      ? Response.json({ job: { ...job, status: 'succeeded' as const, revision: 2 } })
+      : Response.json({ job }),
+  );
+  const client = new MigrationJobClient(
+    () => {},
+    async () => {},
+    vi.fn(),
+    request,
+    '/__hotsheet/remote/projects/migration-jobs',
+  );
+  await client.join('/a');
+  await vi.waitFor(() => {
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+  expect(request.mock.calls.map(([input]) => requestUrl(input).split('?')[0])).toEqual([
+    '/__hotsheet/remote/projects/migration-jobs',
+    '/__hotsheet/remote/projects/migration-jobs',
+  ]);
+  client.disconnect('/a');
+});

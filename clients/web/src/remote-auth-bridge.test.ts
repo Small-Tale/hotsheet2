@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Checkout } from './api';
 import { changePollSessionHeaders, createDevApp } from './dev-server';
 import { createLocalHostApp } from './local-host';
+import type { MigrationJobApi } from './migration-job-bridge';
 import { openRegisteredProject, type ProjectSession, UnregisteredRemoteProjectError } from './project-bridge';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -245,5 +246,61 @@ describe('HS2-ZVSMTZ remote change-poll multiplexer', () => {
 
   it('builds no session headers for a browser without a cookie', () => {
     expect([...changePollSessionHeaders(new Headers({ origin: PAIRED })).keys()]).toEqual([]);
+  });
+});
+
+describe('HS2-9FWETT remote HS1 migration status', () => {
+  const registered: Checkout[] = [
+    { id: 'synthetic-a1b2', root: '/synthetic/registered', alias: 'registered', stores: [] },
+  ];
+  function app(remote: boolean) {
+    if (remote) vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
+    const watch = vi.fn<MigrationJobApi['watch']>(async () => undefined);
+    const jobs: MigrationJobApi = { start: vi.fn(), watch };
+    const check = vi.fn<(headers: Headers) => Promise<Response>>(async () =>
+      Response.json({ origin: 'https://synthetic-host.example.ts.net' }),
+    );
+    const before = Array.from({ length: 7 }, () => undefined) as [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    return {
+      watch,
+      app: createDevApp(true, ...before, async () => registered, jobs, undefined, undefined, undefined, check),
+    };
+  }
+  const get = (target: ReturnType<typeof createDevApp>, root: string, headers: Record<string, string> = {}) =>
+    target.request(`/__hotsheet/remote/projects/migration-jobs?root=${encodeURIComponent(root)}&after=2`, { headers });
+
+  it('reads status only for a registered checkout', async () => {
+    const { app: target, watch } = app(false);
+    const read = await get(target, '/synthetic/registered');
+    expect(read.status).toBe(200);
+    expect(watch).toHaveBeenCalledWith('/synthetic/registered', 2, expect.any(AbortSignal));
+    expect((await get(target, '/synthetic/elsewhere')).status).toBe(403);
+    expect(watch).toHaveBeenCalledTimes(1);
+  });
+
+  it('is on the remote allowlist for a live session while the local status and start routes are not', async () => {
+    const { app: target, watch } = app(true);
+    const cookie = 'hs2_remote=synthetic-session';
+    expect((await get(target, '/synthetic/registered')).status).toBe(401);
+    expect((await get(target, '/synthetic/registered', { cookie })).status).toBe(200);
+    expect(
+      (
+        await target.request('/__hotsheet/projects/migration-jobs?root=%2Fsynthetic%2Fregistered', {
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await target.request('/__hotsheet/projects/migration-jobs', { method: 'POST', headers: { cookie } })).status,
+    ).toBe(404);
+    expect(watch).toHaveBeenCalledTimes(1);
   });
 });

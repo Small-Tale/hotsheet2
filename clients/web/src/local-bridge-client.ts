@@ -228,6 +228,8 @@ export function parseConversationExportOpen(value: unknown): { conversation?: Co
 
 /** Remote browsers open a host-registered checkout here instead of `/__hotsheet/projects/open` (HS2-3HC9HT). */
 export const REMOTE_PROJECT_OPEN_PATH = '/__hotsheet/remote/projects/open';
+/** Remote devices read HS1 migration status for registered checkouts only (HS2-9FWETT). */
+export const REMOTE_MIGRATION_JOBS_PATH = '/__hotsheet/remote/projects/migration-jobs';
 
 /** Native dialogs open on the server's machine, so a remote client is refused with an explanation (HS2-F78B1S). */
 async function hostOnly<T>(action: HostOnlyAction, run: () => Promise<T>): Promise<T> {

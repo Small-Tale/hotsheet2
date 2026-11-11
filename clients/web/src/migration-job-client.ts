@@ -30,6 +30,8 @@ export class MigrationJobClient {
     private finished: (job: MigrationJob) => Promise<void>,
     private disconnected: (root: string, message: string) => void,
     private request: typeof fetch = (input, init) => fetch(input, init),
+    /** HS2-9FWETT: a remote device reads status through its registered-checkout route. */
+    private statusPath = '/__hotsheet/projects/migration-jobs',
   ) {}
 
   private async decode(response: Response): Promise<unknown> {
@@ -64,7 +66,7 @@ export class MigrationJobClient {
     }
   }
   async join(root: string): Promise<MigrationJob | undefined> {
-    const response = await this.request(`/__hotsheet/projects/migration-jobs?root=${encodeURIComponent(root)}`),
+    const response = await this.request(`${this.statusPath}?root=${encodeURIComponent(root)}`),
       value = (await this.decode(response)) as { job?: MigrationJob };
     if (value.job) {
       this.accept(value.job);
@@ -96,7 +98,7 @@ export class MigrationJobClient {
         if (!current || current.status !== 'running') return;
         const requestedAt = Date.now();
         const response = await this.request(
-            `/__hotsheet/projects/migration-jobs?root=${encodeURIComponent(root)}&after=${current.revision}`,
+            `${this.statusPath}?root=${encodeURIComponent(root)}&after=${current.revision}`,
             { signal: controller.signal },
           ),
           value = (await this.decode(response)) as { job?: MigrationJob };

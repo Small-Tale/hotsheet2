@@ -48,6 +48,11 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-9FWETT: `clients/web/src/remote-auth-bridge.test.ts` reads remote HS1 migration
+status only for registered checkouts and keeps the local status and start routes off
+the remote allowlist; `migration-job-client.test.ts` pins the configured status path;
+`remote-auth-server-integration.test.ts` reads it through the real session.
+
 HS2-ZVSMTZ: `clients/web/src/remote-auth-bridge.test.ts` multiplexes a remote poll with
 only the session cookie forwarded and refuses missing, revoked, or cross-origin
 sessions; `remote-auth-server-integration.test.ts` polls the real server through the

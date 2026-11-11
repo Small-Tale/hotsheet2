@@ -217,7 +217,10 @@ server already lists it, using that checkout's own linked store, and it skips
 the project setup refresh that writes into the host repository. An unregistered
 root answers 403. The client uses this route, and the open-projects picker in
 place of the folder chooser, whenever the page is stamped with the remote auth
-mode or loaded from a non-loopback origin.
+mode or loaded from a non-loopback origin. The same device reads Hot Sheet 1
+migration status through `GET /__hotsheet/remote/projects/migration-jobs`, which also
+answers only for registered checkouts (HS2-9FWETT); starting a migration, removing
+HS1 data, and creating a Git ticket store remain host-only.
 
 **Host-only actions on remote clients (HS2-F78B1S).** Some actions launch a process or
 native dialog on the machine running the server: the configured `git difftool` (ticket

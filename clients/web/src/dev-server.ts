@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 
 import type { Checkout } from './api';
 import {
@@ -12,7 +12,7 @@ import { createConversationExportBridge } from './conversation-export-bridge';
 import { createDevLatencyLog } from './dev-latency-log';
 import { traceDevBridgeRequest } from './dev-request-timing';
 import { isRecord } from './json-value';
-import { REMOTE_PROJECT_OPEN_PATH } from './local-bridge-client';
+import { REMOTE_MIGRATION_JOBS_PATH, REMOTE_PROJECT_OPEN_PATH } from './local-bridge-client';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
 import {
@@ -87,6 +87,7 @@ export function createDevApp(
     const allowed =
       path === '/__hotsheet/checkouts' ||
       path === REMOTE_PROJECT_OPEN_PATH ||
+      path === REMOTE_MIGRATION_JOBS_PATH ||
       path === CHANGE_MUX_PATH ||
       path.startsWith('/__hotsheet/project-api/') ||
       ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
@@ -277,20 +278,25 @@ export function createDevApp(
       return context.json({ error: error instanceof Error ? error.message : String(error) }, 409);
     }
   });
-  app.get('/__hotsheet/projects/migration-jobs', async (context) => {
+  const migrationStatus = async (context: Context, registeredOnly: boolean) => {
     if (!dev) return context.notFound();
     try {
       const root = context.req.query('root'),
         rawAfter = context.req.query('after');
       if (!root || (rawAfter !== undefined && (!Number.isSafeInteger(Number(rawAfter)) || Number(rawAfter) < 0)))
         throw new Error('A project root and valid revision are required.');
+      // HS2-9FWETT: a remote device may read status only for a checkout the host registered.
+      if (registeredOnly && !(await listCheckouts()).some((checkout) => checkout.root === root))
+        return context.json({ error: new UnregisteredRemoteProjectError().message }, 403);
       return context.json({
         job: await jobs.watch(root, rawAfter === undefined ? undefined : Number(rawAfter), context.req.raw.signal),
       });
     } catch (error) {
       return context.json({ error: error instanceof Error ? error.message : String(error) }, 400);
     }
-  });
+  };
+  app.get('/__hotsheet/projects/migration-jobs', (context) => migrationStatus(context, false));
+  app.get(REMOTE_MIGRATION_JOBS_PATH, (context) => migrationStatus(context, true));
   app.delete('/__hotsheet/projects/:project/hs1-data', async (context) => {
     if (!dev) return context.notFound();
     try {

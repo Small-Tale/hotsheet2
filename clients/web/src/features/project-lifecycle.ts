@@ -19,7 +19,7 @@ import { githubAccountEndpoint } from '../github-account-endpoint';
 import { githubAttachmentSettings } from '../github-attachment-settings';
 import { githubSignInOrigin } from '../github-sign-in-origin';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
-import { localBridge } from '../local-bridge-client';
+import { localBridge, REMOTE_MIGRATION_JOBS_PATH } from '../local-bridge-client';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
 import { type ProjectTicketSources, projectTicketSources } from '../new-ticket-source';
@@ -164,6 +164,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     (root, message) => {
       migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [root]: message };
     },
+    undefined,
+    opensProjectsRemotely() ? REMOTE_MIGRATION_JOBS_PATH : undefined,
   );
 
   function hs1SourceIdentity(value: Project) {
