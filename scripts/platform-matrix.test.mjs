@@ -172,6 +172,13 @@ test('HS2-31RGRK runs the full suite on every core target', () => {
   assert.match(core, /dav1d:\$env:TRIPLET/);
 });
 
+test('HS2-D4HJZC runs every platform Rust test after the first failure', () => {
+  const core = workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:'));
+  const rust = core.split('\n').find((line) => line.includes('cargo nextest run --all-features'));
+  assert.ok(rust, 'the core target runs the Rust suite');
+  assert.match(rust, /--no-fail-fast$/, 'nextest fail-fast would hide later native results');
+});
+
 test('HS2-31RGRK keeps the Windows CRT diagnostics after the native build', () => {
   const core = workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:'));
   const order = [

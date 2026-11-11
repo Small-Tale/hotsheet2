@@ -195,7 +195,8 @@ jobs:
       - name: Rust tests
         id: rust
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        run: ${{ matrix.test_wrapper }} cargo nextest run --all-features
+        # HS2-D4HJZC: one platform failure must not hide every later test's native result.
+        run: ${{ matrix.test_wrapper }} cargo nextest run --all-features --no-fail-fast
 
       # nextest writes this JUnit report on every run (.config/nextest.toml, HS2-3PX1E4).
       - name: Slowest Rust tests

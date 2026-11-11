@@ -1007,11 +1007,11 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   covers a ticket's per-commit gate. Targets come from `scripts/platform-matrix.mjs`:
   `linux-x86_64` (`ubuntu-latest`), `linux-arm64` (`ubuntu-24.04-arm`), `windows-x86_64`
   (`windows-latest`), `windows-arm64` (`windows-11-arm`) and `macos-arm64` (`macos-latest`).
-  Each target runs fmt, `cargo lint`, `cargo nextest run --all-features`, web
+  Each target runs fmt, `cargo lint`, `cargo nextest run --all-features --no-fail-fast`, web
   lint/typecheck/unit/build, migrator lint and coverage, and the whole Playwright suite after
   the isolated fixture build. That suite runs in Chromium; WebKit runs only in the specs that
   launch it (see the browser engine matrix, HS2-HW6VED). Every suite runs even when an
-  earlier one fails, and each target uploads its JUnit and JSON reports and Playwright
+  earlier one fails, the Rust suite runs every test after its first failure (HS2-D4HJZC), and each target uploads its JUnit and JSON reports and Playwright
   failure output as `platform-reports-<target>`. Windows targets install dav1d from vcpkg
   with the `x64-windows-static-md` or `arm64-windows-static-md` triplet. The Windows
   arm64 core and Tauri jobs install a commit-pinned, SHA-256-verified

@@ -77,7 +77,7 @@ test('HS2-MFD44D runs notification process transitions on native Windows', () =>
   assert.ok(start >= 0 && end > start, 'the core platform job must exist');
   const core = workflow.slice(start, end);
   assert.match(core, /runs-on: \$\{\{ matrix\.runner \}\}/);
-  assert.ok(/run: \$\{\{ matrix\.test_wrapper \}\} cargo nextest run --all-features\n/.test(core));
+  assert.ok(/run: \$\{\{ matrix\.test_wrapper \}\} cargo nextest run --all-features --no-fail-fast\n/.test(core));
   const targets = read('scripts/platform-matrix.mjs');
   assert.match(targets, /runner: 'windows-latest'/);
   assert.match(targets, /runner: 'windows-11-arm'/);
