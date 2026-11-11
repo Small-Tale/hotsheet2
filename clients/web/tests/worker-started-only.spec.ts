@@ -30,7 +30,9 @@ async function openProject(page: Page, server: Server) {
   await page.getByRole('button', { name: 'Workers' }).click();
 }
 
-test('HS2-D5KXBA removes completed worker cards and counts, then refills on Started', async ({ page }) => {
+test('HS2-D5KXBA removes completed worker cards and counts, fades them out (HS2-PM42ZM), then refills on Started', async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   let fixtureCli = '';
   let fixtureEnv: NodeJS.ProcessEnv = {};
@@ -85,7 +87,7 @@ test('HS2-D5KXBA removes completed worker cards and counts, then refills on Star
       '--lease-seconds',
       '3600',
     );
-    const ticket = await server.request<{ id: string }>('/tickets', 'POST', {
+    const ticket = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
       title: 'Synthetic active work',
       category: 'task',
     });
@@ -100,8 +102,36 @@ test('HS2-D5KXBA removes completed worker cards and counts, then refills on Star
     await expect(column.locator('[data-worker-ticket]')).toHaveCount(1, { timeout: 30_000 });
     await expect(column).toContainText('Working on · 1');
 
+    // HS2-PM42ZM: a card completed while the Workers view is visible fades out through the shared
+    // ticket motion instead of vanishing; reduced motion removes it directly.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- HS2-PM42ZM records the real animate call
+      const original = Element.prototype.animate;
+      const records: Array<{ ghost: string; slug: string; fades: boolean }> = [];
+      (window as typeof window & { __workerMotion?: typeof records }).__workerMotion = records;
+      Element.prototype.animate = function (keyframes, options) {
+        const animation = original.call(this, keyframes, options),
+          element = this as HTMLElement;
+        if (element.dataset.ticketMotionGhost)
+          records.push({
+            ghost: element.dataset.ticketMotionGhost,
+            slug: element.dataset.ticketMotionSlug ?? '',
+            fades: (animation.effect as KeyframeEffect).getKeyframes().some((frame) => Number(frame.opacity) === 0),
+          });
+        return animation;
+      };
+    });
+    const motion = () =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __workerMotion?: Array<{ ghost: string; slug: string; fades: boolean }> })
+            .__workerMotion ?? [],
+      );
     await server.request(`/tickets/${ticket.id}`, 'PATCH', { status: 'completed' });
     await expect(column.locator('[data-worker-ticket]')).toHaveCount(0, { timeout: 30_000 });
+    await expect.poll(motion).toContainEqual({ ghost: 'outgoing', slug: ticket.slug, fades: true });
+    await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
     await expect(column).toContainText('No assigned or planned tickets');
     await expect(column).not.toContainText('Working on · 1');
 
@@ -110,8 +140,13 @@ test('HS2-D5KXBA removes completed worker cards and counts, then refills on Star
     await expect(column.locator('[data-worker-ticket]')).toHaveCount(1, { timeout: 30_000 });
     await expect(column).toContainText('Working on · 1');
 
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.evaluate(() => {
+      (window as typeof window & { __workerMotion?: unknown[] }).__workerMotion?.splice(0);
+    });
     await server.request(`/tickets/${ticket.id}`, 'PATCH', { status: 'completed' });
     await expect(column.locator('[data-worker-ticket]')).toHaveCount(0, { timeout: 30_000 });
+    expect(await motion()).toEqual([]);
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       for (const [name, width] of [

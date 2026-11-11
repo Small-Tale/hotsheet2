@@ -285,7 +285,9 @@ preview/download, server directory browser) are separate design work.
   removes the card and updates every section count while the selected inspector
   and unsaved edit remain available (HS2-D5KXBA). Keep the worker header and
   its empty state when no Started tickets remain. Missing details do not prove a
-  ticket is Started. Removal animation belongs to HS2-PM42ZM.
+  ticket is Started. A card completed while the Workers view is visible leaves
+  through the shared ticket motion: it fades out in place while the column closes
+  up, and reduced motion removes it directly (HS2-PM42ZM).
   If a source or tool cannot be observed, say that coverage is
   unknown rather than showing zero workers. Keep idle workers visible and give a
   genuine zero-worker state.
