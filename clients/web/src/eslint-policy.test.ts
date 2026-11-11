@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 import { ESLint } from 'eslint';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -157,7 +157,8 @@ describe('web ESLint policy', () => {
             dialogs += source.match(/eslint-disable[^\n]*\bno-alert\b/g)?.length ?? 0;
             // Any suppressed window.open (the only no-restricted-properties use for it).
             for (const match of source.match(/eslint-disable[^\n]*\bno-restricted-properties\b[^\n]*/g) ?? [])
-              if (/open|window|HS2-0A7FWS/i.test(match)) windowOpeners.push(path.slice(webRoot.length + 1));
+              if (/open|window|HS2-0A7FWS/i.test(match))
+                windowOpeners.push(relative(webRoot, path).split(sep).join('/'));
           }
         }
       };

@@ -74,9 +74,9 @@ describe('fresh-binary detection (HS2-3PX1E4)', () => {
     expect(binariesAreFresh('/repo', { fs: fakeFs(tree()) })).toBe(true);
     const edited = tree({ plugins: { shared: { 'testing.md': 150 } } });
     expect(binariesAreFresh('/repo', { fs: fakeFs(edited) })).toBe(false);
-    const oneStale = tree({ target: { debug: { ...binaries(100), 'hotsheet-migrate': 30 } } });
+    const oneStale = tree({ target: { debug: { ...binaries(100), [fixtureBinaryName('hotsheet-migrate')]: 30 } } });
     expect(binariesAreFresh('/repo', { fs: fakeFs(oneStale) })).toBe(false);
-    const missing = tree({ target: { debug: { 'hotsheet-cli': 100 } } });
+    const missing = tree({ target: { debug: { [fixtureBinaryName('hotsheet-cli')]: 100 } } });
     expect(binariesAreFresh('/repo', { fs: fakeFs(missing) })).toBe(false);
   });
 
@@ -152,7 +152,7 @@ fn main() {
     if args.first().map(String::as_str) == Some("build") {
         std::fs::write(std::env::var("HS2_FAKE_CARGO_MARKER").unwrap(), format!("{}\n", args.join(" "))).unwrap();
     } else {
-        println!(r#"{"isolated_permission_vault":true,"isolated_native_credentials":true}"#);
+        println!("{}", r#"{"isolated_permission_vault":true,"isolated_native_credentials":true}"#);
     }
 }
 `,

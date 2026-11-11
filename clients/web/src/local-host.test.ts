@@ -378,7 +378,8 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
       expect(await (await host.request('/')).text()).toContain('selected');
       expect(await (await host.request('/assets/app.js')).text()).toBe('selected build');
       expect(readFileSync(pinnedServer, 'utf8')).toBe('selected server');
-      expect(statSync(pinnedServer).mode & 0o111).toBeTruthy();
+      // HS2-R4XTCB: Windows has no execute bit (it runs by file extension), so Node reports none.
+      if (process.platform !== 'win32') expect(statSync(pinnedServer).mode & 0o111).toBeTruthy();
       expect(snapshot.environment.HOT_SHEET_BUILD_REVISION).toBe('selected');
       expect(snapshot.environment.HOTSHEET_LOCAL_HOST_SNAPSHOT).toBe('1');
 

@@ -11,6 +11,9 @@ import {
   DESKTOP_STORAGE_VALUE_LIMIT,
 } from './desktop-storage-contract';
 
+// HS2-R4XTCB: Windows has no POSIX modes; Node reports 0o666 for a writable private entry.
+const privateMode = (posix: number): number => (process.platform === 'win32' ? 0o666 : posix);
+
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -44,8 +47,8 @@ describe('private desktop storage bridge (HS2-RKZKX7)', () => {
     const names = await readdir(root);
     expect(names).toHaveLength(2);
     expect(names.every((name) => /^[a-f0-9]{64}\.json$/.test(name))).toBe(true);
-    expect((await stat(root)).mode & 0o777).toBe(0o700);
-    for (const name of names) expect((await stat(join(root, name))).mode & 0o777).toBe(0o600);
+    expect((await stat(root)).mode & 0o777).toBe(privateMode(0o700));
+    for (const name of names) expect((await stat(join(root, name))).mode & 0o777).toBe(privateMode(0o600));
   });
   it('preserves independent keys across concurrent bridges and isolates other roots', async () => {
     const root = await directory(),

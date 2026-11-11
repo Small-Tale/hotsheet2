@@ -7,6 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DESKTOP_DRAFT_FILES_DIRECTORY, desktopStorageBridge } from './desktop-storage-bridge';
 import { DESKTOP_DRAFT_FILE_LIMIT, DESKTOP_DRAFT_FILES_PATH, DESKTOP_STORAGE_PATH } from './desktop-storage-contract';
 
+// HS2-R4XTCB: Windows has no POSIX modes; Node reports 0o666 for a writable private entry.
+const privateMode = (posix: number): number => (process.platform === 'win32' ? 0o666 : posix);
+
 // Fault injection for the commit point of a record write (HS2-791W19).
 const faults = vi.hoisted(() => ({ rename: false }));
 vi.mock('node:fs/promises', async (original) => {
@@ -95,8 +98,8 @@ describe('private desktop draft files (HS2-791W19)', () => {
       names = await records(root);
     expect(names).toHaveLength(1);
     expect(names[0]).toMatch(/^[a-f0-9]{64}\.draft$/);
-    expect((await stat(drafts)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(drafts, names[0]))).mode & 0o777).toBe(0o600);
+    expect((await stat(drafts)).mode & 0o777).toBe(privateMode(0o700));
+    expect((await stat(join(drafts, names[0]))).mode & 0o777).toBe(privateMode(0o600));
   });
 
   it('isolates projects, draft kinds, and storage roots, and removes the record', async () => {

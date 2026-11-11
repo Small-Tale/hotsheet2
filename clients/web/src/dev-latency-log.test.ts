@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,9 +25,9 @@ afterEach(() => {
 
 describe('dev latency log', () => {
   it('defaults under HOTSHEET_HOME and honors an explicit file', () => {
-    expect(devLatencyLogPath({ HOTSHEET_HOME: '/h' })).toBe('/h/logs/dev-latency.jsonl');
+    expect(devLatencyLogPath({ HOTSHEET_HOME: '/h' })).toBe(resolve('/h', 'logs', 'dev-latency.jsonl'));
     expect(devLatencyLogPath({ HOTSHEET_HOME: '/h', HOTSHEET_DEV_LATENCY_LOG: '/x.jsonl' })).toBe('/x.jsonl');
-    expect(devLatencyLogPath({})).toMatch(/\.hotsheet2\/logs\/dev-latency\.jsonl$/);
+    expect(devLatencyLogPath({})).toMatch(/\.hotsheet2[\\/]logs[\\/]dev-latency\.jsonl$/);
   });
 
   it('warns, appends JSON lines, keeps recent reports, and drops malformed entries', async () => {

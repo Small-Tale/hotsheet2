@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { specIndex } from '../../../scripts/browser-engines.mjs';
@@ -62,7 +64,7 @@ describe('local WebKit repeat guard (HS2-CKHSM5)', () => {
   });
 
   it('finds the real spec-launched WebKit files in this package', () => {
-    const real = specIndex(new URL('..', import.meta.url).pathname);
+    const real = specIndex(fileURLToPath(new URL('..', import.meta.url)));
     const webkit = localWebkitUse({ args: [], env: {}, specs: real }).webkit;
     expect(webkit).toContain('tests/terminal-safari.spec.ts');
     expect(webkit).not.toContain('tests/providers.spec.ts');

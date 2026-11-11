@@ -61,6 +61,9 @@ import {
   superviseServer,
 } from './project-bridge';
 
+// HS2-R4XTCB: Windows has no POSIX modes; Node reports 0o666 for a writable private entry.
+const privateMode = (posix: number): number => (process.platform === 'win32' ? 0o666 : posix);
+
 describe('linked migration destination', () => {
   it('prefers the current durable link, supports legacy links, and fails closed for a broken selected store', async () => {
     const root = await realpath(await mkdtemp(resolve(tmpdir(), 'linked-migration-')));
@@ -190,11 +193,11 @@ describe('developmentRepositoryRoot', () => {
       developmentRepositoryRoot('/tmp/hotsheet-web-stable-123', {
         HOTSHEET_REPO_ROOT: '/work/hotsheet2',
       }),
-    ).toBe('/work/hotsheet2');
+    ).toBe(resolve('/work/hotsheet2'));
   });
 
   it('retains the normal clients/web fallback for hot development', () => {
-    expect(developmentRepositoryRoot('/work/hotsheet2/clients/web', {})).toBe('/work/hotsheet2');
+    expect(developmentRepositoryRoot('/work/hotsheet2/clients/web', {})).toBe(resolve('/work/hotsheet2'));
   });
 });
 
@@ -749,7 +752,7 @@ describe('Hot Sheet 1 project import bridge', () => {
   });
   it('uses argument arrays for the standalone migrator and preserves backups, snapshots, unknown files, and the HS2 link', () => {
     expect(hs1MigrationArgs('/work/demo', '/tickets/demo.hs2', '/app/migrator/export.mjs')).toEqual([
-      '/work/demo/.hotsheet',
+      resolve('/work/demo', '.hotsheet'),
       '-C',
       '/tickets/demo.hs2',
       '--migrator',
@@ -917,7 +920,7 @@ describe('Hot Sheet 1 project import bridge', () => {
           hotsheet: { args: ['--path', resolve(root, 'tickets.hs2')] },
         },
       });
-      if (process.platform !== 'win32') expect((await stat(resolve(root, '.mcp.json'))).mode & 0o777).toBe(0o600);
+      expect((await stat(resolve(root, '.mcp.json'))).mode & 0o777).toBe(privateMode(0o600));
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
@@ -1620,7 +1623,7 @@ describe('openServerLog (HS2-DSYPTN)', () => {
       writeSync(second as number, 'second launch\n');
       closeSync(second as number);
       expect(await readFile(path, 'utf8')).toBe('slow API request exceeded its budget\nsecond launch\n');
-      expect((await stat(path)).mode & 0o777).toBe(0o600);
+      expect((await stat(path)).mode & 0o777).toBe(privateMode(0o600));
       // Over the limit: the old content moves aside and a fresh log starts.
       const third = openServerLog(home, 16);
       closeSync(third as number);

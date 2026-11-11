@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
@@ -7,7 +8,7 @@ const sourceRoot = new URL('../', import.meta.url);
 function stylesheets(directory: URL): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (entry.isDirectory()) return stylesheets(new URL(`${entry.name}/`, directory));
-    return entry.name.endsWith('.css') ? [new URL(entry.name, directory).pathname] : [];
+    return entry.name.endsWith('.css') ? [fileURLToPath(new URL(entry.name, directory))] : [];
   });
 }
 

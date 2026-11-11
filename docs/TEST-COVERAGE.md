@@ -129,6 +129,14 @@ a spaced symlink to prove `main` executes. On Windows the old `file://${argv1}`
 comparison never matched, so the standalone migrator saw a missing export instead of
 the missing-payload diagnostic; `progress.test.mjs` is the native Windows proof.
 
+HS2-R4XTCB: web unit tests compare native paths through `path.resolve`, convert file
+URLs with `fileURLToPath` (not `URL.pathname`, which doubles a Windows drive), and
+report package-relative paths with `/`. Private-file mode checks keep `0o600`/`0o700`
+on POSIX and expect Node's `0o666` writable report on Windows; the pinned-server
+execute-bit check is POSIX-only. The `vitest-build-binaries` fixtures use
+`fixtureBinaryName` and a compilable Windows cargo stand-in. Native Windows web unit
+selection in the `Platforms` workflow is the platform proof.
+
 HS2-0AJP3T: existing Unix HTTP terminal tests exercise the three helpers now
 guarded with `cfg(unix)`. Native Windows x86_64 test compilation must confirm
 they no longer produce dead-code warnings.
