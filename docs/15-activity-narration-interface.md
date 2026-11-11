@@ -90,8 +90,8 @@ The `activity` capability turns native signals → events; the host owns the str
   cross-project digest, live narration over the change stream, a bounded reel,
   browser speech or a configured server provider. The macOS server offers a local
   `macos-say` provider. The overlay has no separate close button. While the sidebar
-  is collapsed the toggle follows it into the workspace toolbar, except on a phone
-  while workspace search is expanded, which keeps that one row for search. Edit events carry
+  is collapsed the toggle follows it into the workspace toolbar. A phone keeps it,
+  like Standby, in the overlay rail, leaving the one-row toolbar to search. Edit events carry
   path, operation, and optional file count;
   native patch and old/new text are excluded from retained and live activity. An
   explicit **View current diff** action calls the authenticated

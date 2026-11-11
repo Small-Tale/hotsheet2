@@ -2,28 +2,23 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
-test('HS2-6PZ35D keeps the sidebar announcer toggle clear of phone drawer restore', async ({ page }) => {
+test('HS2-6PZ35D keeps the phone announcer toggle in the sidebar rail', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page);
   await expect(page.locator('[data-project-dialog]')).not.toBeVisible();
   const launch = page.getByRole('button', { name: 'Announcer', exact: true });
-  const restore = page.getByRole('button', { name: 'Show Terminal Drawer' });
-  await expect(launch).toBeVisible();
-  await expect(launch).toHaveAttribute('aria-pressed', 'false');
+  // A phone keeps the announcer in the overlay rail, leaving its one-row toolbar to search (HS2-RDFY4A).
+  await expect(launch).toBeHidden();
   await expect(page.locator('[data-component="project-tab-bar"] [data-announcer-action="open"]')).toHaveCount(0);
-  await expect(restore).toBeVisible();
-  const launchBox = await launch.boundingBox();
-  const restoreBox = await restore.boundingBox();
-  if (!launchBox || !restoreBox) throw new Error('Announcer and drawer controls must be measurable');
-  expect(
-    launchBox.x < restoreBox.x + restoreBox.width &&
-      launchBox.x + launchBox.width > restoreBox.x &&
-      launchBox.y < restoreBox.y + restoreBox.height &&
-      launchBox.y + launchBox.height > restoreBox.y,
-  ).toBe(false);
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+  await expect(launch).toBeVisible();
+  expect(await launch.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(true);
+  await expect(launch).toHaveAttribute('aria-pressed', 'false');
   if (process.env.ANNOUNCER_VISUAL_CAPTURE)
-    await page.screenshot({ path: `${process.env.ANNOUNCER_VISUAL_CAPTURE}/hs2-announcer-launch-narrow.png` });
-  await restore.click();
+    await page.screenshot({
+      path: `${process.env.ANNOUNCER_VISUAL_CAPTURE}/hs2-announcer-launch-narrow.png`,
+      animations: 'disabled',
+    });
   await launch.click();
   await expect(launch).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-component="announcer-overlay"]')).toContainText('No activity');
@@ -186,7 +181,8 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await settleViewport(true);
-  await expect(launch).toBeVisible();
+  // The phone's closed overlay rail holds the toggle, off the one-row toolbar (HS2-RDFY4A).
+  await expect(launch).toBeHidden();
   await expect
     .poll(() => overlay.evaluate((node) => node.getBoundingClientRect().right <= window.innerWidth))
     .toBe(true);

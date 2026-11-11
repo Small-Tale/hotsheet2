@@ -155,15 +155,11 @@ export function AppShell({
   // stats page alone, since its rails are overlays that would cover it.
   const railsAllowed = !gridFullscreen && !(mobile && mode === 'stats');
   const sidebarPanel = sidebar ? workbenchSidebarPanel(sidebar) : undefined;
+  // A phone's one-row workspace toolbar has no room to spare (HS2-RDFY4A, HS2-C5Y899), so there the
+  // announcer, like Standby, stays in the overlay rail. Switching relocation with search state instead
+  // rebuilds the toolbar and drops keyboard focus (HS2-GRAQ2K); Kerf gap KF-ZX9Q0X.
   const announcerControl = announcerTrigger && (
-    // A phone's expanded workspace search takes the whole one-row toolbar, so the announcer then waits
-    // in the hidden rail rather than narrowing the search field (HS2-RDFY4A, HS2-C5Y899).
-    <ToolbarControlGroup
-      appearance="borderless"
-      single
-      label="Announcer"
-      relocateOnCollapse={!(mobile && workspaceSearchOpen)}
-    >
+    <ToolbarControlGroup appearance="borderless" single label="Announcer" relocateOnCollapse={!mobile}>
       {announcerTrigger}
     </ToolbarControlGroup>
   );
@@ -183,8 +179,8 @@ export function AppShell({
     railsAllowed && sidebarPanel
       ? {
           ...sidebarPanel,
-          // The announcer and moon sit before the collapse toggle. The announcer follows that toggle
-          // into the workspace toolbar when the rail is hidden; a phone keeps only Standby in the rail.
+          // The announcer and moon sit before the collapse toggle and follow it into the workspace
+          // toolbar when the rail is hidden; a phone keeps both in the overlay rail.
           toolbar:
             announcerControl || standbyButton
               ? {
