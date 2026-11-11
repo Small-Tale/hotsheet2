@@ -694,7 +694,8 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     // HS2-HTRFDS: the volume popup's outside-click listener moved into Kerf AnchoredSurface dismissal.
     const signals = add.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
     const bodySignals = bodyAdd.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
-    expect(signals.length).toBe(12);
+    // HS2-58BJ0P: the drag modifier keydown/keyup pair joins the gallery's native listeners.
+    expect(signals.length).toBe(14);
     expect(bodySignals.length).toBe(7);
     expect(signals.every((item) => item && !item.aborted)).toBe(true);
     expect(bodySignals.every((item) => item && !item.aborted)).toBe(true);

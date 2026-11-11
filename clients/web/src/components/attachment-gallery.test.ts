@@ -11,6 +11,7 @@ import {
   attachmentGalleryArrowEnds,
   attachmentGalleryBadgeStyle,
   attachmentGalleryDefaultRange,
+  attachmentGalleryDisplayBox,
   attachmentGalleryImageIndex,
   attachmentGalleryKeyboardAction,
   attachmentGallerySelectionUrl,
@@ -25,6 +26,30 @@ import {
 } from './attachment-gallery';
 
 describe('AttachmentGallery', () => {
+  it('HS2-58BJ0P renders a straight arrow in a box grown around its line, leaving other shapes alone', () => {
+    const straight: MediaAnnotation = {
+      id: 'arrow',
+      x: 2000,
+      y: 5000,
+      width: 3000,
+      height: 1,
+      text: '',
+      shape: {
+        type: 'arrow',
+        points: [
+          { x: 2000, y: 5000 },
+          { x: 5000, y: 5000 },
+        ],
+      },
+    };
+    expect(attachmentGalleryDisplayBox(straight)).toMatchObject({ x: 2000, width: 3000, y: 4950.5, height: 100 });
+    expect(attachmentGalleryShapePath(attachmentGalleryDisplayBox(straight))).toBe('M 0,495 L 1000,495');
+    const slanted = { ...straight, height: 400 };
+    expect(attachmentGalleryDisplayBox(slanted)).toBe(slanted);
+    const rect: MediaAnnotation = { id: 'r', x: 1, y: 1, width: 1, height: 1, text: '' };
+    expect(attachmentGalleryDisplayBox(rect)).toBe(rect);
+  });
+
   const images = [
     { id: 'a', name: 'a.png', url: '/a.png' },
     { id: 'b', name: 'b.svg', url: '/b.svg' },

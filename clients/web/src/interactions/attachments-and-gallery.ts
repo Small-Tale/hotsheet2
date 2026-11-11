@@ -47,12 +47,12 @@ import {
   drawGalleryAnnotation,
   type GalleryAnnotationTool,
   galleryGestureLargeEnough,
-  moveGalleryArrowVertex,
   pickGalleryAnnotation,
-  resizeGalleryAnnotation,
   translateGalleryAnnotation,
 } from '../gallery-annotation-editor';
+import { galleryGestureAnnotation } from '../gallery-annotation-gesture';
 import { galleryCropFromDrag } from '../gallery-crop';
+import { galleryDragModifiers } from '../gallery-drag-modifiers';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
@@ -142,6 +142,9 @@ export interface AttachmentAndGalleryInteractionsDependencies {
         samples: { x: number; y: number }[];
         startPoint: { x: number; y: number };
         before: MediaAnnotation[];
+        /** The last pointer position, so a modifier key change can redo it (HS2-58BJ0P). */
+        lastX?: number;
+        lastY?: number;
       }
     | undefined;
   attachmentGalleryLivePlayhead: number;
@@ -936,6 +939,18 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         : { ...item, end_ms: Math.max(start, next) };
     });
   }
+  function applyAnnotationGesture(
+    gesture: NonNullable<AttachmentAndGalleryInteractionsDependencies['attachmentAnnotationGesture']>,
+    clientX: number,
+    clientY: number,
+    modifiers: ReturnType<typeof galleryDragModifiers>,
+  ) {
+    const next = galleryGestureAnnotation(gesture, clientX, clientY, modifiers);
+    if (!next) return;
+    attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
+      item.id === gesture.annotation.id ? next : item,
+    );
+  }
   lifetime.add(
     delegateCapture(
       document.body,
@@ -1026,38 +1041,24 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       const gesture = dependencies.attachmentAnnotationGesture;
       if (!gesture || event.pointerId !== gesture.pointerId) return;
       event.preventDefault();
-      const dx = ((event.clientX - gesture.startX) * 10_000) / gesture.surface.width,
-        dy = ((event.clientY - gesture.startY) * 10_000) / gesture.surface.height,
-        base = gesture.annotation;
-      let next = { ...base };
-      if (gesture.kind === 'draw') {
-        const point = annotationPoint(event, gesture.surface);
-        if (gesture.tool === 'select') return;
-        next = drawGalleryAnnotation(base, gesture.tool, gesture.startPoint, point, gesture.samples, gesture.surface);
-        if (gesture.tool === 'freehand') gesture.samples.push(point);
-      } else if (gesture.kind === 'move') {
-        next = translateGalleryAnnotation(base, dx, dy);
-      } else {
-        const handle = gesture.handle ?? '',
-          vertex = handle.startsWith('point-') ? Number(handle.slice(6)) : -1;
-        next =
-          vertex >= 0
-            ? moveGalleryArrowVertex(base, vertex, annotationPoint(event, gesture.surface))
-            : resizeGalleryAnnotation(
-                base,
-                handle as 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w',
-                dx,
-                dy,
-                (6 * 10_000) / gesture.surface.width,
-                (6 * 10_000) / gesture.surface.height,
-              );
-      }
-      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-        item.id === base.id ? next : item,
-      );
+      gesture.lastX = event.clientX;
+      gesture.lastY = event.clientY;
+      applyAnnotationGesture(gesture, event.clientX, event.clientY, galleryDragModifiers(event));
+      if (gesture.kind === 'draw' && gesture.tool === 'freehand')
+        gesture.samples.push(annotationPoint(event, gesture.surface));
     },
     { signal: lifetime.signal },
   );
+  // Shift (constrain) and Option/Alt (from center) reshape a drag in progress at once when pressed or
+  // released, as in the ux-review editor (HS2-58BJ0P).
+  const reshapeAnnotationGesture = (event: KeyboardEvent) => {
+    const gesture = dependencies.attachmentAnnotationGesture;
+    if (!gesture || gesture.lastX === undefined || gesture.lastY === undefined) return;
+    if (event.key !== 'Shift' && event.key !== 'Alt') return;
+    applyAnnotationGesture(gesture, gesture.lastX, gesture.lastY, galleryDragModifiers(event));
+  };
+  document.addEventListener('keydown', reshapeAnnotationGesture, { signal: lifetime.signal });
+  document.addEventListener('keyup', reshapeAnnotationGesture, { signal: lifetime.signal });
   document.addEventListener(
     'pointerup',
     (event) => {

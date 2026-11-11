@@ -300,6 +300,26 @@ export function releaseAttachmentGalleryVideo(video: AttachmentGalleryVideoResou
 const annotationStyle = (annotation: MediaAnnotation) =>
   `left:${annotation.x / 100}%;top:${annotation.y / 100}%;width:${annotation.width / 100}%;height:${annotation.height / 100}%`;
 const annotationShapeType = (annotation: MediaAnnotation) => annotation.shape?.type ?? 'rect';
+/** The thinnest box (normalized units) a rendered arrow keeps across its line. */
+const ARROW_DISPLAY_MINIMUM = 100;
+
+/**
+ * A straight arrow (as Shift draws, HS2-58BJ0P) has a box with no height or no width, which gives its
+ * SVG an empty viewport that draws nothing. Render it in a box grown around the line instead; the
+ * points are absolute, so the shape, heads and handles stay where they are.
+ */
+export function attachmentGalleryDisplayBox(annotation: MediaAnnotation): MediaAnnotation {
+  if (
+    annotation.shape?.type !== 'arrow' ||
+    (annotation.width >= ARROW_DISPLAY_MINIMUM && annotation.height >= ARROW_DISPLAY_MINIMUM)
+  )
+    return annotation;
+  const grow = (start: number, size: number) =>
+    size >= ARROW_DISPLAY_MINIMUM ? [start, size] : [start - (ARROW_DISPLAY_MINIMUM - size) / 2, ARROW_DISPLAY_MINIMUM];
+  const [x, width] = grow(annotation.x, annotation.width),
+    [y, height] = grow(annotation.y, annotation.height);
+  return { ...annotation, x, y, width, height };
+}
 const annotationPoint = (annotation: MediaAnnotation, point: { x: number; y: number }) =>
   `${((point.x - annotation.x) * 1000) / annotation.width},${((point.y - annotation.y) * 1000) / annotation.height}`;
 
@@ -688,11 +708,11 @@ export function AttachmentGallery({
                           data-shape={shape}
                           data-intent-color={color}
                           hidden={!visible}
-                          style={annotationStyle(annotation)}
+                          style={annotationStyle(attachmentGalleryDisplayBox(annotation))}
                           aria-label={`Annotation ${number}, ${shape}, ${intents.join(', ')}${annotation.text ? `: ${annotation.text}` : ''}`}
                         >
                           <AnnotationShape
-                            annotation={annotation}
+                            annotation={attachmentGalleryDisplayBox(annotation)}
                             mediaWidth={geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000}
                             mediaHeight={geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000}
                           />
@@ -711,7 +731,10 @@ export function AttachmentGallery({
                             annotation.shape.points.map((point, index) => (
                               <i
                                 data-annotation-handle={`point-${index}`}
-                                style={`left:${((point.x - annotation.x) / annotation.width) * 100}%;top:${((point.y - annotation.y) / annotation.height) * 100}%`}
+                                style={(() => {
+                                  const box = attachmentGalleryDisplayBox(annotation);
+                                  return `left:${((point.x - box.x) / box.width) * 100}%;top:${((point.y - box.y) / box.height) * 100}%`;
+                                })()}
                               />
                             ))}
                           {markup &&

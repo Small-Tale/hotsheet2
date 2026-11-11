@@ -2561,6 +2561,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   label includes its number, shape, intents, and note. The selected note appears
   as sanitized Markdown in the notes panel. Shape-specific drawing and editing are
   covered by `HS2-C46J3X`.
+  Modifier keys work as in the ux-review annotation editor (HS2-58BJ0P): Shift
+  draws a square rectangle or strike, snaps an arrow end (drawn or dragged) to the
+  nearest 45°, keeps a resized shape's aspect ratio, and keeps a move horizontal
+  or vertical; Option/Alt draws a box centered on where the drag began and resizes
+  about the center. Pressing or releasing either key mid-drag reshapes the drag at
+  once, and the geometry is measured in rendered pixels. A straight arrow keeps a
+  drawable box around its line.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
   before opening the media. The gallery action menu includes Remove so a user can verify

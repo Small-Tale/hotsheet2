@@ -196,7 +196,16 @@ export function resizeGalleryAnnotation(
   if (handle.includes('e')) newRight = Math.min(extent, Math.max(old.x + minimumX, Math.round(right + dx)));
   if (handle.includes('n')) top = Math.max(0, Math.min(bottom - minimumY, Math.round(old.y + dy)));
   if (handle.includes('s')) newBottom = Math.min(extent, Math.max(old.y + minimumY, Math.round(bottom + dy)));
-  const next = { ...old, x: left, y: top, width: newRight - left, height: newBottom - top },
+  return fitGalleryAnnotationToBox(old, { x: left, y: top, width: newRight - left, height: newBottom - top });
+}
+
+/** `old` moved and scaled into `box` (normalized), scaling any freehand, arrow, or insertion points with it. */
+export function fitGalleryAnnotationToBox(
+  old: MediaAnnotation,
+  box: { x: number; y: number; width: number; height: number },
+): MediaAnnotation {
+  const { x: left, y: top } = box,
+    next = { ...old, ...box },
     scale = (source: AnnotationPoint) =>
       point(
         left + ((source.x - old.x) / old.width) * next.width,

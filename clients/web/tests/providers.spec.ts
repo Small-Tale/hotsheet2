@@ -27281,6 +27281,93 @@ const markupToolLabels = {
   insertion: 'Add insertion mark',
   strike: 'Add strike-through',
 } as const;
+test('Shift and Option constrain annotation drags like ux-review (HS2-58BJ0P)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
+    stage = gallery.locator('[data-gallery-zoom-stage="true"]'),
+    surface = gallery.locator('[data-gallery-annotation-surface="true"]');
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  const center = async (handle: string) => {
+    const box = (await gallery.locator(`[data-annotation-handle="${handle}"]`).boundingBox())!;
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const box = (await surface.boundingBox())!,
+    at = (x: number, y: number) => [box.x + box.width * x, box.y + box.height * y] as const;
+  // Arrow: pressing Shift mid-drag snaps the end onto the start's horizontal line at once.
+  await gallery.getByRole('button', { name: markupToolLabels.arrow }).click();
+  await page.mouse.move(...at(0.2, 0.5));
+  await page.mouse.down();
+  await page.mouse.move(...at(0.5, 0.56), { steps: 3 });
+  const slanted = [await center('point-0'), await center('point-1')];
+  expect(Math.abs(slanted[1].y - slanted[0].y)).toBeGreaterThan(4);
+  await page.keyboard.down('Shift');
+  await expect.poll(async () => Math.abs((await center('point-1')).y - (await center('point-0')).y)).toBeLessThan(1.5);
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  // A perfectly horizontal arrow still draws its line (its box has no height).
+  const straightInk = (await gallery
+    .locator('.attachment-gallery__annotation[data-shape="arrow"] .attachment-gallery__annotation-ink')
+    .boundingBox())!;
+  expect(straightInk.width).toBeGreaterThan(200);
+  // Rectangle: Shift draws a square on screen.
+  await stage.focus();
+  await page.keyboard.press('r');
+  await page.mouse.move(...at(0.55, 0.15));
+  await page.mouse.down();
+  await page.keyboard.down('Shift');
+  await page.mouse.move(...at(0.75, 0.25), { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  const squareNw = await center('nw'),
+    squareSe = await center('se');
+  expect(Math.abs(squareSe.x - squareNw.x - (squareSe.y - squareNw.y))).toBeLessThan(2);
+  // Resizing the square from a corner with Shift keeps it square.
+  await page.mouse.move(squareSe.x, squareSe.y);
+  await page.mouse.down();
+  await page.keyboard.down('Shift');
+  await page.mouse.move(squareSe.x + 60, squareSe.y + 10, { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  const grownNw = await center('nw'),
+    grownSe = await center('se');
+  expect(grownSe.x - grownNw.x).toBeGreaterThan(squareSe.x - squareNw.x + 40);
+  expect(Math.abs(grownSe.x - grownNw.x - (grownSe.y - grownNw.y))).toBeLessThan(2);
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-58bj0p-constrained-wide.png', animations: 'disabled' });
+  // Moving with Shift stays horizontal.
+  await page.mouse.move((grownNw.x + grownSe.x) / 2, (grownNw.y + grownSe.y) / 2);
+  await page.mouse.down();
+  await page.keyboard.down('Shift');
+  await page.mouse.move((grownNw.x + grownSe.x) / 2 - 80, (grownNw.y + grownSe.y) / 2 + 20, { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  const movedNw = await center('nw');
+  expect(movedNw.x).toBeLessThan(grownNw.x - 60);
+  expect(Math.abs(movedNw.y - grownNw.y)).toBeLessThan(1.5);
+  // Option draws a box centered on where the drag began.
+  await stage.focus();
+  await page.keyboard.press('r');
+  const [startX, startY] = at(0.4, 0.75);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.keyboard.down('Alt');
+  await page.mouse.move(startX + 50, startY + 20, { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  const centeredNw = await center('nw'),
+    centeredSe = await center('se');
+  expect(Math.abs((centeredNw.x + centeredSe.x) / 2 - startX)).toBeLessThan(2);
+  expect(Math.abs((centeredNw.y + centeredSe.y) / 2 - startY)).toBeLessThan(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-58bj0p-constrained-phone.png', animations: 'disabled' });
+});
+
 test('draws all annotation tools and keeps keyboard edits in one markup batch (HS2-C46J3X) @ci-smoke', async ({
   page,
 }) => {

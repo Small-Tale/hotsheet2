@@ -1192,6 +1192,12 @@ tool/keyboard/undo transitions, inline Markdown notes and intent controls, and
 one-batch persistence. Geometry unit tests include point-bound validation and
 overlap picking; production browser tests exercise image and timed video gestures,
 keyboard creation and undo/redo, plus wide and phone captures.
+HS2-58BJ0P covers Shift/Option drag modifiers: `gallery-drag-modifiers.test.ts`
+(45° snap, square and centered boxes, axis-locked moves, aspect-kept and centered
+resizes clamped to the media), `gallery-annotation-gesture.test.ts` (unmodified
+parity and each modified gesture), the straight-arrow display box in
+`attachment-gallery.test.ts`, and the `providers.spec.ts` browser case that holds
+and releases the keys mid-drag, with wide and phone captures.
 HS2-4PHSMG covers independent arrow start/end styles and the v6 file guard in
 model round trips and server writes, default-intent and SVG geometry unit tests,
 and gallery editing, persistence, and wide/phone captures in the browser. Multiple
