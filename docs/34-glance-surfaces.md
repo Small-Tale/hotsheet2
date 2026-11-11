@@ -63,9 +63,11 @@ For each store it carries the state above and:
 - the time of last progress, using the idle detector's progress definition;
 - live claims with ticket, phase, and ETA overrun;
 - workers live versus expected;
-- queue runway: the ready Up Next count and an ETA-based estimate;
 - `main` CI status;
 - two rates, each with a rolling 30-day peak.
+
+Queue runway (the ready Up Next count and an ETA-based estimate) was removed from the model and every
+glance surface (HS2-5A83MR).
 
 The rates are:
 
@@ -98,8 +100,8 @@ when it changed, so a quiet project decays to zero rather than freezing at its l
 important signal (HS2-MHW3SX). Clients compute ages locally from timestamps, and local display timers never
 issue requests.
 
-**Restarts.** A server restart does not zero the model. Tickets updated, the active period, halts, and the
-runway samples are kept per store in machine-local `metrics/local/live-state.json` and restored best effort,
+**Restarts.** A server restart does not zero the model. Tickets updated, the active period, and halts are
+kept per store in machine-local `metrics/local/live-state.json` and restored best effort,
 falling back to what the tickets record themselves (HS2-MHW3SX, [32-notifier-plugins.md](32-notifier-plugins.md)
 §32.8.3).
 
@@ -169,10 +171,11 @@ A **Live** section under the completion chart. Mocks: `r3-project-sidebar-compac
 the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
 
 - **Compact:** one line with two bare gauges (blue tokens/min, green tickets updated/h), then icon chips:
-  Needs you count, ETA overrun, `main` CI, queue runway. Chips appear only when non-trivial. A
+  Needs you count, ETA overrun, `main` CI. Chips appear only when non-trivial; the queue runway chip was
+  removed (HS2-5A83MR, TWD45K #6). A
   likely-critical callout (for example disk, §34.8) keeps its full width.
 - **Expanded:** the detailed rows of `m1`: work state and last-progress age, Needs you, overdue ETA, `main`
-  CI, queue runway, and a machine warning only past a threshold. A toggle in the section header switches
+  CI, and a machine warning only past a threshold. The queue runway row was removed (HS2-5A83MR, TWD45K #5). A toggle in the section header switches
   modes, and the choice persists per viewer.
 - **Shipped (HS2-F788GW).** `ProjectLiveSection` renders the compact line and the expanded rows from the
   live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
@@ -230,7 +233,8 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
 - **Tiles (HS2-ERTNJ7):** full tokens/min gauge; tickets updated in the last 60 minutes with a sparkline;
   completed since a period start; Needs you (tinted when non-zero); workers live versus expected; `main` CI.
 - **Projects table (HS2-ERTNJ7):** state glyph and word, project, current work (ticket and phase, including
-  final-testing tickets waiting on CI), last progress, ETA overrun, queue runway, a 12-hour token sparkline,
+  final-testing tickets waiting on CI), last progress, ETA overrun, a 12-hour token sparkline (the queue runway column was removed by
+  HS2-5A83MR),
   and the one action that unsticks it (Open terminal, Answer). Sorted by need, with a "data as of"
   freshness line.
 - **Shipped (HS2-ERTNJ7).** `StatsRightNow` and `StatsProjectsTable` render from the pushed live
@@ -307,8 +311,9 @@ Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf
   - a ticket that newly waits on you (Answer);
   - a usage-limit pause, with its reset time, or how long it lasted once it cleared;
   - a host signal that rose to warning or critical, with free disk, battery, or CPU busy where known;
-  - a store that went Active to Stopped with nothing ready ("finished its queue", with the number of
-    tickets claimed during that run).
+  - a store that went Active to Stopped, every claim released ("finished its run", with the number of
+    tickets claimed during that run). The live state no longer carries queue runway (HS2-5A83MR), so the
+    row does not say whether Up Next still holds ready work.
     A store first seen during standby counts from its first snapshot. The activity narration digest is
     not used: these rows already cover what it would add.
 - **Tiles.**

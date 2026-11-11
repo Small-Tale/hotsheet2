@@ -84,7 +84,7 @@ describe('HS2-ERTNJ7 Projects table rows', () => {
     expect(rightNowRows([a, b, c], NOW, open).map((row) => row.name)).toEqual(['Alpha', 'Aardvark', 'Beta']);
   });
 
-  it('reports claims with phases, last progress, the largest ETA overrun, runway, and tokens', () => {
+  it('reports claims with phases, last progress, the largest ETA overrun, and tokens, without queue runway (HS2-5A83MR)', () => {
     const active = glanceScenario().find((state) => state.name === 'Hot Sheet 2')!;
     const row = rightNowRow(active, NOW, open);
     expect(row.work).toEqual([
@@ -93,8 +93,7 @@ describe('HS2-ERTNJ7 Projects table rows', () => {
     ]);
     expect(row.progressAgeMs).toBe(2 * MINUTE);
     expect(row.etaOverrunMs).toBe(18 * MINUTE);
-    expect(row.runwayReady).toBe(6);
-    expect(row.runwayEstimateMs).toBe(220 * MINUTE);
+    expect(row).not.toHaveProperty('runwayReady');
     expect(row.tokensPerMinute).toBe(1_600);
     expect(row.action).toBeUndefined();
   });

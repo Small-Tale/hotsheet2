@@ -49,7 +49,6 @@ function liveFixture(overrides: Partial<LiveStoreState> = {}): LiveStoreState {
     ],
     workers: { live: 2, expected: 2 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 3, estimate_ms: null },
     rates: {
       tokens: {
         window_minutes: 5,
@@ -102,7 +101,6 @@ const stopped = liveFixture({
   checkouts: ['kerf-gh78'],
   state: 'stopped',
   claims: [],
-  runway: { ready: 0, estimate_ms: null },
 });
 
 describe('standby settings contract (HS2-EQVZTZ)', () => {
@@ -137,7 +135,7 @@ describe('standby display model', () => {
     expect(model.ticketsUpdated).toBe(6);
     expect(model.rows.map((row) => row.title)).toEqual(['Hot Sheet 2', 'Kerf', 'UX Review']);
     expect(model.rows[0]).toMatchObject({ word: 'active', detail: 'Active · 2m · HS2-R76MMW', alert: false });
-    expect(model.rows[1]).toMatchObject({ word: 'stopped', detail: 'Stopped · queue empty', alert: false });
+    expect(model.rows[1]).toMatchObject({ word: 'stopped', detail: 'Stopped', alert: false });
     expect(model.rows[2]).toMatchObject({ detail: 'Waiting on you · 2 feedback requests', alert: true });
   });
 
@@ -195,8 +193,12 @@ describe('standby display model', () => {
       claims: [],
     });
     expect(standbyModel([noProgress], NOW).rows[0]?.detail).toBe('May be stuck');
-    const ready = liveFixture({ state: 'stopped', runway: { ready: 4, estimate_ms: null } });
-    expect(standbyModel([ready], NOW).rows[0]?.detail).toBe('Stopped · 4 ready');
+    // A Stopped row says how long ago work stopped, not the queue runway (HS2-5A83MR).
+    const since = liveFixture({
+      state: 'stopped',
+      activity: { ...liveFixture().activity, stopped_at_ms: NOW - 90 * MINUTE },
+    });
+    expect(standbyModel([since], NOW).rows[0]?.detail).toBe('Stopped · for 1h 30m');
   });
 });
 

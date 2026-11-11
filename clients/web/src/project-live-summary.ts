@@ -66,7 +66,6 @@ export interface ProjectLiveSummary {
   overrun?: ProjectLiveOverrun;
   /** How many claims are past their ETA. */
   overrunCount: number;
-  runway: { ready: number; estimateMs: number | null };
 }
 
 /** The project's live numbers, or `undefined` when none of its stores has reported yet. */
@@ -84,7 +83,6 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
       return ms === undefined ? [] : [{ slug: claim.slug, title: claim.title, ms }];
     })
     .sort((a, b) => b.ms - a.ms);
-  const estimates = states.flatMap((state) => (state.runway.estimate_ms === null ? [] : [state.runway.estimate_ms]));
   return {
     state: worstLiveWord(states),
     activity: worstLiveWord(states.map((state) => ({ ...state, state: state.activity.word }))),
@@ -98,10 +96,6 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
     waiting: aggregate.waiting,
     ...(overruns[0] ? { overrun: overruns[0] } : {}),
     overrunCount: overruns.length,
-    runway: {
-      ready: states.reduce((sum, state) => sum + state.runway.ready, 0),
-      estimateMs: estimates.length ? estimates.reduce((sum, value) => sum + value, 0) : null,
-    },
   };
 }
 
@@ -118,19 +112,9 @@ export function lastProgressDescription(summary: ProjectLiveSummary): string {
     : `last progress ${formatGlanceDuration(summary.progressAgeMs)} ago`;
 }
 
-/** The queue runway label, e.g. `Queue runway ~3h 40m`, or `Queue runway` without an estimate. */
-export function runwayLabel(runway: ProjectLiveSummary['runway']): string {
-  return runway.estimateMs === null ? 'Queue runway' : `Queue runway ~${formatGlanceDuration(runway.estimateMs)}`;
-}
-
-/** The queue runway phrase, e.g. `Queue runway ~3h 40m · 4 ready`. */
-export function runwayDescription(runway: ProjectLiveSummary['runway']): string {
-  return `${runwayLabel(runway)} · ${runway.ready} ready`;
-}
-
 /** One compact chip: a glyph and a raw number, with its explanation only in `title` and `label`. */
 export interface LiveChip {
-  kind: 'state' | 'waiting' | 'overrun' | 'runway';
+  kind: 'state' | 'waiting' | 'overrun';
   /** The raw number or short value on the chip's face; empty for a glyph-only chip. */
   text: string;
   /** The hover title and accessible name. */
@@ -140,7 +124,7 @@ export interface LiveChip {
 
 /**
  * The compact chips that have something to say, in reading order (§34.4): a problem state, Needs you,
- * the worst ETA overrun, then the queue runway. A quiet, healthy project shows no chips.
+ * then the worst ETA overrun. A quiet, healthy project shows no chips; queue runway is gone (HS2-5A83MR).
  */
 export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
   const chips: LiveChip[] = [];
@@ -166,13 +150,6 @@ export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
         summary.overrunCount > 1 ? ` · ${summary.overrunCount} claims past ETA` : ''
       }`,
       tone: 'warning',
-    });
-  if (summary.runway.ready > 0)
-    chips.push({
-      kind: 'runway',
-      text: String(summary.runway.ready),
-      title: runwayDescription(summary.runway),
-      tone: 'neutral',
     });
   return chips;
 }

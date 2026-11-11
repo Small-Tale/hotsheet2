@@ -49,7 +49,7 @@ function digest(scenario: Scenario): AwayDigest {
             title: 'Pick a header layout',
             fromMs: at(0, 10),
           },
-          { kind: 'queue_finished', store: 'kerf', name: 'Kerf', atMs: at(1, 2), tickets: 5 },
+          { kind: 'run_finished', store: 'kerf', name: 'Kerf', atMs: at(1, 2), tickets: 5 },
           {
             kind: 'usage_limit',
             store: 'hs2',
@@ -76,7 +76,7 @@ function digest(scenario: Scenario): AwayDigest {
         completed: 6,
         needYou: 0,
         tokens: 98_000,
-        events: [{ kind: 'queue_finished', store: 'kerf', name: 'Kerf', atMs: at(1, 2), tickets: 5 }],
+        events: [{ kind: 'run_finished', store: 'kerf', name: 'Kerf', atMs: at(1, 2), tickets: 5 }],
       };
     case 'completions-only':
       return { ...base, completed: 2, needYou: 0, tokens: 0, events: [] };

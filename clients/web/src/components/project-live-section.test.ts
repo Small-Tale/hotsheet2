@@ -24,8 +24,10 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     expect(markup).toContain('data-tone="success"');
     expect(markup).toContain('aria-label="Token rate: 1.6k tokens/min (30-day peak 6.2k)"');
     expect(markup).toContain('aria-label="Tickets updated: 14 tickets/h (30-day peak 22)"');
-    for (const kind of ['waiting', 'overrun', 'runway']) expect(markup).toContain(`data-live-chip="${kind}"`);
+    for (const kind of ['waiting', 'overrun']) expect(markup).toContain(`data-live-chip="${kind}"`);
     expect(markup).not.toContain('data-live-chip="state"');
+    // Queue runway is gone (HS2-5A83MR).
+    expect(markup).not.toContain('data-live-chip="runway"');
     // The explanations are titles and accessible names only.
     expect(markup).toContain('title="Needs you · 2 tickets waiting on you"');
     expect(markup).toContain('title="HS2-R76MMW past ETA by 18m"');
@@ -47,16 +49,16 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     const full = String(ProjectLiveSection({ summary: attention, expanded: true }));
     expect(full).toContain('data-mode="expanded"');
     expect(count(full, /data-variant="full"/)).toBe(2);
-    for (const row of ['state', 'waiting', 'overrun', 'runway']) expect(full).toContain(`data-live-row="${row}"`);
+    for (const row of ['state', 'waiting', 'overrun']) expect(full).toContain(`data-live-row="${row}"`);
     expect(full).toContain('HS2-R76MMW past ETA');
-    expect(full).toContain('Queue runway ~3h 40m');
-    expect(full).toContain('4 ready');
+    expect(full).not.toContain('data-live-row="runway"');
+    expect(full).not.toContain('Queue runway');
     expect(full).toContain('2m ago');
     const calm = String(
       ProjectLiveSection({ summary: projectLiveSummary([demoLiveState('stopped')], DEMO_LIVE_NOW_MS), expanded: true }),
     );
     expect(calm).toContain('data-live-row="state"');
-    for (const row of ['waiting', 'overrun', 'runway']) expect(calm).not.toContain(`data-live-row="${row}"`);
+    for (const row of ['waiting', 'overrun']) expect(calm).not.toContain(`data-live-row="${row}"`);
   });
 
   it('keeps a full-width host callout in both modes, toned by level', () => {

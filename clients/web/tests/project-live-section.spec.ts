@@ -67,17 +67,16 @@ test('project sidebar Live section is compact by default and remembers the detai
     expect(order[1]).toBeGreaterThan(order[0]);
     expect(order[2]).toBeGreaterThan(order[1]);
 
-    // Compact: two bare chip gauges named by their titles; the runway chip says what it means only
-    // in its title and accessible name, and its face is the raw number.
+    // Compact: two bare chip gauges named by their titles. A quiet project shows no chips; queue
+    // runway is gone even with Up Next work (HS2-5A83MR).
     const gauges = live.locator('svg.glance-gauge');
     await expect(gauges).toHaveCount(2);
     await expect(gauges.nth(0)).toHaveAttribute('data-variant', 'bare');
     await expect(gauges.nth(0)).toHaveAccessibleName(/^Token rate: 0 tokens\/min/);
     await expect(gauges.nth(1)).toHaveAccessibleName(/^Tickets updated: \d+ tickets\/h/);
-    const runway = live.locator('[data-live-chip="runway"]');
-    await expect(runway).toHaveText('1');
-    await expect(runway).toHaveAttribute('title', /^Queue runway.* · 1 ready$/);
-    await expect(live.locator('[data-live-chip="waiting"], [data-live-chip="overrun"]')).toHaveCount(0);
+    await expect(
+      live.locator('[data-live-chip="runway"], [data-live-chip="waiting"], [data-live-chip="overrun"]'),
+    ).toHaveCount(0);
     await expect(live.locator('[data-live-row]')).toHaveCount(0);
 
     // The header action switches to the detail rows and names the way back.
@@ -85,8 +84,7 @@ test('project sidebar Live section is compact by default and remembers the detai
     await expect(live).toHaveAttribute('data-mode', 'expanded');
     await expect(live.locator('svg.glance-gauge[data-variant="full"]')).toHaveCount(2);
     await expect(live.locator('[data-live-row="state"]')).toBeVisible();
-    await expect(live.locator('[data-live-row="runway"]')).toContainText('1 ready');
-    await expect(live.locator('[data-live-row="waiting"]')).toHaveCount(0);
+    await expect(live.locator('[data-live-row="runway"], [data-live-row="waiting"]')).toHaveCount(0);
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-expanded-1280.png' });
 
     // The choice persists per viewer across a reload, which restores the open project.

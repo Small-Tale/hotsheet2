@@ -14,11 +14,10 @@
 //! store's rates decay (HS2-MHW3SX). It is pushed as one `live_state` change event only when
 //! it changed. Rebuilds are coalesced per store. No client polls.
 //!
-//! The inputs that only live in memory (the tracker, progress fingerprints, ETA samples, and
-//! the revision) are kept in the store's machine-local live-state record
+//! The inputs that only live in memory (the tracker, progress fingerprints, and the revision) are kept in the store's machine-local live-state record
 //! ([`crate::live_record`]) and restored when the store is seeded (HS2-MHW3SX).
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -37,7 +36,7 @@ use time::{Duration, OffsetDateTime};
 use crate::AppState;
 use crate::api_error::ApiError;
 use crate::events::ChangeEvent;
-use crate::live_record::{EtaSample, LiveRecord, RECORD_VERSION};
+use crate::live_record::{LiveRecord, RECORD_VERSION};
 use crate::project_activity::{ActivityWord, LiveActivity, PromptKind, UPDATED_WINDOW};
 
 /// The change-event kind that carries a [`LiveStoreState`].
@@ -54,9 +53,6 @@ const WAITING_LIMIT: usize = 20;
 
 /// Progress times sent for "tickets updated per hour"; the newest are kept.
 const UPDATED_LIMIT: usize = 2000;
-
-/// Planned claim durations kept per store for the runway estimate.
-const ETA_SAMPLES: usize = 20;
 
 /// Bursts of changes within this window share one rebuild.
 const COALESCE: std::time::Duration = std::time::Duration::from_millis(250);
@@ -117,7 +113,6 @@ pub struct LiveStoreState {
     pub claims: Vec<LiveClaim>,
     pub workers: LiveWorkers,
     pub waiting: LiveWaiting,
-    pub runway: LiveRunway,
     pub rates: LiveRates,
 }
 
@@ -222,15 +217,6 @@ pub struct LiveWaitingTicket {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LiveRunway {
-    /// Open Up Next tickets that are unblocked, unclaimed, and not waiting on feedback.
-    pub ready: usize,
-    /// `ready` times the median planned claim duration (claim to ETA) seen recently,
-    /// shared across the live workers; `None` without a planned duration.
-    pub estimate_ms: Option<i64>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LiveRates {
     pub tokens: LiveTokenRate,
@@ -298,8 +284,6 @@ struct StoreLive {
     pending: bool,
     usage: UsageTail,
     peaks: Option<PeakBook>,
-    /// `(ticket, claimed_at_ms, planned_ms)`, newest last.
-    eta_samples: VecDeque<(String, i64, i64)>,
     /// The persisted record was restored into this entry (HS2-MHW3SX).
     restored: bool,
     /// The last record written, with `saved_at_ms` zeroed, so an unchanged one is not
@@ -313,7 +297,7 @@ impl LiveStates {
     }
 }
 
-/// Restore `store`'s persisted revision, ETA samples, and epoch floor (HS2-MHW3SX). Runs once
+/// Restore `store`'s persisted revision and epoch floor (HS2-MHW3SX). Runs once
 /// per store when the tracker is seeded; revisions continue above the record's, and this
 /// server's epoch is raised above the record's so snapshots order after the old server's even
 /// if the clock stepped back.
@@ -328,16 +312,6 @@ pub(crate) fn restore(state: &AppState, store: &str, record: Option<&LiveRecord>
         return;
     };
     entry.revision = entry.revision.max(record.revision);
-    if entry.eta_samples.is_empty() {
-        entry.eta_samples = record
-            .eta_samples
-            .iter()
-            .map(|s| (s.ticket.clone(), s.claimed_at_ms, s.planned_ms))
-            .collect();
-        while entry.eta_samples.len() > ETA_SAMPLES {
-            entry.eta_samples.pop_front();
-        }
-    }
     let epoch = state.live_states.epoch();
     if record.epoch_ms >= epoch {
         state
@@ -472,15 +446,6 @@ fn persist(state: &AppState, store: &str, now: OffsetDateTime) {
             revision: live.revision,
             activity,
             fingerprints,
-            eta_samples: live
-                .eta_samples
-                .iter()
-                .map(|(ticket, claimed_at_ms, planned_ms)| EtaSample {
-                    ticket: ticket.clone(),
-                    claimed_at_ms: *claimed_at_ms,
-                    planned_ms: *planned_ms,
-                })
-                .collect(),
         };
         record.cap_fingerprints();
         if live.saved.as_ref() == Some(&record) {
@@ -561,13 +526,6 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
         needs_review: Some(true),
         ..TicketQuery::default()
     });
-    let ready_rows = query(TicketQuery {
-        open_only: true,
-        up_next_only: true,
-        blocked: Some(false),
-        ..TicketQuery::default()
-    });
-    let ready = ready_count(&ready_rows, &claims);
     let waiting = waiting_of(&waiting_rows);
     let (checkouts, name) = crate::notification_router::store_identity(state, store);
     let mut stores = state.live_states.stores.lock_or_recover();
@@ -579,10 +537,6 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
         workers.sort_unstable();
         workers.dedup();
         workers.len()
-    };
-    let runway = LiveRunway {
-        ready,
-        estimate_ms: runway_estimate(live, &claims, ready, workers_live),
     };
     drop(stores);
     Some(LiveStoreState {
@@ -600,7 +554,6 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
         },
         claims,
         waiting,
-        runway,
         rates: LiveRates {
             tokens,
             tickets_updated: updated,
@@ -689,13 +642,6 @@ pub fn live_claims(rows: Vec<TicketRow>, now: OffsetDateTime) -> Vec<LiveClaim> 
     claims
 }
 
-/// Up Next rows that a worker could take now.
-pub fn ready_count(rows: &[TicketRow], claims: &[LiveClaim]) -> usize {
-    rows.iter()
-        .filter(|row| !row.feedback_needed && !claims.iter().any(|c| c.ticket == row.id))
-        .count()
-}
-
 /// Started tickets blocked on a feedback answer, by slug (HS2-JGW031). Review requests and
 /// tickets outside the Started column never count.
 pub fn waiting_of(rows: &[TicketRow]) -> LiveWaiting {
@@ -713,39 +659,6 @@ pub fn waiting_of(rows: &[TicketRow]) -> LiveWaiting {
     let count = tickets.len();
     tickets.truncate(WAITING_LIMIT);
     LiveWaiting { count, tickets }
-}
-
-fn runway_estimate(
-    live: &mut StoreLive,
-    claims: &[LiveClaim],
-    ready: usize,
-    workers: usize,
-) -> Option<i64> {
-    for claim in claims {
-        let (Some(start), Some(eta)) = (claim.claimed_at_ms, claim.eta_at_ms) else {
-            continue;
-        };
-        if eta <= start
-            || live
-                .eta_samples
-                .iter()
-                .any(|(ticket, at, _)| *ticket == claim.ticket && *at == start)
-        {
-            continue;
-        }
-        live.eta_samples
-            .push_back((claim.ticket.clone(), start, eta - start));
-        while live.eta_samples.len() > ETA_SAMPLES {
-            live.eta_samples.pop_front();
-        }
-    }
-    let mut planned: Vec<i64> = live.eta_samples.iter().map(|(_, _, ms)| *ms).collect();
-    if planned.is_empty() {
-        return None;
-    }
-    planned.sort_unstable();
-    let median = planned[planned.len() / 2];
-    Some(median * ready as i64 / workers.max(1) as i64)
 }
 
 // ---- rates and peaks -----------------------------------------------------------------
@@ -1108,7 +1021,7 @@ mod tests {
     }
 
     #[test]
-    fn hs2_jttqmy_claims_keep_live_leases_and_ready_excludes_claimed_and_feedback() {
+    fn hs2_jttqmy_claims_keep_live_leases() {
         let now = at(1_800_000_000_000);
         let mut live = row("a", "HS2-A");
         live.claimed_by = Some("w1".into());
@@ -1127,10 +1040,6 @@ mod tests {
             claims[0].eta_at_ms.unwrap() - claims[0].claimed_at_ms.unwrap(),
             3_600_000
         );
-        let mut feedback = row("c", "HS2-C");
-        feedback.feedback_needed = true;
-        let ready = [row("a", "HS2-A"), feedback, row("d", "HS2-D")];
-        assert_eq!(ready_count(&ready, &claims), 1);
     }
 
     #[test]
@@ -1160,48 +1069,6 @@ mod tests {
         assert_eq!(waiting.tickets[0].slug, "HS2-R00");
         assert!(waiting.tickets.iter().all(|t| t.reason == "feedback"));
         assert_eq!(waiting_of(&[]).count, 0);
-    }
-
-    #[test]
-    fn hs2_jttqmy_runway_uses_the_median_planned_claim_shared_by_workers() {
-        let mut live = StoreLive::default();
-        assert_eq!(
-            runway_estimate(&mut live, &[], 4, 0),
-            None,
-            "no planned claims"
-        );
-        let claim = |ticket: &str, start: i64, minutes: i64| LiveClaim {
-            ticket: ticket.into(),
-            slug: ticket.into(),
-            title: String::new(),
-            worker: "w".into(),
-            phase: None,
-            claimed_at_ms: Some(start),
-            lease_expires_at_ms: start + 1,
-            eta_at_ms: Some(start + minutes * MINUTE_MS),
-        };
-        let claims = [claim("a", 0, 10), claim("b", 0, 30), claim("c", 0, 20)];
-        assert_eq!(
-            runway_estimate(&mut live, &claims, 3, 1),
-            Some(3 * 20 * MINUTE_MS)
-        );
-        // The same claims seen again are not new samples; two workers halve the estimate.
-        assert_eq!(
-            runway_estimate(&mut live, &claims, 4, 2),
-            Some(2 * 20 * MINUTE_MS)
-        );
-        assert_eq!(live.eta_samples.len(), 3);
-        assert_eq!(runway_estimate(&mut live, &claims, 0, 2), Some(0));
-        // A claim without an ETA, or one with an ETA before its start, is no sample.
-        let mut no_eta = claim("d", 0, 5);
-        no_eta.eta_at_ms = None;
-        let backwards = claim("e", 100, -1);
-        runway_estimate(&mut live, &[no_eta, backwards], 1, 1);
-        assert_eq!(live.eta_samples.len(), 3);
-        // The ring keeps the newest samples.
-        let many: Vec<LiveClaim> = (0..30).map(|n| claim(&format!("m{n}"), n, 1)).collect();
-        runway_estimate(&mut live, &many, 1, 1);
-        assert_eq!(live.eta_samples.len(), ETA_SAMPLES);
     }
 
     #[test]
@@ -1325,10 +1192,6 @@ mod tests {
             waiting: LiveWaiting {
                 count: 0,
                 tickets: Vec::new(),
-            },
-            runway: LiveRunway {
-                ready: 0,
-                estimate_ms: None,
             },
             rates: LiveRates {
                 tokens: LiveTokenRate {

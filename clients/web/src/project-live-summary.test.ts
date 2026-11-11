@@ -8,8 +8,6 @@ import {
   liveChips,
   liveStateDescription,
   projectLiveSummary,
-  runwayDescription,
-  runwayLabel,
   workersLive,
   workersLiveTitle,
 } from './project-live-summary';
@@ -41,7 +39,7 @@ describe('projectLiveSummary (HS2-F788GW)', () => {
     expect(projectLiveSummary([], NOW)).toBeUndefined();
   });
 
-  it('derives the rates, workers, last progress, and runway of one store', () => {
+  it('derives the rates, workers, and last progress of one store, without queue runway (HS2-5A83MR)', () => {
     const quiet = summary(demoLiveState('quiet'));
     expect(quiet).toMatchObject({
       state: 'active',
@@ -54,8 +52,8 @@ describe('projectLiveSummary (HS2-F788GW)', () => {
       progressAgeMs: 2 * MINUTE,
       waiting: 0,
       overrunCount: 0,
-      runway: { ready: 4, estimateMs: 220 * MINUTE },
     });
+    expect(quiet).not.toHaveProperty('runway');
     expect(quiet.overrun).toBeUndefined();
     expect(liveStateDescription(quiet)).toBe('Active · 2 workers live');
     expect(lastProgressDescription(quiet)).toBe('last progress 2m ago');
@@ -68,7 +66,6 @@ describe('projectLiveSummary (HS2-F788GW)', () => {
         ...attention,
         store: 'third',
         claims: [{ ...attention.claims[0], slug: 'HS2-LATER1', eta_at_ms: NOW - 45 * MINUTE }],
-        runway: { ready: 1, estimate_ms: null },
       };
     const combined = summary(attention, stuck, later);
     expect(combined.state).toBe('may_be_stuck');
@@ -83,10 +80,9 @@ describe('projectLiveSummary (HS2-F788GW)', () => {
     expect(combined.progressAgeMs).toBe(2 * MINUTE);
     expect(combined.overrun).toEqual({ slug: 'HS2-LATER1', title: attention.claims[0].title, ms: 45 * MINUTE });
     expect(combined.overrunCount).toBe(2);
-    expect(combined.runway).toEqual({ ready: 5, estimateMs: 220 * MINUTE });
   });
 
-  it('reports no progress before the idle detector saw any and no estimate without one', () => {
+  it('reports no progress before the idle detector saw any', () => {
     const fresh = summary({
       ...demoLiveState('stopped'),
       activity: { ...demoLiveState('stopped').activity, last_progress_ms: null },
@@ -94,27 +90,24 @@ describe('projectLiveSummary (HS2-F788GW)', () => {
     expect(fresh.progressAgeMs).toBeUndefined();
     expect(lastProgressDescription(fresh)).toBe('no progress yet');
     expect(liveStateDescription({ ...fresh, workersLive: 1 })).toBe('Stopped · 1 worker live');
-    expect(runwayLabel(fresh.runway)).toBe('Queue runway');
-    expect(runwayDescription(fresh.runway)).toBe('Queue runway · 0 ready');
   });
 });
 
 describe('liveChips (HS2-F788GW, docs/34-glance-surfaces.md §34.4)', () => {
-  it('shows only the runway for a quiet, healthy project', () => {
-    expect(liveChips(summary(demoLiveState('quiet')))).toEqual([
-      { kind: 'runway', text: '4', title: 'Queue runway ~3h 40m · 4 ready', tone: 'neutral' },
-    ]);
+  it('shows no chips for a quiet, healthy project, even with Up Next work (HS2-5A83MR)', () => {
+    // An older server still sends `runway`; it never becomes a chip.
+    const older = { ...demoLiveState('quiet'), runway: { ready: 4, estimate_ms: 220 * MINUTE } };
+    expect(liveChips(summary(older))).toEqual([]);
   });
 
-  it('shows nothing at all for a stopped project with an empty queue', () => {
+  it('shows nothing at all for a stopped project', () => {
     expect(liveChips(summary(demoLiveState('stopped')))).toEqual([]);
   });
 
-  it('puts Needs you, the worst ETA overrun, and the runway in reading order', () => {
+  it('puts Needs you, then the worst ETA overrun, in reading order', () => {
     expect(liveChips(summary(demoLiveState('attention')))).toEqual([
       { kind: 'waiting', text: '2', title: 'Needs you · 2 tickets waiting on you', tone: 'pop' },
       { kind: 'overrun', text: '+18m', title: 'HS2-R76MMW past ETA by 18m', tone: 'warning' },
-      { kind: 'runway', text: '4', title: 'Queue runway ~3h 40m · 4 ready', tone: 'neutral' },
     ]);
     const one = summary({ ...demoLiveState('attention'), waiting: { count: 1, tickets: [] } });
     expect(liveChips(one)[0]?.title).toBe('Needs you · 1 ticket waiting on you');

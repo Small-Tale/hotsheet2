@@ -1,6 +1,6 @@
 //! The machine-local record of one store's live-state inputs (HS2-MHW3SX,
-//! `docs/32-notifier-plugins.md` §32.8.3). The claim tracker, the progress fingerprints, and
-//! the ETA samples otherwise live only in server memory, so a restart would zero "tickets
+//! `docs/32-notifier-plugins.md` §32.8.3). The claim tracker and the progress fingerprints
+//! otherwise live only in server memory, so a restart would zero "tickets
 //! updated" and treat the first write to every ticket as a baseline. The record sits beside
 //! the peak book at `metrics/local/live-state.json`, which the store gitignores, and is
 //! recovered best effort: an unreadable or missing record starts empty, and the server then
@@ -37,9 +37,6 @@ pub struct LiveRecord {
     /// Progress fingerprint per ticket id.
     #[serde(default)]
     pub fingerprints: BTreeMap<String, FingerprintRecord>,
-    /// Planned claim durations behind the runway estimate, oldest first.
-    #[serde(default)]
-    pub eta_samples: Vec<EtaSample>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,13 +44,6 @@ pub struct FingerprintRecord {
     pub hash: u64,
     /// When the server last saw the ticket (Unix ms), which decides what the cap drops.
     pub seen_ms: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EtaSample {
-    pub ticket: String,
-    pub claimed_at_ms: i64,
-    pub planned_ms: i64,
 }
 
 impl LiveRecord {
@@ -153,11 +143,6 @@ mod tests {
                 seen_ms: 5,
             },
         );
-        record.eta_samples.push(EtaSample {
-            ticket: "t1".into(),
-            claimed_at_ms: 1,
-            planned_ms: 60_000,
-        });
         assert!(record.save(&store, 99));
         let loaded = LiveRecord::load(&store).unwrap();
         assert_eq!(loaded.saved_at_ms, 99);
@@ -175,6 +160,14 @@ mod tests {
         // Older fields missing still load.
         std::fs::write(LiveRecord::path(&store), r#"{"version":1}"#).unwrap();
         assert_eq!(LiveRecord::load(&store).unwrap().revision, 0);
+        // A record from before HS2-5A83MR still carries the queue runway's ETA samples; it
+        // loads and the samples are dropped.
+        std::fs::write(
+            LiveRecord::path(&store),
+            r#"{"version":1,"revision":4,"eta_samples":[{"ticket":"t1","claimed_at_ms":1,"planned_ms":60000}]}"#,
+        )
+        .unwrap();
+        assert_eq!(LiveRecord::load(&store).unwrap().revision, 4);
     }
 
     #[test]

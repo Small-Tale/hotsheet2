@@ -415,7 +415,6 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
       claims: [],
       workers: { live: 0, expected: 0 },
       waiting: { count: 0, tickets: [] },
-      runway: { ready: 0, estimate_ms: null },
       rates: {
         tokens: { window_minutes: 5, minutes: [], peak_per_minute: 0 },
         tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 0 },

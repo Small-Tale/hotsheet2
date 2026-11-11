@@ -50,7 +50,6 @@ function store(overrides: Partial<LiveStoreState> = {}): LiveStoreState {
     ],
     workers: { live: 1, expected: 2 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 0, estimate_ms: null },
     rates: {
       tokens: { window_minutes: 1, minutes: [{ start_ms: NOW, tokens: 600 }], peak_per_minute: 1000 },
       tickets_updated: { window_minutes: 60, at_ms: [NOW - MINUTE, NOW - 2 * MINUTE], peak_per_hour: 10 },

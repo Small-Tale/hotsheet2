@@ -1,6 +1,6 @@
 import type { CalibrationReport, LiveStoreState } from './api';
 import type { HostHealthSignalId, HostHealthSnapshot } from './host-health';
-import { type GlanceIcon, HOST_SIGNAL_ICONS, LIVE_STATE_ICONS, QUEUE_FINISHED_ICON } from './live-state-icons';
+import { type GlanceIcon, HOST_SIGNAL_ICONS, LIVE_STATE_ICONS, RUN_FINISHED_ICON } from './live-state-icons';
 import { formatBytes } from './stats-this-mac';
 
 /**
@@ -26,7 +26,7 @@ export type AwayEvent =
       resumedAtMs?: number;
     }
   | { kind: 'host'; signal: HostHealthSignalId; level: 'warning' | 'critical'; atMs: number; detail?: string }
-  | { kind: 'queue_finished'; store: string; name: string; atMs: number; tickets: number };
+  | { kind: 'run_finished'; store: string; name: string; atMs: number; tickets: number };
 
 export interface AwayRecord {
   enteredAtMs: number;
@@ -35,7 +35,7 @@ export interface AwayRecord {
   events: AwayEvent[];
   /** Token minutes seen during standby, per store and minute start (each snapshot repeats recent minutes). */
   tokenMinutes: Map<string, number>;
-  /** Claimed ticket slugs seen per store during its current active run (a finished queue's count). */
+  /** Claimed ticket slugs seen per store during its current active run (a finished run's count). */
   worked: Map<string, Set<string>>;
 }
 
@@ -127,9 +127,11 @@ export function observeAwayStates(
         !limitsNow.has(`${event.worker}\0${event.sinceMs}`)
       )
         event.resumedAtMs = nowMs;
-    if (before.state === 'active' && state.state === 'stopped' && state.runway.ready === 0) {
+    // Active to Stopped means every claim was released. Without queue runway (HS2-5A83MR) the
+    // snapshot no longer says whether Up Next still holds ready work, so the row names the run.
+    if (before.state === 'active' && state.state === 'stopped') {
       record.events.push({
-        kind: 'queue_finished',
+        kind: 'run_finished',
         store: state.store,
         name: state.name,
         atMs: nowMs,
@@ -220,7 +222,7 @@ export function eventTime(event: AwayEvent): number {
       return event.sinceMs;
     case 'stalled':
     case 'host':
-    case 'queue_finished':
+    case 'run_finished':
       return event.atMs;
     default:
       return event satisfies never;
@@ -292,11 +294,11 @@ export function awayEventRow(event: AwayEvent, clock: (ms: number) => string = a
         icon: HOST_SIGNAL_ICONS[event.signal],
         text: `${HOST_WORDS[event.signal]}${event.detail ? ` (${event.detail})` : ''} at ${clock(event.atMs)}`,
       };
-    case 'queue_finished':
+    case 'run_finished':
       return {
-        icon: QUEUE_FINISHED_ICON,
+        icon: RUN_FINISHED_ICON,
         subject: event.name,
-        text: `finished its queue at ${clock(event.atMs)}${
+        text: `finished its run at ${clock(event.atMs)}${
           event.tickets ? ` · ${String(event.tickets)} ${event.tickets === 1 ? 'ticket' : 'tickets'}` : ''
         }`,
       };

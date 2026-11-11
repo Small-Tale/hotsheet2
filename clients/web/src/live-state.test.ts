@@ -53,7 +53,6 @@ function liveFixture(overrides: Partial<LiveStoreState> = {}): LiveStoreState {
     ],
     workers: { live: 1, expected: 1 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 2, estimate_ms: 40 * MINUTE },
     rates: {
       tokens: {
         window_minutes: 5,

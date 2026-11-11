@@ -1496,7 +1496,6 @@ export interface LiveStoreState {
   claims: LiveClaim[];
   workers: { live: number; expected: number };
   waiting: { count: number; tickets: { ticket: string; slug: string; title: string; reason: 'feedback' | 'review' }[] };
-  runway: { ready: number; estimate_ms: number | null };
   rates: {
     tokens: { window_minutes: number; minutes: { start_ms: number; tokens: number }[]; peak_per_minute: number };
     tickets_updated: { window_minutes: number; at_ms: number[]; peak_per_hour: number };

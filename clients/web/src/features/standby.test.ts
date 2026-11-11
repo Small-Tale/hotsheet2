@@ -276,7 +276,6 @@ describe('standby controller (HS2-EQVZTZ)', () => {
       claims: [],
       workers: { live: 1, expected: 1 },
       waiting: { count: 0, tickets: [] },
-      runway: { ready: 1, estimate_ms: null },
       rates: {
         tokens: { window_minutes: 5, minutes: [], peak_per_minute: 1 },
         tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 1 },

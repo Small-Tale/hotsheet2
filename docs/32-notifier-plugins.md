@@ -434,10 +434,8 @@ notification always agree. The tracker therefore runs whether or not a rule name
 - `workers`: `live` counts distinct workers with a live claim. `expected` counts the workers
   that held a claim in the current or stalled period (a worker-plan source is HS2-BHPPAS).
 - `waiting`: the count, plus up to 20 tickets with their reason (`feedback` or `review`).
-- `runway`: `ready` counts open Up Next tickets that are unblocked, unclaimed, and not
-  waiting on feedback. `estimate_ms` is `ready` times the median planned claim duration
-  (claim to ETA) seen recently, divided by the live workers. It is `null` until a claim
-  states an ETA.
+- Queue runway (the ready Up Next count and an ETA-based estimate) was removed (HS2-5A83MR).
+  Clients ignore a `runway` member that an older server still sends.
 - `rates.tokens`: tokens per minute averages tokens in plus out over the last 5 whole
   minutes, the current one included. It reads the store's usage JSONL
   ([14](14-metrics-interface.md)) incrementally. Terminal AI sessions record into their
@@ -475,7 +473,8 @@ tracker's state (claims as last seen, the period start, release grace start, com
 tickets, expired leases, last progress, whether the idle episode was reported, the last
 period's outcome, halts with their cause detail, the per-ticket progress times, and the
 period's workers), each ticket's progress fingerprint with when it was seen (the newest
-5,000), the runway's planned claim durations, and the last `epoch_ms` and `revision`. It is
+5,000), and the last `epoch_ms` and `revision`. A record from before HS2-5A83MR may still hold
+`eta_samples`; it loads and they are dropped. It is
 rewritten atomically after a rebuild only when its content changed. Terminal prompts are not
 kept; they are read again from hook state.
 

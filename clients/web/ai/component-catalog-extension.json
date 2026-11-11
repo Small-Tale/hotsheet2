@@ -2150,7 +2150,7 @@
       "id": "stats-projects-table",
       "name": "StatsProjectsTable",
       "kind": "component",
-      "purpose": "Projects sorted by need: state glyph and word, current work, last progress, ETA overrun, runway, tokens/min, and the one unstick action (HS2-ERTNJ7).",
+      "purpose": "Projects sorted by need: state glyph and word, current work, last progress, ETA overrun, tokens/min, and the one unstick action (HS2-ERTNJ7).",
       "useWhen": [
         "Comparing live expectation versus reality across projects with one action per row."
       ],

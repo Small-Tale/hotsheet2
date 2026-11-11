@@ -77,7 +77,6 @@ function store(
         reason: 'feedback' as const,
       })),
     },
-    runway: { ready: 0, estimate_ms: null },
     rates: {
       tokens: {
         window_minutes: 5,

@@ -13,7 +13,6 @@ import {
   Cpu,
   HardDrive,
   type IconNode,
-  ListTodo,
   MemoryStick,
   Thermometer,
   Timer,
@@ -31,7 +30,6 @@ import {
   liveChips,
   liveStateDescription,
   type ProjectLiveSummary,
-  runwayLabel,
 } from '../project-live-summary';
 import { GlanceGauge } from './glance-gauge';
 
@@ -61,8 +59,6 @@ function chipIcon(chip: LiveChip, summary: ProjectLiveSummary): { icon: IconNode
       return LIVE_STATE_ICONS.waiting_on_you;
     case 'overrun':
       return { icon: Timer, name: 'timer' };
-    case 'runway':
-      return { icon: ListTodo, name: 'list-todo' };
     default:
       return chip.kind satisfies never;
   }
@@ -185,13 +181,6 @@ export function ProjectLiveSection({ summary, callouts = [], expanded = false }:
                 { icon: Timer, name: 'timer' },
                 `${summary.overrun.slug} past ETA`,
                 `+${formatGlanceDuration(summary.overrun.ms)}`,
-              )}
-            {summary.runway.ready > 0 &&
-              detailRow(
-                'runway',
-                { icon: ListTodo, name: 'list-todo' },
-                runwayLabel(summary.runway),
-                `${summary.runway.ready} ready`,
               )}
           </List>
         )}

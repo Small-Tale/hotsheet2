@@ -52,5 +52,5 @@ export const HOST_SIGNAL_ICONS: Readonly<Record<HostHealthSignalId, GlanceIcon>>
   thermal: { icon: Thermometer, name: 'thermometer' },
 };
 
-/** A project that finished its queue during standby (HS2-JJ9RYN, mock `m7-away-digest-light`). */
-export const QUEUE_FINISHED_ICON: GlanceIcon = { icon: Check, name: 'check' };
+/** A project whose run finished during standby: every claim released (HS2-JJ9RYN, HS2-5A83MR). */
+export const RUN_FINISHED_ICON: GlanceIcon = { icon: Check, name: 'check' };

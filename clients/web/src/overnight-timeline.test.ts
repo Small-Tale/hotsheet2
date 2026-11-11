@@ -44,7 +44,6 @@ function live(state: LiveStoreState['state'], phases: (string | null)[] = []): L
     })),
     workers: { live: phases.length, expected: 1 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 0, estimate_ms: null },
     rates: {
       tokens: { window_minutes: 5, minutes: [], peak_per_minute: 1 },
       tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 1 },

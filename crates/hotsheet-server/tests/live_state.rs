@@ -896,12 +896,13 @@ async fn hs2_mhw3sx_a_restart_keeps_tickets_updated_baselines_and_ordering() {
     assert!(record["fingerprints"][&second]["hash"].is_u64());
     assert_eq!(record["activity"]["updated"].as_object().unwrap().len(), 2);
     assert_eq!(record["activity"]["claims"][&second]["worker"], "w1");
-    assert_eq!(record["eta_samples"].as_array().unwrap().len(), 1);
+    // Queue runway is gone (HS2-5A83MR): neither the record nor the snapshot carries it.
+    assert!(record.get("eta_samples").is_none());
+    assert!(before.get("runway").is_none());
     let ignore = std::fs::read_to_string(h._dir.path().join("demo.hs2/.gitignore")).unwrap();
     assert!(ignore.lines().any(|l| l.trim() == "metrics/local/"));
 
-    // Restart: a new server restores the rates, the period, and the runway samples, and
-    // orders its snapshots after the old server's.
+    // Restart: a new server restores the rates and the period, and orders its snapshots after the old server's.
     let restarted = restarted(&h);
     let router = app(restarted.clone());
     let after = refresh(&restarted, &h.store_id, time::OffsetDateTime::now_utc());
@@ -911,7 +912,6 @@ async fn hs2_mhw3sx_a_restart_keeps_tickets_updated_baselines_and_ordering() {
         before["activity"]["active_since_ms"]
     );
     assert_eq!(after["state"], "active");
-    assert_eq!(after["runway"], before["runway"], "ETA samples survive");
     assert!(after["epoch_ms"].as_i64().unwrap() > before["epoch_ms"].as_i64().unwrap());
     assert!(after["revision"].as_u64().unwrap() > before["revision"].as_u64().unwrap());
 

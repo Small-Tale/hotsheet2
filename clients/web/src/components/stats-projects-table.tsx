@@ -42,17 +42,7 @@ function workLine(work: RightNowWork): string {
 
 function idleWork(row: RightNowRow): string {
   if (row.waiting > 0) return `${row.waiting} ${row.waiting === 1 ? 'request' : 'requests'} waiting on you`;
-  return row.runwayReady > 0 ? 'Nothing claimed' : 'Queue empty';
-}
-
-function runway(row: RightNowRow): { text: string; title: string } {
-  const ready = `${row.runwayReady} ready`;
-  if (row.runwayReady > 0 && row.runwayEstimateMs !== undefined)
-    return {
-      text: `~${formatDuration(row.runwayEstimateMs)}`,
-      title: `${ready}, about ${formatDuration(row.runwayEstimateMs)} of work`,
-    };
-  return { text: ready, title: `${ready} in Up Next` };
+  return 'Nothing claimed';
 }
 
 /**
@@ -95,11 +85,6 @@ export function StatsProjectsTable({ rows }: StatsProjectsTableProps) {
             </th>
             <th scope="col">
               <Text variant="span" size="compact" tone="quiet" weight="strong" flush wrap="nowrap">
-                Runway
-              </Text>
-            </th>
-            <th scope="col">
-              <Text variant="span" size="compact" tone="quiet" weight="strong" flush wrap="nowrap">
                 Tokens/min
               </Text>
             </th>
@@ -112,7 +97,6 @@ export function StatsProjectsTable({ rows }: StatsProjectsTableProps) {
           {rows.map((row) => {
             const icon = LIVE_STATE_ICONS[row.state];
             const label = LIVE_WORD_LABELS[row.state];
-            const lane = runway(row);
             return (
               <tr data-key={`right-now:${row.store}`} data-store={row.store} data-state={row.state}>
                 <td>
@@ -161,9 +145,6 @@ export function StatsProjectsTable({ rows }: StatsProjectsTableProps) {
                       +{formatDuration(row.etaOverrunMs)}
                     </Text>
                   )}
-                </td>
-                <td data-column="runway" title={lane.title}>
-                  {lane.text}
                 </td>
                 <td data-column="tokens" title={`${Math.round(row.tokensPerMinute)} tokens per minute`}>
                   {formatGlanceValue(row.tokensPerMinute)}

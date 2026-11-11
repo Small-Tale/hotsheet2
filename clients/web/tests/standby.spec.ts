@@ -36,7 +36,6 @@ function store(
     claims: [],
     workers: { live: word === 'active' ? 2 : 0, expected: 1 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 0, estimate_ms: null },
     rates: {
       tokens: {
         window_minutes: 5,

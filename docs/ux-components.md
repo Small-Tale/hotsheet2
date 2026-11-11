@@ -321,7 +321,7 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   per live store, sorted by need (Halted, Stalled, May be stuck, Waiting on you, Active, Stopped,
   then longest without progress). Columns: state glyph (`LIVE_STATE_ICONS`) and word, project,
   current work (ticket and phase; `final_testing` reads "final testing (CI)"), last progress, ETA
-  overrun, runway, and tokens/min, then the one unstick action: **Answer** opens the first waiting
+  overrun, and tokens/min (no queue runway, HS2-5A83MR), then the one unstick action: **Answer** opens the first waiting
   ticket through `open-linked-ticket`, and **Open Terminal** opens the project's halted (else first)
   terminal through `open-terminal-project`. A row with no open project or terminal has no action. A
   native table (Kerf has no tabular-data component) that scrolls sideways inside its own container.
@@ -346,9 +346,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   docs/34-glance-surfaces.md §34.6): the project sidebar's Live section under the completion chart.
   Compact (the default) is one line of two bare chip `GlanceGauge`s (blue tokens/min, green tickets
   updated/h) and Kerf `Badge` chips with a glyph and a raw number: a problem state, Needs you, the
-  worst ETA overrun, and the queue runway, each only when it has something to say. Every explanation
+  worst ETA overrun, each only when it has something to say (queue runway removed, HS2-5A83MR). Every explanation
   is in the chip's title and accessible name. Expanded shows two medium full gauges and the `m1`
-  detail rows (work state and last-progress age, Needs you, past ETA, queue runway). The `ListHeader`
+  detail rows (work state and last-progress age, Needs you, past ETA). The `ListHeader`
   action `toggle-live-section` switches modes and the choice persists in the workspace preferences.
   Host conditions past a threshold (HS2-DTAVQA) are full-width Kerf `StateBanner` callouts in both
   modes. Numbers derive in `project-live-summary.ts`; ages re-render from a local render-only clock.

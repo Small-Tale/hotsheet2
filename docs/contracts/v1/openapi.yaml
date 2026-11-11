@@ -18718,7 +18718,6 @@ components:
         - claims
         - workers
         - waiting
-        - runway
         - rates
       properties:
         store:
@@ -18880,19 +18879,6 @@ components:
                     enum:
                       - feedback
                       - review
-        runway:
-          type: object
-          required:
-            - ready
-            - estimate_ms
-          properties:
-            ready:
-              type: integer
-              minimum: 0
-            estimate_ms:
-              type:
-                - integer
-                - 'null'
         rates:
           type: object
           required:

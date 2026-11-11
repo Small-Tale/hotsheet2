@@ -926,7 +926,7 @@ export const parseLiveStoreState = shape<LiveStoreState>('live state', {
   claims: listOf(liveClaim.check),
   workers: shape('live workers', { live: isNumber, expected: isNumber }).check,
   waiting: liveWaiting.check,
-  runway: shape('live runway', { ready: isNumber, estimate_ms: isNullableNumber }).check,
+  // An older server still sends `runway` (removed by HS2-5A83MR); extra members are ignored.
   rates: liveRates.check,
 });
 export const parseLiveStateList = shape<LiveStateList>('live state list', {

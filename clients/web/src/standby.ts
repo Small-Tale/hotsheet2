@@ -123,8 +123,11 @@ function stateDetail(state: LiveStoreState, nowMs: number): string {
     case 'waiting_on_you':
       // Only Started tickets with an open feedback request count (HS2-JGW031).
       return plural(state.waiting.count, 'feedback request');
-    case 'stopped':
-      return state.runway.ready ? `${state.runway.ready} ready` : 'queue empty';
+    case 'stopped': {
+      // How long ago work stopped; queue runway is gone (HS2-5A83MR).
+      const stopped = state.activity.stopped_at_ms;
+      return stopped === null ? '' : `for ${formatStandbyAge(Math.max(0, nowMs - stopped))}`;
+    }
     case 'active':
     case 'may_be_stuck':
       return [ageText, state.claims[0]?.slug].filter(Boolean).join(' · ');

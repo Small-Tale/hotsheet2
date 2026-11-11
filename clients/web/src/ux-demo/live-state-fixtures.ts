@@ -30,7 +30,6 @@ export function liveStateFixture(overrides: Partial<LiveStoreState> = {}, now = 
     claims: [],
     workers: { live: 1, expected: 1 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 0, estimate_ms: null },
     rates: {
       tokens: { window_minutes: 5, minutes: [], peak_per_minute: 0 },
       tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 0 },
@@ -76,7 +75,6 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
             eta_at_ms: now - 52 * MINUTE,
           },
         ],
-        runway: { ready: 2, estimate_ms: null },
         rates: {
           tokens: { window_minutes: 5, minutes: minutes([120, 0, 0, 40, 0]), peak_per_minute: 4_100 },
           tickets_updated: { window_minutes: 60, at_ms: [now - 50 * MINUTE], peak_per_hour: 6 },
@@ -149,7 +147,6 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
           },
         ],
         workers: { live: 2, expected: 2 },
-        runway: { ready: 6, estimate_ms: 220 * MINUTE },
         rates: {
           tokens: { window_minutes: 5, minutes: minutes([1_400, 1_900, 1_500, 1_700, 1_500]), peak_per_minute: 6_200 },
           tickets_updated: {

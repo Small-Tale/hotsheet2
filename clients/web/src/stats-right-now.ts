@@ -88,8 +88,6 @@ export interface RightNowRow {
   progressAgeMs?: number;
   /** The largest ETA overrun among the live claims. */
   etaOverrunMs?: number;
-  runwayReady: number;
-  runwayEstimateMs?: number;
   tokensPerMinute: number;
   action?: RightNowAction;
 }
@@ -132,8 +130,6 @@ export function rightNowRow(state: LiveStoreState, nowMs: number, targets: Right
     waiting: state.waiting.count,
     progressAgeMs: progressAgeMs(state, nowMs),
     etaOverrunMs: overruns.length ? Math.max(...overruns) : undefined,
-    runwayReady: state.runway.ready,
-    runwayEstimateMs: state.runway.estimate_ms ?? undefined,
     tokensPerMinute: tokensPerMinute(state, nowMs),
     action: rowAction(state, targets),
   };

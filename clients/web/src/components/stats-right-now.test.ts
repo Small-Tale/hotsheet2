@@ -90,15 +90,15 @@ describe('HS2-ERTNJ7 StatsProjectsTable', () => {
     expect(active).toContain('HS2-R76MMW · initial testing');
     expect(active).toContain('HS2-TG2ZV3 · final testing (CI)');
     expect(rowOf('store-review')).toContain('2 requests waiting on you');
-    expect(rowOf('store-kerf')).toContain('Queue empty');
+    expect(rowOf('store-kerf')).toContain('Nothing claimed');
   });
 
-  it('shows last progress, ETA overrun, runway, and tokens/min', () => {
+  it('shows last progress, ETA overrun, and tokens/min, with no Runway column (HS2-5A83MR)', () => {
     const stuck = rowOf('store-website');
     expect(stuck).toContain('34m ago');
     expect(stuck).toContain('+52m');
-    expect(stuck).toContain('2 ready');
-    expect(rowOf('store-hotsheet')).toContain('~3h 40m');
+    expect(stuck).not.toContain('data-column="runway"');
+    expect(stuck).not.toContain(' ready');
     expect(rowOf('store-hotsheet')).toContain('1.6k');
     expect(rowOf('store-review')).toMatch(/data-column="eta"[^>]*>—/u);
   });

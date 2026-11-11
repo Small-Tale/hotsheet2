@@ -68,8 +68,6 @@ export function demoLiveState(scenario: DemoLiveScenario): LiveStoreState {
           ],
         }
       : { count: 0, tickets: [] },
-    runway:
-      attention || scenario === 'quiet' ? { ready: 4, estimate_ms: 220 * MINUTE } : { ready: 0, estimate_ms: null },
     rates: {
       tokens: { window_minutes: 5, minutes: minutes(idle ? 0 : 1600), peak_per_minute: 6200 },
       tickets_updated: {

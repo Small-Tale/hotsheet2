@@ -64,7 +64,6 @@ function liveStore(id: string, checkout: string, now: number, overrides: Partial
     ],
     workers: { live: 1, expected: 1 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 0, estimate_ms: null },
     rates: {
       tokens: {
         window_minutes: 5,

@@ -40,7 +40,6 @@ function store(
     claims: [],
     workers: { live: 1, expected: 1 },
     waiting: { count: 0, tickets: [] },
-    runway: { ready: 2, estimate_ms: null },
     rates: {
       tokens: { window_minutes: 5, minutes: [], peak_per_minute: 1_000 },
       tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 10 },
@@ -101,7 +100,7 @@ describe('away digest (HS2-JJ9RYN)', () => {
     expect(finishAwayDigest(record, [before], 0, T0 + 60 * MINUTE)).toBeUndefined();
   });
 
-  it('records one row per new stall, wait, usage-limit pause, host crossing, and finished queue', () => {
+  it('records one row per new stall, wait, usage-limit pause, host crossing, and finished run', () => {
     const before = store({ claims: [claim('STW-1')] });
     const record = beginAwayRecord([before], T0);
     // A stall, a ticket waiting on the user, and a usage-limit pause arrive in one snapshot.
@@ -129,7 +128,7 @@ describe('away digest (HS2-JJ9RYN)', () => {
     // The pause clears, then the queue finishes.
     const resumed: LiveStoreState = { ...stalled, revision: 3, activity: { ...stalled.activity, causes: [] } };
     observeAwayStates(record, map(stalled), [resumed], ['demo-checkout'], T0 + 50 * MINUTE);
-    const done: LiveStoreState = { ...resumed, revision: 4, state: 'stopped', runway: { ready: 0, estimate_ms: null } };
+    const done: LiveStoreState = { ...resumed, revision: 4, state: 'stopped' };
     observeAwayStates(record, map(resumed), [done], ['demo-checkout'], T0 + 90 * MINUTE);
     observeAwayHost(record, host('normal'), host('warning'), T0 + 20 * MINUTE);
     // Staying in warning is not a second crossing; escalating to critical is.
@@ -143,14 +142,14 @@ describe('away digest (HS2-JJ9RYN)', () => {
       'usage_limit',
       'host',
       'host',
-      'queue_finished',
+      'run_finished',
     ]);
     expect(digest.events[0]).toMatchObject({ slug: 'STW-2', projectId: 'demo-checkout' });
     expect(digest.events[1]).toMatchObject({ slug: 'STW-3', projectId: 'demo-checkout' });
     expect(digest.events[2]).toMatchObject({ resetsAtMs: T0 + 50 * MINUTE, resumedAtMs: T0 + 50 * MINUTE });
     expect(digest.events[3]).toMatchObject({ signal: 'disk', level: 'warning' });
     expect(digest.events[4]).toMatchObject({ signal: 'disk', level: 'critical', detail: '5 GB free' });
-    // Both tickets worked during the run count toward the finished queue.
+    // Both tickets worked during the run count toward the finished run.
     expect(digest.events[5]).toMatchObject({ tickets: 2 });
     expect(digest.needYou).toBe(1);
   });
@@ -251,11 +250,11 @@ describe('away digest (HS2-JJ9RYN)', () => {
     expect(
       awayEventRow({ kind: 'host', signal: 'network', level: 'critical', atMs: T0 }, clock).subject,
     ).toBeUndefined();
-    expect(awayEventRow({ kind: 'queue_finished', ...base, atMs: T0, tickets: 1 }, clock).text).toBe(
-      'finished its queue at t0 · 1 ticket',
+    expect(awayEventRow({ kind: 'run_finished', ...base, atMs: T0, tickets: 1 }, clock).text).toBe(
+      'finished its run at t0 · 1 ticket',
     );
-    expect(awayEventRow({ kind: 'queue_finished', ...base, atMs: T0, tickets: 0 }, clock)).toMatchObject({
-      text: 'finished its queue at t0',
+    expect(awayEventRow({ kind: 'run_finished', ...base, atMs: T0, tickets: 0 }, clock)).toMatchObject({
+      text: 'finished its run at t0',
       icon: { name: 'check' },
     });
   });
