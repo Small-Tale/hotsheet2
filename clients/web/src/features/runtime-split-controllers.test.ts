@@ -526,6 +526,49 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     owner.dispose();
   });
 
+  it('change streams: standby_settings events and resyncs feed the standby settings, idle time reads nothing (HS2-A5BTTK)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      standbySettings = { applyEvents: vi.fn(() => undefined), resync: vi.fn(async () => undefined) },
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('stats'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        standbySettings,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onResync.get('/api/b')!('reconnect');
+    expect(standbySettings.resync).toHaveBeenCalledTimes(2);
+    const events = [{ cursor: 4, store: '', kind: 'standby_settings', id: '', slug: '' }];
+    await streams.onEvents.get('/api/a')!({ cursor: 4, overflow: false, events });
+    expect(standbySettings.applyEvents).toHaveBeenCalledWith(events);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(standbySettings.resync).toHaveBeenCalledTimes(2);
+    expect(standbySettings.applyEvents).toHaveBeenCalledTimes(1);
+    owner.dispose();
+  });
+
   it('change streams: report each stream health for standby freshness, not handler failures (HS2-EQVZTZ)', async () => {
     const projects = signal([project('a'), project('b')]),
       noop = vi.fn(async () => undefined),

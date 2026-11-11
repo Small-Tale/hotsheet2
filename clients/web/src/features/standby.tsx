@@ -1,5 +1,6 @@
 import { effect, mount, signal } from 'kerfjs';
 
+import type { ChangeEvent } from '../api';
 import { StandbyScreen } from '../components/standby-screen';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
 import type { LiveStateStore } from '../live-state';
@@ -195,6 +196,53 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     }
   }
 
+  // Settings changes elsewhere (the CLI, another device) push `standby_settings` events (HS2-A5BTTK).
+  let settingsRead: Promise<void> | undefined,
+    settingsReadAgain = false,
+    /** The newest settings event cursor acted on; reset on resync because a restarted server restarts its cursors. */
+    seenSettingsEvent: number | undefined;
+
+  /** Re-read the settings now, or once more after the read already in flight. */
+  function rereadSettings(): Promise<void> {
+    if (settingsRead) {
+      settingsReadAgain = true;
+      return settingsRead;
+    }
+    // Read through a function: an event during the await sets the flag again.
+    const again = () => settingsReadAgain;
+    settingsRead = (async () => {
+      for (;;) {
+        settingsReadAgain = false;
+        await refreshSettings();
+        if (!again()) return;
+      }
+    })().finally(() => {
+      settingsRead = undefined;
+    });
+    return settingsRead;
+  }
+
+  /**
+   * Feed change events from any project stream; only a new `standby_settings` event re-reads (and so
+   * re-arms the idle timer). The same event seen through several streams of one server reads once.
+   */
+  function applySettingsEvents(events: readonly ChangeEvent[]): Promise<void> | undefined {
+    let fresh = false;
+    for (const event of events) {
+      if (event.kind !== 'standby_settings') continue;
+      if (event.cursor === undefined || seenSettingsEvent === undefined || event.cursor > seenSettingsEvent)
+        fresh = true;
+      if (event.cursor !== undefined) seenSettingsEvent = Math.max(seenSettingsEvent ?? event.cursor, event.cursor);
+    }
+    return fresh ? rereadSettings() : undefined;
+  }
+
+  /** A change stream (re)started or overflowed: a settings event may have been missed. */
+  function resyncSettings(): Promise<void> {
+    seenSettingsEvent = undefined;
+    return rereadSettings();
+  }
+
   async function saveSettings(form: HTMLElement) {
     const api = dependencies.api();
     if (!api) return;
@@ -278,6 +326,8 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     exit,
     streamHealth,
     refreshSettings,
+    applySettingsEvents,
+    resyncSettings,
     saveSettings,
     wire,
   };

@@ -136,6 +136,14 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
   machine-wide settings on the server's host. Clients read and write them with `GET`/`PUT
 /standby-settings`. `hotsheet-cli settings set standby.<name> <value>` validates the value and
   always writes the global scope. In the app they are App Settings → General → Standby.
+- **Settings changes reach open clients (HS2-A5BTTK).** Every change pushes a cursored
+  `standby_settings` change event (`store` empty; it carries no values). A `PUT /standby-settings`
+  emits it itself; `hotsheet-cli settings set standby.*` announces its write to every running server
+  on the machine with `POST /standby-settings/changed`, which emits the same event. Clients re-read
+  `GET /standby-settings` on each new event (cursor-deduped across project streams, coalesced) and
+  on change-stream resync, then re-arm the idle timer from the last activity with the new threshold.
+  Nothing polls. A REST write on one server does not reach clients of another server process on the
+  same machine until their next resync.
 - **Idle entry.** Idle means no pointer, key, wheel, or touch input. One local timer counts it and
   never makes a request.
 - **Moon button.** It sits directly before the left rail's collapse toggle. While the rail is
@@ -303,6 +311,7 @@ HS2-GAJSX9:
 | Live state kept across restarts, minute rebuild and decay | §34.3      | HS2-MHW3SX | HS2-JTTQMY              |
 | Glance gauge, full and bare variants                      | §34.3      | HS2-CVE3SK | none                    |
 | Standby mode                                              | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |
+| Standby settings pushed to running clients                | §34.5      | HS2-A5BTTK | HS2-EQVZTZ              |
 | Project sidebar Live section                              | §34.6      | HS2-F788GW | HS2-JTTQMY, HS2-CVE3SK  |
 | Workers view button badge                                 | §34.6      | HS2-6B9S7P | HS2-JTTQMY, `KF-170258` |
 | Grid sidebar shared groups, gauge and triage page bodies  | §34.7      | HS2-E1AQE8 | HS2-JTTQMY, HS2-CVE3SK  |

@@ -10292,6 +10292,59 @@ fn standby_settings_are_set_headlessly_as_validated_machine_wide_settings() {
 }
 
 #[test]
+fn headless_standby_settings_changes_notify_running_servers() {
+    // HS2-A5BTTK: each `settings set standby.*` announces itself to every running server, which
+    // pushes the `standby_settings` event open clients re-read on.
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let home = dir.path().join("home");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": url,
+            "secret": "standby-secret",
+            "store_path": store,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        (0..2)
+            .map(|_| capture_one_request(listener.try_clone().unwrap()))
+            .collect::<Vec<_>>()
+    });
+    for (key, value) in [("standby.enabled", "false"), ("standby.idle_minutes", "45")] {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["settings", "set", key, value])
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty());
+    }
+    for (request, secret, body) in server.join().unwrap() {
+        assert_eq!(request, "POST /standby-settings/changed HTTP/1.1");
+        assert_eq!(secret, "standby-secret");
+        assert!(body.is_empty());
+    }
+    // A rejected value is never saved, so nothing is announced; with no server listening any
+    // more, an announcement would surface as a warning on stderr.
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["settings", "set", "standby.idle_minutes", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("from 1 to 1440"))
+        .stderr(predicate::str::contains("warning").not());
+}
+
+#[test]
 fn terminal_limits_are_set_headlessly_as_validated_machine_wide_settings() {
     // HS2-Y5DYC0 headless parity with App Settings → Terminal memory.
     let dir = tempfile::tempdir().unwrap();

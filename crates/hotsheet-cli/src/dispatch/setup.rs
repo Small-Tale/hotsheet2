@@ -1482,9 +1482,18 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
                 hotsheet_ticketing::terminal_limits::HISTORY_LINES_SETTING
                     | hotsheet_ticketing::terminal_limits::REPLAY_BYTES_SETTING
             ) {
-                if let Err(error) = notify_running_terminal_limits() {
+                if let Err(error) = notify_running_servers("terminal-limits/reconcile") {
                     eprintln!(
                         "warning: saved {key}, but running terminals were not resized: {error}"
+                    );
+                }
+            }
+            // Running clients re-read standby settings on the event this announcement pushes
+            // (HS2-A5BTTK), so a headless change reaches them without a reload.
+            if standby {
+                if let Err(error) = notify_running_servers("standby-settings/changed") {
+                    eprintln!(
+                        "warning: saved {key}, but open clients were not told about it: {error}"
                     );
                 }
             }
@@ -1511,7 +1520,9 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
     Ok(())
 }
 
-fn notify_running_terminal_limits() -> Result<()> {
+/// `POST` to `path` on every running server on this machine, so a headless write to the shared
+/// machine settings file takes effect there (terminal limits, HS2-Y5DYC0; standby, HS2-A5BTTK).
+fn notify_running_servers(path: &str) -> Result<()> {
     let home = hotsheet_plugins::hotsheet_home();
     let instances = home.join("instances");
     if !instances.exists() {
@@ -1541,10 +1552,7 @@ fn notify_running_terminal_limits() -> Result<()> {
         ) else {
             continue;
         };
-        let endpoint = format!(
-            "{}/terminal-limits/reconcile",
-            server.url.trim_end_matches('/')
-        );
+        let endpoint = format!("{}/{path}", server.url.trim_end_matches('/'));
         if let Err(error) = ureq::post(&endpoint)
             .set("X-Hotsheet-Secret", &server.secret)
             .timeout(std::time::Duration::from_secs(10))

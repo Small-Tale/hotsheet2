@@ -4291,6 +4291,7 @@ export async function startHotSheetWebClient() {
     loadRepositorySize,
     liveStates,
     hostHealth,
+    standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
     onStreamHealth: standby.streamHealth,
   });
   const {

@@ -10843,6 +10843,46 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ConfiguredStandbySettings'
+  /standby-settings/changed:
+    post:
+      operationId: standby_settings_changed
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandbySettingsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /health:
     get:
       operationId: health
@@ -19340,6 +19380,8 @@ components:
       additionalProperties: false
     StandbySettingsView:
       type: object
+      description: The machine-wide standby settings (HS2-EQVZTZ). Every change pushes a standby_settings change
+        event (HS2-A5BTTK), and clients re-read this on each one and on resync.
       required:
         - defaults
         - configured

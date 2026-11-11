@@ -359,6 +359,12 @@ threshold crossing as a replayable `host_health` change event (`store` empty, `i
 `slug` = status, `message` = reason code); clients re-read `GET /host-health` on each one. See
 [host-health](host-health.md) (HS2-DTAVQA).
 
+A change to the machine-wide **standby settings** is published as a replayable
+`standby_settings` change event (`store`, `id`, and `slug` empty). `PUT /standby-settings` emits it;
+`hotsheet-cli settings set standby.*` makes every running server emit it through
+`POST /standby-settings/changed`. Clients re-read `GET /standby-settings` on each one
+([34](34-glance-surfaces.md) §34.5, HS2-A5BTTK).
+
 Historical cumulative-flow data is explicitly reported unavailable because current ticket
 files do not preserve status transitions.
 The CLI exposes the same live feed through the selected `-C` store's running server:

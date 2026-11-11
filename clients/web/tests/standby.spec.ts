@@ -51,6 +51,7 @@ function store(
 interface Host {
   now: number;
   settings: { enabled: boolean | null; idle_minutes: number | null };
+  reads: number;
   puts: unknown[];
   pollDown: boolean;
   sockets: WebSocketRoute[];
@@ -67,6 +68,7 @@ async function openStandbyProject(page: Page, settings: Host['settings'] = { ena
   const host: Host = {
     now: Date.now(),
     settings,
+    reads: 0,
     puts: [],
     pollDown: false,
     sockets: [],
@@ -91,7 +93,10 @@ async function openStandbyProject(page: Page, settings: Host['settings'] = { ena
       ],
     }),
     standbySettings: {
-      get: () => settingsView(host.settings),
+      get: () => {
+        host.reads += 1;
+        return settingsView(host.settings);
+      },
       put: (body) => {
         host.puts.push(body);
         host.settings = body as Host['settings'];
@@ -280,5 +285,33 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await enabled.uncheck();
     await expect.poll(() => host.puts.at(-1)).toEqual({ enabled: false, idle_minutes: 30 });
     await expect(idle).toHaveAttribute('disabled', '');
+  });
+
+  test('a settings change made elsewhere reaches the open client by a pushed event, without polling (HS2-A5BTTK)', async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const host = await openStandbyProject(page, { enabled: false, idle_minutes: null });
+    await expect.poll(() => host.sockets.length).toBeGreaterThan(0);
+    // One read when the project opens, one for its change stream's initial resync.
+    await expect.poll(() => host.reads).toBe(2);
+    // Standby is off: a long idle stretch neither enters standby nor re-reads the settings.
+    await page.mouse.move(10, 10);
+    const settled = host.reads;
+    await page.clock.fastForward(30 * 60_000);
+    await expect(standby(page)).toHaveCount(0);
+    expect(host.reads).toBe(settled);
+
+    // The CLI (or another device) turns standby on with a one-minute threshold; the server pushes
+    // the cursored event, and the open client re-reads once and re-arms its idle timer.
+    host.settings = { enabled: true, idle_minutes: 1 };
+    for (const socket of host.sockets)
+      socket.send(JSON.stringify({ cursor: 1, store: '', kind: 'standby_settings', id: '', slug: '' }));
+    await expect.poll(() => host.reads).toBe(settled + 1);
+    await page.mouse.move(20, 20);
+    await page.clock.fastForward(65_000);
+    await expect(standby(page)).toBeVisible();
+    expect(host.reads).toBe(settled + 1);
   });
 });

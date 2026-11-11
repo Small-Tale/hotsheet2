@@ -84,6 +84,67 @@ describe('standby controller (HS2-EQVZTZ)', () => {
     expect(controller.scope.value).toBeUndefined();
   });
 
+  it('re-reads pushed settings changes once per new event and on resync, re-arming idle entry (HS2-A5BTTK)', async () => {
+    vi.useFakeTimers();
+    let settings = view(true, 30);
+    const standbySettings = vi.fn(() => Promise.resolve(settings));
+    const api: StandbyApi = { standbySettings, saveStandbySettings: vi.fn(() => Promise.resolve(settings)) };
+    const { controller } = harness({ api });
+    await controller.refreshSettings();
+    expect(standbySettings).toHaveBeenCalledTimes(1);
+    const event = (cursor: number, kind = 'standby_settings') => ({ cursor, store: '', kind, id: '', slug: '' });
+    // Unrelated events read nothing.
+    expect(controller.applySettingsEvents([event(1, 'host_health')])).toBeUndefined();
+    // The CLI lowered the threshold: one read re-arms the timer from the last activity.
+    settings = view(true, 5, { idle_minutes: 5 });
+    await controller.applySettingsEvents([event(2)]);
+    expect(standbySettings).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(5 * 60_000);
+    expect(controller.scope.value).toEqual({ kind: 'all' });
+    controller.exit();
+    // The same event seen again through another project stream of this server reads nothing.
+    expect(controller.applySettingsEvents([event(2)])).toBeUndefined();
+    expect(standbySettings).toHaveBeenCalledTimes(2);
+    // Standby was turned off elsewhere: idle entry stops.
+    settings = view(false, 5, { enabled: false });
+    await controller.applySettingsEvents([event(3)]);
+    vi.advanceTimersByTime(60 * 60_000);
+    expect(controller.scope.value).toBeUndefined();
+    // A resync re-reads even without an event, and forgets the old cursor (a restarted server).
+    settings = view(true, 10);
+    await controller.resyncSettings();
+    expect(standbySettings).toHaveBeenCalledTimes(4);
+    await controller.applySettingsEvents([event(1)]);
+    expect(standbySettings).toHaveBeenCalledTimes(5);
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(controller.scope.value).toEqual({ kind: 'all' });
+  });
+
+  it('coalesces a burst of settings events into the read in flight plus one more (HS2-A5BTTK)', async () => {
+    const pending: ((value: StandbySettingsView) => void)[] = [];
+    const standbySettings = vi.fn(
+      () =>
+        new Promise<StandbySettingsView>((resolve) => {
+          pending.push(resolve);
+        }),
+    );
+    const { controller } = harness({ api: { standbySettings, saveStandbySettings: vi.fn() } });
+    const event = (cursor: number) => ({ cursor, store: '', kind: 'standby_settings', id: '', slug: '' });
+    const first = controller.applySettingsEvents([event(1)]);
+    void controller.applySettingsEvents([event(2)]);
+    void controller.applySettingsEvents([event(3)]);
+    void controller.resyncSettings();
+    expect(standbySettings).toHaveBeenCalledTimes(1);
+    pending.shift()!(view(true, 20));
+    await vi.waitFor(() => {
+      expect(standbySettings).toHaveBeenCalledTimes(2);
+    });
+    pending.shift()!(view(true, 25));
+    await first;
+    expect(standbySettings).toHaveBeenCalledTimes(2);
+    expect(controller.settings.value?.effective.idle_minutes).toBe(25);
+  });
+
   it('holds a wake lock only on touch devices and releases it on exit', async () => {
     const touch = harness({ touch: true });
     touch.controller.enter();

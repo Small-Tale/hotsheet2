@@ -1,7 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
-import { type ActivityEvent, Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
+import { type ActivityEvent, Api, CHANGE_STREAM_CLIENT_ID, type ChangeEvent, type PollResponse } from '../api';
 import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
 import { createHandshakeGapReconciler, ticketReadCursors } from '../change-read-gap';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
@@ -72,6 +72,14 @@ export interface ProjectChangeStreamsDependencies {
    * each stream resync re-reads it. No timer reads it.
    */
   hostHealth?: Pick<HostHealthResource, 'applyEvents' | 'resync'>;
+  /**
+   * Machine-wide standby settings (HS2-A5BTTK): `standby_settings` events trigger one coalesced
+   * re-read and each stream resync re-reads them. No timer reads them.
+   */
+  standbySettings?: {
+    applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
+    resync: () => Promise<void>;
+  };
   /**
    * A project's change stream (re)established continuity or delivered (`true`), failed or dropped
    * (`false`), or was stopped (`undefined`). Standby's freshness line reads it (HS2-EQVZTZ).
@@ -239,6 +247,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     loadRepositorySize,
     liveStates,
     hostHealth,
+    standbySettings,
     onStreamHealth,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
@@ -372,6 +381,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
               ...(liveStates ? [liveStates.resync(new Api(current.apiPath))] : []),
               ...(hostHealth ? [hostHealth.resync()] : []),
+              ...(standbySettings ? [standbySettings.resync()] : []),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
@@ -386,6 +396,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             onStreamHealth?.(current.id, true);
             liveStates?.applyEvents(response.events);
             void hostHealth?.applyEvents(response.events);
+            void standbySettings?.applyEvents(response.events);
             const acceptedTurns = new Set(turnStreamEvents(response));
             for (const event of response.events) {
               if (event.kind === 'permission_resolved') {

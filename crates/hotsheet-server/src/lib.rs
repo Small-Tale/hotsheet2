@@ -2183,6 +2183,12 @@ pub fn app(state: AppState) -> Router {
             "/standby-settings",
             get(routes::standby::get_standby_settings).put(routes::standby::put_standby_settings),
         )
+        // The CLI announces its headless standby writes here (HS2-A5BTTK); a `PUT` announces
+        // itself. Both push a `standby_settings` change event.
+        .route(
+            "/standby-settings/changed",
+            post(routes::standby::standby_settings_changed),
+        )
         // Inside authentication: an authenticated response names the change cursor it was
         // served at, so a client can replay what its read may have missed (HS2-SQKJYG).
         .route_layer(middleware::from_fn_with_state(
