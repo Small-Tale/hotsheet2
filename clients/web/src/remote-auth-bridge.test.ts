@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Checkout } from './api';
-import { createDevApp } from './dev-server';
+import { changePollSessionHeaders, createDevApp } from './dev-server';
 import { createLocalHostApp } from './local-host';
 import { openRegisteredProject, type ProjectSession, UnregisteredRemoteProjectError } from './project-bridge';
 
@@ -181,5 +181,69 @@ describe('HS2-CD8YNK remote writes behind a TLS-terminating proxy', () => {
     const { app: target, openRemote } = app(session({}, false));
     expect((await post(target, { cookie, origin: PAIRED })).status).toBe(401);
     expect(openRemote).not.toHaveBeenCalled();
+  });
+});
+
+describe('HS2-ZVSMTZ remote change-poll multiplexer', () => {
+  const PAIRED = 'https://synthetic-host.example.ts.net';
+  const cookie = 'hs2_remote=synthetic-session; hs2_remote_csrf=synthetic-csrf';
+  function app(ok = true) {
+    vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
+    const forward = vi.fn<(project: string, path: string, signal: AbortSignal, browser: Headers) => Promise<Response>>(
+      async () => Response.json({ events: [], cursor: 3 }),
+    );
+    const check = vi.fn<(headers: Headers) => Promise<Response>>(async () =>
+      ok ? Response.json({ origin: PAIRED }) : Response.json({ error: 'no' }, { status: 401 }),
+    );
+    const defaults = Array.from({ length: 10 }, () => undefined) as [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    return { forward, app: createDevApp(true, ...defaults, forward, undefined, check) };
+  }
+  const poll = (target: ReturnType<typeof createDevApp>, headers: Record<string, string>) =>
+    target.request('http://synthetic-host.example.ts.net/__hotsheet/change-mux/poll', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({
+        version: 1,
+        client: 'synthetic-client',
+        polls: [{ project: 'synthetic-a1b2', timeout_ms: 0 }],
+      }),
+    });
+
+  it('forwards each upstream poll with the browser session cookie only', async () => {
+    const { app: target, forward } = app();
+    const response = await poll(target, { cookie, origin: PAIRED, 'x-hotsheet-secret': 'spoofed' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ results: [{ project: 'synthetic-a1b2', status: 200 }] });
+    expect(forward).toHaveBeenCalledTimes(1);
+    const browser = forward.mock.calls[0][3];
+    expect(changePollSessionHeaders(browser).get('cookie')).toBe(cookie);
+    expect([...changePollSessionHeaders(browser).keys()]).toEqual(['cookie']);
+  });
+
+  it('refuses an unauthenticated, revoked, or cross-origin multiplexed poll', async () => {
+    for (const [reason, ok, headers, status] of [
+      ['no cookie', true, { origin: PAIRED }, 401],
+      ['revoked session', false, { cookie, origin: PAIRED }, 401],
+      ['foreign origin', true, { cookie, origin: 'https://foreign.example' }, 403],
+    ] as const) {
+      const { app: target, forward } = app(ok);
+      expect((await poll(target, headers)).status, reason).toBe(status);
+      expect(forward, reason).not.toHaveBeenCalled();
+    }
+  });
+
+  it('builds no session headers for a browser without a cookie', () => {
+    expect([...changePollSessionHeaders(new Headers({ origin: PAIRED })).keys()]).toEqual([]);
   });
 });

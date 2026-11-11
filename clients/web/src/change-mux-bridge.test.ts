@@ -225,7 +225,12 @@ describe('dev bridge endpoint', () => {
       version: 1,
       results: [{ project: 'p1', status: 200, body: { cursor: 3, events: [], overflow: false } }],
     });
-    expect(forward).toHaveBeenCalledWith('p1', '/ws/poll?timeout_ms=0&since=2&client=tab', expect.any(AbortSignal));
+    expect(forward).toHaveBeenCalledWith(
+      'p1',
+      '/ws/poll?timeout_ms=0&since=2&client=tab',
+      expect.any(AbortSignal),
+      expect.any(Headers), // HS2-ZVSMTZ: the browser's session headers ride along.
+    );
   });
 
   it('rejects a malformed request with 400', async () => {

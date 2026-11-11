@@ -36,6 +36,15 @@ import {
   UnregisteredRemoteProjectError,
 } from './project-bridge';
 
+/** A remote session's polls ride the browser's own session cookie, as its project-api requests
+ * do; the proxy adds the CSRF header from it and never forwards a loopback secret (HS2-ZVSMTZ). */
+export function changePollSessionHeaders(browser: Headers): Headers {
+  const headers = new Headers();
+  const cookie = browser.get('cookie');
+  if (cookie) headers.set('cookie', cookie);
+  return headers;
+}
+
 export function createDevApp(
   dev = true,
   reveal = revealCorruptTicket,
@@ -48,8 +57,18 @@ export function createDevApp(
   listCheckouts: () => Promise<Checkout[]> = listServerCheckouts,
   jobs: MigrationJobApi = migrationJobApi,
   latencyLog: Pick<ReturnType<typeof createDevLatencyLog>, 'record' | 'recent' | 'file'> = createDevLatencyLog(),
-  forwardChangePoll: ChangeMuxForward = (project, path, signal) =>
-    proxyProjectRequest(project, path, new Request(new URL(path, 'http://bridge.invalid')), signal),
+  forwardChangePoll: (project: string, path: string, signal: AbortSignal, browser: Headers) => Promise<Response> = (
+    project,
+    path,
+    signal,
+    browser,
+  ) =>
+    proxyProjectRequest(
+      project,
+      path,
+      new Request(new URL(path, 'http://bridge.invalid'), { headers: changePollSessionHeaders(browser) }),
+      signal,
+    ),
   openRemote: (root: string) => Promise<unknown> = openRegisteredProject,
   checkRemoteSession: (headers: Headers) => Promise<Response> = (headers) =>
     browserAuthRequest('/remote-auth/me', new Request('http://bridge.invalid/remote-auth/me', { headers })),
@@ -68,6 +87,7 @@ export function createDevApp(
     const allowed =
       path === '/__hotsheet/checkouts' ||
       path === REMOTE_PROJECT_OPEN_PATH ||
+      path === CHANGE_MUX_PATH ||
       path.startsWith('/__hotsheet/project-api/') ||
       ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
     if (!allowed) return context.notFound();
@@ -294,7 +314,9 @@ export function createDevApp(
     }
     const request = parseChangeMuxRequest(body);
     if (typeof request === 'string') return context.json({ error: request }, 400);
-    return context.json(await multiplexChangePolls(request, forwardChangePoll, context.req.raw.signal));
+    const browser = context.req.raw.headers;
+    const forward: ChangeMuxForward = (project, path, signal) => forwardChangePoll(project, path, signal, browser);
+    return context.json(await multiplexChangePolls(request, forward, context.req.raw.signal));
   });
   app.all('/__hotsheet/project-api/:project/*', async (context) => {
     if (!dev) return context.notFound();

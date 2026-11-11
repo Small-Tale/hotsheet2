@@ -167,6 +167,14 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
       body: JSON.stringify({ root: project }),
     });
     expect(proxied.status).toBe(201);
+    // HS2-ZVSMTZ: the multiplexed change poll rides the remote session to the real server.
+    const muxed = await bridge.request(url('/change-mux/poll'), {
+      method: 'POST',
+      headers: { cookie, origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ version: 1, client: 'synthetic-tab', polls: [{ project: checkoutId, timeout_ms: 0 }] }),
+    });
+    expect(muxed.status).toBe(200);
+    expect(((await muxed.json()) as { results: Array<{ status: number }> }).results[0].status).toBe(200);
     const deniedWrite = await bridge.request(url(`/project-api/${checkoutId}/tickets`), {
       method: 'POST',
       headers: { ...headers, 'x-hotsheet-csrf': csrf },

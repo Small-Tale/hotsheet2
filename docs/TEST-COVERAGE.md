@@ -48,6 +48,11 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-ZVSMTZ: `clients/web/src/remote-auth-bridge.test.ts` multiplexes a remote poll with
+only the session cookie forwarded and refuses missing, revoked, or cross-origin
+sessions; `remote-auth-server-integration.test.ts` polls the real server through the
+remote session.
+
 HS2-CD8YNK: `clients/web/src/remote-auth-bridge.test.ts` sends proxy-shaped writes
 (https paired origin, http request URL) and refuses foreign, request-URL, missing,
 and unpaired origins, a missing CSRF cookie, or a dead session;
