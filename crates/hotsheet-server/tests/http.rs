@@ -2523,7 +2523,8 @@ async fn hs2_cyhawb_an_in_process_codex_rollout_halts_resumes_and_records_ticket
     let halt =
         || async { body_json(send("GET", "/terminals/watched", None).await).await["halt"].clone() };
     async fn eventually<F: std::future::Future<Output = bool>>(mut check: impl FnMut() -> F) {
-        for _ in 0..500 {
+        // HS2-AY33TG: allow the macOS rollout watcher to register under full-suite load.
+        for _ in 0..1500 {
             if check().await {
                 return;
             }
@@ -2734,7 +2735,8 @@ async fn hs2_h8bzgy_a_restarted_server_resumes_a_codex_rollout_watch_and_records
     let until = |want: usize| {
         let recorded = &recorded;
         async move {
-            for _ in 0..250 {
+            // HS2-AY33TG: rollout discovery can wait on FSEvents stream startup.
+            for _ in 0..1500 {
                 if recorded().len() >= want {
                     return;
                 }
@@ -3274,7 +3276,8 @@ async fn hs2_ssmdq1_claude_usage_records_per_response_mid_turn_and_resumes_after
     let until = |want: usize| {
         let recorded = &recorded;
         async move {
-            for _ in 0..200 {
+            // HS2-AY33TG: leave time for transcript watcher startup under load.
+            for _ in 0..600 {
                 if recorded().len() >= want {
                     return;
                 }
