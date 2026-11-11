@@ -69,7 +69,7 @@ export function StatsRightNow({ scope, stores, tiles, rows, completed, asOfMs }:
                     unit="tokens/min"
                   />
                   <Text variant="span" size="compact" tone="quiet" flush>
-                    Scale: 30-day peak {formatGlanceValue(tiles.tokensPeakPerMinute)}/min
+                    Scale: 24-hour peak {formatGlanceValue(tiles.tokensPeakPerMinute)}/min
                   </Text>
                 </List>
               </ContentItem>

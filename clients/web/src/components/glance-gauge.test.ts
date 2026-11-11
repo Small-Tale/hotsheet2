@@ -26,8 +26,8 @@ describe('GlanceGauge (HS2-CVE3SK)', () => {
     const markup = render();
     expect(rootAttribute(markup, 'class')).toBe('glance-gauge');
     expect(rootAttribute(markup, 'role')).toBe('img');
-    expect(rootAttribute(markup, 'aria-label')).toBe('Token rate: 1.6k tokens/min (30-day peak 6.2k)');
-    expect(markup).toContain('<title>Token rate: 1.6k tokens/min (30-day peak 6.2k)</title>');
+    expect(rootAttribute(markup, 'aria-label')).toBe('Token rate: 1.6k tokens/min (24-hour peak 6.2k)');
+    expect(markup).toContain('<title>Token rate: 1.6k tokens/min (24-hour peak 6.2k)</title>');
   });
 
   it('defaults to the full brand dial at the large size on the theme palette', () => {
@@ -55,7 +55,7 @@ describe('GlanceGauge (HS2-CVE3SK)', () => {
     expect(markup).not.toContain('<text');
     expect(markup).not.toContain('glance-gauge__tick');
     expect(markup).toContain('class="glance-gauge__needle"');
-    expect(rootAttribute(markup, 'aria-label')).toBe('Token rate: 14 tickets/h (30-day peak 22)');
+    expect(rootAttribute(markup, 'aria-label')).toBe('Token rate: 14 tickets/h (24-hour peak 22)');
   });
 
   it('rotates the needle and dashes the value arc to the reading', () => {

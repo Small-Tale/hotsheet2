@@ -13,7 +13,7 @@ import {
 } from './glance-gauge-geometry';
 
 describe('glance gauge scale (HS2-CVE3SK)', () => {
-  it('scales a reading to its own 30-day peak', () => {
+  it('scales a reading to its own 24-hour peak', () => {
     expect(glanceGaugeFraction(0, 6200)).toBe(0);
     expect(glanceGaugeFraction(1550, 6200)).toBe(0.25);
     expect(glanceGaugeFraction(6200, 6200)).toBe(1);
@@ -81,16 +81,16 @@ describe('glance gauge text (HS2-CVE3SK)', () => {
     expect(formatGlanceValue(Number.NaN)).toBe('0');
   });
 
-  it('names the label, reading, unit, and 30-day peak', () => {
+  it('names the label, reading, unit, and 24-hour peak', () => {
     expect(glanceGaugeTitle('Token rate', 1600, 'tokens/min', 6200)).toBe(
-      'Token rate: 1.6k tokens/min (30-day peak 6.2k)',
+      'Token rate: 1.6k tokens/min (24-hour peak 6.2k)',
     );
     expect(glanceGaugeTitle('Tickets updated', 14, 'tickets/h', 22)).toBe(
-      'Tickets updated: 14 tickets/h (30-day peak 22)',
+      'Tickets updated: 14 tickets/h (24-hour peak 22)',
     );
   });
 
-  it('says when there is no 30-day peak yet', () => {
-    expect(glanceGaugeTitle('Token rate', 0, 'tokens/min', 0)).toBe('Token rate: 0 tokens/min (no 30-day peak yet)');
+  it('says when there is no 24-hour peak yet', () => {
+    expect(glanceGaugeTitle('Token rate', 0, 'tokens/min', 0)).toBe('Token rate: 0 tokens/min (no 24-hour peak yet)');
   });
 });

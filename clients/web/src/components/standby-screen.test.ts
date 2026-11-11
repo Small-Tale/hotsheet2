@@ -55,7 +55,7 @@ describe('StandbyScreen (HS2-EQVZTZ)', () => {
     const markup = render();
     expect(markup).toContain('data-palette="standby"');
     expect(markup).toContain('data-size="fill"');
-    expect(markup).toContain('Token rate: 1.6k tokens/min (30-day peak 9.8k)');
+    expect(markup).toContain('Token rate: 1.6k tokens/min (24-hour peak 9.8k)');
     expect(markup).toContain('aria-label="Tickets updated: 17"');
     expect(markup).toContain('tickets updated · last 60 min');
     expect(markup).toMatch(/data-role="standby-clock"><svg[^>]*aria-label="Time: 2:47"[^>]*>.*>2:47<\/text>/s);

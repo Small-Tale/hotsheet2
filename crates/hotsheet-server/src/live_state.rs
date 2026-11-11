@@ -6,8 +6,8 @@
 //! ([`crate::project_activity::ProjectActivity::live`]), so clients see the states that
 //! notifications use, plus **Waiting on you**. The rest is read from the store's index and
 //! its metrics usage JSONL. Rates ship as timestamps and per-minute buckets, so clients
-//! compute ages and decaying rates locally without asking again; only the rolling 30-day
-//! peaks the gauges scale to are computed here and persisted per store.
+//! compute ages and decaying rates locally without asking again; only the rolling 24-hour
+//! peaks (HS2-7CS5A4) the gauges scale to are computed here and persisted per store.
 //!
 //! A snapshot is rebuilt when something that feeds it happens (a ticket write, activity, a
 //! usage record, a halt, a tracker deadline), and on the router's minute timer so a quiet
@@ -31,7 +31,7 @@ use hotsheet_ticketing::FsStore;
 use hotsheet_ticketing::ops::TicketQuery;
 use hotsheet_ticketing::wire::TicketRow;
 use serde::{Deserialize, Serialize};
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 
 use crate::AppState;
 use crate::api_error::ApiError;
@@ -45,8 +45,9 @@ pub const LIVE_STATE_KIND: &str = "live_state";
 /// Tokens per minute average over this many whole minutes, ending with the current one.
 pub const TOKEN_WINDOW_MINUTES: i64 = 5;
 
-/// Peaks are the maximum over this many UTC days, today included.
-pub const PEAK_DAYS: i64 = 30;
+/// Peaks are the maximum over this many whole UTC hours, the current one included: a rolling
+/// 24-hour peak (HS2-7CS5A4; it was 30 days).
+pub const PEAK_HOURS: i64 = 24;
 
 /// Waiting tickets listed by slug; `count` still counts every one.
 const WAITING_LIMIT: usize = 20;
@@ -229,7 +230,7 @@ pub struct LiveRates {
 pub struct LiveTokenRate {
     pub window_minutes: i64,
     pub minutes: Vec<LiveTokenMinute>,
-    /// The highest tokens per minute in the last 30 days.
+    /// The highest tokens per minute in the last 24 hours (HS2-7CS5A4).
     pub peak_per_minute: f64,
 }
 
@@ -245,7 +246,7 @@ pub struct LiveUpdatedRate {
     pub window_minutes: i64,
     /// One time per ticket (its last progress write), oldest first.
     pub at_ms: Vec<i64>,
-    /// The most distinct tickets updated in any hour of the last 30 days.
+    /// The most distinct tickets updated in any hour of the last 24 hours (HS2-7CS5A4).
     pub peak_per_hour: u64,
 }
 
@@ -664,9 +665,14 @@ pub fn waiting_of(rows: &[TicketRow]) -> LiveWaiting {
 // ---- rates and peaks -----------------------------------------------------------------
 
 const MINUTE_MS: i64 = 60_000;
+const HOUR_MS: i64 = 60 * MINUTE_MS;
 
 fn minute_of(ms: i64) -> i64 {
     ms.div_euclid(MINUTE_MS) * MINUTE_MS
+}
+
+fn hour_of(ms: i64) -> i64 {
+    ms.div_euclid(HOUR_MS) * HOUR_MS
 }
 
 fn day_of(ms: i64) -> String {
@@ -690,8 +696,7 @@ fn window_rate(minutes: &BTreeMap<i64, u64>, end: i64) -> f64 {
 fn token_rate(live: &mut StoreLive, store: &FsStore, now: OffsetDateTime) -> LiveTokenRate {
     let now_ms = unix_ms(now);
     let book = live.peaks.get_or_insert_with(|| PeakBook::load(store));
-    let backfill = !live.usage.primed && !book.has_tokens();
-    let added = live.usage.ingest(store, now_ms, backfill);
+    let added = live.usage.ingest(store, now_ms);
     let mut raised = false;
     // A new minute raises every window that ends in it or in the next window-1 minutes.
     let mut ends: Vec<i64> = added
@@ -702,12 +707,12 @@ fn token_rate(live: &mut StoreLive, store: &FsStore, now: OffsetDateTime) -> Liv
     ends.dedup();
     for end in ends {
         let rate = window_rate(&live.usage.minutes, end);
-        raised |= book.raise_tokens(&day_of(end), rate);
+        raised |= book.raise_tokens(hour_of(end), rate);
     }
     live.usage.prune(now_ms);
-    let today = day_of(now_ms);
+    let current_hour = hour_of(now_ms);
     if raised {
-        book.save(store, &today);
+        book.save(store, current_hour);
     }
     let current = minute_of(now_ms);
     let first = current - (TOKEN_WINDOW_MINUTES - 1) * MINUTE_MS;
@@ -722,7 +727,7 @@ fn token_rate(live: &mut StoreLive, store: &FsStore, now: OffsetDateTime) -> Liv
                 tokens: *tokens,
             })
             .collect(),
-        peak_per_minute: book.peak_tokens(&today),
+        peak_per_minute: book.peak_tokens(current_hour),
     }
 }
 
@@ -732,13 +737,12 @@ fn updated_rate(
     activity: &LiveActivity,
     now: OffsetDateTime,
 ) -> LiveUpdatedRate {
-    let now_ms = unix_ms(now);
-    let today = day_of(now_ms);
+    let current_hour = hour_of(unix_ms(now));
     let mut at_ms: Vec<i64> = activity.updated.iter().copied().map(unix_ms).collect();
     let count = at_ms.len() as u64;
     let book = live.peaks.get_or_insert_with(|| PeakBook::load(store));
-    if book.raise_tickets(&today, count) {
-        book.save(store, &today);
+    if book.raise_tickets(current_hour, count) {
+        book.save(store, current_hour);
     }
     if at_ms.len() > UPDATED_LIMIT {
         at_ms.drain(..at_ms.len() - UPDATED_LIMIT);
@@ -746,14 +750,13 @@ fn updated_rate(
     LiveUpdatedRate {
         window_minutes: UPDATED_WINDOW.whole_minutes(),
         at_ms,
-        peak_per_hour: book.peak_tickets(&today),
+        peak_per_hour: book.peak_tickets(current_hour),
     }
 }
 
 /// Incremental reader of the store's raw usage JSONL (`metrics/raw/<day>.jsonl`).
 #[derive(Default)]
 struct UsageTail {
-    primed: bool,
     /// Bytes consumed per file, up to its last complete line.
     offsets: HashMap<PathBuf, u64>,
     /// Tokens (in + out) per minute start, kept for two days.
@@ -761,18 +764,12 @@ struct UsageTail {
 }
 
 impl UsageTail {
-    /// Read lines appended since the last call: today's and yesterday's files, or every
-    /// file of the peak period when `backfill`. Returns the minutes that gained tokens.
-    fn ingest(&mut self, store: &FsStore, now_ms: i64, backfill: bool) -> Vec<i64> {
+    /// Read lines appended since the last call to today's and yesterday's files. The first
+    /// call reads both whole, which backfills the 24-hour peak period. Returns the minutes
+    /// that gained tokens.
+    fn ingest(&mut self, store: &FsStore, now_ms: i64) -> Vec<i64> {
         let dir = store.root().join("metrics").join("raw");
-        let days: Vec<String> = if backfill {
-            (0..PEAK_DAYS)
-                .map(|back| day_of(now_ms - back * 86_400_000))
-                .collect()
-        } else {
-            vec![day_of(now_ms - 86_400_000), day_of(now_ms)]
-        };
-        self.primed = true;
+        let days = [day_of(now_ms - 86_400_000), day_of(now_ms)];
         let mut added = Vec::new();
         for day in days {
             let path = dir.join(format!("{day}.jsonl"));
@@ -835,16 +832,18 @@ fn read_complete_lines(path: &Path, offset: u64) -> Option<(String, u64)> {
     Some((String::from_utf8_lossy(&bytes).into_owned(), end as u64))
 }
 
-/// Per-day maxima behind the rolling 30-day peaks, machine-local and gitignored at
-/// `metrics/local/live-peaks.json`.
+/// Per-UTC-hour maxima behind the rolling 24-hour peaks (HS2-7CS5A4), machine-local and
+/// gitignored at `metrics/local/live-peaks.json`. A book written before HS2-7CS5A4 kept
+/// per-day maxima under `days`; that member is ignored, so its 30-day peaks stop counting.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 struct PeakBook {
+    /// Keyed by the hour's start (Unix ms).
     #[serde(default)]
-    days: BTreeMap<String, DayPeak>,
+    hours: BTreeMap<i64, HourPeak>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
-struct DayPeak {
+struct HourPeak {
     #[serde(default)]
     tokens_per_minute: f64,
     #[serde(default)]
@@ -867,12 +866,8 @@ impl PeakBook {
             .unwrap_or_default()
     }
 
-    fn has_tokens(&self) -> bool {
-        self.days.values().any(|day| day.tokens_per_minute > 0.0)
-    }
-
-    fn raise_tokens(&mut self, day: &str, rate: f64) -> bool {
-        let entry = self.days.entry(day.to_string()).or_default();
+    fn raise_tokens(&mut self, hour: i64, rate: f64) -> bool {
+        let entry = self.hours.entry(hour).or_default();
         if rate > entry.tokens_per_minute {
             entry.tokens_per_minute = rate;
             true
@@ -881,8 +876,8 @@ impl PeakBook {
         }
     }
 
-    fn raise_tickets(&mut self, day: &str, count: u64) -> bool {
-        let entry = self.days.entry(day.to_string()).or_default();
+    fn raise_tickets(&mut self, hour: i64, count: u64) -> bool {
+        let entry = self.hours.entry(hour).or_default();
         if count > entry.tickets_per_hour {
             entry.tickets_per_hour = count;
             true
@@ -891,48 +886,34 @@ impl PeakBook {
         }
     }
 
-    fn first_day(today: &str) -> String {
-        let Ok(date) = time::Date::parse(
-            today,
-            time::macros::format_description!("[year]-[month]-[day]"),
-        ) else {
-            return today.to_string();
-        };
-        let first = date - Duration::days(PEAK_DAYS - 1);
-        format!(
-            "{:04}-{:02}-{:02}",
-            first.year(),
-            u8::from(first.month()),
-            first.day()
-        )
+    /// The first hour of the period that ends with the hour starting at `current`.
+    fn first_hour(current: i64) -> i64 {
+        current - (PEAK_HOURS - 1) * HOUR_MS
     }
 
-    fn in_period<'a>(&'a self, today: &str) -> impl Iterator<Item = &'a DayPeak> {
-        let first = Self::first_day(today);
-        self.days
-            .range(first..)
-            .filter(move |(day, _)| day.as_str() <= today)
+    fn in_period(&self, current: i64) -> impl Iterator<Item = &HourPeak> {
+        self.hours
+            .range(Self::first_hour(current)..=current)
             .map(|(_, peak)| peak)
     }
 
-    fn peak_tokens(&self, today: &str) -> f64 {
-        self.in_period(today)
-            .map(|day| day.tokens_per_minute)
+    fn peak_tokens(&self, current: i64) -> f64 {
+        self.in_period(current)
+            .map(|hour| hour.tokens_per_minute)
             .fold(0.0, f64::max)
     }
 
-    fn peak_tickets(&self, today: &str) -> u64 {
-        self.in_period(today)
-            .map(|day| day.tickets_per_hour)
+    fn peak_tickets(&self, current: i64) -> u64 {
+        self.in_period(current)
+            .map(|hour| hour.tickets_per_hour)
             .max()
             .unwrap_or(0)
     }
 
-    /// Drop days before the period and write atomically. Failures are logged; a peak that
+    /// Drop hours before the period and write atomically. Failures are logged; a peak that
     /// could not be saved is still used until the server restarts.
-    fn save(&mut self, store: &FsStore, today: &str) {
-        let first = Self::first_day(today);
-        self.days = self.days.split_off(&first);
+    fn save(&mut self, store: &FsStore, current: i64) {
+        self.hours = self.hours.split_off(&Self::first_hour(current));
         let path = Self::path(store);
         let write = || -> std::io::Result<()> {
             if let Some(dir) = path.parent() {
@@ -1072,7 +1053,7 @@ mod tests {
     }
 
     #[test]
-    fn hs2_jttqmy_token_window_rate_and_peak_book_roll_over_thirty_days() {
+    fn hs2_7cs5a4_token_window_rate_and_peak_book_roll_over_twenty_four_hours() {
         let mut minutes = BTreeMap::new();
         minutes.insert(0, 500u64);
         minutes.insert(4 * MINUTE_MS, 500);
@@ -1082,23 +1063,64 @@ mod tests {
         assert_eq!(window_rate(&minutes, 5 * MINUTE_MS), 300.0);
         assert_eq!(window_rate(&minutes, 20 * MINUTE_MS), 0.0);
 
+        assert_eq!(hour_of(HOUR_MS + 59 * MINUTE_MS), HOUR_MS);
+        assert_eq!(hour_of(-1), -HOUR_MS);
+
         let mut book = PeakBook::default();
-        assert!(!book.has_tokens());
-        assert!(book.raise_tokens("2026-10-01", 50.0));
+        let h = |n: i64| n * HOUR_MS;
+        assert!(book.raise_tokens(h(100), 50.0));
         assert!(
-            !book.raise_tokens("2026-10-01", 40.0),
+            !book.raise_tokens(h(100), 40.0),
             "only a higher value raises"
         );
-        assert!(book.raise_tokens("2026-11-05", 20.0));
-        assert!(book.raise_tickets("2026-11-05", 3));
-        assert!(!book.raise_tickets("2026-11-05", 3));
-        assert!(book.has_tokens());
-        // 2026-10-01 is inside the 30 days ending 2026-10-30, outside those ending 11-05.
-        assert_eq!(book.peak_tokens("2026-10-30"), 50.0);
-        assert_eq!(book.peak_tokens("2026-11-05"), 20.0);
-        assert_eq!(book.peak_tickets("2026-11-05"), 3);
-        assert_eq!(PeakBook::first_day("2026-11-05"), "2026-10-07");
-        assert_eq!(PeakBook::first_day("not a day"), "not a day");
+        assert!(book.raise_tokens(h(120), 20.0));
+        assert!(book.raise_tickets(h(120), 3));
+        assert!(!book.raise_tickets(h(120), 3));
+        assert!(book.raise_tickets(h(100), 9));
+        // Hour 100 is the first hour of the 24 ending with hour 123, and out of those
+        // ending with hour 124: a 30-day-old burst no longer sets the scale (HS2-7CS5A4).
+        assert_eq!(PeakBook::first_hour(h(123)), h(100));
+        assert_eq!(book.peak_tokens(h(123)), 50.0);
+        assert_eq!(book.peak_tickets(h(123)), 9);
+        assert_eq!(book.peak_tokens(h(124)), 20.0);
+        assert_eq!(book.peak_tickets(h(124)), 3);
+        // An hour after the period's end (clock stepped back) does not count yet.
+        assert_eq!(book.peak_tokens(h(99)), 0.0);
+        // Once the last raised hour leaves the period, the peak is zero again.
+        assert_eq!(book.peak_tokens(h(144)), 0.0);
+        assert_eq!(book.peak_tickets(h(144)), 0);
+    }
+
+    #[test]
+    fn hs2_7cs5a4_peak_book_saves_only_the_period_and_ignores_a_thirty_day_book() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(
+            dir.path().join("demo.hs2"),
+            &hotsheet_ticketing::StoreMetadata::new("HS2"),
+        )
+        .unwrap();
+        // A book written before HS2-7CS5A4 holds per-day maxima: it loads as empty.
+        let path = PeakBook::path(&store);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"days":{"2026-11-05":{"tokens_per_minute":9000.0,"tickets_per_hour":40}}}"#,
+        )
+        .unwrap();
+        assert_eq!(PeakBook::load(&store), PeakBook::default());
+        let mut book = PeakBook::default();
+        book.raise_tokens(HOUR_MS, 10.0);
+        book.raise_tokens(30 * HOUR_MS, 30.0);
+        book.raise_tickets(30 * HOUR_MS, 2);
+        book.save(&store, 30 * HOUR_MS);
+        let saved = PeakBook::load(&store);
+        assert_eq!(
+            saved.hours.keys().copied().collect::<Vec<_>>(),
+            vec![30 * HOUR_MS],
+            "hours before the period are dropped"
+        );
+        assert_eq!(saved.peak_tokens(30 * HOUR_MS), 30.0);
+        assert_eq!(saved.peak_tickets(30 * HOUR_MS), 2);
     }
 
     #[test]
@@ -1145,13 +1167,23 @@ mod tests {
         assert_eq!(rate.peak_per_minute, 1002.0);
         // The peak survives a restart through the machine-local book.
         let saved = PeakBook::load(&store);
-        assert_eq!(saved.peak_tokens(&day_of(unix_ms(now))), 1002.0);
+        assert_eq!(saved.peak_tokens(hour_of(unix_ms(now))), 1002.0);
         let ignore = std::fs::read_to_string(store.root().join(".gitignore")).unwrap();
         assert!(ignore.lines().any(|l| l.trim() == "metrics/local/"));
         // Ten minutes later the window is empty but the peak stays.
         let later = at(1_800_000_000_000 + 10 * MINUTE_MS);
         let rate = token_rate(&mut live, &store, later);
         assert!(rate.minutes.is_empty());
+        assert_eq!(rate.peak_per_minute, 1002.0);
+        // 23 hours on it still sets the scale; a day later it no longer does (HS2-7CS5A4).
+        let rate = token_rate(&mut live, &store, at(1_800_000_000_000 + 23 * HOUR_MS));
+        assert_eq!(rate.peak_per_minute, 1002.0);
+        let rate = token_rate(&mut live, &store, at(1_800_000_000_000 + 24 * HOUR_MS));
+        assert_eq!(rate.peak_per_minute, 0.0);
+        // Without a book, a fresh server's first ingest reads today's and yesterday's files
+        // whole: the backfill.
+        std::fs::remove_file(PeakBook::path(&store)).unwrap();
+        let rate = token_rate(&mut StoreLive::default(), &store, now);
         assert_eq!(rate.peak_per_minute, 1002.0);
         // A missing raw directory is no usage, not an error.
         let empty = FsStore::init(

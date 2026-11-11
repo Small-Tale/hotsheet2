@@ -24,10 +24,10 @@ test('glance gauge names its reading, sweeps the needle, and keeps bare gauges t
   await page.goto('/ux-demo?component=glance-gauge');
   const interactive = page.getByRole('region', { name: 'Interactive' }).locator('svg.glance-gauge');
 
-  // The hover title is the accessible name: label, reading with unit, and the 30-day peak.
-  const typical = page.getByRole('img', { name: 'Token rate: 1.6k tokens/min (30-day peak 6.2k)' });
-  await expect(interactive).toHaveAccessibleName('Token rate: 1.6k tokens/min (30-day peak 6.2k)');
-  await expect(interactive.locator('title')).toHaveText('Token rate: 1.6k tokens/min (30-day peak 6.2k)');
+  // The hover title is the accessible name: label, reading with unit, and the 24-hour peak.
+  const typical = page.getByRole('img', { name: 'Token rate: 1.6k tokens/min (24-hour peak 6.2k)' });
+  await expect(interactive).toHaveAccessibleName('Token rate: 1.6k tokens/min (24-hour peak 6.2k)');
+  await expect(interactive.locator('title')).toHaveText('Token rate: 1.6k tokens/min (24-hour peak 6.2k)');
   await expect(interactive.locator('.glance-gauge__value')).toHaveText('1.6k');
   await expect(interactive.locator('.glance-gauge__unit')).toHaveText('tokens/min');
   expect(await typical.count()).toBeGreaterThan(0);
@@ -40,8 +40,8 @@ test('glance gauge names its reading, sweeps the needle, and keeps bare gauges t
   const bareTickets = page
     .getByRole('region', { name: 'Bare at Chip Height' })
     .locator('svg[data-size="chip"][data-tone="success"]');
-  await expect(bareTokens).toHaveAccessibleName('Token rate: 1.6k tokens/min (30-day peak 6.2k)');
-  await expect(bareTickets).toHaveAccessibleName('Tickets updated: 14 tickets/h (30-day peak 22)');
+  await expect(bareTokens).toHaveAccessibleName('Token rate: 1.6k tokens/min (24-hour peak 6.2k)');
+  await expect(bareTickets).toHaveAccessibleName('Tickets updated: 14 tickets/h (24-hour peak 22)');
   await expect(bareTokens.locator('text')).toHaveCount(0);
   const chip = await bareTokens.boundingBox();
   expect(chip?.width).toBe(40);
@@ -53,7 +53,7 @@ test('glance gauge names its reading, sweeps the needle, and keeps bare gauges t
     Object.assign(node, { hs2Cve3skIdentity: 'kept' });
   });
   await choose(page, 'reading', '100');
-  await expect(interactive).toHaveAccessibleName('Token rate: 6.2k tokens/min (30-day peak 6.2k)');
+  await expect(interactive).toHaveAccessibleName('Token rate: 6.2k tokens/min (24-hour peak 6.2k)');
   expect(await needle.evaluate((node) => (node as Element & { hs2Cve3skIdentity?: string }).hs2Cve3skIdentity)).toBe(
     'kept',
   );
@@ -64,7 +64,7 @@ test('glance gauge names its reading, sweeps the needle, and keeps bare gauges t
   await choose(page, 'reading', '140');
   await expect(interactive).toHaveAttribute('data-angle', '120');
   await choose(page, 'tone', 'success');
-  await expect(interactive).toHaveAccessibleName('Tickets updated: 31 tickets/h (30-day peak 22)');
+  await expect(interactive).toHaveAccessibleName('Tickets updated: 31 tickets/h (24-hour peak 22)');
   await expect(interactive.locator('.glance-gauge__fill')).toHaveCSS(
     'stroke',
     await page.evaluate(() => {
@@ -81,7 +81,7 @@ test('glance gauge names its reading, sweeps the needle, and keeps bare gauges t
   const closedSettings = page.locator('[data-action="toggle-settings"][aria-expanded="false"]');
   if ((await closedSettings.count()) > 0) await closedSettings.first().click();
   await page.locator('[data-settings="glance-gauge"] [data-action="reset-settings"]').click();
-  await expect(interactive).toHaveAccessibleName('Token rate: 1.6k tokens/min (30-day peak 6.2k)');
+  await expect(interactive).toHaveAccessibleName('Token rate: 1.6k tokens/min (24-hour peak 6.2k)');
   await expect(page.locator('[data-settings="glance-gauge"] [name="reading"]')).toHaveJSProperty('value', '26');
   await choose(page, 'variant', 'bare');
   await expect(interactive).toHaveAttribute('data-variant', 'bare');
@@ -94,6 +94,6 @@ test('glance gauge jumps straight to a new reading under reduced motion (HS2-CVE
   const interactive = page.getByRole('region', { name: 'Interactive' }).locator('svg.glance-gauge');
   await expect(interactive.locator('.glance-gauge__needle')).toHaveCSS('transition-duration', '0s');
   await choose(page, 'reading', '64');
-  await expect(interactive).toHaveAccessibleName('Token rate: 4k tokens/min (30-day peak 6.2k)');
+  await expect(interactive).toHaveAccessibleName('Token rate: 4k tokens/min (24-hour peak 6.2k)');
   expect(await needleRotation(interactive)).toBe(34);
 });

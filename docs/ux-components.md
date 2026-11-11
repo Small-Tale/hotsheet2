@@ -292,10 +292,10 @@ covers anything past the button's end. The demo's Unread chat messages setting s
 
 - `GlanceGauge` — **demo built** (`components/glance-gauge.tsx`, HS2-CVE3SK; designed on
   HS2-CT5EWR): a speedometer for one live rate, its needle sweeping a 240-degree arc scaled to the
-  series' own 30-day peak (a reading above the peak pins to the end). `variant="full"` draws ticks
+  series' own 24-hour peak (a reading above the peak pins to the end). `variant="full"` draws ticks
   plus the value and unit in the dial; `variant="bare"` is arc, fill, and needle only, at chip
   height (`size="chip"`, 40px) or `medium` (88px). Its hover title is also its accessible name:
-  label, reading with unit, and 30-day peak. `tone="brand"` (blue) means tokens/min and
+  label, reading with unit, and 24-hour peak (HS2-7CS5A4). `tone="brand"` (blue) means tokens/min and
   `tone="success"` (green) tickets updated/h; `palette="standby"` overrides both with the dark red
   on black `--hs-standby-*` tokens. The needle and fill animate only when the value changes, and
   not under reduced motion. Kerf has no gauge (KF-Y0XT2R), so this is an app-owned visualization.
@@ -355,7 +355,7 @@ covers anything past the button's end. The demo's Unread chat messages setting s
 
 - `GridSidebarGauges` — **demo built** (`components/grid-sidebar-gauges.tsx`, HS2-E1AQE8; mock
   `r4-grid-sidebar-page2`): the workspace grid sidebar's gauge-page body. Two medium bare
-  `GlanceGauge`s (blue tokens/min, green tickets updated/h, each on its own 30-day peak) and the
+  `GlanceGauge`s (blue tokens/min, green tickets updated/h, each on its own 24-hour peak) and the
   group's state glyph (`LIVE_STATE_ICONS`, HS2-CSPKQX) at the row end; the All projects group shows
   no glyph. Values, durations, and causes are only in hover titles and the accessible name
   (docs/34-glance-surfaces.md §34.4). Like `ProjectSummary`, it is a native button that opens the

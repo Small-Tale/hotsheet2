@@ -64,7 +64,7 @@ For each store it carries the state above and:
 - live claims with ticket, phase, and ETA overrun;
 - workers live versus expected;
 - `main` CI status;
-- two rates, each with a rolling 30-day peak.
+- two rates, each with a rolling 24-hour peak (HS2-7CS5A4; designed as 30 days).
 
 Queue runway (the ready Up Next count and an ETA-based estimate) was removed from the model and every
 glance surface (HS2-5A83MR).
@@ -79,12 +79,12 @@ The rates are:
   renewals do not count**, matching the idle detector (§32.8.1), so a session that only renews looks idle.
 
 **Gauge semantics.** One glance gauge component (HS2-CVE3SK, design only) implements the speedometer HS2-PZPD83
-asked for: a needle rotating over an arc, scaled to that value's own 30-day peak, and pinned at the end of
+asked for: a needle rotating over an arc, scaled to that value's own 24-hour peak, and pinned at the end of
 the arc above the peak.
 
 - **Blue = tokens/min, green = tickets updated/h**, from Kerf tone tokens. On standby both are dark red.
 - **Full variant:** value and unit inside the dial. Used on Stats Right now and, very large, in standby.
-- **Bare variant:** arc, fill, and needle only. Value, unit, and 30-day peak are in the title and the
+- **Bare variant:** arc, fill, and needle only. Value, unit, and 24-hour peak are in the title and the
   accessible name. Used at chip height (about 38 px) in the compact project sidebar and at about 84 px on
   the grid sidebar's gauge page.
 - The needle animates only when the value changes and respects `prefers-reduced-motion`.
@@ -364,7 +364,7 @@ HS2-GAJSX9:
 | Requirement                                                   | Section    | Ticket     | Depends on              |
 | ------------------------------------------------------------- | ---------- | ---------- | ----------------------- |
 | This requirements document                                    | all        | HS2-3AA1N7 | none                    |
-| Per-project live state model, rates, 30-day peaks, push       | §34.2–34.3 | HS2-JTTQMY | none                    |
+| Per-project live state model, rates, 24-hour peaks, push      | §34.2–34.3 | HS2-JTTQMY | none                    |
 | Live state kept across restarts, minute rebuild and decay     | §34.3      | HS2-MHW3SX | HS2-JTTQMY              |
 | Glance gauge, full and bare variants                          | §34.3      | HS2-CVE3SK | none                    |
 | Standby mode                                                  | §34.5      | HS2-EQVZTZ | HS2-JTTQMY, HS2-CVE3SK  |

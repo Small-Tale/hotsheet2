@@ -1,12 +1,12 @@
 /**
  * Pure scale, angle, and label math for the glance gauge (HS2-CVE3SK). The dial sweeps 240 degrees,
  * from -120 (lower left) through 0 (straight up) to +120 (lower right), and is scaled to the series'
- * own 30-day peak, as designed on HS2-CT5EWR.
+ * own 24-hour peak (HS2-7CS5A4; 30 days as designed on HS2-CT5EWR).
  */
 
 /** Needle angle at an empty dial, in degrees clockwise from straight up. */
 export const GLANCE_GAUGE_START_ANGLE = -120;
-/** Needle angle at the 30-day peak. */
+/** Needle angle at the 24-hour peak. */
 export const GLANCE_GAUGE_END_ANGLE = 120;
 /** Dial centre and arc radius, in viewBox units (the viewBox is 100 wide). */
 export const GLANCE_GAUGE_CENTER = { x: 50, y: 52 } as const;
@@ -64,12 +64,12 @@ export function formatGlanceValue(value: number): string {
 
 /**
  * The gauge's hover title and accessible name: what it measures, the reading with its unit, and the
- * 30-day peak that sets its scale (HS2-CT5EWR: "just show text via title / on hover").
+ * 24-hour peak that sets its scale (HS2-CT5EWR: "just show text via title / on hover").
  */
 export function glanceGaugeTitle(label: string, value: number, unit: string, peak: number): string {
   const reading = `${label}: ${formatGlanceValue(value)} ${unit}`;
-  if (!Number.isFinite(peak) || peak <= 0) return `${reading} (no 30-day peak yet)`;
-  return `${reading} (30-day peak ${formatGlanceValue(peak)})`;
+  if (!Number.isFinite(peak) || peak <= 0) return `${reading} (no 24-hour peak yet)`;
+  return `${reading} (24-hour peak ${formatGlanceValue(peak)})`;
 }
 
 function round(value: number): number {

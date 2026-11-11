@@ -16,11 +16,11 @@ import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
-/** Synthetic readings (HS2-CVE3SK): each series is scaled to its own 30-day peak. */
+/** Synthetic readings (HS2-CVE3SK): each series is scaled to its own 24-hour peak. */
 const TOKENS = { label: 'Token rate', unit: 'tokens/min', peak: 6200 } as const;
 const TICKETS = { label: 'Tickets updated', unit: 'tickets/h', peak: 22 } as const;
 
-/** Reading as a share of the 30-day peak; 140% shows a reading above the peak pinned to the end. */
+/** Reading as a share of the 24-hour peak; 140% shows a reading above the peak pinned to the end. */
 const READING_CHOICES: SelectChoice[] = [
   { value: '0', label: '0% (Idle)' },
   { value: '26', label: '26% (Typical)' },
@@ -100,7 +100,7 @@ export function GlanceGaugeDemo() {
       </CatalogExample>
       <CatalogExample
         label="Full: Idle, Mid, and Above Peak"
-        note="Stats Right now tiles. A reading above its 30-day peak pins to the end."
+        note="Stats Right now tiles. A reading above its 24-hour peak pins to the end."
       >
         <Row gap="m" vAlign="middle" wrap>
           {GlanceGauge({ ...TOKENS, value: 0 })}

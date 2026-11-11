@@ -21,7 +21,7 @@ export interface GridSidebarGaugesProps {
 
 /**
  * The gauge page's group body (HS2-E1AQE8, mock `r4-grid-sidebar-page2`): two bare gauges, blue
- * tokens/min and green tickets updated/h, each on its own 30-day peak, and the state glyph at the row
+ * tokens/min and green tickets updated/h, each on its own 24-hour peak, and the state glyph at the row
  * end. Values and durations are only in hover titles and the accessible name (§34.4). Like the
  * completion chart it replaces, the tile is a native button that opens the group's statistics.
  */

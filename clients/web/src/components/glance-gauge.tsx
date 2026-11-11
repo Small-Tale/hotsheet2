@@ -26,7 +26,7 @@ export type GlanceGaugeSize = 'chip' | 'medium' | 'large' | 'fill';
 export interface GlanceGaugeProps {
   /** The current reading, in `unit`. */
   value: number;
-  /** The series' 30-day peak; it sets the full-scale end of the dial. */
+  /** The series' 24-hour peak; it sets the full-scale end of the dial. */
   peak: number;
   /** What the gauge measures, for the hover title and accessible name, e.g. `Token rate`. */
   label: string;
@@ -43,7 +43,7 @@ const NEEDLE_LENGTH = GLANCE_GAUGE_RADIUS - 6;
 
 /**
  * A speedometer for one live rate on a glance surface (HS2-CVE3SK, designed on HS2-CT5EWR): a needle
- * over a 240-degree arc scaled to the series' own 30-day peak. Kerf has no gauge (KF-Y0XT2R), so this
+ * over a 240-degree arc scaled to the series' own 24-hour peak. Kerf has no gauge (KF-Y0XT2R), so this
  * is an app-owned domain visualization. Every text it carries lives in the hover title and accessible
  * name; the full variant also draws the value and unit inside the dial.
  */

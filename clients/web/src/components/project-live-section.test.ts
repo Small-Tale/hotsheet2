@@ -22,8 +22,8 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     expect(count(markup, /data-size="chip"/)).toBe(2);
     expect(markup).toContain('data-tone="brand"');
     expect(markup).toContain('data-tone="success"');
-    expect(markup).toContain('aria-label="Token rate: 1.6k tokens/min (30-day peak 6.2k)"');
-    expect(markup).toContain('aria-label="Tickets updated: 14 tickets/h (30-day peak 22)"');
+    expect(markup).toContain('aria-label="Token rate: 1.6k tokens/min (24-hour peak 6.2k)"');
+    expect(markup).toContain('aria-label="Tickets updated: 14 tickets/h (24-hour peak 22)"');
     for (const kind of ['waiting', 'overrun']) expect(markup).toContain(`data-live-chip="${kind}"`);
     expect(markup).not.toContain('data-live-chip="state"');
     // Queue runway is gone (HS2-5A83MR).

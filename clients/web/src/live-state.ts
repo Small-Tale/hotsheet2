@@ -63,7 +63,7 @@ export function etaOverrunMs(claim: LiveClaim, nowMs: number): number | undefine
   return nowMs - claim.eta_at_ms;
 }
 
-/** A gauge position in [0, 1] against its 30-day peak; any value pins a zero peak's gauge. */
+/** A gauge position in [0, 1] against its 24-hour peak; any value pins a zero peak's gauge. */
 export function gaugeFraction(value: number, peak: number): number {
   if (peak <= 0) return value > 0 ? 1 : 0;
   return Math.min(1, Math.max(0, value / peak));

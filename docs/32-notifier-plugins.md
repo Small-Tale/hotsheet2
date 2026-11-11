@@ -446,10 +446,13 @@ notification always agree. The tracker therefore runs whether or not a rule name
   without another read.
 - `rates.tickets_updated`: one time per distinct ticket whose last progress write is within
   60 minutes. A new ticket counts. Claim renewals do not.
-- Each rate has a rolling 30-day peak (`peak_per_minute`, `peak_per_hour`) that its gauge
-  scales to. Peaks are per-day maxima in the store's gitignored, machine-local
-  `metrics/local/live-peaks.json`. The first read backfills the token peak from up to 30
-  days of usage JSONL.
+- Each rate has a rolling 24-hour peak (`peak_per_minute`, `peak_per_hour`) that its gauge
+  scales to (HS2-7CS5A4; it was 30 days). The peak is the maximum over the last 24 whole
+  UTC hours, the current one included, so a burst stops setting the scale a day later.
+  Peaks are per-hour maxima in the store's gitignored, machine-local
+  `metrics/local/live-peaks.json`, which keeps only the period's hours. A book from before
+  HS2-7CS5A4 holds per-day maxima and is ignored. The first read backfills the token peak
+  from today's and yesterday's usage JSONL.
 
 Main CI status is not part of the snapshot yet (HS2-M8HHEA).
 
