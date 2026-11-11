@@ -239,7 +239,9 @@ it('traces compiled-host remembered reopen with a missing synthetic ticket (HS2-
     await run(cli, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop', '--force'], {
       env: { ...environment, HOTSHEET_HOME: home },
     }).catch(() => {});
-    await rm(home, { recursive: true, force: true });
-    await rm(build, { recursive: true, force: true });
+    // The stopped server can still remove its instance registration while the home is deleted
+    // (ENOTEMPTY on instances/, HS2-4XV5K3), so retry like the other fixture cleanups.
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await rm(build, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }, 300_000);
