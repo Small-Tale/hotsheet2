@@ -1368,7 +1368,7 @@ export const parseNotifierList = shape<NotifierList>('notifier list', {
 const parseQuietHours = shape<NotificationQuietHours>(
   'quiet hours',
   { start: isString, end: isString },
-  { utc_offset: isString, allow_errors: isBoolean },
+  { time_zone: isString, utc_offset: isString, allow_errors: isBoolean },
 );
 export const parseNotificationChannel = shape<NotificationChannel>(
   'notification channel',

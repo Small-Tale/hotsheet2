@@ -34,7 +34,7 @@ export const CHANNEL_FIELD = {
   setting: (key: string) => `setting:${key}`,
   quietStart: 'notification-channel-quiet-start',
   quietEnd: 'notification-channel-quiet-end',
-  quietOffset: 'notification-channel-quiet-offset',
+  quietZone: 'notification-channel-quiet-zone',
   maxPerHour: 'notification-channel-max-per-hour',
 } as const;
 export const RULE_FIELD = {
@@ -103,6 +103,52 @@ export function channelFormFields(descriptor: NotifierDescriptor, channel?: Noti
   });
 }
 
+/** The device's IANA time zone (HS2-9T27WQ), or `UTC` when the runtime cannot name it. */
+export function deviceTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+/** Every IANA zone the runtime knows, or none on an engine without `Intl.supportedValuesOf`. */
+export function supportedTimeZones(): readonly string[] {
+  const intl = Intl as { supportedValuesOf?: (key: 'timeZone') => string[] };
+  return typeof intl.supportedValuesOf === 'function' ? intl.supportedValuesOf('timeZone') : [];
+}
+
+/** A quiet-hours zone choice value that keeps a stored fixed offset (`offset:+09:00`). */
+const OFFSET_CHOICE = 'offset:';
+
+export interface QuietZoneChoices {
+  value: string;
+  choices: { value: string; label: string }[];
+}
+
+/**
+ * The quiet-hours time zone choices (HS2-9T27WQ): the device's zone first, labeled as local, then UTC and
+ * every other known zone. A saved zone stays selected even when this runtime does not list it, and a
+ * window saved with only a fixed offset keeps that offset as its own choice until the person picks a zone.
+ */
+export function quietZoneChoices(
+  device: string,
+  saved?: NotificationQuietHours,
+  zones: readonly string[] = supportedTimeZones(),
+): QuietZoneChoices {
+  const value = saved ? (saved.time_zone ?? `${OFFSET_CHOICE}${saved.utc_offset ?? '+00:00'}`) : device;
+  const choices = [{ value: device, label: `Local time zone (${device.replaceAll('_', ' ')})` }];
+  if (value.startsWith(OFFSET_CHOICE))
+    choices.push({ value, label: `Fixed offset (UTC${value.slice(OFFSET_CHOICE.length)})` });
+  const named = new Set([device]);
+  for (const zone of [value, 'UTC', ...zones]) {
+    if (zone.startsWith(OFFSET_CHOICE) || named.has(zone)) continue;
+    named.add(zone);
+    choices.push({ value: zone, label: zone.replaceAll('_', ' ') });
+  }
+  return { value, choices };
+}
+
 /** Form values as the dialog reads them: text inputs by name, checkboxes as booleans. */
 export type FormValues = Readonly<Record<string, string | boolean | undefined>>;
 
@@ -160,12 +206,13 @@ export function channelDraftFromForm(
   const start = text(values, CHANNEL_FIELD.quietStart),
     end = text(values, CHANNEL_FIELD.quietEnd);
   if (Boolean(start) !== Boolean(end)) return { error: 'Quiet hours need both a start and an end time.' };
+  const zone = text(values, CHANNEL_FIELD.quietZone) || deviceTimeZone();
   const quiet_hours: NotificationQuietHours | undefined =
     start && end
       ? {
           start,
           end,
-          utc_offset: text(values, CHANNEL_FIELD.quietOffset) || existing?.quiet_hours?.utc_offset || '+00:00',
+          ...(zone.startsWith(OFFSET_CHOICE) ? { utc_offset: zone.slice(OFFSET_CHOICE.length) } : { time_zone: zone }),
           allow_errors: existing?.quiet_hours?.allow_errors ?? true,
         }
       : undefined;

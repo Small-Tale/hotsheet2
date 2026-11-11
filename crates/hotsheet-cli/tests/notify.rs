@@ -1052,3 +1052,44 @@ fn hs2_g8nxnc_saved_view_rules_forward_only_tickets_in_the_view() {
         "only the docs ticket's start is in the view"
     );
 }
+
+#[test]
+fn hs2_9t27wq_quiet_hours_take_a_named_time_zone_from_the_cli() {
+    let env = env();
+    let add = |id: &str, extra: &[&str]| {
+        let mut cmd = hs(&env);
+        cmd.args([
+            "channel",
+            "add",
+            id,
+            "--notifier",
+            "webhook",
+            "--quiet",
+            "22:00-07:00",
+        ])
+        .args(extra);
+        cmd.assert()
+    };
+    add("named", &["--quiet-zone", "America/New_York"]).success();
+    add("fixed", &["--quiet-offset", "+09:00"]).success();
+    add("unknown", &["--quiet-zone", "Mars/Olympus_Mons"])
+        .failure()
+        .stderr(contains("not a known time zone"));
+    add("both", &["--quiet-zone", "UTC", "--quiet-offset", "+09:00"]).failure();
+    let config: Value = serde_json::from_str(
+        &std::fs::read_to_string(env.home.join("notifications.json")).unwrap(),
+    )
+    .unwrap();
+    let quiet = |id: &str| {
+        config["channels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|channel| channel["id"] == id)
+            .unwrap()["quiet_hours"]
+            .clone()
+    };
+    assert_eq!(quiet("named")["time_zone"], "America/New_York");
+    assert_eq!(quiet("fixed")["utc_offset"], "+09:00");
+    assert!(quiet("fixed").get("time_zone").is_none());
+}

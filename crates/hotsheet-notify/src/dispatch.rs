@@ -257,7 +257,9 @@ impl Dispatcher {
             if quiet.contains(now) && !urgent {
                 return Some(format!(
                     "quiet hours {}-{} ({})",
-                    quiet.start, quiet.end, quiet.utc_offset
+                    quiet.start,
+                    quiet.end,
+                    quiet.zone_label()
                 ));
             }
         }
@@ -816,6 +818,7 @@ mod tests {
         let d = at(&h, clock.clone(), true);
         let mut c = one_channel(0);
         c.channels[0].quiet_hours = Some(crate::config::QuietHours {
+            time_zone: None,
             start: "22:00".into(),
             end: "07:00".into(),
             utc_offset: "+00:00".into(),
@@ -858,6 +861,7 @@ mod tests {
 
     fn quiet(c: &mut NotificationConfig) {
         c.channels[0].quiet_hours = Some(crate::config::QuietHours {
+            time_zone: None,
             start: "22:00".into(),
             end: "07:00".into(),
             utc_offset: "+00:00".into(),

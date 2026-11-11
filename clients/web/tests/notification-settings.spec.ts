@@ -275,3 +275,69 @@ test('chooses saved views, categories, and priorities in the rule dialog', async
     await server.stop();
   }
 });
+
+interface QuietConfig {
+  channels: { id: string; quiet_hours?: Record<string, unknown> }[];
+}
+
+/** Capture the channel dialog's quiet-hours section at wide, medium, and narrow widths, then return wide. */
+async function captureQuietHours(page: Page, name: string) {
+  for (const [label, width] of [
+    ['wide', 1280],
+    ['medium', 900],
+    ['narrow', 420],
+  ] as const) {
+    await page.setViewportSize({ width, height: 860 });
+    await page
+      .getByRole('dialog', { name: /Channel$/ })
+      .getByText('During quiet hours')
+      .scrollIntoViewIfNeeded();
+    await settled(page);
+    await page.screenshot({ path: `target/visual-captures/${name}-${label}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await settled(page);
+}
+
+test.describe('quiet hours follow the device', () => {
+  test.use({ timezoneId: 'America/New_York' });
+
+  // HS2-9T27WQ: a new channel's quiet hours default to the device's named zone, which the server stores.
+  test('defaults the quiet-hours zone to the device time zone', async ({ page }) => {
+    const server = await realTicketServer();
+    try {
+      await page.setViewportSize({ width: 1280, height: 860 });
+      await installTerminalFixture(page);
+      await routeNotifierApi(page, server);
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Notifications', exact: true }).click();
+      const settings = page.locator('[data-component="notification-settings"]');
+      await settings.getByRole('button', { name: 'Add Channel…' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Add Channel' });
+      const zone = page.locator('kui-select[name="notification-channel-quiet-zone"]');
+      await expect(zone).toHaveJSProperty('value', 'America/New_York');
+      await expect(zone).toContainText('Local time zone (America/New York)');
+      await dialog.getByLabel('Name').fill('Night Voice');
+      await dialog.getByLabel('Custom Command').fill('true');
+      await dialog.getByLabel('Quiet From').fill('22:00');
+      await dialog.getByLabel('Quiet Until').fill('07:00');
+      await captureQuietHours(page, 'hs2-9t27wq-quiet-zone');
+      await dialog.getByRole('button', { name: 'Add Channel' }).click();
+      await expect(dialog).toBeHidden();
+      await expect
+        .poll(async () => (await server.request<QuietConfig>('/notification-config')).channels[0]?.quiet_hours)
+        .toEqual({
+          start: '22:00',
+          end: '07:00',
+          time_zone: 'America/New_York',
+          utc_offset: '+00:00',
+          allow_errors: true,
+        });
+    } finally {
+      await server.stop();
+    }
+  });
+});

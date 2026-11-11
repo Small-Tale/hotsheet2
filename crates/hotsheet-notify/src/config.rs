@@ -19,13 +19,16 @@ fn yes() -> bool {
 }
 
 /// A daily window during which a channel holds deliveries (HS2-4JG95G). Times are
-/// `HH:MM` in the fixed `utc_offset` (`+09:00`, `-05:00`); a window may wrap midnight.
-/// A fixed offset avoids local-time lookups in a multithreaded server; adjust it when
-/// daylight saving time changes.
+/// `HH:MM` local to `time_zone`, an IANA zone such as `America/New_York` whose daylight
+/// saving changes apply automatically (HS2-9T27WQ). Without a zone, the times are in the
+/// fixed `utc_offset` (`+09:00`, `-05:00`). A window may wrap midnight.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuietHours {
     pub start: String,
     pub end: String,
+    /// An IANA time zone name; when set it wins over `utc_offset`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_zone: Option<String>,
     #[serde(default = "utc")]
     pub utc_offset: String,
     /// Error-severity messages (a stalled project, a failed build) still go out.
@@ -41,6 +44,16 @@ fn minutes(hhmm: &str) -> Option<i64> {
     let (h, m) = hhmm.split_once(':')?;
     let (h, m): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
     ((0..24).contains(&h) && (0..60).contains(&m) && hhmm.len() == 5).then_some(h * 60 + m)
+}
+
+/// This machine's local IANA time zone name, when it has one (HS2-9T27WQ).
+pub fn system_time_zone() -> Option<String> {
+    jiff::tz::TimeZone::system().iana_name().map(str::to_owned)
+}
+
+/// An IANA time zone from the system or bundled database.
+fn zone_of(name: &str) -> Option<jiff::tz::TimeZone> {
+    jiff::tz::TimeZone::get(name).ok()
 }
 
 fn offset(text: &str) -> Option<time::UtcOffset> {
@@ -61,22 +74,42 @@ impl QuietHours {
         if start == end {
             return Err("quiet hours start and end must differ".into());
         }
+        if let Some(zone) = &self.time_zone {
+            return zone_of(zone)
+                .map(|_| ())
+                .ok_or_else(|| format!("quiet hours time_zone '{zone}' is not a known time zone"));
+        }
         offset(&self.utc_offset)
             .map(|_| ())
             .ok_or_else(|| "quiet hours utc_offset must look like +09:00 or -05:00".into())
     }
 
+    /// The zone the window is read in, as held-delivery reasons show it: the IANA name, or
+    /// the fixed offset.
+    pub fn zone_label(&self) -> &str {
+        self.time_zone.as_deref().unwrap_or(&self.utc_offset)
+    }
+
+    /// The local wall-clock minute of the day at `at`, in the window's zone.
+    fn local_minute(&self, at: time::OffsetDateTime) -> Option<i64> {
+        if let Some(zone) = &self.time_zone {
+            let instant = jiff::Timestamp::from_second(at.unix_timestamp()).ok()?;
+            let local = instant.to_zoned(zone_of(zone)?);
+            return Some(i64::from(local.hour()) * 60 + i64::from(local.minute()));
+        }
+        let local = at.to_offset(offset(&self.utc_offset)?);
+        Some(i64::from(local.hour()) * 60 + i64::from(local.minute()))
+    }
+
     /// Whether `at` falls inside the window.
     pub fn contains(&self, at: time::OffsetDateTime) -> bool {
-        let (Some(start), Some(end), Some(offset)) = (
+        let (Some(start), Some(end), Some(now)) = (
             minutes(&self.start),
             minutes(&self.end),
-            offset(&self.utc_offset),
+            self.local_minute(at),
         ) else {
             return false;
         };
-        let local = at.to_offset(offset);
-        let now = i64::from(local.hour()) * 60 + i64::from(local.minute());
         if start < end {
             (start..end).contains(&now)
         } else {
@@ -613,11 +646,48 @@ mod tests {
     }
 
     #[test]
+    fn hs2_9t27wq_quiet_hours_follow_a_named_zone_across_daylight_saving() {
+        let at = |text: &str| {
+            time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
+                .unwrap()
+        };
+        let lunch = QuietHours {
+            start: "12:00".into(),
+            end: "13:00".into(),
+            time_zone: Some("America/New_York".into()),
+            // A named zone wins over a stale fixed offset.
+            utc_offset: "+09:00".into(),
+            allow_errors: true,
+        };
+        assert!(lunch.validate().is_ok());
+        assert_eq!(lunch.zone_label(), "America/New_York");
+        // 17:30 UTC is 12:30 EST in January but 13:30 EDT in July.
+        assert!(lunch.contains(at("2026-01-15T17:30:00Z")));
+        assert!(!lunch.contains(at("2026-07-15T17:30:00Z")));
+        assert!(lunch.contains(at("2026-07-15T16:30:00Z")));
+        // A stored window without a zone keeps the fixed-offset meaning, and the zone is
+        // omitted again when saved.
+        let legacy: QuietHours =
+            serde_json::from_str(r#"{"start":"22:00","end":"07:00","utc_offset":"-05:00"}"#)
+                .unwrap();
+        assert_eq!(legacy.time_zone, None);
+        assert_eq!(legacy.zone_label(), "-05:00");
+        assert!(
+            !serde_json::to_string(&legacy)
+                .unwrap()
+                .contains("time_zone")
+        );
+        let named = serde_json::to_value(&lunch).unwrap();
+        assert_eq!(named["time_zone"], "America/New_York");
+    }
+
+    #[test]
     fn hs2_4jg95g_quiet_hours_windows() {
         let at = |h: u8, m: u8| {
             time::OffsetDateTime::UNIX_EPOCH.replace_time(time::Time::from_hms(h, m, 0).unwrap())
         };
         let night = QuietHours {
+            time_zone: None,
             start: "22:00".into(),
             end: "07:00".into(),
             utc_offset: "+00:00".into(),
@@ -629,6 +699,7 @@ mod tests {
         );
         assert!(!night.contains(at(7, 0)) && !night.contains(at(12, 0)));
         let lunch = QuietHours {
+            time_zone: None,
             start: "12:00".into(),
             end: "13:00".into(),
             utc_offset: "+09:00".into(),
@@ -643,6 +714,7 @@ mod tests {
             ("22:00", "07:00", "09:00"),
         ] {
             let q = QuietHours {
+                time_zone: None,
                 start: bad.0.into(),
                 end: bad.1.into(),
                 utc_offset: bad.2.into(),
@@ -654,6 +726,19 @@ mod tests {
         let mut c = NotificationConfig::default();
         let mut phone = ntfy("phone");
         phone.quiet_hours = Some(QuietHours {
+            time_zone: Some("Mars/Olympus_Mons".into()),
+            ..night.clone()
+        });
+        c.channels.push(phone.clone());
+        assert!(
+            c.validate(&reg)
+                .unwrap_err()
+                .to_string()
+                .contains("not a known time zone")
+        );
+        c.channels.clear();
+        phone.quiet_hours = Some(QuietHours {
+            time_zone: None,
             start: "x".into(),
             ..night.clone()
         });

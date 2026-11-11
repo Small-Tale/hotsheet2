@@ -123,7 +123,11 @@ pub(crate) enum ChannelCmd {
         /// Hold rule deliveries during this daily window, HH:MM-HH:MM (may wrap midnight).
         #[arg(long, value_name = "HH:MM-HH:MM")]
         quiet: Option<String>,
-        /// UTC offset of the quiet window, like +09:00 (default +00:00).
+        /// IANA time zone of the quiet window, like America/New_York (default: this
+        /// machine's local zone, or +00:00 when it cannot be named).
+        #[arg(long, value_name = "ZONE", conflicts_with = "quiet_offset")]
+        quiet_zone: Option<String>,
+        /// A fixed UTC offset for the quiet window instead of a zone, like +09:00.
         #[arg(long, value_name = "+HH:MM", allow_hyphen_values = true)]
         quiet_offset: Option<String>,
         /// Hold error-severity messages during quiet hours too.
@@ -471,6 +475,7 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
             settings,
             disabled,
             quiet,
+            quiet_zone,
             quiet_offset,
             quiet_errors,
             max_per_hour,
@@ -483,6 +488,13 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
                     Ok::<_, anyhow::Error>(hotsheet_notify::config::QuietHours {
                         start: start.trim().to_string(),
                         end: end.trim().to_string(),
+                        // The local zone by default, so daylight saving applies (HS2-9T27WQ).
+                        time_zone: quiet_zone.clone().or_else(|| {
+                            quiet_offset
+                                .is_none()
+                                .then(hotsheet_notify::config::system_time_zone)
+                                .flatten()
+                        }),
                         utc_offset: quiet_offset.clone().unwrap_or_else(|| "+00:00".into()),
                         allow_errors: !quiet_errors,
                     })

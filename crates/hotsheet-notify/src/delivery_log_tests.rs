@@ -289,6 +289,7 @@ fn hs2_mfd44d_dispatch_child() {
         "busy-write" => {
             let mut quiet = config();
             quiet.channels[0].quiet_hours = Some(crate::config::QuietHours {
+                time_zone: None,
                 start: "22:00".into(),
                 end: "07:00".into(),
                 utc_offset: "+00:00".into(),

@@ -22951,9 +22951,12 @@ components:
             end:
               type: string
               description: HH:MM; the window may wrap midnight.
+            time_zone:
+              type: string
+              description: IANA time zone such as America/New_York; wins over utc_offset (HS2-9T27WQ).
             utc_offset:
               type: string
-              description: Fixed offset such as +09:00 (default +00:00).
+              description: Fixed offset such as +09:00 (default +00:00), used when time_zone is absent.
             allow_errors:
               type: boolean
           additionalProperties: false
@@ -22988,9 +22991,12 @@ components:
             end:
               type: string
               description: HH:MM; the window may wrap midnight.
+            time_zone:
+              type: string
+              description: IANA time zone such as America/New_York; wins over utc_offset (HS2-9T27WQ).
             utc_offset:
               type: string
-              description: Fixed offset such as +09:00 (default +00:00).
+              description: Fixed offset such as +09:00 (default +00:00), used when time_zone is absent.
             allow_errors:
               type: boolean
           additionalProperties: false

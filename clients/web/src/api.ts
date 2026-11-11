@@ -1255,6 +1255,8 @@ export interface NotifierList {
 export interface NotificationQuietHours {
   start: string;
   end: string;
+  /** An IANA zone such as `America/New_York`; wins over `utc_offset` (HS2-9T27WQ). */
+  time_zone?: string;
   utc_offset?: string;
   allow_errors?: boolean;
 }

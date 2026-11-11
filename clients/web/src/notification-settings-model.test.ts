@@ -6,8 +6,10 @@ import {
   channelDraftFromForm,
   channelFormFields,
   channelIdFrom,
+  deviceTimeZone,
   eventLabel,
   notifierIconName,
+  quietZoneChoices,
   RULE_FIELD,
   ruleFromForm,
   ruleSummary,
@@ -99,17 +101,30 @@ describe('channelDraftFromForm (HS2-DPBJJA)', () => {
       values({
         [CHANNEL_FIELD.quietStart]: '22:00',
         [CHANNEL_FIELD.quietEnd]: '07:00',
-        [CHANNEL_FIELD.quietOffset]: '+09:00',
+        [CHANNEL_FIELD.quietZone]: 'Asia/Tokyo',
         [CHANNEL_FIELD.maxPerHour]: '6',
       }),
     );
     expect('error' in draft ? draft : draft.quiet_hours).toEqual({
       start: '22:00',
       end: '07:00',
-      utc_offset: '+09:00',
+      time_zone: 'Asia/Tokyo',
       allow_errors: true,
     });
     expect('error' in draft ? undefined : draft.max_per_hour).toBe(6);
+  });
+
+  it('keeps a stored fixed offset and defaults a missing zone to the device zone (HS2-9T27WQ)', () => {
+    const quiet = { [CHANNEL_FIELD.quietStart]: '22:00', [CHANNEL_FIELD.quietEnd]: '07:00' };
+    const fixed = channelDraftFromForm(ntfy, values({ ...quiet, [CHANNEL_FIELD.quietZone]: 'offset:-05:00' }));
+    expect('error' in fixed ? fixed : fixed.quiet_hours).toEqual({
+      start: '22:00',
+      end: '07:00',
+      utc_offset: '-05:00',
+      allow_errors: true,
+    });
+    const unset = channelDraftFromForm(ntfy, values(quiet));
+    expect('error' in unset ? unset : unset.quiet_hours?.time_zone).toBe(deviceTimeZone());
   });
 
   it('explains the first invalid value', () => {
@@ -234,5 +249,35 @@ describe('rules (HS2-DPBJJA)', () => {
   it('maps notifiers to icons with a plugin fallback', () => {
     expect(notifierIconName('email')).toBe('mail');
     expect(notifierIconName('custom-pager')).toBe('puzzle');
+  });
+});
+
+describe('quietZoneChoices (HS2-9T27WQ)', () => {
+  const zones = ['America/New_York', 'Asia/Tokyo', 'UTC', 'America/Los_Angeles'];
+
+  it('selects the device zone by default and lists it first as the local zone', () => {
+    const zone = quietZoneChoices('America/Los_Angeles', undefined, zones);
+    expect(zone.value).toBe('America/Los_Angeles');
+    expect(zone.choices[0]).toEqual({ value: 'America/Los_Angeles', label: 'Local time zone (America/Los Angeles)' });
+    expect(zone.choices.map((choice) => choice.value)).toEqual([
+      'America/Los_Angeles',
+      'UTC',
+      'America/New_York',
+      'Asia/Tokyo',
+    ]);
+    expect(zone.choices.find((choice) => choice.value === 'America/New_York')?.label).toBe('America/New York');
+  });
+
+  it('keeps a saved zone selected even when the runtime does not list it', () => {
+    const zone = quietZoneChoices('UTC', { start: '22:00', end: '07:00', time_zone: 'Europe/Kyiv' }, []);
+    expect(zone.value).toBe('Europe/Kyiv');
+    expect(zone.choices.map((choice) => choice.value)).toEqual(['UTC', 'Europe/Kyiv']);
+  });
+
+  it('offers a legacy fixed offset as its own choice', () => {
+    const zone = quietZoneChoices('Asia/Tokyo', { start: '22:00', end: '07:00', utc_offset: '+09:00' }, zones);
+    expect(zone.value).toBe('offset:+09:00');
+    expect(zone.choices[1]).toEqual({ value: 'offset:+09:00', label: 'Fixed offset (UTC+09:00)' });
+    expect(quietZoneChoices('UTC', { start: '22:00', end: '07:00' }, []).value).toBe('offset:+00:00');
   });
 });

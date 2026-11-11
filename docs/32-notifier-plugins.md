@@ -150,9 +150,11 @@ The delivery record notes `truncated` and `omitted_attachments`.
     as the checkout listing (the checkout's code repository has a commit whose subject or
     `Refs:` line names the ticket), run only when the term is evaluated. Serverless CLI and
     MCP writes have no repository scan, so for them `has:commit` never matches.
-- A channel may set `quiet_hours` (`start` and `end` as `HH:MM`, a fixed `utc_offset`
-  such as `+09:00`, and `allow_errors`, default true) and `max_per_hour`. Adjust the
-  offset when daylight saving time changes.
+- A channel may set `quiet_hours` (`start` and `end` as `HH:MM`, a `time_zone`, and
+  `allow_errors`, default true) and `max_per_hour`. `time_zone` is an IANA name such as
+  `America/New_York`, so daylight saving changes apply automatically (HS2-9T27WQ); an
+  unknown zone is refused. A window without a zone uses the fixed `utc_offset` (such as
+  `+09:00`, default `+00:00`), which stays supported for configs written before zones.
 - `test` and `notifications.held` cannot be rule events; tests go only to the channel
   being tested, and a summary only to the channel that held the deliveries.
 - Saving validates everything: unique ids, installed notifiers, settings against the
@@ -554,22 +556,22 @@ claim, including a claim made after the prompt opened.
 Both call the same `hotsheet_notify::admin` workflow, and every operation is
 idempotent.
 
-| CLI (`hotsheet-cli notify …`)                                                                                                                       | REST                                                         |
-| --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `notifiers [--json]`                                                                                                                                | `GET /notifiers` (with `load_errors`)                        |
-| `config [--json]`                                                                                                                                   | `GET /notification-config`                                   |
-| `channel add <id> --notifier <n> [--label] [--set k=v]… [--disabled] [--quiet HH:MM-HH:MM --quiet-offset +HH:MM --quiet-errors] [--max-per-hour n]` | `PUT /notification-channels/{id}`                            |
-| `channel secret <id> <field>` (prompt or piped stdin)                                                                                               | `PUT /notification-channels/{id}/secrets/{field}`            |
-| `channel enable\|disable <id>`                                                                                                                      | `PUT /notification-channels/{id}` with `enabled`             |
-| `channel remove <id>`                                                                                                                               | `DELETE /notification-channels/{id}`                         |
-| `channel trust <id>` (approve the external plugin as it is now)                                                                                     | `POST /notification-channels/{id}/trust`                     |
-| `channel test <id> [--json]`                                                                                                                        | `POST /notification-channels/{id}/test`                      |
-| `rule add <id> --event … --channel … [filters incl. --text, --view] [--cooldown s]`                                                                 | `PUT /notification-rules/{id}`                               |
-| `rule remove <id>`                                                                                                                                  | `DELETE /notification-rules/{id}`                            |
-| `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…`                                                                            | `POST /notifications` (published events route through rules) |
-| `link-base [URL] [--clear]` (show, set, or clear the link origin)                                                                                   | `PUT /notification-link-base` (`{"url": …}` or `null`)       |
-| `project-timing [--grace-seconds S] [--idle-minutes M]`                                                                                             | `PUT /notification-project-timing`                           |
-| `deliveries [--limit] [--json]`                                                                                                                     | `GET /notification-deliveries?limit=`                        |
+| CLI (`hotsheet-cli notify …`)                                                                                                                                                | REST                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `notifiers [--json]`                                                                                                                                                         | `GET /notifiers` (with `load_errors`)                        |
+| `config [--json]`                                                                                                                                                            | `GET /notification-config`                                   |
+| `channel add <id> --notifier <n> [--label] [--set k=v]… [--disabled] [--quiet HH:MM-HH:MM [--quiet-zone <IANA> \| --quiet-offset +HH:MM] --quiet-errors] [--max-per-hour n]` | `PUT /notification-channels/{id}`                            |
+| `channel secret <id> <field>` (prompt or piped stdin)                                                                                                                        | `PUT /notification-channels/{id}/secrets/{field}`            |
+| `channel enable\|disable <id>`                                                                                                                                               | `PUT /notification-channels/{id}` with `enabled`             |
+| `channel remove <id>`                                                                                                                                                        | `DELETE /notification-channels/{id}`                         |
+| `channel trust <id>` (approve the external plugin as it is now)                                                                                                              | `POST /notification-channels/{id}/trust`                     |
+| `channel test <id> [--json]`                                                                                                                                                 | `POST /notification-channels/{id}/test`                      |
+| `rule add <id> --event … --channel … [filters incl. --text, --view] [--cooldown s]`                                                                                          | `PUT /notification-rules/{id}`                               |
+| `rule remove <id>`                                                                                                                                                           | `DELETE /notification-rules/{id}`                            |
+| `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…`                                                                                                     | `POST /notifications` (published events route through rules) |
+| `link-base [URL] [--clear]` (show, set, or clear the link origin)                                                                                                            | `PUT /notification-link-base` (`{"url": …}` or `null`)       |
+| `project-timing [--grace-seconds S] [--idle-minutes M]`                                                                                                                      | `PUT /notification-project-timing`                           |
+| `deliveries [--limit] [--json]`                                                                                                                                              | `GET /notification-deliveries?limit=`                        |
 
 - `--set` values are parsed by the field's type; lists are comma-separated. A secret
   field passed to `--set` is refused, and the error names the `channel secret` command.
@@ -603,7 +605,12 @@ from the notifier's settings schema:
 - a password input for a credential.
 
 A credential input never shows a stored value ("Stored; leave empty to keep it"), and it is
-written only through the secret route. Quiet hours and the hourly limit sit below.
+written only through the secret route. Quiet hours and the hourly limit sit below. The
+quiet-hours **Time Zone** defaults to the device's zone, labeled "Local time zone
+(America/New York)", and lists every zone the browser knows; a window saved with only a
+fixed offset keeps it as a "Fixed offset" choice until another zone is picked. The CLI's
+`--quiet` likewise defaults to the machine's local zone unless `--quiet-zone` or
+`--quiet-offset` names one (HS2-9T27WQ).
 
 **Rule dialog.** Choose events and channels with checkboxes; filter by ticket text, tags,
 statuses, categories, priorities, and projects, a minimum severity, and a cooldown. **In

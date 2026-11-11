@@ -89,7 +89,7 @@ function fixtureConfig(): NotificationConfig {
         label: 'My Phone',
         enabled: true,
         settings: { topic: 'hs-7f3k', token: { secret: 'notify-phone-token' }, priority: 'auto' },
-        quiet_hours: { start: '22:00', end: '07:00', utc_offset: '-08:00', allow_errors: true },
+        quiet_hours: { start: '22:00', end: '07:00', time_zone: 'America/Los_Angeles', allow_errors: true },
       },
       {
         id: 'team',
@@ -153,7 +153,7 @@ const DELIVERIES: NotificationDelivery[] = [
     notifier: 'ntfy',
     outcome: 'suppressed',
     attempts: 0,
-    error: 'quiet hours 22:00-07:00 (-08:00)',
+    error: 'quiet hours 22:00-07:00 (America/Los_Angeles)',
     truncated: false,
     omitted_attachments: 0,
   },

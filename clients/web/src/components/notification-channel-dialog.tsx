@@ -16,7 +16,13 @@ import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
 } from '../interaction-attrs/notifications-and-links';
-import { CHANNEL_FIELD, type ChannelFormField, channelFormFields } from '../notification-settings-model';
+import {
+  CHANNEL_FIELD,
+  type ChannelFormField,
+  channelFormFields,
+  deviceTimeZone,
+  quietZoneChoices,
+} from '../notification-settings-model';
 
 export interface NotificationChannelDialogProps {
   editor: ChannelEditorState;
@@ -71,7 +77,8 @@ function settingControl(field: ChannelFormField) {
 export function NotificationChannelDialog({ editor, notifiers, channel }: NotificationChannelDialogProps) {
   const descriptor = notifiers.find((item) => item.id === editor.notifier),
     adding = !editor.id,
-    fields = descriptor ? channelFormFields(descriptor, channel) : [];
+    fields = descriptor ? channelFormFields(descriptor, channel) : [],
+    zone = quietZoneChoices(deviceTimeZone(), channel?.quiet_hours);
   return (
     <DialogSurface
       label={adding ? 'Add Channel' : 'Edit Channel'}
@@ -127,20 +134,16 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
             placeholder="07:00"
             value={channel?.quiet_hours?.end ?? ''}
           />
-          <TextField
-            name={CHANNEL_FIELD.quietOffset}
-            label="UTC Offset"
-            placeholder="+00:00"
-            value={channel?.quiet_hours?.utc_offset ?? ''}
-          />
-          <TextField
-            name={CHANNEL_FIELD.maxPerHour}
-            label="Max per Hour"
-            type="number"
-            min={1}
-            value={channel?.max_per_hour === undefined ? '' : String(channel.max_per_hour)}
-          />
         </Grid>
+        {/* Full width so the zone name is never truncated (HS2-9T27WQ). */}
+        <Select name={CHANNEL_FIELD.quietZone} label="Time Zone" value={zone.value} choices={zone.choices} />
+        <TextField
+          name={CHANNEL_FIELD.maxPerHour}
+          label="Max per Hour"
+          type="number"
+          min={1}
+          value={channel?.max_per_hour === undefined ? '' : String(channel.max_per_hour)}
+        />
         <Text tone="quiet" size="compact">
           During quiet hours, rule deliveries are skipped; error notifications still go through.
         </Text>
