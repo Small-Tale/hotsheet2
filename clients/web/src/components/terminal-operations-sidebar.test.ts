@@ -75,6 +75,17 @@ describe('TerminalOperationsSidebar', () => {
     expect(single).not.toContain('data-background-bar=');
   });
 
+  it('draws every completion chart on the All projects scale so heights compare (HS2-0Y4447, HS2-C9JM65)', () => {
+    const page = String(gridSidebarPageContent('completion', { projects }));
+    // One shared maximum: All projects' largest day (6), not each project's own (2 and 4).
+    expect(page.match(/data-chart-maximum="6"/g)).toHaveLength(3);
+    expect(page).not.toContain('data-chart-maximum="2"');
+    expect(page).not.toContain('data-chart-maximum="4"');
+    // Project two's best day (4) stands at two thirds of the All projects scale, not full height.
+    const two = page.slice(page.indexOf('data-project-id="two"'));
+    expect(two).toContain('--bar-height:67%');
+  });
+
   it('separates only the multi-project aggregate through the List divider API', () => {
     const multiple = String(TerminalOperationsSidebar({ projects }));
     expect(multiple).toContain('data-project-id="all"');
