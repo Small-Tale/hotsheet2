@@ -172,7 +172,7 @@ function compactContent(summary: ProjectLiveSummary, chips: readonly LiveChip[])
 function expandedContent(summary: ProjectLiveSummary) {
   return (
     <List gap="xs" textInsets="rl">
-      <Row gap="m" vAlign="middle">
+      <Row gap="m" vAlign="middle" hAlign="center" rootAttributes={{ 'data-live-gauges': '' }}>
         {gauges(summary, true)}
       </Row>
       {detailRow(

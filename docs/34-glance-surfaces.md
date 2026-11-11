@@ -174,7 +174,7 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   Needs you count, ETA overrun, `main` CI. Chips appear only when non-trivial; the queue runway chip was
   removed (HS2-5A83MR, TWD45K #6). A
   likely-critical callout (for example disk, §34.8) keeps its full width.
-- **Expanded:** the detailed rows of `m1`: work state and last-progress age, Needs you, overdue ETA, `main`
+- **Expanded:** the two gauges centred horizontally (HS2-80SWPT, through the Kerf `Row` `hAlign` prop), then the detailed rows of `m1`: work state and last-progress age, Needs you, overdue ETA, `main`
   CI, and a machine warning only past a threshold. The queue runway row was removed (HS2-5A83MR, TWD45K #5). The section has no
   header bar (HS2-9J6PPR, TWD45K #1/#2): clicking anywhere on its gauges, chips, or rows switches modes.
   That content is one native button, so Tab and Enter or Space reach it too, and its accessible name

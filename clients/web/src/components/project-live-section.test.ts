@@ -60,6 +60,14 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     expect(String(ProjectLiveSection({}))).not.toContain('<button');
   });
 
+  it('centers the gauges horizontally in expanded mode only, through the Row prop (HS2-80SWPT)', () => {
+    const expanded = String(ProjectLiveSection({ summary: quiet, expanded: true }));
+    expect(expanded).toMatch(/<div data-live-gauges=""[^>]*data-h-align="center"/);
+    const compact = String(ProjectLiveSection({ summary: quiet }));
+    expect(compact).not.toContain('data-live-gauges');
+    expect(compact).not.toContain('data-h-align="center"');
+  });
+
   it('shows only the rows that have something to say when expanded', () => {
     const full = String(ProjectLiveSection({ summary: attention, expanded: true }));
     expect(full).toContain('data-mode="expanded"');

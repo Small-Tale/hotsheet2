@@ -95,9 +95,20 @@ test('project sidebar Live section is compact by default and remembers the detai
     await expect(live.locator('svg.glance-gauge[data-variant="full"]')).toHaveCount(2);
     await expect(live.locator('[data-live-row="state"]')).toBeVisible();
     await expect(live.locator('[data-live-row="runway"], [data-live-row="waiting"]')).toHaveCount(0);
+    // Expanded gauges sit centred in the section (HS2-80SWPT): the pair's midpoint is the row's.
+    const centring = await live.locator('[data-live-gauges]').evaluate((row) => {
+      const box = row.getBoundingClientRect(),
+        dials = [...row.querySelectorAll('svg.glance-gauge')].map((dial) => dial.getBoundingClientRect());
+      const left = Math.min(...dials.map((dial) => dial.left)),
+        right = Math.max(...dials.map((dial) => dial.right));
+      return { row: box.left + box.width / 2, pair: (left + right) / 2, width: right - left };
+    });
+    expect(centring.width).toBeGreaterThan(100);
+    expect(Math.abs(centring.pair - centring.row)).toBeLessThanOrEqual(1);
     // Captures show the resting state: no hover fill or focus ring.
     await page.mouse.move(640, 880);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(live.locator('button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-expanded-1280.png' });
 
     // The choice persists per viewer across a reload, which restores the open project.
@@ -116,6 +127,7 @@ test('project sidebar Live section is compact by default and remembers the detai
     await expect(live.locator('[data-live-row]')).toHaveCount(0);
     await page.mouse.move(640, 880);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(live.locator('button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-compact-1280.png' });
   } finally {
     await server.stop();
