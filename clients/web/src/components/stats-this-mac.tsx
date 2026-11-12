@@ -11,13 +11,17 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { Cpu, HardDrive, type IconNode, MemoryStick, Plug, Thermometer, WifiOff } from 'lucide';
 
+import type { HostCpuFrame } from '../host-cpu-feed';
 import type { HostHealthSignalId, HostHealthStatus } from '../host-health';
 import type { HostHealthResourceState } from '../host-health-resource';
 import { hostPlatform, thisMacCards } from '../stats-this-mac';
+import { CpuCoreMeter } from './cpu-core-meter';
 import { GlanceSparkline } from './glance-sparkline';
 
 export interface StatsThisMacProps {
   state: HostHealthResourceState;
+  /** The live CPU frame while Stats shows (HS2-CPFBWP); absent when the feed is stopped. */
+  liveCpu?: HostCpuFrame;
 }
 
 const ICONS: Record<HostHealthSignalId, { icon: IconNode; name: string }> = {
@@ -45,7 +49,7 @@ const TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-di
  * on another device. Values come from the host-health push channel (HS2-DTAVQA); unsupported or
  * unreadable signals say so and never show a value.
  */
-export function StatsThisMac({ state }: StatsThisMacProps) {
+export function StatsThisMac({ state, liveCpu }: StatsThisMacProps) {
   const { snapshot } = state;
   if (!snapshot)
     return (
@@ -85,7 +89,7 @@ export function StatsThisMac({ state }: StatsThisMacProps) {
           />
         )}
         <Grid minColumnWidth={px(224)} gap="m">
-          {thisMacCards(snapshot).map((card) => (
+          {thisMacCards(snapshot, liveCpu).map((card) => (
             <ContentItem
               appearance={appearance(card.status)}
               frame="framed"
@@ -98,15 +102,18 @@ export function StatsThisMac({ state }: StatsThisMacProps) {
                     {card.title}
                   </Text>
                 </Row>
-                <Text
-                  variant="span"
-                  size="large"
-                  weight="strong"
-                  tone={card.status === 'unsupported' || card.status === 'unavailable' ? 'quiet' : 'default'}
-                  flush
-                >
-                  {card.headline}
-                </Text>
+                <Row gap="xs" vAlign="middle">
+                  <Text
+                    variant="span"
+                    size="large"
+                    weight="strong"
+                    tone={card.status === 'unsupported' || card.status === 'unavailable' ? 'quiet' : 'default'}
+                    flush
+                  >
+                    {card.headline}
+                  </Text>
+                  {card.cores && <CpuCoreMeter cores={card.cores} />}
+                </Row>
                 {card.trend && (
                   <GlanceSparkline
                     values={card.trend.values}

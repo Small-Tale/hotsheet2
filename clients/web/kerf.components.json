@@ -9,19 +9,41 @@
       "kind": "component",
       "purpose": "Pair a remote browser with the host's server before rendering the application (HS2-7DBJMS).",
       "source": "src/components/remote-auth-screen.tsx",
-      "publicExports": [{ "name": "RemoteAuthScreen" }],
+      "publicExports": [
+        {
+          "name": "RemoteAuthScreen"
+        }
+      ],
       "sourceLinks": ["src/components/remote-auth-screen.tsx", "src/components/remote-auth-screen.css"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "component", "behaviors": ["single-column-card"] },
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "component",
+          "behaviors": ["single-column-card"]
+        },
         "layout": {
           "roles": ["controls"],
-          "geometry": { "margin": "none", "border": "self", "padding": "self" }
+          "geometry": {
+            "margin": "none",
+            "border": "self",
+            "padding": "self"
+          }
         }
       },
       "boundaries": {
@@ -3148,7 +3170,7 @@
       "id": "glance-sparkline",
       "name": "GlanceSparkline",
       "kind": "component",
-      "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
+      "purpose": "Small trend line scaled to its own maximum or a fixed scale for glance surfaces, with its values in the title (HS2-ERTNJ7, HS2-RBFR94).",
       "source": "src/components/glance-sparkline.tsx",
       "publicExports": [
         {
@@ -3204,6 +3226,69 @@
       "selection": {
         "useWhen": ["A glance surface shows a short recent trend beside a raw number."],
         "avoidWhen": ["The value is task progress; use Kerf ProgressBar."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "cpu-core-meter",
+      "name": "CpuCoreMeter",
+      "kind": "component",
+      "purpose": "Per-core CPU busy meter: one LED column per logical core, lit in fifths with a warning-toned peak, values in the title (HS2-CPFBWP).",
+      "source": "src/components/cpu-core-meter.tsx",
+      "publicExports": [
+        {
+          "name": "CpuCoreMeter"
+        }
+      ],
+      "sourceLinks": ["src/components/cpu-core-meter.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["feedback"],
+          "geometry": {
+            "margin": "none",
+            "border": "none",
+            "padding": "none"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["cpu-core-meter"],
+        "publicTokens": [],
+        "placeableClasses": ["cpu-core-meter"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/cpu-core-meter.tsx",
+        "composition": "src/components/cpu-core-meter.tsx"
+      },
+      "selection": {
+        "useWhen": ["A glance surface shows how busy each CPU core is right now."],
+        "avoidWhen": ["One value against a ceiling; use Kerf Gauge. A trend over time; use GlanceSparkline."],
         "documentation": "../../docs/ux-components.md"
       }
     },
@@ -4441,17 +4526,42 @@
       "kind": "component",
       "purpose": "Human review of a note-level AI repair proposal with deterministic findings, before and after text, unsupported changes, and explicit acceptance.",
       "source": "src/components/note-repair-review.tsx",
-      "publicExports": [{ "name": "NoteRepairReview" }],
+      "publicExports": [
+        {
+          "name": "NoteRepairReview"
+        }
+      ],
       "sourceLinks": ["src/components/note-repair-review.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -4459,7 +4569,9 @@
         "publicTokens": [],
         "placeableClasses": ["note-repair-review"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/note-repair-review.tsx",
@@ -4477,17 +4589,42 @@
       "kind": "component",
       "purpose": "Explicit human correction of a stored note's type, timeline summary, or confidence.",
       "source": "src/components/note-metadata-dialog.tsx",
-      "publicExports": [{ "name": "NoteMetadataDialog" }],
+      "publicExports": [
+        {
+          "name": "NoteMetadataDialog"
+        }
+      ],
       "sourceLinks": ["src/components/note-metadata-dialog.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": null,
@@ -4495,7 +4632,9 @@
         "publicTokens": [],
         "placeableClasses": ["note-metadata-dialog"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/note-metadata-dialog.tsx",
@@ -7557,17 +7696,42 @@
       "kind": "component",
       "purpose": "Project development policy, Custom strategy validation feedback, and live green-main cadence.",
       "source": "src/components/development-strategy-settings.tsx",
-      "publicExports": [{ "name": "DevelopmentStrategySettings" }],
+      "publicExports": [
+        {
+          "name": "DevelopmentStrategySettings"
+        }
+      ],
       "sourceLinks": ["src/components/development-strategy-settings.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "child", "padding": "child" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
       },
       "boundaries": {
         "rootClass": "development-strategy-settings",
@@ -7575,7 +7739,9 @@
         "publicTokens": [],
         "placeableClasses": ["development-strategy-settings"]
       },
-      "accessibility": { "obligations": [] },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/development-strategy-settings.tsx",

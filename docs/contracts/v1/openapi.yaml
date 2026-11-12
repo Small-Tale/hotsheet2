@@ -10754,6 +10754,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /host-health/cpu:
+    get:
+      operationId: get_live_cpu
+      description: The live CPU long poll (HS2-CPFBWP). Answers as soon as the server holds a frame newer than after; with none, waits up to timeout_ms (default 10000, at most 25000) and returns the current frame. A missing after, or one ahead of the server's, returns the current frame at once.
+      parameters:
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: timeout_ms
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostCpuFrame'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /host-health/thresholds:
     get:
       operationId: get_host_health_thresholds
@@ -20119,6 +20155,41 @@ components:
           anyOf:
             - type: integer
             - type: 'null'
+      additionalProperties: false
+    HostCpuFrame:
+      type: object
+      description: One live CPU frame (HS2-CPFBWP). live carries values; starting waits for a second reading; unavailable means the reader failed (no values); unsupported means there is no per-core reader and the client stops asking.
+      required:
+        - seq
+        - status
+        - sampled_at
+        - busy_percent
+        - core_percent
+        - interval_ms
+      properties:
+        seq:
+          type: integer
+          minimum: 0
+        status:
+          enum:
+            - live
+            - starting
+            - unavailable
+            - unsupported
+        sampled_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+        busy_percent:
+          anyOf:
+            - type: number
+            - type: 'null'
+        core_percent:
+          type: array
+          items:
+            type: number
+        interval_ms:
+          type: integer
       additionalProperties: false
     HostHealthSnapshot:
       type: object

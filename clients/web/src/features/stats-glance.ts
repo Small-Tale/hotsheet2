@@ -7,6 +7,7 @@ import type { StatsOvernightProps } from '../components/stats-overnight';
 import type { StatsRightNowProps } from '../components/stats-right-now';
 import type { StatsThisMacProps } from '../components/stats-this-mac';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { HostCpuFeedState } from '../host-cpu-feed';
 import type { HostHealthResourceState } from '../host-health-resource';
 import type { Project } from '../interactions/types';
 import type { LiveStateStore } from '../live-state';
@@ -25,6 +26,13 @@ export interface StatsGlanceDependencies {
   terminalGroups: Signal<TerminalDashboardGroup[]>;
   /** The server host's health for the This Mac cards (HS2-NS0AYR). */
   hostHealth?: { state: Signal<HostHealthResourceState> };
+  /**
+   * The live CPU feed (HS2-CPFBWP). It long-polls only while Stats shows on a visible page, so a hidden
+   * Stats page or a background tab issues no request.
+   */
+  hostCpu?: { state: Signal<HostCpuFeedState>; start(): void; stop(): void; running(): boolean };
+  /** Whether the document is visible; defaults to visible. */
+  pageVisible?: Signal<boolean>;
   /**
    * Read the recorded live state history since a time (HS2-9AN4DN). It is read when Stats opens, when
    * its window changes, and on the Stats project's stream resync; pushed snapshots extend it between reads.
@@ -100,6 +108,12 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     void refreshOvernight();
   }
 
+  // The live CPU feed follows Stats' visibility (HS2-CPFBWP); it never runs on a timer of its own.
+  const disposeCpu = effect(() => {
+    const watching = shellMode.value === 'stats' && (dependencies.pageVisible?.value ?? true);
+    if (watching) dependencies.hostCpu?.start();
+    else dependencies.hostCpu?.stop();
+  });
   // The store's signal changes only when a newer snapshot applies, so this marks each live update.
   const disposeApplied = effect(() => {
     if (liveStates.states.value.size > 0) appliedAt.value = now();
@@ -208,10 +222,18 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
 
   /** The This Mac cards' input: the pushed server-host snapshot (HS2-NS0AYR). */
   function thisMac(): StatsThisMacProps | undefined {
-    return dependencies.hostHealth ? { state: dependencies.hostHealth.state.value } : undefined;
+    if (!dependencies.hostHealth) return undefined;
+    const cpu = dependencies.hostCpu,
+      frame = cpu?.state.value.frame;
+    return {
+      state: dependencies.hostHealth.state.value,
+      ...(frame !== undefined && cpu?.running() === true ? { liveCpu: frame } : {}),
+    };
   }
 
   function dispose() {
+    disposeCpu();
+    dependencies.hostCpu?.stop();
     disposeApplied();
     disposeClock();
     if (timer !== undefined) stopTimer(timer);

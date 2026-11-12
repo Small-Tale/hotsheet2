@@ -113,6 +113,7 @@ describe('UX demo catalog', () => {
       'stats-overnight',
       'glance-gauge',
       'glance-sparkline',
+      'cpu-core-meter',
       'grid-sidebar-gauges',
       'standby-screen',
       'away-digest-dialog',

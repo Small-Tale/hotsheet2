@@ -7,6 +7,7 @@
 //!   (escalate at once, recover only past a margin and after [`RECOVERY_SAMPLES`] samples).
 //! - [`run_sampler`] is the server task: sample, evaluate, emit `host_health` change events.
 //! - `routes` serves `GET /host-health` and `GET`/`PUT /host-health/thresholds`.
+//! - [`live_cpu`] serves the live CPU long poll, `GET /host-health/cpu` (HS2-CPFBWP).
 //!
 //! Change events carry `kind: "host_health"`, `store: ""`, `id` = the signal (`disk`, `memory`,
 //! `cpu`, `power`, `network`, `thermal`) or `snapshot`, `slug` = the new status, and `message` =
@@ -14,6 +15,7 @@
 //! snapshot with `GET /host-health` on each event and on resync. Every value is a metric or a
 //! code; the only name reported is the busiest process's executable name.
 
+pub(crate) mod live_cpu;
 pub(crate) mod routes;
 pub(crate) mod source;
 #[cfg(test)]
@@ -922,6 +924,8 @@ impl Monitor {
 #[derive(Debug)]
 pub(crate) struct HostHealth {
     pub(crate) monitor: Mutex<Monitor>,
+    /// The live CPU feed (HS2-CPFBWP).
+    pub(crate) live_cpu: live_cpu::LiveCpu,
     started: std::sync::atomic::AtomicBool,
 }
 
@@ -929,6 +933,7 @@ impl Default for HostHealth {
     fn default() -> Self {
         Self {
             monitor: Mutex::new(Monitor::new(HostIdentity::current())),
+            live_cpu: live_cpu::LiveCpu::default(),
             started: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -1008,6 +1013,13 @@ impl AppState {
             return;
         }
         self.spawn_host_health_sampler_with(Box::new(source::SystemSource::new(self.store.root())));
+        // The live CPU feed reads per-core ticks only where the platform has a reader; elsewhere
+        // it answers `unsupported` and the client stops asking (HS2-CPFBWP).
+        if source::core_ticks_supported() {
+            self.host_health
+                .live_cpu
+                .set_source(Box::new(source::SystemCoreSource));
+        }
     }
 
     pub(crate) fn spawn_host_health_sampler_with(&self, source: Box<dyn HostSource>) {

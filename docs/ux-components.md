@@ -305,7 +305,14 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   line over a soft area, scaled to its own maximum, with its values in the hover title and
   accessible name and no text on its face. Tones: `neutral` (calm default), `brand`, `success`
   (tickets updated), and `warning`. An all-zero series draws a flat baseline. Kerf has no sparkline,
-  so this is an app-owned visualization like `GlanceGauge`.
+  so this is an app-owned visualization like `GlanceGauge`. An optional `max` fixes the scale, such as
+  100 for the CPU sparkline (HS2-RBFR94).
+
+- `CpuCoreMeter` — **demo built** (`components/cpu-core-meter.tsx`, HS2-CPFBWP): a per-core CPU busy
+  meter for the This Mac CPU card, one LED column per logical core lit from the bottom in fifths, the
+  top segment in the warning tone. Values are in its title and accessible name. It narrows to its
+  container on machines with many cores. Kerf's `Gauge` shows one value, so this is an app-owned
+  visualization.
 
 - `StatsRightNow` — **demo built** (`components/stats-right-now.tsx`, HS2-ERTNJ7,
   docs/34-glance-surfaces.md §34.8): the Stats page's **Right now** section above Ticket flow and
@@ -336,7 +343,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
 - `StatsThisMac` — **demo built** (`components/stats-this-mac.tsx`, HS2-NS0AYR): the server host's
   health cards on Stats, headed by the host name and "Server host · platform · sampled time". A Kerf
   `Grid` of framed `ContentItem` cards: disk free with rate, time to full, and total; memory pressure
-  with swap and its trend; CPU with the top process; power and sleep (kept awake, on battery, lid
+  with swap and its trend; CPU with the top process, the last hour's sparkline (HS2-RBFR94), and,
+  while the live feed runs (HS2-CPFBWP), the live busy percent, core count, and `CpuCoreMeter`; power and sleep (kept awake, on battery, lid
   closed on battery, may sleep when idle); network and thermal only while degraded. A crossed card
   takes `appearance="warning"` or `"danger"`; unsupported or unreadable signals read "Not supported"
   or "Unavailable" with no value. Loading, a failed first read, and a stale snapshot use Kerf

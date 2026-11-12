@@ -1,0 +1,20 @@
+/* The per-core CPU meter is an app-owned domain data visualization (Kerf has no meter for this). Its
+   palette resolves from Kerf's semantic ramps, so it follows the light and dark themes (HS2-CPFBWP).
+   It keeps its natural width (8px a core) and narrows to its container when many cores would overflow. */
+.cpu-core-meter {
+  display: block;
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  inline-size: var(--_cpu-core-meter-width);
+  max-inline-size: 100%;
+  block-size: remify(19px);
+}
+.cpu-core-meter__segment {
+  fill: var(--kui-color-neutral-fill-quiet);
+}
+.cpu-core-meter__segment[data-lit='true'] {
+  fill: var(--kui-color-neutral-border-loud);
+}
+.cpu-core-meter__segment[data-lit='true'][data-peak='true'] {
+  fill: var(--kui-color-warning-border-loud);
+}

@@ -1,5 +1,6 @@
 import { browserRandomId } from './browser-id';
 import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from './change-read-gap';
+import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
@@ -2457,6 +2458,14 @@ export class Api {
     this.parsed(parseTerminalLimits, '/terminal-limits', { method: 'PUT', body: JSON.stringify(value) });
   // The server host's health and its machine-wide thresholds (HS2-DTAVQA).
   hostHealth = () => this.parsed(parseHostHealth, '/host-health');
+  /** The live CPU long poll (HS2-CPFBWP): answers when the server has a frame newer than `after`. */
+  hostCpu = (after: number | undefined, signal: AbortSignal) =>
+    this.parsed(
+      parseHostCpuFrame,
+      `/host-health/cpu?timeout_ms=10000${after === undefined ? '' : `&after=${after}`}`,
+      { signal },
+      false,
+    );
   hostHealthThresholds = () => this.parsed(parseHostHealthThresholds, '/host-health/thresholds');
   saveHostHealthThresholds = (value: HostHealthConfiguredThresholds) =>
     this.parsed(parseHostHealthThresholds, '/host-health/thresholds', { method: 'PUT', body: JSON.stringify(value) });

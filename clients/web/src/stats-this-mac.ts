@@ -1,3 +1,4 @@
+import type { HostCpuFrame } from './host-cpu-feed';
 import type { HostHealthSignalId, HostHealthSignals, HostHealthSnapshot, HostHealthStatus } from './host-health';
 import { formatDuration } from './stats-right-now';
 
@@ -17,6 +18,8 @@ export interface ThisMacCard {
   details: string[];
   /** A sparkline under the headline (the CPU's last hour, HS2-RBFR94), when there is one. */
   trend?: { values: number[]; label: string };
+  /** Each logical core's busy percent from the live feed (HS2-CPFBWP), for the per-core meter. */
+  cores?: number[];
 }
 
 const GIB = 1024 ** 3;
@@ -119,24 +122,39 @@ export function cpuTrend(history: HostHealthSignals['cpu']['history']): ThisMacC
   };
 }
 
-function cpuCard(cpu: HostHealthSignals['cpu']): ThisMacCard {
+/** A live frame with values (HS2-CPFBWP); anything else leaves the card on the sampled snapshot. */
+const liveValues = (live: HostCpuFrame | undefined) =>
+  live?.status === 'live' && live.busy_percent !== null
+    ? { busy: live.busy_percent, cores: live.core_percent }
+    : undefined;
+
+function cpuCard(cpu: HostHealthSignals['cpu'], live?: HostCpuFrame): ThisMacCard {
   const details: string[] = [];
-  if (cpu.top_process !== null)
-    details.push(
-      cpu.top_process_percent === null
+  const now = liveValues(live);
+  const top =
+    cpu.top_process === null
+      ? undefined
+      : cpu.top_process_percent === null
         ? `top: ${cpu.top_process}`
-        : `top: ${cpu.top_process} (${Math.round(cpu.top_process_percent)}%)`,
-    );
-  if (cpu.status !== 'normal' && cpu.busy_for_seconds !== null)
+        : `top: ${cpu.top_process} (${Math.round(cpu.top_process_percent)}%)`;
+  const cores = now?.cores.length ? `${now.cores.length} cores` : undefined;
+  if (cores !== undefined || top !== undefined) details.push([cores, top].filter(Boolean).join(' · '));
+  if ((cpu.status === 'warning' || cpu.status === 'critical') && cpu.busy_for_seconds !== null)
     details.push(`busy for ${formatDuration(cpu.busy_for_seconds * 1000)}`);
   const trend = cpuTrend(cpu.history);
   return {
     id: 'cpu',
     title: TITLES.cpu,
     status: cpu.status,
-    headline: cpu.busy_percent === null ? 'Unknown' : `${Math.round(cpu.busy_percent)}%`,
+    headline:
+      now !== undefined
+        ? `${Math.round(now.busy)}%`
+        : cpu.busy_percent === null
+          ? 'Unknown'
+          : `${Math.round(cpu.busy_percent)}%`,
     details,
     ...(trend === undefined ? {} : { trend }),
+    ...(now?.cores.length ? { cores: now.cores } : {}),
   };
 }
 
@@ -192,14 +210,16 @@ const alerting = (status: HostHealthStatus) => status === 'warning' || status ==
 
 /**
  * The cards to show, in a fixed order: disk, memory, CPU, and power always (unsupported ones say
- * so); network and thermal only while degraded (§34.8).
+ * so); network and thermal only while degraded (§34.8). A live CPU frame (HS2-CPFBWP) replaces the
+ * sampled busy percent and adds the core count and per-core values.
  */
-export function thisMacCards(snapshot: HostHealthSnapshot): ThisMacCard[] {
+export function thisMacCards(snapshot: HostHealthSnapshot, live?: HostCpuFrame): ThisMacCard[] {
   const { signals } = snapshot;
   const cards: ThisMacCard[] = [
     nonAlerting('disk', signals.disk.status) ?? diskCard(signals.disk),
     nonAlerting('memory', signals.memory.status) ?? memoryCard(signals.memory),
-    nonAlerting('cpu', signals.cpu.status) ?? cpuCard(signals.cpu),
+    // A live frame (HS2-CPFBWP) shows even while the sampled CPU reader is unavailable.
+    (liveValues(live) === undefined ? nonAlerting('cpu', signals.cpu.status) : undefined) ?? cpuCard(signals.cpu, live),
     nonAlerting('power', signals.power.status) ?? powerCard(signals.power),
   ];
   if (alerting(signals.network.status)) cards.push(networkCard(signals.network));

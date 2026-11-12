@@ -362,6 +362,90 @@ fn platform_sample(_source: &mut SystemSource) -> HostReading {
     HostReading::unsupported()
 }
 
+/// The real per-core reader for the live CPU feed (HS2-CPFBWP): macOS `host_processor_info`, Linux
+/// `/proc/stat` `cpuN` lines. Other platforms have none, so the feed answers `unsupported`.
+pub(crate) struct SystemCoreSource;
+
+impl super::live_cpu::CoreSource for SystemCoreSource {
+    fn ticks(&mut self) -> Option<Vec<(u64, u64)>> {
+        platform_core_ticks()
+    }
+}
+
+/// Whether this platform has a per-core reader.
+pub(crate) const fn core_ticks_supported() -> bool {
+    cfg!(any(target_os = "macos", target_os = "linux"))
+}
+
+#[cfg(target_os = "macos")]
+fn platform_core_ticks() -> Option<Vec<(u64, u64)>> {
+    // `processor_cpu_load_info` order: user, system, idle, nice.
+    const USER: usize = 0;
+    const SYSTEM: usize = 1;
+    const IDLE: usize = 2;
+    const NICE: usize = 3;
+    let states = libc::CPU_STATE_MAX as usize;
+    // libc marks its Mach port accessors deprecated; libSystem exports both as functions.
+    unsafe extern "C" {
+        fn mach_host_self() -> libc::host_t;
+        fn mach_task_self() -> libc::vm_map_t;
+    }
+    // One host port for the process: `mach_host_self` adds a user reference per call.
+    static HOST: std::sync::OnceLock<libc::host_t> = std::sync::OnceLock::new();
+    // SAFETY: `mach_host_self` has no preconditions.
+    let host = *HOST.get_or_init(|| unsafe { mach_host_self() });
+    let mut count: libc::natural_t = 0;
+    let mut info: libc::processor_info_array_t = std::ptr::null_mut();
+    let mut info_count: libc::mach_msg_type_number_t = 0;
+    // SAFETY: every out pointer is writable; on success the kernel hands back an allocation of
+    // `info_count` integers that we release below.
+    let result = unsafe {
+        libc::host_processor_info(
+            host,
+            libc::PROCESSOR_CPU_LOAD_INFO,
+            &mut count,
+            &mut info,
+            &mut info_count,
+        )
+    };
+    if result != libc::KERN_SUCCESS || info.is_null() {
+        return None;
+    }
+    // SAFETY: the kernel returned `info_count` initialised integers at `info`.
+    let values = unsafe { std::slice::from_raw_parts(info, info_count as usize) };
+    let cores = values
+        .chunks_exact(states)
+        .take(count as usize)
+        .map(|core| {
+            // The tick counters are unsigned 32-bit values carried in `integer_t`.
+            let tick = |index: usize| u64::from(core[index] as u32);
+            let busy = tick(USER) + tick(SYSTEM) + tick(NICE);
+            (busy, busy + tick(IDLE))
+        })
+        .collect::<Vec<_>>();
+    // SAFETY: `info` and its size are exactly what `host_processor_info` allocated in this task.
+    unsafe {
+        libc::vm_deallocate(
+            mach_task_self(),
+            info as libc::vm_address_t,
+            (info_count as usize * std::mem::size_of::<libc::integer_t>()) as libc::vm_size_t,
+        );
+    }
+    (!cores.is_empty()).then_some(cores)
+}
+
+#[cfg(target_os = "linux")]
+fn platform_core_ticks() -> Option<Vec<(u64, u64)>> {
+    std::fs::read_to_string("/proc/stat")
+        .ok()
+        .and_then(|text| linux::parse_proc_stat_cores(&text))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn platform_core_ticks() -> Option<Vec<(u64, u64)>> {
+    None
+}
+
 #[cfg_attr(not(windows), allow(dead_code))] // HS2-MEQ46T: pure Windows parsers run in every host's unit suite.
 pub(crate) mod windows {
     use super::MemoryReading;
@@ -810,7 +894,24 @@ pub(crate) mod linux {
 
     /// Linux `/proc/stat`: the aggregate `cpu` line's busy and total jiffies.
     pub(crate) fn parse_proc_stat(text: &str) -> Option<(u64, u64)> {
-        let line = text.lines().find(|line| line.starts_with("cpu "))?;
+        parse_cpu_line(text.lines().find(|line| line.starts_with("cpu "))?)
+    }
+
+    /// Each `cpuN` line of `/proc/stat` (HS2-CPFBWP): every core's busy and total jiffies, in order.
+    pub(crate) fn parse_proc_stat_cores(text: &str) -> Option<Vec<(u64, u64)>> {
+        let cores = text
+            .lines()
+            .filter(|line| {
+                line.strip_prefix("cpu")
+                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+            })
+            .map(parse_cpu_line)
+            .collect::<Option<Vec<_>>>()?;
+        (!cores.is_empty()).then_some(cores)
+    }
+
+    /// One `/proc/stat` CPU line as busy and total jiffies.
+    fn parse_cpu_line(line: &str) -> Option<(u64, u64)> {
         let values: Vec<u64> = line
             .split_whitespace()
             .skip(1)

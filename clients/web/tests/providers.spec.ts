@@ -25595,6 +25595,100 @@ test('Stats This Mac cards show the server host, tint crossed thresholds, and re
   }
 });
 
+test('Stats This Mac CPU card follows the live per-core feed only while Stats shows (HS2-CPFBWP)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  await page.route('**/live-state', (route) =>
+    route.fulfill({ json: { epoch_ms: 1, stores: glanceScenario(Date.now()) } }),
+  );
+  await page.route('**/host-health', (route) => route.fulfill({ json: hostHealthFixture('normal') }));
+  const coresA = [96, 81, 62, 44, 33, 21, 12, 6, 2, 0];
+  const coresB = [10, 10, 10, 10, 10, 10, 10, 10, 10, 90];
+  const frame = (seq: number, cores: number[]) => ({
+    seq,
+    status: 'live',
+    sampled_at: new Date().toISOString(),
+    busy_percent: cores.reduce((sum, value) => sum + value, 0) / cores.length,
+    core_percent: cores,
+    interval_ms: 2000,
+  });
+  // A genuine long poll: the first read answers at once; every later one waits until the test answers,
+  // the way the server answers only when its sampler has a newer frame.
+  const held: { after: string; answer: (json: unknown) => Promise<void> }[] = [];
+  await page.route('**/host-health/cpu*', (route) => {
+    const after = new URL(route.request().url()).searchParams.get('after');
+    if (after === null) return route.fulfill({ json: frame(1, coresA) });
+    return new Promise<void>((resolve) => {
+      held.push({
+        after,
+        answer: (json) => route.fulfill({ json }).catch(() => undefined),
+      });
+      resolve();
+    });
+  });
+  let aborted = 0;
+  page.on('requestfailed', (request) => {
+    if (request.url().includes('/host-health/cpu')) aborted += 1;
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  // Nothing asks for live CPU until Stats shows.
+  expect(held).toHaveLength(0);
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  const thisMac = page.getByRole('region', { name: 'Server Host studio' });
+  const cpu = thisMac.locator('[data-card="cpu"]');
+  await expect(cpu).toContainText('36%');
+  await expect(cpu).toContainText('10 cores · top: cargo (88%)');
+  const meter = cpu.locator('[data-component="cpu-core-meter"]');
+  await expect(meter).toHaveAttribute('data-cores', '10');
+  await expect(meter).toHaveAttribute('aria-label', /^10 cores: core 1 96%, core 2 81%/u);
+  // 96% lights all five segments and the warning peak; an idle core lights none.
+  const lit = (core: number) =>
+    meter.evaluate(
+      (node, index) =>
+        [...node.querySelectorAll('.cpu-core-meter__segment')]
+          .slice(index * 5, index * 5 + 5)
+          .filter((segment) => segment.getAttribute('data-lit') === 'true').length,
+      core,
+    );
+  expect(await lit(0)).toBe(5);
+  expect(await lit(9)).toBe(0);
+  const box = await meter.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(40);
+  expect(box?.height ?? 0).toBeGreaterThan(8);
+  await expect.poll(() => held.map((request) => request.after)).toEqual(['1']);
+
+  // The server answers with a newer frame: the card follows, and the next request asks after it.
+  await held[0]?.answer(frame(2, coresB));
+  await expect(cpu).toContainText('18%');
+  await expect.poll(() => held.map((request) => request.after)).toEqual(['1', '2']);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1024],
+      ['narrow', 600],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(cpu).toBeVisible();
+      expect(await thisMac.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await cpu.screenshot({ path: `target/visual-captures/hs2-cpfbwp-cpu-card-${scheme}-${label}.png` });
+    }
+  }
+
+  // Leaving Stats aborts the waiting request and asks nothing more.
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await expect.poll(() => aborted).toBe(1);
+  expect(held).toHaveLength(2);
+  // Returning resumes from the frame the client holds.
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  await expect.poll(() => held.map((request) => request.after)).toEqual(['1', '2', '2']);
+});
+
 test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({
   page,
 }) => {

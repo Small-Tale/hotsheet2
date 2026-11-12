@@ -18,6 +18,7 @@ import { demoModule as connectionDetails } from './connection-details-demo';
 import { demoModule as contentComponents } from './content-components-demo';
 import { demoModule as contentTransition } from './content-transition-demo';
 import { demoModule as corruptTicketInspector } from './corrupt-ticket-inspector-demo';
+import { demoModule as cpuCoreMeter } from './cpu-core-meter-demo';
 import type { DemoEntry, DemoModule } from './demo-module';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
@@ -125,6 +126,7 @@ export const demoModules: readonly DemoModule[] = [
   choiceCard,
   glanceGauge,
   glanceSparkline,
+  cpuCoreMeter,
   statsRightNow,
   statsProjectsTable,
   statsThisMac,

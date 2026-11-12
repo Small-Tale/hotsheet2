@@ -106,4 +106,29 @@ describe('HS2-NS0AYR This Mac cards', () => {
     // An unsupported or unavailable CPU card never shows a trend.
     expect(card('unsupported', 'cpu')?.trend).toBeUndefined();
   });
+
+  it('HS2-CPFBWP replaces the sampled CPU with a live frame and adds the core count and per-core values', () => {
+    const live = {
+      seq: 4,
+      status: 'live' as const,
+      sampled_at: '2026-11-06T10:47:02Z',
+      busy_percent: 61.4,
+      core_percent: [90, 32.8],
+      interval_ms: 2000,
+    };
+    const snapshot = hostHealthFixture('normal');
+    const cpu = thisMacCards(snapshot, live).find((item) => item.id === 'cpu');
+    expect(cpu).toMatchObject({ headline: '61%', details: ['2 cores · top: cargo (88%)'], cores: [90, 32.8] });
+    // Anything but a live frame leaves the sampled reading alone.
+    for (const status of ['starting', 'unavailable', 'unsupported'] as const)
+      expect(thisMacCards(snapshot, { ...live, status, busy_percent: null, core_percent: [] })[2]).toMatchObject({
+        headline: '34%',
+        details: ['top: cargo (88%)'],
+      });
+    expect(thisMacCards(snapshot, undefined)[2]?.cores).toBeUndefined();
+    // A live frame shows even while the sampled CPU reader is unavailable.
+    snapshot.signals.cpu = { ...snapshot.signals.cpu, status: 'unavailable', busy_percent: null, top_process: null };
+    expect(thisMacCards(snapshot, live)[2]).toMatchObject({ headline: '61%', details: ['2 cores'] });
+    expect(thisMacCards(snapshot)[2]?.headline).toBe('Unavailable');
+  });
 });

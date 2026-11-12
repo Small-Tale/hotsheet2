@@ -35,6 +35,24 @@ describe('HS2-NS0AYR StatsThisMac', () => {
     expect(crossed).toMatch(/<svg[^>]*data-component="glance-sparkline"[^>]*data-tone="warning"/u);
   });
 
+  it('HS2-CPFBWP renders the live per-core meter beside the CPU headline only with a live frame', () => {
+    const snapshot = hostHealthFixture('normal');
+    const live = {
+      seq: 1,
+      status: 'live' as const,
+      sampled_at: null,
+      busy_percent: 50,
+      core_percent: [100, 0],
+      interval_ms: 2000,
+    };
+    const html = String(StatsThisMac({ state: { snapshot, loading: false }, liveCpu: live }));
+    const meters = html.match(/<svg[^>]*data-component="cpu-core-meter"[^>]*>/gu) ?? [];
+    expect(meters).toHaveLength(1);
+    expect(meters[0]).toContain('data-cores="2"');
+    expect(html).toContain('2 cores · top: cargo (88%)');
+    expect(String(StatsThisMac({ state: { snapshot, loading: false } }))).not.toContain('cpu-core-meter');
+  });
+
   it('renders unsupported signals as unsupported, never as values', () => {
     const html = String(StatsThisMac({ state: { snapshot: hostHealthFixture('unsupported'), loading: false } }));
     expect(html).toContain('Server host · Windows · x86_64');

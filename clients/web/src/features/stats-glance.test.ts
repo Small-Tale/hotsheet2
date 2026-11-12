@@ -179,4 +179,61 @@ describe('HS2-ERTNJ7 stats glance controller', () => {
     expect(test.controller.rightNow().completed?.count).toBe(3);
     test.controller.dispose();
   });
+
+  it('HS2-CPFBWP runs the live CPU feed only while Stats shows on a visible page', () => {
+    const shellMode = signal<ProjectTabBarMode>('project');
+    const pageVisible = signal(true);
+    let running = false;
+    const feed = {
+      state: signal({}),
+      start: vi.fn(() => {
+        running = true;
+      }),
+      stop: vi.fn(() => {
+        running = false;
+      }),
+      running: () => running,
+    };
+    const hostHealth = {
+      state: signal<HostHealthResourceState>({ snapshot: hostHealthFixture('normal'), loading: false }),
+    };
+    const controller = createStatsGlanceController({
+      projects: signal<Project[]>([]),
+      shellMode,
+      statsProjectId: signal<string | undefined>(undefined),
+      liveStates: createLiveStateStore(),
+      analyticsByProject: signal<Record<string, StatsDashboardState>>({}),
+      terminalGroups: signal<TerminalDashboardGroup[]>([]),
+      hostHealth,
+      hostCpu: feed,
+      pageVisible,
+      setInterval: () => 1,
+      clearInterval: () => undefined,
+    });
+    expect(running).toBe(false);
+    shellMode.value = 'stats';
+    expect(running).toBe(true);
+    pageVisible.value = false;
+    expect(running).toBe(false);
+    pageVisible.value = true;
+    expect(running).toBe(true);
+    // The live frame reaches the cards only while the feed runs.
+    const frame = {
+      seq: 2,
+      status: 'live' as const,
+      sampled_at: null,
+      busy_percent: 9,
+      core_percent: [9],
+      interval_ms: 2000,
+    };
+    feed.state.value = { frame };
+    expect(controller.thisMac()?.liveCpu).toEqual(frame);
+    shellMode.value = 'project';
+    expect(running).toBe(false);
+    expect(controller.thisMac()?.liveCpu).toBeUndefined();
+    shellMode.value = 'stats';
+    controller.dispose();
+    expect(running).toBe(false);
+    expect(feed.start).toHaveBeenCalledTimes(3);
+  });
 });

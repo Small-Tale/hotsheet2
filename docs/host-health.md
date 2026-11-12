@@ -150,6 +150,39 @@ and makes no network requests. Clients never poll.
 Event values are metrics and stable codes only. No ticket, path, or customer content appears in
 them.
 
+## Live CPU
+
+The snapshot's CPU reading refreshes only with the sampler and the snapshot notices above, so it
+cannot feel live. While a client shows the CPU card, a separate live feed (HS2-CPFBWP) samples
+per-core CPU every 2 seconds:
+
+- **Readers.** macOS reads `host_processor_info` (no subprocess). Linux reads the `cpuN` lines of
+  `/proc/stat`. Other platforms, Windows included, answer `unsupported`, and the client stops asking.
+  The host health sampler being off (`HOTSHEET_HOST_HEALTH_SAMPLER=off`) also answers `unsupported`.
+- **Long poll.** `GET /host-health/cpu?after=<seq>&timeout_ms=<n>` (`HostCpuFrame` in the OpenAPI
+  contract) returns as soon as the server holds a frame newer than `after`. With no newer frame it
+  waits up to `timeout_ms` (default 10 seconds, at most 25) and returns the current frame. A
+  missing `after`, or one ahead of the server's (a restarted server), returns the current frame at
+  once. The client sends its next request when the answer arrives, so the server's sampling, not a
+  client timer, paces the requests.
+- **Lifecycle.** The first request starts the fast sampler. The first frame compares two readings
+  half a second apart, and later frames compare readings 2 seconds apart. The sampler stops 15
+  seconds after the last request, so nothing samples while no one watches.
+- **Frame.** A frame carries `seq`, `status`, `sampled_at`, `busy_percent` (the whole machine),
+  `core_percent` (each logical core, in OS order), and `interval_ms`. Its `status` is:
+  - `live`: the frame carries values.
+  - `starting`: the sampler has one reading and waits for the next.
+  - `unavailable`: the reader failed, so the values are empty, never guessed.
+  - `unsupported`: there is no reader.
+- **No ring traffic.** Frames are not change events. They never enter the cursored ring or
+  `/ws/poll`, so the threshold-crossing replay is unchanged.
+- **Client.** The web client (`clients/web/src/host-cpu-feed.ts`) long-polls only while Stats shows
+  on a visible page. Leaving Stats or hiding the page aborts the request in flight. After a
+  failure, or an `unavailable` frame, the client waits before asking again, starting at 1 second
+  and doubling to at most 30 seconds. A good frame resets the wait. The This Mac CPU card shows the
+  live busy percent, the core count, and a per-core meter (`CpuCoreMeter`). It falls back to the
+  snapshot whenever the feed has no live frame.
+
 ## Thresholds
 
 Thresholds are machine-wide settings in `${HOTSHEET_HOME}/settings.json`, and each has a default.
@@ -185,8 +218,9 @@ The next sample applies a change.
   - `routes.rs`: the routes.
   - `tests.rs`: the tests.
 - `crates/hotsheet-cli/src/dispatch/setup.rs`: machine-wide validation for `settings set`.
+- `crates/hotsheet-server/src/host_health/live_cpu.rs`: the live CPU feed and its long poll (HS2-CPFBWP).
 - `clients/web/src/host-health.ts` and `clients/web/src/host-health-resource.ts`: the client
-  contract and resource.
+  contract and resource; `clients/web/src/host-cpu-feed.ts`: the live CPU long-poll loop.
 
 ## Tests
 

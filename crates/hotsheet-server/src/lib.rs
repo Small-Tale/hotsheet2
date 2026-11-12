@@ -2202,6 +2202,8 @@ pub fn app(state: AppState) -> Router {
         // The server host's health and its machine-wide thresholds (HS2-DTAVQA). Crossings
         // push as `host_health` change events; clients re-read this on each one.
         .route("/host-health", get(host_health::routes::get_host_health))
+        // The live CPU long poll (HS2-CPFBWP): answers when the fast sampler has a newer frame.
+        .route("/host-health/cpu", get(host_health::live_cpu::get_live_cpu))
         .route(
             "/host-health/thresholds",
             get(host_health::routes::get_host_health_thresholds)

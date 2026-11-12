@@ -296,6 +296,9 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   runtime creates one host-health resource fed by every project stream's `host_health` events and
   resyncs. The CPU card draws a `GlanceSparkline` of the snapshot's last hour of five-minute
   averages on a fixed 0 to 100 scale, from the first sampled bucket (HS2-RBFR94; `docs/host-health.md`).
+  While Stats shows, the CPU card follows the live CPU feed (HS2-CPFBWP): the busy percent every two
+  seconds, the core count, and a per-core LED meter (`CpuCoreMeter`), long-polled only while Stats is
+  visible.
   The largest growing directory waits on a bounded, private measurement (HS2-KK02QB); the left column
   beside the cards is reserved for the Overnight timeline.
 - **Host health sampler (HS2-DTAVQA):** a server-side sampler of those signals pushes threshold crossings

@@ -835,6 +835,57 @@ fn rbfr94_cpu_history_keeps_twelve_aligned_five_minute_averages_with_gaps() {
     assert!(cpu.average_percent[..11].iter().all(Option::is_none));
 }
 
+// ---- live CPU feed (HS2-CPFBWP) ---------------------------------------------------------
+
+#[test]
+fn cpfbwp_frame_values_give_per_core_and_whole_machine_busy() {
+    use super::live_cpu::frame_values;
+    let before = [(100, 1_000), (0, 1_000)];
+    let after = [(600, 2_000), (0, 2_000)];
+    assert_eq!(frame_values(&before, &after), Some((25.0, vec![50.0, 0.0])));
+    // A core went offline: restart the comparison rather than misattribute ticks.
+    assert_eq!(frame_values(&before, &after[..1]), None);
+    assert_eq!(frame_values(&[], &[]), None);
+    // No ticks elapsed: nothing to report.
+    assert_eq!(frame_values(&before, &before), None);
+    // Counters that went backwards (a wrap) read as idle, never negative.
+    assert_eq!(
+        frame_values(&[(900, 1_000)], &[(100, 2_000)]),
+        Some((0.0, vec![0.0]))
+    );
+}
+
+#[test]
+fn cpfbwp_linux_proc_stat_lists_each_core_in_order() {
+    let stat = "cpu  10 0 10 80 0 0 0 0 0 0\ncpu0 5 0 5 40 0 0 0 0 0 0\ncpu1 5 0 5 40 1 0 0 0 0 0\nintr 1 2\n";
+    assert_eq!(
+        source::linux::parse_proc_stat_cores(stat),
+        Some(vec![(10, 50), (10, 51)])
+    );
+    assert_eq!(source::linux::parse_proc_stat_cores("cpu  1 2 3 4\n"), None);
+    assert_eq!(source::linux::parse_proc_stat_cores("cpu0 1 2\n"), None);
+}
+
+/// Per-core ticks that advance by a fixed step each read: core 0 half busy, core 1 idle. A `None`
+/// step fails that read.
+struct ScriptedCores {
+    reads: u64,
+    fail_at: Option<u64>,
+}
+
+impl super::live_cpu::CoreSource for ScriptedCores {
+    fn ticks(&mut self) -> Option<Vec<(u64, u64)>> {
+        self.reads += 1;
+        if self.fail_at == Some(self.reads) {
+            return None;
+        }
+        Some(vec![
+            (50 * self.reads, 100 * self.reads),
+            (0, 100 * self.reads),
+        ])
+    }
+}
+
 #[test]
 fn memory_follows_os_pressure_and_swap_growth() {
     let thresholds = default_thresholds(); // swap growth warns at 1 GiB/h
@@ -1120,6 +1171,111 @@ mod server {
         assert_eq!(history["average_percent"][0], serde_json::Value::Null);
         assert!(history["ends_at"].is_string());
         assert_eq!(after["signals"]["thermal"]["throttled"], false);
+    }
+
+    #[tokio::test]
+    async fn cpfbwp_live_cpu_long_poll_serves_newer_frames_only_while_watched() {
+        use std::time::Duration;
+        let (_dir, state) = state();
+        let router = app(state.clone());
+        let live = &state.host_health.live_cpu;
+        // Without a per-core reader (the sampler is off), the answer is immediate and final.
+        let (status, off) = json(&router, "GET", "/host-health/cpu?after=0", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(off["status"], "unsupported");
+        assert!(!live.running(), "nothing samples without a reader");
+
+        live.set_timing(
+            Duration::from_millis(40),
+            Duration::from_millis(10),
+            Duration::from_millis(300),
+        );
+        live.set_source(Box::new(super::ScriptedCores {
+            reads: 0,
+            fail_at: None,
+        }));
+        let (_, first) = json(
+            &router,
+            "GET",
+            "/host-health/cpu?after=0&timeout_ms=5000",
+            None,
+        )
+        .await;
+        assert!(live.running());
+        assert_eq!(first["status"], "live");
+        assert_eq!(first["busy_percent"], 25.0);
+        assert_eq!(first["core_percent"], serde_json::json!([50.0, 0.0]));
+        assert_eq!(first["interval_ms"], 40);
+        assert!(first["sampled_at"].is_string());
+        let seq = first["seq"].as_u64().unwrap();
+        assert!(seq >= 1);
+
+        // The next request waits for a newer frame, paced by the server.
+        let (_, next) = json(
+            &router,
+            "GET",
+            &format!("/host-health/cpu?after={seq}&timeout_ms=5000"),
+            None,
+        )
+        .await;
+        assert!(next["seq"].as_u64().unwrap() > seq);
+
+        // A cursor from a restarted server (ahead of ours) gets the current frame at once.
+        let (_, reset) = json(
+            &router,
+            "GET",
+            "/host-health/cpu?after=999999&timeout_ms=5000",
+            None,
+        )
+        .await;
+        assert!(reset["seq"].as_u64().unwrap() < 999_999);
+
+        // Unwatched, the fast sampler stops; the next request starts it again.
+        let stopped = async {
+            while live.running() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(5), stopped)
+            .await
+            .expect("the live sampler stops once unwatched");
+        let held = reset["seq"].as_u64().unwrap();
+        let (_, resumed) = json(
+            &router,
+            "GET",
+            &format!("/host-health/cpu?after={held}&timeout_ms=5000"),
+            None,
+        )
+        .await;
+        assert!(resumed["seq"].as_u64().unwrap() > held);
+        assert_eq!(resumed["status"], "live");
+    }
+
+    #[tokio::test]
+    async fn cpfbwp_a_failed_core_read_is_unavailable_not_a_guess() {
+        use std::time::Duration;
+        let (_dir, state) = state();
+        let router = app(state.clone());
+        let live = &state.host_health.live_cpu;
+        live.set_timing(
+            Duration::from_millis(30),
+            Duration::from_millis(10),
+            Duration::from_millis(300),
+        );
+        live.set_source(Box::new(super::ScriptedCores {
+            reads: 0,
+            fail_at: Some(2),
+        }));
+        let (_, frame) = json(
+            &router,
+            "GET",
+            "/host-health/cpu?after=0&timeout_ms=5000",
+            None,
+        )
+        .await;
+        assert_eq!(frame["status"], "unavailable");
+        assert_eq!(frame["busy_percent"], serde_json::Value::Null);
+        assert_eq!(frame["core_percent"], serde_json::json!([]));
     }
 
     #[tokio::test]

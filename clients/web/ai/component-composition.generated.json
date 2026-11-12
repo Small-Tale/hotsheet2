@@ -2268,6 +2268,74 @@
       }
     },
     {
+      "key": "hotsheet-web:cpu-core-meter",
+      "package": "hotsheet-web",
+      "id": "cpu-core-meter",
+      "name": "CpuCoreMeter",
+      "kind": "component",
+      "purpose": "Per-core CPU busy meter: one LED column per logical core, lit in fifths with a warning-toned peak, values in the title (HS2-CPFBWP).",
+      "publicExports": [
+        {
+          "name": "CpuCoreMeter"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/cpu-core-meter.tsx"
+      ],
+      "source": "src/components/cpu-core-meter.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "feedback"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "none",
+          "padding": "none"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "cpu-core-meter"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "cpu-core-meter"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/cpu-core-meter.tsx",
+        "composition": "src/components/cpu-core-meter.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:development-strategy-settings",
       "package": "hotsheet-web",
       "id": "development-strategy-settings",
@@ -2685,7 +2753,7 @@
       "id": "glance-sparkline",
       "name": "GlanceSparkline",
       "kind": "component",
-      "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
+      "purpose": "Small trend line scaled to its own maximum or a fixed scale for glance surfaces, with its values in the title (HS2-ERTNJ7, HS2-RBFR94).",
       "publicExports": [
         {
           "name": "GlanceSparkline"

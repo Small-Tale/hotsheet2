@@ -180,6 +180,7 @@ import {
   guidanceUpdateCacheIsFresh,
 } from '../guidance-update-cache';
 import { projectHaltedSessions } from '../halted-sessions';
+import { createHostCpuFeed } from '../host-cpu-feed';
 import { createHostHealthResource } from '../host-health-resource';
 import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
@@ -4250,6 +4251,13 @@ export async function startHotSheetWebClient() {
     const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
     return new Api(target?.apiPath ?? '');
   });
+  // The live CPU feed (HS2-CPFBWP) reads through the same server; the Stats glance starts it only while
+  // Stats shows on a visible page.
+  const hostCpu = createHostCpuFeed(() => {
+    const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
+    return new Api(target?.apiPath ?? '', '', { trackBusy: false });
+  });
+  const pageVisible = signal(document.visibilityState !== 'hidden');
   // Render-only clock that ages the Live section's rates and times while live state exists; it never
   // issues a request (HS2-F788GW).
   const liveClock = signal(Date.now());
@@ -5022,6 +5030,8 @@ export async function startHotSheetWebClient() {
     analyticsByProject,
     terminalGroups,
     hostHealth,
+    hostCpu,
+    pageVisible,
     // The Overnight timeline (HS2-9AN4DN) reads the recorded history through the Stats project's server.
     liveHistory: (sinceMs) => {
       const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
@@ -6729,6 +6739,7 @@ export async function startHotSheetWebClient() {
     flushCommandAutosaves();
   });
   document.addEventListener('visibilitychange', () => {
+    pageVisible.value = document.visibilityState !== 'hidden';
     if (document.visibilityState === 'hidden') flushOnHide();
   });
   async function openStartupTicketDeepLink(link: TicketDeepLink) {
@@ -6819,6 +6830,7 @@ export async function startHotSheetWebClient() {
       workerDetailRefresh?.dispose();
       disposeProjectChangeStreams();
       statsGlance.dispose();
+      hostCpu.stop();
       hostHealth.dispose();
       disposeGridSidebarPages();
       terminalOperationsSurface.dispose();

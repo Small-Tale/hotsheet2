@@ -759,6 +759,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "cpu-core-meter",
+      "name": "CpuCoreMeter",
+      "kind": "component",
+      "purpose": "Per-core CPU busy meter: one LED column per logical core, lit in fifths with a warning-toned peak, values in the title (HS2-CPFBWP).",
+      "useWhen": [
+        "A glance surface shows how busy each CPU core is right now."
+      ],
+      "avoidWhen": [
+        "One value against a ceiling; use Kerf Gauge. A trend over time; use GlanceSparkline."
+      ],
+      "publicClasses": [
+        "cpu-core-meter"
+      ],
+      "publicTokens": [],
+      "source": "src/components/cpu-core-meter.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "none"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "development-strategy-settings",
       "name": "DevelopmentStrategySettings",
       "kind": "component",
@@ -898,7 +921,7 @@
       "id": "glance-sparkline",
       "name": "GlanceSparkline",
       "kind": "component",
-      "purpose": "Small trend line scaled to its own maximum for glance surfaces, with its values in the title (HS2-ERTNJ7).",
+      "purpose": "Small trend line scaled to its own maximum or a fixed scale for glance surfaces, with its values in the title (HS2-ERTNJ7, HS2-RBFR94).",
       "useWhen": [
         "A glance surface shows a short recent trend beside a raw number."
       ],
