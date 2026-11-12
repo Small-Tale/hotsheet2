@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from '@playwright/test';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
@@ -395,72 +395,54 @@ it.concurrent(
   60_000,
 );
 
-it('does not reload when a later route first imports another dependency', async () => {
-  const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
-  const port = await availablePort();
-  const child = spawn(
-    process.execPath,
-    [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
-    {
-      env: {
-        ...process.env,
-        ...fixtureBinaries,
-        HOTSHEET_HOME: fixtureHome,
-        HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
-        HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
-        HOTSHEET_STABLE_DEV_OWNED_STDIN: '1',
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  );
-  const output = captureChildOutput(child);
-  const browser = await chromium.launch();
-  try {
-    await waitForSource(`http://127.0.0.1:${port}/`, { child, output });
-    const page = await browser.newPage();
-    await page.addInitScript(() => {
-      const key = 'hotsheet-stable-document-loads';
-      sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
-    });
-    const requests = [],
-      pageErrors = [];
-    page.on('request', (request) => requests.push(new URL(request.url()).pathname));
-    page.on('pageerror', (error) => pageErrors.push(error.message));
-    await page.goto(`http://127.0.0.1:${port}/`);
-    await page.waitForLoadState('networkidle');
-    expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
-    // Dependencies are pre-bundled at startup (HS2-N9RD7X): no raw package JavaScript is fetched
-    // module-by-module (only package stylesheets, which Vite serves directly).
-    const rawPackageScripts = requests.filter(
-      (path) =>
-        path.includes('/node_modules/') && !path.includes('/.vite') && !path.includes('/deps/') && !/\.css$/.test(path),
-    );
-    console.log(`stable-dev first load: ${requests.length} requests, ${rawPackageScripts.length} raw package scripts`);
-    expect(rawPackageScripts).toEqual([]);
-    await page.goto(`http://127.0.0.1:${port}/ux-demo`);
-    await page.waitForLoadState('networkidle');
-    expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('2');
-    // Pre-bundled packages still run as one module graph: the catalog renders and registers its
-    // Web Awesome elements with no page errors.
-    expect(await page.evaluate(() => Boolean(customElements.get('wa-button')))).toBe(true);
-    expect(pageErrors).toEqual([]);
-    expect(output()).not.toContain('new dependencies optimized');
-    expect(output()).not.toContain('optimized dependencies changed. reloading');
-  } finally {
-    await browser.close();
-    await stopChild(child);
-    expect(await readdir(runtimeTemp)).toEqual([]);
-    await rm(runtimeTemp, { recursive: true, force: true });
-  }
-}, 60_000);
+/**
+ * HS2-3NM43R: resolve once the stable dev server reports it is listening on `port`, or reject the
+ * moment it exits. Vite pre-bundles every browser dependency before it listens, which took 20-30 s
+ * on a loaded CI runner when two servers started at once; the readiness line is the real signal, and
+ * the caller's hook timeout bounds the wait instead of a guessed deadline.
+ */
+function waitForListening(child, output, port) {
+  const listening = new RegExp(`Local:\\s+http://127\\.0\\.0\\.1:${port}/`);
+  return new Promise((resolveReady, reject) => {
+    const cleanup = () => {
+      child.stdout.off('data', check);
+      child.stderr.off('data', check);
+      child.off('exit', exited);
+    };
+    function check() {
+      if (!listening.test(output())) return;
+      cleanup();
+      resolveReady();
+    }
+    function exited(code, signal) {
+      cleanup();
+      reject(
+        new Error(`Stable dev exited before listening (code ${String(code)}, signal ${String(signal)}).\n${output()}`),
+      );
+    }
+    child.stdout.on('data', check);
+    child.stderr.on('data', check);
+    child.once('exit', exited);
+    if (child.exitCode !== null || child.signalCode !== null) exited(child.exitCode, child.signalCode);
+    else check();
+  });
+}
 
-// Keep the browser fixture readable while changing only its scheduling (HS2-XSP0GJ).
-it.concurrent(
-  'serves the app without a Vite reconnect client, HMR websocket, or reconnect logging',
-  async () => {
-    const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
+// HS2-3NM43R: these checks need the real app's stable dev server but none of each other's server
+// state (each opens its own page), so they share one. Each cold start pre-bundles every dependency
+// before listening, and two starting at once beside the parallel suite routinely took 26-31 s in CI.
+describe('the real app served by stable dev', () => {
+  let child;
+  let output = () => '';
+  let origin;
+  let runtimeTemp;
+  let browser;
+
+  beforeAll(async () => {
+    runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
     const port = await availablePort();
-    const child = spawn(
+    origin = `http://127.0.0.1:${port}`;
+    child = spawn(
       process.execPath,
       [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
       {
@@ -475,10 +457,66 @@ it.concurrent(
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
-    const output = captureChildOutput(child);
-    const browser = await chromium.launch();
+    output = captureChildOutput(child);
+    browser = await chromium.launch();
+    await waitForListening(child, output, port);
+  }, 120_000);
+
+  afterAll(async () => {
+    await browser?.close();
+    if (child) await stopChild(child);
+    if (!runtimeTemp) return;
+    const remainingSnapshots = await readdir(runtimeTemp);
+    await rm(runtimeTemp, { recursive: true, force: true });
+    expect(remainingSnapshots).toEqual([]);
+  }, 30_000);
+
+  it('does not reload when a later route first imports another dependency', async () => {
+    await waitForSource(`${origin}/`, { child, output });
+    const page = await browser.newPage();
     try {
-      const origin = `http://127.0.0.1:${port}`;
+      await page.addInitScript(() => {
+        const key = 'hotsheet-stable-document-loads';
+        sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
+      });
+      const requests = [],
+        pageErrors = [];
+      page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+      page.on('pageerror', (error) => pageErrors.push(error.message));
+      await page.goto(`${origin}/`);
+      await page.waitForLoadState('networkidle');
+      expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+      // Dependencies are pre-bundled at startup (HS2-N9RD7X): no raw package JavaScript is fetched
+      // module-by-module (only package stylesheets, which Vite serves directly).
+      const rawPackageScripts = requests.filter(
+        (path) =>
+          path.includes('/node_modules/') &&
+          !path.includes('/.vite') &&
+          !path.includes('/deps/') &&
+          !/\.css$/.test(path),
+      );
+      console.log(
+        `stable-dev first load: ${requests.length} requests, ${rawPackageScripts.length} raw package scripts`,
+      );
+      expect(rawPackageScripts).toEqual([]);
+      await page.goto(`${origin}/ux-demo`);
+      await page.waitForLoadState('networkidle');
+      expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('2');
+      // Pre-bundled packages still run as one module graph: the catalog renders and registers its
+      // Web Awesome elements with no page errors.
+      expect(await page.evaluate(() => Boolean(customElements.get('wa-button')))).toBe(true);
+      expect(pageErrors).toEqual([]);
+      expect(output()).not.toContain('new dependencies optimized');
+      expect(output()).not.toContain('optimized dependencies changed. reloading');
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  // Keep the browser fixture readable while changing only its scheduling (HS2-XSP0GJ).
+  it.concurrent(
+    'serves the app without a Vite reconnect client, HMR websocket, or reconnect logging',
+    async () => {
       const rootHtml = await waitForSource(`${origin}/`, { child, output });
       const mainSource = await waitForSource(`${origin}/src/main.tsx`, { child, output });
       const demoHtml = await waitForSource(`${origin}/ux-demo`, { child, output });
@@ -489,111 +527,87 @@ it.concurrent(
       expect(stableClientShim).toContain('/src/stable-vite-client.ts');
 
       const page = await browser.newPage();
-      const requested = [];
-      const sockets = [];
-      const consoleMessages = [];
-      page.on('request', (request) => requested.push(request.url()));
-      page.on('websocket', (socket) => sockets.push(socket.url()));
-      page.on('console', (message) => consoleMessages.push(message.text()));
-      await page.goto(`${origin}/`);
-      await page.locator('#app').waitFor();
-      // HS2-N9X6D5: absence of a late reconnect needs a bounded observation window.
-      const reconnectObservationMs = 500;
-      await page.waitForTimeout(reconnectObservationMs);
-      expect(await page.locator('#app').count()).toBe(1);
-      expect(requested.filter((url) => url.includes('/@vite/client'))).toEqual([`${origin}/@vite/client`]);
-      expect(sockets.filter((url) => url.includes('vite-hmr'))).toEqual([]);
-      expect(
-        consoleMessages.filter(
-          (message) => message.includes('[vite] connecting') || message.includes('[vite] connected'),
-        ),
-      ).toEqual([]);
-      const captureDir = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-capture-'));
-      const capturePath = resolve(captureDir, 'hs2-8jv12r-stable-client-after.png');
-      const screenshotBytes = await page.screenshot({ path: capturePath, fullPage: true });
-      expect(await readFile(capturePath)).toEqual(screenshotBytes);
-    } finally {
-      await browser.close();
-      await stopChild(child);
-      expect(await readdir(runtimeTemp)).toEqual([]);
-      await rm(runtimeTemp, { recursive: true, force: true });
-    }
-  },
-  60_000,
-);
+      try {
+        const requested = [];
+        const sockets = [];
+        const consoleMessages = [];
+        page.on('request', (request) => requested.push(request.url()));
+        page.on('websocket', (socket) => sockets.push(socket.url()));
+        page.on('console', (message) => consoleMessages.push(message.text()));
+        await page.goto(`${origin}/`);
+        await page.locator('#app').waitFor();
+        // HS2-N9X6D5: absence of a late reconnect needs a bounded observation window.
+        const reconnectObservationMs = 500;
+        await page.waitForTimeout(reconnectObservationMs);
+        expect(await page.locator('#app').count()).toBe(1);
+        expect(requested.filter((url) => url.includes('/@vite/client'))).toEqual([`${origin}/@vite/client`]);
+        expect(sockets.filter((url) => url.includes('vite-hmr'))).toEqual([]);
+        expect(
+          consoleMessages.filter(
+            (message) => message.includes('[vite] connecting') || message.includes('[vite] connected'),
+          ),
+        ).toEqual([]);
+        const captureDir = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-capture-'));
+        const capturePath = resolve(captureDir, 'hs2-8jv12r-stable-client-after.png');
+        const screenshotBytes = await page.screenshot({ path: capturePath, fullPage: true });
+        expect(await readFile(capturePath)).toEqual(screenshotBytes);
+      } finally {
+        await page.close();
+      }
+    },
+    60_000,
+  );
 
-// Keep the browser fixture readable while changing only its scheduling (HS2-XSP0GJ).
-it.concurrent(
-  'does not reload when the terminal runtime first lazy-loads its xterm dependencies',
-  async () => {
-    // HS2-8JV12R ("client randomly restarts") investigation: a common cause of a dev-server full reload is
-    // Vite discovering a new dependency at runtime and re-optimizing when a route first lazy-loads it. The
-    // terminal viewport dynamically imports terminal-viewport-runtime, which pulls in @xterm/*. This pins
-    // that stable-dev does NOT reload when that lazy import first happens, ruling the class out as the cause.
-    const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
-    const port = await availablePort();
-    const child = spawn(
-      process.execPath,
-      [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
-      {
-        env: {
-          ...process.env,
-          ...fixtureBinaries,
-          HOTSHEET_HOME: fixtureHome,
-          HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
-          HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
-          HOTSHEET_STABLE_DEV_OWNED_STDIN: '1',
-        },
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    );
-    const output = captureChildOutput(child);
-    const browser = await chromium.launch();
-    try {
-      await waitForSource(`http://127.0.0.1:${port}/`, { child, output });
+  // Keep the browser fixture readable while changing only its scheduling (HS2-XSP0GJ).
+  it.concurrent(
+    'does not reload when the terminal runtime first lazy-loads its xterm dependencies',
+    async () => {
+      // HS2-8JV12R ("client randomly restarts") investigation: a common cause of a dev-server full reload is
+      // Vite discovering a new dependency at runtime and re-optimizing when a route first lazy-loads it. The
+      // terminal viewport dynamically imports terminal-viewport-runtime, which pulls in @xterm/*. This pins
+      // that stable-dev does NOT reload when that lazy import first happens, ruling the class out as the cause.
+      await waitForSource(`${origin}/`, { child, output });
       const page = await browser.newPage();
-      await page.addInitScript(() => {
-        const key = 'hotsheet-stable-document-loads';
-        sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
-      });
-      await page.goto(`http://127.0.0.1:${port}/`);
-      expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
-      // HS2-SJDJ7E: under full gate load the browser's first import of a cold graph once failed with
-      // "Failed to fetch dynamically imported module". Wait on the graph's readiness, not a timer.
-      const warmed = await waitForModuleGraph(`http://127.0.0.1:${port}`, '/src/terminal-viewport-runtime.ts', {
-        child,
-        output,
-      });
-      expect(warmed).toBeGreaterThan(1);
-      const failures = [];
-      page.on('requestfailed', (request) => failures.push(`failed ${request.url()}: ${request.failure()?.errorText}`));
-      page.on('response', (response) => {
-        if (response.status() >= 400) failures.push(`HTTP ${response.status()} ${response.url()}`);
-      });
-      // Trigger the same dynamic import the terminal viewport uses, pulling in the xterm dependencies.
-      // Passed as a string so Vitest's SSR transform can't rewrite the browser-side import() call.
-      const runtimeExports = await page
-        .evaluate("import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())")
-        .catch((error) => {
-          // Name the request that failed, which the browser's TypeError does not.
-          throw new Error(
-            `${error.message}\nRequests: ${failures.join('; ') || 'none failed'}\nStable dev output:\n${output().slice(-4000)}`,
-          );
+      try {
+        await page.addInitScript(() => {
+          const key = 'hotsheet-stable-document-loads';
+          sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
         });
-      expect(runtimeExports).toContain('mountTerminalViewportRuntime');
-      // HS2-N9X6D5: a lazy import can schedule a late reload, so observe its absence.
-      const lateReloadObservationMs = 1_000;
-      await page.waitForTimeout(lateReloadObservationMs);
-      // A re-optimize would have full-reloaded the document, resetting/incrementing this counter.
-      expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
-      expect(output()).not.toContain('new dependencies optimized');
-      expect(output()).not.toContain('optimized dependencies changed. reloading');
-    } finally {
-      await browser.close();
-      await stopChild(child);
-      expect(await readdir(runtimeTemp)).toEqual([]);
-      await rm(runtimeTemp, { recursive: true, force: true });
-    }
-  },
-  60_000,
-);
+        await page.goto(`${origin}/`);
+        expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+        // HS2-SJDJ7E: under full gate load the browser's first import of a cold graph once failed with
+        // "Failed to fetch dynamically imported module". Wait on the graph's readiness, not a timer.
+        const warmed = await waitForModuleGraph(origin, '/src/terminal-viewport-runtime.ts', { child, output });
+        expect(warmed).toBeGreaterThan(1);
+        const failures = [];
+        page.on('requestfailed', (request) =>
+          failures.push(`failed ${request.url()}: ${request.failure()?.errorText}`),
+        );
+        page.on('response', (response) => {
+          if (response.status() >= 400) failures.push(`HTTP ${response.status()} ${response.url()}`);
+        });
+        // Trigger the same dynamic import the terminal viewport uses, pulling in the xterm dependencies.
+        // Passed as a string so Vitest's SSR transform can't rewrite the browser-side import() call.
+        const runtimeExports = await page
+          .evaluate("import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())")
+          .catch((error) => {
+            // Name the request that failed, which the browser's TypeError does not.
+            throw new Error(
+              `${error.message}\nRequests: ${failures.join('; ') || 'none failed'}\nStable dev output:\n${output().slice(-4000)}`,
+            );
+          });
+        expect(runtimeExports).toContain('mountTerminalViewportRuntime');
+        // HS2-N9X6D5: a lazy import can schedule a late reload, so observe its absence.
+        const lateReloadObservationMs = 1_000;
+        await page.waitForTimeout(lateReloadObservationMs);
+        // A re-optimize would have full-reloaded the document, resetting/incrementing this counter.
+        expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+        expect(output()).not.toContain('new dependencies optimized');
+        expect(output()).not.toContain('optimized dependencies changed. reloading');
+      } finally {
+        await page.close();
+      }
+    },
+    60_000,
+  );
+});
