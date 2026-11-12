@@ -186,25 +186,33 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     await desktop.page.keyboard.type('desk\n');
     await expect(drawer.locator('.xterm-rows')).toContainText(/ECHO:\S*desk/);
 
-    // Opening and typing in the terminal on the phone is that device's interaction: it takes the size.
+    // Opening and focusing the terminal on the phone is that device's interaction: it takes the size.
     let from = Date.now();
     const phone = await openViewer(browser, baseURL!, server, { width: 390, height: 844, mobile: true });
     viewers.push(phone);
+    const devices = { desktop, phone };
     const phoneTerminal = await openPhoneTerminal(phone.page);
+    // The magnified terminal may already hold focus; blur it so focusing it is a real focusin.
+    await phone.page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
     await phoneTerminal.locator('.xterm-helper-textarea').focus();
-    await phone.page.keyboard.type('phone\n');
-    await expect(phoneTerminal.locator('.xterm-rows')).toContainText(/ECHO:\S*phone/);
+    await expect(phoneTerminal).toHaveAttribute('data-driving', 'true');
     const phoneGrid = (await phoneTerminal.getAttribute('data-grid-size'))!;
     expect(phoneGrid).not.toBe(desktopGrid);
     await expect(drawer).toHaveAttribute('data-pty-size', phoneGrid);
-    await expect(phoneTerminal).toHaveAttribute('data-driving', 'true');
     await expect(drawer).toHaveAttribute('data-driving', 'false');
     await expect(phoneTerminal).toHaveAttribute('data-answers-queries', 'true');
     await expect(drawer).toHaveAttribute('data-answers-queries', 'false');
     // The phone's takeover resized the PTY once, so the program asked once: only the phone answered,
     // even though the desktop drawer, the desktop grid tile, and the phone grid tile all saw the query.
-    const devices = { desktop, phone };
+    // Typing waits for that answer, as on the desktop: under load a reply that lands inside the typed
+    // word split its echo (HS2-93R05G).
     await expect.poll(() => repliesSince(devices, from)).toEqual({ desktop: 0, phone: 1 });
+    await phone.page.keyboard.type('phone\n');
+    await expect(phoneTerminal.locator('.xterm-rows')).toContainText(/ECHO:\S*phone/);
+    await expect(phoneTerminal).toHaveAttribute('data-driving', 'true');
+    expect(repliesSince(devices, from)).toEqual({ desktop: 0, phone: 1 });
 
     // Both viewers sit idle across two heartbeats. Before the fix the size flipped about every 0.5 s.
     from = Date.now();
