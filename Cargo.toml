@@ -15,6 +15,7 @@ members = [
     "crates/hotsheet-sync",
     "crates/hotsheet-process-journal",
     "crates/hotsheet-notify",
+    "crates/hotsheet-resource-claims",
 ]
 
 [workspace.package]
@@ -91,3 +92,4 @@ hotsheet-mcp = { path = "crates/hotsheet-mcp" }
 hotsheet-sync = { path = "crates/hotsheet-sync" }
 hotsheet-process-journal = { path = "crates/hotsheet-process-journal" }
 hotsheet-notify = { path = "crates/hotsheet-notify" }
+hotsheet-resource-claims = { path = "crates/hotsheet-resource-claims" }

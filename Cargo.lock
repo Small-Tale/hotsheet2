@@ -1255,6 +1255,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotsheet-resource-claims"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "hotsheet-ticketing",
+ "libc",
+ "ring",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "time",
+ "ulid",
+]
+
+[[package]]
 name = "hotsheet-server"
 version = "0.0.0"
 dependencies = [

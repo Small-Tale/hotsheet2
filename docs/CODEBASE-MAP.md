@@ -181,6 +181,7 @@ The numbered requirements docs (source of truth for behavior; status in
 - [32-notifier-plugins.md](32-notifier-plugins.md) — Notifier plugins: capabilities, rendering, built-ins, external protocol, rules, router, CLI/REST (HS2-R5HTZN)
 - [33-jobs.md](33-jobs.md) — Jobs: design-only local records for long-running work, state machine, producers, storage, and client surfaces (HS2-M78N64)
 - [34-glance-surfaces.md](34-glance-surfaces.md) — Glance surfaces: standby, sidebar live state, Stats Right now, away digest (design only, HS2-3AA1N7)
+- [36-resource-claims.md](36-resource-claims.md) — Resource claims: leases with fencing and renewal tokens, backend contract, local machine backend (HS2-H3WPPY)
 
 Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
@@ -812,6 +813,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/delivery_log.rs   # Process-shared flush/journal locks, private exact-held-ID write-ahead reservations, interrupted-send recovery and reservation-aware bounded JSONL compaction (HS2-MFD44D); delivery_log_tests.rs launches independent dispatch processes with synthetic transports
     hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
       src/lib.rs             #   use instead of lock().unwrap(), silent `if let Ok(..) = lock()` skips, or poison→500 mapping
+    hotsheet-resource-claims/ # Resource claims (HS2-H3WPPY, docs/36): ClaimBackend contract and ClaimError codes, names and grants, prefixed metadata codecs and KeyProvider, renewal tokens stored as a keyed digest, LocalBackend under <HOTSHEET_HOME>/resource-claims (locked atomic namespace state, persistent fencing counters, loopback-datagram waiter wake-ups, injectable Clock)
     hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
       src/limits.rs          #   Physical memory (sysconf) and replay bounds behind the terminal limits (HS2-Y5DYC0)
