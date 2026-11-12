@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(253); // HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices
+  expect(Object.keys(openapi.paths)).toHaveLength(254); // HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(253); // HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices
+  expect(Object.keys(openapi.paths)).toHaveLength(254); // HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -196,6 +196,22 @@ test('client contracts accept real ticket and replay responses', async () => {
       const documentedPath = path.replace(server.checkoutId, '{reference}');
       validateResponse(documentedPath, await server.request(path));
     }
+    // HS2-M8HHEA: a CI report through the real server is stored and shows in the live state.
+    const ciReport = {
+      status: 'success',
+      branch: 'main',
+      sha: 'abcdef1',
+      workflow: 'CI',
+      started_at_ms: 1_000,
+      finished_at_ms: 2_000,
+    };
+    const ciRequest = ajv.compile(schema('CiReport'));
+    expect(ciRequest(ciReport), JSON.stringify(ciRequest.errors)).toBe(true);
+    const ciResponse = ajv.compile(schema('CiReportResponse'));
+    const reported = await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', ciReport);
+    expect(ciResponse(reported), JSON.stringify(ciResponse.errors)).toBe(true);
+    expect(reported).toMatchObject({ applied: true, ci: { status: 'success', checkout: server.checkoutId } });
+    validateResponse('/live-state', await server.request('/live-state'));
     const rules = await fetch(`${server.url}/permissions/rules`, {
       headers: { 'X-Hotsheet-Secret': server.secret },
     });

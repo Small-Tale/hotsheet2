@@ -1486,6 +1486,27 @@ export interface LiveCause {
   /** Which prompt an `awaiting_input` cause waits at; `null` for `usage_limit`. */
   prompt: 'permission' | 'question' | null;
 }
+/**
+ * A CI run's state (HS2-M8HHEA, docs/32-notifier-plugins.md §32.8.5). `unavailable` means no
+ * linked checkout has reported one.
+ */
+export type LiveCiStatus = 'unavailable' | 'queued' | 'in_progress' | 'success' | 'failure' | 'cancelled';
+/**
+ * The newest CI run a linked checkout reported through `POST /checkouts/{reference}/ci-status`
+ * or `hotsheet-cli ci report`; every member but `status` is `null` while `unavailable`.
+ */
+export interface LiveCi {
+  status: LiveCiStatus;
+  /** The checkout id that reported the run. */
+  checkout: string | null;
+  branch: string | null;
+  sha: string | null;
+  run_url: string | null;
+  workflow: string | null;
+  started_at_ms: number | null;
+  finished_at_ms: number | null;
+  reported_at_ms: number | null;
+}
 /** A hosted store's server-pushed live snapshot; clients derive ages and decaying rates locally. */
 export interface LiveStoreState {
   store: string;
@@ -1519,6 +1540,8 @@ export interface LiveStoreState {
     };
     tickets_updated: { window_minutes: number; at_ms: number[]; peak_per_hour: number };
   };
+  /** Main CI status (HS2-M8HHEA); absent from an older server. */
+  ci?: LiveCi;
 }
 export interface LiveStateList {
   epoch_ms: number;

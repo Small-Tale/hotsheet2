@@ -27,6 +27,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         },
         Cmd::TicketFlow => print_local_server_json(path, "GET", "analytics/tickets"),
         Cmd::LiveState { all } => cmd_live_state(path, all),
+        Cmd::Ci { cmd } => cmd_ci(path, cmd),
         Cmd::LiveHistory { hours } => cmd_live_history(path, hours),
         Cmd::Activity {
             ticket,
@@ -330,6 +331,40 @@ pub(crate) enum CommandsCmd {
     },
     /// Cancel an active run in this checkout.
     Cancel { checkout: String, id: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum CiCmd {
+    /// Report the latest run of a checkout's CI (normally its `main` branch) to the local
+    /// server. A run that started before the stored one, or an in-progress report after the
+    /// same run finished, is stale and leaves the stored run unchanged. Prints the server's
+    /// answer: the checkout id, whether it applied, the stored run, and the hosted stores that
+    /// show it.
+    Report {
+        #[arg(long, value_parser = ["queued", "in_progress", "success", "failure", "cancelled"])]
+        status: String,
+        /// A registered checkout id, alias, or root. Defaults to the checkout of the current
+        /// directory that links the selected store.
+        #[arg(long)]
+        checkout: Option<String>,
+        #[arg(long)]
+        branch: Option<String>,
+        /// The commit the run tested (7 to 64 hexadecimal characters).
+        #[arg(long)]
+        sha: Option<String>,
+        /// An http or https link to the run.
+        #[arg(long)]
+        run_url: Option<String>,
+        /// The workflow or pipeline name.
+        #[arg(long)]
+        workflow: Option<String>,
+        /// When the run started, in Unix milliseconds.
+        #[arg(long)]
+        started_at_ms: Option<i64>,
+        /// When the run finished, in Unix milliseconds (finished runs only).
+        #[arg(long)]
+        finished_at_ms: Option<i64>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -742,6 +777,55 @@ fn cmd_live_state(store: &Path, all: bool) -> Result<()> {
             store.display()
         ),
     }
+}
+
+/// Report a CI run (HS2-M8HHEA) through the same `POST /checkouts/{reference}/ci-status`
+/// route any other reporter uses; the server validates it and pushes it in the live state.
+fn cmd_ci(store: &Path, cmd: CiCmd) -> Result<()> {
+    let CiCmd::Report {
+        status,
+        checkout,
+        branch,
+        sha,
+        run_url,
+        workflow,
+        started_at_ms,
+        finished_at_ms,
+    } = cmd;
+    let checkout = match checkout {
+        Some(checkout) => checkout,
+        None => {
+            let cwd = std::env::current_dir()?;
+            let root = super::groups::checkout_root_for(store, &cwd).with_context(|| {
+                format!(
+                    "{} is not inside a checkout of {}; pass --checkout <id|alias|root>",
+                    cwd.display(),
+                    store.display()
+                )
+            })?;
+            root.canonicalize()
+                .unwrap_or(root)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
+    let body = serde_json::json!({
+        "status": status,
+        "branch": branch,
+        "sha": sha,
+        "run_url": run_url,
+        "workflow": workflow,
+        "started_at_ms": started_at_ms,
+        "finished_at_ms": finished_at_ms,
+    });
+    let answer = local_server_json_with_body(
+        store,
+        "POST",
+        &format!("checkouts/{}/ci-status", urlencoding_component(&checkout)),
+        Some(&body),
+    )?;
+    println!("{}", serde_json::to_string_pretty(&answer)?);
+    Ok(())
 }
 
 /// Print the selected store's overnight timeline (HS2-9AN4DN) straight from its files, the same

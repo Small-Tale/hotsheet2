@@ -16,7 +16,7 @@ use dispatch::providers::{
     ProviderConnectArgs,
 };
 use dispatch::remotes::RemoteArgs;
-use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd, TerminalCmd};
+use dispatch::server::{CertCmd, CiCmd, CommandsCmd, LifecycleCmd, NotificationsCmd, TerminalCmd};
 use dispatch::setup::{AiSettingsCmd, HostDisksCmd, PluginCmd, SettingsCmd, TriggerArgs, WorkArgs};
 use dispatch::store::CheckoutCmd;
 use dispatch::tickets::{AttachArgs, LsFilters, NewArgs, PeopleCmd, TicketEditArgs};
@@ -502,6 +502,12 @@ enum Cmd {
     LiveState {
         #[arg(long)]
         all: bool,
+    },
+    /// Report a CI run to the local server, which pushes it as `main` CI in the live state of
+    /// the checkout's linked stores (HS2-M8HHEA). Meant for the tool already watching CI.
+    Ci {
+        #[command(subcommand)]
+        cmd: CiCmd,
     },
     /// Print the selected store's recorded live state transitions as segments, plus the
     /// tickets completed in the window (HS2-9AN4DN), read from the store itself: no server is

@@ -186,8 +186,8 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
   change stream. Ages and decaying rates re-render from a local 30-second render clock that runs only while
   live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
-  Halted) is a glyph whose title gives the state and the last-progress age. The `main` CI chip and row wait
-  for a CI source (HS2-M8HHEA).
+  Halted) is a glyph whose title gives the state and the last-progress age. The live state now carries
+  `main` CI (HS2-M8HHEA, [32](32-notifier-plugins.md) §32.8.5); rendering the chip and row is HS2-57BYEA.
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
   The Workers button is a choice of the toolbar `SegmentedControl` view switcher, which Kerf prescribes
@@ -253,8 +253,9 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
 - **Shipped (HS2-ERTNJ7).** `StatsRightNow` and `StatsProjectsTable` render from the pushed live
   state; a 30-second local display clock ages values only while Stats is shown and never requests.
   "Data as of" is when the client last applied a snapshot. Completed counts today's UTC calendar day
-  from the analytics the page already loads, labelled with that midnight's local time. One part waits
-  on the live state: the `main` CI tile is omitted until HS2-M8HHEA adds CI. The Tokens 12h column draws
+  from the analytics the page already loads, labelled with that midnight's local time. The `main` CI tile is
+  still omitted: the live state carries `ci` since HS2-M8HHEA ([32](32-notifier-plugins.md) §32.8.5), and
+  rendering it is HS2-E16ZEK. The Tokens 12h column draws
   a `GlanceSparkline` of the snapshot's 12 hourly token buckets (HS2-TRZGT3), aligned to the display
   clock, with the current tokens/min beside it.
 - **Overnight timeline (HS2-9AN4DN):** one swimlane per project over a selectable window (default: since
@@ -267,7 +268,8 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
     appends one line `{"v":1,"at_ms":…,"state":…}` to the store's machine-local, gitignored
     `metrics/local/live-history.jsonl` (`hotsheet_ticketing::live_history`).
     - The state is the live word, or `waiting_on_ci` while every live claim of an active store is in
-      `final_testing`. That is the stand-in for Waiting on CI until a CI source exists (HS2-M8HHEA).
+      `final_testing`. That is the stand-in for Waiting on CI. Whether it should use the reported CI status
+      (HS2-M8HHEA) is HS2-M8V47M.
     - An unchanged state writes nothing. A time before the last record is clamped to it.
     - Past 4096 records, the next append rewrites the file. It drops records older than 7 days but
       keeps the newest older one, so a window's opening state stays known.

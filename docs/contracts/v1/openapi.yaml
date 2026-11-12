@@ -12978,6 +12978,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/ci-status:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+    post:
+      operationId: reportCheckoutCiStatus
+      description: Record the latest CI run a local tool observed for a registered checkout (HS2-M8HHEA,
+        docs/32-notifier-plugins.md §32.8.5). The server keeps one run per checkout, persists it machine-locally, and
+        pushes the newest run among a store's linked checkouts as `ci` in that store's live state. A run that started
+        before the stored one, or a non-terminal report of the same run after a terminal one, is stale and leaves the
+        stored run unchanged. The headless form is `hotsheet-cli ci report`. The server never polls a CI provider.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CiReport'
+      responses:
+        '200':
+          description: The run now stored for the checkout, whether this report applied, and the stores showing it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CiReportResponse'
+        '400':
+          description: The report is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: No registered checkout matches the reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The checkout reference is ambiguous.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/worker-plan:
     parameters:
       - name: reference
@@ -19100,6 +19141,141 @@ components:
         - stalled
         - halted
         - waiting_on_you
+    LiveCiStatus:
+      type: string
+      description:
+        A CI run's state (HS2-M8HHEA). `unavailable` appears only in the live state, when no linked checkout has
+        reported a run.
+      enum:
+        - unavailable
+        - queued
+        - in_progress
+        - success
+        - failure
+        - cancelled
+    LiveCi:
+      type: object
+      description: The newest CI run reported by a checkout linked to the store (HS2-M8HHEA, docs/32-notifier-plugins.md
+        §32.8.5). Every member but `status` is null while `status` is `unavailable`. Times are Unix milliseconds.
+      required:
+        - status
+        - checkout
+        - branch
+        - sha
+        - run_url
+        - workflow
+        - started_at_ms
+        - finished_at_ms
+        - reported_at_ms
+      properties:
+        status:
+          $ref: '#/components/schemas/LiveCiStatus'
+        checkout:
+          description: The checkout id that reported the run.
+          type:
+            - string
+            - 'null'
+        branch:
+          type:
+            - string
+            - 'null'
+        sha:
+          type:
+            - string
+            - 'null'
+        run_url:
+          type:
+            - string
+            - 'null'
+        workflow:
+          type:
+            - string
+            - 'null'
+        started_at_ms:
+          type:
+            - integer
+            - 'null'
+        finished_at_ms:
+          type:
+            - integer
+            - 'null'
+        reported_at_ms:
+          description: When the server accepted the report.
+          type:
+            - integer
+            - 'null'
+      additionalProperties: false
+    CiReport:
+      type: object
+      description: One CI run observed by a local tool (HS2-M8HHEA). Times are Unix milliseconds.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - queued
+            - in_progress
+            - success
+            - failure
+            - cancelled
+        branch:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 255
+        sha:
+          type:
+            - string
+            - 'null'
+          pattern: '^[0-9A-Fa-f]{7,64}$'
+        run_url:
+          description: An http or https link to the run.
+          type:
+            - string
+            - 'null'
+          maxLength: 2048
+        workflow:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 255
+        started_at_ms:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        finished_at_ms:
+          description: Only for success, failure, or cancelled; not before `started_at_ms`.
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+      additionalProperties: false
+    CiReportResponse:
+      type: object
+      required:
+        - checkout
+        - applied
+        - ci
+        - stores
+      properties:
+        checkout:
+          description: The resolved checkout id.
+          type: string
+        applied:
+          description: False when the report was stale and the stored run is unchanged.
+          type: boolean
+        ci:
+          $ref: '#/components/schemas/LiveCi'
+        stores:
+          description: Hosted stores linked to the checkout, whose live state shows the run.
+          type: array
+          items:
+            type: string
+      additionalProperties: false
     LiveCause:
       type: object
       description: A stuck cause of a worker holding a live claim in the store (HS2-EGKKA0).
@@ -19160,6 +19336,7 @@ components:
         - workers
         - waiting
         - rates
+        - ci
       properties:
         store:
           type: string
@@ -19382,6 +19559,9 @@ components:
                 peak_per_hour:
                   type: integer
                   minimum: 0
+        ci:
+          description: Main CI status (HS2-M8HHEA, §32.8.5), explicitly `unavailable` until a linked checkout reports.
+          $ref: '#/components/schemas/LiveCi'
     TicketFlowSummary:
       type: object
       required:

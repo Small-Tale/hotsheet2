@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChangeEvent, LiveCause, LiveStoreState } from './api';
+import type { ChangeEvent, LiveCause, LiveCi, LiveStoreState } from './api';
 import {
   aggregateLiveStates,
   awaitingInputCauses,
@@ -82,6 +82,39 @@ describe('live state helpers (HS2-JTTQMY)', () => {
     const missing: Partial<LiveStoreState> = liveFixture();
     delete missing.rates;
     expect(() => parseLiveStoreState(missing)).toThrow('live state');
+  });
+
+  it('HS2-M8HHEA the parser accepts reported and unavailable CI, and an older server without it', () => {
+    const unavailable: LiveCi = {
+      status: 'unavailable',
+      checkout: null,
+      branch: null,
+      sha: null,
+      run_url: null,
+      workflow: null,
+      started_at_ms: null,
+      finished_at_ms: null,
+      reported_at_ms: null,
+    };
+    const reported: LiveCi = {
+      status: 'success',
+      checkout: 'demo-ab12',
+      branch: 'main',
+      sha: 'abcdef1',
+      run_url: 'https://ci.example/runs/7',
+      workflow: 'CI',
+      started_at_ms: NOW - 9 * MINUTE,
+      finished_at_ms: NOW - MINUTE,
+      reported_at_ms: NOW,
+    };
+    expect(parseLiveStoreState(liveFixture({ ci: unavailable })).ci).toEqual(unavailable);
+    expect(parseLiveStoreState(liveFixture({ ci: reported })).ci).toEqual(reported);
+    expect(parseLiveStoreState(liveFixture()).ci).toBeUndefined();
+    expect(() => parseLiveStoreState(liveFixture({ ci: { ...reported, status: 'passed' as never } }))).toThrow(
+      'live state',
+    );
+    expect(() => parseLiveStoreState(liveFixture({ ci: { ...reported, sha: 7 as never } }))).toThrow('live state');
+    expect(() => parseLiveStoreState({ ...liveFixture(), ci: null })).toThrow('live state');
   });
 
   it('rates decay with the local clock from the pushed timestamps', () => {

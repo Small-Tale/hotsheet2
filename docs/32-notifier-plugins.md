@@ -461,7 +461,8 @@ notification always agree. The tracker therefore runs whether or not a rule name
   HS2-7CS5A4 holds per-day maxima and is ignored. The first read backfills the token peak
   from today's and yesterday's usage JSONL.
 
-Main CI status is not part of the snapshot yet (HS2-M8HHEA).
+- `ci`: main CI status (HS2-M8HHEA, §32.8.5), the newest run a linked checkout reported, or
+  `status: unavailable` with every other member `null` when none has.
 
 **Delivery.** Each change to a snapshot is pushed as one `live_state` change event whose
 `live` member is the whole snapshot. It reaches every client on the existing WebSocket or
@@ -560,6 +561,37 @@ event, with one terminal list per event. The cause ends when the question is ans
 withdrawn, the permission is resolved or its hook disconnects, or the session ends. A prompt
 belongs to its terminal's worker, so it shows in every store where that worker holds a live
 claim, including a claim made after the prompt opened.
+
+### 32.8.5 Main CI status (HS2-M8HHEA)
+
+The server has no CI source of its own and never polls one. The tool that already watches CI
+reports each run it learns about: `scripts/ci-gate.mjs status`, an integrator waiting in
+`final_testing`, or a user's hook for any CI that can run a command. No inbound exposure or
+public URL is needed, and the source is independent of the ticket provider.
+
+- **Report.** `POST /checkouts/{reference}/ci-status` (authenticated like every local route)
+  takes `status` (`queued`, `in_progress`, `success`, `failure`, or `cancelled`) and optional
+  `branch`, `sha` (7 to 64 hex characters), `run_url` (http or https), `workflow`,
+  `started_at_ms`, and `finished_at_ms` (finished runs only, not before the start). The server
+  stamps `reported_at_ms`. The headless form is `hotsheet-cli ci report`, with one flag per
+  member (`--status`, `--branch`, `--sha`, `--run-url`, `--workflow`, `--started-at-ms`,
+  `--finished-at-ms`) and `--checkout <ref>`; without `--checkout` it reports for the checkout
+  of the current directory that links the selected store.
+- **Order.** One run is kept per checkout id. A report whose run started before the stored run
+  is stale, and so is a non-terminal report of the same run (same `sha` and `workflow`) after a
+  terminal one; a stale report leaves the stored run unchanged and answers `applied: false`.
+  Without both start times the later report wins. The answer also names the stored run and the
+  hosted stores linked to the checkout.
+- **Live state.** Each store's `ci` is the newest run among its linked checkouts, by start time
+  and then report time, with the reporting `checkout`. An applied report rebuilds every linked
+  hosted store's snapshot, so it reaches clients as the usual `live_state` event; nothing is
+  pushed for a stale one.
+- **Persistence.** Runs are kept in the machine-local `<machine home>/ci-status.json`
+  (`version` 1) and read again after a restart. An unreadable file or one of another version
+  is ignored, and the stores start as `unavailable`.
+- **Limit.** Status is only as fresh as the last report. Wiring `ci-gate.mjs` and the
+  integrator to report is HS2-W4BC5Q; the Stats tile and the project sidebar chip and row are
+  HS2-E16ZEK and HS2-57BYEA.
 
 ## 32.9 Headless CLI and REST API
 
@@ -706,3 +738,4 @@ re-reads from the server when it opens and after each change, and nothing polls.
 | `digest` producer                                                          | Planned | HS2-D33WPH |
 | `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |
 | Idle-while-claimed and halted-session signals; configurable windows        | Shipped | HS2-P57XHV |
+| Main CI status in the live state, reported locally                         | Shipped | HS2-M8HHEA |

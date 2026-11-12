@@ -2428,6 +2428,161 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
     server.join().unwrap();
 }
 
+/// HS2-M8HHEA: `ci report` posts the run to the local server's
+/// `POST /checkouts/{reference}/ci-status`, naming an explicit checkout or the checkout of the
+/// current directory, and prints the server's answer; outside a checkout it asks for one.
+#[test]
+fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
+    std::fs::write(
+        project.join(hotsheet_cli::STORE_LINK),
+        store.canonicalize().unwrap().to_string_lossy().as_bytes(),
+    )
+    .unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "ci-test-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let encoded: String = project
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect();
+    let expected = [
+        "POST /checkouts/demo-1234/ci-status HTTP/1.1".to_string(),
+        format!("POST /checkouts/{encoded}/ci-status HTTP/1.1"),
+    ];
+    let server = std::thread::spawn(move || {
+        let mut bodies = Vec::new();
+        for request_line in expected {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), request_line);
+            let mut length = 0;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            bodies.push(serde_json::from_slice::<serde_json::Value>(&body).unwrap());
+            let answer = serde_json::json!({"checkout": "demo-1234", "applied": true,
+                "ci": {"status": "success"}, "stores": ["mine"]})
+            .to_string();
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",
+                answer.len()
+            )
+            .unwrap();
+        }
+        bodies
+    });
+    let cli = |cwd: &std::path::Path, args: &[&str]| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .current_dir(cwd)
+            .args(["-C", store.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let explicit = cli(
+        &elsewhere,
+        &[
+            "ci",
+            "report",
+            "--checkout",
+            "demo-1234",
+            "--status",
+            "success",
+            "--branch",
+            "main",
+            "--sha",
+            "abcdef1",
+            "--run-url",
+            "https://ci.example/runs/7",
+            "--workflow",
+            "CI",
+            "--started-at-ms",
+            "1000",
+            "--finished-at-ms",
+            "2000",
+        ],
+    );
+    assert!(
+        explicit.status.success(),
+        "{}",
+        String::from_utf8_lossy(&explicit.stderr)
+    );
+    let answer: serde_json::Value = serde_json::from_slice(&explicit.stdout).unwrap();
+    assert_eq!(answer["applied"], true);
+    assert_eq!(answer["stores"], serde_json::json!(["mine"]));
+
+    let from_cwd = cli(&project, &["ci", "report", "--status", "in_progress"]);
+    assert!(
+        from_cwd.status.success(),
+        "{}",
+        String::from_utf8_lossy(&from_cwd.stderr)
+    );
+
+    let outside = cli(&elsewhere, &["ci", "report", "--status", "queued"]);
+    assert!(!outside.status.success());
+    assert!(String::from_utf8_lossy(&outside.stderr).contains("pass --checkout"));
+    let invalid = cli(&project, &["ci", "report", "--status", "passed"]);
+    assert!(!invalid.status.success());
+
+    let bodies = server.join().unwrap();
+    assert_eq!(
+        bodies[0],
+        serde_json::json!({"status": "success", "branch": "main", "sha": "abcdef1",
+            "run_url": "https://ci.example/runs/7", "workflow": "CI",
+            "started_at_ms": 1000, "finished_at_ms": 2000})
+    );
+    assert_eq!(bodies[1]["status"], "in_progress");
+    assert_eq!(bodies[1]["sha"], serde_json::Value::Null);
+}
+
 /// HS2-ZWBSH1: a Hot Sheet-launched terminal exports its session identity and the agent
 /// harness exports its own; a permission-hook child must see only what its fixture sets.
 const INHERITED_HOOK_SESSION_ENV: &[&str] = &[

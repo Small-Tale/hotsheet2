@@ -1116,3 +1116,187 @@ async fn hs2_bhppas_expected_workers_come_from_the_coordination_worker_plan() {
     let expired = refresh(&state, &h.store_id, later);
     assert_eq!(expired["workers"]["expected"], 2);
 }
+
+/// HS2-M8HHEA E2E: a local tool reports main CI through the authenticated
+/// `POST /checkouts/{reference}/ci-status`; the newest run among the store's linked
+/// checkouts is pushed as `ci` in a `live_state` event, stale reports leave it unchanged, an
+/// unreported store says `unavailable` explicitly, and a restarted server keeps the run.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
+    let h = harness();
+    let store_root = h._dir.path().join("demo.hs2");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        h._dir.path().join("machine-home/checkouts.json"),
+    );
+    let mut ids = Vec::new();
+    for name in ["main-src", "worktree-src"] {
+        let project = h._dir.path().join(name);
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        ids.push(
+            registry
+                .register(&project, Some(name), None, vec![store_root.clone()])
+                .unwrap()
+                .id,
+        );
+    }
+    let unlinked = h._dir.path().join("other-src");
+    std::fs::create_dir_all(unlinked.join(".git")).unwrap();
+    let other = h._dir.path().join("other.hs2");
+    FsStore::init_git(&other, &StoreMetadata::new("OT")).unwrap();
+    let unlinked_id = registry
+        .register(&unlinked, Some("other"), None, vec![other])
+        .unwrap()
+        .id;
+    let (main_id, worktree_id) = (ids[0].clone(), ids[1].clone());
+    let router = app(h.state.clone());
+    let mut events = h.state.subscribe();
+
+    // Nothing reported yet: CI is explicitly unavailable.
+    let (status, before) = call(
+        &router,
+        "GET",
+        &format!("/stores/{}/live-state", h.store_id),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(before["ci"]["status"], "unavailable");
+    assert_eq!(before["ci"]["checkout"], Value::Null);
+
+    // A run starts on the main checkout.
+    let sha = "0123456789abcdef0123456789abcdef01234567";
+    let (status, started) = call(
+        &router,
+        "POST",
+        &format!("/checkouts/{main_id}/ci-status"),
+        Some(
+            json!({"status": "in_progress", "branch": "main", "sha": sha, "workflow": "CI",
+                    "started_at_ms": 1_000}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["applied"], true);
+    assert_eq!(started["checkout"], main_id.as_str());
+    assert_eq!(started["stores"], json!([h.store_id]));
+    let live = next_live(&mut events, &h.store_id, |live| {
+        live["ci"]["status"] == "in_progress"
+    })
+    .await;
+    assert_eq!(live["ci"]["checkout"], main_id.as_str());
+    assert_eq!(live["ci"]["sha"], sha);
+
+    // It finishes green.
+    let url = "https://github.com/Small-Tale/hotsheet2/actions/runs/42";
+    let (status, done) = call(
+        &router,
+        "POST",
+        &format!("/checkouts/{}/ci-status", "main-src"),
+        Some(
+            json!({"status": "success", "branch": "main", "sha": sha, "workflow": "CI",
+                    "run_url": url, "started_at_ms": 1_000, "finished_at_ms": 2_000}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{done}");
+    let live = next_live(&mut events, &h.store_id, |live| {
+        live["ci"]["status"] == "success"
+    })
+    .await;
+    assert_eq!(live["ci"]["run_url"], url);
+    assert_eq!(live["ci"]["finished_at_ms"], 2_000);
+    assert!(live["ci"]["reported_at_ms"].as_i64().unwrap() > 0);
+
+    // A late in-progress report of the same run is stale and changes nothing.
+    let (status, stale) = call(
+        &router,
+        "POST",
+        &format!("/checkouts/{main_id}/ci-status"),
+        Some(
+            json!({"status": "in_progress", "sha": sha, "workflow": "CI", "started_at_ms": 1_000}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(stale["applied"], false);
+    assert_eq!(stale["ci"]["status"], "success");
+
+    // A newer run reported by the other linked checkout wins.
+    let (status, _) = call(
+        &router,
+        "POST",
+        &format!("/checkouts/{worktree_id}/ci-status"),
+        Some(
+            json!({"status": "failure", "branch": "main", "sha": "abcdef1", "workflow": "CI",
+                    "started_at_ms": 3_000, "finished_at_ms": 4_000}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let live = next_live(&mut events, &h.store_id, |live| {
+        live["ci"]["status"] == "failure"
+    })
+    .await;
+    assert_eq!(live["ci"]["checkout"], worktree_id.as_str());
+
+    // A checkout linked to another store does not reach this one.
+    let (status, elsewhere) = call(
+        &router,
+        "POST",
+        &format!("/checkouts/{unlinked_id}/ci-status"),
+        Some(json!({"status": "queued", "started_at_ms": 9_000})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(elsewhere["stores"], json!([]));
+    let (_, read) = call(
+        &router,
+        "GET",
+        &format!("/stores/{}/live-state", h.store_id),
+        None,
+    )
+    .await;
+    assert_eq!(read["ci"]["status"], "failure");
+
+    // Invalid reports, unknown checkouts, and unauthenticated calls are refused.
+    let (status, error) = call(
+        &router,
+        "POST",
+        &format!("/checkouts/{main_id}/ci-status"),
+        Some(json!({"status": "passed"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error["error"].as_str().unwrap().contains("status must be"));
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/checkouts/no-such-checkout/ci-status",
+        Some(json!({"status": "success"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let anonymous = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/checkouts/{main_id}/ci-status"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({"status": "success"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+    // A restarted server reads the persisted run.
+    let restarted_state = restarted(&h);
+    let after = refresh(
+        &restarted_state,
+        &h.store_id,
+        time::OffsetDateTime::now_utc(),
+    );
+    assert_eq!(after["ci"]["status"], "failure");
+    assert_eq!(after["ci"]["checkout"], worktree_id.as_str());
+}

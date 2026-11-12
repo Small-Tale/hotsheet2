@@ -9,6 +9,7 @@ mod activity_capture;
 mod ai_tool_discovery;
 mod api_error;
 mod blocking_offload;
+pub mod ci_status;
 pub mod client_drive;
 pub mod code_review;
 pub mod commands;
@@ -436,6 +437,8 @@ pub struct AppState {
     notification_delivery: notification_router::NotificationDelivery,
     /// Per-store live snapshots pushed to glance surfaces (HS2-JTTQMY).
     live_states: live_state::LiveStates,
+    /// The latest reported CI run per checkout (HS2-M8HHEA).
+    ci_reports: ci_status::CiReports,
     /// The last recorded overnight state per store (HS2-9AN4DN).
     live_history: Arc<live_history::LiveHistory>,
     tts: tts::TtsProviders,
@@ -673,6 +676,7 @@ impl AppState {
             notifications: Default::default(),
             notification_delivery: Default::default(),
             live_states: Default::default(),
+            ci_reports: Default::default(),
             live_history: Arc::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
@@ -1532,6 +1536,11 @@ pub fn app(state: AppState) -> Router {
             get(resolve_checkout).delete(remove_checkout_route),
         )
         .route("/checkouts/{reference}/workers", get(checkout_workers))
+        // The latest CI run a local tool observed (HS2-M8HHEA); no inbound exposure.
+        .route(
+            "/checkouts/{reference}/ci-status",
+            post(ci_status::report_ci_status),
+        )
         .route(
             "/checkouts/{reference}/worker-plan",
             axum::routing::put(replace_worker_plan),

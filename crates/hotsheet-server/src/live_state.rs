@@ -14,6 +14,9 @@
 //! store's rates decay (HS2-MHW3SX). It is pushed as one `live_state` change event only when
 //! it changed. Rebuilds are coalesced per store. No client polls.
 //!
+//! Main CI status (HS2-M8HHEA) is the newest run a linked checkout reported to
+//! [`crate::ci_status`]; a report touches the linked stores, so it is pushed like any change.
+//!
 //! The inputs that only live in memory (the tracker, progress fingerprints, and the revision) are kept in the store's machine-local live-state record
 //! ([`crate::live_record`]) and restored when the store is seeded (HS2-MHW3SX).
 
@@ -118,6 +121,9 @@ pub struct LiveStoreState {
     pub workers: LiveWorkers,
     pub waiting: LiveWaiting,
     pub rates: LiveRates,
+    /// The newest CI run reported by a linked checkout, or `unavailable` (HS2-M8HHEA).
+    #[serde(default = "crate::ci_status::LiveCi::unavailable")]
+    pub ci: crate::ci_status::LiveCi,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -545,6 +551,7 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
     });
     let waiting = waiting_of(&waiting_rows);
     let (checkouts, name) = crate::notification_router::store_identity(state, store);
+    let ci = state.ci_reports.live(state.machine_home(), &checkouts);
     let mut stores = state.live_states.stores.lock_or_recover();
     let live = stores.entry(store.to_string()).or_default();
     let tokens = token_rate(live, &entry.store, now);
@@ -587,6 +594,7 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
             tokens,
             tickets_updated: updated,
         },
+        ci,
     })
 }
 
@@ -1319,6 +1327,7 @@ mod tests {
                     peak_per_hour: 0,
                 },
             },
+            ci: crate::ci_status::LiveCi::unavailable(),
         };
         let mut next = base.clone();
         next.revision = 0;
@@ -1346,6 +1355,10 @@ mod tests {
             tokens: 1,
         });
         assert!(materially_changed(&base, &tokens));
+        // A CI report is pushed (HS2-M8HHEA).
+        let mut ci = base.clone();
+        ci.ci.status = crate::ci_status::CiStatus::Success;
+        assert!(materially_changed(&base, &ci));
         let mut cause = base.clone();
         cause.activity.causes.push(LiveCause {
             kind: LiveCauseKind::AwaitingInput,

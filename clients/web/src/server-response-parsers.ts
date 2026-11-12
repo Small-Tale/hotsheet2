@@ -959,21 +959,40 @@ const liveRates = shape('live rates', {
     peak_per_hour: isNumber,
   }).check,
 });
-export const parseLiveStoreState = shape<LiveStoreState>('live state', {
-  store: isString,
-  root: isString,
-  name: isString,
-  checkouts: isStringArray,
-  epoch_ms: isNumber,
-  revision: isNumber,
-  state: isLiveWord,
-  activity: liveActivity.check,
-  claims: listOf(liveClaim.check),
-  workers: shape('live workers', { live: isNumber, expected: isNumber }).check,
-  waiting: liveWaiting.check,
-  // An older server still sends `runway` (removed by HS2-5A83MR); extra members are ignored.
-  rates: liveRates.check,
+// HS2-M8HHEA: main CI status reported by a linked checkout's CI watcher.
+const liveCiStatuses = new Set(['unavailable', 'queued', 'in_progress', 'success', 'failure', 'cancelled']);
+const liveCi = shape('live CI', {
+  status: (field) => typeof field === 'string' && liveCiStatuses.has(field),
+  checkout: isNullableString,
+  branch: isNullableString,
+  sha: isNullableString,
+  run_url: isNullableString,
+  workflow: isNullableString,
+  started_at_ms: isNullableNumber,
+  finished_at_ms: isNullableNumber,
+  reported_at_ms: isNullableNumber,
 });
+export const parseLiveStoreState = shape<LiveStoreState>(
+  'live state',
+  {
+    store: isString,
+    root: isString,
+    name: isString,
+    checkouts: isStringArray,
+    epoch_ms: isNumber,
+    revision: isNumber,
+    state: isLiveWord,
+    activity: liveActivity.check,
+    claims: listOf(liveClaim.check),
+    workers: shape('live workers', { live: isNumber, expected: isNumber }).check,
+    waiting: liveWaiting.check,
+    // An older server still sends `runway` (removed by HS2-5A83MR); extra members are ignored.
+    rates: liveRates.check,
+  },
+  {},
+  // HS2-M8HHEA: an older server omits `ci`.
+  { ci: liveCi.check },
+);
 export const parseLiveStateList = shape<LiveStateList>('live state list', {
   epoch_ms: isNumber,
   stores: listOf(parseLiveStoreState.check),
