@@ -37,6 +37,8 @@ export interface ProjectTabProps {
   activeTicketCount?: number;
   countsPartial?: boolean;
   operation?: { label: string; state: 'running' | 'failed' | 'succeeded' | 'interrupted'; percent?: number };
+  /** A drag over this tab would copy tickets or stage files here; rendered, never set on the node (HS2-6KNWYT). */
+  dropTarget?: 'ticket' | 'file';
 }
 
 export function projectTabUpNextLabel(count: number): string {
@@ -95,6 +97,7 @@ export function ProjectTab({
   activeTicketCount = 0,
   countsPartial = false,
   operation,
+  dropTarget,
 }: ProjectTabProps) {
   const normalizedUpNextCount = Math.max(0, Math.trunc(upNextCount)),
     normalizedActiveTicketCount = Math.max(0, Math.trunc(activeTicketCount));
@@ -176,6 +179,7 @@ export function ProjectTab({
       name={name}
       selected={selected}
       attention={attention}
+      dropTarget={dropTarget !== undefined}
       closable={closable && !pending}
       draggable={draggable && !pending}
       pending={pending}
@@ -213,6 +217,8 @@ export function ProjectTab({
         'data-restore-failure': String(restoreFailure),
         // Kerf's TabBarItem owns `data-pending` (its named-pending state); the project's opening state is app-owned.
         'data-project-pending': String(pending),
+        'data-dragging-ticket': dropTarget === 'ticket' ? 'true' : undefined,
+        'data-dragging-file': dropTarget === 'file' ? 'true' : undefined,
       }}
     />
   );

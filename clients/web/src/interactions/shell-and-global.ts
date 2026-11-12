@@ -27,7 +27,12 @@ import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { type OvernightWindow } from '../overnight-timeline';
-import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
+import {
+  acceptsProjectTabFileDrag,
+  clearProjectTabDropTarget,
+  markProjectTabDropTarget,
+  projectTabDroppedFiles,
+} from '../project-tab-file-drop';
 import { cycleTabId } from '../tab-cycle';
 import { terminalClearKeyTarget } from '../terminal-clear';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
@@ -417,19 +422,30 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   window.addEventListener('pointercancel', finishAppRegionResize, { signal: lifetime.signal });
   // Kerf ListItem rows show their drag-target state through Kerf's own `data-state`; other targets
   // (project tabs, the composer) keep the app attribute only.
+  // A project tab renders its state from `projectTabDropTarget` through Kerf's `dropTarget` prop: the
+  // shell's next render morphs away attributes set on the tab's node mid-drag (HS2-6KNWYT).
   function markDragTarget(target: HTMLElement) {
+    const tabProject = data(target).ticketDropProject;
+    if (tabProject) {
+      markProjectTabDropTarget(tabProject, 'ticket');
+      return;
+    }
     target.dataset.draggingTicket = 'true';
     if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
-    if (target.matches('.kui-tab-bar-item')) target.dataset.dropTarget = 'true';
   }
   function clearDragTarget(target: HTMLElement) {
+    const tabProject = data(target).ticketDropProject;
+    if (tabProject) {
+      clearProjectTabDropTarget(tabProject, 'ticket');
+      return;
+    }
     delete target.dataset.draggingTicket;
     if (target.dataset.state === 'drag-target') delete target.dataset.state;
-    delete target.dataset.dropTarget;
   }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;
     ticketGroupDropTarget.value = undefined;
+    clearProjectTabDropTarget(undefined, 'ticket');
     document.querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]').forEach((target) => {
       clearDragTarget(target);
     });
@@ -651,16 +667,13 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       )
         return;
       event.preventDefault();
-      (target as HTMLElement).dataset.dropTarget = 'true';
-      (target as HTMLElement).dataset.draggingFile = 'true';
+      markProjectTabDropTarget(data(target).ticketDropProject!, 'file');
       if (transfer) transfer.dropEffect = 'copy';
     }),
   );
   lifetime.add(
     delegate(document.body, 'dragleave', '[data-ticket-drop-project]', (_event, target) => {
-      if (!data(target).draggingFile) return;
-      delete (target as HTMLElement).dataset.dropTarget;
-      delete (target as HTMLElement).dataset.draggingFile;
+      clearProjectTabDropTarget(data(target).ticketDropProject, 'file');
     }),
   );
   lifetime.add(
@@ -674,8 +687,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       if (!files.length || !destination) return;
       event.preventDefault();
       event.stopPropagation();
-      delete (target as HTMLElement).dataset.dropTarget;
-      delete (target as HTMLElement).dataset.draggingFile;
+      clearProjectTabDropTarget(destination.id, 'file');
       selectProjectTab(destination.id);
       void addNewTicketFiles(files);
     }),

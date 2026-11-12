@@ -5,6 +5,18 @@ import { describe, expect, it } from 'vitest';
 import { ProjectTabBar } from './project-tab-bar';
 
 describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
+  it('renders a drag target from tab state so a later render keeps it (HS2-6KNWYT)', () => {
+    const tab = (dropTarget?: 'ticket' | 'file') =>
+      String(ProjectTabBar({ tabs: [{ id: 'other', name: 'other', location: 'local', dropTarget }] }));
+    expect(tab('file')).toMatch(/data-drop-target="true"[^>]*/);
+    expect(tab('file')).toContain('data-dragging-file="true"');
+    expect(tab('file')).not.toContain('data-dragging-ticket');
+    expect(tab('ticket')).toMatch(/data-drop-target="true"/);
+    expect(tab('ticket')).toContain('data-dragging-ticket="true"');
+    expect(tab('ticket')).not.toContain('data-dragging-file');
+    expect(tab()).not.toMatch(/data-drop-target|data-dragging-/);
+  });
+
   it('leaves the far-edge zone to ticket actions after the announcer moves to the sidebar (HS2-6PZ35D)', () => {
     const tabs = [{ id: 'demo', name: 'demo', location: 'local' as const, selected: true }];
     const desktop = String(ProjectTabBar({ tabs }));

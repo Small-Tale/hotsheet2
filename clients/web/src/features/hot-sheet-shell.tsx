@@ -87,6 +87,7 @@ import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import type { PermissionItem } from '../permission-notifications';
 import type { WorkersLive } from '../project-live-summary';
+import { projectTabDropKind } from '../project-tab-file-drop';
 import type { DesktopRemoteServer } from '../remote-projects/client';
 import { parseRemoteProjectId } from '../remote-projects/identity';
 import { showsStaleSourceNotice } from '../source-stale-notice';
@@ -345,6 +346,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           upNextCount: counts.up_next,
           activeTicketCount: counts.active,
           countsPartial: partialSourcesByProject.value[item.id] ?? false,
+          dropTarget: projectTabDropKind(item.id),
           operation:
             job && (!(job.kind === 'backup' && job.status === 'succeeded') || backupUnverified)
               ? {
