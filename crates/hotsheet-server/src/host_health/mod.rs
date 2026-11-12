@@ -25,9 +25,10 @@ use crate::AppState;
 use crate::events::ChangeEvent;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::host_health::HostHealthThresholds;
+use hotsheet_ticketing::host_health_disks::{DiskChoices, STORE_VOLUME_ID};
 use serde::Serialize;
-use source::{HostReading, HostSource, Probe};
-use std::collections::VecDeque;
+use source::{HostReading, HostSource, Probe, VolumeReading};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 /// A condition's severity.
@@ -183,6 +184,61 @@ pub(crate) struct DiskSignal {
     pub(crate) consumption_bytes_per_hour: Option<u64>,
     /// Projected hours until the volume is full at that rate.
     pub(crate) hours_to_full: Option<f64>,
+    /// Which monitored volume these values describe: the worst one, else the store's (HS2-NHK8V8).
+    pub(crate) volume_id: Option<String>,
+    pub(crate) volume_label: Option<String>,
+}
+
+/// The values one volume reports.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct DiskNumbers {
+    free_bytes: Option<u64>,
+    total_bytes: Option<u64>,
+    consumption_bytes_per_hour: Option<u64>,
+    hours_to_full: Option<f64>,
+}
+
+/// Whether a detected volume counts (HS2-NHK8V8): the user's saved choice, or `pending` until made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DiskDecision {
+    Included,
+    Excluded,
+    Pending,
+}
+
+/// One volume host health knows about (HS2-NHK8V8): the store's, each detected or added one, and
+/// each saved choice whose volume is absent right now.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(crate) struct DiskVolume {
+    /// `store` for the store's volume, else a stable volume id (`uuid:…` or `mount:…`).
+    pub(crate) id: String,
+    pub(crate) label: String,
+    /// Where the volume is (or was last) mounted; `null` for the store's volume.
+    pub(crate) mount: Option<String>,
+    /// The volume holding the primary store; always monitored.
+    pub(crate) store: bool,
+    /// Added by path rather than detected (HS2-KBVZV1).
+    pub(crate) manual: bool,
+    pub(crate) decision: DiskDecision,
+    /// Mounted now; an absent volume keeps its choice and reports no values.
+    pub(crate) present: bool,
+    /// Its committed status while monitored and present; `null` otherwise.
+    pub(crate) status: Option<Status>,
+    pub(crate) reason: Option<&'static str>,
+    pub(crate) free_bytes: Option<u64>,
+    pub(crate) total_bytes: Option<u64>,
+    pub(crate) consumption_bytes_per_hour: Option<u64>,
+    pub(crate) hours_to_full: Option<f64>,
+}
+
+/// An included volume's trend and hysteresis.
+#[derive(Debug, Default)]
+struct VolumeTrack {
+    history: VecDeque<(u64, f64)>,
+    hold: Hold,
+    reason: Option<&'static str>,
+    numbers: DiskNumbers,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -289,6 +345,8 @@ pub(crate) struct HostHealthSnapshot {
     /// The worst callout level; `normal` is the dark-cockpit "all normal" line.
     pub(crate) level: Level,
     pub(crate) signals: Signals,
+    /// Every volume and its choice (HS2-NHK8V8), store first.
+    pub(crate) disks: Vec<DiskVolume>,
 }
 
 /// One change event the sampler emits.
@@ -312,6 +370,16 @@ pub(crate) struct Monitor {
     snapshot: HostHealthSnapshot,
     holds: [Hold; 6],
     disk_history: VecDeque<(u64, f64)>,
+    /// The store volume's committed reason and values; the disk signal shows them unless another
+    /// monitored volume is worse (HS2-NHK8V8).
+    store_reason: Option<&'static str>,
+    store_numbers: DiskNumbers,
+    disk_choices: DiskChoices,
+    volumes: Vec<VolumeReading>,
+    volume_tracks: BTreeMap<String, VolumeTrack>,
+    /// The combined disk signal's committed status.
+    disk_signal: Option<Status>,
+    disks_fingerprint: Option<String>,
     swap_history: VecDeque<(u64, f64)>,
     cpu_busy_since: Option<u64>,
     /// `(bucket start ms, sum of busy percents, sample count)`, oldest first (HS2-RBFR94).
@@ -414,6 +482,58 @@ fn disk_consumption(history: &VecDeque<(u64, f64)>, free: f64, critical_hours: u
     }
 }
 
+/// One volume's values and raw status from its trend (HS2-Y2HGY9), with the hysteresis margins
+/// while a level is held. Shared by the store's volume and every other monitored one (HS2-NHK8V8).
+fn disk_eval(
+    history: &VecDeque<(u64, f64)>,
+    free_bytes: u64,
+    total_bytes: u64,
+    thresholds: &HostHealthThresholds,
+    critical_held: bool,
+    warning_held: bool,
+) -> (DiskNumbers, Status, Option<&'static str>) {
+    let consumption = disk_consumption(
+        history,
+        free_bytes as f64,
+        thresholds.disk_critical_hours_to_full,
+    );
+    let hours = consumption
+        .filter(|rate| *rate > 0.0)
+        .map(|rate| free_bytes as f64 / rate);
+    let numbers = DiskNumbers {
+        free_bytes: Some(free_bytes),
+        total_bytes: Some(total_bytes),
+        consumption_bytes_per_hour: consumption.map(|rate| rate as u64),
+        hours_to_full: hours.map(|hours| (hours * 10.0).round() / 10.0),
+    };
+    let free_gib = free_bytes as f64 / GIB;
+    let projected = |limit: u64, held: bool| {
+        limit > 0 && hours.is_some_and(|hours| below(hours, limit as f64, held, 1.25))
+    };
+    let (status, reason) = if below(
+        free_gib,
+        thresholds.disk_critical_free_gib as f64,
+        critical_held,
+        1.1,
+    ) {
+        (Status::Critical, Some("low_free_space"))
+    } else if projected(thresholds.disk_critical_hours_to_full, critical_held) {
+        (Status::Critical, Some("projected_full"))
+    } else if below(
+        free_gib,
+        thresholds.disk_warning_free_gib as f64,
+        warning_held,
+        1.1,
+    ) {
+        (Status::Warning, Some("low_free_space"))
+    } else if projected(thresholds.disk_warning_hours_to_full, warning_held) {
+        (Status::Warning, Some("projected_full"))
+    } else {
+        (Status::Normal, None)
+    };
+    (numbers, status, reason)
+}
+
 /// Least-squares slope in units per hour, once the points span [`RATE_MIN_SPAN_MS`].
 fn slope_per_hour(history: &VecDeque<(u64, f64)>) -> Option<f64> {
     let (first, last) = (history.front()?, history.back()?);
@@ -451,6 +571,35 @@ fn below(value: f64, threshold: f64, holding: bool, margin: f64) -> bool {
         }
 }
 
+/// Apply hysteresis to one hold. Returns `Some(previous)` when the committed status changes.
+fn commit_hold(hold: &mut Hold, raw: Status) -> Option<Option<Status>> {
+    let Some(committed) = hold.committed else {
+        hold.committed = Some(raw);
+        hold.recovering = 0;
+        return Some(None);
+    };
+    if raw == committed {
+        hold.recovering = 0;
+        return None;
+    }
+    let change = if raw.severity() > committed.severity() {
+        true
+    } else if raw.severity() == committed.severity() && committed.severity() == 0 {
+        // normal / unsupported / unavailable trade places freely: none is a callout.
+        true
+    } else {
+        hold.recovering += 1;
+        hold.recovering >= RECOVERY_SAMPLES
+    };
+    if change {
+        hold.committed = Some(raw);
+        hold.recovering = 0;
+        Some(Some(committed))
+    } else {
+        None
+    }
+}
+
 impl Monitor {
     pub(crate) fn new(host: HostIdentity) -> Self {
         let blank = SignalHeader::initial;
@@ -466,6 +615,8 @@ impl Monitor {
                         total_bytes: None,
                         consumption_bytes_per_hour: None,
                         hours_to_full: None,
+                        volume_id: None,
+                        volume_label: None,
                     },
                     memory: MemorySignal {
                         header: blank(),
@@ -504,9 +655,17 @@ impl Monitor {
                         cpu_speed_limit: None,
                     },
                 },
+                disks: Vec::new(),
             },
             holds: [Hold::default(); 6],
             disk_history: VecDeque::new(),
+            store_reason: None,
+            store_numbers: DiskNumbers::default(),
+            disk_choices: DiskChoices::new(),
+            volumes: Vec::new(),
+            volume_tracks: BTreeMap::new(),
+            disk_signal: None,
+            disks_fingerprint: None,
             swap_history: VecDeque::new(),
             cpu_busy_since: None,
             cpu_buckets: VecDeque::new(),
@@ -531,6 +690,7 @@ impl Monitor {
         now: u64,
         thresholds: &HostHealthThresholds,
     ) -> Vec<Emission> {
+        self.eval_volumes(now, thresholds);
         let raw = [
             self.eval_disk(reading.disk, now, thresholds),
             self.eval_memory(reading.memory, now, thresholds),
@@ -543,7 +703,12 @@ impl Monitor {
         let mut emissions = Vec::new();
         for (index, (status, reason)) in raw.into_iter().enumerate() {
             let id = SIGNALS[index];
-            if let Some(previous) = self.commit(index, status) {
+            let (status, reason, change) = if index == 0 {
+                self.commit_disk(status, reason)
+            } else {
+                (status, reason, self.commit(index, status))
+            };
+            if let Some(previous) = change {
                 let header = self.snapshot.signals.header_mut(id);
                 header.status = status;
                 header.since = rfc3339(now);
@@ -578,6 +743,20 @@ impl Monitor {
             })
             .max()
             .unwrap_or(Level::Normal);
+        self.rebuild_disks();
+        // A volume appeared, left, or awaits a choice: clients re-read the snapshot (HS2-NHK8V8).
+        let disks = self.disks_fingerprint();
+        if self
+            .disks_fingerprint
+            .replace(disks.clone())
+            .is_some_and(|previous| previous != disks)
+        {
+            emissions.push(Emission {
+                id: "disks",
+                status: "changed",
+                reason: None,
+            });
+        }
         let fingerprint = self.coarse_fingerprint();
         if emissions.is_empty() {
             let due = match &self.last_snapshot_notice {
@@ -607,32 +786,221 @@ impl Monitor {
 
     /// Apply hysteresis. Returns `Some(previous)` when the committed status changes.
     fn commit(&mut self, index: usize, raw: Status) -> Option<Option<Status>> {
-        let hold = &mut self.holds[index];
-        let Some(committed) = hold.committed else {
-            hold.committed = Some(raw);
-            hold.recovering = 0;
-            return Some(None);
+        commit_hold(&mut self.holds[index], raw)
+    }
+
+    /// Commit the store volume's reading, then combine it with every other monitored volume
+    /// (HS2-NHK8V8): the disk signal takes the worst committed volume (the store's on a tie) and
+    /// shows its values. Each volume keeps its own trend and hysteresis, so combining adds no
+    /// second recovery delay. Returns the combined status, its reason, and `Some(previous)` when
+    /// the combined status changed.
+    fn commit_disk(
+        &mut self,
+        raw: Status,
+        reason: Option<&'static str>,
+    ) -> (Status, Option<&'static str>, Option<Option<Status>>) {
+        let store = match self.commit(0, raw) {
+            Some(_) => {
+                self.store_reason = reason;
+                raw
+            }
+            None => {
+                let committed = self.holds[0].committed.unwrap_or(raw);
+                if committed == raw {
+                    self.store_reason = reason;
+                }
+                committed
+            }
         };
-        if raw == committed {
-            hold.recovering = 0;
-            return None;
+        let mut worst = (store, self.store_reason, None::<&str>);
+        for (id, track) in &self.volume_tracks {
+            if let Some(status) = track.hold.committed
+                && status.severity() > worst.0.severity()
+            {
+                worst = (status, track.reason, Some(id.as_str()));
+            }
         }
-        let change = if raw.severity() > committed.severity() {
-            true
-        } else if raw.severity() == committed.severity() && committed.severity() == 0 {
-            // normal / unsupported / unavailable trade places freely: none is a callout.
-            true
-        } else {
-            hold.recovering += 1;
-            hold.recovering >= RECOVERY_SAMPLES
+        let (status, reason, volume) = worst;
+        let numbers = volume
+            .and_then(|id| self.volume_tracks.get(id))
+            .map_or(self.store_numbers, |track| track.numbers);
+        let label = match volume {
+            Some(id) => self
+                .volumes
+                .iter()
+                .find(|item| item.id == id)
+                .map(|item| item.label.clone()),
+            None => Some("Ticket store".to_string()),
         };
-        if change {
-            hold.committed = Some(raw);
-            hold.recovering = 0;
-            Some(Some(committed))
+        let signal = &mut self.snapshot.signals.disk;
+        signal.free_bytes = numbers.free_bytes;
+        signal.total_bytes = numbers.total_bytes;
+        signal.consumption_bytes_per_hour = numbers.consumption_bytes_per_hour;
+        signal.hours_to_full = numbers.hours_to_full;
+        signal.volume_id = Some(volume.unwrap_or(STORE_VOLUME_ID).to_string());
+        signal.volume_label = label;
+        let previous = self.disk_signal;
+        if previous == Some(status) {
+            (status, reason, None)
         } else {
-            None
+            self.disk_signal = Some(status);
+            (status, reason, Some(previous))
         }
+    }
+
+    /// Use the saved disk choices (HS2-NHK8V8). Returns whether they changed.
+    pub(crate) fn set_disk_choices(&mut self, choices: DiskChoices) -> bool {
+        if choices == self.disk_choices {
+            return false;
+        }
+        self.disk_choices = choices;
+        self.rebuild_disks();
+        true
+    }
+
+    /// The volumes other than the store's that this sample saw (HS2-NHK8V8).
+    pub(crate) fn set_volumes(&mut self, volumes: Vec<VolumeReading>) {
+        self.volumes = volumes;
+    }
+
+    fn included(&self, id: &str) -> bool {
+        self.disk_choices
+            .get(id)
+            .is_some_and(|choice| choice.monitor)
+    }
+
+    /// Track every present, included volume: its robust trend and its own hysteresis, with the
+    /// same margins as the store's. A volume that left or was excluded drops its track.
+    fn eval_volumes(&mut self, now: u64, thresholds: &HostHealthThresholds) {
+        let included: Vec<VolumeReading> = self
+            .volumes
+            .iter()
+            .filter(|volume| self.included(&volume.id))
+            .cloned()
+            .collect();
+        self.volume_tracks
+            .retain(|id, _| included.iter().any(|volume| volume.id == *id));
+        for volume in included {
+            let track = self.volume_tracks.entry(volume.id.clone()).or_default();
+            push_disk_point(&mut track.history, now, volume.free_bytes as f64);
+            let held = |at_least: Status| {
+                track
+                    .hold
+                    .committed
+                    .is_some_and(|status| status.severity() >= at_least.severity())
+            };
+            let (critical_held, warning_held) = (held(Status::Critical), held(Status::Warning));
+            let (numbers, raw, reason) = disk_eval(
+                &track.history,
+                volume.free_bytes,
+                volume.total_bytes,
+                thresholds,
+                critical_held,
+                warning_held,
+            );
+            track.numbers = numbers;
+            let changed = commit_hold(&mut track.hold, raw).is_some();
+            if changed || track.hold.committed == Some(raw) {
+                track.reason = reason;
+            }
+        }
+    }
+
+    /// Rebuild the snapshot's volume list from the store reading, the tracks, and the choices.
+    fn rebuild_disks(&mut self) {
+        let store_status = self.snapshot.signals.disk.header.status;
+        let mut disks = vec![DiskVolume {
+            id: STORE_VOLUME_ID.into(),
+            label: "Ticket store".into(),
+            mount: None,
+            store: true,
+            manual: false,
+            decision: DiskDecision::Included,
+            present: self.store_numbers.free_bytes.is_some(),
+            status: self.holds[0].committed.or(Some(store_status)),
+            reason: self.store_reason,
+            free_bytes: self.store_numbers.free_bytes,
+            total_bytes: self.store_numbers.total_bytes,
+            consumption_bytes_per_hour: self.store_numbers.consumption_bytes_per_hour,
+            hours_to_full: self.store_numbers.hours_to_full,
+        }];
+        for volume in &self.volumes {
+            let choice = self.disk_choices.get(&volume.id);
+            let decision = match choice {
+                Some(choice) if choice.monitor => DiskDecision::Included,
+                Some(_) => DiskDecision::Excluded,
+                None => DiskDecision::Pending,
+            };
+            let track = self.volume_tracks.get(&volume.id);
+            let numbers = track.map_or(
+                DiskNumbers {
+                    free_bytes: Some(volume.free_bytes),
+                    total_bytes: Some(volume.total_bytes),
+                    ..DiskNumbers::default()
+                },
+                |track| track.numbers,
+            );
+            disks.push(DiskVolume {
+                id: volume.id.clone(),
+                label: volume.label.clone(),
+                mount: Some(volume.mount.clone()),
+                store: false,
+                manual: volume.manual || choice.is_some_and(|choice| choice.manual),
+                decision,
+                present: true,
+                status: track.and_then(|track| track.hold.committed),
+                reason: track.and_then(|track| track.reason),
+                free_bytes: numbers.free_bytes,
+                total_bytes: numbers.total_bytes,
+                consumption_bytes_per_hour: numbers.consumption_bytes_per_hour,
+                hours_to_full: numbers.hours_to_full,
+            });
+        }
+        let mut absent: Vec<DiskVolume> = self
+            .disk_choices
+            .iter()
+            .filter(|(id, _)| !self.volumes.iter().any(|volume| volume.id == **id))
+            .map(|(id, choice)| DiskVolume {
+                id: id.clone(),
+                label: choice.label.clone(),
+                mount: Some(choice.mount.clone()),
+                store: false,
+                manual: choice.manual,
+                decision: if choice.monitor {
+                    DiskDecision::Included
+                } else {
+                    DiskDecision::Excluded
+                },
+                present: false,
+                status: None,
+                reason: None,
+                free_bytes: None,
+                total_bytes: None,
+                consumption_bytes_per_hour: None,
+                hours_to_full: None,
+            })
+            .collect();
+        absent.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.id.cmp(&b.id)));
+        disks.extend(absent);
+        self.snapshot.disks = disks;
+    }
+
+    /// Which volumes are present and which await a choice.
+    fn disks_fingerprint(&self) -> String {
+        let mut present: Vec<String> = self
+            .volumes
+            .iter()
+            .map(|volume| {
+                let decision = match self.disk_choices.get(&volume.id) {
+                    Some(choice) if choice.monitor => "in",
+                    Some(_) => "out",
+                    None => "pending",
+                };
+                format!("{}={decision}", volume.id)
+            })
+            .collect();
+        present.sort();
+        present.join(",")
     }
 
     fn eval_disk(
@@ -641,56 +1009,27 @@ impl Monitor {
         now: u64,
         thresholds: &HostHealthThresholds,
     ) -> (Status, Option<&'static str>) {
-        let signal = &mut self.snapshot.signals.disk;
         let disk = match probe {
             Probe::Value(disk) => disk,
             other => {
                 // Never show a stale value beside an unsupported or failed reader.
-                (signal.free_bytes, signal.total_bytes) = (None, None);
-                (signal.consumption_bytes_per_hour, signal.hours_to_full) = (None, None);
+                self.store_numbers = DiskNumbers::default();
                 return (missing(&other), None);
             }
         };
         push_disk_point(&mut self.disk_history, now, disk.free_bytes as f64);
-        let consumption = disk_consumption(
-            &self.disk_history,
-            disk.free_bytes as f64,
-            thresholds.disk_critical_hours_to_full,
-        );
-        let hours = consumption
-            .filter(|rate| *rate > 0.0)
-            .map(|rate| disk.free_bytes as f64 / rate);
-        signal.free_bytes = Some(disk.free_bytes);
-        signal.total_bytes = Some(disk.total_bytes);
-        signal.consumption_bytes_per_hour = consumption.map(|rate| rate as u64);
-        signal.hours_to_full = hours.map(|hours| (hours * 10.0).round() / 10.0);
-        let free_gib = disk.free_bytes as f64 / GIB;
         let critical_held = self.holding(0, Status::Critical);
         let warning_held = self.holding(0, Status::Warning);
-        let projected = |limit: u64, held: bool| {
-            limit > 0 && hours.is_some_and(|hours| below(hours, limit as f64, held, 1.25))
-        };
-        if below(
-            free_gib,
-            thresholds.disk_critical_free_gib as f64,
+        let (numbers, status, reason) = disk_eval(
+            &self.disk_history,
+            disk.free_bytes,
+            disk.total_bytes,
+            thresholds,
             critical_held,
-            1.1,
-        ) {
-            (Status::Critical, Some("low_free_space"))
-        } else if projected(thresholds.disk_critical_hours_to_full, critical_held) {
-            (Status::Critical, Some("projected_full"))
-        } else if below(
-            free_gib,
-            thresholds.disk_warning_free_gib as f64,
             warning_held,
-            1.1,
-        ) {
-            (Status::Warning, Some("low_free_space"))
-        } else if projected(thresholds.disk_warning_hours_to_full, warning_held) {
-            (Status::Warning, Some("projected_full"))
-        } else {
-            (Status::Normal, None)
-        }
+        );
+        self.store_numbers = numbers;
+        (status, reason)
     }
 
     fn eval_memory(
@@ -950,6 +1289,30 @@ pub(crate) fn thresholds(state: &AppState) -> HostHealthThresholds {
     )
 }
 
+/// The saved disk choices (HS2-NHK8V8); an unreadable settings file reads as none.
+pub(crate) fn disk_choices(state: &AppState) -> hotsheet_ticketing::host_health_disks::DiskChoices {
+    routes::read_disk_choices(state).unwrap_or_else(|error| {
+        tracing::warn!(error = %error.message, "host health disk choices unreadable");
+        hotsheet_ticketing::host_health_disks::DiskChoices::new()
+    })
+}
+
+/// Publish one `host_health` change event.
+pub(crate) fn emit_event(state: &AppState, emission: &Emission) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: "host_health".into(),
+        id: emission.id.into(),
+        slug: emission.status.into(),
+        message: emission.reason.map(str::to_owned),
+        activity: None,
+        assignment: None,
+        turn: None,
+        live: None,
+    });
+}
+
 /// Evaluate one reading and publish its events on the change bus.
 pub(crate) fn record(
     state: &AppState,
@@ -961,19 +1324,8 @@ pub(crate) fn record(
         .host_health
         .monitor
         .with_lock(|monitor| monitor.observe(reading, now, thresholds));
-    for emission in emissions {
-        state.emit(ChangeEvent {
-            cursor: None,
-            store: String::new(),
-            kind: "host_health".into(),
-            id: emission.id.into(),
-            slug: emission.status.into(),
-            message: emission.reason.map(str::to_owned),
-            activity: None,
-            assignment: None,
-            turn: None,
-            live: None,
-        });
+    for emission in &emissions {
+        emit_event(state, emission);
     }
 }
 
@@ -984,15 +1336,26 @@ pub(crate) async fn run_sampler(state: AppState, source: Box<dyn HostSource>) {
     loop {
         let reading_state = state.clone();
         let reading_source = source.clone();
-        let Ok((reading, thresholds)) = tokio::task::spawn_blocking(move || {
+        let Ok((reading, thresholds, choices, volumes)) = tokio::task::spawn_blocking(move || {
             let thresholds = thresholds(&reading_state);
-            let reading = reading_source.with_lock(|source| source.sample());
-            (reading, thresholds)
+            let choices = disk_choices(&reading_state);
+            let added: Vec<(String, std::path::PathBuf)> = choices
+                .iter()
+                .filter(|(_, choice)| choice.manual)
+                .map(|(id, choice)| (id.clone(), std::path::PathBuf::from(&choice.mount)))
+                .collect();
+            let (reading, volumes) =
+                reading_source.with_lock(|source| (source.sample(), source.volumes(&added)));
+            (reading, thresholds, choices, volumes)
         })
         .await
         else {
             return;
         };
+        state.host_health.monitor.with_lock(|monitor| {
+            monitor.set_disk_choices(choices);
+            monitor.set_volumes(volumes);
+        });
         record(&state, reading, crate::client_drive::now_ms(), &thresholds);
         let wait = std::time::Duration::from_secs(thresholds.sample_seconds);
         tokio::select! {

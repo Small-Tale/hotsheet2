@@ -25,14 +25,14 @@ the stats with that name.
 
 ## Signals
 
-| Signal    | Reading                                                                                                                                                    | Warning                                                                         | Critical                                                                          | Reason codes                                                               |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `disk`    | Free and total bytes of the volume holding the primary store. Consumption is a robust trend (see [Disk trend](#disk-trend)), with projected hours to full. | free < `disk_warning_free_gib`, or hours to full < `disk_warning_hours_to_full` | free < `disk_critical_free_gib`, or hours to full < `disk_critical_hours_to_full` | `low_free_space`, `projected_full`                                         |
-| `memory`  | OS memory-pressure level and swap in use. Swap growth is a least-squares fit over the last hour.                                                           | OS pressure _warn_, or swap growth ≥ `swap_warning_growth_mib_per_hour`         | OS pressure _critical_                                                            | `pressure`, `swap_growth`                                                  |
-| `cpu`     | Whole-machine busy percent, the busiest process's executable name and percent (never its arguments or path), and the last hour's history (see below).      | busy ≥ `cpu_warning_percent` continuously for `cpu_sustain_minutes`             | —                                                                                 | `sustained_cpu`                                                            |
-| `power`   | On battery, battery percent, lid closed, sleep-prevention assertion held, idle system-sleep timer.                                                         | on battery; or idle sleep enabled with no assertion held                        | lid closed on battery; battery ≤ `battery_critical_percent` on battery            | `on_battery`, `idle_sleep_allowed`, `lid_closed_on_battery`, `battery_low` |
-| `network` | Whether a default route exists, and its interface. No packet is sent.                                                                                      | —                                                                               | no default route                                                                  | `no_default_route`                                                         |
-| `thermal` | Whether the OS records thermal or performance throttling (macOS `CPU_Speed_Limit` below 100, or a recorded warning level).                                 | throttled                                                                       | —                                                                                 | `throttled`                                                                |
+| Signal    | Reading                                                                                                                                                                                               | Warning                                                                         | Critical                                                                          | Reason codes                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `disk`    | Free and total bytes of the worst monitored volume (the store's, plus [chosen disks](#monitored-disks)). Consumption is a robust trend (see [Disk trend](#disk-trend)), with projected hours to full. | free < `disk_warning_free_gib`, or hours to full < `disk_warning_hours_to_full` | free < `disk_critical_free_gib`, or hours to full < `disk_critical_hours_to_full` | `low_free_space`, `projected_full`                                         |
+| `memory`  | OS memory-pressure level and swap in use. Swap growth is a least-squares fit over the last hour.                                                                                                      | OS pressure _warn_, or swap growth ≥ `swap_warning_growth_mib_per_hour`         | OS pressure _critical_                                                            | `pressure`, `swap_growth`                                                  |
+| `cpu`     | Whole-machine busy percent, the busiest process's executable name and percent (never its arguments or path), and the last hour's history (see below).                                                 | busy ≥ `cpu_warning_percent` continuously for `cpu_sustain_minutes`             | —                                                                                 | `sustained_cpu`                                                            |
+| `power`   | On battery, battery percent, lid closed, sleep-prevention assertion held, idle system-sleep timer.                                                                                                    | on battery; or idle sleep enabled with no assertion held                        | lid closed on battery; battery ≤ `battery_critical_percent` on battery            | `on_battery`, `idle_sleep_allowed`, `lid_closed_on_battery`, `battery_low` |
+| `network` | Whether a default route exists, and its interface. No packet is sent.                                                                                                                                 | —                                                                               | no default route                                                                  | `no_default_route`                                                         |
+| `thermal` | Whether the OS records thermal or performance throttling (macOS `CPU_Speed_Limit` below 100, or a recorded warning level).                                                                            | throttled                                                                       | —                                                                                 | `throttled`                                                                |
 
 Each signal reports one status: `normal`, `warning`, or `critical`, or one of two non-alerting
 states:
@@ -88,6 +88,46 @@ pairs that touch it, so the median stays on the trend.
   volume full sooner than `disk_critical_hours_to_full`, it replaces the trend, so a real
   emergency still calls out within minutes.
 - **Swap growth** keeps the one-hour least-squares fit.
+
+## Monitored disks
+
+The `disk` signal used to describe only the volume that holds the primary store. Host health now
+also watches other disks the user chooses (HS2-NHK8V8):
+
+- **Detection.** Each sample lists the other local, writable, user-visible volumes:
+  - macOS: mounts under `/Volumes` that are local, writable, and not hidden. Network shares,
+    read-only images, and local Time Machine snapshots are skipped.
+  - Linux: read-write block-device file systems, without boot, snap, or loop mounts, and each
+    device once.
+  - Other platforms detect nothing yet; only the store's volume and added disks count.
+
+  The store's own volume is recognised by its device number and never listed twice.
+
+- **Identity.** A volume is keyed by its OS volume UUID (macOS `diskutil info`, looked up once per
+  mount; Linux `/dev/disk/by-uuid`), as `uuid:<UUID>`, else by its mount point, as
+  `mount:<path>`. The key survives a removable drive's unplug and reconnect.
+- **Choices.** A choice is a machine-wide setting, `host_health.disks` in
+  `${HOTSHEET_HOME}/settings.json`. It maps each volume id to
+  `{ "monitor": bool, "label", "mount", "manual"? }`, and a missing or unreadable value means no
+  choices. A detected volume without a choice is `pending`: it shows its size, never calls out,
+  and the Stats This Mac cards ask once whether to monitor it ("Monitor" or "Ignore").
+  `PUT /host-health/disks` with `{ "id", "monitor" }` saves the choice and answers with the
+  updated snapshot. The store's volume is always monitored (409), and an unknown id is 404.
+- **Absence.** A saved volume that is not mounted stays in the list as not present, keeps its
+  choice, and reports no values. When it reconnects under the same id it is monitored, or
+  ignored, again without asking.
+- **Evaluation.** Each monitored volume has its own robust trend (see [Disk trend](#disk-trend)),
+  thresholds, margins, and three-sample recovery. The `disk` signal takes the worst committed
+  volume, the store's on a tie, and shows that volume's values with `volume_id` and
+  `volume_label`. Combining volumes adds no second recovery delay. A monitored volume that is
+  unplugged takes its callout with it.
+- **Snapshot.** `disks` lists the store's volume first, then each present volume, then each absent
+  saved one. Each entry has `id`, `label`, `mount`, `store`, `manual`, `decision`
+  (`included`, `excluded`, or `pending`), `present`, `status`, `reason`, and its values.
+- **Events.** When a volume appears, leaves, or its decision changes, the sampler emits one
+  `host_health` change event with `id: "disks"` and `slug: "changed"`. A saved choice emits the
+  same event at once, so every client re-reads the snapshot. The event never carries a volume name
+  or path.
 
 ## Hysteresis
 

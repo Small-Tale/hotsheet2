@@ -101,9 +101,27 @@ impl HostReading {
     }
 }
 
+/// A volume other than the store's that this sample saw (HS2-NHK8V8): detected, or added by path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VolumeReading {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) mount: String,
+    pub(crate) free_bytes: u64,
+    pub(crate) total_bytes: u64,
+    /// Found only because it was added by path.
+    pub(crate) manual: bool,
+}
+
 /// Where the sampler gets its readings. Tests inject a scripted source.
 pub(crate) trait HostSource: Send {
     fn sample(&mut self) -> HostReading;
+
+    /// The volumes other than the store's (HS2-NHK8V8): every detected one, plus each added
+    /// `(id, mount)` that is mounted now.
+    fn volumes(&mut self, _added: &[(String, std::path::PathBuf)]) -> Vec<VolumeReading> {
+        Vec::new()
+    }
 }
 
 /// The real host.
@@ -118,6 +136,8 @@ pub(crate) struct SystemSource {
     /// Linux thermal throttle counters from the preceding tick.
     #[cfg(target_os = "linux")]
     last_thermal: Option<std::collections::BTreeMap<String, u64>>,
+    /// Volume ids already looked up (HS2-NHK8V8).
+    volume_ids: hotsheet_ticketing::host_health_disks::VolumeIds,
 }
 
 impl SystemSource {
@@ -131,6 +151,7 @@ impl SystemSource {
             last_thermal: None,
             #[cfg(windows)]
             last_windows_cpu: None,
+            volume_ids: hotsheet_ticketing::host_health_disks::VolumeIds::default(),
         }
     }
 }
@@ -138,6 +159,48 @@ impl SystemSource {
 impl HostSource for SystemSource {
     fn sample(&mut self) -> HostReading {
         platform_sample(self)
+    }
+
+    fn volumes(&mut self, added: &[(String, std::path::PathBuf)]) -> Vec<VolumeReading> {
+        use hotsheet_ticketing::host_health_disks::{detected_volumes, label_for, space};
+        let store = space(&self.disk_path).map(|(_, _, device)| device);
+        let mut volumes: Vec<VolumeReading> = Vec::new();
+        for volume in detected_volumes(&mut self.volume_ids) {
+            if Some(volume.device) == store || volumes.iter().any(|seen| seen.id == volume.id) {
+                continue;
+            }
+            volumes.push(VolumeReading {
+                id: volume.id,
+                label: volume.label,
+                mount: volume.mount.display().to_string(),
+                free_bytes: volume.free_bytes,
+                total_bytes: volume.total_bytes,
+                manual: false,
+            });
+        }
+        for (id, mount) in added {
+            if volumes.iter().any(|volume| volume.id == *id) {
+                continue;
+            }
+            // An added mount counts only while something is mounted there: its device differs
+            // from its parent's, and it is not the store's volume.
+            let Some((free_bytes, total_bytes, device)) = space(mount) else {
+                continue;
+            };
+            let parent = mount.parent().and_then(space).map(|(_, _, device)| device);
+            if Some(device) == store || (parent == Some(device) && mount.parent().is_some()) {
+                continue;
+            }
+            volumes.push(VolumeReading {
+                id: id.clone(),
+                label: label_for(mount),
+                mount: mount.display().to_string(),
+                free_bytes,
+                total_bytes,
+                manual: true,
+            });
+        }
+        volumes
     }
 }
 

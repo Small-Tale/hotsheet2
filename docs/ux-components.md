@@ -344,7 +344,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   health cards on Stats, headed by the host name and "Server host · platform · sampled time". A Kerf
   `Grid` of framed `ContentItem` cards: disk free with rate, time to full, and total; memory pressure
   with swap and its trend; CPU with the top process, the last hour's sparkline (HS2-RBFR94), and,
-  while the live feed runs (HS2-CPFBWP), the live busy percent, core count, and `CpuCoreMeter`; power and sleep (kept awake, on battery, lid
+  while the live feed runs (HS2-CPFBWP), the live busy percent, core count, and `CpuCoreMeter`; one Disk card per other monitored, connected disk and an info `StateBanner` asking
+  about each newly detected disk (HS2-NHK8V8); power and sleep (kept awake, on battery, lid
   closed on battery, may sleep when idle); network and thermal only while degraded. A crossed card
   takes `appearance="warning"` or `"danger"`; unsupported or unreadable signals read "Not supported"
   or "Unavailable" with no value. Loading, a failed first read, and a stale snapshot use Kerf

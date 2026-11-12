@@ -1,4 +1,4 @@
-import type { HostHealthSnapshot, HostHealthStatus } from '../host-health';
+import type { HostHealthDiskVolume, HostHealthSnapshot, HostHealthStatus } from '../host-health';
 
 /**
  * Deterministic server-host snapshots in the server's exact `GET /host-health` shape (HS2-DTAVQA)
@@ -8,7 +8,63 @@ import type { HostHealthSnapshot, HostHealthStatus } from '../host-health';
 const GIB = 1024 ** 3;
 const header = (status: HostHealthStatus, reason: string | null = null) => ({ status, reason, since: null });
 
-export type HostHealthScenario = 'normal' | 'crossed' | 'unsupported';
+export type HostHealthScenario = 'normal' | 'crossed' | 'unsupported' | 'disks';
+
+const volume = (id: string, label: string, overrides: Partial<HostHealthDiskVolume> = {}): HostHealthDiskVolume => ({
+  id,
+  label,
+  mount: `/Volumes/${label}`,
+  store: false,
+  manual: false,
+  decision: 'included',
+  present: true,
+  status: 'normal',
+  reason: null,
+  free_bytes: 900 * GIB,
+  total_bytes: 1863 * GIB,
+  consumption_bytes_per_hour: 0,
+  hours_to_full: null,
+  ...overrides,
+});
+
+/**
+ * The volumes of the `disks` scenario (HS2-NHK8V8): the store's, an included backup drive past its warning
+ * line, a newly detected scratch drive awaiting a choice, an ignored camera card, and an included archive
+ * drive that is not connected.
+ */
+export function hostHealthDisksFixture(): HostHealthDiskVolume[] {
+  return [
+    volume('store', 'Ticket store', { mount: null, store: true, free_bytes: 212 * GIB, total_bytes: 494 * GIB }),
+    volume('uuid:0A1B2C3D-0000-4000-8000-000000000001', 'Backup', {
+      status: 'warning',
+      reason: 'low_free_space',
+      free_bytes: 14 * GIB,
+      consumption_bytes_per_hour: 1.5 * GIB,
+      hours_to_full: 9.3,
+    }),
+    volume('uuid:0A1B2C3D-0000-4000-8000-000000000002', 'Scratch', {
+      decision: 'pending',
+      status: null,
+      consumption_bytes_per_hour: null,
+      free_bytes: 410 * GIB,
+      total_bytes: 931 * GIB,
+    }),
+    volume('uuid:0A1B2C3D-0000-4000-8000-000000000003', 'Camera', {
+      decision: 'excluded',
+      status: null,
+      consumption_bytes_per_hour: null,
+      free_bytes: 2 * GIB,
+      total_bytes: 64 * GIB,
+    }),
+    volume('uuid:0A1B2C3D-0000-4000-8000-000000000004', 'Archive', {
+      present: false,
+      status: null,
+      free_bytes: null,
+      total_bytes: null,
+      consumption_bytes_per_hour: null,
+    }),
+  ];
+}
 
 export function hostHealthFixture(scenario: HostHealthScenario = 'normal'): HostHealthSnapshot {
   if (scenario === 'unsupported')
@@ -44,6 +100,26 @@ export function hostHealthFixture(scenario: HostHealthScenario = 'normal'): Host
         thermal: { ...header('unsupported'), throttled: null, cpu_speed_limit: null },
       },
     };
+  if (scenario === 'disks') {
+    const base = hostHealthFixture('normal');
+    return {
+      ...base,
+      level: 'warning',
+      signals: {
+        ...base.signals,
+        disk: {
+          ...header('warning', 'low_free_space'),
+          free_bytes: 14 * GIB,
+          total_bytes: 1863 * GIB,
+          consumption_bytes_per_hour: 1.5 * GIB,
+          hours_to_full: 9.3,
+          volume_id: 'uuid:0A1B2C3D-0000-4000-8000-000000000001',
+          volume_label: 'Backup',
+        },
+      },
+      disks: hostHealthDisksFixture(),
+    };
+  }
   const crossed = scenario === 'crossed';
   return {
     host: { name: 'studio', os: 'macos', arch: 'aarch64' },

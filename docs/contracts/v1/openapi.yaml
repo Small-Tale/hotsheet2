@@ -10790,6 +10790,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /host-health/disks:
+    put:
+      operationId: put_host_health_disk
+      description: Include or ignore one known volume in host health (HS2-NHK8V8). Saved machine-wide by volume id; answers with the updated snapshot and pushes a host_health disks event. The store's volume is always monitored (409); an id neither present nor saved is 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - monitor
+              properties:
+                id:
+                  type: string
+                monitor:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostHealthSnapshot'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /host-health/thresholds:
     get:
       operationId: get_host_health_thresholds
@@ -19915,6 +19959,8 @@ components:
         - total_bytes
         - consumption_bytes_per_hour
         - hours_to_full
+        - volume_id
+        - volume_label
       properties:
         status:
           $ref: '#/components/schemas/HostHealthStatus'
@@ -19925,6 +19971,77 @@ components:
             - type: 'null'
         since:
           description: When the current status began (RFC 3339).
+          anyOf:
+            - type: string
+            - type: 'null'
+        free_bytes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        total_bytes:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        consumption_bytes_per_hour:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        hours_to_full:
+          anyOf:
+            - type: number
+            - type: 'null'
+        volume_id:
+          description: Which monitored volume the values describe, the worst one else the store's (HS2-NHK8V8).
+          anyOf:
+            - type: string
+            - type: 'null'
+        volume_label:
+          anyOf:
+            - type: string
+            - type: 'null'
+      additionalProperties: false
+    HostHealthDiskVolume:
+      type: object
+      description: One volume host health knows about (HS2-NHK8V8) - the store's (id store), a detected or added one, or a saved one that is absent. A pending volume awaits the user's choice and never calls out.
+      required:
+        - id
+        - label
+        - mount
+        - store
+        - manual
+        - decision
+        - present
+        - status
+        - reason
+        - free_bytes
+        - total_bytes
+        - consumption_bytes_per_hour
+        - hours_to_full
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        mount:
+          anyOf:
+            - type: string
+            - type: 'null'
+        store:
+          type: boolean
+        manual:
+          type: boolean
+        decision:
+          enum:
+            - included
+            - excluded
+            - pending
+        present:
+          type: boolean
+        status:
+          anyOf:
+            - $ref: '#/components/schemas/HostHealthStatus'
+            - type: 'null'
+        reason:
           anyOf:
             - type: string
             - type: 'null'
@@ -20200,7 +20317,13 @@ components:
         - sampled_at
         - level
         - signals
+        - disks
       properties:
+        disks:
+          description: Every volume host health knows about and its choice, store first (HS2-NHK8V8).
+          type: array
+          items:
+            $ref: '#/components/schemas/HostHealthDiskVolume'
         host:
           type: object
           required:

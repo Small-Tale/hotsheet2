@@ -181,6 +181,7 @@ import {
 } from '../guidance-update-cache';
 import { projectHaltedSessions } from '../halted-sessions';
 import { createHostCpuFeed } from '../host-cpu-feed';
+import { createHostDiskChoices } from '../host-disk-choices';
 import { createHostHealthResource } from '../host-health-resource';
 import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
@@ -4258,6 +4259,11 @@ export async function startHotSheetWebClient() {
     return new Api(target?.apiPath ?? '', '', { trackBusy: false });
   });
   const pageVisible = signal(document.visibilityState !== 'hidden');
+  // Disk choices for host health (HS2-NHK8V8): saved through the same server, then the snapshot re-read.
+  const hostDisks = createHostDiskChoices(() => {
+    const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
+    return new Api(target?.apiPath ?? '');
+  }, hostHealth.refresh);
   // Render-only clock that ages the Live section's rates and times while live state exists; it never
   // issues a request (HS2-F788GW).
   const liveClock = signal(Date.now());
@@ -5032,6 +5038,7 @@ export async function startHotSheetWebClient() {
     hostHealth,
     hostCpu,
     pageVisible,
+    hostDiskMessage: hostDisks.message,
     // The Overnight timeline (HS2-9AN4DN) reads the recorded history through the Stats project's server.
     liveHistory: (sinceMs) => {
       const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
@@ -6544,6 +6551,9 @@ export async function startHotSheetWebClient() {
       },
       setOvernightWindow: (window) => {
         statsGlance.setOvernightWindow(window);
+      },
+      chooseHostDisk: (id, monitor) => {
+        void hostDisks.choose(id, monitor);
       },
       openAwayEvent: (projectId, slug) => {
         standby.dismissAwayDigest();

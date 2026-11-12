@@ -17,6 +17,8 @@ export const SHELL_AND_GLOBAL_ACTIONS = {
   dismissAwayDigest: action('dismiss-away-digest'),
   showWhatNeedsMe: action('show-what-needs-me'),
   openAwayEvent: action('open-away-event'),
+  /** Include or ignore a newly detected disk in host health (HS2-NHK8V8). */
+  chooseHostDisk: action('choose-host-disk'),
 } as const;
 
 /**

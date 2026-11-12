@@ -53,6 +53,20 @@ describe('HS2-NS0AYR StatsThisMac', () => {
     expect(String(StatsThisMac({ state: { snapshot, loading: false } }))).not.toContain('cpu-core-meter');
   });
 
+  it('HS2-NHK8V8 asks about a newly detected disk with Monitor and Ignore, and shows a failed choice', () => {
+    const html = String(StatsThisMac({ state: { snapshot: hostHealthFixture('disks'), loading: false } }));
+    expect(html).toContain('New Disk Detected: Scratch');
+    expect(html).toContain('931 GB at /Volumes/Scratch');
+    expect(html.match(/data-action="choose-host-disk"/gu)).toHaveLength(2);
+    expect(html).toContain('data-disk-monitor="true"');
+    expect(html).toContain('data-disk-monitor="false"');
+    expect(html).not.toContain('host-disk-message');
+    const failed = String(
+      StatsThisMac({ state: { snapshot: hostHealthFixture('disks'), loading: false }, diskMessage: 'read-only' }),
+    );
+    expect(failed).toContain('The disk choice was not saved.');
+  });
+
   it('renders unsupported signals as unsupported, never as values', () => {
     const html = String(StatsThisMac({ state: { snapshot: hostHealthFixture('unsupported'), loading: false } }));
     expect(html).toContain('Server host · Windows · x86_64');

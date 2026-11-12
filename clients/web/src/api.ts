@@ -2467,6 +2467,9 @@ export class Api {
       false,
     );
   hostHealthThresholds = () => this.parsed(parseHostHealthThresholds, '/host-health/thresholds');
+  /** Include or ignore one disk in host health (HS2-NHK8V8); answers with the updated snapshot. */
+  setHostHealthDisk = (id: string, monitor: boolean) =>
+    this.parsed(parseHostHealth, '/host-health/disks', { method: 'PUT', body: JSON.stringify({ id, monitor }) });
   saveHostHealthThresholds = (value: HostHealthConfiguredThresholds) =>
     this.parsed(parseHostHealthThresholds, '/host-health/thresholds', { method: 'PUT', body: JSON.stringify(value) });
   /** Machine-wide standby settings (HS2-EQVZTZ). */

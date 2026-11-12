@@ -56,6 +56,7 @@ export function StatsThisMacSettings() {
           { value: 'normal', label: 'All Normal' },
           { value: 'crossed', label: 'Disk, CPU, and Network Crossed' },
           { value: 'unsupported', label: 'Unsupported Platform' },
+          { value: 'disks', label: 'Several Disks and a New One' },
           { value: 'loading', label: 'Loading' },
           { value: 'failed', label: 'First Read Failed' },
           { value: 'stale', label: 'Stale Snapshot' },

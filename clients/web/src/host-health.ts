@@ -21,6 +21,9 @@ export interface HostHealthSignals {
     total_bytes: number | null;
     consumption_bytes_per_hour: number | null;
     hours_to_full: number | null;
+    /** Which monitored volume the values describe (HS2-NHK8V8); absent from an older server. */
+    volume_id?: string | null;
+    volume_label?: string | null;
   };
   memory: HostHealthSignalHeader & {
     pressure: HostHealthLevel | null;
@@ -54,11 +57,35 @@ export interface HostHealthCpuHistory {
   ends_at: string | null;
   average_percent: (number | null)[];
 }
+/** Whether a volume counts in host health (HS2-NHK8V8); `pending` waits for the user's choice. */
+export type HostHealthDiskDecision = 'included' | 'excluded' | 'pending';
+/** One volume host health knows about: the store's, a detected or added one, or a saved one now absent. */
+export interface HostHealthDiskVolume {
+  /** `store` for the ticket store's volume, else a stable volume id. */
+  id: string;
+  label: string;
+  /** Where it is or was last mounted; `null` for the store's volume. */
+  mount: string | null;
+  store: boolean;
+  /** Added by path (HS2-KBVZV1). */
+  manual: boolean;
+  decision: HostHealthDiskDecision;
+  present: boolean;
+  /** Its committed status while monitored and present. */
+  status: HostHealthStatus | null;
+  reason: string | null;
+  free_bytes: number | null;
+  total_bytes: number | null;
+  consumption_bytes_per_hour: number | null;
+  hours_to_full: number | null;
+}
 export interface HostHealthSnapshot {
   host: { name: string; os: string; arch: string };
   sampled_at: string | null;
   level: HostHealthLevel;
   signals: HostHealthSignals;
+  /** Every volume and its choice, store first (HS2-NHK8V8); absent from an older server. */
+  disks?: HostHealthDiskVolume[];
 }
 export interface HostHealthThresholdValues {
   sample_seconds: number;
@@ -87,6 +114,7 @@ export const HOST_HEALTH_SIGNALS: readonly HostHealthSignalId[] = [
   'thermal',
 ];
 const LEVELS = ['normal', 'warning', 'critical'];
+const DECISIONS = ['included', 'excluded', 'pending'];
 const STATUSES = [...LEVELS, 'unsupported', 'unavailable'];
 const THRESHOLD_NAMES: ReadonlyArray<keyof HostHealthThresholdValues> = [
   'sample_seconds',
@@ -115,6 +143,32 @@ function isCpuHistory(value: unknown): value is HostHealthCpuHistory {
   );
 }
 
+const nullableNumber = (value: unknown) => value === null || typeof value === 'number';
+
+function isDiskVolume(value: unknown): value is HostHealthDiskVolume {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.label === 'string' &&
+    nullableString(value.mount) &&
+    typeof value.store === 'boolean' &&
+    typeof value.manual === 'boolean' &&
+    typeof value.present === 'boolean' &&
+    DECISIONS.includes(value.decision as string) &&
+    (value.status === null || STATUSES.includes(value.status as string)) &&
+    nullableString(value.reason) &&
+    nullableNumber(value.free_bytes) &&
+    nullableNumber(value.total_bytes) &&
+    nullableNumber(value.consumption_bytes_per_hour) &&
+    nullableNumber(value.hours_to_full)
+  );
+}
+
+/** Volumes detected but not yet included or ignored (HS2-NHK8V8), in the server's order. */
+export function pendingDisks(snapshot: HostHealthSnapshot | undefined): HostHealthDiskVolume[] {
+  return (snapshot?.disks ?? []).filter((disk) => disk.present && disk.decision === 'pending');
+}
+
 /** `GET /host-health`: checks every field the glance surfaces read. */
 export const parseHostHealth: ResponseParser<HostHealthSnapshot> = (value) => {
   const what = 'host health';
@@ -131,6 +185,7 @@ export const parseHostHealth: ResponseParser<HostHealthSnapshot> = (value) => {
   }
   const history = (value.signals.cpu as Record<string, unknown>).history;
   if (history !== undefined && !isCpuHistory(history)) return fail();
+  if (value.disks !== undefined && !(Array.isArray(value.disks) && value.disks.every(isDiskVolume))) return fail();
   return value as unknown as HostHealthSnapshot;
 };
 

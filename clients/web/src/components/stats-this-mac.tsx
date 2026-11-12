@@ -1,5 +1,6 @@
 import './stats-this-mac.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
@@ -12,9 +13,10 @@ import { Text } from '@kerfjs/ui/text';
 import { Cpu, HardDrive, type IconNode, MemoryStick, Plug, Thermometer, WifiOff } from 'lucide';
 
 import type { HostCpuFrame } from '../host-cpu-feed';
-import type { HostHealthSignalId, HostHealthStatus } from '../host-health';
+import { type HostHealthSignalId, type HostHealthStatus, pendingDisks } from '../host-health';
 import type { HostHealthResourceState } from '../host-health-resource';
-import { hostPlatform, thisMacCards } from '../stats-this-mac';
+import { SHELL_AND_GLOBAL_ACTIONS } from '../interaction-attrs/shell-and-global';
+import { formatBytes, hostPlatform, thisMacCards } from '../stats-this-mac';
 import { CpuCoreMeter } from './cpu-core-meter';
 import { GlanceSparkline } from './glance-sparkline';
 
@@ -22,6 +24,8 @@ export interface StatsThisMacProps {
   state: HostHealthResourceState;
   /** The live CPU frame while Stats shows (HS2-CPFBWP); absent when the feed is stopped. */
   liveCpu?: HostCpuFrame;
+  /** Why the last disk choice failed (HS2-NHK8V8). */
+  diskMessage?: string;
 }
 
 const ICONS: Record<HostHealthSignalId, { icon: IconNode; name: string }> = {
@@ -49,7 +53,7 @@ const TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-di
  * on another device. Values come from the host-health push channel (HS2-DTAVQA); unsupported or
  * unreadable signals say so and never show a value.
  */
-export function StatsThisMac({ state, liveCpu }: StatsThisMacProps) {
+export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps) {
   const { snapshot } = state;
   if (!snapshot)
     return (
@@ -88,12 +92,58 @@ export function StatsThisMac({ state, liveCpu }: StatsThisMacProps) {
             rootAttributes={{ 'data-key': 'host-health-stale' }}
           />
         )}
+        {/* A newly detected disk asks once whether it counts (HS2-NHK8V8); the choice is machine-wide. */}
+        {pendingDisks(snapshot).map((disk) => (
+          <StateBanner
+            tone="info"
+            title={`New Disk Detected: ${disk.label}`}
+            detail={`${disk.total_bytes === null ? 'A disk' : formatBytes(disk.total_bytes)}${disk.mount === null ? '' : ` at ${disk.mount}`}. Should host health watch its free space?`}
+            rootAttributes={{ 'data-key': `pending-disk:${disk.id}`, 'data-pending-disk': disk.id }}
+            action={
+              // One action child, as the doctor requires (KUI-L203); the two choices sit in a wrapping Row
+              // like the feedback-session banner.
+              <Row wrap gap="xs">
+                <Button
+                  type="button"
+                  size="compact"
+                  shape="pill"
+                  action={SHELL_AND_GLOBAL_ACTIONS.chooseHostDisk.value}
+                  rootAttributes={{ 'data-disk-id': disk.id, 'data-disk-monitor': 'true' }}
+                >
+                  Monitor
+                </Button>
+                <Button
+                  type="button"
+                  size="compact"
+                  shape="pill"
+                  action={SHELL_AND_GLOBAL_ACTIONS.chooseHostDisk.value}
+                  rootAttributes={{ 'data-disk-id': disk.id, 'data-disk-monitor': 'false' }}
+                >
+                  Ignore
+                </Button>
+              </Row>
+            }
+          />
+        ))}
+        {diskMessage ? (
+          <StateBanner
+            tone="warning"
+            title="The disk choice was not saved."
+            detail={diskMessage}
+            rootAttributes={{ 'data-key': 'host-disk-message' }}
+          />
+        ) : null}
         <Grid minColumnWidth={px(224)} gap="m">
           {thisMacCards(snapshot, liveCpu).map((card) => (
             <ContentItem
               appearance={appearance(card.status)}
               frame="framed"
-              rootAttributes={{ 'data-key': `this-mac:${card.id}`, 'data-card': card.id, 'data-status': card.status }}
+              rootAttributes={{
+                'data-key': `this-mac:${card.key}`,
+                'data-card': card.id,
+                'data-card-key': card.key,
+                'data-status': card.status,
+              }}
             >
               <List gap="2xs">
                 <Row gap="xs" vAlign="middle">

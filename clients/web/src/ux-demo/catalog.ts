@@ -180,7 +180,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('stats-dashboard', ['state-banner']),
           cataloged('stats-right-now', ['glance-gauge', 'glance-sparkline', 'stats-projects-table', 'list', 'text']),
           cataloged('stats-projects-table', ['button', 'text']),
-          cataloged('stats-this-mac', ['state-banner', 'list', 'text', 'glance-sparkline', 'cpu-core-meter']),
+          cataloged('stats-this-mac', ['state-banner', 'button', 'list', 'text', 'glance-sparkline', 'cpu-core-meter']),
           cataloged('stats-overnight', ['select', 'state-banner', 'list', 'row', 'text']),
           cataloged('glance-gauge'),
           cataloged('glance-sparkline'),

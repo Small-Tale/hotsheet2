@@ -886,6 +886,172 @@ impl super::live_cpu::CoreSource for ScriptedCores {
     }
 }
 
+// ---- other disks (HS2-NHK8V8) ------------------------------------------------------------
+
+fn volume(id: &str, label: &str, free_gib: u64) -> source::VolumeReading {
+    source::VolumeReading {
+        id: id.into(),
+        label: label.into(),
+        mount: format!("/Volumes/{label}"),
+        free_bytes: free_gib * GIB,
+        total_bytes: 2000 * GIB,
+        manual: false,
+    }
+}
+
+fn choice(monitor: bool, label: &str) -> hotsheet_ticketing::host_health_disks::DiskChoice {
+    hotsheet_ticketing::host_health_disks::DiskChoice {
+        monitor,
+        label: label.into(),
+        mount: format!("/Volumes/{label}"),
+        manual: false,
+    }
+}
+
+fn disk_row<'a>(monitor: &'a Monitor, id: &str) -> &'a super::DiskVolume {
+    monitor
+        .snapshot()
+        .disks
+        .iter()
+        .find(|disk| disk.id == id)
+        .unwrap_or_else(|| panic!("no disk {id}"))
+}
+
+#[test]
+fn nhk8v8_an_included_disk_calls_out_while_pending_and_ignored_ones_never_do() {
+    use super::{DiskDecision, Status};
+    let thresholds = default_thresholds();
+    let mut monitor = Monitor::new(host());
+    monitor.set_disk_choices(
+        [
+            ("uuid:A".to_string(), choice(true, "Backup")),
+            ("uuid:C".to_string(), choice(false, "Camera")),
+            ("uuid:D".to_string(), choice(true, "Archive")),
+        ]
+        .into(),
+    );
+    monitor.set_volumes(vec![
+        volume("uuid:A", "Backup", 3),
+        volume("uuid:B", "Scratch", 1),
+        volume("uuid:C", "Camera", 1),
+    ]);
+    let out = crossings(&monitor.observe(healthy(), T0, &thresholds));
+    assert_eq!(out, vec![("disk", "critical")]);
+    let disk = &monitor.snapshot().signals.disk;
+    assert_eq!(disk.header.reason, Some("low_free_space"));
+    assert_eq!(disk.volume_id.as_deref(), Some("uuid:A"));
+    assert_eq!(disk.volume_label.as_deref(), Some("Backup"));
+    assert_eq!(disk.free_bytes, Some(3 * GIB));
+    let ids: Vec<&str> = monitor
+        .snapshot()
+        .disks
+        .iter()
+        .map(|disk| disk.id.as_str())
+        .collect();
+    assert_eq!(ids, ["store", "uuid:A", "uuid:B", "uuid:C", "uuid:D"]);
+    let store = disk_row(&monitor, "store");
+    assert!(store.store && store.present);
+    assert_eq!(store.status, Some(Status::Normal));
+    assert_eq!(store.free_bytes, Some(500 * GIB));
+    let backup = disk_row(&monitor, "uuid:A");
+    assert_eq!(backup.decision, DiskDecision::Included);
+    assert_eq!(backup.status, Some(Status::Critical));
+    // A newly detected disk waits for a choice; it shows its size but never calls out.
+    let scratch = disk_row(&monitor, "uuid:B");
+    assert_eq!(scratch.decision, DiskDecision::Pending);
+    assert_eq!((scratch.status, scratch.free_bytes), (None, Some(GIB)));
+    assert_eq!(
+        disk_row(&monitor, "uuid:C").decision,
+        DiskDecision::Excluded
+    );
+    // A saved disk that is not connected keeps its choice and reports nothing.
+    let archive = disk_row(&monitor, "uuid:D");
+    assert_eq!(
+        (archive.present, archive.decision, archive.free_bytes),
+        (false, DiskDecision::Included, None)
+    );
+    assert_eq!(archive.mount.as_deref(), Some("/Volumes/Archive"));
+
+    // Recovery keeps the per-volume margin and three samples, with no second delay on top.
+    monitor.set_volumes(vec![
+        volume("uuid:A", "Backup", 400),
+        volume("uuid:B", "Scratch", 1),
+        volume("uuid:C", "Camera", 1),
+    ]);
+    for minute in 1..RECOVERY_SAMPLES {
+        let at = T0 + u64::from(minute) * MINUTE;
+        assert!(crossings(&monitor.observe(healthy(), at, &thresholds)).is_empty());
+    }
+    let at = T0 + u64::from(RECOVERY_SAMPLES) * MINUTE;
+    assert_eq!(
+        crossings(&monitor.observe(healthy(), at, &thresholds)),
+        vec![("disk", "normal")]
+    );
+    let disk = &monitor.snapshot().signals.disk;
+    assert_eq!(disk.volume_id.as_deref(), Some("store"));
+    assert_eq!(disk.free_bytes, Some(500 * GIB));
+}
+
+#[test]
+fn nhk8v8_a_disk_that_leaves_keeps_its_choice_and_resumes_on_reconnect() {
+    use super::DiskDecision;
+    let thresholds = default_thresholds();
+    let mut monitor = Monitor::new(host());
+    monitor.set_disk_choices([("uuid:A".to_string(), choice(true, "Backup"))].into());
+    monitor.set_volumes(vec![volume("uuid:A", "Backup", 3)]);
+    assert_eq!(
+        crossings(&monitor.observe(healthy(), T0, &thresholds)),
+        vec![("disk", "critical")]
+    );
+    // Unplugged: the callout goes with it, the choice stays, and clients hear about it.
+    monitor.set_volumes(Vec::new());
+    let out = monitor.observe(healthy(), T0 + MINUTE, &thresholds);
+    assert_eq!(
+        crossings(&out),
+        vec![("disk", "normal"), ("disks", "changed")]
+    );
+    let backup = disk_row(&monitor, "uuid:A");
+    assert_eq!(
+        (backup.present, backup.decision),
+        (false, DiskDecision::Included)
+    );
+    // Reconnected under the same id: monitored again without asking.
+    monitor.set_volumes(vec![volume("uuid:A", "Backup", 3)]);
+    let out = monitor.observe(healthy(), T0 + 2 * MINUTE, &thresholds);
+    assert_eq!(
+        crossings(&out),
+        vec![("disk", "critical"), ("disks", "changed")]
+    );
+    assert_eq!(
+        disk_row(&monitor, "uuid:A").decision,
+        DiskDecision::Included
+    );
+}
+
+#[test]
+fn nhk8v8_a_new_disk_is_announced_once_and_a_choice_applies_at_once() {
+    use super::DiskDecision;
+    let thresholds = default_thresholds();
+    let mut monitor = Monitor::new(host());
+    monitor.observe(healthy(), T0, &thresholds);
+    monitor.set_volumes(vec![volume("uuid:B", "Scratch", 1)]);
+    let out = monitor.observe(healthy(), T0 + MINUTE, &thresholds);
+    assert_eq!(crossings(&out), vec![("disks", "changed")]);
+    // Still pending: nothing new to announce.
+    assert!(crossings(&monitor.observe(healthy(), T0 + 2 * MINUTE, &thresholds)).is_empty());
+    assert!(monitor.set_disk_choices([("uuid:B".to_string(), choice(true, "Scratch"))].into()));
+    assert_eq!(
+        disk_row(&monitor, "uuid:B").decision,
+        DiskDecision::Included
+    );
+    assert!(!monitor.set_disk_choices([("uuid:B".to_string(), choice(true, "Scratch"))].into()));
+    let out = monitor.observe(healthy(), T0 + 3 * MINUTE, &thresholds);
+    assert_eq!(
+        crossings(&out),
+        vec![("disk", "critical"), ("disks", "changed")]
+    );
+}
+
 #[test]
 fn memory_follows_os_pressure_and_swap_growth() {
     let thresholds = default_thresholds(); // swap growth warns at 1 GiB/h
@@ -1276,6 +1442,74 @@ mod server {
         assert_eq!(frame["status"], "unavailable");
         assert_eq!(frame["busy_percent"], serde_json::Value::Null);
         assert_eq!(frame["core_percent"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn nhk8v8_a_disk_choice_is_saved_machine_wide_applied_at_once_and_announced() {
+        use hotsheet_sync::LockExt;
+        let (_dir, state) = state();
+        let router = app(state.clone());
+        let (_, start) = json(&router, "GET", "/ws/poll?timeout_ms=0", None).await;
+        let cursor = start["cursor"].as_u64().unwrap();
+        state
+            .host_health
+            .monitor
+            .with_lock(|monitor| monitor.set_volumes(vec![volume("uuid:B", "Scratch", 400)]));
+        super::super::record(&state, healthy(), T0, &default_thresholds());
+        let (_, before) = json(&router, "GET", "/host-health", None).await;
+        assert_eq!(before["disks"][0]["id"], "store");
+        assert_eq!(before["disks"][0]["store"], true);
+        assert_eq!(before["disks"][1]["id"], "uuid:B");
+        assert_eq!(before["disks"][1]["decision"], "pending");
+        assert_eq!(before["signals"]["disk"]["volume_id"], "store");
+
+        let (status, after) = json(
+            &router,
+            "PUT",
+            "/host-health/disks",
+            Some(r#"{"id":"uuid:B","monitor":true}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(after["disks"][1]["decision"], "included");
+        let saved = super::super::routes::read_disk_choices(&state).unwrap();
+        assert!(saved["uuid:B"].monitor);
+        assert_eq!(saved["uuid:B"].label, "Scratch");
+        assert_eq!(saved["uuid:B"].mount, "/Volumes/Scratch");
+        // The store's disk cannot be ignored, and an unknown disk is not invented.
+        let (status, _) = json(
+            &router,
+            "PUT",
+            "/host-health/disks",
+            Some(r#"{"id":"store","monitor":false}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = json(
+            &router,
+            "PUT",
+            "/host-health/disks",
+            Some(r#"{"id":"uuid:none","monitor":true}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        // The choice is announced by a cursored event that names no disk.
+        let (_, replay) = json(
+            &router,
+            "GET",
+            &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+            None,
+        )
+        .await;
+        let disks: Vec<&serde_json::Value> = replay["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "host_health" && event["id"] == "disks")
+            .collect();
+        assert_eq!(disks.len(), 1);
+        assert_eq!(disks[0]["slug"], "changed");
+        assert!(disks[0].get("message").is_none());
     }
 
     #[tokio::test]

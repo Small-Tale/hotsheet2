@@ -1,6 +1,6 @@
 //! `GET /host-health` and `GET`/`PUT /host-health/thresholds` (HS2-DTAVQA).
 
-use super::HostHealthSnapshot;
+use super::{Emission, HostHealthSnapshot};
 use crate::AppState;
 use crate::api_error::ApiError;
 use axum::Json;
@@ -11,8 +11,11 @@ use hotsheet_ticketing::host_health::{
     ConfiguredHostHealthThresholds, HostHealthThresholds, THRESHOLDS, default_thresholds,
     effective_thresholds, setting_key, stored_threshold, validate_thresholds,
 };
+use hotsheet_ticketing::host_health_disks::{
+    DISKS_SETTING_KEY, DiskChoice, DiskChoices, STORE_VOLUME_ID, stored_choices,
+};
 use hotsheet_ticketing::{Scope, Settings};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// The machine-wide thresholds: defaults, explicit settings (`null` = default), and effective.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -97,4 +100,101 @@ pub(crate) async fn put_host_health_thresholds(
     .await
     .map_err(join_error)??;
     Ok(Json(view))
+}
+
+/// Read the saved disk choices (HS2-NHK8V8).
+pub(crate) fn read_disk_choices(state: &AppState) -> Result<DiskChoices, ApiError> {
+    let value = machine_settings(state)
+        .get(DISKS_SETTING_KEY, Scope::Global)
+        .map_err(settings_error)?;
+    Ok(stored_choices(value.as_ref()))
+}
+
+fn write_disk_choices(state: &AppState, choices: &DiskChoices) -> Result<(), ApiError> {
+    let settings = machine_settings(state);
+    if choices.is_empty() {
+        settings
+            .unset(DISKS_SETTING_KEY, Scope::Global)
+            .map_err(settings_error)?;
+    } else {
+        let value = serde_json::to_value(choices).map_err(join_error)?;
+        settings
+            .set(DISKS_SETTING_KEY, value, Scope::Global)
+            .map_err(settings_error)?;
+    }
+    Ok(())
+}
+
+/// Apply saved choices to the snapshot at once and tell clients to re-read it.
+fn publish_choices(state: &AppState, choices: DiskChoices) -> HostHealthSnapshot {
+    let snapshot = state.host_health.monitor.with_lock(|monitor| {
+        monitor.set_disk_choices(choices);
+        monitor.snapshot().clone()
+    });
+    super::emit_event(
+        state,
+        &Emission {
+            id: "disks",
+            status: "changed",
+            reason: None,
+        },
+    );
+    snapshot
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct DiskChoiceBody {
+    id: String,
+    monitor: bool,
+}
+
+/// `PUT /host-health/disks`: include or ignore one known volume (HS2-NHK8V8). The choice is
+/// a machine-wide setting keyed by the volume id, so it returns with a reconnected drive. The
+/// store's volume is always monitored.
+pub(crate) async fn put_host_health_disk(
+    State(state): State<AppState>,
+    Json(body): Json<DiskChoiceBody>,
+) -> Result<Json<HostHealthSnapshot>, ApiError> {
+    let id = body.id;
+    if id == STORE_VOLUME_ID {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "the ticket store's disk is always monitored",
+        ));
+    }
+    let known = state.host_health.monitor.with_lock(|monitor| {
+        monitor
+            .snapshot()
+            .disks
+            .iter()
+            .find(|disk| disk.id == id)
+            .map(|disk| {
+                (
+                    disk.label.clone(),
+                    disk.mount.clone().unwrap_or_default(),
+                    disk.manual,
+                )
+            })
+    });
+    let Some((label, mount, manual)) = known else {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "unknown disk"));
+    };
+    let choices = tokio::task::spawn_blocking(move || {
+        let mut choices = read_disk_choices(&state)?;
+        choices.insert(
+            id,
+            DiskChoice {
+                monitor: body.monitor,
+                label,
+                mount,
+                manual,
+            },
+        );
+        write_disk_choices(&state, &choices)?;
+        Ok::<_, ApiError>((state, choices))
+    })
+    .await
+    .map_err(join_error)??;
+    let (state, choices) = choices;
+    Ok(Json(publish_choices(&state, choices)))
 }

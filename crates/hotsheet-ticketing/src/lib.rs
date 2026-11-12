@@ -27,6 +27,7 @@ pub mod git;
 pub mod github_endpoint;
 pub mod groups;
 pub mod host_health;
+pub mod host_health_disks;
 pub mod identity;
 pub mod image_crop;
 pub mod live_history;

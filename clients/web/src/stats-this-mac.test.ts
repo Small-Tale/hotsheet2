@@ -131,4 +131,16 @@ describe('HS2-NS0AYR This Mac cards', () => {
     expect(thisMacCards(snapshot, live)[2]).toMatchObject({ headline: '61%', details: ['2 cores'] });
     expect(thisMacCards(snapshot)[2]?.headline).toBe('Unavailable');
   });
+
+  it('HS2-NHK8V8 shows the store disk first, then each other monitored, connected disk with its own tint', () => {
+    const cards = thisMacCards(hostHealthFixture('disks'));
+    expect(cards.filter((item) => item.id === 'disk').map((item) => [item.key, item.title, item.status])).toEqual([
+      ['disk', 'Disk', 'normal'],
+      ['disk:uuid:0A1B2C3D-0000-4000-8000-000000000001', 'Disk · Backup', 'warning'],
+    ]);
+    // The store card reads the store's own volume, not the worst volume the signal names.
+    expect(cards[0]).toMatchObject({ headline: '212 GB free' });
+    expect(cards[1]).toMatchObject({ headline: '14 GB free', details: ['−1.5 GB/h · full in ~9h 18m', 'of 1863 GB'] });
+    expect(new Set(cards.map((item) => item.key)).size).toBe(cards.length);
+  });
 });

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { hostHealthCallouts, type HostHealthSnapshot, parseHostHealth, parseHostHealthThresholds } from './host-health';
+import {
+  hostHealthCallouts,
+  type HostHealthSnapshot,
+  parseHostHealth,
+  parseHostHealthThresholds,
+  pendingDisks,
+} from './host-health';
 import { ServerResponseShapeError } from './server-response-parsers';
 
 const header = (status: string, reason: string | null = null) => ({ status, reason, since: null });
@@ -84,6 +90,36 @@ describe('host health contract (HS2-DTAVQA)', () => {
       { bucket_seconds: 300, ends_at: null },
     ])
       expect(() => parseHostHealth(withHistory(drifted))).toThrow(ServerResponseShapeError);
+  });
+
+  it('HS2-NHK8V8 accepts the disk list or its absence, rejects drift, and lists pending disks', () => {
+    const good = hostHealthFixture();
+    const disk = {
+      id: 'uuid:A',
+      label: 'Backup',
+      mount: '/Volumes/Backup',
+      store: false,
+      manual: false,
+      decision: 'pending',
+      present: true,
+      status: null,
+      reason: null,
+      free_bytes: 1,
+      total_bytes: 2,
+      consumption_bytes_per_hour: null,
+      hours_to_full: null,
+    };
+    expect(pendingDisks(parseHostHealth({ ...good, disks: [disk] })).map((item) => item.id)).toEqual(['uuid:A']);
+    expect(pendingDisks(parseHostHealth({ ...good, disks: [{ ...disk, present: false }] }))).toEqual([]);
+    expect(pendingDisks(good)).toEqual([]);
+    for (const drifted of [
+      { ...disk, decision: 'maybe' },
+      { ...disk, present: 'yes' },
+      { ...disk, status: 'red' },
+      'disk',
+    ])
+      expect(() => parseHostHealth({ ...good, disks: [drifted] })).toThrow(ServerResponseShapeError);
+    expect(() => parseHostHealth({ ...good, disks: {} })).toThrow(ServerResponseShapeError);
   });
 
   it('parses thresholds with nullable configured values', () => {

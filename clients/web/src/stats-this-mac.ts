@@ -1,5 +1,11 @@
 import type { HostCpuFrame } from './host-cpu-feed';
-import type { HostHealthSignalId, HostHealthSignals, HostHealthSnapshot, HostHealthStatus } from './host-health';
+import type {
+  HostHealthDiskVolume,
+  HostHealthSignalId,
+  HostHealthSignals,
+  HostHealthSnapshot,
+  HostHealthStatus,
+} from './host-health';
 import { formatDuration } from './stats-right-now';
 
 /**
@@ -10,6 +16,8 @@ import { formatDuration } from './stats-right-now';
 
 export interface ThisMacCard {
   id: HostHealthSignalId;
+  /** Unique among the cards: the signal, or `disk:<volume id>` for another monitored disk (HS2-NHK8V8). */
+  key: string;
   title: string;
   status: HostHealthStatus;
   /** The large reading, or why there is none. */
@@ -55,17 +63,30 @@ function nonAlerting(id: HostHealthSignalId, status: HostHealthStatus): ThisMacC
   if (status === 'unsupported')
     return {
       id,
+      key: id,
       title: TITLES[id],
       status,
       headline: 'Not supported',
       details: ["This server's platform has no reader for it"],
     };
   if (status === 'unavailable')
-    return { id, title: TITLES[id], status, headline: 'Unavailable', details: ['The last sample could not be read'] };
+    return {
+      id,
+      key: id,
+      title: TITLES[id],
+      status,
+      headline: 'Unavailable',
+      details: ['The last sample could not be read'],
+    };
   return undefined;
 }
 
-function diskCard(disk: HostHealthSignals['disk']): ThisMacCard {
+type DiskValues = Pick<
+  HostHealthDiskVolume,
+  'free_bytes' | 'total_bytes' | 'consumption_bytes_per_hour' | 'hours_to_full'
+> & { status: HostHealthStatus };
+
+function diskCard(disk: DiskValues, volume?: HostHealthDiskVolume): ThisMacCard {
   const details: string[] = [];
   if (disk.consumption_bytes_per_hour !== null && disk.consumption_bytes_per_hour !== 0) {
     const sign = disk.consumption_bytes_per_hour > 0 ? '−' : '+';
@@ -75,7 +96,8 @@ function diskCard(disk: HostHealthSignals['disk']): ThisMacCard {
   if (disk.total_bytes !== null) details.push(`of ${formatBytes(disk.total_bytes)}`);
   return {
     id: 'disk',
-    title: TITLES.disk,
+    key: volume ? `disk:${volume.id}` : 'disk',
+    title: volume ? `${TITLES.disk} · ${volume.label}` : TITLES.disk,
     status: disk.status,
     headline: disk.free_bytes === null ? 'Unknown' : `${formatBytes(disk.free_bytes)} free`,
     details,
@@ -96,6 +118,7 @@ function memoryCard(memory: HostHealthSignals['memory']): ThisMacCard {
   }
   return {
     id: 'memory',
+    key: 'memory',
     title: TITLES.memory,
     status: memory.status,
     headline: memory.pressure === null ? 'Unknown' : capitalize(memory.pressure),
@@ -144,6 +167,7 @@ function cpuCard(cpu: HostHealthSignals['cpu'], live?: HostCpuFrame): ThisMacCar
   const trend = cpuTrend(cpu.history);
   return {
     id: 'cpu',
+    key: 'cpu',
     title: TITLES.cpu,
     status: cpu.status,
     headline:
@@ -179,6 +203,7 @@ function powerCard(power: HostHealthSignals['power']): ThisMacCard {
   ].filter((item): item is string => item !== undefined);
   return {
     id: 'power',
+    key: 'power',
     title: TITLES.power,
     status: power.status,
     headline: powerHeadline(power),
@@ -189,6 +214,7 @@ function powerCard(power: HostHealthSignals['power']): ThisMacCard {
 function networkCard(network: HostHealthSignals['network']): ThisMacCard {
   return {
     id: 'network',
+    key: 'network',
     title: TITLES.network,
     status: network.status,
     headline: network.reachable === false ? 'No network route' : 'Degraded',
@@ -199,6 +225,7 @@ function networkCard(network: HostHealthSignals['network']): ThisMacCard {
 function thermalCard(thermal: HostHealthSignals['thermal']): ThisMacCard {
   return {
     id: 'thermal',
+    key: 'thermal',
     title: TITLES.thermal,
     status: thermal.status,
     headline: 'Throttled',
@@ -215,8 +242,16 @@ const alerting = (status: HostHealthStatus) => status === 'warning' || status ==
  */
 export function thisMacCards(snapshot: HostHealthSnapshot, live?: HostCpuFrame): ThisMacCard[] {
   const { signals } = snapshot;
+  // With a volume list (HS2-NHK8V8) the Disk card is the store's volume and each other monitored, connected
+  // volume follows it with its own card; an older server reports only the store's.
+  const store = snapshot.disks?.find((disk) => disk.store);
+  const storeDisk: DiskValues = store ? { ...store, status: store.status ?? signals.disk.status } : signals.disk;
+  const others = (snapshot.disks ?? []).filter(
+    (disk) => !disk.store && disk.present && disk.decision === 'included' && disk.status !== null,
+  );
   const cards: ThisMacCard[] = [
-    nonAlerting('disk', signals.disk.status) ?? diskCard(signals.disk),
+    nonAlerting('disk', storeDisk.status) ?? diskCard(storeDisk),
+    ...others.map((disk) => diskCard({ ...disk, status: disk.status ?? 'unavailable' }, disk)),
     nonAlerting('memory', signals.memory.status) ?? memoryCard(signals.memory),
     // A live frame (HS2-CPFBWP) shows even while the sampled CPU reader is unavailable.
     (liveValues(live) === undefined ? nonAlerting('cpu', signals.cpu.status) : undefined) ?? cpuCard(signals.cpu, live),

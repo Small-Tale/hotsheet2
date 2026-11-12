@@ -25689,6 +25689,90 @@ test('Stats This Mac CPU card follows the live per-core feed only while Stats sh
   await expect.poll(() => held.map((request) => request.after)).toEqual(['1', '2', '2']);
 });
 
+test('Stats This Mac asks once about a newly detected disk and shows each monitored disk (HS2-NHK8V8)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  await page.route('**/live-state', (route) =>
+    route.fulfill({ json: { epoch_ms: 1, stores: glanceScenario(Date.now()) } }),
+  );
+  let snapshot = hostHealthFixture('disks');
+  const scratch = 'uuid:0A1B2C3D-0000-4000-8000-000000000002';
+  await page.route('**/host-health', (route) => route.fulfill({ json: snapshot }));
+  const choices: unknown[] = [];
+  let failNext = true;
+  await page.route('**/host-health/disks', (route) => {
+    const body = route.request().postDataJSON() as { id: string; monitor: boolean };
+    choices.push({ method: route.request().method(), ...body });
+    if (failNext) {
+      failNext = false;
+      return route.fulfill({ status: 500, json: { error: 'settings are read-only' } });
+    }
+    snapshot = {
+      ...snapshot,
+      disks: snapshot.disks?.map((disk) =>
+        disk.id === body.id
+          ? { ...disk, decision: body.monitor ? 'included' : 'excluded', status: body.monitor ? 'normal' : null }
+          : disk,
+      ),
+    };
+    return route.fulfill({ json: snapshot });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  const thisMac = page.getByRole('region', { name: 'Server Host studio' });
+  await expect(thisMac).toBeVisible();
+  // The store's disk first, then each other monitored, connected disk with its own tint.
+  expect(
+    await thisMac
+      .locator('[data-card="disk"]')
+      .evaluateAll((cards) => cards.map((card) => card.getAttribute('data-card-key'))),
+  ).toEqual(['disk', 'disk:uuid:0A1B2C3D-0000-4000-8000-000000000001']);
+  const backup = thisMac.locator('[data-card-key="disk:uuid:0A1B2C3D-0000-4000-8000-000000000001"]');
+  await expect(backup).toContainText('Disk · Backup');
+  await expect(backup).toHaveAttribute('data-status', 'warning');
+  await expect(thisMac.locator('[data-card-key="disk"]')).toContainText('212 GB free');
+  // Ignored and disconnected disks get no card; the new one asks.
+  await expect(thisMac).not.toContainText('Camera');
+  await expect(thisMac).not.toContainText('Archive');
+  const prompt = thisMac.locator(`[data-pending-disk="${scratch}"]`);
+  await expect(prompt).toContainText('New Disk Detected: Scratch');
+  await expect(prompt).toContainText('931 GB at /Volumes/Scratch');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1024],
+      ['narrow', 600],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(prompt).toBeVisible();
+      expect(await thisMac.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await thisMac.screenshot({ path: `target/visual-captures/hs2-nhk8v8-this-mac-disks-${scheme}-${label}.png` });
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // A failed save keeps the prompt and says why; a retry saves, clears both, and adds the disk's card.
+  await prompt.getByRole('button', { name: 'Monitor' }).click();
+  await expect(thisMac.locator('[data-key="host-disk-message"]')).toContainText('settings are read-only');
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole('button', { name: 'Monitor' }).click();
+  await expect(prompt).toBeHidden();
+  await expect(thisMac.locator('[data-key="host-disk-message"]')).toBeHidden();
+  await expect(thisMac.locator(`[data-card-key="disk:${scratch}"]`)).toContainText('Disk · Scratch');
+  expect(choices).toEqual([
+    { method: 'PUT', id: scratch, monitor: true },
+    { method: 'PUT', id: scratch, monitor: true },
+  ]);
+});
+
 test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({
   page,
 }) => {

@@ -149,6 +149,8 @@ export interface ShellAndGlobalInteractionsDependencies {
     openAwayEvent?: (projectId: string, slug: string) => void;
     /** Stats' Overnight window select (HS2-9AN4DN). */
     setOvernightWindow?: (window: OvernightWindow) => void;
+    /** Include or ignore a detected disk in host health (HS2-NHK8V8). */
+    chooseHostDisk?: (id: string, monitor: boolean) => void;
   };
 }
 
@@ -263,6 +265,12 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     delegate(document.body, 'change', 'kui-select[name="stats-overnight-window"]', (_event, target) => {
       const value = (target as HTMLElement & { value: string }).value;
       if (value === 'standby' || value === '12h' || value === '24h') standby?.setOvernightWindow?.(value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.chooseHostDisk.selector, (_event, target) => {
+      const { diskId, diskMonitor } = data(target);
+      if (diskId) standby?.chooseHostDisk?.(diskId, diskMonitor === 'true');
     }),
   );
   lifetime.add(

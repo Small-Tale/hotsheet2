@@ -33,6 +33,8 @@ export interface StatsGlanceDependencies {
   hostCpu?: { state: Signal<HostCpuFeedState>; start(): void; stop(): void; running(): boolean };
   /** Whether the document is visible; defaults to visible. */
   pageVisible?: Signal<boolean>;
+  /** Why the last disk choice failed (HS2-NHK8V8). */
+  hostDiskMessage?: Signal<string | undefined>;
   /**
    * Read the recorded live state history since a time (HS2-9AN4DN). It is read when Stats opens, when
    * its window changes, and on the Stats project's stream resync; pushed snapshots extend it between reads.
@@ -228,6 +230,7 @@ export function createStatsGlanceController(dependencies: StatsGlanceDependencie
     return {
       state: dependencies.hostHealth.state.value,
       ...(frame !== undefined && cpu?.running() === true ? { liveCpu: frame } : {}),
+      ...(dependencies.hostDiskMessage?.value === undefined ? {} : { diskMessage: dependencies.hostDiskMessage.value }),
     };
   }
 

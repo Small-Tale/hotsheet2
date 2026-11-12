@@ -2204,6 +2204,11 @@ pub fn app(state: AppState) -> Router {
         .route("/host-health", get(host_health::routes::get_host_health))
         // The live CPU long poll (HS2-CPFBWP): answers when the fast sampler has a newer frame.
         .route("/host-health/cpu", get(host_health::live_cpu::get_live_cpu))
+        // Include or ignore a detected disk (HS2-NHK8V8).
+        .route(
+            "/host-health/disks",
+            axum::routing::put(host_health::routes::put_host_health_disk),
+        )
         .route(
             "/host-health/thresholds",
             get(host_health::routes::get_host_health_thresholds)
