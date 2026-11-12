@@ -3448,7 +3448,8 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
 
     // An agent transcript from before the follow began is not back-counted.
     append(&agent("old"), "old-1", 1000, true, Some("end_turn"));
-    let first = app(server());
+    let first_state = server();
+    let first = app(first_state.clone());
     call(first.clone(), "POST", "/terminals", terminal.clone()).await;
     call(
         first.clone(),
@@ -3488,7 +3489,13 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
         3,
         "every followed agent's offset persists: {record}"
     );
+    // The first server exits: its follow stops but its record stays. Its watcher thread
+    // would otherwise outlive the router in this process and keep recording and persisting
+    // after the restarted server forgets the record (HS2-2XHKMZ).
+    hotsheet_server::stop_claude_usage_follows(&first_state);
     drop(first);
+    drop(first_state);
+    assert!(persisted.exists(), "a stopped follow keeps its record");
 
     // While the server is down, a1 appends and a new agent starts.
     append(&agent("a1"), "a1-2", 6, true, Some("end_turn"));
@@ -3510,6 +3517,8 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
         String::new(),
     )
     .await;
+    // The forget stopped the follow before removing its record, so no wake already in
+    // flight writes it back (HS2-2XHKMZ).
     assert!(!persisted.exists());
 
     // A record written before HS2-JW6N67 (no subagent offsets) starts existing agent

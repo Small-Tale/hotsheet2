@@ -12,7 +12,7 @@ pub(crate) mod usage_store;
 
 pub(crate) use attach::attach_terminal;
 pub(crate) use claude_usage::report_claude_turn;
-pub use claude_usage::resume_claude_usage_follows;
+pub use claude_usage::{resume_claude_usage_follows, stop_claude_usage_follows};
 pub use codex_watch::resume_codex_session_watches;
 pub(crate) use launch::{
     INHERIT_GLOBAL_SHELL_HISTORY_SETTING, open_terminal, release_session_claims,

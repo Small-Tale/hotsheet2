@@ -66,6 +66,9 @@ struct FollowInner {
     turn_messages: usize,
     /// A Stop is waiting for a late append; a concurrent Stop returns at once.
     stop_waiting: bool,
+    /// The follow stopped (HS2-2XHKMZ): a watcher wake or Stop wait already in flight
+    /// records and persists nothing more, so it cannot recreate a forgotten record.
+    stopped: bool,
 }
 
 /// The persisted part of a follow: no transcript content and no credential.
@@ -209,6 +212,9 @@ fn record_path(state: &AppState, terminal: &str) -> Option<PathBuf> {
 
 /// Best effort: a follow that cannot persist still records while this server runs.
 fn persist(state: &AppState, inner: &FollowInner) {
+    if inner.stopped {
+        return;
+    }
     let Some(path) = record_path(state, &inner.terminal) else {
         return;
     };
@@ -288,6 +294,9 @@ fn record_ready(
     inner: &mut FollowInner,
     turn_ended: bool,
 ) -> std::io::Result<usize> {
+    if inner.stopped {
+        return Ok(0);
+    }
     let target = match &inner.target {
         Some(target) => target.clone(),
         None => {
@@ -424,6 +433,7 @@ fn ensure_follow(
             turn_start: None,
             turn_messages: 0,
             stop_waiting: false,
+            stopped: false,
         },
     );
     let inner = follow.inner.clone();
@@ -522,15 +532,40 @@ pub(crate) async fn report_claude_turn(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// The session or terminal ended: stop following and forget the persisted follow.
+/// Mark `follow` stopped and drop it, which ends its watcher. A watcher wake or Stop wait
+/// already running holds the follow's lock while it records, so once this returns none of
+/// them persists again (HS2-2XHKMZ).
+fn stop_follow(follow: ClaudeUsageFollow) {
+    follow.inner.lock_or_recover().stopped = true;
+}
+
+/// The session or terminal ended: stop following and forget the persisted follow. The
+/// record is removed only after the follow stopped, so an in-flight wake cannot write it
+/// back (HS2-2XHKMZ).
 pub(crate) fn forget_claude_turn(state: &AppState, terminal: &str) {
     let removed = state
         .claude_usage_follows
         .lock_or_recover()
         .remove(terminal);
-    drop(removed);
+    if let Some(follow) = removed {
+        stop_follow(follow);
+    }
     if let Some(path) = record_path(state, terminal) {
         let _ = std::fs::remove_file(path);
+    }
+}
+
+/// Stop every follow while keeping its persisted record, as when this server exits, so a
+/// server restarted in the same process resumes from the records alone (HS2-2XHKMZ).
+pub fn stop_claude_usage_follows(state: &AppState) {
+    let follows: Vec<_> = state
+        .claude_usage_follows
+        .lock_or_recover()
+        .drain()
+        .map(|(_, follow)| follow)
+        .collect();
+    for follow in follows {
+        stop_follow(follow);
     }
 }
 
@@ -584,6 +619,7 @@ pub fn resume_claude_usage_follows(state: &AppState, alive: &[String]) {
                 turn_start: None,
                 turn_messages: 0,
                 stop_waiting: false,
+                stopped: false,
             },
         );
         state
@@ -636,6 +672,45 @@ mod tests {
         assert!(record_path_is_safe("01M6JTZXXEBCC3KN9EHWQZD3P2"));
         assert!(!record_path_is_safe("../x"));
         assert!(!record_path_is_safe(""));
+    }
+
+    #[test]
+    fn hs2_2xhkmz_a_stopped_follow_never_writes_its_record_back() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(
+            hotsheet_ticketing::FsStore::init(
+                root.path().join("s.hs2"),
+                &hotsheet_ticketing::StoreMetadata::new("HS"),
+            )
+            .unwrap(),
+            "secret".into(),
+        )
+        .unwrap()
+        .with_machine_home(root.path().join("home"));
+        let transcript = root.path().join("projects").join("p").join("s.jsonl");
+        let mut inner = FollowInner {
+            terminal: "t1".into(),
+            session_id: "s".into(),
+            transcript,
+            reader: TranscriptFollower::new(0),
+            subagents: BTreeMap::new(),
+            usage_checkout: None,
+            target: None,
+            turn_start: None,
+            turn_messages: 0,
+            stop_waiting: false,
+            stopped: false,
+        };
+        let path = record_path(&state, "t1").unwrap();
+        persist(&state, &inner);
+        assert!(path.exists());
+        std::fs::remove_file(&path).unwrap();
+        // A wake that was already running when the terminal ended finishes after the
+        // forget removed the record: it must not recreate it.
+        inner.stopped = true;
+        assert_eq!(record_ready(&state, &mut inner, true).unwrap(), 0);
+        persist(&state, &inner);
+        assert!(!path.exists());
     }
 
     fn record_path_is_safe(terminal: &str) -> bool {
