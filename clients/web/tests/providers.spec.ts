@@ -31431,11 +31431,33 @@ test('styles completed and verified titles consistently in list and column rows'
   await expect(verified).toHaveCSS('color', quietColor);
 });
 
+/**
+ * HS2-DXJ2RZ: the next answer to a ticket list read. Opening a project makes about twenty mocked
+ * requests before the list read, each a round trip through the test process, so under full-gate
+ * load the first rows could arrive after one expect timeout. Wait for the list itself, within the
+ * test's budget, before asserting on its rows.
+ */
+function ticketListLoaded(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' && /\/checkouts\/[^/]+\/tickets$/.test(new URL(response.url()).pathname),
+  );
+}
+
+/** HS2-DXJ2RZ: the answer to the next Reopen Ticket (`not-working`) operation, which carries the reopened ticket. */
+function reopenAnswered(page: Page) {
+  return page.waitForResponse(
+    (response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/not-working'),
+  );
+}
+
 test('offers Up Next only on active tickets across rows and inspector', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  const listed = ticketListLoaded(page);
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await listed;
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"] [data-action="toggle-row-up-next"]')).toBeVisible();
   await expect(
     page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DONE01"] [data-action="toggle-row-up-next"]'),
@@ -31482,7 +31504,9 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  const listed = ticketListLoaded(page);
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await listed;
   const menu = page.locator('[data-context-menu="ticket"]'),
     verified = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-VERIFY01"]');
   await verified.click({ button: 'right' });
@@ -31499,7 +31523,9 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
     .setInputFiles({ name: 'verified-proof.png', mimeType: 'image/png', buffer: Buffer.from('png') });
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-bmhnsx-reopen-verified-wide.png', fullPage: true });
+  let reopened = reopenAnswered(page);
   await dialog.getByRole('button', { name: 'Reopen Ticket' }).click();
+  await reopened;
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.operation === 'not-working').length).toBe(1);
   await expect(verified).toHaveAttribute('data-status', 'not_started');
@@ -31521,14 +31547,18 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   await expect(archiveNote).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-bmhnsx-reopen-archive-narrow.png', fullPage: true });
+  reopened = reopenAnswered(page);
   await dialog.getByRole('button', { name: 'Reopen Ticket' }).click();
+  await reopened;
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.operation === 'not-working').length).toBe(2);
   const mobileView = page.locator('kui-select[name="mobile-view"]');
+  const relisted = ticketListLoaded(page);
   await mobileView.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'all';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  await relisted;
   const reopenedArchive = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]');
   await expect(reopenedArchive).toHaveAttribute('data-status', 'not_started');
   await expect(reopenedArchive.locator('[data-action="toggle-row-up-next"]')).toHaveAttribute(
