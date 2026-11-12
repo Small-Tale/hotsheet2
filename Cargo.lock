@@ -1169,6 +1169,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotsheet-jobs"
+version = "0.0.0"
+dependencies = [
+ "hotsheet-process-journal",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "ulid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "hotsheet-mcp"
 version = "0.0.0"
 dependencies = [

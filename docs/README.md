@@ -207,9 +207,11 @@ Machine-local PTY, AI drive, discovery-probe, utility, and detached launch
 diagnostics, including the headless `processes` inventory and crash-unresolved
 records, are shipped in [04](04-core-server-cli.md) (HS2-GDCMXE, HS2-G9TF60).
 
-**Jobs:** [33-jobs.md](33-jobs.md) defines the decided, design-only machine-local
-Job model, producer and client contract, and state transitions (HS2-M78N64).
-The core, CLI, server, MCP, monitor, and client implementations remain follow-ups.
+**Jobs:** [33-jobs.md](33-jobs.md) defines the machine-local Job model, producer
+and client contract, and state transitions (HS2-M78N64). Partial: the core model,
+state machine, leases, and local store are shipped in `crates/hotsheet-jobs`
+(HS2-GCHX8V). The CLI, server, MCP, monitor, and client implementations remain
+follow-ups.
 
 **Development strategies:** [34-development-strategies.md](34-development-strategies.md)
 defines the versioned shared project policy and the Ticket Assured, Steady Main,

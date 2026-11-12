@@ -1,5 +1,21 @@
 # Feature Coverage Matrix
 
+HS2-GCHX8V: `hotsheet-jobs` unit tests compare the transition function with the
+`docs/33-jobs.md` §33.2 table for every source, target, and producer family, and
+cover step validation and weighted rollup, parent-linked step cycles, feed cursor
+replay, compaction gaps, torn lines, and refill. `tests/transitions.rs` drives
+every edge through the real store on a temporary home and checks that a refused
+edge leaves `job.json` byte-identical. `tests/adversarial.rs` covers a late
+message from an older lease generation, out-of-order reports, a crash that leaves
+temporary files or a half-created directory, damaged and newer-version records,
+repeated outcomes, lease expiry with late renewal and late outcome, owner probes
+including process-journal launch ids with a reused PID, cancellation races,
+retention windows, the per-checkout cap, and an emptied then refilled checkout.
+`tests/concurrency.rs` runs six threads and four separate processes against one
+Job and checks one gap-free feed sequence. There is no end-to-end surface yet: the
+CLI, server, and MCP callers are HS2-V4Q2MA, HS2-WPFWS8, and HS2-B2PAVJ. Fixtures
+use synthetic data only.
+
 HS2-3FQNGT adds a narrow jsdom `dom-pilot` project for parent-composed search-help insertion and Workers Started/Completed/Started transitions, plus custom-element, shadow-DOM, focus, mutation, composed-event, and re-edit probes. Existing real-browser search/Workers flows and visual checks remain authoritative; measured coverage and limits are in [the pilot report](dom-test-pilot-2026-11-10.md).
 
 HS2-6CK09C: `scripts/verify-playwright-shards.test.mjs` checks that the CI

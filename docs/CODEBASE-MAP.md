@@ -179,7 +179,7 @@ The numbered requirements docs (source of truth for behavior; status in
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
 - [26-orchestration-projects.md](26-orchestration-projects.md) — Partial: target declarations and bindings (HS2-4J6V46), delegated grants and audit journal (HS2-SBQ3T8), throughput policy and approvals (HS2-YCJDEB), ticket links and target ticket operations (HS2-AZ15GA); dispatch remains design (HS2-4JFP0S)
 - [32-notifier-plugins.md](32-notifier-plugins.md) — Notifier plugins: capabilities, rendering, built-ins, external protocol, rules, router, CLI/REST (HS2-R5HTZN)
-- [33-jobs.md](33-jobs.md) — Jobs: design-only local records for long-running work, state machine, producers, storage, and client surfaces (HS2-M78N64)
+- [33-jobs.md](33-jobs.md) — Jobs: local records for long-running work, state machine, producers, storage, and client surfaces (HS2-M78N64); core crate shipped (HS2-GCHX8V), surfaces design-only
 - [34-glance-surfaces.md](34-glance-surfaces.md) — Glance surfaces: standby, sidebar live state, Stats Right now, away digest (design only, HS2-3AA1N7)
 - [36-resource-claims.md](36-resource-claims.md) — Resource claims: leases with fencing and renewal tokens, backend contract, local machine backend, CLI/MCP/REST surfaces and the token-only route (HS2-H3WPPY, HS2-FMHH9Y)
 
@@ -817,6 +817,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
       src/lib.rs             #   use instead of lock().unwrap(), silent `if let Ok(..) = lock()` skips, or poison→500 mapping
     hotsheet-resource-claims/ # Resource claims (HS2-H3WPPY, HS2-FMHH9Y, docs/36): ClaimBackend contract and ClaimError codes, names and grants, prefixed metadata codecs and KeyProvider, renewal tokens stored as a keyed digest, LocalBackend under <HOTSHEET_HOME>/resource-claims (locked atomic namespace state, persistent fencing counters, loopback-datagram waiter wake-ups, injectable Clock); service.rs is the one ClaimService request workflow behind the CLI, MCP and server, with resolve_backend (the HS2-JJWESD configuration seam) and held / wait_until_free for schedulers
+    hotsheet-jobs/           # Transient machine-local Jobs (docs/33, HS2-GCHX8V): no server or ticket-store dependency; injected Clock/IdSource
+      src/model.rs           #   Job snapshot (`job.json`, version 1), Status, ProducerFamily, Capabilities, Lease/LeaseToken, Outcome, ETA, derived Liveness; bounded field validation
+      src/state.rs           #   The docs/33 §33.2 transition table; every unlisted edge is refused
+      src/steps.rs           #   Step tree validation, parent-linked steps to tree, weighted rollup
+      src/feed.rs            #   Bounded append-only `feed.jsonl`: seq cursor, compaction, explicit gap
+      src/store.rs           #   JobStore under `${HOTSHEET_HOME}/jobs/<checkout-id>/<ulid>/`: per-checkout file lock, atomic snapshot, leases, cancel, reconcile (stalled to lost), retention and cap, history ETA, revision counter
+      src/probe.rs           #   OwnerProbe; JournalProbe reads process-journal launch ids (never PIDs)
+      tests/                 #   transitions.rs (full matrix through the store), adversarial.rs, concurrency.rs (threads and separate processes)
     hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
       src/limits.rs          #   Physical memory (sysconf) and replay bounds behind the terminal limits (HS2-Y5DYC0)

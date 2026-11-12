@@ -1,8 +1,9 @@
 # 33 — Jobs
 
-**Status:** Decided, design only (HS2-M78N64, from HS2-46YX92 annotation #1). The
-core store, producers, CLI, server, MCP, and client surfaces are tracked by the
-linked follow-up tickets; this document does not describe shipped behavior.
+**Status:** Partly shipped. The core model, state machine, and local store are
+shipped in `crates/hotsheet-jobs` (HS2-GCHX8V, §33.7). The producers, CLI, server,
+MCP, and client surfaces remain design only and are tracked by the tickets in
+§33.6 (design: HS2-M78N64, from HS2-46YX92 annotation #1).
 
 A **Job** is a transient, machine-local record of long-running work such as a test
 run, a project command, or a wait for CI. It is not a ticket: it has no provider,
@@ -137,3 +138,56 @@ CI watch HS2-3R9V0R; result summary HS2-BDH12X; notification HS2-FCBYC8;
 project-command consolidation HS2-YT619Z. Their implementation tickets may
 refine protocol field names without changing the behavior or state transitions
 above.
+
+## 33.7 Core crate as shipped (HS2-GCHX8V)
+
+`crates/hotsheet-jobs` is a library with no server or ticket-store dependency. It
+reads time and mints ids only through injected `Clock` and `IdSource` values.
+
+**Files.** `${HOTSHEET_HOME}/jobs/<checkout-id>/` holds a `.lock` file, a `revision`
+counter that grows with every change in the checkout, a `history.json` of recent
+successful durations by job key, and one `<ulid>/` directory for each Job with
+`job.json` and `feed.jsonl`. Directories are created with owner-only permissions.
+`job.json` carries `version: 1`; any other version is rejected and never
+rewritten or removed. Feed text is stored only in `feed.jsonl`.
+
+**Leases.** `acquire` moves a `queued` Job to `running` or `waiting` and returns a
+token of owner and generation. Every producer write presents the token and renews
+the lease. A token from an earlier generation, or from another owner, is refused.
+A producer may also number its reports; a report at or below the last accepted
+number is refused. The default lease is 60 seconds.
+
+**Stalled and lost.** `stalled` is a derived liveness, not a stored status: the
+Job is active and its lease has expired. A late renewal makes it live again.
+`reconcile` turns a stalled Job into `lost` after a further 5 minutes, or at once
+when the owner probe reports that the process-journal launch has ended. A probe
+that confirms a live owner prevents the loss. A `lost` watch Job can be acquired
+again by presenting the same external operation; a stalled watch Job can be taken
+over the same way, which applies the `lost` and reattach edges in one locked step.
+
+**Outcomes and cancellation.** An identical repeated outcome from the same lease
+is accepted without a write; any different repeat is a rejected transition. A
+cancel request on a `queued` Job cancels it at once, because no producer has
+started. On an active Job the request is only recorded: the producer confirms it,
+or reports the failure, which clears the request and keeps the prior state. A
+kind without the `cancel`, `retry`, or `open_url` capability refuses that action.
+Recording a cancellation that was observed needs no capability. Stop watching is
+a separate request that every watch Job accepts: the Job ends as `cancelled` with
+`refs.cancel = stopped_watching`, and its external operation is left alone. A
+producer that stops deliberately releases its lease, so the Job reads as stalled
+at once.
+
+**Steps and ETA.** A producer replaces the whole step tree in one report, as a
+nested tree or as parent-linked steps. A tree holds at most 512 steps in 8
+levels. The history estimate is the median of the last 16 successful durations of
+the job key and needs at least 3 of them.
+
+**Feed.** One update appends at most 256 lines of at most 4096 bytes each. A feed
+is capped at 256 KiB; reaching the cap drops the oldest entries down to half the
+cap. A reader behind the retained range gets one gap, then the retained entries.
+
+**Retention.** `succeeded` and `cancelled` Jobs are removed 15 minutes after they
+finish; `failed` and `lost` Jobs after 24 hours. A checkout holds at most 64 Jobs.
+A create at the cap removes the oldest finished Job, and is refused when every
+Job is unfinished. Retention runs on create and on `reconcile`, which also removes
+abandoned temporary files, unfinished creates, and damaged records.
