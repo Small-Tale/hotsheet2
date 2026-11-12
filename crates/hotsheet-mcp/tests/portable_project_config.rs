@@ -365,19 +365,25 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
     let gui_path = "/usr/bin:/bin:/usr/sbin:/sbin";
     let elsewhere = root.path().join("elsewhere");
     std::fs::create_dir_all(&elsewhere).unwrap();
-    let portable = Command::new("hotsheet-mcp")
-        .args(["--project", "."])
-        .current_dir(&elsewhere)
-        .env_clear()
-        .env("PATH", gui_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
-    assert!(
-        portable.is_err(),
-        "the bare shared command must not resolve on a GUI PATH"
-    );
+    // A minimal GUI PATH is a macOS/Linux launch condition. On Windows, Rust's program
+    // lookup also searches the parent's PATH, which Cargo extends with `target/debug`, so
+    // the bare command would resolve and leak a server child (HS2-AMAQSV).
+    #[cfg(unix)]
+    {
+        let portable = Command::new("hotsheet-mcp")
+            .args(["--project", "."])
+            .current_dir(&elsewhere)
+            .env_clear()
+            .env("PATH", gui_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        assert!(
+            portable.is_err(),
+            "the bare shared command must not resolve on a GUI PATH"
+        );
+    }
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -404,6 +410,11 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
         .env_clear()
         .env("PATH", gui_path)
         .env("HOTSHEET_HOME", &home);
+    // Windows sockets need SystemRoot even in a minimal environment (HS2-AMAQSV).
+    #[cfg(windows)]
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        launch.env("SystemRoot", root);
+    }
     for (name, value) in entry["env"].as_object().unwrap() {
         launch.env(name, value.as_str().unwrap());
     }

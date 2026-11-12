@@ -7056,12 +7056,22 @@ args = []
         }
     }
 
+    /// A fake `hotsheet-mcp` path that is absolute on this platform (HS2-AMAQSV): a bare
+    /// `/opt/...` has no drive on Windows, so setup rightly refuses it as an override.
+    fn fake_mcp(unix_path: &str) -> String {
+        if cfg!(windows) {
+            format!("C:{unix_path}")
+        } else {
+            unix_path.to_owned()
+        }
+    }
+
     const SHARED_CLAUDE_MCP: &str = "{\n  \"mcpServers\": {\n    \"other\": {\n      \"command\": \"other-mcp\"\n    }\n  }\n}\n";
 
     #[test]
     fn hs2_pn848f_shared_claude_config_gets_an_absolute_local_override() {
         let fixture = Sharing::new();
-        let layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        let layer = LocalLayer::new(&fake_mcp("/opt/a/hotsheet-mcp"));
         std::fs::write(fixture.project.path().join(".mcp.json"), SHARED_CLAUDE_MCP).unwrap();
         std::fs::write(
             layer.path(),
@@ -7093,7 +7103,7 @@ args = []
             layer.entry(fixture.project.path()),
             serde_json::json!({
                 "type": "stdio",
-                "command": "/opt/a/hotsheet-mcp",
+                "command": fake_mcp("/opt/a/hotsheet-mcp"),
                 "args": ["--project", project_abs.display().to_string()],
                 "env": { "HOTSHEET_ACTOR_ROLE": "ai" },
             })
@@ -7129,7 +7139,7 @@ args = []
         );
 
         // The binary moved: refresh points the override at the new path only.
-        layer.set_command("/opt/b/hotsheet-mcp");
+        layer.set_command(&fake_mcp("/opt/b/hotsheet-mcp"));
         let plan = plan_refresh_setup_in(
             fixture.store.path(),
             fixture.project.path(),
@@ -7148,7 +7158,7 @@ args = []
         apply_setup_plan(plan).unwrap();
         assert_eq!(
             layer.entry(fixture.project.path())["command"],
-            "/opt/b/hotsheet-mcp"
+            fake_mcp("/opt/b/hotsheet-mcp")
         );
         assert_eq!(layer.read().unwrap()["numStartups"], 5);
         assert_eq!(
@@ -7172,7 +7182,7 @@ args = []
     #[test]
     fn hs2_pn848f_hotsheet_only_claude_config_needs_no_local_override() {
         let fixture = Sharing::new();
-        let layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        let layer = LocalLayer::new(&fake_mcp("/opt/a/hotsheet-mcp"));
         let reports = fixture.setup("claude");
         assert!(reports.iter().all(|report| report.notices.is_empty()));
         let own: serde_json::Value = serde_json::from_str(
@@ -7181,7 +7191,7 @@ args = []
         .unwrap();
         assert_eq!(
             own["mcpServers"]["hotsheet"]["command"],
-            "/opt/a/hotsheet-mcp"
+            fake_mcp("/opt/a/hotsheet-mcp")
         );
         assert!(layer.read().is_none(), "no user config is created");
 
@@ -7204,14 +7214,14 @@ args = []
         fixture.setup("claude");
         assert_eq!(
             layer.entry(fixture.project.path())["command"],
-            "/opt/a/hotsheet-mcp"
+            fake_mcp("/opt/a/hotsheet-mcp")
         );
     }
 
     #[test]
     fn hs2_pn848f_shared_configs_without_a_local_layer_report_the_limitation() {
         let fixture = Sharing::new();
-        let _layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        let _layer = LocalLayer::new(&fake_mcp("/opt/a/hotsheet-mcp"));
         let project = fixture.project.path();
         std::fs::create_dir_all(project.join(".codex")).unwrap();
         std::fs::create_dir_all(project.join(".agents")).unwrap();
@@ -7258,7 +7268,7 @@ args = []
     #[test]
     fn hs2_pn848f_claude_override_that_cannot_be_written_is_reported() {
         let fixture = Sharing::new();
-        let layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        let layer = LocalLayer::new(&fake_mcp("/opt/a/hotsheet-mcp"));
         std::fs::write(fixture.project.path().join(".mcp.json"), SHARED_CLAUDE_MCP).unwrap();
         let key = fixture
             .project

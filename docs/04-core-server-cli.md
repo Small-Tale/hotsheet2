@@ -659,6 +659,9 @@ server, and every loser exits. Then **stop** (`hotsheet-server
 --stop` → SIGTERM). `serve` takes the lock, writes the instance file (removed by a
 guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already serves
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
+On native Windows (HS2-AMAQSV), liveness opens the process and polls its exit state, the
+registry mutex is a `LockFileEx` lock, and stop terminates the process, because a
+windowless server has no SIGTERM. The terminated server's instance file then reads as stale.
 
 The web host has a separate discovery record, `${HOTSHEET_HOME:-~/.hotsheet2}/client.json`,
 containing its local `url`, `pid`, and start identity. It points to the browser client, while

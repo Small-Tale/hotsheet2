@@ -278,6 +278,31 @@ fn open_locked_mutex(path: &Path) -> std::io::Result<std::fs::File> {
             }
         }
     }
+    // Windows needs the same cross-process mutex (HS2-AMAQSV): without it, concurrent
+    // starters there could all publish themselves as the writer.
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{LOCKFILE_EXCLUSIVE_LOCK, LockFileEx};
+        use windows_sys::Win32::System::IO::OVERLAPPED;
+        // SAFETY: an all-zero OVERLAPPED describes a synchronous lock from offset 0.
+        let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+        // SAFETY: `file` owns a live handle for the whole call; the OS releases the lock
+        // when the handle closes, including when the holder exits.
+        let locked = unsafe {
+            LockFileEx(
+                file.as_raw_handle(),
+                LOCKFILE_EXCLUSIVE_LOCK,
+                0,
+                u32::MAX,
+                u32::MAX,
+                &mut overlapped,
+            )
+        };
+        if locked == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
     Ok(file)
 }
 
@@ -390,9 +415,64 @@ pub fn pid_alive(pid: u32) -> bool {
         // SAFETY: signal 0 performs only the existence and permission check; it delivers nothing.
         unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        windows_process::alive(pid)
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         signal(pid, "0")
+    }
+}
+
+/// Native Windows liveness and stop (HS2-AMAQSV). Without these, every registration read
+/// as a dead server on Windows: a second starter reclaimed a live writer lock, discovery
+/// never found a running server, and `stop` signalled nothing.
+#[cfg(windows)]
+mod windows_process {
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, WAIT_TIMEOUT};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+        TerminateProcess, WaitForSingleObject,
+    };
+
+    /// An owned process handle, closed on drop.
+    struct Process(HANDLE);
+
+    impl Process {
+        fn open(pid: u32, access: u32) -> Option<Self> {
+            // Pid 0 is the System Idle Process, never a server.
+            if pid == 0 {
+                return None;
+            }
+            // SAFETY: OpenProcess takes plain values and returns null on failure.
+            let handle = unsafe { OpenProcess(access, 0, pid) };
+            (!handle.is_null()).then_some(Self(handle))
+        }
+    }
+
+    impl Drop for Process {
+        fn drop(&mut self) {
+            // SAFETY: the handle came from a successful OpenProcess and is closed once.
+            let _ = unsafe { CloseHandle(self.0) };
+        }
+    }
+
+    /// A process that can be opened and has not yet signalled exit. As with `kill -0`, a
+    /// process this user may not query (access denied) does not count as alive.
+    pub(super) fn alive(pid: u32) -> bool {
+        Process::open(pid, PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE)
+            // SAFETY: a zero timeout only polls the live handle's signalled state.
+            .is_some_and(|process| unsafe { WaitForSingleObject(process.0, 0) } == WAIT_TIMEOUT)
+    }
+
+    /// Windows has no SIGTERM for a windowless server, so a stop terminates the process;
+    /// its instance file then reads as stale and the next start replaces it.
+    pub(super) fn terminate(pid: u32) -> bool {
+        alive(pid)
+            && Process::open(pid, PROCESS_TERMINATE)
+                // SAFETY: the handle was opened with PROCESS_TERMINATE access.
+                .is_some_and(|process| unsafe { TerminateProcess(process.0, 1) } != 0)
     }
 }
 
@@ -414,7 +494,15 @@ fn signal(pid: u32, sig: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn signal(pid: u32, sig: &str) -> bool {
+    match sig {
+        "0" => windows_process::alive(pid),
+        _ => windows_process::terminate(pid),
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn signal(_pid: u32, _sig: &str) -> bool {
     false
 }
