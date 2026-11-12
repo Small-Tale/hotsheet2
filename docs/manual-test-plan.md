@@ -901,6 +901,13 @@ capture. For a real incident, record the exact tooltip, terminal snapshot and re
 hook diagnosis at the same time; synthetic state reproduction alone does not identify
 that incident's cause. Never use the running user host or real customer actions.
 
+### Codex questions in the app (HS2-D0QTGB)
+
+In a Hot Sheet Codex terminal on a synthetic project, ask Codex to pose a question with its
+question tool. Confirm the "AI waiting for your answer" notice shows its title and options,
+send an answer from the notice, and confirm Codex receives it as user input and the notice
+clears. Repeat answering in the terminal instead, and with two Codex terminals asking at once.
+
 ### Human ticket feedback to AI sessions (HS2-25TP3N)
 
 Use a synthetic Started Git ticket claimed by a live AI session.

@@ -149,6 +149,7 @@ pub(crate) async fn ask_terminal_question(
                 at: OffsetDateTime::now_utc()
                     .format(&Rfc3339)
                     .unwrap_or_default(),
+                agent: None,
             },
         );
     }
@@ -182,9 +183,58 @@ pub(crate) async fn answer_terminal_question(
     Path(id): Path<String>,
     Json(body): Json<TerminalQuestionAnswerReq>,
 ) -> Result<StatusCode, ApiError> {
+    // HS2-D0QTGB: a Codex answer still has to be queued to its session after the lock is gone.
+    let Some((text, tool_use_id)) = record_question_answer(&state, &id, body)? else {
+        return Ok(StatusCode::NO_CONTENT);
+    };
+    let delivered = match crate::routes::session_messages::adapter(&state, &id) {
+        Some(adapter) => tokio::task::spawn_blocking(move || {
+            adapter.message(&hotsheet_aitools::session_push::PushMessage::Prompt {
+                text,
+                banner: None,
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+        .and_then(|result| result.map(|_| ()).map_err(|error| error.to_string())),
+        None => Err("this Codex session cannot receive messages".to_owned()),
+    };
+    match delivered {
+        Ok(()) => {
+            if forget_terminal_question(&state, &id, Some(&tool_use_id)) {
+                emit_terminal_question(&state, &id);
+            }
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(error) => {
+            if let Some(current) = state
+                .terminal_questions
+                .lock_or_recover()
+                .get_mut(&id)
+                .filter(|current| current.tool_use_id == tool_use_id)
+            {
+                current.answer = None;
+            }
+            tracing::warn!(terminal = %id, %error, "queueing a Codex question answer failed");
+            Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "Could not send the answer to Codex. Answer in the terminal instead.",
+            ))
+        }
+    }
+}
+
+/// Validate and record an answer under the questions lock. `None` when nothing more is needed
+/// (a Claude hook polls the answer, or the user answers natively); otherwise the text to queue
+/// to a Codex session and its question id (HS2-D0QTGB).
+fn record_question_answer(
+    state: &AppState,
+    id: &str,
+    body: TerminalQuestionAnswerReq,
+) -> Result<Option<(String, String)>, ApiError> {
     let mut questions = state.terminal_questions.lock_or_recover();
     let current = questions
-        .get_mut(&id)
+        .get_mut(id)
         .filter(|current| current.tool_use_id == body.tool_use_id && current.at == body.at)
         .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "question is no longer active"))?;
     if current.answer.is_some() {
@@ -194,10 +244,10 @@ pub(crate) async fn answer_terminal_question(
         ));
     }
     if body.native {
-        questions.remove(&id);
+        questions.remove(id);
         drop(questions);
-        emit_terminal_question(&state, &id);
-        return Ok(StatusCode::NO_CONTENT);
+        emit_terminal_question(state, id);
+        return Ok(None);
     }
     let expected = current
         .questions
@@ -224,8 +274,109 @@ pub(crate) async fn answer_terminal_question(
             "incomplete question answers",
         ));
     }
+    // No hook waits on a Codex question; marking it answered first keeps a second submission
+    // from queueing it twice.
+    let queued = current.agent.is_some().then(|| {
+        (
+            codex_answer_text(expected, answers),
+            current.tool_use_id.clone(),
+        )
+    });
     current.answer = Some(body.answers);
-    Ok(StatusCode::NO_CONTENT)
+    Ok(queued)
+}
+
+/// The user input that answers a Codex question (HS2-D0QTGB): each question with its answer,
+/// in the order asked.
+fn codex_answer_text(
+    expected: &[serde_json::Value],
+    answers: &serde_json::Map<String, serde_json::Value>,
+) -> String {
+    let mut text = String::from("Answer from Hot Sheet to your question:");
+    for question in expected {
+        let Some(title) = question.get("question").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let answer = answers
+            .get(title)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        text.push_str(&format!("\n- {title}: {}", answer.trim()));
+    }
+    text
+}
+
+/// A question a Codex session asked through `request_user_input_async`, read from its rollout
+/// (HS2-D0QTGB). It takes the same shape as a Claude `AskUserQuestion`, so every client shows the
+/// existing in-app prompt: one choice per question plus Other for free text.
+pub(crate) fn record_codex_question(
+    state: &AppState,
+    id: &str,
+    session_id: &str,
+    asked: hotsheet_aitools::codex_rollout_watch::AskedQuestion,
+) {
+    let questions = asked
+        .questions
+        .iter()
+        .map(|prompt| {
+            serde_json::json!({
+                "question": prompt.title,
+                "options": prompt
+                    .options
+                    .iter()
+                    .map(|label| serde_json::json!({ "label": label }))
+                    .collect::<Vec<_>>(),
+                "multiSelect": false,
+            })
+        })
+        .collect::<Vec<_>>();
+    let changed = {
+        let mut current = state.terminal_questions.lock_or_recover();
+        if current
+            .get(id)
+            .is_some_and(|question| question.tool_use_id == asked.id)
+        {
+            false
+        } else {
+            current.insert(
+                id.to_owned(),
+                TerminalQuestion {
+                    question: asked
+                        .questions
+                        .first()
+                        .map(|prompt| prompt.title.clone())
+                        .unwrap_or_default(),
+                    tool_use_id: asked.id,
+                    questions: serde_json::Value::Array(questions),
+                    session_id: Some(session_id.to_owned()),
+                    answer: None,
+                    at: OffsetDateTime::now_utc()
+                        .format(&Rfc3339)
+                        .unwrap_or_default(),
+                    agent: Some("codex".to_owned()),
+                },
+            );
+            true
+        }
+    };
+    if changed {
+        emit_terminal_question(state, id);
+    }
+}
+
+/// User input reached a Codex session (typed in the terminal, or an answer Hot Sheet queued), so
+/// its asked question is answered or superseded (HS2-D0QTGB). A Claude question is left alone.
+pub(crate) fn clear_codex_question_on_input(state: &AppState, id: &str, session_id: &str) {
+    let removed = {
+        let mut questions = state.terminal_questions.lock_or_recover();
+        let codex = questions.get(id).is_some_and(|question| {
+            question.agent.is_some() && question.session_id.as_deref() == Some(session_id)
+        });
+        codex && questions.remove(id).is_some()
+    };
+    if removed {
+        emit_terminal_question(state, id);
+    }
 }
 
 /// A short HTTP poll keeps the PreToolUse hook responsive to server loss without exposing the
@@ -1580,4 +1731,250 @@ pub(crate) async fn revoke_permission_rule(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
     emit_permission_rules_changed(&state, &body.project);
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod codex_question_tests {
+    //! HS2-D0QTGB: Codex questions read from a rollout, answered in the app or the terminal.
+    use super::*;
+    use hotsheet_aitools::codex_rollout_watch::{AskedPrompt, AskedQuestion};
+    use hotsheet_aitools::session_push::{PushError, PushMessage, PushReceipt, SessionPush};
+    use std::sync::{Arc, Mutex};
+
+    struct FakePush {
+        sent: Arc<Mutex<Vec<String>>>,
+        fail: bool,
+    }
+
+    impl SessionPush for FakePush {
+        fn mechanism(&self) -> &'static str {
+            "codex-queue"
+        }
+        fn session_id(&self) -> Option<String> {
+            Some("synthetic-thread".into())
+        }
+        fn message(&self, message: &PushMessage) -> Result<PushReceipt, PushError> {
+            if self.fail {
+                return Err(PushError::Unreachable("synthetic".into()));
+            }
+            if let PushMessage::Prompt { text, .. } = message {
+                self.sent.lock().unwrap().push(text.clone());
+            }
+            Ok(PushReceipt {
+                mechanism: "codex-queue",
+                session_id: None,
+                confirmed: true,
+            })
+        }
+    }
+
+    fn state(root: &std::path::Path) -> AppState {
+        AppState::new(
+            hotsheet_ticketing::FsStore::init(
+                root.join("s.hs2"),
+                &hotsheet_ticketing::StoreMetadata::new("HS"),
+            )
+            .unwrap(),
+            "secret".into(),
+        )
+        .unwrap()
+        .with_machine_home(root.join("home"))
+    }
+
+    fn asked(id: &str) -> AskedQuestion {
+        AskedQuestion {
+            id: id.into(),
+            questions: vec![
+                AskedPrompt {
+                    title: "Synthetic choice?".into(),
+                    options: vec!["Alpha".into(), "Beta".into()],
+                },
+                AskedPrompt {
+                    title: "Synthetic detail?".into(),
+                    options: vec![],
+                },
+            ],
+        }
+    }
+
+    fn push(state: &AppState, terminal: &str, fail: bool) -> Arc<Mutex<Vec<String>>> {
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        state.session_pushes.lock_or_recover().insert(
+            terminal.into(),
+            Arc::new(FakePush {
+                sent: sent.clone(),
+                fail,
+            }),
+        );
+        sent
+    }
+
+    fn current(state: &AppState, terminal: &str) -> Option<TerminalQuestion> {
+        state
+            .terminal_questions
+            .lock_or_recover()
+            .get(terminal)
+            .cloned()
+    }
+
+    async fn answer(
+        state: &AppState,
+        terminal: &str,
+        question: &TerminalQuestion,
+        answers: serde_json::Value,
+        native: bool,
+    ) -> Result<StatusCode, ApiError> {
+        answer_terminal_question(
+            State(state.clone()),
+            Path(terminal.to_owned()),
+            Json(TerminalQuestionAnswerReq {
+                tool_use_id: question.tool_use_id.clone(),
+                at: question.at.clone(),
+                answers,
+                native,
+            }),
+        )
+        .await
+    }
+
+    #[test]
+    fn hs2_d0qtgb_a_rollout_question_takes_the_in_app_prompt_shape_once() {
+        let root = tempfile::tempdir().unwrap();
+        let state = state(root.path());
+        record_codex_question(&state, "t1", "session-1", asked("item_1"));
+        let question = current(&state, "t1").unwrap();
+        let wire = serde_json::to_value(&question).unwrap();
+        assert_eq!(wire["agent"], "codex");
+        assert_eq!(wire["question"], "Synthetic choice?");
+        assert_eq!(
+            wire["questions"],
+            serde_json::json!([
+                {"question":"Synthetic choice?","options":[{"label":"Alpha"},{"label":"Beta"}],"multiSelect":false},
+                {"question":"Synthetic detail?","options":[],"multiSelect":false},
+            ])
+        );
+        // The rollout is re-read after a restart or a settle read: the same item is not new.
+        record_codex_question(&state, "t1", "session-1", asked("item_1"));
+        assert_eq!(current(&state, "t1").unwrap().at, question.at);
+        // Questions stay per terminal.
+        record_codex_question(&state, "t2", "session-2", asked("item_2"));
+        assert_eq!(current(&state, "t1").unwrap().tool_use_id, "item_1");
+        assert_eq!(current(&state, "t2").unwrap().tool_use_id, "item_2");
+    }
+
+    #[tokio::test]
+    async fn hs2_d0qtgb_an_in_app_answer_is_queued_to_the_session_once() {
+        let root = tempfile::tempdir().unwrap();
+        let state = state(root.path());
+        let sent = push(&state, "t1", false);
+        record_codex_question(&state, "t1", "session-1", asked("item_1"));
+        let question = current(&state, "t1").unwrap();
+        let answers =
+            serde_json::json!({"Synthetic choice?":"Beta","Synthetic detail?":" Free text "});
+        assert!(
+            answer(
+                &state,
+                "t1",
+                &question,
+                serde_json::json!({"Synthetic choice?":"Beta"}),
+                false
+            )
+            .await
+            .is_err(),
+            "every question needs an answer"
+        );
+        assert_eq!(
+            answer(&state, "t1", &question, answers.clone(), false)
+                .await
+                .unwrap(),
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            sent.lock().unwrap().as_slice(),
+            [
+                "Answer from Hot Sheet to your question:\n- Synthetic choice?: Beta\n- Synthetic detail?: Free text"
+            ]
+        );
+        assert!(
+            current(&state, "t1").is_none(),
+            "an answered question is cleared"
+        );
+        // A stale second submission cannot queue it again.
+        assert!(
+            answer(&state, "t1", &question, answers, false)
+                .await
+                .is_err()
+        );
+        assert_eq!(sent.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn hs2_d0qtgb_an_unreachable_session_keeps_the_question_for_the_terminal() {
+        let root = tempfile::tempdir().unwrap();
+        let state = state(root.path());
+        record_codex_question(&state, "t1", "session-1", asked("item_1"));
+        let question = current(&state, "t1").unwrap();
+        let answers = serde_json::json!({"Synthetic choice?":"Alpha","Synthetic detail?":"x"});
+        // No adapter, then a failing one: the question stays open and can be retried.
+        assert!(
+            answer(&state, "t1", &question, answers.clone(), false)
+                .await
+                .is_err()
+        );
+        push(&state, "t1", true);
+        assert!(
+            answer(&state, "t1", &question, answers.clone(), false)
+                .await
+                .is_err()
+        );
+        assert!(current(&state, "t1").unwrap().answer.is_none());
+        let sent = push(&state, "t1", false);
+        assert!(
+            answer(&state, "t1", &question, answers, false)
+                .await
+                .is_ok()
+        );
+        assert_eq!(sent.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn hs2_d0qtgb_terminal_answers_clear_only_that_sessions_codex_question() {
+        let root = tempfile::tempdir().unwrap();
+        let state = state(root.path());
+        let sent = push(&state, "t1", false);
+        record_codex_question(&state, "t1", "session-1", asked("item_1"));
+        // Answer in terminal: the notice goes away and nothing is queued.
+        let question = current(&state, "t1").unwrap();
+        assert!(
+            answer(&state, "t1", &question, serde_json::Value::Null, true)
+                .await
+                .is_ok()
+        );
+        assert!(current(&state, "t1").is_none());
+        assert!(sent.lock().unwrap().is_empty());
+        // User input from another session, then from the asking session.
+        record_codex_question(&state, "t1", "session-1", asked("item_2"));
+        clear_codex_question_on_input(&state, "t1", "session-other");
+        assert!(current(&state, "t1").is_some());
+        clear_codex_question_on_input(&state, "t1", "session-1");
+        assert!(current(&state, "t1").is_none());
+        // Empty then refill: a new question after input is shown again.
+        record_codex_question(&state, "t1", "session-1", asked("item_3"));
+        assert_eq!(current(&state, "t1").unwrap().tool_use_id, "item_3");
+        // A Claude hook question is never cleared by Codex input.
+        state.terminal_questions.lock_or_recover().insert(
+            "t2".into(),
+            TerminalQuestion {
+                question: "Claude?".into(),
+                tool_use_id: "tool-1".into(),
+                questions: serde_json::json!([]),
+                session_id: Some("session-1".into()),
+                answer: None,
+                at: "2026-11-12T00:00:00Z".into(),
+                agent: None,
+            },
+        );
+        clear_codex_question_on_input(&state, "t2", "session-1");
+        assert!(current(&state, "t2").is_some());
+    }
 }

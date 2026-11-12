@@ -1914,6 +1914,20 @@ clear of the exact tool and session. `PostToolUse` or `PostToolUseFailure` clear
 an older completion cannot clear a newer question. Session start/end and terminal removal
 clear stale questions.
 
+**Codex questions (HS2-D0QTGB).** Codex asks through its `request_user_input_async` tool,
+which no hook reports and no hook waits on: the turn keeps running and the TUI lists the
+question under queued follow-up inputs. Hot Sheet reads it from the terminal session's own
+rollout, which the HS2-CYHAWB watch already follows. A live `item_completed` record with an
+`AgentMessage` item whose `delivery` is `async` becomes the terminal question, in the same shape
+as a Claude question (title, option labels, Other for free text, up to four questions; titles and
+labels bounded, never logged), with `agent: "codex"` and the rollout item id as its identity. An
+in-app answer is queued to that session as user input through its session-push adapter
+(`codex queue`) and then clears the notice. A second submission cannot queue it again, and an
+unreachable session returns 502 and leaves the question open for the terminal. “Answer in
+terminal” only clears the notice. A later `UserMessage` item in the same session (an answer
+typed in the terminal, or the queued one) clears it, and questions stay per terminal and
+session. The TUI's own queued-question entry stays until Codex consumes the follow-up input.
+
 In the isolated live Claude check (HS2-5CX10W), a server-launched terminal delivered
 two choices, a multi-select answer, and free text to Claude. Native fallback and
 stale-answer rejection after session replacement also worked. A browser-created

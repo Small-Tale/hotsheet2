@@ -1203,6 +1203,9 @@ export interface TerminalQuestion {
     options?: Array<{ label: string; description?: string }>;
     multiSelect?: boolean;
   }>;
+  /** `codex` for a question read from a Codex rollout: an in-app answer is queued to the session
+   * as user input rather than returned to a waiting hook (HS2-D0QTGB). Absent for Claude. */
+  agent?: string;
 }
 /** `PUT /terminals/{id}/name` response; `name` is absent after a clear. */
 export interface TerminalName {

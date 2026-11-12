@@ -22,7 +22,10 @@
 //! (`codex-work-<session>.json`) keeps responses recorded before the restart from counting
 //! twice.
 
-use super::signals::{clear_terminal_halt_on_resume, record_terminal_halt};
+use super::signals::{
+    clear_codex_question_on_input, clear_terminal_halt_on_resume, record_codex_question,
+    record_terminal_halt,
+};
 use super::usage_store::{UsageTarget, terminal_usage_checkout, usage_target_for_checkout};
 use crate::{AppState, now};
 use hotsheet_aitools::codex_rollout_watch::{RolloutSignal, RolloutWatch, watch_rollout};
@@ -161,6 +164,12 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                         flush(&mut batches);
                         clear_terminal_halt_on_resume(&signal_state, &signal_id);
                         turn_target = Some(target());
+                    }
+                    RolloutSignal::Question(asked) => {
+                        record_codex_question(&signal_state, &signal_id, &signal_session, asked);
+                    }
+                    RolloutSignal::UserInput => {
+                        clear_codex_question_on_input(&signal_state, &signal_id, &signal_session);
                     }
                     RolloutSignal::Usage(usage) => {
                         let target = turn_target.get_or_insert_with(target).clone();
@@ -418,6 +427,67 @@ mod tests {
         stop_codex_session_watch(&state, "t1");
         assert!(!kept.exists());
         assert!(!is_current(&state, "t1", session));
+    }
+
+    /// HS2-D0QTGB: a question in the watched rollout becomes the terminal's in-app prompt, and
+    /// later user input in that session clears it. Synthetic rollout records only.
+    #[test]
+    fn hs2_d0qtgb_a_watched_rollout_question_is_shown_then_cleared_by_user_input() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let state = state(root.path());
+        let home = root.path().join("codex");
+        let session = "00000000-0000-0000-0000-0000000000d1";
+        let day = home.join("sessions/2026/11/12");
+        std::fs::create_dir_all(&day).unwrap();
+        let rollout = day.join(format!("rollout-2026-11-12T00-00-00-{session}.jsonl"));
+        let line = |value: serde_json::Value| format!("{value}\n");
+        std::fs::write(
+            &rollout,
+            line(serde_json::json!({"timestamp":"2026-11-12T00:00:00Z","type":"session_meta","payload":{"id":session}}))
+                + &line(serde_json::json!({"timestamp":"2026-11-12T00:00:02Z","type":"event_msg","payload":{"type":"item_completed","item":{
+                    "type":"AgentMessage","id":"item_q","delivery":"async",
+                    "questions":[{"title":"Synthetic?","options":["Yes","No"]}]}}})),
+        )
+        .unwrap();
+        write_record(
+            &state,
+            "tq.json",
+            serde_json::json!({"terminal":"tq","session_id":session,"codex_home":home,"reported_at":"2026-11-12T00:00:01Z"}),
+        );
+        resume_codex_session_watches(&state, &["tq".to_owned()]);
+        let wait = |want: bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while state
+                .terminal_questions
+                .lock_or_recover()
+                .contains_key("tq")
+                != want
+            {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "question presence never became {want}"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        };
+        wait(true);
+        assert_eq!(
+            state.terminal_questions.lock_or_recover()["tq"].tool_use_id,
+            "item_q"
+        );
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&rollout)
+            .unwrap();
+        file.write_all(
+            line(serde_json::json!({"timestamp":"2026-11-12T00:00:05Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"u1"}}}))
+                .as_bytes(),
+        )
+        .unwrap();
+        file.sync_all().unwrap();
+        wait(false);
+        stop_codex_session_watch(&state, "tq");
     }
 
     /// HS2-H8BZGY transitions: report persists, the same session keeps the watch, a new

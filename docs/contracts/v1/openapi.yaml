@@ -20172,6 +20172,11 @@ components:
         questions: {}
         at:
           type: string
+        agent:
+          description: >-
+            `codex` for a question read from a Codex rollout, answered by queueing session input
+            (HS2-D0QTGB); absent for Claude hook questions.
+          type: string
       additionalProperties: false
     TerminalAiConnection:
       type: object

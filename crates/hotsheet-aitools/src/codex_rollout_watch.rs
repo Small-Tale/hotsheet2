@@ -18,6 +18,12 @@
 //! - `turn_context {turn_id, model}` names the turn's model.
 //! - `token_usage_record {response_id, turn_id, usage {input_tokens, output_tokens}}` counts one
 //!   model response; `input_tokens` already includes its cached subset.
+//! - `event_msg` `item_completed {item {type: AgentMessage, id, delivery: "async", questions:
+//!   [{title, options: [string]}]}}` is a question the agent asked through its
+//!   `request_user_input_async` tool (HS2-D0QTGB). The turn keeps running; the TUI lists it under
+//!   queued follow-up inputs until the user answers.
+//! - `event_msg` `item_completed {item {type: UserMessage}}` is user input reaching the session,
+//!   which answers or supersedes an asked question.
 //!
 //! Codex keeps the rollout open and appends to it. FSEvents reports such a file's change only
 //! when it is closed, so on macOS the rollout itself is followed per write through a kqueue
@@ -25,8 +31,9 @@
 //! after the writer closes, so its active rollout gets one local read per second (HS2-WAAKXQ).
 //! Directory waits and other platforms use `notify`; no wake issues a network request.
 //!
-//! Only those numeric and identifying fields are parsed. Prompts, tool calls, and agent output
-//! in the same file are skipped unread by the typed parser and never logged. The rollout is an
+//! Only those numeric and identifying fields, and an asked question's titles and option labels,
+//! are parsed. Prompts, tool calls, and agent output in the same file are skipped unread by the
+//! typed parser and never logged. The rollout is an
 //! observed local format, not a public contract: an unrecognized or unverified record fails
 //! closed (no signal).
 
@@ -51,7 +58,33 @@ pub enum RolloutSignal {
     Resumed,
     /// One model response's numeric usage.
     Usage(ResponseUsage),
+    /// The agent asked the user a question it waits on asynchronously (HS2-D0QTGB).
+    Question(AskedQuestion),
+    /// User input reached the session, answering or superseding an asked question.
+    UserInput,
 }
+
+/// A question the agent asked, bounded like a Claude `AskUserQuestion` (HS2-D0QTGB).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AskedQuestion {
+    /// The rollout item id, unique per question within the session.
+    pub id: String,
+    /// One to [`MAX_QUESTIONS`] questions, each with its offered option labels.
+    pub questions: Vec<AskedPrompt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AskedPrompt {
+    pub title: String,
+    #[serde(default)]
+    pub options: Vec<String>,
+}
+
+/// The most questions one prompt carries, matching Claude's `AskUserQuestion`.
+pub const MAX_QUESTIONS: usize = 4;
+const MAX_TITLE_CHARS: usize = 500;
+const MAX_OPTIONS: usize = 8;
+const MAX_OPTION_CHARS: usize = 200;
 
 /// The numeric usage of one Codex model response, keyed for deduplication by `response_id`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +111,23 @@ struct EventPayload {
     kind: String,
     #[serde(default)]
     error: Option<TurnError>,
+}
+
+#[derive(Deserialize)]
+struct CompletedItem {
+    item: ItemRecord,
+}
+
+#[derive(Deserialize)]
+struct ItemRecord {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    delivery: Option<String>,
+    #[serde(default)]
+    questions: Option<Vec<AskedPrompt>>,
 }
 
 #[derive(Deserialize)]
@@ -164,10 +214,14 @@ impl RolloutReader {
         }
         match line.kind.as_str() {
             "event_msg" => {
-                let event: EventPayload = serde_json::from_value(payload).ok()?;
+                let event: EventPayload = serde_json::from_value(payload.clone()).ok()?;
                 match event.kind.as_str() {
                     "task_started" => Some(RolloutSignal::Resumed),
                     "task_complete" => event.error.map(halted),
+                    "item_completed" => {
+                        let completed: CompletedItem = serde_json::from_value(payload).ok()?;
+                        item_signal(completed.item)
+                    }
                     _ => None,
                 }
             }
@@ -232,6 +286,43 @@ fn valid_token(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"-._/".contains(&byte))
+}
+
+/// The signal of a completed rollout item: an asked question or user input (HS2-D0QTGB). A
+/// question with no usable title, too many questions, or an unsafe id fails closed.
+fn item_signal(item: ItemRecord) -> Option<RolloutSignal> {
+    match item.kind.as_str() {
+        "UserMessage" => Some(RolloutSignal::UserInput),
+        "AgentMessage" if item.delivery.as_deref() == Some("async") => {
+            let id = item.id.filter(|id| valid_token(id))?;
+            let questions = item.questions?;
+            if questions.is_empty() || questions.len() > MAX_QUESTIONS {
+                return None;
+            }
+            let questions = questions
+                .into_iter()
+                .map(|prompt| {
+                    let title = bounded(&prompt.title, MAX_TITLE_CHARS);
+                    (!title.is_empty()).then(|| AskedPrompt {
+                        title,
+                        options: prompt
+                            .options
+                            .iter()
+                            .map(|option| bounded(option, MAX_OPTION_CHARS))
+                            .filter(|option| !option.is_empty())
+                            .take(MAX_OPTIONS)
+                            .collect(),
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(RolloutSignal::Question(AskedQuestion { id, questions }))
+        }
+        _ => None,
+    }
+}
+
+fn bounded(text: &str, max: usize) -> String {
+    text.trim().chars().take(max).collect()
 }
 
 /// A [`RolloutSignal::Halted`] from a rollout `task_complete.error`.
@@ -625,6 +716,86 @@ mod tests {
         assert_eq!(reader.feed_line("not json"), None);
         let bad_response = usage("2026-11-05T01:00:03Z", "t", "bad id with spaces", 1, 1);
         assert_eq!(reader.feed_line(&bad_response), None);
+    }
+
+    fn completed(ts: &str, item: serde_json::Value) -> String {
+        json!({"timestamp":ts,"type":"event_msg","payload":{"type":"item_completed","thread_id":SESSION,"turn_id":"t","item":item,"started_at_ms":1,"completed_at_ms":2}}).to_string()
+    }
+
+    #[test]
+    fn hs2_d0qtgb_async_questions_and_user_input_are_signalled_and_bounded() {
+        let mut reader = RolloutReader::new(SESSION, at("2026-11-05T01:00:00Z"));
+        reader.feed_line(&meta(SESSION));
+        let asked = json!({"type":"AgentMessage","id":"item_q1","content":[{"type":"text","text":"synthetic"}],
+            "phase":"final_answer","delivery":"async",
+            "questions":[{"title":" Synthetic choice? ","options":["Alpha","", "Beta"]},{"title":"Free text?"}]});
+        assert_eq!(
+            reader.feed_line(&completed("2026-11-05T01:00:01Z", asked.clone())),
+            Some(RolloutSignal::Question(AskedQuestion {
+                id: "item_q1".into(),
+                questions: vec![
+                    AskedPrompt {
+                        title: "Synthetic choice?".into(),
+                        options: vec!["Alpha".into(), "Beta".into()]
+                    },
+                    AskedPrompt {
+                        title: "Free text?".into(),
+                        options: vec![]
+                    },
+                ],
+            }))
+        );
+        assert_eq!(
+            reader.feed_line(&completed(
+                "2026-11-05T01:00:02Z",
+                json!({"type":"UserMessage","id":"u1"})
+            )),
+            Some(RolloutSignal::UserInput)
+        );
+        // A final answer that is not asynchronous, an untitled or oversized question, and an
+        // unsafe id are not questions.
+        let mut plain = asked.clone();
+        plain["delivery"] = json!("sync");
+        assert_eq!(
+            reader.feed_line(&completed("2026-11-05T01:00:03Z", plain)),
+            None
+        );
+        let mut untitled = asked.clone();
+        untitled["questions"] = json!([{"title":"  "}]);
+        assert_eq!(
+            reader.feed_line(&completed("2026-11-05T01:00:03Z", untitled)),
+            None
+        );
+        let mut many = asked.clone();
+        many["questions"] =
+            json!([{"title":"1"},{"title":"2"},{"title":"3"},{"title":"4"},{"title":"5"}]);
+        assert_eq!(
+            reader.feed_line(&completed("2026-11-05T01:00:03Z", many)),
+            None
+        );
+        let mut unsafe_id = asked.clone();
+        unsafe_id["id"] = json!("bad id;");
+        assert_eq!(
+            reader.feed_line(&completed("2026-11-05T01:00:03Z", unsafe_id)),
+            None
+        );
+        let mut long = asked.clone();
+        long["questions"] = json!([{"title":"x".repeat(900),"options":["o".repeat(400)]}]);
+        let Some(RolloutSignal::Question(bounded)) =
+            reader.feed_line(&completed("2026-11-05T01:00:03Z", long))
+        else {
+            panic!("a long question is still a question");
+        };
+        assert_eq!(bounded.questions[0].title.chars().count(), MAX_TITLE_CHARS);
+        assert_eq!(
+            bounded.questions[0].options[0].chars().count(),
+            MAX_OPTION_CHARS
+        );
+        // A question asked before the session reported is history, not a live prompt.
+        assert_eq!(
+            reader.feed_line(&completed("2026-11-05T00:59:59Z", asked)),
+            None
+        );
     }
 
     #[test]

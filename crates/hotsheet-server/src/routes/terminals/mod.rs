@@ -682,6 +682,11 @@ pub struct TerminalQuestion {
     #[serde(skip)]
     answer: Option<serde_json::Value>,
     at: String,
+    /// The question came from a Codex rollout, whose agent no hook waits on: an in-app answer is
+    /// queued to the session as user input instead of being polled (HS2-D0QTGB). Clients see
+    /// `agent: "codex"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    agent: Option<String>,
 }
 
 /// The AI tool of an `ai` terminal, recovered from its `<tool>-<id>` worker id. Shell terminals,
