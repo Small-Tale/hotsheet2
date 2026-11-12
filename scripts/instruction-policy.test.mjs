@@ -38,7 +38,9 @@ test('HS2-EJ8JTG pins authoritative tier tags and analyzed T2 testing', () => {
   for (const source of [local, agents]) {
     assert.match(source, /Set exactly one\s+`tier:T0`, `tier:T1`, or `tier:T2` ticket tag/);
     assert.match(source, /T2 has no time cap:/);
-    assert.match(source, /Run `scripts\/check\.sh` without profile flags normally/);
+    // HS2-6PZCD9: the configured development strategy makes the gate require a reviewed test plan.
+    assert.match(source, /`scripts\/check\.sh` refuses to run without `--test-plan <reviewed\.json>`/);
+    assert.match(source, /A T2 ticket also runs `--full` or an explicit analyzed selection with `--t2-stage`/);
     assert.match(source, /completion note names deferred-to-CI checks and the successful\s+covering main CI run/);
   }
   assert.match(worker, /set the ticket's tier\s+tag when declaring risk/);

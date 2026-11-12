@@ -6,8 +6,11 @@ description: 'Hot Sheet 2 project-specific guidance'
 
 # Hot Sheet 2 project guidance
 
-Read the generated `AGENTS.md` before changing code. Project workflows live in
-`.agents/skills/`; shared workflow sources live in `.claude/skills/`. Use the
+Read the generated `AGENTS.md` before changing code. Project workflows are
+installed in `.claude/skills/` and mirrored for Codex in `.agents/skills/`; both are
+generated. Edit their sources instead: role skills in `plugins/shared/role-skills/`
+(`scripts/sync-role-skills.mjs`) and the Hot Sheet skill in
+`plugins/{claude,codex}/SKILL.md` (installed by Hot Sheet setup). Use the
 equivalent available tool when a shared workflow names a tool-specific capability.
 Keep durable project additions in this local Rulesync rule and provider
 configuration in its provider directory.
@@ -128,7 +131,11 @@ the default T1 profile. T0/T1 use the checked-in five-minute planning budget;
 `deep-testing`, `testing:browser`, `testing:platform`, `testing:perf`, and
 `test-budget:<duration>` select documented deeper checks. T2 has no time cap:
 analyze the actual risks, record the chosen checks and reasons in the ticket,
-then run that selection. Run `scripts/check.sh` without profile flags normally;
+then run that selection. Because this project configures a `development_strategy`,
+`scripts/check.sh` refuses to run without `--test-plan <reviewed.json>` (HS2-RRNZYN).
+A T2 ticket also runs `--full` or an explicit analyzed selection with `--t2-stage`
+whenever other affected checks exist (HS2-BNAYKG); see
+`docs/29-affected-local-verification.md`. Do not add profile flags otherwise;
 inspect `--plan` for the selected and deferred checks. CI covers checks not run
 locally. The completion note names deferred-to-CI checks and the successful
 covering main CI run. If a defect escaped local selection, create a prioritized
