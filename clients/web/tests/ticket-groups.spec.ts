@@ -485,11 +485,32 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
     // A group drop moves tickets; it never copies them.
     await expect(view.locator('[data-ticket-slug]')).toHaveCount(SEEDS.length);
 
-    // Columns: dropping on a group in another column applies that column's status with the group.
+    // Columns (HS2-K2QA1J): from another column the whole column is the target, even over a group,
+    // so the drop changes only the status.
     await page.getByLabel('Columns View').click();
     const columns = board(page),
       onboarding = tickets['Onboarding checklist copy review'],
+      startedColumn = columns.locator('[data-column-id="started"]'),
       startedSearch = group(columns, SEARCH, 'started');
+    await drag(
+      page,
+      rowOf(columns, onboarding.slug),
+      startedSearch.locator('[data-component="list-header"]'),
+      async () => {
+        await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+        await expect(startedSearch).not.toHaveAttribute('data-drop-target', 'true');
+        await expect(startedSearch.locator('[data-component="sunken-panel"]')).not.toHaveAttribute(
+          'data-outlined',
+          'true',
+        );
+        await capture(page, 'drag-across-columns-over-group-light-1440');
+      },
+    );
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', null]);
+    await expect(startedSearch.locator(`[data-ticket-slug="${onboarding.slug}"]`)).toHaveCount(0);
+    await expect(startedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+
+    // Within its own column, dropping on a group sets the group and only the group outlines.
     await drag(
       page,
       rowOf(columns, onboarding.slug),
@@ -498,11 +519,21 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
         await expect(startedSearch).toHaveAttribute('data-drop-target', 'true');
         await expect(group(columns, SEARCH, 'not-started')).not.toHaveAttribute('data-drop-target', 'true');
         // The column itself is not also highlighted.
-        await expect(columns.locator('[data-column-id="started"]')).not.toHaveAttribute('data-dragging-ticket', 'true');
+        await expect(startedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
         await capture(page, 'drag-into-column-group-light-1440');
       },
     );
     await expect(startedSearch.locator(`[data-ticket-slug="${onboarding.slug}"]`)).toBeVisible();
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', SEARCH]);
+
+    // From another column over a different group, a grouped ticket keeps its own group.
+    await drag(
+      page,
+      rowOf(columns, onboarding.slug),
+      group(columns, BOARD, 'not-started').locator('[data-component="list-header"]'),
+    );
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['not_started', SEARCH]);
+    await drag(page, rowOf(columns, onboarding.slug), startedColumn.locator(':scope > header'));
     await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', SEARCH]);
 
     // Dropped in another column outside a group, a grouped ticket keeps its group and changes status.

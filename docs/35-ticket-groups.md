@@ -132,12 +132,14 @@ once more when loaded tickets name an id it has no name for; it never polls.
 - **Remove from Group** appears when the selection contains a grouped ticket.
 - **Drag and drop.** Dragging tickets over a group outlines the whole group; there
   is no insertion line because order follows the sort. Dropping sets the group. In
-  the column view, dropping on a group in another column also applies that column's
-  status, as one update.
+  the column view, a group takes the drop only when every dragged ticket is already
+  in that group's column (HS2-K2QA1J). A drag from another column is a status change:
+  the whole column is the target even over one of its groups, and the drop changes
+  only the status and keeps each ticket's group.
 - **Leaving a group by dragging.** In the list view, dropping a grouped ticket on
   the list outside every group removes its group. In the column view, dropping it
   in its own column outside every group removes its group; dropping it in another
-  column outside a group changes only the status and keeps the group.
+  column changes only the status and keeps the group.
 - **Writes** are ordinary ticket updates: optimistic, rolled back on failure, and
   undoable with the standard Undo shortcut.
 - **Sources without group support.** When the selection or the dragged tickets
