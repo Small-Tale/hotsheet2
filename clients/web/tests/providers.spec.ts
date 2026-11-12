@@ -25418,6 +25418,16 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
     'stopped',
   ]);
   await expect(rows.nth(2)).toContainText('HS2-TG2ZV3 · final testing (CI)');
+  // Tokens 12h (HS2-TRZGT3): one sparkline per project from the pushed hourly buckets.
+  await expect(rightNow.locator('thead')).toContainText('Tokens 12h');
+  const sparkline = rows.nth(2).locator('[data-column="tokens"] svg.glance-sparkline');
+  await expect(sparkline).toHaveAccessibleName(/^Hot Sheet 2 tokens per hour, last 12 hours: (\d+, ){11}\d+$/u);
+  await expect(sparkline).toHaveAttribute('data-empty', 'false');
+  expect((await sparkline.boundingBox())!.width).toBeGreaterThan(60);
+  const table = rightNow.locator('[data-component="stats-projects-table"]');
+  await table.evaluate((node) => (node.scrollLeft = node.scrollWidth));
+  await table.screenshot({ path: 'target/visual-captures/hs2-trzgt3-projects-tokens-12h-1440.png' });
+  await table.evaluate((node) => (node.scrollLeft = 0));
 
   // Visual QA captures: wide, medium, narrow, and back to wide, in both colour schemes.
   for (const scheme of ['light', 'dark'] as const) {

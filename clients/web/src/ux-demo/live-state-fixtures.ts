@@ -7,6 +7,7 @@ import type { LiveStoreState } from '../api';
 
 export const GLANCE_FIXTURE_NOW = Date.parse('2026-11-06T10:47:00Z');
 const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
 
 export function liveStateFixture(overrides: Partial<LiveStoreState> = {}, now = GLANCE_FIXTURE_NOW): LiveStoreState {
   return {
@@ -42,6 +43,12 @@ export function liveStateFixture(overrides: Partial<LiveStoreState> = {}, now = 
 export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
   const minutes = (perMinute: readonly number[]) =>
     perMinute.map((tokens, index) => ({ start_ms: now - (perMinute.length - 1 - index) * MINUTE, tokens }));
+  // Twelve hourly buckets ending with the current hour (HS2-TRZGT3), given in thousands of tokens.
+  const hours = (thousands: readonly number[]) =>
+    thousands.map((tokens, index) => ({
+      start_ms: Math.floor(now / HOUR) * HOUR - (thousands.length - 1 - index) * HOUR,
+      tokens: tokens * 1_000,
+    }));
   const base = (store: string, name: string, checkout: string) => ({
     store,
     name,
@@ -76,7 +83,12 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
           },
         ],
         rates: {
-          tokens: { window_minutes: 5, minutes: minutes([120, 0, 0, 40, 0]), peak_per_minute: 4_100 },
+          tokens: {
+            window_minutes: 5,
+            minutes: minutes([120, 0, 0, 40, 0]),
+            peak_per_minute: 4_100,
+            hours: hours([9, 21, 40, 32, 30, 18, 12, 6, 4, 3, 2, 1]),
+          },
           tickets_updated: { window_minutes: 60, at_ms: [now - 50 * MINUTE], peak_per_hour: 6 },
         },
       },
@@ -115,7 +127,12 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
           ],
         },
         rates: {
-          tokens: { window_minutes: 5, minutes: [], peak_per_minute: 2_400 },
+          tokens: {
+            window_minutes: 5,
+            minutes: [],
+            peak_per_minute: 2_400,
+            hours: hours([0, 0, 12, 30, 26, 8, 0, 0, 0, 0, 0, 0]),
+          },
           tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 4 },
         },
       },
@@ -148,7 +165,12 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
         ],
         workers: { live: 2, expected: 2 },
         rates: {
-          tokens: { window_minutes: 5, minutes: minutes([1_400, 1_900, 1_500, 1_700, 1_500]), peak_per_minute: 6_200 },
+          tokens: {
+            window_minutes: 5,
+            minutes: minutes([1_400, 1_900, 1_500, 1_700, 1_500]),
+            peak_per_minute: 6_200,
+            hours: hours([20, 34, 42, 51, 60, 72, 66, 70, 81, 88, 90, 95]),
+          },
           tickets_updated: {
             window_minutes: 60,
             at_ms: [55, 48, 41, 33, 29, 22, 18, 12, 9, 6, 4, 2, 1].map((ago) => now - ago * MINUTE),
@@ -174,7 +196,12 @@ export function glanceScenario(now = GLANCE_FIXTURE_NOW): LiveStoreState[] {
         },
         workers: { live: 0, expected: 0 },
         rates: {
-          tokens: { window_minutes: 5, minutes: [], peak_per_minute: 3_000 },
+          tokens: {
+            window_minutes: 5,
+            minutes: [],
+            peak_per_minute: 3_000,
+            hours: hours([14, 18, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+          },
           tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 5 },
         },
       },

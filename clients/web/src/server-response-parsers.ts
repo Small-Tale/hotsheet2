@@ -903,11 +903,17 @@ const liveWaiting = shape('live waiting', {
   ),
 });
 const liveRates = shape('live rates', {
-  tokens: shape('live token rate', {
-    window_minutes: isNumber,
-    minutes: listOf(shape('live token minute', { start_ms: isNumber, tokens: isNumber }).check),
-    peak_per_minute: isNumber,
-  }).check,
+  tokens: shape(
+    'live token rate',
+    {
+      window_minutes: isNumber,
+      minutes: listOf(shape('live token minute', { start_ms: isNumber, tokens: isNumber }).check),
+      peak_per_minute: isNumber,
+    },
+    {},
+    // HS2-TRZGT3: 12 hourly buckets; an older server omits them.
+    { hours: listOf(shape('live token hour', { start_ms: isNumber, tokens: isNumber }).check) },
+  ).check,
   tickets_updated: shape('live updated rate', {
     window_minutes: isNumber,
     at_ms: listOf(isNumber),

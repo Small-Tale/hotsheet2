@@ -18909,6 +18909,22 @@ components:
                         minimum: 0
                 peak_per_minute:
                   type: number
+                hours:
+                  description:
+                    Tokens per whole UTC hour for the last 12 hours, the current hour last, zeros kept (HS2-TRZGT3).
+                    An older server omits it.
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - start_ms
+                      - tokens
+                    properties:
+                      start_ms:
+                        type: integer
+                      tokens:
+                        type: integer
+                        minimum: 0
             tickets_updated:
               type: object
               required:

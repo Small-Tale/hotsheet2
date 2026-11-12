@@ -810,6 +810,23 @@ fn refresh(state: &AppState, store: &str, now: time::OffsetDateTime) -> Value {
     .unwrap()
 }
 
+/// A rebuild time whose next few minutes stay inside one UTC clock hour. The snapshot's hourly
+/// token buckets (HS2-TRZGT3) roll when the hour turns, which is a real change; a test that
+/// expects "nothing changed" over a few minutes must not straddle that turn, so a time in the
+/// last minutes of an hour moves just past the next one.
+fn within_one_clock_hour(now: time::OffsetDateTime) -> time::OffsetDateTime {
+    if now.minute() < 55 {
+        return now;
+    }
+    now.replace_minute(0)
+        .unwrap()
+        .replace_second(0)
+        .unwrap()
+        .replace_nanosecond(0)
+        .unwrap()
+        + time::Duration::minutes(61)
+}
+
 /// [`hotsheet_server::live_state::refresh_all_at`] on a plain thread.
 fn refresh_all(state: &AppState, now: time::OffsetDateTime) {
     let state = state.clone();
@@ -899,6 +916,11 @@ async fn hs2_mhw3sx_a_restart_keeps_tickets_updated_baselines_and_ordering() {
     // Queue runway is gone (HS2-5A83MR): neither the record nor the snapshot carries it.
     assert!(record.get("eta_samples").is_none());
     assert!(before.get("runway").is_none());
+    // Twelve hourly token buckets ride the snapshot for the Stats sparkline (HS2-TRZGT3).
+    assert_eq!(
+        before["rates"]["tokens"]["hours"].as_array().unwrap().len(),
+        12
+    );
     let ignore = std::fs::read_to_string(h._dir.path().join("demo.hs2/.gitignore")).unwrap();
     assert!(ignore.lines().any(|l| l.trim() == "metrics/local/"));
 
@@ -1001,7 +1023,7 @@ async fn hs2_mhw3sx_the_minute_rebuild_decays_a_quiet_store_and_pushes_only_chan
 
     let id = create(&router, "Busy").await;
     route(&h.state, vec![ticket_event(&h.store_id, "created", &id)]);
-    let now = time::OffsetDateTime::now_utc();
+    let now = within_one_clock_hour(time::OffsetDateTime::now_utc());
     let busy = refresh(&h.state, &h.store_id, now);
     assert_eq!(updated(&busy).len(), 1);
     let mut bus = h.state.subscribe();

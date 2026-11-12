@@ -11,6 +11,8 @@ import {
   pausedUntilMs,
   progressAgeMs,
   ticketsUpdatedPerHour,
+  TOKEN_HOURS,
+  tokenHours,
   tokensPerMinute,
   worstLiveWord,
 } from './live-state';
@@ -150,6 +152,39 @@ describe('live state helpers (HS2-JTTQMY)', () => {
     // A restarted server counts revisions from 1 again.
     expect(isNewerLiveState(liveFixture({ revision: 90 }), liveFixture({ epoch_ms: 2, revision: 1 }))).toBe(true);
     expect(isNewerLiveState(liveFixture({ epoch_ms: 2, revision: 1 }), liveFixture({ revision: 90 }))).toBe(false);
+  });
+});
+
+describe('hourly token buckets (HS2-TRZGT3)', () => {
+  const HOUR = 60 * MINUTE;
+  const current = Math.floor(NOW / HOUR) * HOUR;
+  const withHours = (hours: { start_ms: number; tokens: number }[]) =>
+    liveFixture({
+      rates: { ...liveFixture().rates, tokens: { ...liveFixture().rates.tokens, hours } },
+    });
+
+  it('the parser accepts hourly buckets, their absence from an older server, and rejects a bad bucket', () => {
+    const state = withHours([{ start_ms: current, tokens: 5 }]);
+    expect(parseLiveStoreState(state).rates.tokens.hours).toEqual([{ start_ms: current, tokens: 5 }]);
+    expect(parseLiveStoreState(liveFixture()).rates.tokens.hours).toBeUndefined();
+    expect(() => parseLiveStoreState(withHours([{ start_ms: current, tokens: 'many' as unknown as number }]))).toThrow(
+      'live state',
+    );
+  });
+
+  it('aligns twelve hours to the render clock, oldest first, with missing hours as zero', () => {
+    const state = withHours([
+      { start_ms: current - 11 * HOUR, tokens: 1 },
+      { start_ms: current - HOUR, tokens: 2 },
+      { start_ms: current, tokens: 3 },
+    ]);
+    const hours = tokenHours(state, NOW);
+    expect(hours).toHaveLength(TOKEN_HOURS);
+    expect(hours).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3]);
+    // Once the hour turns before the next snapshot, the oldest bucket leaves and the new hour is 0.
+    expect(tokenHours(state, current + HOUR)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 0]);
+    // An older server without buckets reads twelve zeros.
+    expect(tokenHours(liveFixture(), NOW)).toEqual(Array.from({ length: 12 }, () => 0));
   });
 });
 

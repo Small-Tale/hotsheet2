@@ -45,6 +45,24 @@ export function tokensPerMinute(state: LiveStoreState, nowMs: number): number {
   return total / window;
 }
 
+/** Hourly token buckets the Stats projects sparkline shows (HS2-TRZGT3). */
+export const TOKEN_HOURS = 12;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/**
+ * Tokens per whole hour for the `TOKEN_HOURS` hours ending with the one containing `nowMs`, oldest
+ * first, aligned to the render clock: once the hour turns before the next snapshot, the oldest bucket
+ * leaves and the new hour reads 0. An older server without hourly buckets reads all zeros.
+ */
+export function tokenHours(state: LiveStoreState, nowMs: number): number[] {
+  const current = Math.floor(nowMs / HOUR_MS) * HOUR_MS;
+  const byStart = new Map((state.rates.tokens.hours ?? []).map((hour) => [hour.start_ms, hour.tokens]));
+  return Array.from(
+    { length: TOKEN_HOURS },
+    (_, index) => byStart.get(current - (TOKEN_HOURS - 1 - index) * HOUR_MS) ?? 0,
+  );
+}
+
 /** Distinct tickets with a progress write in the last hour at `nowMs` (claim renewals excluded). */
 export function ticketsUpdatedPerHour(state: LiveStoreState, nowMs: number): number {
   const since = nowMs - state.rates.tickets_updated.window_minutes * MINUTE_MS;

@@ -95,6 +95,8 @@ describe('HS2-ERTNJ7 Projects table rows', () => {
     expect(row.etaOverrunMs).toBe(18 * MINUTE);
     expect(row).not.toHaveProperty('runwayReady');
     expect(row.tokensPerMinute).toBe(1_600);
+    // The last 12 hours of tokens, oldest first (HS2-TRZGT3).
+    expect(row.tokensByHour).toEqual([20, 34, 42, 51, 60, 72, 66, 70, 81, 88, 90, 95].map((k) => k * 1_000));
     expect(row.action).toBeUndefined();
   });
 

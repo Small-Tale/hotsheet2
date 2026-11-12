@@ -1,5 +1,5 @@
 import type { LiveStoreState, LiveWord } from './api';
-import { aggregateLiveStates, etaOverrunMs, progressAgeMs, tokensPerMinute } from './live-state';
+import { aggregateLiveStates, etaOverrunMs, progressAgeMs, tokenHours, tokensPerMinute } from './live-state';
 
 /**
  * Pure derivations for the Stats page's **Right now** section (HS2-ERTNJ7,
@@ -89,6 +89,8 @@ export interface RightNowRow {
   /** The largest ETA overrun among the live claims. */
   etaOverrunMs?: number;
   tokensPerMinute: number;
+  /** Tokens per hour for the last 12 hours, oldest first (HS2-TRZGT3). */
+  tokensByHour: number[];
   action?: RightNowAction;
 }
 
@@ -131,6 +133,7 @@ export function rightNowRow(state: LiveStoreState, nowMs: number, targets: Right
     progressAgeMs: progressAgeMs(state, nowMs),
     etaOverrunMs: overruns.length ? Math.max(...overruns) : undefined,
     tokensPerMinute: tokensPerMinute(state, nowMs),
+    tokensByHour: tokenHours(state, nowMs),
     action: rowAction(state, targets),
   };
 }

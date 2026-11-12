@@ -3,6 +3,7 @@ import './stats-projects-table.css';
 import { Button } from '@kerfjs/ui/button';
 import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 
 import type { LiveWord } from '../api';
@@ -11,6 +12,7 @@ import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { LIVE_STATE_ICONS } from '../live-state-icons';
 import { formatDuration, LIVE_WORD_LABELS, type RightNowRow, type RightNowWork } from '../stats-right-now';
 import { formatGlanceValue } from './glance-gauge-geometry';
+import { GlanceSparkline } from './glance-sparkline';
 
 export interface StatsProjectsTableProps {
   rows: readonly RightNowRow[];
@@ -85,7 +87,7 @@ export function StatsProjectsTable({ rows }: StatsProjectsTableProps) {
             </th>
             <th scope="col">
               <Text variant="span" size="compact" tone="quiet" weight="strong" flush wrap="nowrap">
-                Tokens/min
+                Tokens 12h
               </Text>
             </th>
             <th scope="col">
@@ -146,8 +148,25 @@ export function StatsProjectsTable({ rows }: StatsProjectsTableProps) {
                     </Text>
                   )}
                 </td>
-                <td data-column="tokens" title={`${Math.round(row.tokensPerMinute)} tokens per minute`}>
-                  {formatGlanceValue(row.tokensPerMinute)}
+                <td data-column="tokens">
+                  {/* The last 12 hours of tokens (HS2-TRZGT3), then the current rate. */}
+                  <Row gap="xs" vAlign="middle">
+                    <GlanceSparkline
+                      values={row.tokensByHour}
+                      label={`${row.name} tokens per hour, last 12 hours`}
+                      tone="brand"
+                    />
+                    <Text
+                      variant="span"
+                      size="compact"
+                      tone="quiet"
+                      flush
+                      wrap="nowrap"
+                      title={`${Math.round(row.tokensPerMinute)} tokens per minute`}
+                    >
+                      {formatGlanceValue(row.tokensPerMinute)}/min
+                    </Text>
+                  </Row>
                 </td>
                 <td data-column="action">
                   {row.action?.kind === 'answer' && (

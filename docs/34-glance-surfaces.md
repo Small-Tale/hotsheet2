@@ -252,9 +252,10 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
 - **Shipped (HS2-ERTNJ7).** `StatsRightNow` and `StatsProjectsTable` render from the pushed live
   state; a 30-second local display clock ages values only while Stats is shown and never requests.
   "Data as of" is when the client last applied a snapshot. Completed counts today's UTC calendar day
-  from the analytics the page already loads, labelled with that midnight's local time. Two parts wait
-  on the live state: the `main` CI tile is omitted until HS2-M8HHEA adds CI, and the table shows
-  current tokens/min until the live state carries 12 hours of hourly token buckets (HS2-TRZGT3).
+  from the analytics the page already loads, labelled with that midnight's local time. One part waits
+  on the live state: the `main` CI tile is omitted until HS2-M8HHEA adds CI. The Tokens 12h column draws
+  a `GlanceSparkline` of the snapshot's 12 hourly token buckets (HS2-TRZGT3), aligned to the display
+  clock, with the current tokens/min beside it.
 - **Overnight timeline (HS2-9AN4DN):** one swimlane per project over a selectable window (default: since
   standby was entered, or the last 12 hours), segments coloured by state (Active, Waiting on CI, May be
   stuck, Waiting on you, Stopped, Stalled, Halted), and a tick per completed ticket. Hover shows state,

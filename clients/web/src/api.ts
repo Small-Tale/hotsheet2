@@ -1497,7 +1497,13 @@ export interface LiveStoreState {
   workers: { live: number; expected: number };
   waiting: { count: number; tickets: { ticket: string; slug: string; title: string; reason: 'feedback' | 'review' }[] };
   rates: {
-    tokens: { window_minutes: number; minutes: { start_ms: number; tokens: number }[]; peak_per_minute: number };
+    tokens: {
+      window_minutes: number;
+      minutes: { start_ms: number; tokens: number }[];
+      peak_per_minute: number;
+      /** Tokens per whole UTC hour for the last 12 hours, the current one last (HS2-TRZGT3); absent from an older server. */
+      hours?: { start_ms: number; tokens: number }[];
+    };
     tickets_updated: { window_minutes: number; at_ms: number[]; peak_per_hour: number };
   };
 }

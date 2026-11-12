@@ -443,7 +443,8 @@ notification always agree. The tracker therefore runs whether or not a rule name
   state (HS2-B4EQ87). Claude terminals record each assistant response at its own time as
   it completes, not once at turn end, so a long autonomous turn moves the rate while it
   runs (HS2-SSMDQ1). The snapshot carries the per-minute buckets, so the gauge decays
-  without another read.
+  without another read. `hours` carries 12 dense UTC-hour token buckets ending with the current hour
+  (HS2-TRZGT3), built from the same tail, for the Stats projects sparkline; an older server omits it.
 - `rates.tickets_updated`: one time per distinct ticket whose last progress write is within
   60 minutes. A new ticket counts. Claim renewals do not.
 - Each rate has a rolling 24-hour peak (`peak_per_minute`, `peak_per_hour`) that its gauge

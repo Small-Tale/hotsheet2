@@ -49,6 +49,9 @@ pub const TOKEN_WINDOW_MINUTES: i64 = 5;
 /// 24-hour peak (HS2-7CS5A4; it was 30 days).
 pub const PEAK_HOURS: i64 = 24;
 
+/// Hourly token buckets the snapshot carries, the current hour included (HS2-TRZGT3).
+pub const TOKEN_HOURS: i64 = 12;
+
 /// Waiting tickets listed by slug; `count` still counts every one.
 const WAITING_LIMIT: usize = 20;
 
@@ -232,10 +235,21 @@ pub struct LiveTokenRate {
     pub minutes: Vec<LiveTokenMinute>,
     /// The highest tokens per minute in the last 24 hours (HS2-7CS5A4).
     pub peak_per_minute: f64,
+    /// Tokens per whole UTC hour for the last [`TOKEN_HOURS`] hours, the current one last and
+    /// included, zeros kept (HS2-TRZGT3): the Stats projects sparkline.
+    #[serde(default)]
+    pub hours: Vec<LiveTokenHour>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LiveTokenMinute {
+    pub start_ms: i64,
+    pub tokens: u64,
+}
+
+/// One hour's tokens (in + out), starting at `start_ms`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveTokenHour {
     pub start_ms: i64,
     pub tokens: u64,
 }
@@ -728,7 +742,23 @@ fn token_rate(live: &mut StoreLive, store: &FsStore, now: OffsetDateTime) -> Liv
             })
             .collect(),
         peak_per_minute: book.peak_tokens(current_hour),
+        hours: token_hours(&live.usage.minutes, current_hour),
     }
+}
+
+/// [`TOKEN_HOURS`] dense hourly buckets ending with the hour that starts at `current_hour`.
+fn token_hours(minutes: &BTreeMap<i64, u64>, current_hour: i64) -> Vec<LiveTokenHour> {
+    (0..TOKEN_HOURS)
+        .rev()
+        .map(|back| {
+            let start_ms = current_hour - back * HOUR_MS;
+            let tokens = minutes
+                .range(start_ms..start_ms + HOUR_MS)
+                .map(|(_, tokens)| *tokens)
+                .sum();
+            LiveTokenHour { start_ms, tokens }
+        })
+        .collect()
 }
 
 fn updated_rate(
@@ -1092,6 +1122,32 @@ mod tests {
     }
 
     #[test]
+    fn hs2_trzgt3_token_hours_are_twelve_dense_buckets_ending_with_the_current_hour() {
+        let mut minutes = BTreeMap::new();
+        minutes.insert(0, 5u64); // hour 0, outside the window ending with hour 12
+        minutes.insert(HOUR_MS, 10); // hour 1, the first in the window
+        minutes.insert(HOUR_MS + 59 * MINUTE_MS, 1);
+        minutes.insert(12 * HOUR_MS + MINUTE_MS, 7); // the current hour
+        let hours = token_hours(&minutes, 12 * HOUR_MS);
+        assert_eq!(hours.len(), 12);
+        assert_eq!(hours[0].start_ms, HOUR_MS);
+        assert_eq!(hours[11].start_ms, 12 * HOUR_MS);
+        let tokens: Vec<u64> = hours.iter().map(|hour| hour.tokens).collect();
+        assert_eq!(tokens, [11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7]);
+        // An hour later the oldest bucket leaves and a new, empty hour starts.
+        let next = token_hours(&minutes, 13 * HOUR_MS);
+        assert_eq!(next[0].start_ms, 2 * HOUR_MS);
+        assert_eq!(next[10].tokens, 7);
+        assert_eq!(next[11].tokens, 0);
+        // No usage at all is twelve zero hours, not an empty list.
+        assert!(
+            token_hours(&BTreeMap::new(), 12 * HOUR_MS)
+                .iter()
+                .all(|hour| hour.tokens == 0)
+        );
+    }
+
+    #[test]
     fn hs2_7cs5a4_peak_book_saves_only_the_period_and_ignores_a_thirty_day_book() {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(
@@ -1175,6 +1231,17 @@ mod tests {
         let rate = token_rate(&mut live, &store, later);
         assert!(rate.minutes.is_empty());
         assert_eq!(rate.peak_per_minute, 1002.0);
+        // Twelve dense hourly buckets end with the current hour (HS2-TRZGT3): 07:00 holds the
+        // 07:58 and 07:59 lines, 08:00 the 08:00 line, and the ten hours before are zero.
+        assert_eq!(rate.hours.len(), TOKEN_HOURS as usize);
+        assert_eq!(
+            rate.hours.last().unwrap().start_ms,
+            hour_of(unix_ms(now)),
+            "the current hour is last"
+        );
+        let tokens: Vec<u64> = rate.hours.iter().map(|hour| hour.tokens).collect();
+        assert_eq!(tokens[..10], [0; 10]);
+        assert_eq!(tokens[10..], [1000 + 1500 + 7 + 3, 2500]);
         // 23 hours on it still sets the scale; a day later it no longer does (HS2-7CS5A4).
         let rate = token_rate(&mut live, &store, at(1_800_000_000_000 + 23 * HOUR_MS));
         assert_eq!(rate.peak_per_minute, 1002.0);
@@ -1230,6 +1297,7 @@ mod tests {
                     window_minutes: 5,
                     minutes: Vec::new(),
                     peak_per_minute: 0.0,
+                    hours: Vec::new(),
                 },
                 tickets_updated: LiveUpdatedRate {
                     window_minutes: 60,

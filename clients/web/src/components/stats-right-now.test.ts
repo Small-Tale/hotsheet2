@@ -103,6 +103,17 @@ describe('HS2-ERTNJ7 StatsProjectsTable', () => {
     expect(rowOf('store-review')).toMatch(/data-column="eta"[^>]*>—/u);
   });
 
+  it('draws a 12-hour token sparkline per project with the current rate beside it (HS2-TRZGT3)', () => {
+    const active = rowOf('store-hotsheet');
+    expect(active).toContain('data-component="glance-sparkline"');
+    expect(active).toContain(
+      'aria-label="Hot Sheet 2 tokens per hour, last 12 hours: 20000, 34000, 42000, 51000, 60000, 72000, 66000, 70000, 81000, 88000, 90000, 95000"',
+    );
+    expect(active).toContain('1.6k/min');
+    // A stopped project still shows the hours it worked earlier in the window.
+    expect(rowOf('store-kerf')).toMatch(/data-component="glance-sparkline"[^>]*data-empty="false"/u);
+  });
+
   it('routes the one unstick action per row through the existing delegated actions', () => {
     const stuck = rowOf('store-website');
     expect(stuck).toContain('data-action="open-terminal-project"');

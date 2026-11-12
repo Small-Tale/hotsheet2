@@ -321,7 +321,7 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   per live store, sorted by need (Halted, Stalled, May be stuck, Waiting on you, Active, Stopped,
   then longest without progress). Columns: state glyph (`LIVE_STATE_ICONS`) and word, project,
   current work (ticket and phase; `final_testing` reads "final testing (CI)"), last progress, ETA
-  overrun, and tokens/min (no queue runway, HS2-5A83MR), then the one unstick action: **Answer** opens the first waiting
+  overrun, and a 12-hour token `GlanceSparkline` with the current tokens/min (HS2-TRZGT3; no queue runway, HS2-5A83MR), then the one unstick action: **Answer** opens the first waiting
   ticket through `open-linked-ticket`, and **Open Terminal** opens the project's halted (else first)
   terminal through `open-terminal-project`. A row with no open project or terminal has no action. A
   native table (Kerf has no tabular-data component) that scrolls sideways inside its own container.
