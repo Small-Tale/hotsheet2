@@ -20227,6 +20227,11 @@ components:
           $ref: '#/components/schemas/TerminalAiConnection'
         mcp_connected:
           type: boolean
+        feedback_primary:
+          description: >-
+            This live terminal's AI session is its project's primary session for proactive
+            feedback delivery (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
+          type: boolean
       additionalProperties: false
     TerminalRead:
       type: object
@@ -20267,6 +20272,11 @@ components:
         last_hook_report:
           $ref: '#/components/schemas/TerminalAiConnection'
         mcp_connected:
+          type: boolean
+        feedback_primary:
+          description: >-
+            This live terminal's AI session is its project's primary session for proactive
+            feedback delivery (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
         scrollback:
           type: string

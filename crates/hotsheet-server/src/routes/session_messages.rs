@@ -296,8 +296,10 @@ fn is_replaceable_reported(mechanism: &str) -> bool {
 }
 
 /// Drop an ended terminal's adapter.
-pub(crate) fn unregister(pushes: &SessionPushes, terminal_id: &str) {
-    pushes.lock_or_recover().remove(terminal_id);
+/// Forget a terminal's adapter; returns whether it had one (it could have been its project's
+/// primary for proactive feedback delivery, HS2-DB2FQ2).
+pub(crate) fn unregister(pushes: &SessionPushes, terminal_id: &str) -> bool {
+    pushes.lock_or_recover().remove(terminal_id).is_some()
 }
 
 /// The adapter for a connection, if it accepts messages.

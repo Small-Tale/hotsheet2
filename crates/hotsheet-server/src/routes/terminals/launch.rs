@@ -597,6 +597,7 @@ fn register_terminal_connection(
     let conn_id = id.to_string();
     let host = state.host.clone();
     let pushes = state.session_pushes.clone();
+    let events = state.clone();
     let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
         loop {
@@ -608,7 +609,10 @@ fn register_terminal_connection(
                     r.unregister_if_generation(&conn_id, generation)
                 };
                 if removed {
-                    session_messages::unregister(&pushes, &conn_id);
+                    if session_messages::unregister(&pushes, &conn_id) {
+                        // The project's primary may move to another session (HS2-DB2FQ2).
+                        super::announce_session_push_gone(&events, &conn_id);
+                    }
                     release_session_claims(host, worker).await;
                 }
                 break;
@@ -657,6 +661,7 @@ fn register_broker_terminal_connection(
     let conn_id = id.to_string();
     let host = state.host.clone();
     let pushes = state.session_pushes.clone();
+    let events = state.clone();
     let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
         loop {
@@ -680,7 +685,10 @@ fn register_broker_terminal_connection(
                         r.unregister_if_generation(&conn_id, generation)
                     };
                     if removed {
-                        session_messages::unregister(&pushes, &conn_id);
+                        if session_messages::unregister(&pushes, &conn_id) {
+                            // The project's primary may move to another session (HS2-DB2FQ2).
+                            super::announce_session_push_gone(&events, &conn_id);
+                        }
                         release_session_claims(host, worker).await;
                     }
                     break;

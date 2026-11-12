@@ -1343,6 +1343,7 @@ const terminalOptional: Record<string, Check> = {
   ai_connection: isObject,
   last_hook_report: isObject,
   mcp_connected: isBoolean,
+  feedback_primary: isBoolean,
 };
 
 export const parseTerminalInfo = shape<TerminalInfo>(

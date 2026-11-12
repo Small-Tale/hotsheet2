@@ -907,7 +907,9 @@ Add a human note and answer a FEEDBACK NEEDED prompt. Confirm that each committe
 note sends only a short ticket reference to the claimed session and records a
 delivery activity note. Repeat while the driven chat is busy, with the claimed
 session unreachable, with two reachable same-project sessions, and with no
-session. Confirm the chooser stays within the project/source, the start action
+session. With two reachable terminals and no claim, confirm the note goes to the
+older (primary) terminal; close it and confirm the next note goes to the other
+(HS2-DB2FQ2). Confirm the chooser stays within the project/source, the start action
 opens a session, and a completed-ticket Not Working report remains separate.
 
 ### Announcer audio on a real device (HS2-5PSQJQ)

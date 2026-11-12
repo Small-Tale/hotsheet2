@@ -1173,6 +1173,9 @@ export interface TerminalInfo {
   /** A live `hotsheet-mcp` shim launched from this terminal holds a presence lease (HS2-HNXE38).
    * Separate from `ai_connection`: MCP reachability does not prove hooks route permission prompts. */
   mcp_connected?: boolean;
+  /** This live terminal's AI session is its project's primary: proactive feedback delivery goes
+   * here when no claim names a session (HS2-DB2FQ2). Absent otherwise. */
+  feedback_primary?: boolean;
 }
 /** An AI session's `SessionStart` hook report (`POST /terminals/{id}/ai-connection`). */
 export interface TerminalAiConnection {

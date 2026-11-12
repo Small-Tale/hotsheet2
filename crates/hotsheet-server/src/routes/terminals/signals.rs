@@ -19,10 +19,15 @@ use time::format_description::well_known::Rfc3339;
 
 /// `GET /terminals` — the live terminals (id, alive, busy).
 pub(crate) async fn list_terminals(State(state): State<AppState>) -> Json<Vec<TerminalInfo>> {
-    Json(with_terminal_names(
-        &state,
-        live_terminal_infos(&state).await,
-    ))
+    let infos = live_terminal_infos(&state).await;
+    // The full list knows exactly which terminals are alive, so a terminal that just closed
+    // never stays primary while its registry entry is being removed (HS2-DB2FQ2).
+    let live = infos
+        .iter()
+        .filter(|info| info.alive)
+        .map(|info| info.id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    Json(with_terminal_names(&state, infos, Some(&live)))
 }
 
 /// Every live terminal this server reports, before saved names are applied.
@@ -52,13 +57,18 @@ pub(crate) async fn try_live_terminal_infos(state: &AppState) -> Result<Vec<Term
 
 /// Apply the project's saved terminal names (HS2-89FPV1). An unreadable settings file leaves
 /// every terminal unnamed rather than failing the terminal list.
-fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<TerminalInfo> {
+fn with_terminal_names(
+    state: &AppState,
+    mut infos: Vec<TerminalInfo>,
+    live: Option<&std::collections::HashSet<String>>,
+) -> Vec<TerminalInfo> {
     let names = terminal_names::all(&Settings::new(state.store.root())).unwrap_or_default();
     let halts = state.terminal_halts.lock_or_recover().clone();
     let mut questions = state.terminal_questions.lock_or_recover();
     let connections = state.terminal_ai_connections.lock_or_recover().clone();
     let mut last_reports = state.terminal_ai_last_reports.lock_or_recover();
     let mcp = state.mcp_presence.lock_or_recover().clone();
+    let primaries = crate::routes::feedback_session::feedback_primaries(state, live);
     for info in &mut infos {
         if !info.alive {
             last_reports.remove(&info.id);
@@ -77,6 +87,7 @@ fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<Te
             .flatten();
         info.last_hook_report = last_reports.get(&info.id).cloned();
         info.mcp_connected = info.alive && mcp.terminal_connected(&info.id);
+        info.feedback_primary = info.alive && primaries.contains(&info.id);
     }
     infos
 }
@@ -856,7 +867,7 @@ pub(crate) struct TerminalRead {
 }
 
 pub(crate) fn named_terminal_info(state: &AppState, info: TerminalInfo) -> TerminalInfo {
-    with_terminal_names(state, vec![info])
+    with_terminal_names(state, vec![info], None)
         .pop()
         .expect("one terminal in, one out")
 }

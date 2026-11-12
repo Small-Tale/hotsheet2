@@ -37,6 +37,8 @@ pub(crate) struct Candidate {
     /// A client-owned drive is attached to one ticket source; terminals serve the project.
     pub(crate) source: Option<String>,
     pub(crate) channel: Channel,
+    /// When the terminal's connection registered (Unix ms); orders the primary (HS2-DB2FQ2).
+    pub(crate) started_at_ms: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -129,6 +131,57 @@ pub(crate) fn api_note_to_notify(ticket: &ApiTicket, request_human: bool) -> Opt
         })
 }
 
+/// Live terminals whose reported AI session can receive a pushed message, as registry
+/// connections (HS2-25TP3N). `live_ids` are the terminals currently alive; `None` trusts the
+/// registry, whose lifecycle monitor removes a terminal soon after it exits.
+fn push_capable_terminals(
+    state: &AppState,
+    live_ids: Option<&HashSet<String>>,
+) -> Vec<hotsheet_aitools::Connection> {
+    state
+        .drive_registry
+        .lock_or_recover()
+        .list()
+        .into_iter()
+        .filter(|terminal| {
+            live_ids.is_none_or(|live| live.contains(&terminal.id))
+                && session_messages::adapter(state, &terminal.id).is_some()
+        })
+        .cloned()
+        .collect()
+}
+
+/// HS2-DB2FQ2: the primary AI session of each project, the one proactive feedback delivery
+/// goes to when no claim names a session: the oldest push-capable live terminal (registry
+/// start time, then id). It is derived, never stored, so closing the primary promotes the
+/// next oldest and opening another terminal never takes the role (HS2-DB2FQ2).
+pub(crate) fn primary_terminals<'a>(
+    terminals: impl IntoIterator<Item = (&'a str, &'a str, u64)>,
+) -> HashSet<String> {
+    let mut best: std::collections::HashMap<&str, (u64, &str)> = std::collections::HashMap::new();
+    for (id, project, started_at_ms) in terminals {
+        let entry = best.entry(project).or_insert((started_at_ms, id));
+        if (started_at_ms, id) < *entry {
+            *entry = (started_at_ms, id);
+        }
+    }
+    best.into_values().map(|(_, id)| id.to_string()).collect()
+}
+
+/// The ids of every project's primary terminal among `live_ids` (HS2-DB2FQ2); `None` trusts
+/// the registry's own lifecycle for liveness.
+pub(crate) fn feedback_primaries(
+    state: &AppState,
+    live_ids: Option<&HashSet<String>>,
+) -> HashSet<String> {
+    let terminals = push_capable_terminals(state, live_ids);
+    primary_terminals(
+        terminals
+            .iter()
+            .map(|t| (t.id.as_str(), t.project.as_str(), t.started_at_ms)),
+    )
+}
+
 async fn candidates(state: &AppState, checkout: &Checkout, source: &str) -> Vec<Candidate> {
     let project = checkout.root.as_str();
     let live_ids = terminals::try_live_terminal_infos(state)
@@ -138,19 +191,10 @@ async fn candidates(state: &AppState, checkout: &Checkout, source: &str) -> Vec<
         .filter(|terminal| terminal.alive)
         .map(|terminal| terminal.id)
         .collect::<HashSet<_>>();
-    let registered = state
-        .drive_registry
-        .lock_or_recover()
-        .list()
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let registered = push_capable_terminals(state, Some(&live_ids));
     let mut result = Vec::new();
     for terminal in registered {
-        if terminal.project != project
-            || !live_ids.contains(&terminal.id)
-            || session_messages::adapter(state, &terminal.id).is_none()
-        {
+        if terminal.project != project {
             continue;
         }
         result.push(Candidate {
@@ -162,6 +206,7 @@ async fn candidates(state: &AppState, checkout: &Checkout, source: &str) -> Vec<
             project: terminal.project,
             source: None,
             channel: Channel::Terminal,
+            started_at_ms: terminal.started_at_ms,
         });
     }
     result.extend(state.client_drives.list().into_iter().filter_map(|drive| {
@@ -175,6 +220,7 @@ async fn candidates(state: &AppState, checkout: &Checkout, source: &str) -> Vec<
             project: drive.project,
             source: Some(drive.source),
             channel: Channel::Drive,
+            started_at_ms: 0,
         })
     }));
     result
@@ -605,7 +651,18 @@ pub(crate) fn route(
     match scoped.len() {
         0 => Route::Start,
         1 => Route::Direct(scoped.remove(0)),
-        _ => Route::Choose(scoped),
+        // HS2-DB2FQ2: no claim names a session, so the project's primary (the oldest
+        // push-capable terminal, see [`primary_terminals`]) receives it. Only client-owned drives
+        // with no terminal still ask the human to choose.
+        _ => match scoped
+            .iter()
+            .filter(|candidate| candidate.channel == Channel::Terminal)
+            .min_by(|left, right| {
+                (left.started_at_ms, &left.id).cmp(&(right.started_at_ms, &right.id))
+            }) {
+            Some(primary) => Route::Direct(primary.clone()),
+            None => Route::Choose(scoped),
+        },
     }
 }
 
@@ -625,7 +682,43 @@ mod tests {
             } else {
                 Channel::Terminal
             },
+            started_at_ms: 0,
         }
+    }
+
+    #[test]
+    fn hs2_db2fq2_primary_is_the_oldest_terminal_per_project_across_open_close_reopen() {
+        // One terminal: it is the primary.
+        assert_eq!(
+            primary_terminals([("b", "/p", 20)]),
+            HashSet::from(["b".to_string()])
+        );
+        // A newer terminal opens: the older one stays primary.
+        assert_eq!(
+            primary_terminals([("b", "/p", 20), ("c", "/p", 30)]),
+            HashSet::from(["b".to_string()])
+        );
+        // The primary closes: the remaining terminal is promoted.
+        assert_eq!(
+            primary_terminals([("c", "/p", 30)]),
+            HashSet::from(["c".to_string()])
+        );
+        // A reopened terminal is newer, so the promoted primary keeps the role.
+        assert_eq!(
+            primary_terminals([("c", "/p", 30), ("b2", "/p", 40)]),
+            HashSet::from(["c".to_string()])
+        );
+        // Equal start times break by id, and projects never share a primary.
+        assert_eq!(
+            primary_terminals([("z", "/p", 5), ("a", "/p", 5), ("q", "/other", 99)]),
+            HashSet::from(["a".to_string(), "q".to_string()])
+        );
+        // Empty, then refilled.
+        assert!(primary_terminals([]).is_empty());
+        assert_eq!(
+            primary_terminals([("n", "/p", 1)]),
+            HashSet::from(["n".to_string()])
+        );
     }
 
     fn provider_ticket(
@@ -719,13 +812,74 @@ mod tests {
             route("/project", "source", Some("codex-two"), sessions.clone()),
             Route::Direct(sessions[1].clone())
         );
+        // HS2-DB2FQ2: without a live claim the deterministic primary receives it.
         assert_eq!(
             route("/project", "source", None, sessions.clone()),
-            Route::Choose(sessions.to_vec())
+            Route::Direct(sessions[0].clone())
         );
         assert_eq!(
             route("/project", "source", Some("stale-worker"), sessions.clone()),
-            Route::Choose(sessions.to_vec())
+            Route::Direct(sessions[0].clone())
+        );
+    }
+
+    #[test]
+    fn hs2_db2fq2_routing_follows_the_primary_across_open_close_reopen() {
+        let at = |id: &str, started_at_ms: u64| Candidate {
+            started_at_ms,
+            ..candidate(id, "/project", None)
+        };
+        let (first, second, reopened) = (at("z-first", 10), at("a-second", 20), at("m-reopen", 30));
+        // Two terminals: the older one is primary even though its id sorts later.
+        assert_eq!(
+            route("/project", "source", None, [second.clone(), first.clone()]),
+            Route::Direct(first.clone())
+        );
+        // A claim still names its own waiting session over the primary.
+        assert_eq!(
+            route(
+                "/project",
+                "source",
+                Some("codex-a-second"),
+                [first.clone(), second.clone()]
+            ),
+            Route::Direct(second.clone())
+        );
+        // The primary closes (or its delivery failed and it was dropped): the next is promoted.
+        assert_eq!(
+            route("/project", "source", None, [second.clone()]),
+            Route::Direct(second.clone())
+        );
+        // A reopened terminal is newer, so the promoted primary keeps the role.
+        assert_eq!(
+            route(
+                "/project",
+                "source",
+                None,
+                [reopened.clone(), second.clone()]
+            ),
+            Route::Direct(second.clone())
+        );
+        // Every terminal closed: start a session.
+        assert_eq!(route("/project", "source", None, []), Route::Start);
+        // Several client-owned drives with no terminal still ask the human.
+        let drives = [
+            candidate("drive-1", "/project", Some("source")),
+            candidate("drive-2", "/project", Some("source")),
+        ];
+        assert_eq!(
+            route("/project", "source", None, drives.clone()),
+            Route::Choose(drives.to_vec())
+        );
+        // A terminal beside a drive is the primary.
+        assert_eq!(
+            route(
+                "/project",
+                "source",
+                None,
+                [drives[0].clone(), reopened.clone()]
+            ),
+            Route::Direct(reopened)
         );
     }
 

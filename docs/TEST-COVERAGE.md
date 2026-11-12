@@ -366,7 +366,11 @@ note returns a start offer, a foreign session cannot be chosen, and an AI note
 does not trigger delivery. `clients/web/src/components/ticket-inspector.test.ts`
 checks the nonmodal chooser/start controls; the real-server browser flow in
 `clients/web/tests/feedback-session-choice.spec.ts` saves a human note, chooses a
-session, and checks wide/medium/narrow/wide rendering. Live external-tool
+session, and checks wide/medium/narrow/wide rendering. HS2-DB2FQ2 adds
+`hs2_db2fq2_routing_follows_the_primary_across_open_close_reopen` (unit) and, in
+`crates/hotsheet-server/tests/session_messages.rs`, real-server routing of human
+notes to the primary across two-terminal close and reopen, plus the change event
+for a push session that exits on its own. Live external-tool
 delivery remains a manual integration check. HS2-H9Z9KZ unit tests in the same
 module pin the provider trigger (request authorship when a provider reads comments
 back without an actor) and the `not_shared` wire status;

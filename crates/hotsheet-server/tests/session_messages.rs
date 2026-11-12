@@ -1104,3 +1104,198 @@ async fn a_hook_reported_claude_inbox_receives_prompts_and_its_token_is_never_se
     );
     let _ = send(&router, "DELETE", "/terminals/inbox", None).await;
 }
+
+/// The ids `GET /terminals` marks as their project's primary AI session (HS2-DB2FQ2).
+async fn primaries(router: &axum::Router) -> Vec<String> {
+    let (status, list) = send(router, "GET", "/terminals", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut ids: Vec<String> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|terminal| terminal["feedback_primary"] == true)
+        .map(|terminal| terminal["id"].as_str().unwrap().to_string())
+        .collect();
+    ids.sort();
+    ids
+}
+
+#[tokio::test]
+async fn hs2_db2fq2_two_terminals_mark_one_primary_and_promote_on_close_and_reopen() {
+    // Synthetic fake tools only. Every push-capable terminal stays connected; exactly one per
+    // project is the primary for proactive delivery, the oldest live one (HS2-DB2FQ2).
+    let (_store, _plugins, router) = fixture();
+    let project = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    assert!(
+        primaries(&router).await.is_empty(),
+        "no terminal, no primary"
+    );
+    launch_in(&router, "fake-push", "primary-1", Some(project.path())).await;
+    assert_eq!(primaries(&router).await, ["primary-1"]);
+    // A second terminal in the same project is connected but not primary.
+    launch_in(&router, "fake-push", "primary-2", Some(project.path())).await;
+    assert_eq!(primaries(&router).await, ["primary-1"]);
+    // A terminal without a push mechanism never becomes primary.
+    launch_in(
+        &router,
+        "fake-nopush",
+        "primary-plain",
+        Some(project.path()),
+    )
+    .await;
+    // Another project has its own primary.
+    launch_in(
+        &router,
+        "fake-push",
+        "primary-other",
+        Some(elsewhere.path()),
+    )
+    .await;
+    assert_eq!(primaries(&router).await, ["primary-1", "primary-other"]);
+    // Closing the primary promotes the remaining push-capable terminal immediately.
+    let (status, _) = send(&router, "DELETE", "/terminals/primary-1", None).await;
+    assert!(status.is_success());
+    assert_eq!(primaries(&router).await, ["primary-2", "primary-other"]);
+    // Reopening a terminal does not take the role from the promoted primary.
+    launch_in(&router, "fake-push", "primary-1", Some(project.path())).await;
+    assert_eq!(primaries(&router).await, ["primary-2", "primary-other"]);
+    // Closing every push-capable terminal of the project leaves it without a primary.
+    for id in ["primary-1", "primary-2"] {
+        let (status, _) = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+        assert!(status.is_success());
+    }
+    assert_eq!(primaries(&router).await, ["primary-other"]);
+    for id in ["primary-plain", "primary-other"] {
+        let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+    }
+}
+
+#[tokio::test]
+async fn hs2_db2fq2_feedback_follows_the_primary_across_close_and_reopen() {
+    // Synthetic fake tools and tickets only. Two push-capable terminals in one checkout: a
+    // human note goes to the primary (the older one) without asking, closing it promotes the
+    // other, and a reopened terminal does not take the role.
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    write_plugin(
+        plugins.path(),
+        "fake-push",
+        r#"
+[session_push]
+mechanism = "opencode-http"
+port_args = ["--port", "{port}"]
+password_env = "OPENCODE_SERVER_PASSWORD"
+"#,
+    );
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    let project = tempfile::tempdir().unwrap();
+    let root = project.path().canonicalize().unwrap();
+    let registration = serde_json::json!({
+        "root": root, "alias": "routing", "stores": [store_dir.path()]
+    })
+    .to_string();
+    let (status, json) = send(&router, "POST", "/checkouts", Some(&registration)).await;
+    assert!(status.is_success(), "{json}");
+    let (_, created) = send(
+        &router,
+        "POST",
+        "/checkouts/routing/tickets",
+        Some(r#"{"title":"Synthetic routing"}"#),
+    )
+    .await;
+    let path = format!(
+        "/checkouts/routing/tickets/{}",
+        created["qualified_id"].as_str().unwrap()
+    );
+    let (status, _) = send(&router, "PATCH", &path, Some(r#"{"status":"started"}"#)).await;
+    assert!(status.is_success());
+    let open = |id: &'static str| {
+        let router = router.clone();
+        let root = root.clone();
+        async move {
+            let (_, port, _) = launch_in(&router, "fake-push", id, Some(&root)).await;
+            fake_opencode(port.parse().unwrap())
+        }
+    };
+    let human_note = |text: &'static str| {
+        let router = router.clone();
+        let path = path.clone();
+        async move {
+            let body = serde_json::json!({
+                "note": text, "actor": {"role": "human"}, "note_kind": "regular"
+            })
+            .to_string();
+            let (status, ticket) = send(&router, "PATCH", &path, Some(&body)).await;
+            assert!(status.is_success(), "{ticket}");
+            ticket["feedback_delivery"].clone()
+        }
+    };
+    let prompts = |seen: &Arc<Mutex<Vec<Seen>>>| {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|seen| seen.route.ends_with("/prompt_async"))
+            .count()
+    };
+    let first = open("route-1").await;
+    let second = open("route-2").await;
+    let delivery = human_note("Synthetic answer one").await;
+    assert_eq!(delivery["status"], "sent", "{delivery}");
+    assert_eq!(delivery["connection_id"], "route-1");
+    assert_eq!((prompts(&first), prompts(&second)), (1, 0));
+
+    // The primary closes: the next note goes to the promoted session.
+    let (status, _) = send(&router, "DELETE", "/terminals/route-1", None).await;
+    assert!(status.is_success());
+    let delivery = human_note("Synthetic answer two").await;
+    assert_eq!(delivery["connection_id"], "route-2", "{delivery}");
+    assert_eq!(prompts(&second), 1);
+
+    // A reopened terminal is connected but the promoted primary keeps the role.
+    let reopened = open("route-3").await;
+    let delivery = human_note("Synthetic answer three").await;
+    assert_eq!(delivery["connection_id"], "route-2", "{delivery}");
+    assert_eq!((prompts(&second), prompts(&reopened)), (2, 0));
+    for id in ["route-2", "route-3"] {
+        let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+    }
+}
+
+#[tokio::test]
+async fn hs2_db2fq2_an_exited_push_session_is_announced_so_clients_show_the_new_primary() {
+    // A terminal whose tool exits on its own: every client must learn that the project's
+    // primary may have moved, through the change stream rather than polling.
+    let (_store, plugins, router) = fixture();
+    let manifest = plugins.path().join("fake-push/manifest.toml");
+    let original = std::fs::read_to_string(&manifest).unwrap();
+    std::fs::write(&manifest, original.replace("sleep 30", "sleep 0.1")).unwrap();
+    let (_, start) = send(&router, "GET", "/ws/poll?timeout_ms=0", None).await;
+    let since = start["cursor"].as_u64().unwrap();
+    launch(&router, "fake-push", "exits").await;
+    let announced =
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let (_, poll) = send(
+                    &router,
+                    "GET",
+                    &format!("/ws/poll?since={since}&timeout_ms=200"),
+                    None,
+                )
+                .await;
+                if poll["events"].as_array().unwrap().iter().any(|event| {
+                    event["kind"] == "terminal_ai_connection" && event["id"] == "exits"
+                }) {
+                    return;
+                }
+            }
+        })
+        .await;
+    assert!(announced.is_ok(), "the exited session was never announced");
+    let _ = send(&router, "DELETE", "/terminals/exits", None).await;
+}

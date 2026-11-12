@@ -563,6 +563,10 @@ pub(crate) struct TerminalInfo {
     /// serialized, so a client can tell `false` from a server that predates the field
     /// (HS2-670ADP).
     pub(crate) mcp_connected: bool,
+    /// This terminal's AI session is its project's primary session: proactive feedback
+    /// delivery goes here when no claim names a session (HS2-DB2FQ2). Absent otherwise.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) feedback_primary: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -695,6 +699,24 @@ pub(crate) fn ai_terminal_tool(
         .strip_suffix(&format!("-{id}"))
         .filter(|tool| !tool.is_empty() && *tool != "terminal")
         .map(str::to_string)
+}
+
+/// A terminal's push-capable AI session went away with its terminal. Announce it like a session
+/// leaving Hot Sheet, so every client refetches its terminals and shows the project's newly
+/// promoted primary without polling (HS2-DB2FQ2).
+pub(crate) fn announce_session_push_gone(state: &AppState, id: &str) {
+    state.emit(crate::ChangeEvent {
+        live: None,
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_ai_connection".into(),
+        id: id.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
 }
 
 /// The claim worker id a terminal's session runs as (HS2-P57XHV), from the broker when
@@ -839,6 +861,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         ai_connection: None,
         last_hook_report: None,
         mcp_connected: false,
+        feedback_primary: false,
     }
 }
 
@@ -861,6 +884,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         ai_connection: None,
         last_hook_report: None,
         mcp_connected: false,
+        feedback_primary: false,
     }
 }
 
