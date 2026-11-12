@@ -99,6 +99,11 @@ pub struct ApiTicket {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_phase_estimate_ms: Option<u64>,
     pub worker_label: Option<String>,
+    /// Whether a live claim's worker belongs to this Hot Sheet host or to a separate one seen
+    /// through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
+    /// before hosts were recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_origin: Option<crate::claim_host::ClaimOrigin>,
     /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when imported (HS2-XB5R3Y).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub legacy_number: Option<String>,
@@ -305,6 +310,10 @@ impl ApiTicket {
                 .map(|at| at.as_str().to_string()),
             started_phase_estimate_ms: None,
             worker_label: t.worker_label.clone(),
+            claim_origin: crate::claim_host::claim_origin(
+                t,
+                crate::claim_host::local_host_id().as_deref(),
+            ),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             claim_history: t.claim_history.clone(),
@@ -441,6 +450,9 @@ pub struct TicketRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_phase_estimate_ms: Option<u64>,
     pub worker_label: Option<String>,
+    /// [`ApiTicket::claim_origin`] for the row (HS2-DQJPW0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_origin: Option<crate::claim_host::ClaimOrigin>,
     /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when it was imported,
     /// so clients can recognize and resolve legacy references in ticket text without an
     /// extra lookup (HS2-XB5R3Y). Absent for tickets that were not imported from HS1.
@@ -493,6 +505,10 @@ impl From<&Ticket> for TicketRow {
                 .map(|at| at.as_str().to_string()),
             started_phase_estimate_ms: None,
             worker_label: t.worker_label.clone(),
+            claim_origin: crate::claim_host::claim_origin(
+                t,
+                crate::claim_host::local_host_id().as_deref(),
+            ),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             latest_confidence: crate::ops::latest_confidence(t).map(Confidence::get),
@@ -540,6 +556,7 @@ impl From<&ApiTicket> for TicketRow {
             started_phase_since: t.started_phase_since.clone(),
             started_phase_estimate_ms: t.started_phase_estimate_ms,
             worker_label: t.worker_label.clone(),
+            claim_origin: t.claim_origin,
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             latest_confidence: t.latest_confidence,
@@ -621,6 +638,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "claim_eta_at",
     "claim_history",
     "claim_lease_expires_at",
+    "claim_origin",
     "claim_started_at",
     "claimed_by",
     "close_reason",

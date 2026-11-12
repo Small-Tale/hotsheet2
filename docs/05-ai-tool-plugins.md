@@ -1244,6 +1244,18 @@ the live claim with the same estimate (HS2-XQMDQB, HS2-QKNQXC; see
 [ux-components.md](ux-components.md) TicketRow); wire tickets and rows also carry the derived
 `claim_started_at` (the live holder's latest `claim` event) as the progress origin.
 
+**Remote claims (HS2-DQJPW0).** Each claim and renewal records `claim_host`, the opaque id in
+the claiming machine home's `host-id` file (created on first use; shared by that machine's
+server, CLI and MCP). Wire tickets and rows carry `claim_origin`, computed by the reader:
+`local` when the holder's host is the reader's own, `remote` when the claim arrived through the
+synced store from a separate Hot Sheet host, and absent without a claim or for a claim written
+before hosts were recorded (its origin is unknown, so it keeps the worker name). The web client
+shows a remote claim's owner as a quiet "Remote" badge with a cloud icon in list rows and column
+cards, and the inspector names "Remote server" instead of the other machine's worker. A phone or
+browser attached to this server sees the server's own claims as local. Release clears the host
+with the claim. An older Hot Sheet that rewrites the ticket keeps the field as unknown
+frontmatter, so a stale host can outlive a claim that older version releases and reclaims.
+
 ## 5.7 Permissions & user prompts (permission checks and other prompts)
 
 A **host-side permission bridge**: "ask the user, get a decision," with each

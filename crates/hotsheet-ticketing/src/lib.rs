@@ -19,6 +19,7 @@ pub mod annotation_activity;
 pub mod calibration;
 pub mod checkout_order;
 pub mod checkout_page;
+pub mod claim_host;
 pub mod corrupt_cache;
 pub mod distclaim;
 pub mod distwork;

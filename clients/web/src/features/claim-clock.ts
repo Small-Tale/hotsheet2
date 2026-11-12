@@ -10,6 +10,7 @@ import {
   nextPhaseEstimateTick,
 } from '../active-ticket-work';
 import type { CheckoutTicketCounts, TicketRow as WireTicketRow } from '../api';
+import { claimHolderName } from '../claim-holder';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import type { Project } from '../interactions/types';
 
@@ -53,7 +54,7 @@ export function createClaimClockController(dependencies: ClaimClockDependencies)
     const now = claimEtaClock.value;
     if (!isTicketActivelyWorkedOn(ticket, now)) return undefined;
     return {
-      agentName: ticket.worker_label || ticket.claimed_by || 'AI',
+      agentName: claimHolderName(ticket),
       eta: claimEtaPresentation(ticket, now),
     };
   }

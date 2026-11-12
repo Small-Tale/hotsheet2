@@ -420,6 +420,7 @@ impl GitLabProvider {
             started_phase_since: None,
             started_phase_estimate_ms: None,
             worker_label: None,
+            claim_origin: None,
             legacy_number: None,
             claim_count: 0,
             claim_history: vec![],

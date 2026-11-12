@@ -734,6 +734,10 @@ pub struct ClaimEvent {
     pub eta_at: Option<Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_label: Option<String>,
+    /// The Hot Sheet host that wrote this claim or renewal (HS2-DQJPW0); absent in history
+    /// written before hosts were recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -814,6 +818,11 @@ pub struct Ticket {
     pub claim_eta_at: Option<Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_label: Option<String>,
+    /// The opaque id of the Hot Sheet host (machine home) whose worker holds the live claim
+    /// (HS2-DQJPW0). Another server sees the claim through the synced store and can tell it is
+    /// remote; absent for claims written before hosts were recorded. Cleared with the claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_host: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub claim_count: u32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

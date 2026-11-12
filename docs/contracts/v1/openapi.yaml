@@ -14991,6 +14991,14 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        claim_origin:
+          description: >-
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
+            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
+            before hosts were recorded.
+          enum:
+            - local
+            - remote
         legacy_number:
           type: string
         created_by:
@@ -15184,6 +15192,14 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        claim_origin:
+          description: >-
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
+            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
+            before hosts were recorded.
+          enum:
+            - local
+            - remote
         legacy_number:
           type: string
         created_by:
@@ -15482,6 +15498,9 @@ components:
         eta_at:
           type: string
         worker_label:
+          type: string
+        host:
+          description: The Hot Sheet host that wrote this claim event (HS2-DQJPW0).
           type: string
       additionalProperties: false
     ReviewRequest:
@@ -15798,6 +15817,14 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        claim_origin:
+          description: >-
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
+            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
+            before hosts were recorded.
+          enum:
+            - local
+            - remote
         legacy_number:
           type: string
         created_by:
@@ -15992,6 +16019,14 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        claim_origin:
+          description: >-
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
+            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
+            before hosts were recorded.
+          enum:
+            - local
+            - remote
         legacy_number:
           type: string
         created_by:
@@ -16288,6 +16323,14 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        claim_origin:
+          description: >-
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
+            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
+            before hosts were recorded.
+          enum:
+            - local
+            - remote
         legacy_number:
           type: string
         created_by:

@@ -141,7 +141,7 @@ CREATE TABLE tickets (
   up_next       INTEGER NOT NULL DEFAULT 0,
   tags_json     TEXT NOT NULL DEFAULT '[]',
   created_at    TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
-  claimed_by    TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, claim_started_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
+  claimed_by    TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, claim_started_at TEXT, worker_label TEXT, claim_host TEXT, claim_count INTEGER DEFAULT 0,  -- claim_host: HS2-DQJPW0; rows report claim_origin relative to the reader
   latest_confidence INTEGER,          -- derived ops::latest_confidence (0-100) of a completed/verified ticket; NULL otherwise (HS2-RD4M29)
   -- provenance for incremental reindex:
   file_path     TEXT NOT NULL,

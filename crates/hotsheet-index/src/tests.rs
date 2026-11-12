@@ -2390,11 +2390,63 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
         .collect::<Vec<_>>();
     assert_eq!(
         (SCHEMA_VERSION, projection),
-        // 23: the group columns (HS2-PDSHNN); 24: group ids (HS2-9KZSD4). The feedback
-        // projection is unchanged.
-        (24, vec![true, true, false, true, false]),
+        // 23: the group columns (HS2-PDSHNN); 24: group ids (HS2-9KZSD4); 25: the claim host
+        // column (HS2-DQJPW0). The feedback projection is unchanged.
+        (25, vec![true, true, false, true, false]),
         "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
     );
+}
+
+/// HS2-DQJPW0: indexed rows report a claim's origin relative to the reading host, matching the
+/// file-backed conversion, through claim, a synced remote claim, a legacy claim, and release.
+#[test]
+fn hs2_dqjpw0_indexed_rows_report_claim_origin() {
+    use hotsheet_ticketing::claim_host::ClaimOrigin;
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let row = |ix: &Index| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+    };
+    ix.rebuild_from_store(&store).unwrap();
+    assert_eq!(row(&ix).claim_origin, None, "no claim");
+    ops::claim(
+        &store,
+        &id,
+        &Timestamp::new("2026-11-01T00:00:00Z"),
+        Timestamp::new("2099-11-01T00:30:00Z"),
+        "w1",
+        None,
+    )
+    .unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+    assert_eq!(row(&ix).claim_origin, Some(ClaimOrigin::Local));
+    let mut synced = store.read_ticket(&id).unwrap();
+    synced.claim_host = Some("01ARZ3NDEKTSV4RRFFQ69G5FZZ".into());
+    store.write_ticket(&synced).unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+    assert_eq!(row(&ix).claim_origin, Some(ClaimOrigin::Remote));
+    assert_eq!(
+        serde_json::to_value(row(&ix)).unwrap()["claim_origin"],
+        "remote"
+    );
+    synced.claim_host = None;
+    store.write_ticket(&synced).unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+    assert_eq!(row(&ix).claim_origin, None, "legacy claim: unknown origin");
+    ops::release(
+        &store,
+        &id,
+        Timestamp::new("2026-11-01T00:01:00Z"),
+        "w1",
+        false,
+    )
+    .unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+    assert_eq!(row(&ix).claim_origin, None);
 }
 
 /// HS2-PDSHNN / HS2-44W3TP: the group column is populated by a rebuild, follows upserts,

@@ -4,7 +4,7 @@ import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SummaryRow } from '@kerfjs/ui/summary-row';
-import { Bot, CircleAlert, Star } from 'lucide';
+import { Bot, CircleAlert, Cloud, Star } from 'lucide';
 
 import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
@@ -58,6 +58,9 @@ export interface TicketRowProps {
   categoryColor?: string;
   categoryShortLabel?: string;
   agentName?: string;
+  /** The live claim belongs to a separate Hot Sheet server seen through the synced store; its owner
+   * shows as remote instead of a worker name local to that machine (HS2-DQJPW0). */
+  remoteClaim?: boolean;
   /** Progress toward the live claim's ETA, shown beside the active-work indicator (HS2-XQMDQB). */
   claimEta?: ClaimEtaPresentation;
   /** Estimated time left in the current testing phase, beside the phase chip (HS2-YDGM04). */
@@ -296,11 +299,24 @@ export function TicketRow(raw: TicketRowProps) {
                 </Badge>
               </span>
             )}
-            {props.busy && (
-              <span class="ticket-list-row__owner" aria-label={props.agentName} title={props.agentName}>
-                {props.agentName}
-              </span>
-            )}
+            {props.busy &&
+              (props.remoteClaim ? (
+                <Badge
+                  tone="neutral"
+                  appearance="quiet"
+                  size="compact"
+                  label="Remote claim"
+                  title="Claimed on another Hot Sheet server. Its worker names are local to that machine."
+                  icon={<LucideIcon icon={Cloud} name="cloud" />}
+                  rootAttributes={{ 'data-claim-origin': 'remote' }}
+                >
+                  Remote
+                </Badge>
+              ) : (
+                <span class="ticket-list-row__owner" aria-label={props.agentName} title={props.agentName}>
+                  {props.agentName}
+                </span>
+              ))}
             {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
             {confidence !== undefined && <ConfidenceBadge value={confidence} />}
             {props.tags.length > 0 ? (

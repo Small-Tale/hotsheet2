@@ -63,6 +63,7 @@ export const ticketRowSettings = {
   feedbackNeeded: signal(false),
   selected: signal(false),
   busy: signal(true),
+  remoteClaim: signal(false),
   claimEta: signal<TicketRowClaimEta>('estimate'),
   phaseEstimate: signal<TicketRowPhaseEstimate>('estimate'),
   /** Derived completion confidence; shown only for completed/verified rows (HS2-A0Q6G6). */
@@ -89,6 +90,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.feedbackNeeded.value = false;
   ticketRowSettings.selected.value = false;
   ticketRowSettings.busy.value = true;
+  ticketRowSettings.remoteClaim.value = false;
   ticketRowSettings.claimEta.value = 'estimate';
   ticketRowSettings.phaseEstimate.value = 'estimate';
   ticketRowSettings.confidence.value = 'none';
@@ -123,6 +125,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         'feedback-needed': ticketRowSettings.feedbackNeeded.value,
         selected: ticketRowSettings.selected.value,
         busy: ticketRowSettings.busy.value,
+        'remote-claim': ticketRowSettings.remoteClaim.value,
         'show-source-icon': ticketRowSettings.showSourceIcon.value,
       },
     });
@@ -165,6 +168,7 @@ export function TicketRowDemo() {
             feedbackNeeded: ticketRowSettings.feedbackNeeded.value,
             selected: ticketRowSettings.selected.value,
             busy: ticketRowSettings.busy.value,
+            remoteClaim: ticketRowSettings.remoteClaim.value,
             claimEta:
               ticketRowSettings.claimEta.value === 'none'
                 ? undefined
@@ -255,6 +259,7 @@ export function TicketRowSettings() {
       <Checkbox name="feedback-needed" checked={ticketRowSettings.feedbackNeeded.value} label="Feedback needed" />
       <Checkbox name="selected" checked={ticketRowSettings.selected.value} label="Selected" />
       <Checkbox name="busy" checked={ticketRowSettings.busy.value} label="AI working" />
+      <Checkbox name="remote-claim" checked={ticketRowSettings.remoteClaim.value} label="Claimed on another server" />
       <Checkbox
         name="show-source-icon"
         checked={ticketRowSettings.showSourceIcon.value}
@@ -372,6 +377,9 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
           break;
         case 'busy':
           ticketRowSettings.busy.value = control.checked;
+          break;
+        case 'remote-claim':
+          ticketRowSettings.remoteClaim.value = control.checked;
           break;
         case 'show-source-icon':
           ticketRowSettings.showSourceIcon.value = control.checked;

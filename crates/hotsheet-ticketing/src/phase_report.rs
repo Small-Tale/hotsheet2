@@ -428,6 +428,7 @@ mod tests {
                 lease_expires_at: lease.map(Timestamp::new),
                 eta_at: None,
                 worker_label: None,
+                host: None,
             });
         }
         t

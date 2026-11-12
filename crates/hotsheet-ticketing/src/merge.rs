@@ -147,6 +147,12 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         &theirs.worker_label,
         ours_wins,
     );
+    m.claim_host = pick3(
+        &base.claim_host,
+        &ours.claim_host,
+        &theirs.claim_host,
+        ours_wins,
+    );
     m.claim_count = pick3(
         &base.claim_count,
         &ours.claim_count,
@@ -638,6 +644,7 @@ mod tests {
             at: ts(at),
             lease_expires_at: Some(ts("2026-08-19T03:00:00Z")),
             worker_label: None,
+            host: None,
         };
         let mut base = base_ticket();
         base.claim_history = vec![event(

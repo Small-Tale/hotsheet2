@@ -52,6 +52,7 @@ const KNOWN_KEYS: &[&str] = &[
     "claim_lease_expires_at",
     "claim_eta_at",
     "worker_label",
+    "claim_host",
     "claim_count",
     "claim_history",
     "assignees",
@@ -963,6 +964,7 @@ mod tests {
         t.claim_lease_expires_at = Some("2026-08-20T09:30:00Z".into());
         t.claim_eta_at = Some("2026-08-20T09:10:00Z".into());
         t.worker_label = Some("worktree-2".into());
+        t.claim_host = Some("01ARZ3NDEKTSV4RRFFQ69G5FC9".into());
         t.claim_count = 2;
         t.claim_history = vec![crate::ClaimEvent {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC5"),
@@ -972,6 +974,7 @@ mod tests {
             lease_expires_at: Some("2026-08-20T09:30:00Z".into()),
             eta_at: Some("2026-08-20T09:10:00Z".into()),
             worker_label: Some("worktree-2".into()),
+            host: Some("01ARZ3NDEKTSV4RRFFQ69G5FC9".into()),
         }];
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));
         t.legacy_number = Some("HS-1234".into());

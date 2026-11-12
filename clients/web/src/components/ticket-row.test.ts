@@ -240,6 +240,33 @@ describe('TicketRow', () => {
     ).not.toContain('data-claim-eta');
   });
 
+  it('marks a claim from another Hot Sheet server as remote in list rows and column cards (HS2-DQJPW0)', () => {
+    const ticket: TicketRowProps = {
+      slug: 'HS2-REMOTE',
+      title: 'Remote work',
+      status: 'started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      busy: true,
+      agentName: 'Remote server',
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const remote = String(TicketRow({ ...ticket, presentation, remoteClaim: true }));
+      expect(remote).toContain('data-claim-origin="remote"');
+      expect(remote).toContain('data-lucide="cloud"');
+      expect(remote).toContain('aria-label="Remote claim"');
+      expect(remote).toContain('Remote server is actively working on this ticket');
+      expect(remote).not.toContain('codex-');
+      // A local claim keeps its worker name, and an idle ticket shows no owner at all.
+      const local = String(TicketRow({ ...ticket, presentation, agentName: 'Worktree 2' }));
+      expect(local).not.toContain('data-claim-origin');
+      expect(local).toContain('title="Worktree 2"');
+      const idle = String(TicketRow({ ...ticket, presentation, busy: false, remoteClaim: true }));
+      expect(idle).not.toContain('data-claim-origin');
+    }
+  });
+
   it('keeps the full worker identity available when its visible row label is clipped (HS2-3H4Y31)', () => {
     const worker = 'codex-01M44ZE2BPEZKWTW49DCTATTPW';
     const row = String(

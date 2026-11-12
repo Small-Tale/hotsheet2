@@ -918,6 +918,7 @@ fn clear_claim_fields(ticket: &mut Ticket) {
     ticket.claim_lease_expires_at = None;
     ticket.claim_eta_at = None;
     ticket.worker_label = None;
+    ticket.claim_host = None;
 }
 
 fn end_claim(ticket: &mut Ticket, now: &Timestamp) {
@@ -945,6 +946,12 @@ pub(crate) fn append_claim_event(
         .instant()
         .map(|instant| instant.unix_timestamp_nanos().max(0) as u64 / 1_000_000)
         .unwrap_or_default();
+    // HS2-DQJPW0: a claim or renewal names the host whose worker holds it, so another server
+    // reading the synced store can tell remote work from its own.
+    let host = crate::claim_host::local_host_id();
+    if matches!(kind, ClaimEventKind::Claim | ClaimEventKind::Renew) {
+        ticket.claim_host.clone_from(&host);
+    }
     ticket.claim_history.push(ClaimEvent {
         id: Ulid::from_parts(timestamp_ms, entropy.finish() as u128),
         kind,
@@ -957,6 +964,7 @@ pub(crate) fn append_claim_event(
             ClaimEventKind::Release => None,
         },
         worker_label,
+        host,
     });
 }
 
@@ -2316,6 +2324,7 @@ pub fn copy_ticket(
         t.claimed_by = None;
         t.claim_lease_expires_at = None;
         t.worker_label = None;
+        t.claim_host = None;
         t.claim_count = 0;
         t.claim_history.clear();
         t.completed_at = None;
@@ -2379,6 +2388,7 @@ pub fn move_ticket(
         tombstone.up_next = false;
         tombstone.claimed_by = None;
         tombstone.claim_lease_expires_at = None;
+        tombstone.claim_host = None;
         src.write_ticket_committing(&tombstone)?;
         // The attachments now live in the destination; drop the source working-tree copy
         // (git history still retains them — that's the retention caveat).
@@ -3106,6 +3116,84 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    /// HS2-DQJPW0: the claim lifecycle records this host, a ticket synced from another host
+    /// reads as remote, a legacy claim's origin stays unknown, and release clears it.
+    #[test]
+    fn hs2_dqjpw0_claims_record_their_host_through_the_lifecycle() {
+        use crate::claim_host::{ClaimOrigin, claim_origin, local_host_id};
+        let (_dir, store) = store();
+        let local = local_host_id().expect("the isolated test home holds a host id");
+        let t = titled(&store, "synthetic host");
+        assert_eq!(t.claim_host, None);
+        let now = ts("2026-10-15T00:01:00Z");
+        let claimed = claim(&store, &t.id, &now, ts("2026-10-15T00:31:00Z"), "w1", None).unwrap();
+        assert_eq!(claimed.claim_host.as_deref(), Some(local.as_str()));
+        assert_eq!(
+            claimed.claim_history[0].host.as_deref(),
+            Some(local.as_str())
+        );
+        assert_eq!(
+            claim_origin(&claimed, Some(&local)),
+            Some(ClaimOrigin::Local)
+        );
+        assert_eq!(
+            crate::ApiTicket::from(&claimed).claim_origin,
+            Some(ClaimOrigin::Local)
+        );
+        let renewed = renew(
+            &store,
+            &t.id,
+            ts("2026-10-15T00:02:00Z"),
+            ts("2026-10-15T00:40:00Z"),
+            "w1",
+        )
+        .unwrap();
+        assert_eq!(renewed.claim_host.as_deref(), Some(local.as_str()));
+        assert_eq!(
+            renewed.claim_history.last().unwrap().host.as_deref(),
+            Some(local.as_str())
+        );
+
+        // The same claim as another host wrote it, seen through the synced store.
+        let mut synced = renewed.clone();
+        synced.claim_host = Some("01ARZ3NDEKTSV4RRFFQ69G5FZZ".into());
+        assert_eq!(
+            crate::ApiTicket::from(&synced).claim_origin,
+            Some(ClaimOrigin::Remote)
+        );
+        assert_eq!(
+            crate::TicketRow::from(&synced).claim_origin,
+            Some(ClaimOrigin::Remote)
+        );
+        // A claim written before hosts were recorded is truthfully unknown.
+        synced.claim_host = None;
+        assert_eq!(crate::ApiTicket::from(&synced).claim_origin, None);
+
+        let released = release(&store, &t.id, ts("2026-10-15T00:03:00Z"), "w1", false).unwrap();
+        assert_eq!(released.claim_host, None);
+        assert_eq!(crate::ApiTicket::from(&released).claim_origin, None);
+        assert_eq!(
+            released.claim_history.last().unwrap().kind,
+            ClaimEventKind::Release
+        );
+        // Reclaim after release records the host again (empty then refill).
+        let again = claim(
+            &store,
+            &t.id,
+            &ts("2026-10-15T00:04:00Z"),
+            ts("2026-10-15T00:34:00Z"),
+            "w2",
+            None,
+        )
+        .unwrap();
+        assert_eq!(again.claim_host.as_deref(), Some(local.as_str()));
+        // The field survives a write and read of the ticket file.
+        assert_eq!(
+            store.read_ticket(&t.id).unwrap().claim_host.as_deref(),
+            Some(local.as_str())
+        );
     }
 
     #[test]

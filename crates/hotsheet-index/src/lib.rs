@@ -21,8 +21,8 @@ use sha2::{Digest, Sha256};
 /// content hash are never re-derived, and an older process sharing the file would keep
 /// writing the old projection (21: explicit note kinds, HS2-4ZFB8K; 22: the ticket
 /// creator column, HS2-9FPHWY; 23: group columns, HS2-PDSHNN; 24: `group_key` holds a group
-/// id or a legacy name key, HS2-9KZSD4).
-const SCHEMA_VERSION: i64 = 24;
+/// id or a legacy name key, HS2-9KZSD4; 25: the claim host column, HS2-DQJPW0).
+const SCHEMA_VERSION: i64 = 25;
 
 /// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
 const GIT_OWNER_META: &str = "git_owner";
@@ -86,7 +86,7 @@ CREATE TABLE tickets (
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
   has_media_annotation INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
-  claimed_by      TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, claim_started_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
+  claimed_by      TEXT, claim_lease_expires_at TEXT, claim_eta_at TEXT, claim_started_at TEXT, worker_label TEXT, claim_host TEXT, claim_count INTEGER DEFAULT 0,
   latest_confidence INTEGER,
   file_path       TEXT NOT NULL,
   content_hash    TEXT NOT NULL,
@@ -506,8 +506,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json,group_name,group_key) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since,created_by_json,group_name,group_key,claim_host) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -521,7 +521,7 @@ impl Index {
              legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
              latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase,\
              started_phase_since=excluded.started_phase_since,created_by_json=excluded.created_by_json,\
-             group_name=excluded.group_name,group_key=excluded.group_key",
+             group_name=excluded.group_name,group_key=excluded.group_key,claim_host=excluded.claim_host",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -539,6 +539,7 @@ impl Index {
                 hotsheet_ticketing::phase_timing::started_phase_since(t).map(|at| at.as_str().to_string()),
                 t.created_by.as_ref().and_then(|actor| serde_json::to_string(actor).ok()),
                 t.group, t.group.as_deref().map(hotsheet_model::group_value_key),
+                t.claim_host,
             ],
         )?;
 
@@ -1327,12 +1328,13 @@ impl Index {
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since,\
              (t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id)),\
-             t.created_by_json,t.group_name \
+             t.created_by_json,t.group_name,t.claim_host \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
 
         let mut stmt = self.conn.prepare(&sql)?;
+        let local_host = hotsheet_ticketing::claim_host::local_host_id();
         let rows = stmt
             .query_map(params_from_iter(args.iter().map(|b| b.as_ref())), |r| {
                 let id: String = r.get(0)?;
@@ -1372,6 +1374,12 @@ impl Index {
                     started_phase_since: r.get(28)?,
                     started_phase_estimate_ms: None,
                     worker_label: r.get(20)?,
+                    // HS2-DQJPW0: relative to the host reading the index.
+                    claim_origin: hotsheet_ticketing::claim_host::origin(
+                        r.get::<_, Option<String>>(18)?.as_deref(),
+                        r.get::<_, Option<String>>(32)?.as_deref(),
+                        local_host.as_deref(),
+                    ),
                     legacy_number: r.get(23)?,
                     claim_count: r.get::<_, i64>(21)? as u32,
                     latest_confidence: r

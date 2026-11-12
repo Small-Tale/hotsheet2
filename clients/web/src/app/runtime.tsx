@@ -63,6 +63,7 @@ import { type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
 import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
+import { claimHolderName } from '../claim-holder';
 import { createClientNotifications } from '../client-notifications';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
@@ -3387,7 +3388,8 @@ export async function startHotSheetWebClient() {
     busy: isTicketActivelyWorkedOn(ticket),
     claimEta: claimEtaPresentation(ticket, claimEtaClock.value),
     phaseEstimate: phaseEstimatePresentation(ticket, claimEtaClock.value),
-    agentName: ticket.worker_label || ticket.claimed_by || 'AI',
+    agentName: claimHolderName(ticket),
+    remoteClaim: ticket.claim_origin === 'remote',
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
     aiCreatorLabel: aiCreatorLabel(ticket.created_by),

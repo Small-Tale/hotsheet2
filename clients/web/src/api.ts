@@ -775,6 +775,9 @@ export interface TicketRow {
   /** Median duration of this store's past spans of the current testing phase (HS2-YDGM04). */
   started_phase_estimate_ms?: number;
   worker_label?: string;
+  /** Whether a live claim's worker belongs to this Hot Sheet server or a separate one seen through
+   * the synced store (HS2-DQJPW0); absent without a claim or when the claim predates host records. */
+  claim_origin?: 'local' | 'remote';
   legacy_number?: string;
   claim_count: number;
   /** Derived completion confidence of a completed/verified ticket (HS2-RD4M29). */
@@ -800,6 +803,8 @@ export interface ClaimEvent {
   /** The holder's estimate as of this claim or renewal (HS2-DQQ0AX). */
   eta_at?: string;
   worker_label?: string;
+  /** The Hot Sheet host that wrote this event (HS2-DQJPW0). */
+  host?: string;
 }
 export interface CheckoutTicketQuery {
   /** A local-first checkout read that avoids external credential access. */
