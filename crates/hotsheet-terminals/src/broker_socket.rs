@@ -165,6 +165,31 @@ pub fn socket_path(home: &Path, project: &str) -> io::Result<PathBuf> {
     Ok(directory.join(format!("{}.sock", &key[..32])))
 }
 
+/// The terminal launch relay's socket for `home` (HS2-HYF56Y). It shares the brokers'
+/// private short directory and is keyed by the canonical home, so a test or development home
+/// never reaches the relay of the user's real home.
+pub fn relay_socket_path(home: &Path) -> io::Result<PathBuf> {
+    let directory = PathBuf::from(format!("/tmp/hotsheet2-brokers-{}", user_id()));
+    ensure_private_directory(&directory)?;
+    Ok(directory.join(format!(
+        "relay-{}.sock",
+        home_key(home, "terminal-launch-relay")
+    )))
+}
+
+/// A short stable key for `home`, distinct per `purpose`.
+pub fn home_key(home: &Path, purpose: &str) -> String {
+    let home = home
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(home));
+    let mut digest = Sha256::new();
+    digest.update(home.as_os_str().as_bytes());
+    digest.update([0]);
+    digest.update(purpose.as_bytes());
+    let key = format!("{:x}", digest.finalize());
+    key[..16].to_owned()
+}
+
 /// Serialize adoption across server processes before inspecting the legacy socket.
 /// Its broker may exit during inspection; the persistent marker must be published
 /// before another server is allowed to decide that the legacy namespace is absent.

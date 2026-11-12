@@ -106,6 +106,16 @@ struct Cli {
     )]
     terminal_broker_project: Option<String>,
 
+    /// Internal: run the per-user terminal launch relay on this socket (HS2-HYF56Y). launchd
+    /// starts it from the relay LaunchAgent that `hotsheet-cli terminal-relay install` loads.
+    #[arg(
+        long,
+        hide = true,
+        value_name = "SOCKET",
+        conflicts_with = "terminal_broker_process"
+    )]
+    terminal_launch_relay: Option<PathBuf>,
+
     /// **Opt-in** distributed driving loop (HS2-1TY7GC): spawn this AI tool (plugin id,
     /// e.g. `codex`) on each self-claimed ticket across hosted stores that have a git
     /// remote. Omitted → the loop is off (the default; the server never drives a tool
@@ -191,6 +201,16 @@ async fn main() -> Result<()> {
     if let Some(socket) = cli.terminal_broker_process.as_ref() {
         let project = cli.terminal_broker_project.clone().unwrap_or_default();
         return Ok(hotsheet_terminals::run_broker_process(socket, project).await?);
+    }
+
+    if let Some(socket) = cli.terminal_launch_relay.as_ref() {
+        #[cfg(unix)]
+        return Ok(hotsheet_server::terminal_broker::run_launch_relay(socket).await?);
+        #[cfg(not(unix))]
+        anyhow::bail!(
+            "the terminal launch relay is macOS-only; {} was not started",
+            socket.display()
+        );
     }
 
     // Explicit shutdown (HS2-59): signal the running server for this store and exit.

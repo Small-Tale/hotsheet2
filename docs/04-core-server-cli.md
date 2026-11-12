@@ -1518,6 +1518,9 @@ hotsheet bootstrap [--project <path>] [--store <path>] [--remote <url>] [--tool 
 hotsheet serve         # run the server
 hotsheet serve --stop  # stop the server; preserve detached terminals
 hotsheet serve --stop --kill-all-terminals  # stop it and explicitly clear project terminals
+hotsheet terminal-relay install|status|uninstall [--server <path>] [--json]
+                       # macOS: per-user LaunchAgent that starts terminal brokers in the
+                       # desktop session (HS2-HYF56Y, 05-ai-tool-plugins.md)
 hotsheet serve --stop --force  # also stop a server owned by the pinned production host
 hotsheet reindex       # drop + rebuild the index from disk; prune idle older-schema index files
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
@@ -1766,6 +1769,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Checkouts and accounts | `checkout`, `account` | §4.3 Checkout identity, [16](16-external-sync-interface.md) (HS2-SM9PM8) |
 | Migration | `import` | [07](07-migration.md) |
 | Server and transport security | `serve`, `cert` | §4.3.1, §4.6, [08](08-distributed-and-remote.md) |
+| Terminal launch relay (macOS) | `terminal-relay` (HS2-HYF56Y) | [05](05-ai-tool-plugins.md) |
 
 ## 4.5 How the three stay consistent
 

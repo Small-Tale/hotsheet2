@@ -17,6 +17,7 @@ pub(crate) mod remotes;
 pub(crate) mod server;
 pub(crate) mod setup;
 pub(crate) mod store;
+pub(crate) mod terminal_relay;
 pub(crate) mod tickets;
 pub(crate) mod usage_reroute;
 
@@ -149,6 +150,7 @@ impl Cmd {
             | AiSettings { .. }
             | Settings { .. }
             | HostDisks { .. }
+            | TerminalRelay { .. }
             | PermissionHook { .. }
             | PermissionDiscard { .. }
             | HookDiagnose { .. }
@@ -179,6 +181,7 @@ impl Cmd {
                 | Cmd::Processes
                 | Cmd::Guidance { .. }
                 | Cmd::Notify { .. }
+                | Cmd::TerminalRelay { .. }
                 | Cmd::Serve { list: true, .. }
         )
     }
@@ -214,6 +217,7 @@ impl Cmd {
                 | Cmd::PermissionDiscard { .. }
                 | Cmd::Processes
                 | Cmd::Guidance { .. }
+                | Cmd::TerminalRelay { .. }
                 | Cmd::Setup { diagnose: true, .. }
                 | Cmd::Serve { .. }
                 | Cmd::Ls { .. }

@@ -973,6 +973,61 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   the Dock or Finder), while reattaching to a live terminal still works. The server logs the
   same warning when it adopts or spawns a dead broker, and when its own namespace is dead
   before spawning one. A broker that predates `health` is treated as unknown.
+- **Desktop-session launch relay (HS2-HYF56Y, macOS).** A dead namespace cannot be repaired
+  from inside it: `launchctl asuser` and `launchctl print gui/<uid>` both fail with `141:
+Reentrancy avoided`. So launchd itself runs a small relay in the per-user GUI (Aqua)
+  domain, and that relay starts brokers.
+  - **Installing it.** `hotsheet-cli terminal-relay install [--server <hotsheet-server>]` is
+    the headless path. It writes `~/Library/LaunchAgents/com.smalltale.hotsheet2.terminal-relay.plist`
+    and loads it with `launchctl bootstrap gui/<uid>`. The agent runs `hotsheet-server
+--terminal-launch-relay <socket>` with `LimitLoadToSessionType=Aqua`, `RunAtLoad`,
+    `KeepAlive`, `AbandonProcessGroup` and `ProcessType=Interactive`, and logs to
+    `<home>/logs/terminal-relay.log`. A machine home other than `~/.hotsheet2` gets a label
+    suffixed with a hash of that home, so a development or test home never replaces the
+    real agent.
+  - **Idempotent install.** If the current definition is loaded and its relay answers,
+    install changes nothing. A changed definition, such as a moved binary, is booted out and
+    loaded again. If the definition is loaded but its relay is silent, install runs
+    `kickstart -k`.
+  - **Desktop session required.** Install refuses unless this process's namespace is live
+    and `launchctl managername` reports `Aqua`. In that case it writes nothing and names the
+    next step: log in to the desktop and run the same command from Terminal, or open the
+    desktop app.
+  - **Status and removal.** `status [--json]` reports the plist (present, current),
+    whether the agent is loaded, and the relay's `hello`. `uninstall` boots the agent out
+    and removes its plist.
+  - **Desktop app.** On macOS, the desktop app runs the bundled CLI's `terminal-relay
+install --server <bundled hotsheet-server>` before it starts the local bridge. The
+    install is bounded to 10 seconds and never blocks startup.
+  - **Relay socket and protocol.** The relay owns
+    `/tmp/hotsheet2-brokers-<uid>/relay-<home-hash>.sock`, using the broker sockets'
+    private 0700 directory, exclusive owner lock, and stale-socket recovery. It answers only
+    peers with its own effective uid. The protocol is line JSON:
+    - `hello` returns the relay pid, the broker executable it launches, and its own
+      bootstrap health.
+    - `launch` takes `{socket, project, journal_home, cwd, env}` and returns the broker pid.
+  - **What the relay launches.** It only ever launches its own broker executable, chosen
+    the way the server chooses one: the sibling `hotsheet-terminal-broker`, else the server
+    in `--terminal-broker-process` mode. That adds no capability beyond the same-user broker
+    sockets. The broker gets the server's environment, so terminals keep the user's `PATH`.
+    `XPC_*` launchd job variables are replaced with the relay's own: a dead-namespace
+    process carries `XPC_NULL_BOOTSTRAP`, and libxpc would make the relayed broker discard
+    its healthy port at startup. Each broker runs in its own session (`setsid`). The relay
+    reaps it and journals it under supervisor `hotsheet-terminal-relay`, so stopping,
+    upgrading or uninstalling the relay never ends running brokers.
+  - **Server side.** On macOS the server asks the relay before every broker spawn. It
+    authenticates the socket first: the directory is owned with mode 0700, the socket is
+    owned, and `getpeereid` returns this uid. It uses the relay only when the relay's broker
+    executable is the server's own. Otherwise a development server would silently get the
+    installed broker build. A relayed broker is not the server's child, so the existing
+    bounded readiness wait reports its state with a signal-0 probe.
+  - **Fallback.** If the relay is absent, stale, untrusted, unresponsive, refusing, or
+    mismatched, the server spawns directly as before. It logs a warning naming the reason
+    and `hotsheet-cli terminal-relay install`: once per process for an absent relay in a
+    live namespace, and every time otherwise. Detached survival, owned socket identity, and
+    `serve --stop --kill-all-terminals` recovery are unchanged. Linux and Windows have no
+    bootstrap namespaces and never ask a relay; there `terminal-relay` reports that no relay
+    is needed.
 - **Compact broker byte payloads (HS2-9R751Y).** Byte payloads (attach scrollback and
   output frames, attach input, `read` scrollback) decode from either a legacy JSON number
   array or a base64 string (`hotsheet_terminals::WireBytes`), so mixed versions always

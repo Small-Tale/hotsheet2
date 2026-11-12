@@ -20,6 +20,10 @@ pub mod broker_socket;
 pub mod busy;
 pub mod env;
 pub mod input_queue;
+#[cfg(unix)]
+pub mod launch_agent;
+#[cfg(unix)]
+pub mod launch_relay;
 pub mod limits;
 pub mod manager;
 pub mod osc;

@@ -51,7 +51,8 @@ pub const DEAD_BOOTSTRAP_MESSAGE: &str = "terminal broker's macOS bootstrap name
 (MACH_SEND_INVALID_DEST), so new terminals could not reach FSEvents, DNS, Keychain or \
 WindowServer (HS2-CY01TZ). Stop the broker with `hotsheet-cli serve --stop \
 --kill-all-terminals` (this ends retained terminals), then relaunch Hot Sheet from the Dock \
-or Finder";
+or Finder. Installing the launch relay from a desktop session (`hotsheet-cli terminal-relay \
+install`, HS2-HYF56Y) starts later brokers in the desktop session instead";
 
 /// Probe this process's bootstrap namespace with one lookup.
 #[cfg(target_os = "macos")]

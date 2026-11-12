@@ -479,6 +479,13 @@ enum Cmd {
         #[command(subcommand)]
         cmd: HostDisksCmd,
     },
+    /// Install, inspect, or remove the macOS terminal launch relay (HS2-HYF56Y): a per-user
+    /// LaunchAgent that starts terminal brokers in the desktop session, so terminals keep a
+    /// working macOS bootstrap namespace even when the server's own launch context died.
+    TerminalRelay {
+        #[command(subcommand)]
+        cmd: dispatch::terminal_relay::TerminalRelayCmd,
+    },
     /// Inspect and run saved commands in a registered checkout through the local server.
     Commands {
         #[command(subcommand)]

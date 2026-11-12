@@ -51,7 +51,7 @@ impl TerminalBroker {
         let project = hotsheet_tls::project_id(store_path);
         let socket = Self::socket_for(&project)?;
 
-        let mut child = match is_live(&socket) {
+        let spawned = match is_live(&socket) {
             Ok(true) => {
                 warn_on_dead_namespace(&socket, "adopted");
                 return Ok(Self {
@@ -64,15 +64,20 @@ impl TerminalBroker {
             Ok(false) => {
                 if hotsheet_terminals::bootstrap::probe().is_dead() {
                     tracing::warn!(
-                        "this server's macOS bootstrap namespace is dead; the terminal broker it \
-                         spawns will inherit it (HS2-CY01TZ). Relaunch Hot Sheet from the Dock or Finder"
+                        "this server's macOS bootstrap namespace is dead; a terminal broker it \
+                         spawns directly will inherit it (HS2-CY01TZ). The desktop-session launch \
+                         relay avoids that when installed (HS2-HYF56Y); otherwise relaunch Hot \
+                         Sheet from the Dock or Finder"
                     );
                 }
                 spawn_broker(&socket, &project)?
             }
             Err(error) => return Err(error.into()),
         };
-        wait_for_broker_startup(&socket, &mut child)?;
+        match spawned {
+            SpawnedBroker::Direct(mut child) => wait_for_broker_startup(&socket, &mut child)?,
+            SpawnedBroker::Relayed { pid } => wait_for_relayed_startup(&socket, pid)?,
+        }
         warn_on_dead_namespace(&socket, "spawned");
         Ok(Self {
             socket,
@@ -197,6 +202,29 @@ fn wait_for_broker_startup(
     socket: &Path,
     child: &mut hotsheet_process_journal::TrackedChild,
 ) -> anyhow::Result<()> {
+    let pid = child.id();
+    wait_for_startup(socket, pid, "spawned", || tracked_child_state(child))
+}
+
+/// A relayed broker is the relay's child, not this server's (HS2-HYF56Y); its state after a
+/// failed startup is read with a signal-0 probe instead of `wait`.
+fn wait_for_relayed_startup(socket: &Path, pid: u32) -> anyhow::Result<()> {
+    wait_for_startup(socket, pid, "relayed", || {
+        // SAFETY: signal 0 only checks that the pid exists; nothing is delivered.
+        if pid <= i32::MAX as u32 && unsafe { libc::kill(pid as i32, 0) } == 0 {
+            "relayed broker still running".to_owned()
+        } else {
+            "relayed broker exited".to_owned()
+        }
+    })
+}
+
+fn wait_for_startup(
+    socket: &Path,
+    pid: u32,
+    how: &str,
+    state: impl FnOnce() -> String,
+) -> anyhow::Result<()> {
     let mut last_probe = None;
     for _ in 0..40 {
         last_probe = Some(match is_live(socket) {
@@ -208,7 +236,16 @@ fn wait_for_broker_startup(
     }
     // HS2-C8J6WS: only observe the contender after failure. An exited contender must
     // never prevent adoption of another healthy broker during the existing window.
-    let child_state = match child.try_wait() {
+    let child_state = state();
+    anyhow::bail!(
+        "terminal broker did not come up on {} ({how} pid {pid}; {child_state}; last probe: {})",
+        socket.display(),
+        last_probe.as_deref().unwrap_or("not observed")
+    )
+}
+
+fn tracked_child_state(child: &mut hotsheet_process_journal::TrackedChild) -> String {
+    match child.try_wait() {
         Ok(Some(status)) => format!("child exited: {status}"),
         Ok(None) => "child still running".to_owned(),
         Err(error) => format!(
@@ -216,14 +253,7 @@ fn wait_for_broker_startup(
             error.kind(),
             error.raw_os_error()
         ),
-    };
-    anyhow::bail!(
-        "terminal broker did not come up on {} (spawned pid {}; {}; last probe: {})",
-        socket.display(),
-        child.id(),
-        child_state,
-        last_probe.as_deref().unwrap_or("not observed")
-    )
+    }
 }
 
 /// Log once when a broker's bootstrap namespace is dead (HS2-CY01TZ). The broker itself refuses
@@ -302,26 +332,39 @@ fn is_live(socket: &Path) -> std::io::Result<bool> {
     }
 }
 
+/// A broker this server started: its own child, or one the launch relay started for it.
+enum SpawnedBroker {
+    Direct(hotsheet_process_journal::TrackedChild),
+    Relayed { pid: u32 },
+}
+
 /// Spawn the broker detached with stdio disconnected from the server. Prefer the dedicated
 /// sibling binary; a server-only development build falls back to the server's hidden broker
 /// process mode so making detached hosting the default does not add a packaging footgun.
-fn spawn_broker(
-    socket: &Path,
-    project: &str,
-) -> std::io::Result<hotsheet_process_journal::TrackedChild> {
+///
+/// On macOS the per-user launch relay is asked first, so the broker (and every terminal it
+/// hosts) holds the desktop session's bootstrap namespace rather than this server's, which
+/// may be dead (HS2-HYF56Y). Without a usable relay the server spawns directly, as before.
+fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<SpawnedBroker> {
     hotsheet_terminals::broker_socket::prepare_parent(socket)?;
     let current = std::env::current_exe().ok();
     let (executable, self_hosted) = broker_launch(current);
-    let mut command = hotsheet_ticketing::git::launch(executable);
-    if self_hosted {
-        command
-            .arg("--terminal-broker-process")
-            .arg(socket)
-            .arg("--terminal-broker-project")
-            .arg(project);
-    } else {
-        command.arg(socket).arg(project);
+    // Only macOS has bootstrap namespaces; elsewhere the direct spawn is already right.
+    if cfg!(target_os = "macos") {
+        match launch_relay::relay_spawn(&executable, socket, project) {
+            Ok(pid) => {
+                tracing::info!(
+                    pid,
+                    socket = %socket.display(),
+                    "terminal broker launched by the desktop-session launch relay (HS2-HYF56Y)"
+                );
+                return Ok(SpawnedBroker::Relayed { pid });
+            }
+            Err(reason) => launch_relay::report_fallback(&reason),
+        }
     }
+    let mut command = hotsheet_ticketing::git::launch(executable);
+    broker_arguments(&mut command, self_hosted, socket, project);
     command.env(
         "HOTSHEET_PROCESS_JOURNAL_HOME",
         hotsheet_plugins::hotsheet_home(),
@@ -341,7 +384,32 @@ fn spawn_broker(
     // Retaining the handle permits startup diagnostics. Dropping it does not wait or
     // kill: the broker keeps its existing detached lifetime on successful startup.
     .spawn(&mut command)
+    .map(SpawnedBroker::Direct)
 }
+
+/// The broker's command-line arguments for a sibling broker binary or a self-hosting server.
+fn broker_arguments(
+    command: &mut std::process::Command,
+    self_hosted: bool,
+    socket: &Path,
+    project: &str,
+) {
+    if self_hosted {
+        command
+            .arg("--terminal-broker-process")
+            .arg(socket)
+            .arg("--terminal-broker-project")
+            .arg(project);
+    } else {
+        command.arg(socket).arg(project);
+    }
+}
+
+#[cfg(unix)]
+#[path = "terminal_launch_relay.rs"]
+mod launch_relay;
+#[cfg(unix)]
+pub use launch_relay::run_launch_relay;
 
 fn broker_launch(current: Option<PathBuf>) -> (PathBuf, bool) {
     let sibling = current

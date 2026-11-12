@@ -84,7 +84,9 @@ the staged Node executable on each host. `npm run desktop:build` packages the ma
 ephemeral desktop origins (HS2-RKZKX7). `src/desktop-close.ts` captures parent recovery
 through `desktop-recovery-flush.ts` and drains ordinary writes before the native shell's
 exact-request IPC acknowledgement; `src-tauri/src/close_lifecycle.rs` fences close/quit,
-retry, timeout and stale acknowledgements (HS2-E0H7S0). The same bridge keeps staged draft attachment
+retry, timeout and stale acknowledgements (HS2-E0H7S0). On macOS
+`src-tauri/src/terminal_relay.rs` runs the bundled `hotsheet-cli terminal-relay install` (bounded,
+non-blocking on failure) before the bridge starts (HS2-HYF56Y). The same bridge keeps staged draft attachment
 bytes as single atomic records under `draft-files-v1`, `src/desktop-draft-files.ts` routes
 `workspace-session.ts` draft files there instead of IndexedDB on desktop, and
 `src/browser-draft-file-contract.ts` validates browser IndexedDB recovery records: the existing
@@ -714,6 +716,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent); compaction-aware admission for checkpoints and settings (HS2-YCEQNT)
       src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
+      src/dispatch/terminal_relay.rs # HS2-HYF56Y `terminal-relay install|status|uninstall [--server] [--json]`: headless macOS relay LaunchAgent workflow (the desktop app runs the same install)
+      tests/terminal_relay.rs # HS2-HYF56Y headless install/idempotent reinstall/status/uninstall against a fake launchctl that starts the real relay; no-desktop-session refusal writes nothing
       tests/git_env_isolation.rs # real hotsheet-cli under hook-style GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE aimed at a sentinel repo: init/new/edit/sync touch only the store (HS2-RRD417)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
@@ -780,6 +784,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/concurrent_start.rs # Real server subprocesses started at once on one store (HS2-585JCP): exactly one stays registered + holds the writer lock; the rest exit
       tests/terminal_broker.rs # Creation-kind HTTP/broker integration: shell/AI creation, OSC8 independence, reattach and server-restart preservation
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F/HS2-8GQNDQ): TerminalBroker::ensure (discover/spawn the default broker per home/project in a short private per-user /tmp namespace (pinning adopted legacy home socket namespaces across idle exits), using the dedicated sibling binary or the server's hidden self-host fallback), discover/kill_all for explicit cleanup, and per-request BrokerClient round trips; routes /terminals ops + live WS attach (bridged to a BrokerStream — broker_attach_loop in routes/terminals.rs) + the connect busy feed (polls the broker's Read) so terminals survive server stop/restart
+      src/terminal_launch_relay.rs # HS2-HYF56Y server side of the launch relay: relay_spawn before each macOS broker spawn, forwarded env minus git::launch removals and XPC_* job context, fallback warning, `--terminal-launch-relay` process mode (setsid brokers, reaped and journaled as hotsheet-terminal-relay)
+      tests/terminal_launch_relay.rs # HS2-HYF56Y null-bootstrap harness: dead-namespace server gets a relay-launched live broker + PTY, survives server SIGKILL, restart adopts, kill-all; no-relay fallback stays dead and says why; stopped relay leaves brokers running
       src/terminal_broker_windows.rs # HS2-2TD7M7 explicit unsupported broker boundary; Windows uses the in-process TerminalManager
       src/routes/orchestration.rs # authenticated shared target adapters and bounded metadata; TLS loopback admin fence in tls.rs
       src/routes/terminals/mod.rs # /terminal-limits PUT and POST /terminal-limits/reconcile apply effective replay capacity to running direct PTYs or send the broker resize_replay op (HS2-56G204, HS2-1HYDSY)
@@ -822,6 +828,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/viewer_output.rs   #   Back-pressure-safe attach output (HS2-J52ZJ7): pump_viewer_output drains a Terminal's fan-out into a bounded 32-frame queue, coalescing while the viewer is slow (PendingOutput) and replacing from scrollback only past 256 KiB; shared by the server attach and the broker stream
       src/broker_socket.rs   # Short per-user/home/project socket namespace; private-directory validation, exclusive no-follow ownership locks, stale-owned-socket recovery and inode-matched cleanup
       src/bootstrap.rs       # macOS Mach bootstrap namespace probe (live/dead/indeterminate); broker `health` op and dead-namespace spawn refusal (HS2-CY01TZ)
+      src/launch_relay.rs    # HS2-HYF56Y desktop-session terminal launch relay: hello/launch line-JSON protocol, same-uid peer check, BrokerLauncher trait, authenticated client (owned 0700 dir + owned socket + getpeereid), RelayUnavailable fallback reasons, broker-build match
+      src/launch_agent.rs    # HS2-HYF56Y relay LaunchAgent: plist (Aqua, KeepAlive, AbandonProcessGroup), injectable Launchctl, idempotent install/status/uninstall, desktop-session (Aqua + live namespace) gate; HOTSHEET_LAUNCHCTL / HOTSHEET_LAUNCH_AGENTS_DIR overrides
       src/bin/broker.rs      #   `hotsheet-terminal-broker <socket> <project>` binary: bind the UDS + serve_broker until killed
       src/bin/fake_agent.rs  #   `hs-fake-agent` — deterministic PTY-byte emulator for terminal E2E (OSC 133/7/9 + spinner + print/hold/exit as a left-to-right script), HS2-1GJY50
       tests/fake_agent.rs    #   integrated terminal E2E: hs-fake-agent drives busy/cwd/progress/output→idle→exit + spinner detection, in one realistic sequence

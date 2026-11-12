@@ -40,3 +40,8 @@ GIT_CONFIG_GLOBAL = { value = ".cargo/test-gitconfig", force = true, relative = 
 # any test that sets up Claude against a shared config would edit the developer's real
 # `~/.claude.json`. Tests that assert the override pass their own file.
 HOTSHEET_CLAUDE_USER_CONFIG = { value = "target/test-claude-user-config/.claude.json", force = true, relative = true }
+# HS2-HYF56Y: the terminal launch relay installs a per-user LaunchAgent. No test may load,
+# unload, or write one for real: `launchctl` resolves to a path that does not exist (tests
+# that drive install inject a fake), and the agents directory stays under `target/`.
+HOTSHEET_LAUNCHCTL = { value = "target/test-launchctl-disabled/launchctl", force = true, relative = true }
+HOTSHEET_LAUNCH_AGENTS_DIR = { value = "target/test-launch-agents", force = true, relative = true }

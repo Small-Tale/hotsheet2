@@ -24,6 +24,8 @@ hotsheet-notify.workspace = true
 hotsheet-aitools.workspace = true
 hotsheet-process-journal.workspace = true
 hotsheet-tls.workspace = true
+# The macOS terminal launch relay's LaunchAgent install and status (HS2-HYF56Y).
+hotsheet-terminals.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 ulid.workspace = true

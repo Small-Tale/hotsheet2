@@ -501,6 +501,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(path, cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
         Cmd::HostDisks { cmd } => cmd_host_disks(path, cwd, cmd),
+        Cmd::TerminalRelay { cmd } => super::terminal_relay::run(cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
         Cmd::Guidance { project, cmd } => cmd_guidance(path, &project, cmd),
         Cmd::PermissionDiscard {

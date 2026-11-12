@@ -341,7 +341,7 @@ pub async fn run_broker_process(
 /// Test-launched brokers inherit the runner's owner PID from their detached server
 /// (HS2-BNGHKM). Production brokers keep their normal idle/terminal lifetime.
 #[cfg(unix)]
-fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
+pub(crate) fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
     match std::env::var("HOTSHEET_TEST_SERVER_OWNER_PID") {
         Ok(value) => {
             let pid = value
@@ -358,7 +358,7 @@ fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
 }
 
 #[cfg(unix)]
-async fn wait_for_test_server_owner_exit(owner_pid: i32) {
+pub(crate) async fn wait_for_test_server_owner_exit(owner_pid: i32) {
     while (unsafe { libc::kill(owner_pid, 0) }) == 0 {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }

@@ -1032,3 +1032,31 @@ open a synthetic `cmd.exe` terminal, send input, and observe its output and clos
 Restart that server and confirm the old terminal is gone, matching the documented
 Windows persistence limit. Run the managed credential-cache/account tests on the
 same build; a Unix broker compile error must not prevent them from starting.
+
+## Terminal launch relay with real launchd (HS2-HYF56Y)
+
+Automated tests use a fake `launchctl` and a relay started by the test, never the real
+launchd. On a Mac logged in to its desktop, verify the launchd-specific parts by hand.
+
+1. Use a throwaway machine home and a temporary agents directory so the agent label is
+   unique and the real agent is untouched:
+   `HOTSHEET_HOME=<tmp>/home HOTSHEET_LAUNCH_AGENTS_DIR=<tmp>/agents HOTSHEET_LAUNCHCTL=/bin/launchctl`.
+2. Run `hotsheet-cli terminal-relay install --server <built hotsheet-server> --json`.
+   Confirm the label is `com.smalltale.hotsheet2.terminal-relay.<hash>`,
+   `launchctl print gui/$(id -u)/<label>` shows it running, and the reported relay
+   bootstrap is `live`.
+3. Run the install again. It reports `already_current` and the relay pid is unchanged.
+4. Start a disposable server under a null bootstrap port. One way is a short script that
+   calls `task_set_special_port(mach_task_self(), TASK_BOOTSTRAP_PORT, 0)` and then execs
+   the server. Its log shows the broker was launched by the launch relay, and the
+   broker's `health` is `live`. Open a terminal and run `ls`.
+5. Kill the server with SIGKILL and confirm the broker is still running. Run
+   `terminal-relay uninstall`, which boots the agent out. Confirm the relay is gone, the
+   broker and its terminal are still running, and `launchctl print` no longer finds the
+   label.
+6. Run `hotsheet-server -C <store> --stop --kill-all-terminals` and confirm it reports one
+   killed terminal. Remove the temporary directory.
+
+For the packaged app, launch the desktop app from Finder. Confirm `hotsheet-cli
+terminal-relay status` reports the default label as healthy and naming the bundled
+`hotsheet-server`. Then quit the app and confirm that its terminals keep running.

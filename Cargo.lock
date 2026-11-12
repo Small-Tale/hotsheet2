@@ -1113,6 +1113,7 @@ dependencies = [
  "hotsheet-notify",
  "hotsheet-plugins",
  "hotsheet-process-journal",
+ "hotsheet-terminals",
  "hotsheet-ticketing",
  "hotsheet-tls",
  "libc",

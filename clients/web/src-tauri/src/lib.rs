@@ -15,6 +15,8 @@ mod close_lifecycle;
 use close_lifecycle::{CloseLifecycle, caller_allowed};
 mod external_links;
 use external_links::{LinkRoute, navigation_route, new_window_route};
+#[cfg(target_os = "macos")]
+mod terminal_relay;
 use tauri_plugin_opener::OpenerExt;
 
 struct BridgeChild(Mutex<Child>);
@@ -205,6 +207,14 @@ pub fn run() {
                     Some(directory) => PathBuf::from(directory),
                     None => app.path().app_data_dir()?.join("browser-preferences-v1"),
                 };
+                // HS2-HYF56Y: launched from the Dock, the app is in a healthy desktop session,
+                // the moment the relay can be installed; servers it starts then launch their
+                // terminal brokers through it.
+                #[cfg(target_os = "macos")]
+                terminal_relay::ensure_installed(
+                    &required(binaries, "hotsheet-cli")?,
+                    &required(binaries, "hotsheet-server")?,
+                );
                 let (child, url) = launch_bridge(&root, binaries, &storage)?;
                 app.manage(BridgeChild(Mutex::new(child)));
                 let origin = url.origin().ascii_serialization();
