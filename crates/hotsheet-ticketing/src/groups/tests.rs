@@ -312,11 +312,17 @@ fn hs2_9kzsd4_listing_names_ids_flags_placeholders_legacy_and_duplicates() {
             .into_iter()
             .map(|g| (g.1, g.3))
             .collect::<Vec<_>>(),
-        vec![
-            ("Group 7K3M9P2QXA".to_string(), false),
-            (format!("Group {sprint}"), false),
-            ("Legacy work".to_string(), true),
-        ]
+        {
+            // The sprint id is random, so its placeholder sorts on either side of the
+            // fixed one; build the expectation in the listing's name order.
+            let mut expected = vec![
+                ("Group 7K3M9P2QXA".to_string(), false),
+                (format!("Group {sprint}"), false),
+                ("Legacy work".to_string(), true),
+            ];
+            expected.sort();
+            expected
+        }
     );
     // Two clones each created "sprint": both are listed and flagged; the placeholder and
     // a legacy name with another key are not duplicates.
