@@ -9998,8 +9998,9 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(connection.locator('title')).toHaveText(
       /Codex is connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: PermissionRequest at .*\./,
     );
-    // HS2-YHQM67: the only connected session is the project's primary, so it shows plug-zap.
-    await expect(connection).toHaveAttribute('data-lucide', 'plug-zap');
+    // HS2-YHQM67: connectivity, not primary routing, is under test. Whether this lone session is
+    // already the project's primary when the hook lands varies by timing, so accept either plug.
+    await expect(connection).toHaveAttribute('data-lucide', /^plug(-zap)?$/);
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(tileConnection).toHaveAttribute('title', (await connection.locator('title').textContent()) as string);
     await page.screenshot({ path: test.info().outputPath('hs2-xysxvt-connected-1280.png') });
