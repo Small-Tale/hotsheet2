@@ -1628,10 +1628,10 @@ description, optional `warning`) with a `default_permission_mode`, and lists
 the `change_permission_mode` action). `GET /ai-tools` serves the declarations; clients never
 hard-code mode names.
 
-| Tool   | Modes (provider value → meaning)                                                                                                                                                                                                          | Default |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Claude | `--permission-mode`: `acceptEdits` (edits run, other tools ask), `auto` (Claude's own classifier asks only for risky actions), `manual` (every tool call asks), `plan` (read-only), `bypassPermissions` (nothing asks; carries a warning) | `auto`  |
-| Codex  | `approvalPolicy`: `never`, `on-request`, `on-failure`, `untrusted`; the sandbox stays `workspace-write` for every policy                                                                                                                  | `never` |
+| Tool   | Modes (provider value → meaning)                                                                                                                                                                                                                                 | Default |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Claude | `--permission-mode`: `acceptEdits` (edits run, other tools ask), `auto` (Claude decides when to ask; consequential actions may run without a prompt), `manual` (every tool call asks), `plan` (read-only), `bypassPermissions` (nothing asks; carries a warning) | `auto`  |
+| Codex  | `approvalPolicy`: `never`, `on-request`, `on-failure`, `untrusted`; the sandbox stays `workspace-write` for every policy                                                                                                                                         | `never` |
 
 - **Project scope:** `ai.defaults` stores a per-provider `permission_mode` beside model and
   effort (the default provider's value mirrors at the top level), in the checkout's
@@ -1663,9 +1663,10 @@ hard-code mode names.
 - **Visibility:** the chat's drawer tab carries a shield icon naming the active mode; the
   conversation model menu has a Permissions submenu beside Provider, Model, and Effort.
 
-`auto` stays opt-in until it has been validated in a driven stream-json session (that the
-bridge still receives the prompts `auto` raises); making it the Claude default is
-`HS2-YAS0FR`.
+`auto` remains the default (HS2-YAS0FR, HS2-53RV01) to preserve the established driven-chat
+workflow. It does not promise a prompt for destructive commands: Claude Code 2.1.318 ran
+an in-project deletion, a force push, a shell pipeline, and a sandbox-disabled retry without
+asking in the isolated HS2-KMNQ21 probe. Select `manual` when every tool call must ask.
 
 For a driven headless Claude chat in `auto`, the Hot Sheet hook observes `PreToolUse` but
 defers to Claude's own classifier. A resulting native `PermissionRequest` is sent to the

@@ -7375,7 +7375,12 @@ test('HS2-6S1346 asks in app before Bypass permissions: Escape and Cancel keep t
           ? {
               default_permission_mode: 'auto',
               permission_modes: [
-                { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
+                {
+                  id: 'auto',
+                  label: 'Auto',
+                  description:
+                    'Claude decides when to ask. Commands and other actions may run without a prompt, even when they change files or Git history.',
+                },
                 {
                   id: 'bypassPermissions',
                   label: 'Bypass permissions',
@@ -7536,7 +7541,12 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
       default_permission_mode: 'auto',
       permission_modes: [
         { id: 'acceptEdits', label: 'Accept edits', description: 'File edits run without asking.' },
-        { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
+        {
+          id: 'auto',
+          label: 'Auto',
+          description:
+            'Claude decides when to ask. Commands and other actions may run without a prompt, even when they change files or Git history.',
+        },
         {
           id: 'bypassPermissions',
           label: 'Bypass permissions',
@@ -7593,7 +7603,9 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   await expect(optIn).toHaveCount(0);
   await expect(claudeMode).toHaveJSProperty('value', 'auto');
   expect(settingsPuts).toHaveLength(putsBeforeDecline);
-  await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Claude asks only for risky actions.');
+  await expect(page.locator('[data-ai-provider="claude"]')).toContainText(
+    'Claude decides when to ask. Commands and other actions may run without a prompt, even when they change files or Git history.',
+  );
   await page.locator('[data-component="ai-tool-settings"]').screenshot({
     path: 'target/visual-captures/hs2-nhrdmw-settings-permission-1280.png',
   });
@@ -7652,7 +7664,12 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
               default_permission_mode: 'auto',
               permission_modes: [
                 { id: 'acceptEdits', label: 'Accept edits', description: 'File edits run without asking.' },
-                { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
+                {
+                  id: 'auto',
+                  label: 'Auto',
+                  description:
+                    'Claude decides when to ask. Commands and other actions may run without a prompt, even when they change files or Git history.',
+                },
                 {
                   id: 'bypassPermissions',
                   label: 'Bypass permissions',

@@ -1593,6 +1593,22 @@ fn permission_modes_validate_per_tool_and_fall_back_to_the_plugin_default() {
     assert!(error.contains("provider 'codex'"), "{error}");
 }
 
+/// HS2-53RV01: Auto remains the Claude default, and its user-facing description must not
+/// promise that consequential actions will raise a permission prompt.
+#[test]
+fn hs2_53rv01_claude_auto_description_states_that_actions_may_run_without_asking() {
+    let claude = ai_tool_descriptor(&find_in("claude", &[]).unwrap()).unwrap();
+    assert_eq!(claude.default_permission_mode.as_deref(), Some("auto"));
+    let auto = claude
+        .permission_modes
+        .iter()
+        .find(|mode| mode.id == "auto")
+        .unwrap();
+    let description = auto.description.as_deref().unwrap();
+    assert!(description.contains("may run without a prompt"));
+    assert!(description.contains("Git history"));
+}
+
 /// HS2-T9VXEP: test processes must never resolve the maintainer's real machine home, even
 /// when the launching shell exported `HOTSHEET_HOME=~/.hotsheet2` (Hot Sheet-launched agent
 /// sessions do). `.cargo/config.toml` forces a repository-local test home for every process

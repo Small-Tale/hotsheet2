@@ -699,7 +699,8 @@ evidence in `target/live-claude-permission/`).
 
 - **Auto:** asked for nothing. An in-project `rm -rf`, a force push, `curl ... | sh`, and an
   explicit unsandboxed network retry all ran or failed without a prompt. Claude's own sandbox
-  and classifier decided each one.
+  and classifier decided each one. HS2-53RV01 keeps Auto as the default and describes it as
+  allowing commands and other actions without a prompt, including changes to files or Git history.
 - **Accept edits:** a Write outside the workspace reached the Hot Sheet popup. **Allow Once**
   wrote the file; **Deny** left it unwritten, and Claude reported the bridge's denial.
 - **Mode shield:** the chat tab's shield named the mode throughout.

@@ -47,8 +47,8 @@ function ProviderDefaults({
       ...tool.models.map((item) => ({ value: item.id, label: item.label, icon: Brain, iconName: 'brain' })),
       { value: other, label: 'Other…', icon: Pencil, iconName: 'pencil', separatorBefore: true },
     ],
-    // HS2-NHRDMW: the provider's chat permission mode. The hint explains the selected mode; a mode
-    // that removes a safety net shows its warning instead.
+    // HS2-NHRDMW, HS2-53RV01: the provider's chat permission mode. Its hint describes the
+    // selected mode; a mode with an explicit warning shows that warning instead.
     permissionModes = tool.permission_modes ?? [],
     permissionMode = permissionModes.find((mode) => mode.id === selection.permission_mode) ?? permissionModes.at(0);
   return (

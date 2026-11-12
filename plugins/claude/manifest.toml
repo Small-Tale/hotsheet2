@@ -72,7 +72,7 @@ session_options = ["model", "effort", "permission_mode"]
 default_permission_mode = "auto"
 permission_modes = [
   { id = "acceptEdits", label = "Accept edits", description = "File edits run without asking; commands, web access, and other tools ask first." },
-  { id = "auto", label = "Auto", description = "Claude decides; it asks only for actions its safety check flags as risky." },
+  { id = "auto", label = "Auto", description = "Claude decides when to ask. Commands and other actions may run without a prompt, even when they change files or Git history." },
   { id = "manual", label = "Ask every time", description = "Every tool call, including file edits, asks first." },
   { id = "plan", label = "Plan only", description = "Read-only: Claude explores and proposes a plan without editing files or running commands." },
   { id = "bypassPermissions", label = "Bypass permissions", description = "Every tool call runs without asking.", warning = "Claude can run any command and change any file in this project without asking. Use only in a disposable or fully backed-up checkout." },

@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// HS2-KMNQ21: opt-in live check that a real Claude chat in Auto mode reaches Hot Sheet's
-// permission popup for a naturally risky action, and that Allow and Deny are honored.
+// HS2-KMNQ21, HS2-53RV01: opt-in live check of what a real Claude chat in Auto mode
+// actually prompts for, plus whether Allow and Deny are honored in Accept edits mode.
 //
 // It drives the rebuilt production web client in Chromium against a local host that supervises
 // its own machine server under a temporary HOTSHEET_HOME, in a throwaway Git project. It uses the
 // signed-in `claude` CLI; Hot Sheet's own writes to the Claude user config go to a temporary file
 // (HOTSHEET_CLAUDE_USER_CONFIG). Nothing reaches the developer's running Hot Sheet. Run from
-// clients/web after `cargo build -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp`:
+// clients/web after building the fixture-owned server with its isolated permission vault:
+//   cargo build -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp --bins --features hotsheet-aitools/test-permission-vault
 //
 //   node scripts/live-claude-permission.mjs [--keep]
 //
