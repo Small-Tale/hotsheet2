@@ -18,6 +18,8 @@ use hotsheet_ticketing::{ProviderCapabilities, SecretError};
 
 use super::*;
 
+mod access;
+
 fn id(n: u128) -> String {
     ulid::Ulid::from(n).to_string()
 }

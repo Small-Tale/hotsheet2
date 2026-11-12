@@ -1,4 +1,5 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
+//! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -17,6 +18,178 @@ pub(crate) struct OrchestrationArgs {
 enum OrchestrationCmd {
     /// List, declare, rename, remove, bind, unbind, resolve and inspect project targets.
     Target(TargetArgs),
+    /// List, issue, revoke and check delegated authority over one bound target.
+    Grant(GrantArgs),
+    /// Read this machine's audit journal of orchestration decisions for one project.
+    Audit {
+        /// Registered owning checkout id.
+        #[arg(long)]
+        project: Option<String>,
+        /// Return entries after this sequence number.
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+        #[arg(long, default_value_t = 100)]
+        limit: u64,
+    },
+}
+#[derive(Args)]
+struct GrantArgs {
+    /// Registered owning checkout id, never a source/store id or label.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: GrantCmd,
+}
+#[derive(Subcommand)]
+enum GrantCmd {
+    /// Retained grants for a target with their state against this machine's binding.
+    List { target_id: String },
+    /// Issue a grant for one actor. A person runs this; an AI actor is refused.
+    Add {
+        target_id: String,
+        /// Retain an id across retries; omission mints one.
+        #[arg(long)]
+        grant_id: Option<String>,
+        /// The actor id the grant covers (a worker id, account, or tool name).
+        #[arg(long)]
+        actor: String,
+        /// tickets_read, tickets_write, work_start, gates_observe, validation_run,
+        /// sessions_manage. Repeatable.
+        #[arg(long = "action", required = true)]
+        actions: Vec<String>,
+        /// Lifetime such as 30m, 8h or 14d (at most 90d).
+        #[arg(long, conflicts_with = "expires_at_ms")]
+        expires_in: Option<String>,
+        /// Absolute expiry in Unix milliseconds; use it to retry with a retained id.
+        #[arg(long)]
+        expires_at_ms: Option<u64>,
+        /// For sessions_manage: `tool` or `tool:model,model`. Repeatable.
+        #[arg(long = "tool")]
+        tools: Vec<String>,
+        /// For sessions_manage: most sessions this actor may run on the target.
+        #[arg(long)]
+        max_concurrency: Option<u32>,
+    },
+    /// Withdraw a grant; idempotent, and works for an unreachable or unbound target.
+    Revoke { target_id: String, grant_id: String },
+    /// Report whether the cached binding and grants would allow an action. Not authority.
+    Check {
+        target_id: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        action: String,
+        #[arg(long)]
+        tool: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        /// Sessions this actor already runs on the target.
+        #[arg(long, default_value_t = 0)]
+        running: u32,
+        /// The check concerns starting one more session.
+        #[arg(long)]
+        starting: bool,
+    },
+}
+/// `30m`, `8h`, `14d`, or bare seconds.
+fn lifetime_ms(value: &str) -> Result<u64> {
+    let value = value.trim();
+    let (digits, unit) = match value.char_indices().find(|(_, c)| !c.is_ascii_digit()) {
+        Some((index, _)) => value.split_at(index),
+        None => (value, "s"),
+    };
+    let scale: u64 = match unit {
+        "s" => 1_000,
+        "m" => 60_000,
+        "h" => 3_600_000,
+        "d" => 86_400_000,
+        _ => bail!("lifetime must look like 30m, 8h or 14d"),
+    };
+    digits
+        .parse::<u64>()
+        .ok()
+        .and_then(|count| count.checked_mul(scale))
+        .filter(|ms| *ms > 0)
+        .ok_or_else(|| anyhow::anyhow!("lifetime must look like 30m, 8h or 14d"))
+}
+fn grant_route(project: &str, command: GrantCmd) -> Result<(&'static str, String, Value)> {
+    let prefix = |id: &str| format!("/checkouts/{project}/orchestration/targets/{id}");
+    Ok(match command {
+        GrantCmd::List { target_id } => {
+            ("GET", format!("{}/grants", prefix(&target_id)), Value::Null)
+        }
+        GrantCmd::Add {
+            target_id,
+            grant_id,
+            actor,
+            actions,
+            expires_in,
+            expires_at_ms,
+            tools,
+            max_concurrency,
+        } => {
+            let expires_at_ms = match (expires_in, expires_at_ms) {
+                (Some(lifetime), None) => {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|time| u64::try_from(time.as_millis()).unwrap_or(u64::MAX))
+                        .unwrap_or(0);
+                    now.saturating_add(lifetime_ms(&lifetime)?)
+                }
+                (None, Some(at)) => at,
+                _ => bail!("pass exactly one of --expires-in or --expires-at-ms"),
+            };
+            let session_scope = match (tools.is_empty(), max_concurrency) {
+                (true, None) => Value::Null,
+                (false, Some(max_concurrency)) => json!({
+                    "max_concurrency": max_concurrency,
+                    "tools": tools.iter().map(|tool| match tool.split_once(':') {
+                        Some((tool, models)) => json!({"tool":tool,"models":models.split(',').collect::<Vec<_>>()}),
+                        None => json!({"tool":tool}),
+                    }).collect::<Vec<_>>(),
+                }),
+                _ => bail!("a session scope needs both --tool and --max-concurrency"),
+            };
+            (
+                "POST",
+                format!("{}/grants", prefix(&target_id)),
+                json!({"grant_id":grant_id,"actor_id":actor,"actions":actions,
+                    "session_scope":session_scope,"expires_at_ms":expires_at_ms}),
+            )
+        }
+        GrantCmd::Revoke {
+            target_id,
+            grant_id,
+        } => (
+            "DELETE",
+            format!("{}/grants/{grant_id}", prefix(&target_id)),
+            json!({}),
+        ),
+        GrantCmd::Check {
+            target_id,
+            actor,
+            action,
+            tool,
+            model,
+            running,
+            starting,
+        } => {
+            let session = match tool {
+                Some(tool) => {
+                    json!({"tool":tool,"model":model,"running":running,"starting":starting})
+                }
+                None if model.is_some() || starting || running > 0 => {
+                    bail!("--model, --running and --starting need --tool")
+                }
+                None => Value::Null,
+            };
+            (
+                "POST",
+                format!("{}/access", prefix(&target_id)),
+                json!({"actor_id":actor,"action":action,"session":session}),
+            )
+        }
+    })
 }
 #[derive(Args)]
 struct TargetArgs {
@@ -175,12 +348,36 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     let Cmd::Orchestration(arguments) = command else {
         super::misrouted("orchestration")
     };
-    let OrchestrationCmd::Target(arguments) = arguments.command;
-    let owner_id = arguments
-        .project
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("--project <registered-checkout-id> is required"))?;
-    let (method, path, body) = route(&owner_id, arguments.command)?;
+    let required = |project: Option<String>| {
+        project.ok_or_else(|| anyhow::anyhow!("--project <registered-checkout-id> is required"))
+    };
+    let (owner_id, (method, path, mut body)) = match arguments.command {
+        OrchestrationCmd::Target(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = route(&owner_id, arguments.command)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Grant(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = grant_route(&owner_id, arguments.command)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Audit {
+            project,
+            after,
+            limit,
+        } => {
+            let owner_id = required(project)?;
+            let path =
+                format!("/checkouts/{owner_id}/orchestration/audit?after={after}&limit={limit}");
+            (owner_id, ("GET", path, Value::Null))
+        }
+    };
+    // HS2-SBQ3T8: authority decisions record who acted; the runtime strips this again
+    // before decoding a request body.
+    if let (Some(actor), Some(object)) = (&context.actor, body.as_object_mut()) {
+        object.insert("actor".into(), serde_json::to_value(actor)?);
+    }
     let home = hotsheet_plugins::hotsheet_home();
     // HS2-4J6V46: do not even resolve -C or construct runtime/identity/config owners
     // before this independent cleanup subset has had its chance to return.

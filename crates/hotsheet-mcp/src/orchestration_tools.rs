@@ -3,9 +3,14 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect"]},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit"]},
+        "for_actor":{"type":"string","description":"access_check: the actor id the grant must cover (not the caller's own actor_id)"},
+        "target_action":{"type":"string","enum":["tickets_read","tickets_write","work_start","gates_observe","validation_run","sessions_manage"],"description":"access_check: the delegated action"},
+        "session":{"type":"object","description":"access_check for sessions_manage: {tool, model?, running?, starting?}"},
+        "after":{"type":"integer","minimum":0,"description":"audit: return entries after this sequence number"},
+        "limit":{"type":"integer","minimum":1,"maximum":500,"description":"audit: page size"},
         "destination_checkout":{"type":"string","description":"registered local/remote checkout id to inspect"},
             "registration_id":{"type":"string","description":"reviewed remote registration for inspect; omit for local"},
             "checkout":{"type":"string","description":"owning registered checkout id; inherits selected project"},
@@ -42,8 +47,10 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
     // HS2-4J6V46: tools/call does not enforce inputSchema; only omission selects defaults.
     let id = optional_id(args, "target_id")?;
     let registration = optional_id(args, "registration_id")?;
-    let machine = matches!(action, "bind" | "unbind" | "resolve" | "inspect")
-        || (action == "list" && id.is_some());
+    let machine = matches!(
+        action,
+        "bind" | "unbind" | "resolve" | "inspect" | "grant_list" | "access_check" | "audit"
+    ) || (action == "list" && id.is_some());
     // Preflight before any backend request; HttpBackend repeats it for actual origin.
     if machine && !backend.machine_local() {
         return Err("target binding administration requires a machine-local backend".into());
@@ -74,6 +81,24 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             .get(
                 &id.map(|id| format!("{prefix}/{id}/binding"))
                     .unwrap_or(prefix),
+                &[],
+            )
+            .map_err(crate::be_msg);
+    }
+    if action == "audit" {
+        let number = |name: &str, default: u64| match args.get(name) {
+            None => Ok(default),
+            Some(value) => value
+                .as_u64()
+                .ok_or_else(|| format!("{name} must be an unsigned integer when present")),
+        };
+        return backend
+            .get(
+                &format!(
+                    "/checkouts/{owner}/orchestration/audit?after={}&limit={}",
+                    number("after", 0)?,
+                    number("limit", 100)?
+                ),
                 &[],
             )
             .map_err(crate::be_msg);
@@ -116,6 +141,10 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             backend.send(if action == "bind" {"PUT"} else {"DELETE"}, &format!("{prefix}/{id}/binding"), &body)
         }
         "resolve" => backend.get(&format!("{prefix}/{}/resolve", id.ok_or("target_id is required")?), &[]),
+        "grant_list" => backend.get(&format!("{prefix}/{}/grants", id.ok_or("target_id is required")?), &[]),
+        "access_check" => backend.send("POST", &format!("{prefix}/{}/access", id.ok_or("target_id is required")?), &json!({
+            "actor_id":required(args,"for_actor")?,"action":required(args,"target_action")?,
+            "session":args.get("session").cloned().unwrap_or(Value::Null)})),
         _ => return Err("unsupported target action".into()),
     }.map_err(crate::be_msg)
 }
@@ -151,7 +180,16 @@ mod tests {
         let backend = OffBox {
             calls: Mutex::new(Vec::new()),
         };
-        for action in ["bind", "unbind", "resolve", "inspect"] {
+        for action in [
+            "bind",
+            "unbind",
+            "resolve",
+            "inspect",
+            // HS2-SBQ3T8: delegated authority and its journal are machine-local reads.
+            "grant_list",
+            "access_check",
+            "audit",
+        ] {
             assert!(
                 dispatch(&json!({"action":action}), &backend)
                     .unwrap_err()
@@ -177,6 +215,9 @@ mod tests {
             "/checkouts/owner/orchestration/targets/id/binding",
             "/checkouts/owner/orchestration/targets/id/resolve",
             "/checkouts/owner/orchestration/inspect",
+            "/checkouts/owner/orchestration/targets/id/grants",
+            "/checkouts/owner/orchestration/targets/id/access",
+            "/checkouts/owner/orchestration/audit?after=0&limit=1",
         ] {
             assert_eq!(http.get(path, &[]).unwrap_err().status, Some(403));
             assert_eq!(

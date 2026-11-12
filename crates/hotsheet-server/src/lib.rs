@@ -2043,6 +2043,22 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/targets/{target}/resolve",
             get(routes::orchestration::read),
         )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/grants",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/grants/{grant}",
+            axum::routing::delete(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/access",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/audit",
+            get(routes::orchestration::read),
+        )
         // A client may supervise this process but never owns it: restart is accepted only
         // after mutation admission closes and all server-owned work is proven quiescent.
         .route("/lifecycle/quiescence", get(lifecycle_quiescence))

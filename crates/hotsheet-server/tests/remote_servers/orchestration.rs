@@ -8,7 +8,7 @@ use hotsheet_ticketing::{
 use std::path::Path;
 
 const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAY";
-fn configured_owner(
+pub(super) fn configured_owner(
     source: &Path,
     home: &Path,
     project: &Path,
@@ -42,7 +42,11 @@ fn configured_owner(
         )
         .unwrap()
 }
-fn shared_runtime(source: &Path, home: &Path, memory: &Arc<Memory>) -> OrchestrationRuntime {
+pub(super) fn shared_runtime(
+    source: &Path,
+    home: &Path,
+    memory: &Arc<Memory>,
+) -> OrchestrationRuntime {
     OrchestrationRuntime::new(
         home.into(),
         CheckoutRegistry::new(home.join("checkouts.json")),
@@ -53,7 +57,7 @@ fn shared_runtime(source: &Path, home: &Path, memory: &Arc<Memory>) -> Orchestra
     )
     .unwrap()
 }
-async fn api(
+pub(super) async fn api(
     router: axum::Router,
     method: &str,
     path: &str,

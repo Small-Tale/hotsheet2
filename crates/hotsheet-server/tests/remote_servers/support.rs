@@ -178,8 +178,25 @@ fn isolated_command(binary: &Path, home: &Path) -> std::process::Command {
         .env_remove("HOTSHEET_SERVER")
         .env_remove("HOTSHEET_SECRET")
         .env_remove("HOTSHEET_TERMINAL_ID")
+        // HS2-SBQ3T8: a suite launched from an AI session must not inherit its actor.
+        .env_remove("HOTSHEET_ACTOR_ROLE")
+        .env_remove("HOTSHEET_ACTOR_ID")
         .current_dir(home);
     command
+}
+
+/// HS2-SBQ3T8: the stderr of an owned CLI invocation that must fail.
+pub(super) fn cli_failure(home: &Path, prefix: &[&str], arguments: &[&str]) -> String {
+    let binary = PathBuf::from(env!("CARGO_BIN_EXE_hotsheet-server"))
+        .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
+    let output = isolated_command(&binary, home)
+        .arg("--test-fixture-credentials")
+        .args(prefix)
+        .args(arguments)
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "command unexpectedly succeeded");
+    String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
 pub(super) fn write_credentials(path: &Path, credentials: &RemoteCredentials) {

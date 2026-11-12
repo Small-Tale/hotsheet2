@@ -474,5 +474,7 @@ async fn hs2_1y45mz_shipped_project_path_and_server_mcp_stdio_share_remote_workf
     peer.stop().await;
 }
 
+#[path = "remote_servers/grants.rs"]
+mod grants;
 #[path = "remote_servers/orchestration.rs"]
 mod orchestration;

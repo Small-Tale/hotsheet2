@@ -1,14 +1,26 @@
 //! HS2-4J6V46: shared target declarations and reviewed machine-local bindings.
 //! Network, provider metadata, clock and randomness remain injected boundaries.
 
+mod audit;
 mod bindings;
 pub(crate) mod contract;
+mod grants;
 mod manifest;
 mod storage;
 mod workflow;
 
+pub use audit::{
+    AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, MAX_AUDIT_PAGE,
+    MAX_AUDIT_SEGMENT_BYTES,
+};
 pub use bindings::BindingRegistry;
 pub use contract::*;
+pub use grants::{
+    AccessDecision, AccessRequest, CreateGrant, DenialReason, Grant, GrantRegistry, GrantState,
+    GrantView, MAX_GRANT_CONCURRENCY, MAX_GRANT_LIFETIME_MS, MAX_GRANT_MODELS, MAX_GRANT_TOOLS,
+    MAX_GRANTS, MAX_GRANTS_PER_TARGET, SessionRequest, SessionScope, TargetAction, ToolScope,
+    destination_key,
+};
 pub use manifest::ManifestStore;
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 
@@ -32,6 +44,12 @@ pub enum OrchestrationError {
     Observation(TargetFailure),
     #[error("orchestration storage is unavailable")]
     Storage(#[source] std::io::Error),
+    /// HS2-SBQ3T8: no grant (or policy) authorizes this actor's action on the target.
+    #[error("orchestration action is not authorized: {}", .0.code())]
+    Denied(DenialReason),
+    /// HS2-SBQ3T8: the caller may never perform this operation, whatever is granted.
+    #[error("orchestration operation is forbidden: {0}")]
+    Forbidden(&'static str),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -53,6 +71,8 @@ impl OrchestrationError {
             Self::Capacity => "capacity_reached",
             Self::Observation(failure) => failure.code(),
             Self::Storage(_) => "storage_unavailable",
+            Self::Denied(reason) => reason.code(),
+            Self::Forbidden(_) => "forbidden",
         }
     }
 }
@@ -70,6 +90,10 @@ impl Transaction<'_> {
 }
 
 #[cfg(test)]
+mod audit_tests;
+#[cfg(test)]
 mod binding_tests;
+#[cfg(test)]
+mod grant_tests;
 #[cfg(test)]
 mod tests;

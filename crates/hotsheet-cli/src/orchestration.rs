@@ -1,8 +1,10 @@
 //! HS2-4J6V46: shared CLI/server/MCP composition. Domain transitions remain in core.
 //! Host injects its actual registry/config/secret owners; no store/path discovery,
 //! provider account probe, implicit source creation or credential copying.
+mod access;
 mod observer;
 mod request;
+pub use access::Authorized;
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
 #[cfg(test)]
 mod tests;
@@ -316,5 +318,6 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         OrchestrationError::Observation(_) => 502,
         OrchestrationError::Corrupt => 500,
         OrchestrationError::Storage(_) => 503,
+        OrchestrationError::Denied(_) | OrchestrationError::Forbidden(_) => 403,
     }
 }

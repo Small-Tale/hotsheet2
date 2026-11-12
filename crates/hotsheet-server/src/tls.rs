@@ -373,6 +373,11 @@ mod tests {
             "/checkouts/owner/orchestration/targets/id/binding",
             "/checkouts/owner/orchestration/targets/id/resolve",
             "/checkouts/owner/orchestration/inspect",
+            // HS2-SBQ3T8: delegated authority and its journal never leave the machine.
+            "/checkouts/owner/orchestration/targets/id/grants",
+            "/checkouts/owner/orchestration/targets/id/grants/grant",
+            "/checkouts/owner/orchestration/targets/id/access",
+            "/checkouts/owner/orchestration/audit",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

@@ -177,7 +177,7 @@ The numbered requirements docs (source of truth for behavior; status in
 - [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md) — AI note feedback synthesis (HS2-355565)
 - [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md) — CLI and service parity audit
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
-- [26-orchestration-projects.md](26-orchestration-projects.md) — Partial target source implementation (HS2-4J6V46), pending verification; links/grants/dispatch remain design (HS2-4JFP0S)
+- [26-orchestration-projects.md](26-orchestration-projects.md) — Partial: target declarations and bindings (HS2-4J6V46), delegated grants and audit journal (HS2-SBQ3T8); links/dispatch remain design (HS2-4JFP0S)
 - [32-notifier-plugins.md](32-notifier-plugins.md) — Notifier plugins: capabilities, rendering, built-ins, external protocol, rules, router, CLI/REST (HS2-R5HTZN)
 - [33-jobs.md](33-jobs.md) — Jobs: design-only local records for long-running work, state machine, producers, storage, and client surfaces (HS2-M78N64)
 - [34-glance-surfaces.md](34-glance-surfaces.md) — Glance surfaces: standby, sidebar live state, Stats Right now, away digest (design only, HS2-3AA1N7)
@@ -624,7 +624,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
       src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps + summary_hex/confidence note tokens; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
-      src/orchestration/ # HS2-4J6V46 shared manifest CAS/tombstones, bounded machine bindings, latest-started reservations and guarded resolution (source pending verification)
+      src/orchestration/ # HS2-4J6V46 shared manifest CAS/tombstones, bounded machine bindings, latest-started reservations and guarded resolution (source pending verification); HS2-SBQ3T8 grants.rs (machine-local delegated authority, destination-pinned, fail-closed decide) and audit.rs (bounded append-only JSON-lines journal with seq cursor)
       src/remote_servers/ # HS2-1Y45MZ locked, versioned machine registry and injected credential/transport workflow
                           # transition_tests.rs pins total credential obligations and clock-independent observation CAS races
       src/lib.rs             #   mint_ulid(clock, rng)
@@ -693,8 +693,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary + note confidence and derived latest_confidence (HS2-DWTJ43), ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
-      src/orchestration.rs; src/orchestration/ # shared target runtime/request dispatcher + real owner proof composition; CLI/server/MCP parity and orphan cleanup
-      src/dispatch/orchestration.rs # headless target operations and inspect; cleanup before -C/config/identity construction
+      src/orchestration.rs; src/orchestration/ # shared target runtime/request dispatcher + real owner proof composition; CLI/server/MCP parity and orphan cleanup; access.rs is the HS2-SBQ3T8 grant/authorize/audit gate every target action passes
+      src/dispatch/orchestration.rs # headless target operations and inspect; cleanup before -C/config/identity construction; `orchestration grant|audit` (HS2-SBQ3T8)
       src/remote_servers.rs # shared HTTP/HTTPS/mTLS remote discovery runtime; paired-session cookie vs legacy local bearer, verified CA and optional client cert (HS2-W4JJJE)
       src/dispatch/remotes.rs # headless remote identity/list/register/review/revoke/checkouts
       src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release/optional claim-run guarded child (HS2-MFYYJ9), Trash `restore`/`purge-trash`, activate-format, providers/provider-ls/get/new/edit/close/assign/restore/report-not-working/delete-note/attach/disable/enable/remove, github-sign-in/github-connect (incl. assets-repository attachment settings, HS2-HSA64D), provider-connect gitlab|jira (HS2-65KYVP), provider-copy/move, git-ticket batch/delete-note/attachment-rename/attachment-delete/attachment-metadata/attachment-actor/annotate, feedback-synthesis, hook-diagnose/permission-hook, setup/plugins/settings/server/lifecycle/workflows; the clap `Cli`/`Cmd` tree, worklist refresh, and helpers shared across groups (`resolve`, `now_ts`, note-input/`TicketEdit` modifier parsing, AI-default resolution, `urlencoding_component`); per-group arg/subcommand types, helpers, and `cmd_*` implementations live in `src/dispatch/` (HS2-3CE018)

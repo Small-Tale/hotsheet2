@@ -638,6 +638,229 @@ paths:
         schema:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/grants:
+    description:
+      Machine-local delegated authority for one bound target (HS2-SBQ3T8). A grant names one actor, actions and an
+      expiry and pins the reviewed destination; it holds no credential and is never shared.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: listTargetGrants
+      responses:
+        '200':
+          description: Retained grants with their state against this machine's cached binding.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 32
+                items:
+                  $ref: '#/components/schemas/TargetGrantView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: createTargetGrant
+      description:
+        Issue a grant against the freshly confirmed destination. Idempotent by a retained `grant_id`; a different body
+        under that id is 409. An `ai` actor is refused with 403 `forbidden`; an unusable target with 403
+        `target_unavailable`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTargetGrant'
+      responses:
+        '200':
+          description: The stored grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetGrantView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/grants/{grant}:
+    description: Machine-local revocation (HS2-SBQ3T8); needs no registered owner, binding or reachable target.
+    x-hotsheet-machine-local: true
+    delete:
+      operationId: revokeTargetGrant
+      description: Idempotent. An `ai` actor is refused with 403 `forbidden`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: The revoked grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetGrant'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      - name: grant
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/access:
+    description:
+      Machine-local, side-effect-free answer against the cached binding (HS2-SBQ3T8). It is never authority; the
+      action itself confirms the destination freshly.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: checkTargetAccess
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetAccessRequest'
+      responses:
+        '200':
+          description: Whether the cached binding and grants would allow the action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetAccessDecision'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/audit:
+    description:
+      Machine-local journal of orchestration authority decisions for one owning checkout (HS2-SBQ3T8). Identifiers,
+      codes and outcomes only.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationAudit
+      parameters:
+        - name: after
+          in: query
+          description: Return entries with a greater sequence number.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: Entries after the cursor, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationAuditPage'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -14769,6 +14992,305 @@ components:
                 $ref: '#/components/schemas/TargetSource'
               maxItems: 64
             - type: 'null'
+      additionalProperties: false
+    OrchestrationActor:
+      description: Who is acting (HS2-RD4M29); absent means unspecified, never assumed to be an AI.
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          enum:
+            - human
+            - ai
+            - system
+        id:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+      additionalProperties: false
+    TargetAction:
+      description: An action an orchestration project may be delegated in a target (HS2-SBQ3T8).
+      enum:
+        - tickets_read
+        - tickets_write
+        - work_start
+        - gates_observe
+        - validation_run
+        - sessions_manage
+    TargetSessionScope:
+      description: Limits on the AI sessions a `sessions_manage` grant covers; a tool without models allows any model.
+      type: object
+      required:
+        - tools
+        - max_concurrency
+      properties:
+        tools:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: object
+            required:
+              - tool
+            properties:
+              tool:
+                type: string
+                maxLength: 160
+                pattern: ^[A-Za-z0-9._-]+$
+              models:
+                type: array
+                maxItems: 32
+                items:
+                  type: string
+                  maxLength: 128
+            additionalProperties: false
+        max_concurrency:
+          type: integer
+          minimum: 1
+          maximum: 64
+      additionalProperties: false
+    CreateTargetGrant:
+      type: object
+      required:
+        - actor_id
+        - actions
+        - expires_at_ms
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        grant_id:
+          description: Retain an id across retries; omission mints one.
+          type:
+            - string
+            - 'null'
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        actor_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/TargetAction'
+        session_scope:
+          description: Required with `sessions_manage` and rejected without it.
+          anyOf:
+            - $ref: '#/components/schemas/TargetSessionScope'
+            - type: 'null'
+        expires_at_ms:
+          description: Unix milliseconds, in the future and at most ninety days ahead.
+          type: integer
+          minimum: 1
+      additionalProperties: false
+    TargetGrant:
+      type: object
+      required:
+        - grant_id
+        - target
+        - actor_id
+        - actions
+        - destination_key
+        - created_at_ms
+        - expires_at_ms
+      properties:
+        grant_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        target:
+          type: object
+          required:
+            - owner_checkout_id
+            - target_id
+          properties:
+            owner_checkout_id:
+              type: string
+              maxLength: 160
+            target_id:
+              type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+          additionalProperties: false
+        actor_id:
+          type: string
+          maxLength: 160
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/TargetAction'
+        session_scope:
+          $ref: '#/components/schemas/TargetSessionScope'
+        destination_key:
+          description: Digest of the reviewed destination the grant was issued for.
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        created_at_ms:
+          type: integer
+          minimum: 0
+        created_by:
+          type: string
+          maxLength: 160
+        expires_at_ms:
+          type: integer
+          minimum: 0
+        revoked_at_ms:
+          type: integer
+          minimum: 0
+        revoked_by:
+          type: string
+          maxLength: 160
+        state:
+          description: Present on list and create responses; state against this machine's current reviewed destination.
+          enum:
+            - active
+            - expired
+            - revoked
+            - destination_changed
+      additionalProperties: false
+    TargetGrantView:
+      description: A grant with its state against this machine's current reviewed destination.
+      allOf:
+        - $ref: '#/components/schemas/TargetGrant'
+        - type: object
+          required:
+            - state
+    TargetAccessRequest:
+      type: object
+      required:
+        - actor_id
+        - action
+      properties:
+        actor_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        action:
+          $ref: '#/components/schemas/TargetAction'
+        session:
+          description: The session a `sessions_manage` check concerns.
+          anyOf:
+            - type: object
+              required:
+                - tool
+              properties:
+                tool:
+                  type: string
+                  maxLength: 160
+                model:
+                  type:
+                    - string
+                    - 'null'
+                  maxLength: 128
+                running:
+                  type: integer
+                  minimum: 0
+                starting:
+                  type: boolean
+              additionalProperties: false
+            - type: 'null'
+        operation_id:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+      additionalProperties: false
+    TargetAccessDecision:
+      type: object
+      required:
+        - allowed
+      properties:
+        allowed:
+          type: boolean
+        reason:
+          enum:
+            - no_grant
+            - action_not_granted
+            - destination_changed
+            - grant_revoked
+            - grant_expired
+            - session_scope_required
+            - tool_not_granted
+            - model_not_granted
+            - concurrency_exceeded
+            - target_unavailable
+            - policy_denied
+            - approval_required
+        grant_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      additionalProperties: false
+    OrchestrationAuditPage:
+      type: object
+      required:
+        - entries
+        - cursor
+        - gap
+        - more
+      properties:
+        entries:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required:
+              - seq
+              - at_ms
+              - action
+              - outcome
+            properties:
+              seq:
+                type: integer
+                minimum: 1
+              at_ms:
+                type: integer
+                minimum: 0
+              actor_role:
+                type: string
+                maxLength: 160
+              actor_id:
+                type: string
+                maxLength: 160
+              target_id:
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              action:
+                description: A stable action code such as `tickets_write` or `grant_create`.
+                type: string
+                maxLength: 160
+              operation_id:
+                type: string
+                maxLength: 160
+              outcome:
+                enum:
+                  - allowed
+                  - denied
+                  - succeeded
+                  - failed
+                  - granted
+                  - revoked
+              reason:
+                description: A stable reason code, never free text.
+                type: string
+                maxLength: 160
+              grant_id:
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            additionalProperties: false
+        cursor:
+          description: Pass as `after` to continue.
+          type: integer
+          minimum: 0
+        gap:
+          description: Retention removed entries between the request cursor and the first one returned.
+          type: boolean
+        more:
+          type: boolean
       additionalProperties: false
     RemoteIdentity:
       type: object

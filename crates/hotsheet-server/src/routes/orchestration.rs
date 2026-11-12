@@ -53,7 +53,11 @@ pub(crate) async fn read(
     State(state): State<AppState>,
     OriginalUri(uri): OriginalUri,
 ) -> Result<Json<Value>, ApiError> {
-    execute(state, Method::GET, uri.path().into(), Value::Null).await
+    // HS2-SBQ3T8: the audit cursor travels in the query; the runtime parses it.
+    let path = uri
+        .path_and_query()
+        .map_or_else(|| uri.path().to_owned(), |path| path.as_str().to_owned());
+    execute(state, Method::GET, path, Value::Null).await
 }
 pub(crate) async fn write(
     State(state): State<AppState>,

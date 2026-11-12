@@ -1,4 +1,6 @@
 //! Shared transport adapters select a route only; all transitions live in core.
+use hotsheet_ticketing::actor::MutationActor;
+use hotsheet_ticketing::orchestration::{AccessRequest, CreateGrant};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -9,7 +11,7 @@ pub fn is_path(path: &str) -> bool {
     matches!(
         parts.as_slice(),
         ["checkouts", _, "orchestration", "targets", ..]
-            | ["checkouts", _, "orchestration", "inspect"]
+            | ["checkouts", _, "orchestration", "inspect" | "audit"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -25,8 +27,9 @@ pub fn is_machine_path(path: &str) -> bool {
             "orchestration",
             "targets",
             _,
-            "binding" | "resolve"
-        ] | ["checkouts", _, "orchestration", "inspect"]
+            "binding" | "resolve" | "grants" | "access"
+        ] | ["checkouts", _, "orchestration", "targets", _, "grants", _]
+            | ["checkouts", _, "orchestration", "inspect" | "audit"]
     )
 }
 
@@ -40,7 +43,47 @@ pub fn is_cleanup_request(method: &str, path: &str) -> bool {
 }
 
 fn parts(path: &str) -> Vec<&str> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
     path.trim_start_matches('/').split('/').collect()
+}
+/// HS2-SBQ3T8: a single unsigned query value; a malformed or repeated key is invalid.
+fn query_number(path: &str, key: &str, default: u64) -> Result<u64, OrchestrationError> {
+    let Some((_, query)) = path.split_once('?') else {
+        return Ok(default);
+    };
+    let mut found = None;
+    for pair in query.split('&').filter(|pair| !pair.is_empty()) {
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if name == key {
+            if found.is_some() {
+                return Err(OrchestrationError::Invalid("repeated query parameter"));
+            }
+            found = Some(
+                value
+                    .parse()
+                    .map_err(|_| OrchestrationError::Invalid("unsigned query value required"))?,
+            );
+        }
+    }
+    Ok(found.unwrap_or(default))
+}
+/// HS2-SBQ3T8: the optional acting role and id every adapter may attach to a body.
+fn actor(body: &Value) -> Result<Option<MutationActor>, OrchestrationError> {
+    let Some(actor) = body.get("actor").filter(|actor| !actor.is_null()) else {
+        return Ok(None);
+    };
+    let role = actor
+        .get("role")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let id = match actor.get("id") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(id)) => Some(id.clone()),
+        Some(_) => return Err(OrchestrationError::Invalid("actor id must be a string")),
+    };
+    MutationActor::parse(role, id)
+        .map(Some)
+        .map_err(|_| OrchestrationError::Invalid("actor role must be human, ai, or system"))
 }
 fn value(result: impl serde::Serialize) -> Result<Value, OrchestrationError> {
     serde_json::to_value(result).map_err(|_| OrchestrationError::Corrupt)
@@ -221,6 +264,35 @@ impl OrchestrationRuntime {
                     "resolve",
                 ],
             ) => value(self.resolve(&reference(owner, id)?, tx)?),
+            ("GET", ["checkouts", owner, "orchestration", "targets", id, "grants"]) => {
+                value(self.grants(&reference(owner, id)?, tx)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "targets", id, "grants"]) => {
+                let actor = actor(body)?;
+                let request: CreateGrant = decode(body)?;
+                value(self.grant(&reference(owner, id)?, request, actor.as_ref(), tx)?)
+            }
+            (
+                "DELETE",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "targets",
+                    id,
+                    "grants",
+                    grant,
+                ],
+            ) => value(self.revoke(&reference(owner, id)?, grant, actor(body)?.as_ref(), tx)?),
+            ("POST", ["checkouts", owner, "orchestration", "targets", id, "access"]) => {
+                let request: AccessRequest = decode(body)?;
+                value(self.access(&reference(owner, id)?, &request, tx)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "audit"]) => value(self.audit(
+                owner,
+                query_number(path, "after", 0)?,
+                usize::try_from(query_number(path, "limit", 100)?).unwrap_or(usize::MAX),
+            )?),
             _ => Err(OrchestrationError::Invalid("unsupported target route")),
         }
     }

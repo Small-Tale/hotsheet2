@@ -32,8 +32,13 @@ impl Storage {
     }
 
     pub(crate) fn machine(home: &Path) -> Self {
+        Self::machine_named(home, "orchestration-bindings.json")
+    }
+
+    /// HS2-SBQ3T8: sibling machine-local files reuse the same private, bounded discipline.
+    pub(crate) fn machine_named(home: &Path, relative: &str) -> Self {
         Self {
-            path: home.join("orchestration-bindings.json"),
+            path: home.join(relative),
             anchor: home.into(),
             private: true,
         }

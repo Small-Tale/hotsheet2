@@ -1,10 +1,10 @@
 # 26. Orchestration Projects
 
-> **Status: Partial (HS2-4J6V46).** Shared declarations, reviewed machine bindings
-> and the headless CLI, authenticated HTTP and MCP target adapters are implemented
-> and covered by automated tests; the OpenAPI contract is regenerated. Workspace UI,
-> grants, ticket relationships and dispatch remain design work under their separate
-> implementation tickets.
+> **Status: Partial (HS2-4J6V46, HS2-SBQ3T8).** Shared declarations, reviewed machine
+> bindings, delegated grants with their audit journal (§26.7), and the headless CLI,
+> authenticated HTTP and MCP adapters are implemented and covered by automated tests;
+> the OpenAPI contract describes them. Workspace UI, ticket relationships and dispatch
+> remain design work under their separate implementation tickets.
 
 ## 26.1 Boundary and existing foundations
 
@@ -201,7 +201,7 @@ explicitly when ambiguous. Target ticket writes later route through the target's
 ordinary checkout/source API with qualified ids and an operation id
 (HS2-AZ15GA). AI dispatch uses its ordinary exact claim path (HS2-EBHDSB).
 Neither declaration nor binding authorizes a target mutation by itself;
-target-scoped permissions and audit are HS2-SBQ3T8.
+target-scoped grants and their audit journal are §26.7 (HS2-SBQ3T8).
 
 ## 26.5 Failure states and compatibility
 
@@ -246,3 +246,115 @@ gates, and extra validation. HS2-WBREDM owns restart reconciliation, and
 HS2-2EY9DP owns multi-project failure fixtures. The existing remote-mount and
 git-native self-claim decisions in [08](08-distributed-and-remote.md) remain in
 force.
+
+## 26.7 Delegated grants and audit (HS2-SBQ3T8)
+
+A binding selects a destination; a **grant** is what lets an orchestration project
+act there. Every target action passes one gate, `authorize`, which first resolves
+the target freshly and then consults the grants. Anything not provably allowed is
+denied, and the answer is written to the audit journal either way.
+
+### Grants
+
+A grant is a machine-local record in `${HOTSHEET_HOME}/orchestration-grants.json`
+(mode 0600, version 1). It is never written to the shared manifest, a ticket or a
+note, and it holds no bearer, origin, path or other credential: the credential
+stays with the reviewed remote registration, and the target server still enforces
+its own device role. A grant can only narrow what that pairing already allows.
+
+| Field             | Meaning                                                                                                                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `grant_id`        | Canonical ULID. Retain it across retries; an identical retry is a no-op and a different body under the same id conflicts.                                                                                                                                    |
+| `target`          | `(owner_checkout_id, target_id)`. Another owner with the same target id is a different key.                                                                                                                                                                  |
+| `actor_id`        | The one actor the grant covers, such as a worker id. There is no wildcard.                                                                                                                                                                                   |
+| `actions`         | A non-empty set of `tickets_read`, `tickets_write`, `work_start`, `gates_observe`, `validation_run`, `sessions_manage`.                                                                                                                                      |
+| `session_scope`   | Required with `sessions_manage` and rejected without it: the allowed tools, optionally their models, and the maximum concurrent sessions (1 to 64). A tool listed without models allows any model; a tool listed with models requires a named, listed model. |
+| `expires_at_ms`   | Required, in the future, at most ninety days ahead.                                                                                                                                                                                                          |
+| `destination_key` | SHA-256 of the reviewed destination the grant was issued for.                                                                                                                                                                                                |
+
+A grant is `active`, `expired`, `revoked`, or `destination_changed`. Rebinding the
+target to another server or checkout, or unbinding it, makes every existing grant
+`destination_changed`: a grant never follows a target to a different destination.
+Reviewing the target back onto the original destination restores it. Revocation is
+final and idempotent; a later retry of the original create returns the revoked
+record and never revives it. A target holds at most 32 grants and the file 1,024.
+When a target is full, the oldest revoked or expired grant makes room; an active
+grant is never dropped, and a target full of active grants refuses a new one.
+
+**Who may grant.** A grant is issued or revoked by a person at the serving machine.
+A request whose actor role is `ai` is refused with 403 `forbidden`, the routes are
+machine-local like bindings, and the MCP tool offers only the read views. Issuing a
+grant requires the target to resolve as usable at that moment, because the grant
+pins that confirmed destination. Revoking needs no registered owner, manifest,
+binding or reachable target, so authority can always be withdrawn.
+
+The actor id is self-declared, as everywhere in Hot Sheet. Grants scope and record
+what automation on this machine does; they are not a cryptographic boundary between
+processes of the same user. The authenticated target server remains that boundary.
+
+### Authorization
+
+`authorize(target, actor, action, session?, operation_id?)` requires an identified
+actor, resolves the target freshly, and denies with `target_unavailable` when the
+result is not usable (unbound, removed, unreachable, unauthorized, missing source,
+changed identity, or an unknown owner). It then needs a grant for that exact actor
+that is active for the confirmed destination and covers the action. A
+`sessions_manage` request also names its tool and model; starting a session is
+refused at the concurrency cap, while stopping or winding one down is never blocked
+by the cap. The denial reported is the closest one: `no_grant`,
+`action_not_granted`, `destination_changed`, `grant_revoked`, `grant_expired`,
+`session_scope_required`, `tool_not_granted`, `model_not_granted`,
+`concurrency_exceeded`. `policy_denied` and `approval_required` are reserved for the
+throughput policy (HS2-YCJDEB); both the policy and a grant must allow an action.
+
+`access` is a side-effect-free check against the cached binding. It makes no
+request, reads no secret, writes no audit entry, and is never authority: the action
+itself confirms the destination again.
+
+### Audit journal
+
+`${HOTSHEET_HOME}/orchestration-audit/<owner-checkout-id>.jsonl` is an append-only
+journal with one JSON object per line: `seq`, `at_ms`, `actor_role`, `actor_id`,
+`target_id`, `action`, `operation_id`, `outcome` (`allowed`, `denied`, `succeeded`,
+`failed`, `granted`, `revoked`), a `reason` code, and `grant_id`. Every field is an
+identifier or a stable code; free text, ticket content, credentials and origins are
+rejected at the journal boundary. Grant creation and revocation, every `authorize`
+answer, and the reported result of an authorized action are recorded under the same
+operation id.
+
+A segment rotates at 1 MiB to one retained predecessor, so the journal is bounded
+near 2 MiB per owner. `seq` never restarts. A reader passes `after` and gets later
+entries, a `cursor` to continue from, `more`, and `gap: true` when retention removed
+entries it had not seen. A torn final line from a crash is skipped and never
+rewritten; the next append starts on its own line.
+
+### Headless surface
+
+```sh
+hotsheet-cli -C <configured-host-source> orchestration grant list <target-id> --project <owner-checkout-id>
+hotsheet-cli --actor-role human --actor-id <you> -C <configured-host-source> orchestration grant add <target-id> \
+  --project <owner-checkout-id> --actor <worker-id> --action tickets_read --action tickets_write --expires-in 14d
+hotsheet-cli -C <configured-host-source> orchestration grant add <target-id> --project <owner-checkout-id> \
+  --actor <worker-id> --action sessions_manage --tool claude:<model> --tool codex --max-concurrency 2 --expires-in 8h
+hotsheet-cli -C <configured-host-source> orchestration grant check <target-id> --project <owner-checkout-id> \
+  --actor <worker-id> --action sessions_manage --tool codex --running 1 --starting
+hotsheet-cli -C <configured-host-source> orchestration grant revoke <target-id> <grant-id> --project <owner-checkout-id>
+hotsheet-cli -C <configured-host-source> orchestration audit --project <owner-checkout-id> --after <seq> --limit 100
+```
+
+`grant add` takes `--expires-in` (`30m`, `8h`, `14d`) or an absolute
+`--expires-at-ms`; use the absolute form with a retained `--grant-id` to retry
+safely. A session launched by Hot Sheet acts as `ai` and cannot run `grant add` or
+`grant revoke`.
+
+| Route                                                              | Methods and purpose                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/targets/{target}/grants`         | GET retained grants with state; POST issue             |
+| `/checkouts/{owner}/orchestration/targets/{target}/grants/{grant}` | DELETE revoke                                          |
+| `/checkouts/{owner}/orchestration/targets/{target}/access`         | POST side-effect-free check against the cached binding |
+| `/checkouts/{owner}/orchestration/audit`                           | GET journal page, `?after=<seq>&limit=<n>`             |
+
+All four require the bearer and literal loopback at the serving machine for every
+device role. MCP `hotsheet_targets` adds the read-only actions `grant_list`,
+`access_check` (with `for_actor`, `target_action` and an optional `session`) and
+`audit`. Errors use 403 with the denial code or `forbidden`.

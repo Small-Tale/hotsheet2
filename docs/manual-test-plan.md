@@ -985,6 +985,21 @@ recover. At 1,000 total issue keys with no eligible v2 key, verify the write
 is refused before PUT. At more than 1,000 keys, reads stop for operator
 recovery. Retain every v1 marker even when expired or released.
 
+## Orchestration grants and audit (HS2-SBQ3T8)
+
+Use disposable machine homes and synthetic projects only. No rendered interface is
+added by this ticket. The automated CLI/HTTP/MCP flows pass; this checklist covers
+what needs two real paired machines and has not been run.
+
+1. Bind a target to a paired remote checkout, issue a `tickets_read` grant, and
+   confirm `grant check` allows it. Revoke the pairing on the remote machine and
+   confirm the next authorized action is denied with `target_unavailable` while
+   `grant list` still shows the grant.
+2. From a second machine, request the grant, access and audit routes of the first
+   with a read-write device certificate and confirm each is refused.
+3. In a session launched by Hot Sheet, run `orchestration grant add` and confirm
+   `forbidden`; run `grant list` and `audit` and confirm they work.
+
 ## Orchestration target declarations and bindings (HS2-4J6V46)
 
 Use disposable machine homes, synthetic projects and credentials only. No rendered
