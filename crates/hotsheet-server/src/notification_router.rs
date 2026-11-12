@@ -433,7 +433,7 @@ fn project_name(project: &str) -> String {
 }
 
 /// The checkouts that link `root` (a store or project path).
-fn linked(state: &AppState, root: &std::path::Path) -> Vec<Checkout> {
+pub(crate) fn linked(state: &AppState, root: &std::path::Path) -> Vec<Checkout> {
     state
         .checkout_registry
         .list()

@@ -431,8 +431,14 @@ notification always agree. The tracker therefore runs whether or not a rule name
   `causes` (§32.8.4).
 - `claims`: each live claim's ticket, worker, phase, claim time, lease expiry, and ETA. A
   client computes the ETA overrun locally.
-- `workers`: `live` counts distinct workers with a live claim. `expected` counts the workers
-  that held a claim in the current or stalled period (a worker-plan source is HS2-BHPPAS).
+- `workers`: `live` counts distinct workers with a live claim. `expected` comes from the
+  coordination worker plan when one exists (HS2-BHPPAS): the unexpired worker sessions registered
+  in the `hotsheet-cli coordination` pool of any registered checkout linked to the store whose
+  `source_id` is this store (`<git-common-dir>/hotsheet-coordination/state.json`, read on each
+  rebuild), united with the live claimants, so a planned worker that never claimed reads as missing.
+  Without a plan it counts the workers that held a claim in the current or stalled period. A
+  worker that registers without claiming appears at the next rebuild, at most the minute rebuild
+  later; clients still never poll.
 - `waiting`: the count, plus up to 20 tickets with their reason (`feedback` or `review`).
 - Queue runway (the ready Up Next count and an ETA-based estimate) was removed (HS2-5A83MR).
   Clients ignore a `runway` member that an older server still sends.

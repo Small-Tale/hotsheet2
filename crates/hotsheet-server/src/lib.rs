@@ -27,6 +27,7 @@ pub mod lifecycle;
 pub mod live_history;
 pub mod live_record;
 pub mod live_state;
+mod live_worker_plan;
 pub mod mcp_presence;
 pub mod media;
 pub mod multistore;

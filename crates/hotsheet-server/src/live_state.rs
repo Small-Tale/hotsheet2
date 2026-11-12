@@ -202,7 +202,9 @@ pub struct LiveClaim {
 pub struct LiveWorkers {
     /// Distinct workers holding a live claim.
     pub live: usize,
-    /// Distinct workers that held a claim in the current (or stalled) active period.
+    /// The coordination worker plan's live worker sessions plus the live claimants, when a linked
+    /// checkout's pool plans workers for this store (HS2-BHPPAS); otherwise the distinct workers
+    /// that held a claim in the current (or stalled) active period.
     pub expected: usize,
 }
 
@@ -547,13 +549,25 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
     let live = stores.entry(store.to_string()).or_default();
     let tokens = token_rate(live, &entry.store, now);
     let updated = updated_rate(live, &entry.store, &activity, now);
-    let workers_live = {
-        let mut workers: Vec<&str> = claims.iter().map(|c| c.worker.as_str()).collect();
-        workers.sort_unstable();
-        workers.dedup();
-        workers.len()
-    };
+    let live_workers: std::collections::BTreeSet<String> =
+        claims.iter().map(|c| c.worker.clone()).collect();
+    let workers_live = live_workers.len();
     drop(stores);
+    // A coordination worker plan for this store sets who is expected (HS2-BHPPAS); without one,
+    // the workers of the current or stalled period do.
+    let checkout_roots: Vec<PathBuf> =
+        crate::notification_router::linked(state, entry.store.root())
+            .into_iter()
+            .map(|checkout| PathBuf::from(checkout.root))
+            .collect();
+    let workers_expected = match crate::live_worker_plan::planned_workers(
+        &checkout_roots,
+        entry.store.root(),
+        now.unix_timestamp(),
+    ) {
+        Some(plan) => plan.union(&live_workers).count(),
+        None => activity.expected_workers.max(workers_live),
+    };
     Some(LiveStoreState {
         store: store.to_string(),
         root: entry.store.root().display().to_string(),
@@ -565,7 +579,7 @@ fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStore
         activity: facts(&activity),
         workers: LiveWorkers {
             live: workers_live,
-            expected: activity.expected_workers.max(workers_live),
+            expected: workers_expected,
         },
         claims,
         waiting,

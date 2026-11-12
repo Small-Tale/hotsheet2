@@ -1045,3 +1045,74 @@ async fn hs2_mhw3sx_the_minute_rebuild_decays_a_quiet_store_and_pushes_only_chan
     refresh_all(&h.state, now + time::Duration::minutes(63));
     assert!(pushed(&mut bus).is_empty());
 }
+
+/// HS2-BHPPAS: a linked checkout's coordination worker plan sets who is expected, so a
+/// registered worker that never claimed reads as missing; a claimant outside the plan still
+/// counts, and without a plan the period's workers remain the expectation.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_bhppas_expected_workers_come_from_the_coordination_worker_plan() {
+    use sha2::Digest;
+    let h = harness();
+    let store_root = h._dir.path().join("demo.hs2");
+    let project = h._dir.path().join("demo-src");
+    std::fs::create_dir_all(project.join(".git")).unwrap();
+    let registry_path = h._dir.path().join("checkouts.json");
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(&project, Some("Demo"), None, vec![store_root.clone()])
+        .unwrap();
+    let state = h.state.clone().with_checkout_registry(&registry_path);
+    let router = app(state.clone());
+    let now = time::OffsetDateTime::now_utc();
+    // No plan yet: nobody is expected while nothing is claimed.
+    let before = refresh(&state, &h.store_id, now);
+    assert_eq!(before["workers"], json!({"live": 0, "expected": 0}));
+
+    // The dispatcher's pool registers two worker sessions for this store; neither claimed.
+    let source = format!(
+        "{:x}",
+        sha2::Sha256::digest(
+            store_root
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .as_bytes()
+        )
+    );
+    let pool = project.join(".git/hotsheet-coordination");
+    std::fs::create_dir_all(&pool).unwrap();
+    let session = |id: &str| {
+        json!({"id": id, "generation": "g1", "expires_at": now.unix_timestamp() + 600,
+               "return_route": {"kind": "native_parent", "recipient": "parent"}})
+    };
+    std::fs::write(
+        pool.join("state.json"),
+        json!({"version": 9, "project_id": "demo", "source_id": source, "revision": 1,
+               "integrator": null, "assignments": {}, "stopped": null,
+               "workers": {"w1": session("w1"), "w2": session("w2")}})
+        .to_string(),
+    )
+    .unwrap();
+    let planned = refresh(&state, &h.store_id, now);
+    assert_eq!(planned["workers"], json!({"live": 0, "expected": 2}));
+
+    // A planned worker claims and an unplanned one claims: both are live, three expected.
+    let first = create(&router, "Planned").await;
+    let second = create(&router, "Unplanned").await;
+    for (ticket, worker) in [(&first, "w1"), (&second, "w9")] {
+        let (status, _) = call(
+            &router,
+            "POST",
+            &format!("/tickets/{ticket}/claim"),
+            Some(json!({"worker": worker, "lease_minutes": 30})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    let claimed = refresh(&state, &h.store_id, now);
+    assert_eq!(claimed["workers"], json!({"live": 2, "expected": 3}));
+
+    // Once the plan's sessions expire, the live claimants are expected again.
+    let later = now + time::Duration::minutes(11);
+    let expired = refresh(&state, &h.store_id, later);
+    assert_eq!(expired["workers"]["expected"], 2);
+}
