@@ -161,12 +161,14 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_groups",
-            "description": "Ticket groups: a ticket belongs to at most one group, and a group exists while at least one ticket outside Trash names it. action=list returns {groups:[{name,count}]} sorted by name; action=rename moves every member from `from` to `to` and returns {name,updated} (fails when `to` is a different existing group; changing only case or spacing is allowed); action=ungroup clears `name` from every member and returns {updated}. Names match without regard to case or spacing. Put one ticket in a group with hotsheet_update's group field.",
+            "description": "Ticket groups: a ticket belongs to at most one group, stored as a group id; the project's group registry (under the code checkout) names each id. A group is listed while at least one ticket outside Trash names it. Names need a checkout: without one, groups are listed as ids under placeholders and only ids are accepted. action=list returns {registry,groups:[{id,name,count,named,legacy,duplicate}]} (named=false: placeholder for an id this project does not name; legacy: an unmigrated name value; duplicate: another group has the same name); action=create makes (or finds) the group `name` and returns {id,name,created}; action=rename renames `group` to `to` as a registry edit and returns {id,name,updated} (fails when `to` is another listed group); action=ungroup clears `group` from every member and returns {updated}; action=merge moves every member of `from` into `into` and returns {id,name,updated}; action=migrate rewrites tickets that still store a group name to registry ids and returns {created,reused,updated}. A group is named by its id or by its name (case and spacing do not matter; a duplicated name needs the id). Put one ticket in a group with hotsheet_update's group field.",
             "inputSchema": { "type": "object", "properties": {
-                "action": { "type": "string", "enum": ["list", "rename", "ungroup"], "description": "defaults to list" },
-                "from": str_prop("rename: the group's current name"),
+                "action": { "type": "string", "enum": ["list", "create", "rename", "ungroup", "merge", "migrate"], "description": "defaults to list" },
+                "group": str_prop("rename/ungroup: the group's id or name"),
                 "to": str_prop("rename: the new name (at most 120 characters, no line breaks)"),
-                "name": str_prop("ungroup: the group to dissolve"),
+                "name": str_prop("create: the group's name"),
+                "from": str_prop("merge: the group whose members move (id or name)"),
+                "into": str_prop("merge: the group they join (id or name)"),
                 "checkout": str_prop("optional checkout id/alias/path; one namespace across its git stores"), "connection": str_prop("optional ticket-provider connection id; only connections with the groups capability")
             } }
         },
@@ -188,7 +190,7 @@ fn base_tools_list() -> Value {
                 "review_by": str_prop("filter to tickets whose review was requested by this person (git email, or 'me')"),
                 "claimed": { "type": "boolean", "description": "true = only claimed tickets; false = only unclaimed" },
                 "blocked": { "type": "boolean", "description": "true = only blocked tickets (a blocker isn't done); false = only unblocked" },
-                "group": str_prop("only tickets in this group (case and spacing do not matter)"),
+                "group": str_prop("only tickets in this group: its id, or its name (case and spacing do not matter; names resolve through the checkout's registry)"),
                 "has_group": { "type": "boolean", "description": "true = only grouped tickets; false = only ungrouped" },
                 "created_after": str_prop("only tickets created at/after this ISO-8601 time"),
                 "created_before": str_prop("only tickets created at/before this ISO-8601 time"),
@@ -266,7 +268,7 @@ fn base_tools_list() -> Value {
                 "details": str_prop(""), "tags": { "type": "array", "items": { "type": "string" } },
                 "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" },
-                "group": str_prop("put the ticket in this group; an existing group's spelling is reused")
+                "group": str_prop("put the ticket in this group: a group id, or a name (with a checkout, resolved through its group registry and created when new)")
                 ,"follow_up_to": str_prop("qualified @project/connection:native source ticket; requires checkout")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "store": str_prop("linked store id; required when checkout has multiple stores"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["title"] }
@@ -292,7 +294,7 @@ fn base_tools_list() -> Value {
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
-                "group": { "type": ["string", "null"], "description": "put the ticket in this group (a ticket has at most one; an existing group's spelling is reused), or null to remove it from its group" },
+                "group": { "type": ["string", "null"], "description": "put the ticket in this group (a ticket has at most one): a group id, or a name resolved through the checkout's group registry (created when new); null removes it from its group" },
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; explicit selection wins inference; omitted append kind retains legacy inference; with note_id intentionally corrects kind (feedback_draft refused)"),
                 "note_summary": { "type": ["string", "null"], "description": "concise plain-text timeline headline; with note_id, null clears the existing summary" },
@@ -363,7 +365,7 @@ fn base_tools_list() -> Value {
                 "status": str_prop(""), "priority": str_prop(""), "category": str_prop(""),
                 "up_next": { "type": "boolean" },
                 "tags": { "type": "array", "items": { "type": "string" }, "description": "replace the tag set on each" },
-                "group": { "type": ["string", "null"], "description": "put each ticket in this group, or null to remove each from its group" },
+                "group": { "type": ["string", "null"], "description": "put each ticket in this group (an id, or a name with a checkout), or null to remove each from its group" },
                 "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["ids"] }
         },
@@ -1349,40 +1351,43 @@ fn batch_update(args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     Ok(json!({"updated": updated, "errors": errors}))
 }
 
-/// `hotsheet_groups` (HS2-PDSHNN, HS2-8CDFKR): list, rename, or ungroup through the same
-/// routes the clients use, scoped like every other ticket tool.
+/// `hotsheet_groups` (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4): list, create, rename,
+/// ungroup, merge, or migrate through the same routes the clients use, scoped like every
+/// other ticket tool.
 fn groups_tool(args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     let action = args.get("action").and_then(Value::as_str).unwrap_or("list");
     let mut body = serde_json::Map::new();
-    match action {
-        "list" => backend
-            .get(&checkout_route(args, "/groups"), &[])
-            .map_err(be_msg),
-        "rename" => {
-            body.insert("from".into(), arg_str(args, "from")?.into());
-            body.insert("to".into(), arg_str(args, "to")?.into());
-            backend
-                .send(
-                    "POST",
-                    &checkout_route(args, "/groups/rename"),
-                    &Value::Object(body),
-                )
-                .map_err(be_msg)
+    let (suffix, fields): (&str, &[&str]) = match action {
+        "list" => {
+            return backend
+                .get(&checkout_route(args, "/groups"), &[])
+                .map_err(be_msg);
         }
-        "ungroup" => {
-            body.insert("name".into(), arg_str(args, "name")?.into());
-            backend
-                .send(
-                    "POST",
-                    &checkout_route(args, "/groups/ungroup"),
-                    &Value::Object(body),
-                )
-                .map_err(be_msg)
+        "create" => ("/groups", &["name"]),
+        "rename" => ("/groups/rename", &["group", "to"]),
+        "ungroup" => ("/groups/ungroup", &["group"]),
+        "merge" => ("/groups/merge", &["from", "into"]),
+        "migrate" => ("/groups/migrate", &[]),
+        other => {
+            return Err(format!(
+                "unknown action '{other}' (list, create, rename, ungroup, merge, or migrate)"
+            ));
         }
-        other => Err(format!(
-            "unknown action '{other}' (list, rename, or ungroup)"
-        )),
+    };
+    for field in fields {
+        // The pre-registry argument names stay accepted: rename `from`, ungroup `name`.
+        let alias = match (action, *field) {
+            ("rename", "group") => Some("from"),
+            ("ungroup", "group") => Some("name"),
+            _ => None,
+        };
+        let value = arg_str(args, field)
+            .or_else(|error| alias.map_or(Err(error), |alias| arg_str(args, alias)))?;
+        body.insert((*field).into(), value.into());
     }
+    backend
+        .send("POST", &checkout_route(args, suffix), &Value::Object(body))
+        .map_err(be_msg)
 }
 
 fn checkout_route(args: &Value, suffix: &str) -> String {
@@ -1501,6 +1506,13 @@ mod core_backend {
     fn open_source(path: &Path) -> Result<FsStore, BackendError> {
         FsStore::open_admitted(path, StoreRole::TicketSource).map_err(store_err)
     }
+
+    /// The stores, project registry, and action tail of one group route (HS2-9KZSD4).
+    type GroupScope<'p> = (
+        Vec<FsStore>,
+        Option<hotsheet_ticketing::groups::GroupRegistry>,
+        &'p str,
+    );
 
     /// Serves the `hotsheet_*` tools straight from the store on disk — no server, no
     /// index (reads are an `ops::query` file scan, per `docs/04` §4.4). A running
@@ -1736,24 +1748,28 @@ mod core_backend {
                 .api(&ticket)
         }
 
-        /// The stores a group route addresses and its action tail (`""`, `"/rename"`,
-        /// `"/ungroup"`), or `None` when `path` is not a group route. A checkout is one
-        /// namespace across its git stores, as on the server (HS2-PDSHNN).
-        fn group_scope<'p>(
-            &self,
-            path: &'p str,
-        ) -> Result<Option<(Vec<FsStore>, &'p str)>, BackendError> {
-            let tail = |rest: &'p str| matches!(rest, "" | "/rename" | "/ungroup").then_some(rest);
+        /// The stores a group route addresses, the project registry (a checkout only),
+        /// and its action tail (`""`, `"/rename"`, `"/ungroup"`, `"/merge"`,
+        /// `"/migrate"`), or `None` when `path` is not a group route. A checkout is one
+        /// namespace across its git stores, named by its registry, as on the server
+        /// (HS2-PDSHNN, HS2-9KZSD4).
+        fn group_scope<'p>(&self, path: &'p str) -> Result<Option<GroupScope<'p>>, BackendError> {
+            let tail = |rest: &'p str| {
+                matches!(rest, "" | "/rename" | "/ungroup" | "/merge" | "/migrate").then_some(rest)
+            };
             if let Some(rest) = path.strip_prefix("/groups").and_then(tail) {
-                return Ok(Some((vec![self.store.clone()], rest)));
+                return Ok(Some((vec![self.store.clone()], None, rest)));
             }
             if let Some((reference, rest)) = path
                 .strip_prefix("/checkouts/")
                 .and_then(|rest| rest.split_once("/groups"))
                 && let Some(rest) = tail(rest)
             {
-                let (_, stores) = self.checkout_context(reference)?;
-                return Ok(Some((stores, rest)));
+                let (checkout, stores) = self.checkout_context(reference)?;
+                let registry = hotsheet_ticketing::groups::GroupRegistry::for_checkout(Path::new(
+                    &checkout.root,
+                ));
+                return Ok(Some((stores, Some(registry), rest)));
             }
             if let Some((connection, rest)) = path
                 .strip_prefix("/providers/")
@@ -1768,39 +1784,52 @@ mod core_backend {
                         ),
                     });
                 }
-                return Ok(Some((vec![self.store.clone()], rest)));
+                return Ok(Some((vec![self.store.clone()], None, rest)));
             }
             Ok(None)
         }
 
+        /// The launched checkout's group registry, when this backend serves a project.
+        fn group_registry(&self) -> Option<hotsheet_ticketing::groups::GroupRegistry> {
+            self.checkout.as_ref().map(|checkout| {
+                hotsheet_ticketing::groups::GroupRegistry::for_checkout(Path::new(&checkout.root))
+            })
+        }
+
+        /// Add the ids a project's registry gives a typed `group` filter (HS2-9KZSD4).
+        fn resolve_group_filter(
+            q: &mut TicketQuery,
+            checkout: Option<&hotsheet_ticketing::checkouts::Checkout>,
+        ) {
+            let (Some(input), Some(checkout)) = (q.group.as_deref(), checkout) else {
+                return;
+            };
+            let Some(key) = hotsheet_model::group_key_of_input(input) else {
+                return;
+            };
+            let names =
+                hotsheet_ticketing::groups::GroupRegistry::for_checkout(Path::new(&checkout.root))
+                    .names()
+                    .unwrap_or_default();
+            q.group_ids = names
+                .into_iter()
+                .filter(|(_, name)| hotsheet_model::group_key(name) == key)
+                .map(|(id, _)| id)
+                .collect();
+        }
+
         /// The `group` field of a create or update body, validated and resolved to the
-        /// spelling the namespace already uses: the launched checkout's stores, else this
-        /// store. `patched` are the tickets being rewritten.
-        fn group_change(
-            &self,
-            body: &Value,
-            patched: &[Ulid],
-        ) -> Result<Option<Option<String>>, BackendError> {
+        /// value to store: an id as is, a name through the launched checkout's registry
+        /// (created when new). With no checkout a name is refused (HS2-9KZSD4).
+        fn group_change(&self, body: &Value) -> Result<Option<Option<String>>, BackendError> {
             let change = match body.get("group") {
                 None => return Ok(None),
                 Some(Value::Null) => return Ok(Some(None)),
                 Some(Value::String(name)) => Some(Some(name.clone())),
                 Some(_) => return Err(bad_request("group must be a string or null")),
             };
-            let stores = match &self.checkout {
-                Some(checkout) => checkout
-                    .stores
-                    .iter()
-                    .map(|path| open_source(Path::new(path)))
-                    .collect::<Result<Vec<_>, _>>()?,
-                None => vec![self.store.clone()],
-            };
-            hotsheet_ticketing::groups::resolve_group_change(
-                &group_directory(&stores)?,
-                change,
-                patched,
-            )
-            .map_err(|error| bad_request(error.to_string()))
+            hotsheet_ticketing::groups::resolve_group_change(self.group_registry().as_ref(), change)
+                .map_err(group_err)
         }
 
         fn checkout_context(
@@ -1932,6 +1961,7 @@ mod core_backend {
                 let store = &stores[request.source];
                 let connection = &connections[request.source];
                 let mut source_query = build_query(query, store.root())?;
+                Self::resolve_group_filter(&mut source_query, Some(checkout));
                 source_query.limit = None;
                 source_query.page_after = None;
                 source_query.after_key = request.after.cloned().map(|key| AfterKey {
@@ -2123,10 +2153,15 @@ mod core_backend {
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
             }
-            // Ticket groups (HS2-PDSHNN): the server's `GET …/groups` shape.
-            if let Some((stores, "")) = self.group_scope(path)? {
+            // Ticket groups (HS2-PDSHNN, HS2-9KZSD4): the server's `GET …/groups` shape.
+            if let Some((stores, registry, "")) = self.group_scope(path)? {
                 let directory = group_directory(&stores)?;
-                return Ok(serde_json::json!({ "groups": directory.summaries() }));
+                let groups = hotsheet_ticketing::groups::list_groups(&directory, registry.as_ref())
+                    .map_err(group_err)?;
+                return Ok(serde_json::json!({
+                    "registry": registry.is_some(),
+                    "groups": groups,
+                }));
             }
             // Completion-confidence calibration (HS2-Q1WCCY): the server's report shape.
             if path == "/confidence-report" {
@@ -2339,6 +2374,7 @@ mod core_backend {
                             // Each source reads at most one row past the checkout cap; the
                             // merged result is bounded below with checkout-specific errors.
                             let mut source = build_query(&source_query, store.root())?;
+                            Self::resolve_group_filter(&mut source, Some(&checkout));
                             source.limit = Some(order.limit.map_or(max + 1, |limit| limit + 1));
                             for mut row in backend.store_rows(&source, &source_query)? {
                                 if let Some(obj) = row.as_object_mut() {
@@ -2424,6 +2460,7 @@ mod core_backend {
                 }
                 // `compact=false` is the server's full provider ticket, notes included.
                 let mut q = build_query(query, self.store.root())?;
+                Self::resolve_group_filter(&mut q, self.checkout.as_ref());
                 let bound =
                     ops::StoreReadBound::new(q.limit).map_err(|e| bad_request(e.to_string()))?;
                 q.limit = Some(bound.fetch_limit());
@@ -2441,6 +2478,7 @@ mod core_backend {
             if path == "/tickets" {
                 // The bounded-response contract for an unpaged store list (HS2-3JEFQT).
                 let mut q = build_query(query, self.store.root())?;
+                Self::resolve_group_filter(&mut q, self.checkout.as_ref());
                 let bound =
                     ops::StoreReadBound::new(q.limit).map_err(|e| bad_request(e.to_string()))?;
                 q.limit = Some(bound.fetch_limit());
@@ -2515,43 +2553,72 @@ mod core_backend {
                     message: "external advisory claims require a running Hot Sheet server in serverless MCP mode".into(),
                 });
             }
-            // Ticket groups (HS2-8CDFKR): the server's rename and ungroup routes.
+            // Ticket groups (HS2-8CDFKR, HS2-9KZSD4): the server's create, rename,
+            // ungroup, merge, and migrate routes, through the same workflows.
             if method == "POST"
-                && let Some((stores, action @ ("/rename" | "/ungroup"))) = self.group_scope(path)?
+                && let Some((stores, registry, action)) = self.group_scope(path)?
             {
                 body_actor(body)?;
-                let directory = group_directory(&stores)?;
-                let (key, to) = if action == "/rename" {
-                    let plan = hotsheet_ticketing::groups::plan_rename(
-                        &directory,
-                        &str_field(body, "from").ok_or_else(|| bad_request("from is required"))?,
-                        &str_field(body, "to").ok_or_else(|| bad_request("to is required"))?,
-                    )
-                    .map_err(group_err)?;
-                    (plan.from_key, Some(plan.name))
-                } else {
-                    let key = hotsheet_ticketing::groups::known_group_key(
-                        &directory,
-                        &str_field(body, "name").ok_or_else(|| bad_request("name is required"))?,
-                    )
-                    .map_err(group_err)?;
-                    (key, None)
+                use hotsheet_ticketing::groups;
+                let field = |name: &str| {
+                    str_field(body, name).ok_or_else(|| bad_request(format!("{name} is required")))
                 };
-                let mut updated = 0;
-                for store in &stores {
-                    updated += hotsheet_ticketing::groups::set_group_of_members(
-                        store,
-                        &directory,
-                        &key,
-                        to.as_deref(),
-                        (self.now)(),
-                    )
-                    .map_err(store_err)?
-                    .updated;
+                // The pre-registry field names stay accepted, as on the server.
+                let group_field = |name: &str, alias: &str| {
+                    str_field(body, name)
+                        .or_else(|| str_field(body, alias))
+                        .ok_or_else(|| bad_request(format!("{name} is required")))
+                };
+                if action.is_empty() {
+                    let (id, name, created) =
+                        groups::create_group(registry.as_ref(), &field("name")?)
+                            .map_err(group_err)?;
+                    return Ok(serde_json::json!({ "id": id, "name": name, "created": created }));
                 }
-                return Ok(match to {
-                    Some(name) => serde_json::json!({ "name": name, "updated": updated }),
-                    None => serde_json::json!({ "updated": updated }),
+                let refs: Vec<&FsStore> = stores.iter().collect();
+                let directory = group_directory(&stores)?;
+                if action == "/migrate" {
+                    let registry = registry.ok_or_else(|| {
+                        group_err(groups::GroupError::RegistryRequired("migrate".into()))
+                    })?;
+                    let migration =
+                        groups::migrate_groups(&refs, &directory, &registry).map_err(group_err)?;
+                    return Ok(serde_json::json!({
+                        "created": migration.created,
+                        "reused": migration.reused,
+                        "updated": migration.updated,
+                    }));
+                }
+                let outcome = match action {
+                    "/rename" => groups::rename_group(
+                        &refs,
+                        &directory,
+                        registry.as_ref(),
+                        &group_field("group", "from")?,
+                        &field("to")?,
+                    ),
+                    "/ungroup" => groups::ungroup(
+                        &refs,
+                        &directory,
+                        registry.as_ref(),
+                        &group_field("group", "name")?,
+                    ),
+                    _ => groups::merge_groups(
+                        &refs,
+                        &directory,
+                        registry.as_ref(),
+                        &field("from")?,
+                        &field("into")?,
+                    ),
+                }
+                .map_err(group_err)?;
+                return Ok(match action {
+                    "/ungroup" => serde_json::json!({ "updated": outcome.updated }),
+                    _ => serde_json::json!({
+                        "id": outcome.id,
+                        "name": outcome.name,
+                        "updated": outcome.updated,
+                    }),
                 });
             }
             if let Some((connection, suffix)) = provider_ticket_suffix(path) {
@@ -2971,7 +3038,7 @@ mod core_backend {
                         return Err(bad_request("status cannot be used when creating a ticket"));
                     }
                     let new = NewTicket {
-                        group: self.group_change(body, &[])?.flatten(),
+                        group: self.group_change(body)?.flatten(),
                         title: str_field(body, "title")
                             .ok_or_else(|| bad_request("title is required"))?,
                         category: str_field(body, "category").unwrap_or_else(|| "issue".into()),
@@ -3193,7 +3260,7 @@ mod core_backend {
                     };
                     let actor = body_actor(body)?;
                     let patch = TicketPatch {
-                        group: self.group_change(body, &[t.id])?,
+                        group: self.group_change(body)?,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                         title: str_field(body, "title"),
                         details: str_field(body, "details"),
@@ -3933,6 +4000,7 @@ mod core_backend {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)
             | StoreError::InvalidGroupName(_)
+            | StoreError::GroupRegistryRequired(_)
             | StoreError::InvalidNoteKindEdit => 400,
             StoreError::Admission(_) => 409,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,
@@ -3952,14 +4020,22 @@ mod core_backend {
             .map_err(op_err)
     }
 
-    /// The server's group error statuses: 400 invalid name, 404 unknown, 409 taken.
+    /// The server's group error statuses: 400 invalid name, a name without a registry,
+    /// or a bad merge; 404 unknown; 409 taken or ambiguous.
     fn group_err(error: hotsheet_ticketing::groups::GroupError) -> BackendError {
-        use hotsheet_ticketing::groups::GroupError;
+        use hotsheet_ticketing::groups::{GroupError, GroupRegistryError};
         let status = match &error {
             GroupError::Store(_) => 500,
-            GroupError::InvalidName(_) | GroupError::EmptyName => 400,
+            GroupError::Registry(
+                GroupRegistryError::InvalidName(_) | GroupRegistryError::EmptyName,
+            )
+            | GroupError::InvalidName(_)
+            | GroupError::EmptyName
+            | GroupError::RegistryRequired(_)
+            | GroupError::InvalidMerge(_) => 400,
+            GroupError::Registry(_) => 500,
             GroupError::UnknownGroup(_) => 404,
-            GroupError::NameTaken(_) => 409,
+            GroupError::NameTaken(_) | GroupError::Ambiguous(_) => 409,
         };
         match error {
             GroupError::Store(error) => store_err(error),

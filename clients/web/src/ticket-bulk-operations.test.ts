@@ -165,6 +165,10 @@ describe('bulk ticket operations', () => {
       status: 'completed',
     });
     expect(bulkTicketPatch(grouped, { kind: 'group', group: 'Board', status: 'started' })).toBeUndefined();
+    // HS2-9KZSD4: an id group is no change only for the same id.
+    const sprint = { ...ungrouped, group: '7K3M9P2QXA' };
+    expect(bulkTicketPatch(sprint, { kind: 'group', group: '7K3M9P2QXA' })).toBeUndefined();
+    expect(bulkTicketPatch(sprint, { kind: 'group', group: '8B4N0R3SYB' })).toEqual({ group: '8B4N0R3SYB' });
   });
 
   it('offers grouping only when every target provider supports groups (HS2-TX17CM)', () => {
@@ -183,15 +187,34 @@ describe('bulk ticket operations', () => {
     expect(ticketGroupDisabledReason([ticket('X', 'readOnly')], lookup)).toBe(
       'One or more selected ticket providers do not support updates.',
     );
-    expect(ticketGroupMenuModel([], ['Board'], lookup)).toBeUndefined();
-    expect(ticketGroupMenuModel([a, b], ['Board', 'Search'], lookup)).toEqual({
-      names: ['Board', 'Search'],
+    const option = (id: string, name = id, duplicate = false) => ({ id, name, duplicate });
+    expect(ticketGroupMenuModel([], [option('Board')], lookup)).toBeUndefined();
+    expect(ticketGroupMenuModel([a, b], [option('Board'), option('Search')], lookup)).toEqual({
+      groups: [
+        { id: 'Board', label: 'Board' },
+        { id: 'Search', label: 'Search' },
+      ],
       current: 'Board',
       removable: true,
       disabledReason: undefined,
     });
-    expect(ticketGroupMenuModel([a, c], ['Board'], lookup)).toMatchObject({ current: undefined, removable: true });
-    expect(ticketGroupMenuModel([c], [], lookup)).toMatchObject({ names: [], removable: false });
+    expect(ticketGroupMenuModel([a, c], [option('Board')], lookup)).toMatchObject({
+      current: undefined,
+      removable: true,
+    });
+    expect(ticketGroupMenuModel([c], [], lookup)).toMatchObject({ groups: [], removable: false });
+    // HS2-9KZSD4: ids key exactly, and duplicate names show their ids.
+    const sprintA = { ...ticket('HS2-D'), group: '7K3M9P2QXA' },
+      sprintB = { ...ticket('HS2-E'), group: '8B4N0R3SYB' },
+      twins = [option('7K3M9P2QXA', 'Sprint', true), option('8B4N0R3SYB', 'Sprint', true)];
+    expect(ticketGroupMenuModel([sprintA], twins, lookup)).toMatchObject({
+      groups: [
+        { id: '7K3M9P2QXA', label: 'Sprint (7K3M9P2QXA)' },
+        { id: '8B4N0R3SYB', label: 'Sprint (8B4N0R3SYB)' },
+      ],
+      current: '7K3M9P2QXA',
+    });
+    expect(ticketGroupMenuModel([sprintA, sprintB], twins, lookup)).toMatchObject({ current: undefined });
     expect(ticketGroupMenuModel([c, external], [], lookup)?.disabledReason).toContain('groups');
   });
 });

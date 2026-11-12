@@ -168,9 +168,9 @@ export const NEW_TICKET_GROUP_CHOICE = '';
 
 /** What the ticket menu offers for groups (HS2-TX17CM). */
 export interface TicketGroupMenuModel {
-  /** Existing group names in the project, sorted. */
-  names: readonly string[];
-  /** The one group every target ticket is in, shown checked. */
+  /** Existing groups in the project, sorted by name: each stored value and its menu label (HS2-9KZSD4). */
+  groups: readonly { id: string; label: string }[];
+  /** The stored value of the one group every target ticket is in, shown checked. */
   current?: string;
   /** Some target ticket is in a group, so Remove from Group applies. */
   removable: boolean;
@@ -208,11 +208,11 @@ function groupSubmenu(model: TicketGroupMenuModel): PopupMenuItem {
         icon: <LucideIcon size="s" icon={Plus} name="plus" color={uiColor('neutral-on-quiet')} />,
         attributes: { 'data-context-group': NEW_TICKET_GROUP_CHOICE, 'data-context-group-new': 'true' },
       },
-      ...(model.names.length ? [{ kind: 'divider' } as const] : []),
-      ...model.names.map((name): PopupMenuItem => ({
-        label: name,
-        checked: name === model.current,
-        attributes: { 'data-context-group': name },
+      ...(model.groups.length ? [{ kind: 'divider' } as const] : []),
+      ...model.groups.map((group): PopupMenuItem => ({
+        label: group.label,
+        checked: group.id === model.current,
+        attributes: { 'data-context-group': group.id },
       })),
     ],
   };

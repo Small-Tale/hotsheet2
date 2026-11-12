@@ -3,16 +3,19 @@ import { describe, expect, it } from 'vitest';
 import {
   clusterTicketsByGroup,
   existingTicketGroup,
+  isTicketGroupId,
   normalizeTicketGroupName,
   TICKET_GROUP_NAME_LIMIT,
   ticketGroupCollapseKey,
+  ticketGroupDisplayName,
   ticketGroupDomId,
   ticketGroupKey,
-  ticketGroupName,
   ticketGroupNameError,
+  ticketGroupNameKey,
   ticketGroupNameProblem,
   ticketGroupSegments,
   ticketGroupSummaries,
+  ticketGroupValue,
   withoutCollapsedGroupMembers,
 } from './ticket-groups';
 
@@ -23,10 +26,10 @@ describe('ticket group names (HS2-PDSHNN)', () => {
   it('trims, collapses inner whitespace, and compares case-insensitively', () => {
     expect(normalizeTicketGroupName('  Board   drag &\tdrop ')).toBe('Board drag & drop');
     expect(ticketGroupKey(' Board  DRAG & drop')).toBe('board drag & drop');
-    expect(ticketGroupName({ group: '  ' })).toBeUndefined();
-    expect(ticketGroupName({ group: null })).toBeUndefined();
-    expect(ticketGroupName({})).toBeUndefined();
-    expect(ticketGroupName({ group: ' Übersicht ' })).toBe('Übersicht');
+    expect(ticketGroupValue({ group: '  ' })).toBeUndefined();
+    expect(ticketGroupValue({ group: null })).toBeUndefined();
+    expect(ticketGroupValue({})).toBeUndefined();
+    expect(ticketGroupValue({ group: ' Übersicht ' })).toBe('Übersicht');
   });
 
   it('finds an existing group in its stored spelling', () => {
@@ -60,8 +63,8 @@ describe('ticket group names (HS2-PDSHNN)', () => {
     expect(
       ticketGroupSummaries([row('a', 'Search'), row('b', 'board'), row('c'), row('d', 'search '), row('e', null)]),
     ).toEqual([
-      { name: 'board', count: 1 },
-      { name: 'Search', count: 2 },
+      { id: 'board', name: 'board', count: 1 },
+      { id: 'Search', name: 'Search', count: 2 },
     ]);
     expect(ticketGroupSummaries([])).toEqual([]);
   });
@@ -136,5 +139,72 @@ describe('ticket group view state (HS2-WZ3JGZ)', () => {
     expect(ticketGroupDomId('list', 'Board')).toBe(ticketGroupDomId('list', ' board'));
     expect(ticketGroupDomId('list', 'Board')).not.toBe(ticketGroupDomId('started', 'Board'));
     expect(ticketGroupDomId('list', 'Board & "x"')).toMatch(/^ticket-group-[a-z0-9]+$/);
+  });
+});
+
+describe('ticket group ids (HS2-9KZSD4)', () => {
+  const SPRINT_A = '7K3M9P2QXA',
+    SPRINT_B = '8B4N0R3SYB',
+    registry = [
+      { id: SPRINT_A, name: 'Sprint', duplicate: true },
+      { id: SPRINT_B, name: 'sprint', duplicate: true },
+    ];
+
+  it('recognizes only 10-character uppercase Crockford ids', () => {
+    expect(isTicketGroupId(SPRINT_A)).toBe(true);
+    expect(isTicketGroupId('7k3m9p2qxa')).toBe(false);
+    expect(isTicketGroupId('7K3M9P2QXI')).toBe(false);
+    expect(isTicketGroupId('7K3M9P2QX')).toBe(false);
+    expect(isTicketGroupId('Board')).toBe(false);
+  });
+
+  it('keys an id exactly and a legacy name by its name key', () => {
+    expect(ticketGroupKey(SPRINT_A)).toBe(SPRINT_A);
+    expect(ticketGroupKey(` ${SPRINT_A} `)).toBe(SPRINT_A);
+    expect(ticketGroupKey(' Board  Drop')).toBe('board drop');
+    expect(ticketGroupKey(SPRINT_A)).not.toBe(ticketGroupKey(SPRINT_B));
+    expect(ticketGroupNameKey(' Sprint  One ')).toBe('sprint one');
+  });
+
+  it('resolves display names from the registry, a legacy value, or the placeholder', () => {
+    expect(ticketGroupDisplayName(SPRINT_A, registry)).toBe('Sprint');
+    expect(ticketGroupDisplayName('  Board  drop ', registry)).toBe('Board drop');
+    expect(ticketGroupDisplayName('9C5P1T4VZC', registry)).toBe('Group 9C5P1T4VZC');
+    expect(ticketGroupDisplayName(SPRINT_A)).toBe(`Group ${SPRINT_A}`);
+    // A legacy group listed by the server keeps the server's spelling.
+    expect(ticketGroupDisplayName('board', [{ id: 'Board', name: 'Board' }])).toBe('Board');
+  });
+
+  it('renders two ids with the same display name as two groups', () => {
+    const rows = [
+      { slug: 'a', group: SPRINT_A, groupName: 'Sprint' },
+      { slug: 'b', group: SPRINT_B, groupName: 'sprint' },
+      { slug: 'c', group: SPRINT_A, groupName: 'Sprint' },
+    ];
+    const segments = ticketGroupSegments(rows);
+    expect(segments.map((segment) => [segment.kind, slugs(segment.items)])).toEqual([
+      ['group', ['a', 'c']],
+      ['group', ['b']],
+    ]);
+    expect(segments[0]).toMatchObject({ group: SPRINT_A, name: 'Sprint', key: SPRINT_A });
+    expect(segments[1]).toMatchObject({ group: SPRINT_B, name: 'sprint', key: SPRINT_B });
+    expect(ticketGroupDomId('list', SPRINT_A)).not.toBe(ticketGroupDomId('list', SPRINT_B));
+    expect(ticketGroupSummaries(rows, registry)).toEqual([
+      { id: SPRINT_A, name: 'Sprint', count: 2 },
+      { id: SPRINT_B, name: 'sprint', count: 1 },
+    ]);
+  });
+
+  it('shows an unknown id under its placeholder and a legacy value under its name', () => {
+    const segments = ticketGroupSegments([row('a', '9C5P1T4VZC'), row('b', 'board '), row('c', 'Board')]);
+    expect(segments.map((segment) => (segment.kind === 'group' ? [segment.name, segment.key] : []))).toEqual([
+      ['Group 9C5P1T4VZC', '9C5P1T4VZC'],
+      ['board', 'board'],
+    ]);
+  });
+
+  it('keys collapse by id, so a renamed id group keeps its collapse key', () => {
+    expect(ticketGroupCollapseKey('p', 'all', SPRINT_A)).toBe(JSON.stringify(['p', 'all', SPRINT_A]));
+    expect(ticketGroupCollapseKey('p', 'all', SPRINT_A)).not.toBe(ticketGroupCollapseKey('p', 'all', SPRINT_B));
   });
 });

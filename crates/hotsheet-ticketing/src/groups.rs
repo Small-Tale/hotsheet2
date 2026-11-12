@@ -1,18 +1,28 @@
-//! Ticket groups (HS2-PDSHNN, HS2-8CDFKR): the derived group directory, canonical
-//! spelling reuse, and the multi-ticket rename and ungroup mutations.
+//! Ticket groups (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4): the derived group directory, the
+//! project group registry, name resolution, and the multi-ticket rename, ungroup, merge,
+//! and migration workflows.
 //!
-//! A group has no record of its own: it exists while at least one non-deleted ticket
-//! names it. Names are unique within a namespace by [`hotsheet_model::group_key`], so
-//! every surface (server, CLI, MCP) resolves a requested name through this module
-//! before writing it.
+//! A ticket names its group by **id**. The project's registry (one file per group under
+//! the code checkout, see [`registry`]) maps each id to a display name. A group is
+//! listed while at least one ticket outside Trash names it; a registry entry with no
+//! members is not a visible group, and nothing is deleted automatically.
+//!
+//! Names are a property of a *project*. A ticket store linked by several projects gets
+//! its names from each project's registry; a store or connection addressed with no code
+//! checkout has no registry, so it lists ids under placeholders and accepts only ids.
+//! Every surface (server, CLI, MCP) calls this module so they agree.
+
+pub mod registry;
 
 use std::collections::BTreeMap;
 
 use hotsheet_model::{
-    GroupNameError, Status, Ticket, Timestamp, Ulid, group_key, group_key_of_input,
-    normalize_group_name,
+    GroupNameError, GroupValue, Status, Ticket, Ulid, group_key, group_key_of_input,
+    group_placeholder_name, group_value_key, is_group_id, normalize_group_name,
 };
 use serde::Serialize;
+
+pub use registry::{GROUP_REGISTRY_DIR, GroupNames, GroupRegistry, GroupRegistryError};
 
 use crate::store::{FsStore, StoreError};
 
@@ -20,8 +30,8 @@ use crate::store::{FsStore, StoreError};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupMember {
     pub id: Ulid,
-    /// The display name stored on the ticket.
-    pub name: String,
+    /// The stored `group` value: an id, or a legacy name awaiting migration.
+    pub value: String,
     /// Whether the ticket keeps its group alive. A ticket in Trash still carries its
     /// group (so restoring it puts it back) but does not count as a member.
     pub live: bool,
@@ -30,15 +40,30 @@ pub struct GroupMember {
 /// One group in a listing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GroupSummary {
+    /// The value member tickets store: the group id, or for an unmigrated group its
+    /// legacy name (the earliest member's spelling).
+    pub id: String,
+    /// The display name: the registry's, a legacy group's own name, or a placeholder
+    /// built from the id when this project's registry does not name it.
     pub name: String,
+    /// Live members (outside Trash).
     pub count: usize,
+    /// `false` when `name` is a placeholder: the registry has no entry for this id.
+    pub named: bool,
+    /// `true` for a pre-registry name value that the migration has not rewritten yet.
+    pub legacy: bool,
+    /// `true` when another listed named group has the same name key, as after two clones
+    /// each created a group with that name. Both are listed; a merge folds them together.
+    pub duplicate: bool,
 }
 
-/// Why a group mutation was refused.
+/// Why a group operation was refused.
 #[derive(Debug, thiserror::Error)]
 pub enum GroupError {
     #[error(transparent)]
     Store(#[from] StoreError),
+    #[error(transparent)]
+    Registry(#[from] GroupRegistryError),
     #[error(transparent)]
     InvalidName(#[from] GroupNameError),
     #[error("a group needs a name")]
@@ -47,6 +72,12 @@ pub enum GroupError {
     UnknownGroup(String),
     #[error("a group named '{0}' already exists")]
     NameTaken(String),
+    #[error("several groups are named '{0}'; use a group id")]
+    Ambiguous(String),
+    #[error("group names need a project checkout with a group registry; '{0}' is not a group id")]
+    RegistryRequired(String),
+    #[error("{0}")]
+    InvalidMerge(&'static str),
 }
 
 /// Every grouped ticket of one namespace: a store, or the stores a project connects.
@@ -59,17 +90,17 @@ impl GroupDirectory {
     /// Build from memberships gathered elsewhere (the index). Order does not matter.
     pub fn new(members: impl IntoIterator<Item = GroupMember>) -> Self {
         let mut members: Vec<_> = members.into_iter().collect();
-        members.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
+        members.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.value.cmp(&b.value)));
         Self { members }
     }
 
     /// Build from loaded tickets. Moved tombstones are redirects, never members.
     pub fn from_tickets<'a>(tickets: impl IntoIterator<Item = &'a Ticket>) -> Self {
         Self::new(tickets.into_iter().filter_map(|ticket| {
-            let name = ticket.group.clone()?;
+            let value = ticket.group.clone()?;
             (ticket.status != Status::Moved).then(|| GroupMember {
                 id: ticket.id,
-                name,
+                value,
                 live: ticket.status != Status::Deleted,
             })
         }))
@@ -78,6 +109,15 @@ impl GroupDirectory {
     /// Build by reading every ticket file of `store`, skipping unparseable ones.
     pub fn scan(store: &FsStore) -> Result<Self, StoreError> {
         Ok(Self::from_tickets(&store.list_tickets_resilient()?.tickets))
+    }
+
+    /// Build over several stores of one project.
+    pub fn scan_all<'a>(stores: impl IntoIterator<Item = &'a FsStore>) -> Result<Self, StoreError> {
+        let mut directory = Self::default();
+        for store in stores {
+            directory.merge(Self::scan(store)?);
+        }
+        Ok(directory)
     }
 
     /// Fold another store's memberships into this namespace.
@@ -91,116 +131,156 @@ impl GroupDirectory {
         &self.members
     }
 
-    /// The stored spelling of the group with `key`, ignoring the tickets in `excluding`
-    /// (those being rewritten by the caller). Mixed spellings, which only a merge of two
-    /// clones can produce, resolve to the earliest-created member's.
-    pub fn canonical_name(&self, key: &str, excluding: &[Ulid]) -> Option<&str> {
-        self.members
-            .iter()
-            .find(|member| {
-                member.live && !excluding.contains(&member.id) && group_key(&member.name) == key
-            })
-            .map(|member| member.name.as_str())
-    }
-
-    /// Every ticket naming the group with `key`, including tickets in Trash.
+    /// Every ticket whose value has `key` (see [`group_value_key`]), including tickets
+    /// in Trash.
     pub fn member_ids(&self, key: &str) -> Vec<Ulid> {
         self.members
             .iter()
-            .filter(|member| group_key(&member.name) == key)
+            .filter(|member| group_value_key(&member.value) == key)
             .map(|member| member.id)
             .collect()
     }
 
-    /// The groups with their live member counts, sorted case-insensitively by name.
-    pub fn summaries(&self) -> Vec<GroupSummary> {
+    /// Whether any ticket still holds a legacy name value.
+    pub fn has_legacy(&self) -> bool {
+        self.members
+            .iter()
+            .any(|member| matches!(GroupValue::of(&member.value), GroupValue::Legacy(_)))
+    }
+
+    /// The groups with their live member counts and display names from `names` (a
+    /// project registry snapshot; `None` for a store with no project). Sorted by the
+    /// display name's key, then by id.
+    pub fn summaries(&self, names: Option<&GroupNames>) -> Vec<GroupSummary> {
         let mut groups = BTreeMap::<String, GroupSummary>::new();
         for member in self.members.iter().filter(|member| member.live) {
             groups
-                .entry(group_key(&member.name))
-                .or_insert_with(|| GroupSummary {
-                    name: member.name.clone(),
-                    count: 0,
-                })
+                .entry(group_value_key(&member.value))
+                .or_insert_with(|| summary_of(&member.value, names))
                 .count += 1;
         }
         let mut summaries: Vec<_> = groups.into_values().collect();
+        let mut by_key = BTreeMap::<String, usize>::new();
+        for summary in summaries.iter().filter(|summary| summary.named) {
+            *by_key.entry(group_key(&summary.name)).or_default() += 1;
+        }
+        for summary in &mut summaries {
+            summary.duplicate = summary.named
+                && by_key
+                    .get(&group_key(&summary.name))
+                    .is_some_and(|count| *count > 1);
+        }
         summaries.sort_by(|a, b| {
             group_key(&a.name)
                 .cmp(&group_key(&b.name))
                 .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.id.cmp(&b.id))
         });
         summaries
     }
 }
 
-/// Resolve a requested group name for the tickets in `patched`: validate it, and reuse
-/// the existing spelling when another ticket already names that group. `Ok(None)` means
-/// the name is empty and the group should be cleared.
-pub fn resolve_group_name(
-    directory: &GroupDirectory,
-    requested: &str,
-    patched: &[Ulid],
-) -> Result<Option<String>, GroupNameError> {
-    let Some(name) = normalize_group_name(requested)? else {
-        return Ok(None);
+fn summary_of(value: &str, names: Option<&GroupNames>) -> GroupSummary {
+    let (name, named, legacy) = match GroupValue::of(value) {
+        GroupValue::Id(id) => match names.and_then(|names| names.get(id)) {
+            Some(name) => (name.clone(), true, false),
+            None => (group_placeholder_name(id), false, false),
+        },
+        GroupValue::Legacy(name) => (name.to_string(), true, true),
     };
-    Ok(Some(
-        directory
-            .canonical_name(&group_key(&name), patched)
-            .map_or(name, str::to_string),
-    ))
+    GroupSummary {
+        id: value.to_string(),
+        name,
+        count: 0,
+        named,
+        legacy,
+        duplicate: false,
+    }
 }
 
-/// [`resolve_group_name`] over a patch field: absent stays absent and a clear stays a
+/// The group a request names, found among the listed groups.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupTarget {
+    /// The value key members carry ([`group_value_key`]).
+    pub key: String,
+    pub summary: GroupSummary,
+}
+
+/// Find the listed group `input` names: its id (or a legacy group's stored value), or
+/// its display name compared without case or spacing.
+///
+/// # Errors
+/// [`GroupError::UnknownGroup`] when no listed group matches;
+/// [`GroupError::Ambiguous`] when a name matches several groups (duplicates).
+pub fn find_group(
+    directory: &GroupDirectory,
+    names: Option<&GroupNames>,
+    input: &str,
+) -> Result<GroupTarget, GroupError> {
+    let summaries = directory.summaries(names);
+    let trimmed = input.trim();
+    let target = |summary: &GroupSummary| GroupTarget {
+        key: group_value_key(&summary.id),
+        summary: summary.clone(),
+    };
+    if is_group_id(trimmed)
+        && let Some(summary) = summaries.iter().find(|summary| summary.id == trimmed)
+    {
+        return Ok(target(summary));
+    }
+    let unknown = || GroupError::UnknownGroup(trimmed.to_string());
+    let key = group_key_of_input(input).ok_or_else(unknown)?;
+    let mut matches = summaries
+        .iter()
+        .filter(|summary| group_key(&summary.name) == key);
+    let first = matches.next().ok_or_else(unknown)?;
+    if matches.next().is_some() {
+        return Err(GroupError::Ambiguous(first.name.clone()));
+    }
+    Ok(target(first))
+}
+
+/// Resolve a requested group for a ticket write to the value to store. An id is used as
+/// that id. Any other text is a name: with a project registry it resolves to the group
+/// with that name, creating a registry entry when none exists; without one it is
+/// refused, because a store alone cannot name groups. `Ok(None)` clears the group.
+pub fn resolve_group_input(
+    registry: Option<&GroupRegistry>,
+    input: &str,
+) -> Result<Option<String>, GroupError> {
+    let Some(name) = normalize_group_name(input)? else {
+        return Ok(None);
+    };
+    if is_group_id(&name) {
+        return Ok(Some(name));
+    }
+    let registry = registry.ok_or_else(|| GroupError::RegistryRequired(name.clone()))?;
+    Ok(Some(registry.find_or_create(&name)?.0))
+}
+
+/// [`resolve_group_input`] over a patch field: absent stays absent and a clear stays a
 /// clear.
 pub fn resolve_group_change(
-    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
     change: Option<Option<String>>,
-    patched: &[Ulid],
-) -> Result<Option<Option<String>>, GroupNameError> {
+) -> Result<Option<Option<String>>, GroupError> {
     match change {
-        Some(Some(name)) => resolve_group_name(directory, &name, patched).map(Some),
+        Some(Some(input)) => resolve_group_input(registry, &input).map(Some),
         other => Ok(other),
     }
 }
 
-/// A validated rename, ready to apply to each store of the namespace.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RenamePlan {
-    pub from_key: String,
-    /// The display name every member will carry.
-    pub name: String,
-}
-
-/// Validate renaming `from` to `to` against the whole namespace.
-///
-/// # Errors
-/// [`GroupError::UnknownGroup`] when no live ticket names `from`;
-/// [`GroupError::NameTaken`] when `to` is a different existing group (a change of only
-/// letter case or spacing of the same group is allowed); a name error when `to` is
-/// invalid or empty.
-pub fn plan_rename(
-    directory: &GroupDirectory,
-    from: &str,
-    to: &str,
-) -> Result<RenamePlan, GroupError> {
-    let name = normalize_group_name(to)?.ok_or(GroupError::EmptyName)?;
-    let from_key = known_group_key(directory, from)?;
-    let to_key = group_key(&name);
-    if to_key != from_key
-        && let Some(existing) = directory.canonical_name(&to_key, &[])
-    {
-        return Err(GroupError::NameTaken(existing.to_string()));
+impl GroupError {
+    /// The store-level error for a refused ticket-write value, for callers whose error
+    /// type is [`StoreError`] (providers and `ops`).
+    pub fn into_store_error(self) -> StoreError {
+        match self {
+            Self::Store(error) => error,
+            Self::InvalidName(error) => StoreError::InvalidGroupName(error),
+            Self::RegistryRequired(name) => StoreError::GroupRegistryRequired(name),
+            other => StoreError::Io(std::io::Error::other(other.to_string())),
+        }
     }
-    Ok(RenamePlan { from_key, name })
-}
-
-/// The key of an existing group, or [`GroupError::UnknownGroup`].
-pub fn known_group_key(directory: &GroupDirectory, name: &str) -> Result<String, GroupError> {
-    group_key_of_input(name)
-        .filter(|key| directory.canonical_name(key, &[]).is_some())
-        .ok_or_else(|| GroupError::UnknownGroup(name.trim().to_string()))
 }
 
 /// The tickets one store rewrote for a group mutation.
@@ -208,51 +288,46 @@ pub fn known_group_key(directory: &GroupDirectory, name: &str) -> Result<String,
 pub struct GroupWrite {
     /// Every rewritten ticket, in id order, for index and change notification.
     pub tickets: Vec<Ticket>,
-    /// The store's live members of the group after the write: the number a client
-    /// reports, matching the listing's count.
+    /// The store's live members that the mutation matched.
     pub updated: usize,
 }
 
-/// Set the group of every member of `from_key` in `store` to `to` (`None` ungroups) as
-/// one mutation and one commit. `directory` supplies the candidate tickets; each is
-/// re-read under the store lock and skipped when it no longer names the group.
+/// Rewrite the group of `candidates` in `store` as one mutation and one commit.
+/// `map` receives each ticket's stored value and returns `None` when the ticket is not
+/// affected, or the value to store (`Some(None)` ungroups). Each candidate is re-read
+/// under the store lock, so a stale directory never rewrites the wrong ticket.
 /// `updated_at` is preserved: regrouping is organization, not ticket content.
-pub fn set_group_of_members(
+pub fn rewrite_members(
     store: &FsStore,
-    directory: &GroupDirectory,
-    from_key: &str,
-    to: Option<&str>,
-    _now: Timestamp,
+    candidates: &[Ulid],
+    map: impl Fn(&str) -> Option<Option<String>>,
+    message: &str,
 ) -> Result<GroupWrite, StoreError> {
-    let candidates = directory.member_ids(from_key);
     store.with_ticket_transaction(|| {
         let mut changes = Vec::new();
         let mut updated = 0;
-        for id in &candidates {
+        for id in candidates {
             let before = match store.read_ticket(id) {
                 Ok(ticket) => ticket,
                 // The directory may be a moment stale, or span several stores.
                 Err(error) if error.is_io_kind(std::io::ErrorKind::NotFound) => continue,
                 Err(error) => return Err(error),
             };
-            if before.status == Status::Moved
-                || before.group.as_deref().map(group_key).as_deref() != Some(from_key)
-            {
+            if before.status == Status::Moved {
                 continue;
             }
+            let Some(to) = before.group.as_deref().and_then(&map) else {
+                continue;
+            };
             updated += usize::from(before.status != Status::Deleted);
-            if before.group.as_deref() == to {
+            if before.group == to {
                 continue;
             }
             let mut after = before.clone();
-            after.group = to.map(str::to_string);
+            after.group = to;
             changes.push((before, after));
         }
-        let message = match to {
-            Some(name) => format!("Rename ticket group to {name}"),
-            None => "Ungroup tickets".to_string(),
-        };
-        store.write_ticket_changes_committing(&changes, &message)?;
+        store.write_ticket_changes_committing(&changes, message)?;
         Ok(GroupWrite {
             tickets: changes.into_iter().map(|(_, after)| after).collect(),
             updated,
@@ -260,35 +335,258 @@ pub fn set_group_of_members(
     })
 }
 
-/// The outcome of a single-store rename.
-#[derive(Debug, Clone)]
-pub struct GroupRename {
-    pub name: String,
-    pub write: GroupWrite,
+/// Move every member of the group with value key `from_key` in `store` to `to` (`None`
+/// ungroups).
+pub fn set_group_of_members(
+    store: &FsStore,
+    directory: &GroupDirectory,
+    from_key: &str,
+    to: Option<&str>,
+    message: &str,
+) -> Result<GroupWrite, StoreError> {
+    rewrite_members(
+        store,
+        &directory.member_ids(from_key),
+        |value| (group_value_key(value) == from_key).then(|| to.map(str::to_string)),
+        message,
+    )
 }
 
-/// Rename a group within one store (the headless path; the server applies one
-/// [`plan_rename`] to each store of a project).
+/// The outcome of a group workflow over the stores of one namespace.
+#[derive(Debug, Clone, Default)]
+pub struct GroupOutcome {
+    /// The group the members now belong to (rename, merge).
+    pub id: Option<String>,
+    /// Its display name (rename, merge).
+    pub name: Option<String>,
+    /// Live members matched across every store.
+    pub updated: usize,
+    /// One write per store, in the order the stores were given.
+    pub writes: Vec<GroupWrite>,
+}
+
+fn rewrite_everywhere(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    from_key: &str,
+    to: Option<&str>,
+    message: &str,
+) -> Result<(usize, Vec<GroupWrite>), GroupError> {
+    let mut updated = 0;
+    let mut writes = Vec::with_capacity(stores.len());
+    for store in stores {
+        let write = set_group_of_members(store, directory, from_key, to, message)?;
+        updated += write.updated;
+        writes.push(write);
+    }
+    Ok((updated, writes))
+}
+
+fn registry_names(registry: Option<&GroupRegistry>) -> Result<Option<GroupNames>, GroupError> {
+    registry
+        .map(GroupRegistry::names)
+        .transpose()
+        .map_err(Into::into)
+}
+
+/// The listed groups of a namespace, named by `registry` when the namespace is a project.
+pub fn list_groups(
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+) -> Result<Vec<GroupSummary>, GroupError> {
+    Ok(directory.summaries(registry_names(registry)?.as_ref()))
+}
+
+/// Create (or find, by name key) the registry group `name` without assigning tickets.
+/// Returns the id, the stored display name, and whether an entry was created.
+pub fn create_group(
+    registry: Option<&GroupRegistry>,
+    name: &str,
+) -> Result<(String, String, bool), GroupError> {
+    let registry = registry.ok_or_else(|| GroupError::RegistryRequired(name.trim().into()))?;
+    if normalize_group_name(name)?.is_none() {
+        return Err(GroupError::EmptyName);
+    }
+    Ok(registry.find_or_create(name)?)
+}
+
+/// Rename the group `group` (an id or a name) to `to`. For an id this is one registry
+/// edit and no ticket changes, and it also names a placeholder. A legacy group is given
+/// a registry entry and its members are rewritten to that id.
+///
+/// # Errors
+/// [`GroupError::RegistryRequired`] without a project registry;
+/// [`GroupError::NameTaken`] when `to` is a different listed group's name (a change of
+/// only letter case or spacing of the same group is allowed); the lookup errors of
+/// [`find_group`]; a name error when `to` is invalid or empty.
 pub fn rename_group(
-    store: &FsStore,
-    from: &str,
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+    group: &str,
     to: &str,
-    now: Timestamp,
-) -> Result<GroupRename, GroupError> {
-    let directory = GroupDirectory::scan(store)?;
-    let plan = plan_rename(&directory, from, to)?;
-    let write = set_group_of_members(store, &directory, &plan.from_key, Some(&plan.name), now)?;
-    Ok(GroupRename {
-        name: plan.name,
-        write,
+) -> Result<GroupOutcome, GroupError> {
+    let registry = registry.ok_or_else(|| GroupError::RegistryRequired(group.trim().into()))?;
+    let name = normalize_group_name(to)?.ok_or(GroupError::EmptyName)?;
+    let names = registry.names()?;
+    let target = find_group(directory, Some(&names), group)?;
+    let to_key = group_key(&name);
+    if let Some(taken) = directory
+        .summaries(Some(&names))
+        .into_iter()
+        .find(|summary| {
+            summary.named && summary.id != target.summary.id && group_key(&summary.name) == to_key
+        })
+    {
+        return Err(GroupError::NameTaken(taken.name));
+    }
+    if !target.summary.legacy {
+        let name = registry.set_name(&target.summary.id, &name)?;
+        return Ok(GroupOutcome {
+            id: Some(target.summary.id),
+            name: Some(name),
+            updated: 0,
+            writes: stores.iter().map(|_| GroupWrite::default()).collect(),
+        });
+    }
+    // A legacy group becomes a registry group: reuse an unlisted entry with the new
+    // name's key, else create one, then move the members onto its id.
+    let (id, _, _) = registry.find_or_create(&name)?;
+    let name = registry.set_name(&id, &name)?;
+    let (updated, writes) = rewrite_everywhere(
+        stores,
+        directory,
+        &target.key,
+        Some(&id),
+        &format!("Rename ticket group to {name}"),
+    )?;
+    Ok(GroupOutcome {
+        id: Some(id),
+        name: Some(name),
+        updated,
+        writes,
     })
 }
 
-/// Clear a group from every member within one store.
-pub fn ungroup(store: &FsStore, name: &str, now: Timestamp) -> Result<GroupWrite, GroupError> {
-    let directory = GroupDirectory::scan(store)?;
-    let key = known_group_key(&directory, name)?;
-    Ok(set_group_of_members(store, &directory, &key, None, now)?)
+/// Clear the group `group` (an id or a name) from every member. The registry entry is
+/// kept, so the name returns if the id is used again.
+pub fn ungroup(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+    group: &str,
+) -> Result<GroupOutcome, GroupError> {
+    let names = registry_names(registry)?;
+    let target = find_group(directory, names.as_ref(), group)?;
+    let (updated, writes) =
+        rewrite_everywhere(stores, directory, &target.key, None, "Ungroup tickets")?;
+    Ok(GroupOutcome {
+        id: None,
+        name: None,
+        updated,
+        writes,
+    })
+}
+
+/// Move every member of `from` into `into` (each an id or a name), as after two clones
+/// created the same name. Neither registry entry is deleted.
+///
+/// # Errors
+/// [`GroupError::InvalidMerge`] when both name one group or `into` is a legacy name
+/// (migrate first); the lookup errors of [`find_group`].
+pub fn merge_groups(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+    from: &str,
+    into: &str,
+) -> Result<GroupOutcome, GroupError> {
+    let names = registry_names(registry)?;
+    let from = find_group(directory, names.as_ref(), from)?;
+    let into = find_group(directory, names.as_ref(), into)?;
+    if from.key == into.key {
+        return Err(GroupError::InvalidMerge(
+            "a group cannot be merged into itself",
+        ));
+    }
+    if into.summary.legacy {
+        return Err(GroupError::InvalidMerge(
+            "migrate legacy group names before merging into one",
+        ));
+    }
+    let (updated, writes) = rewrite_everywhere(
+        stores,
+        directory,
+        &from.key,
+        Some(&into.summary.id),
+        &format!("Merge ticket group into {}", into.summary.name),
+    )?;
+    Ok(GroupOutcome {
+        id: Some(into.summary.id),
+        name: Some(into.summary.name),
+        updated,
+        writes,
+    })
+}
+
+/// The outcome of the group migration.
+#[derive(Debug, Clone, Default)]
+pub struct GroupMigration {
+    /// Registry entries created for legacy names.
+    pub created: usize,
+    /// Legacy names that reused an existing registry entry with the same key.
+    pub reused: usize,
+    /// Tickets rewritten, including tickets in Trash.
+    pub updated: usize,
+    /// One write per store, in the order the stores were given.
+    pub writes: Vec<GroupWrite>,
+}
+
+/// The explicit, idempotent migration from legacy name values to registry ids
+/// (HS2-9KZSD4, docs/19 §19.1). Each distinct legacy name key gets one registry entry
+/// (an existing entry with that key is reused, the lowest id when several exist; a new
+/// entry takes the earliest-created member's spelling), and every ticket naming it,
+/// including tickets in Trash, is rewritten to the id in one write and one commit per
+/// store. Running it again finds no legacy value and changes nothing.
+pub fn migrate_groups(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: &GroupRegistry,
+) -> Result<GroupMigration, GroupError> {
+    // The directory is sorted by ticket id, and ticket ids are time-ordered, so the first
+    // spelling seen for a key is the earliest-created member's.
+    let mut spellings = BTreeMap::<String, String>::new();
+    let mut candidates = Vec::new();
+    for member in directory.members() {
+        if let GroupValue::Legacy(name) = GroupValue::of(&member.value) {
+            spellings
+                .entry(group_key(name))
+                .or_insert_with(|| name.to_string());
+            candidates.push(member.id);
+        }
+    }
+    let mut migration = GroupMigration::default();
+    if spellings.is_empty() {
+        migration.writes = stores.iter().map(|_| GroupWrite::default()).collect();
+        return Ok(migration);
+    }
+    let (assignments, created, reused) = registry.assign_ids(&spellings)?;
+    migration.created = created;
+    migration.reused = reused;
+    for store in stores {
+        let write = rewrite_members(
+            store,
+            &candidates,
+            |value| match GroupValue::of(value) {
+                GroupValue::Legacy(name) => assignments.get(&group_key(name)).cloned().map(Some),
+                GroupValue::Id(_) => None,
+            },
+            "Migrate ticket groups to registry ids",
+        )?;
+        migration.updated += write.tickets.len();
+        migration.writes.push(write);
+    }
+    Ok(migration)
 }
 
 #[cfg(test)]

@@ -522,28 +522,67 @@ export const parseTrashPurge: ResponseParser<{ purged: number; tickets: string[]
   return body as { purged: number; tickets: string[] };
 };
 
-/** `GET /checkouts/{id}/groups` (HS2-PDSHNN). */
-export const parseGroupList: ResponseParser<{ groups: Array<{ name: string; count: number }> }> = (value) => {
+/** One group a project's tickets store (HS2-9KZSD4): its stored value, display name, and flags. */
+export interface CheckoutGroupSummary {
+  /** The value member tickets store: a group id, or a legacy group's stored name. */
+  id: string;
+  /** The display name; an id without a registry entry reads `Group <id>`. */
+  name: string;
+  count: number;
+  /** The id has a registry entry here. */
+  named: boolean;
+  /** An unmigrated name value. */
+  legacy: boolean;
+  /** Another listed named group has the same name key. */
+  duplicate: boolean;
+}
+
+/**
+ * `GET /checkouts/{id}/groups` (HS2-PDSHNN, HS2-9KZSD4). A server before the group registry
+ * lists names only, so a missing id reads as that legacy name and missing flags default.
+ */
+export const parseGroupList: ResponseParser<{ registry: boolean; groups: CheckoutGroupSummary[] }> = (value) => {
   const body = record(value, 'group list');
-  if (
-    !Array.isArray(body.groups) ||
-    !body.groups.every(
-      (group: unknown) =>
-        typeof group === 'object' &&
-        group !== null &&
-        typeof (group as { name?: unknown }).name === 'string' &&
-        typeof (group as { count?: unknown }).count === 'number',
-    )
-  )
+  if (!Array.isArray(body.groups) || (body.registry !== undefined && typeof body.registry !== 'boolean'))
     invalid('group list');
-  return body as { groups: Array<{ name: string; count: number }> };
+  const groups = (body.groups as unknown[]).map((entry): CheckoutGroupSummary => {
+    const group = record(entry, 'group list');
+    if (typeof group.name !== 'string' || typeof group.count !== 'number') invalid('group list');
+    if (group.id !== undefined && typeof group.id !== 'string') invalid('group list');
+    for (const flag of ['named', 'legacy', 'duplicate'])
+      if (group[flag] !== undefined && typeof group[flag] !== 'boolean') invalid('group list');
+    const id = typeof group.id === 'string' ? group.id : undefined,
+      flag = (key: string) => (typeof group[key] === 'boolean' ? group[key] : undefined);
+    return {
+      id: id ?? group.name,
+      name: group.name,
+      count: group.count,
+      named: flag('named') ?? true,
+      legacy: flag('legacy') ?? id === undefined,
+      duplicate: flag('duplicate') ?? false,
+    };
+  });
+  return { registry: body.registry === true, groups };
 };
 
-/** `POST /checkouts/{id}/groups/rename` (HS2-8CDFKR). */
-export const parseGroupRename: ResponseParser<{ name: string; updated: number }> = (value) => {
+/** `POST /checkouts/{id}/groups` (HS2-9KZSD4): the registry entry a name resolves to. */
+export const parseGroupCreate: ResponseParser<{ id: string; name: string; created: boolean }> = (value) => {
+  const body = record(value, 'group create');
+  if (typeof body.id !== 'string' || typeof body.name !== 'string' || typeof body.created !== 'boolean')
+    invalid('group create');
+  return body as { id: string; name: string; created: boolean };
+};
+
+/** `POST /checkouts/{id}/groups/rename` and `/groups/merge` (HS2-8CDFKR, HS2-9KZSD4). */
+export const parseGroupRename: ResponseParser<{ id?: string; name: string; updated: number }> = (value) => {
   const body = record(value, 'group rename');
-  if (typeof body.name !== 'string' || typeof body.updated !== 'number') invalid('group rename');
-  return body as { name: string; updated: number };
+  if (
+    typeof body.name !== 'string' ||
+    typeof body.updated !== 'number' ||
+    (body.id !== undefined && typeof body.id !== 'string')
+  )
+    invalid('group rename');
+  return body as { id?: string; name: string; updated: number };
 };
 
 /** `POST /checkouts/{id}/groups/ungroup` (HS2-8CDFKR). */

@@ -34,7 +34,7 @@ import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
 import { ticketGroupDropTarget } from '../ticket-group-state';
-import { ticketGroupKey, ticketGroupName } from '../ticket-groups';
+import { ticketGroupKey, ticketGroupValue } from '../ticket-groups';
 import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
 import { data } from './dom';
 import { type AttachmentMenu, type Project } from './types';
@@ -485,7 +485,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(
     delegate(document.body, 'dragover', TICKET_GROUP_TARGETS.ungroupDropZone.selector, (event) => {
       const drag = groupableDrag();
-      if (!drag || groupDropElement(event) || !draggedRows(drag.slugs).some(ticketGroupName)) return;
+      if (!drag || groupDropElement(event) || !draggedRows(drag.slugs).some(ticketGroupValue)) return;
       event.preventDefault();
       if ((event as DragEvent).dataTransfer) (event as DragEvent).dataTransfer!.dropEffect = 'move';
     }),
@@ -495,7 +495,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       const drag = groupableDrag();
       if (!drag || groupDropElement(event)) return;
       const grouped = draggedRows(drag.slugs)
-        .filter(ticketGroupName)
+        .filter(ticketGroupValue)
         .map((ticket) => ticket.slug);
       if (!grouped.length) return;
       event.preventDefault();
@@ -522,7 +522,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       const leaving =
         target.matches('[data-component="ticket-board-column"]') && groupableDrag()
           ? draggedRows(drag.slugs)
-              .filter((ticket) => ticket.status === data(target).ticketDropStatus && ticketGroupName(ticket))
+              .filter((ticket) => ticket.status === data(target).ticketDropStatus && ticketGroupValue(ticket))
               .map((ticket) => ticket.slug)
           : [];
       if (leaving.length) void ticketGroups.setGroup(leaving, null);

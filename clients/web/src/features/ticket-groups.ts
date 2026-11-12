@@ -2,22 +2,26 @@ import type { Signal } from 'kerfjs';
 
 import type { Api, Capabilities, TicketRow as WireTicketRow } from '../api';
 import type { Project } from '../interactions/types';
+import type { CheckoutGroupSummary } from '../server-response-parsers';
 import { type BulkTicketAction, ticketGroupDisabledReason } from '../ticket-bulk-operations';
 import {
   collapsedTicketGroupKeys,
-  reportedTicketGroups,
+  projectTicketGroups,
   ticketGroupCollapsed,
   ticketGroupDialog,
   ticketGroupDropTarget,
   toggleTicketGroupCollapsed,
 } from '../ticket-group-state';
 import {
-  existingTicketGroup,
+  isTicketGroupId,
   normalizeTicketGroupName,
+  ticketGroupDisplayName,
   ticketGroupKey,
-  ticketGroupName,
+  ticketGroupNameKey,
   ticketGroupNameProblem,
+  type TicketGroupOption,
   ticketGroupSummaries,
+  ticketGroupValue,
   withoutCollapsedGroupMembers,
 } from '../ticket-groups';
 
@@ -36,46 +40,117 @@ export interface TicketGroupsControllerDependencies {
 
 export type TicketGroupsController = ReturnType<typeof createTicketGroupsController>;
 
+/** A known group: the server's summary, or a loaded ticket's group the server has not listed yet. */
+type KnownTicketGroup = TicketGroupOption & Partial<Pick<CheckoutGroupSummary, 'legacy' | 'named'>>;
+
+const byName = (left: TicketGroupOption, right: TicketGroupOption) =>
+  left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }) || left.id.localeCompare(right.id);
+const failureMessage = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
+
 /**
  * Ticket group behavior shared by the menu, the dialog, the group header, and drag and drop
  * (HS2-TX17CM, HS2-PRXD39, HS2-8CDFKR). Membership changes are ordinary bulk ticket updates, so
- * they are optimistic, roll back on failure, and can be undone. Renaming or ungrouping a whole
- * group goes through the server, which also reaches members this view has not loaded.
+ * they are optimistic, roll back on failure, and can be undone. Renaming, ungrouping, or merging
+ * a whole group goes through the server, which also reaches members this view has not loaded.
+ * Groups are identified by their stored value; display names come from the project's group
+ * registry summaries (HS2-9KZSD4).
  */
 export function createTicketGroupsController(dependencies: TicketGroupsControllerDependencies) {
   const { project, api, tickets, selectedView, capabilitiesFor, executeBulkTicketAction, refreshProject, showToast } =
     dependencies;
   let session = 0;
+  /** The project whose summaries were last requested, and the missing ids last asked about. */
+  let syncedProject: string | undefined, syncedMissing: string | undefined;
   /** The open dialog's session, read fresh after an await. */
   const openSession = () => ticketGroupDialog.value?.session;
   const view = () => selectedView.value,
     rowsFor = (slugs: readonly string[]) => tickets.value.filter((ticket) => slugs.includes(ticket.slug)),
     membersOf = (group: string) =>
-      tickets.value.filter((ticket) => ticketGroupKey(ticketGroupName(ticket) ?? '') === ticketGroupKey(group));
+      tickets.value.filter((ticket) => {
+        const value = ticketGroupValue(ticket);
+        return value !== undefined && ticketGroupKey(value) === ticketGroupKey(group);
+      }),
+    summaries = (): readonly CheckoutGroupSummary[] => {
+      const current = project();
+      return (current && projectTicketGroups.value[current.id]) ?? [];
+    };
 
-  /** Every known group name: the loaded tickets' groups plus those the server last reported. */
+  /** Every known group: the server's summaries plus loaded tickets' groups it has not listed. */
+  function groups(): KnownTicketGroup[] {
+    const listed = summaries(),
+      known: KnownTicketGroup[] = listed.map(({ id, name, duplicate, legacy, named }) => ({
+        id,
+        name,
+        duplicate,
+        legacy,
+        named,
+      })),
+      keys = new Set(known.map((group) => ticketGroupKey(group.id)));
+    for (const loaded of ticketGroupSummaries(tickets.value, listed))
+      if (!keys.has(ticketGroupKey(loaded.id))) {
+        keys.add(ticketGroupKey(loaded.id));
+        known.push({ id: loaded.id, name: loaded.name, legacy: !isTicketGroupId(loaded.id) });
+      }
+    return known.sort(byName);
+  }
+  /** Every known group's display name, for duplicate checks and search completion. */
   function groupNames(): string[] {
-    const current = project(),
-      names = ticketGroupSummaries(tickets.value).map((group) => group.name);
-    for (const name of (current && reportedTicketGroups.value[current.id]) ?? [])
-      if (!existingTicketGroup(name, names)) names.push(name);
-    return names.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    return groups().map((group) => group.name);
+  }
+  const groupFor = (value: string) => groups().find((group) => ticketGroupKey(group.id) === ticketGroupKey(value));
+  /** The display name of a stored group value. */
+  const displayName = (value: string) => ticketGroupDisplayName(value, summaries());
+
+  /** Display names the dialog's typed name must not repeat; a renamed group's own name is allowed. */
+  function dialogNames(renamed?: string): string[] {
+    return groups()
+      .filter((group) => renamed === undefined || ticketGroupKey(group.id) !== ticketGroupKey(renamed))
+      .map((group) => group.name);
+  }
+  /** Remember one project's summaries and refresh an open dialog's duplicate list. */
+  function storeSummaries(projectId: string, list: readonly CheckoutGroupSummary[]): void {
+    projectTicketGroups.value = { ...projectTicketGroups.value, [projectId]: list };
+    const dialog = ticketGroupDialog.value;
+    if (dialog?.projectId === projectId) ticketGroupDialog.value = { ...dialog, groups: dialogNames(dialog.group) };
   }
   /** Ask the server for the project's groups; an older server or a failed read keeps the last list. */
-  function refreshGroupNames(): void {
+  function refreshGroups(): Promise<void> {
     const current = project();
-    if (!current) return;
-    void api()
+    if (!current) return Promise.resolve();
+    syncedProject = current.id;
+    return api()
       .checkoutGroups(current.id)
       .then((result) => {
-        reportedTicketGroups.value = {
-          ...reportedTicketGroups.value,
-          [current.id]: result.groups.map((group) => group.name),
-        };
-        const dialog = ticketGroupDialog.value;
-        if (dialog?.projectId === current.id) ticketGroupDialog.value = { ...dialog, groups: groupNames() };
+        storeSummaries(current.id, result.groups);
       })
       .catch(() => undefined);
+  }
+  /**
+   * Load the summaries when the project changes, and again when loaded tickets store ids the last
+   * summaries do not name, at most once per distinct set of missing ids (HS2-9KZSD4). It runs
+   * when tickets change, never on a timer.
+   */
+  function syncGroups(): void {
+    const current = project();
+    if (!current) return;
+    if (syncedProject !== current.id) {
+      syncedMissing = undefined;
+      void refreshGroups();
+      return;
+    }
+    const listed = new Set(summaries().map((group) => ticketGroupKey(group.id))),
+      missing = [
+        ...new Set(
+          tickets.value
+            .map(ticketGroupValue)
+            .filter((value): value is string => value !== undefined && isTicketGroupId(value) && !listed.has(value)),
+        ),
+      ]
+        .sort()
+        .join(' ');
+    if (!missing || missing === syncedMissing) return;
+    syncedMissing = missing;
+    void refreshGroups();
   }
   const isCollapsed = (group: string) => {
     const current = project();
@@ -86,7 +161,13 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     const current = project(),
       drop = ticketGroupDropTarget.value;
     return {
-      collapsedGroups: current ? collapsedTicketGroupKeys(current.id, view(), groupNames()) : [],
+      collapsedGroups: current
+        ? collapsedTicketGroupKeys(
+            current.id,
+            view(),
+            groups().map((group) => group.id),
+          )
+        : [],
       dropGroup: drop?.scope === scope ? drop.key : undefined,
     };
   }
@@ -98,15 +179,24 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
   const navigable = (rows: readonly WireTicketRow[]) => withoutCollapsedGroupMembers(rows, isCollapsed);
   const disabledReason = (slugs: readonly string[]) => ticketGroupDisabledReason(rowsFor(slugs), capabilitiesFor);
 
+  /**
+   * The value to store for a chosen group: a known group's stored value, the one group a typed
+   * display name names, or the typed name itself, which the server resolves through the registry.
+   */
+  function storedValue(group: string): string {
+    const known = groupFor(group);
+    if (known) return known.id;
+    const key = ticketGroupNameKey(group),
+      named = groups().filter((option) => ticketGroupNameKey(option.name) === key);
+    return named.length === 1 ? named[0].id : normalizeTicketGroupName(group);
+  }
   function setGroup(slugs: string[], group: string | null, status?: string): Promise<boolean> {
     const reason = disabledReason(slugs);
     if (reason) {
       showToast(reason);
       return Promise.resolve(false);
     }
-    // Reuse an existing group's spelling so the optimistic rows join it at once.
-    const name = group === null ? null : (existingTicketGroup(group, groupNames()) ?? normalizeTicketGroupName(group));
-    return executeBulkTicketAction({ kind: 'group', group: name, status }, slugs);
+    return executeBulkTicketAction({ kind: 'group', group: group === null ? null : storedValue(group), status }, slugs);
   }
   function focusNameField(): void {
     queueMicrotask(() => {
@@ -121,12 +211,12 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     ticketGroupDialog.value = {
       mode: 'new',
       name: '',
-      groups: groupNames(),
+      groups: dialogNames(),
       session: ++session,
       projectId: current.id,
       slugs: [...slugs],
     };
-    refreshGroupNames();
+    void refreshGroups();
     focusNameField();
   }
   function openRenameGroup(group: string): void {
@@ -134,14 +224,14 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     if (!current || ticketGroupDisabledReason(membersOf(group), capabilitiesFor)) return;
     ticketGroupDialog.value = {
       mode: 'rename',
-      name: group,
+      name: displayName(group),
       group,
-      groups: groupNames(),
+      groups: dialogNames(group),
       session: ++session,
       projectId: current.id,
       slugs: [],
     };
-    refreshGroupNames();
+    void refreshGroups();
     focusNameField();
   }
   function editDialogName(name: string): void {
@@ -151,44 +241,75 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
   function closeDialog(): void {
     if (!ticketGroupDialog.value?.busy) ticketGroupDialog.value = undefined;
   }
-  async function submitDialog(typed: string): Promise<void> {
-    const dialog = ticketGroupDialog.value,
-      current = project();
-    if (!dialog || dialog.busy || current?.id !== dialog.projectId) return;
-    const name = normalizeTicketGroupName(typed);
-    if (ticketGroupNameProblem(name, dialog.groups, dialog.mode === 'rename' ? dialog.group : undefined)) {
-      ticketGroupDialog.value = { ...dialog, name: typed };
+  /** Name a new group in the registry, then move the dialog's tickets into it (HS2-9KZSD4). */
+  async function createGroup(
+    dialog: NonNullable<typeof ticketGroupDialog.value>,
+    name: string,
+    typed: string,
+  ): Promise<void> {
+    ticketGroupDialog.value = { ...dialog, name: typed, busy: true, error: undefined };
+    let created: { id: string; name: string };
+    try {
+      created = await api().createCheckoutGroup(dialog.projectId, name);
+    } catch (reason) {
+      if (openSession() === dialog.session)
+        ticketGroupDialog.value = { ...dialog, name: typed, busy: false, error: failureMessage(reason) };
       return;
     }
-    if (dialog.mode === 'new') {
-      ticketGroupDialog.value = undefined;
-      await setGroup(dialog.slugs, name);
-      return;
-    }
-    if (name === dialog.group) {
+    if (openSession() === dialog.session) ticketGroupDialog.value = undefined;
+    // List the new group at once so its members show its name before the next summaries arrive.
+    const listed = projectTicketGroups.value[dialog.projectId] ?? [];
+    if (!listed.some((group) => group.id === created.id))
+      storeSummaries(dialog.projectId, [
+        ...listed,
+        { id: created.id, name: created.name, count: 0, named: true, legacy: false, duplicate: false },
+      ]);
+    await setGroup(dialog.slugs, created.id);
+    await refreshGroups();
+  }
+  async function renameGroup(
+    dialog: NonNullable<typeof ticketGroupDialog.value>,
+    current: Project,
+    name: string,
+    typed: string,
+  ): Promise<void> {
+    const group = dialog.group!;
+    if (groupFor(group)?.named !== false && name === displayName(group)) {
       ticketGroupDialog.value = undefined;
       return;
     }
     ticketGroupDialog.value = { ...dialog, name: typed, busy: true, error: undefined };
     try {
-      await api().renameCheckoutGroup(current.id, dialog.group!, name);
+      const result = await api().renameCheckoutGroup(current.id, group, name);
       if (openSession() === dialog.session) ticketGroupDialog.value = undefined;
-      // Keep the group's collapse choice under its new name.
-      if (ticketGroupCollapsed(current.id, view(), dialog.group!) && !ticketGroupCollapsed(current.id, view(), name)) {
-        toggleTicketGroupCollapsed(current.id, view(), dialog.group!);
-        toggleTicketGroupCollapsed(current.id, view(), name);
+      // A legacy group's members move to a new id; keep its collapse choice under that id.
+      const renamedTo = result.id ?? group;
+      if (
+        ticketGroupKey(renamedTo) !== ticketGroupKey(group) &&
+        ticketGroupCollapsed(current.id, view(), group) &&
+        !ticketGroupCollapsed(current.id, view(), renamedTo)
+      ) {
+        toggleTicketGroupCollapsed(current.id, view(), group);
+        toggleTicketGroupCollapsed(current.id, view(), renamedTo);
       }
-      await refreshProject({ showLoading: false });
-      refreshGroupNames();
+      if (result.updated > 0 || !isTicketGroupId(group)) await refreshProject({ showLoading: false });
+      await refreshGroups();
     } catch (reason) {
       if (openSession() === dialog.session)
-        ticketGroupDialog.value = {
-          ...dialog,
-          name: typed,
-          busy: false,
-          error: reason instanceof Error ? reason.message : String(reason),
-        };
+        ticketGroupDialog.value = { ...dialog, name: typed, busy: false, error: failureMessage(reason) };
     }
+  }
+  async function submitDialog(typed: string): Promise<void> {
+    const dialog = ticketGroupDialog.value,
+      current = project();
+    if (!dialog || dialog.busy || current?.id !== dialog.projectId) return;
+    const name = normalizeTicketGroupName(typed);
+    if (ticketGroupNameProblem(name, dialog.groups)) {
+      ticketGroupDialog.value = { ...dialog, name: typed };
+      return;
+    }
+    if (dialog.mode === 'new') await createGroup(dialog, name, typed);
+    else await renameGroup(dialog, current, name, typed);
   }
   async function ungroup(group: string): Promise<void> {
     const current = project();
@@ -198,18 +319,63 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
       showToast(reason);
       return;
     }
+    const name = displayName(group);
     try {
       const result = await api().ungroupCheckoutGroup(current.id, group);
       await refreshProject({ showLoading: false });
-      refreshGroupNames();
-      showToast(`Ungrouped ${result.updated} ticket${result.updated === 1 ? '' : 's'} from “${group}”.`);
+      await refreshGroups();
+      showToast(`Ungrouped ${result.updated} ticket${result.updated === 1 ? '' : 's'} from “${name}”.`);
     } catch (failure) {
-      showToast(`Ungroup failed: ${failure instanceof Error ? failure.message : String(failure)}`);
+      showToast(`Ungroup failed: ${failureMessage(failure)}`);
     }
   }
+  /** The other listed groups whose display name has this flagged duplicate's name key (HS2-9KZSD4). */
+  function duplicatesOf(group: string): KnownTicketGroup[] {
+    const own = groupFor(group);
+    if (!own?.duplicate) return [];
+    const key = ticketGroupNameKey(own.name);
+    return groups().filter(
+      (other) =>
+        ticketGroupKey(other.id) !== ticketGroupKey(group) &&
+        other.legacy !== true &&
+        ticketGroupNameKey(other.name) === key,
+    );
+  }
+  /** Whether the group header menu offers Merge Duplicate Groups for this group. */
+  const hasDuplicates = (group: string) => duplicatesOf(group).length > 0;
+  /** Move every member of each same-named group into this one (HS2-9KZSD4). */
+  async function mergeDuplicates(group: string): Promise<void> {
+    const current = project(),
+      others = duplicatesOf(group);
+    if (!current || others.length === 0) return;
+    const reason = ticketGroupDisabledReason(
+      [group, ...others.map((other) => other.id)].flatMap((value) => membersOf(value)),
+      capabilitiesFor,
+    );
+    if (reason) {
+      showToast(reason);
+      return;
+    }
+    const name = displayName(group);
+    let merged = 0;
+    try {
+      for (const other of others) {
+        await api().mergeCheckoutGroups(current.id, other.id, group);
+        merged += 1;
+      }
+      showToast(`Merged ${merged} group${merged === 1 ? '' : 's'} into “${name}”.`);
+    } catch (failure) {
+      showToast(`Merge failed: ${failureMessage(failure)}`);
+    }
+    await refreshProject({ showLoading: false });
+    await refreshGroups();
+  }
   return {
+    groups,
     groupNames,
-    refreshGroupNames,
+    displayName,
+    refreshGroups,
+    syncGroups,
     collectionProps,
     toggleGroup,
     isCollapsed,
@@ -222,5 +388,7 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     closeDialog,
     submitDialog,
     ungroup,
+    hasDuplicates,
+    mergeDuplicates,
   };
 }

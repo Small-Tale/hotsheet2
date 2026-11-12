@@ -97,7 +97,7 @@ pub(crate) fn do_create(
     let group = if req.group_resolved {
         req.group
     } else {
-        groups::resolve_for_write(std::slice::from_ref(entry), req.group.map(Some), &[])?.flatten()
+        groups::resolve_for_write(req.group.map(Some))?.flatten()
     };
     let new = NewTicket {
         group,
@@ -220,7 +220,7 @@ pub(crate) fn do_update_with_ticket(
     let group = if req.group_resolved {
         req.group
     } else {
-        groups::resolve_for_write(std::slice::from_ref(entry), req.group, &[ticket.id])?
+        groups::resolve_for_write(req.group)?
     };
     let patch = TicketPatch {
         group,
@@ -664,21 +664,11 @@ pub(crate) async fn batch_update(
     Json(mut req): Json<BatchReq>,
 ) -> Result<Json<BatchResult>, ApiError> {
     let entry = state.default_entry();
-    // HS2-PDSHNN: choose the group spelling once for the whole selection, so tickets
-    // that are the group's only members can respell it together. An invalid name
-    // refuses the batch before any write.
+    // HS2-PDSHNN, HS2-9KZSD4: validate the group once for the whole selection. A store
+    // takes group ids only, so an invalid value or a name refuses the batch before any
+    // write.
     if matches!(req.update.group, Some(Some(_))) {
-        let patched: Vec<Ulid> = req
-            .ids
-            .iter()
-            .filter_map(|id| entry.resolve(id).ok().flatten())
-            .map(|ticket| ticket.id)
-            .collect();
-        req.update.group = groups::resolve_for_write(
-            std::slice::from_ref(&entry),
-            req.update.group.take(),
-            &patched,
-        )?;
+        req.update.group = groups::resolve_for_write(req.update.group.take())?;
         req.update.group_resolved = true;
     }
     let mut updated = Vec::new();

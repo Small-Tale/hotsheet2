@@ -772,8 +772,9 @@ pub struct Ticket {
     pub follow_ups: Vec<ProjectTicketRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
-    /// The one group this ticket belongs to (HS2-PDSHNN); absent means ungrouped. Holds
-    /// the normalized display name; compare through [`crate::group::group_key`].
+    /// The one group this ticket belongs to (HS2-PDSHNN); absent means ungrouped. Holds a
+    /// group id from the project's registry (HS2-9KZSD4); a value that is not id-shaped is
+    /// a legacy name awaiting migration. Compare through [`crate::group::group_value_key`].
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",

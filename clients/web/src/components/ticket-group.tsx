@@ -9,7 +9,9 @@ import { ticketGroupDomId, ticketGroupKey } from '../ticket-groups';
 import type { TicketRowPresentation } from './ticket-row';
 
 export interface TicketGroupProps {
-  /** The group's name, in the user's casing. */
+  /** The group's stored value: its id, or a legacy group's name (HS2-9KZSD4). */
+  group: string;
+  /** The group's display name. */
   name: string;
   /** How many of the group's tickets this container holds (one column's share on the board). */
   count: number;
@@ -28,6 +30,7 @@ export interface TicketGroupProps {
  * holding a disclosure header and the group's tickets. The same group renders once per column.
  */
 export function TicketGroup({
+  group,
   name,
   count,
   scope,
@@ -36,17 +39,17 @@ export function TicketGroup({
   dropTarget = false,
   children,
 }: TicketGroupProps) {
-  const key = ticketGroupKey(name),
-    region = ticketGroupDomId(scope, name);
+  const key = ticketGroupKey(group),
+    region = ticketGroupDomId(scope, group);
   return (
     <div
       class="ticket-group"
       data-key={`ticket-group:${scope}:${key}`}
       data-component="ticket-group"
       data-presentation={presentation}
-      data-ticket-group={name}
+      data-ticket-group={group}
       data-ticket-group-scope={scope}
-      data-ticket-drop-group={name}
+      data-ticket-drop-group={group}
       data-collapsed={String(collapsed)}
       data-drop-target={dropTarget ? 'true' : undefined}
       role="group"
@@ -64,7 +67,7 @@ export function TicketGroup({
             count={count}
             countLabel={`${count} ticket${count === 1 ? '' : 's'}`}
             controls={region}
-            triggerAttributes={{ 'data-ticket-group': name }}
+            triggerAttributes={{ 'data-ticket-group': group }}
           />
           {!collapsed && (
             <div id={region} class="ticket-group__tickets">

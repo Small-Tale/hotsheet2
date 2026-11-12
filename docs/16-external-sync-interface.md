@@ -109,18 +109,25 @@ offline mutation, history, watch/webhooks, and provider-side idempotency. A
 conformance suite verifies both implemented behavior and honest rejection of absent
 capabilities.
 
-### Ticket groups (HS2-PDSHNN)
+### Ticket groups (HS2-PDSHNN, HS2-9KZSD4)
 
 `groups` (default `false` when a stored descriptor predates it) means tickets carry the
-optional `group` field and the connection lists, renames, and clears groups
-([02](02-ticket-storage.md) §2.7.1). The Markdown/Git provider reports `groups: true`.
+optional `group` id and the connection lists, ungroups, and merges groups
+([02](02-ticket-storage.md) §2.7.1). Group names live in the project's group registry,
+not in any provider, so one group can later span Markdown/Git tickets and external
+issues at once; a connection on its own accepts ids only. The Markdown/Git provider reports `groups: true`.
 GitHub, GitLab, and Jira report `groups: false` for now: a create or update that carries
 `group` (a name or an explicit clear) and the provider's group routes fail with
 `provider connection '<id>' does not support 'groups'` before any request reaches the
 tracker, their tickets read as ungrouped (`group: null`), and the `group` / `has_group`
 list filters are answered for them as for any ungrouped ticket. A queued write-behind
 edit cannot carry `group`. A cross-provider copy drops the group when the destination
-lacks the capability.
+lacks the capability, and carries only an id, never a legacy name.
+
+The maintainer decision on HS2-9KZSD4 settles the mapping direction below: an external
+ticket will reference a group by an `hs-group:<id>` label whose id is the project
+registry's, so a rename touches no tracker. That label mapping is HS2-PQ4A2C; until it
+ships, every external provider keeps `groups: false`.
 
 #### Native mapping investigation (HS2-TEN9X5)
 

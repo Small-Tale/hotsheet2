@@ -315,11 +315,11 @@ pub(crate) async fn create_checkout_ticket(
     // The checkout route owns the relation write; the provider adapter receives only
     // fields it can authoritatively create in the target provider.
     req.follow_up_to = None;
-    // HS2-PDSHNN: a project is one group namespace across its Git sources.
+    // HS2-PDSHNN, HS2-9KZSD4: a project is one group namespace across its Git sources,
+    // named by the checkout's registry; a name resolves to (or creates) its group id.
     if source.provider == "git" && req.group.is_some() {
         req.group =
-            groups::resolve_for_checkout(&state, &reference, req.group.take().map(Some), &[])?
-                .flatten();
+            groups::resolve_for_checkout(&state, &reference, req.group.take().map(Some))?.flatten();
         req.group_resolved = true;
     }
     let mut ticket = if source.provider == "git" {
@@ -840,14 +840,10 @@ pub(crate) async fn update_checkout_ticket(
     let notify = req.note.as_deref().is_some_and(|note| !note.is_empty())
         && req.note_id.is_none()
         && req.ai_feedback.is_none();
-    // HS2-PDSHNN: a project is one group namespace across its Git sources.
+    // HS2-PDSHNN, HS2-9KZSD4: a project is one group namespace across its Git sources,
+    // named by the checkout's registry; a name resolves to (or creates) its group id.
     if matches!(req.group, Some(Some(_))) && req.ai_feedback.is_none() {
-        let patched: Vec<Ulid> = entry
-            .resolve(&native_id)?
-            .map(|ticket| ticket.id)
-            .into_iter()
-            .collect();
-        req.group = groups::resolve_for_checkout(&state, &reference, req.group.take(), &patched)?;
+        req.group = groups::resolve_for_checkout(&state, &reference, req.group.take())?;
         req.group_resolved = true;
     }
     let (mut api, ticket) = do_update_with_ticket(&state, &entry, &native_id, req, true)?;
@@ -944,28 +940,25 @@ pub(crate) async fn batch_update_checkout_tickets(
         }
         resolved.push((entry, ticket.id.to_string(), item));
     }
-    // HS2-PDSHNN: one spelling per group for the whole selection, chosen against the
-    // project-wide namespace before the first write. An invalid name refuses the batch.
-    let mut regrouped = std::collections::BTreeMap::<String, Vec<Ulid>>::new();
-    for (_, native_id, item) in &resolved {
-        if let Some(Some(name)) = &item.update.group
-            && let Some(key) = hotsheet_model::group_key_of_input(name)
-            && let Ok(id) = Ulid::from_string(native_id)
-        {
-            regrouped.entry(key).or_default().push(id);
-        }
-    }
+    // HS2-PDSHNN, HS2-9KZSD4: resolve each requested group once through the project's
+    // registry before the first write, so every ticket of the selection gets one id. An
+    // invalid name refuses the batch.
+    let mut resolved_groups = std::collections::BTreeMap::<String, Option<Option<String>>>::new();
     for (_, _, item) in &mut resolved {
-        if let Some(Some(name)) = &item.update.group {
-            let patched = hotsheet_model::group_key_of_input(name)
-                .and_then(|key| regrouped.get(&key).cloned())
-                .unwrap_or_default();
-            item.update.group = groups::resolve_for_checkout(
-                &state,
-                &reference,
-                item.update.group.take(),
-                &patched,
-            )?;
+        if let Some(Some(input)) = &item.update.group {
+            let value = match resolved_groups.get(input) {
+                Some(value) => value.clone(),
+                None => {
+                    let value = groups::resolve_for_checkout(
+                        &state,
+                        &reference,
+                        Some(Some(input.clone())),
+                    )?;
+                    resolved_groups.insert(input.clone(), value.clone());
+                    value
+                }
+            };
+            item.update.group = value;
             item.update.group_resolved = true;
         }
     }

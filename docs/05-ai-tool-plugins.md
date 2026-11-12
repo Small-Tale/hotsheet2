@@ -2126,10 +2126,11 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > keeps the hook-only verdict (version skew). The client
 > re-reads terminals on `mcp_presence` events, never by polling.
 
-Ticket groups are part of the MCP and CLI surface below (HS2-PDSHNN, HS2-8CDFKR): `hotsheet_create`,
-`hotsheet_update`, and `hotsheet_batch` take `group` (a string, or `null` to clear on
-update), `hotsheet_query` takes `group` and `has_group`, and `hotsheet_groups` lists,
-renames, or dissolves groups; the CLI equivalents and the routes are in
+Ticket groups are part of the MCP and CLI surface below (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4):
+`hotsheet_create`, `hotsheet_update`, and `hotsheet_batch` take `group` (a group id, or with
+a checkout a name resolved through its group registry; `null` clears on update),
+`hotsheet_query` takes `group` and `has_group`, and `hotsheet_groups` lists, creates,
+renames, ungroups, merges, or migrates groups; the CLI equivalents and the routes are in
 [04](04-core-server-cli.md) §4.3.
 
 AI tools reach tickets two ways, both over the one core:

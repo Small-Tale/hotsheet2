@@ -21,8 +21,9 @@ pub mod timestamp;
 pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
 pub use format::{ParseError, parse_file, to_file_string};
 pub use group::{
-    GROUP_NAME_MAX_CHARS, GroupNameError, group_key, group_key_of_input, normalize_group_name,
-    normalize_group_name_lossy,
+    GROUP_ID_LEN, GROUP_NAME_MAX_CHARS, GroupNameError, GroupValue, group_filter_keys, group_key,
+    group_key_of_input, group_placeholder_name, group_value_key, is_group_id, new_group_id,
+    normalize_group_name, normalize_group_name_lossy,
 };
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{

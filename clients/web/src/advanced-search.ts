@@ -1,7 +1,8 @@
 import { isTicketActivelyWorkedOn } from './active-ticket-work';
 import type { TicketRow } from './api';
 import { type InlineSearchToken, SEARCH_LIFECYCLE_PATTERN, type SearchLifecycle, tokenFromRaw } from './inline-search';
-import { ticketGroupKey, ticketGroupName } from './ticket-groups';
+import { ticketGroupMatchesSearch } from './ticket-group-state';
+import { ticketGroupValue } from './ticket-groups';
 
 const normalized = (value: string) => value.trim().toLowerCase();
 type SearchExpression =
@@ -179,11 +180,11 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
   const group = value.match(/^group:("(?:\\.|[^"])*"|\S+)$/i);
   if (group) {
     const raw = group[1],
-      name = raw.startsWith('"') ? raw.slice(1, -1).replaceAll('\\"', '"') : raw,
-      current = ticketGroupName(ticket);
-    return current !== undefined && ticketGroupKey(current) === ticketGroupKey(name);
+      name = raw.startsWith('"') ? raw.slice(1, -1).replaceAll('\\"', '"') : raw;
+    // HS2-9KZSD4: a group term names the group's display name through the registry, or its id.
+    return ticketGroupMatchesSearch(ticketGroupValue(ticket), name);
   }
-  if (/^has:group$/i.test(value)) return ticketGroupName(ticket) !== undefined;
+  if (/^has:group$/i.test(value)) return ticketGroupValue(ticket) !== undefined;
   if (!/^is:./i.test(value)) return ticketContains(ticket, value);
   const state = lifecyclePattern.exec(value)?.[1].toLowerCase() as SearchLifecycle | undefined;
   return state ? lifecyclePredicates[state](ticket, now) : false;

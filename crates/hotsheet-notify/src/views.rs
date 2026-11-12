@@ -54,13 +54,27 @@ pub fn memberships(
             let matched = views
                 .iter()
                 .find(|v| v.id.eq_ignore_ascii_case(&wanted.view))
-                .is_some_and(|v| contains(checkout, &ViewQuery::parse(&v.query)));
+                .is_some_and(|v| contains(checkout, &view_query(checkout, &v.query)));
             if matched {
                 out.push((*wanted).clone());
             }
         }
     }
     out
+}
+
+/// A view query whose `group:` terms resolve through the checkout's group registry
+/// (HS2-9KZSD4). An unreadable registry leaves names unresolved rather than failing.
+fn view_query(checkout: &Checkout, query: &str) -> ViewQuery {
+    let parsed = ViewQuery::parse(query);
+    match hotsheet_ticketing::groups::GroupRegistry::for_checkout(std::path::Path::new(
+        &checkout.root,
+    ))
+    .names()
+    {
+        Ok(names) if !names.is_empty() => parsed.with_group_names(names),
+        _ => parsed,
+    }
 }
 
 #[cfg(test)]

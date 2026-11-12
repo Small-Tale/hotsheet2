@@ -12,6 +12,7 @@ export const TICKET_GROUP_ACTIONS = {
   cancelTicketGroupName: action('cancel-ticket-group-name'),
   renameTicketGroup: action('rename-ticket-group'),
   ungroupTicketGroup: action('ungroup-ticket-group'),
+  mergeTicketGroups: action('merge-ticket-groups'),
 } as const;
 
 /** Other delegated targets for ticket groups. */

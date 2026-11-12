@@ -860,12 +860,12 @@ pub fn keyset_page_from_native_pages(
 /// without the `groups` capability reports every ticket ungrouped, so every adapter can
 /// answer both filters through this one comparison instead of rejecting them.
 pub fn provider_group_matches(ticket: &ApiTicket, query: &TicketQuery) -> bool {
-    let key = ticket.group.as_deref().map(hotsheet_model::group_key);
-    query
-        .group
-        .as_deref()
-        .is_none_or(|name| key.is_some() && key == hotsheet_model::group_key_of_input(name))
-        && query.has_group.is_none_or(|want| key.is_some() == want)
+    let key = ticket.group.as_deref().map(hotsheet_model::group_value_key);
+    query.group.as_deref().is_none_or(|input| {
+        key.as_ref().is_some_and(|key| {
+            hotsheet_model::group_filter_keys(input).contains(key) || query.group_ids.contains(key)
+        })
+    }) && query.has_group.is_none_or(|want| key.is_some() == want)
 }
 
 /// Apply provider-neutral filters to one bounded native page. Adapters remain responsible
@@ -1138,14 +1138,15 @@ pub trait TicketProvider: Send + Sync {
             capability: "groups",
         })
     }
-    /// Move every member of the group with `from_key` to `to` (`None` ungroups) as one
-    /// mutation (HS2-8CDFKR). `directory` is the namespace the caller validated against.
+    /// Move every member of the group with value key `from_key` to `to` (`None`
+    /// ungroups) as one mutation (HS2-8CDFKR). `directory` is the namespace the caller
+    /// validated against.
     fn set_group_of_members(
         &self,
         _directory: &crate::groups::GroupDirectory,
         _from_key: &str,
         _to: Option<&str>,
-        _now: Timestamp,
+        _message: &str,
     ) -> Result<crate::groups::GroupWrite, ProviderError> {
         Err(ProviderError::Unsupported {
             connection_id: self.descriptor().connection_id,
@@ -1588,25 +1589,19 @@ impl GitProvider {
         })
     }
 
-    /// Validate a requested group and reuse the spelling other tickets of this store
-    /// already carry (HS2-PDSHNN). The store walk runs only when a name is being set.
+    /// Validate a requested group (HS2-PDSHNN). A connection has no project registry, so
+    /// it accepts a group id and refuses a name (HS2-9KZSD4); a checkout route resolves
+    /// names to ids before calling the provider.
     fn group_change(
         &self,
         change: Option<Option<String>>,
-        patched: &[Ulid],
     ) -> Result<Option<Option<String>>, ProviderError> {
         if change.is_none() {
             return Ok(None);
         }
         self.require_groups()?;
-        if !matches!(change, Some(Some(_))) {
-            return Ok(change);
-        }
-        let directory = crate::groups::GroupDirectory::scan(&self.store)?;
-        Ok(
-            crate::groups::resolve_group_change(&directory, change, patched)
-                .map_err(StoreError::from)?,
-        )
+        Ok(crate::groups::resolve_group_change(None, change)
+            .map_err(crate::groups::GroupError::into_store_error)?)
     }
 }
 
@@ -1649,7 +1644,7 @@ impl TicketProvider for GitProvider {
         directory: &crate::groups::GroupDirectory,
         from_key: &str,
         to: Option<&str>,
-        now: Timestamp,
+        message: &str,
     ) -> Result<crate::groups::GroupWrite, ProviderError> {
         self.require_groups()?;
         Ok(crate::groups::set_group_of_members(
@@ -1657,7 +1652,7 @@ impl TicketProvider for GitProvider {
             directory,
             from_key,
             to,
-            now,
+            message,
         )?)
     }
 
@@ -1757,7 +1752,7 @@ impl TicketProvider for GitProvider {
     ) -> Result<ApiTicket, ProviderError> {
         let prefix = self.store.metadata()?.ticket_prefix;
         let blocked_by = self.blockers(None, &draft.blocked_by)?;
-        let group = self.group_change(draft.group.map(Some), &[])?.flatten();
+        let group = self.group_change(draft.group.map(Some))?.flatten();
         let _transfer_guard = if draft.transfer.is_some() {
             Some(self.transfer_lock.lock_or_recover())
         } else {
@@ -1832,7 +1827,7 @@ impl TicketProvider for GitProvider {
             // A ticket cannot block itself, matching the server route.
             .map(|v| self.blockers(Some(&ticket.id), v))
             .transpose()?;
-        let group = self.group_change(patch.group, &[ticket.id])?;
+        let group = self.group_change(patch.group)?;
         let updated = ops::update(
             &self.store,
             &ticket.id,
@@ -2533,8 +2528,11 @@ pub fn copy_between(
         // A copy or move keeps the original creator, as pasted notes keep their authors.
         created_by: ticket.created_by,
         // HS2-PDSHNN: the group travels only to a destination that has groups; elsewhere
-        // it is dropped rather than failing the transfer.
-        group: ticket.group.filter(|_| capabilities.groups),
+        // it is dropped rather than failing the transfer. Only a group id travels: a
+        // destination connection has no registry to name a legacy value (HS2-9KZSD4).
+        group: ticket
+            .group
+            .filter(|value| capabilities.groups && hotsheet_model::is_group_id(value)),
     };
     let created = destination.create(
         MutationContext {
@@ -4019,22 +4017,33 @@ mod tests {
     }
 
     #[test]
-    fn hs2_pdshnn_git_provider_writes_groups_and_reuses_the_stored_spelling() {
+    fn hs2_9kzsd4_git_provider_writes_group_ids_and_refuses_names() {
         let (_dir, provider) = git_provider();
         assert!(provider.descriptor().capabilities.groups);
         let first = provider
             .create(
                 ctx(Ulid::new(), "2026-11-01T00:00:00Z"),
                 ProviderDraft {
-                    group: Some("  Board   Drag ".into()),
+                    group: Some(" 7K3M9P2QXA ".into()),
                     ..draft("first", vec![])
                 },
             )
             .unwrap();
-        assert_eq!(first.group.as_deref(), Some("Board Drag"));
+        assert_eq!(first.group.as_deref(), Some("7K3M9P2QXA"));
+        // A connection has no project registry, so a name is refused, not stored.
+        assert!(matches!(
+            provider.create(
+                ctx(Ulid::new(), "2026-11-01T00:00:01Z"),
+                ProviderDraft {
+                    group: Some("Board Drag".into()),
+                    ..draft("named", vec![])
+                },
+            ),
+            Err(ProviderError::Store(StoreError::GroupRegistryRequired(name))) if name == "Board Drag"
+        ));
         let second = provider
             .create(
-                ctx(Ulid::new(), "2026-11-01T00:00:01Z"),
+                ctx(Ulid::new(), "2026-11-01T00:00:02Z"),
                 draft("second", vec![]),
             )
             .unwrap();
@@ -4047,16 +4056,17 @@ mod tests {
             .update(
                 &second.id,
                 Timestamp::new("2026-11-01T00:01:00Z"),
-                patch(Some("BOARD drag")),
+                patch(Some("7K3M9P2QXA")),
             )
             .unwrap();
-        assert_eq!(joined.group.as_deref(), Some("Board Drag"));
+        assert_eq!(joined.group.as_deref(), Some("7K3M9P2QXA"));
+        let summaries = provider.group_directory().unwrap().summaries(None);
         assert_eq!(
-            provider.group_directory().unwrap().summaries(),
-            vec![crate::groups::GroupSummary {
-                name: "Board Drag".into(),
-                count: 2
-            }]
+            summaries
+                .iter()
+                .map(|g| (g.id.as_str(), g.name.as_str(), g.count, g.named))
+                .collect::<Vec<_>>(),
+            vec![("7K3M9P2QXA", "Group 7K3M9P2QXA", 2, false)]
         );
         assert!(matches!(
             provider.update(
@@ -4077,17 +4087,12 @@ mod tests {
 
         let directory = provider.group_directory().unwrap();
         let write = provider
-            .set_group_of_members(
-                &directory,
-                "board drag",
-                Some("Renamed"),
-                Timestamp::new("2026-11-01T00:04:00Z"),
-            )
+            .set_group_of_members(&directory, "7K3M9P2QXA", Some("0000000001"), "Merge")
             .unwrap();
         assert_eq!(write.updated, 1);
         assert_eq!(
             provider.get(&first.id).unwrap().group.as_deref(),
-            Some("Renamed")
+            Some("0000000001")
         );
     }
 
@@ -4144,7 +4149,7 @@ mod tests {
                     &crate::groups::GroupDirectory::default(),
                     "sprint",
                     None,
-                    Timestamp::new("2026-11-01T00:03:00Z"),
+                    "Ungroup tickets",
                 )
                 .map(drop),
         );
@@ -4187,7 +4192,7 @@ mod tests {
                 .create(
                     ctx(source_id, "2026-11-01T00:00:00Z"),
                     ProviderDraft {
-                        group: Some("Sprint".into()),
+                        group: Some("7K3M9P2QXA".into()),
                         ..draft("grouped", vec![])
                     },
                 )
@@ -4210,7 +4215,7 @@ mod tests {
             assert_eq!(copied.len(), 1);
             assert_eq!(
                 copied[0].group.as_deref(),
-                destination_has_groups.then_some("Sprint")
+                destination_has_groups.then_some("7K3M9P2QXA")
             );
         }
     }

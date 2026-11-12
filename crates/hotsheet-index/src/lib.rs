@@ -20,8 +20,9 @@ use sha2::{Digest, Sha256};
 /// a derived column such as `feedback_needed` also bumps it: rows keyed by an unchanged
 /// content hash are never re-derived, and an older process sharing the file would keep
 /// writing the old projection (21: explicit note kinds, HS2-4ZFB8K; 22: the ticket
-/// creator column, HS2-9FPHWY).
-const SCHEMA_VERSION: i64 = 23;
+/// creator column, HS2-9FPHWY; 23: group columns, HS2-PDSHNN; 24: `group_key` holds a group
+/// id or a legacy name key, HS2-9KZSD4).
+const SCHEMA_VERSION: i64 = 24;
 
 /// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
 const GIT_OWNER_META: &str = "git_owner";
@@ -537,7 +538,7 @@ impl Index {
                 t.started_phase.as_ref().map(enum_str),
                 hotsheet_ticketing::phase_timing::started_phase_since(t).map(|at| at.as_str().to_string()),
                 t.created_by.as_ref().and_then(|actor| serde_json::to_string(actor).ok()),
-                t.group, t.group.as_deref().map(hotsheet_model::group_key),
+                t.group, t.group.as_deref().map(hotsheet_model::group_value_key),
             ],
         )?;
 
@@ -970,7 +971,7 @@ impl Index {
             .filter_map(|(id, name, status)| {
                 Some(hotsheet_ticketing::groups::GroupMember {
                     id: Ulid::from_string(&id).ok()?,
-                    name,
+                    value: name,
                     live: status.as_deref() != Some("deleted"),
                 })
             })
@@ -1092,15 +1093,24 @@ impl Index {
                 format!("NOT {is_blocked}")
             });
         }
-        // Group filters (HS2-PDSHNN): `group_key` is the Unicode-lowercased name, computed
-        // in Rust because SQLite's lower() only folds ASCII.
-        if let Some(name) = &q.group {
-            match hotsheet_model::group_key_of_input(name) {
-                Some(key) => {
-                    wheres.push("t.group_key = ?".into());
+        // Group filters (HS2-PDSHNN, HS2-9KZSD4): `group_key` is the id, or a legacy
+        // name's Unicode-lowercased key, computed in Rust because SQLite's lower() only
+        // folds ASCII. A name matches legacy values plus the ids the caller resolved it to.
+        if let Some(input) = &q.group {
+            let mut keys = hotsheet_model::group_filter_keys(input);
+            keys.extend(q.group_ids.iter().cloned());
+            keys.sort();
+            keys.dedup();
+            if keys.is_empty() {
+                wheres.push("0".into());
+            } else {
+                wheres.push(format!(
+                    "t.group_key IN ({})",
+                    vec!["?"; keys.len()].join(",")
+                ));
+                for key in keys {
                     args.push(Box::new(key));
                 }
-                None => wheres.push("0".into()),
             }
         }
         if let Some(want) = q.has_group {

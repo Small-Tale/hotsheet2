@@ -13,9 +13,9 @@ export interface TicketGroupDialogState {
   mode: 'new' | 'rename';
   /** The typed name. */
   name: string;
-  /** Every existing group name in the project, for the duplicate check. */
+  /** The display names a new name must not repeat: every other group in the project. */
   groups: readonly string[];
-  /** The group being renamed. */
+  /** The stored value of the group being renamed (HS2-9KZSD4). */
   group?: string;
   /** Increments per open so the field never shows a previous session's text. */
   session: number;
@@ -28,7 +28,7 @@ export interface TicketGroupDialogState {
 export function TicketGroupDialog({ state }: { state?: TicketGroupDialogState }) {
   if (!state) return <></>;
   const renaming = state.mode === 'rename',
-    problem = ticketGroupNameProblem(state.name, state.groups, renaming ? state.group : undefined),
+    problem = ticketGroupNameProblem(state.name, state.groups),
     error = ticketGroupNameError(problem, state.name);
   return (
     <div data-key="ticket-group-dialog">

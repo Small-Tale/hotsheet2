@@ -14,7 +14,8 @@ import { restoreInlineSearchCaret } from '../inline-search-caret';
 import type { Project } from '../interactions/types';
 import { customViewSearch } from '../saved-views';
 import { createSearchProjection } from '../search-projection-coalescing';
-import { ticketGroupKey, ticketGroupName, ticketGroupSummaries } from '../ticket-groups';
+import { projectTicketGroups, ticketGroupMatchesSearch, ticketGroupSearchNames } from '../ticket-group-state';
+import { ticketGroupValue } from '../ticket-groups';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import {
   ALL_TICKETS_SCOPE,
@@ -214,10 +215,10 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     const group = [...effective.tokens].reverse().find((token) => token.kind === 'group')?.value,
       grouped = effective.tokens.some((token) => token.kind === 'has' && token.value === 'group');
     return matched.filter((ticket) => {
-      const name = ticketGroupName(ticket);
+      const name = ticketGroupValue(ticket);
       return (
         tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)) &&
-        (group === undefined || (name !== undefined && ticketGroupKey(name) === ticketGroupKey(group))) &&
+        (group === undefined || ticketGroupMatchesSearch(name, group)) &&
         (!grouped || name !== undefined)
       );
     });
@@ -488,13 +489,15 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     }
     return availableSearchTagsValue;
   }
-  /** Group names for `group:` completion, recomputed with the ticket collection (HS2-44W3TP). */
+  /** Group display names for `group:` completion, recomputed with the tickets and registry (HS2-44W3TP, HS2-9KZSD4). */
   let availableSearchGroupsSource: WireTicketRow[] | undefined,
+    availableSearchGroupsRegistry: unknown,
     availableSearchGroupsValue: string[] = [];
   function availableSearchGroups() {
-    if (availableSearchGroupsSource !== tickets.value) {
+    if (availableSearchGroupsSource !== tickets.value || availableSearchGroupsRegistry !== projectTicketGroups.value) {
       availableSearchGroupsSource = tickets.value;
-      availableSearchGroupsValue = ticketGroupSummaries(tickets.value).map((group) => group.name);
+      availableSearchGroupsRegistry = projectTicketGroups.value;
+      availableSearchGroupsValue = ticketGroupSearchNames(tickets.value);
     }
     return availableSearchGroupsValue;
   }

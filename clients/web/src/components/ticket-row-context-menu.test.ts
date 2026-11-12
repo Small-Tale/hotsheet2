@@ -243,7 +243,14 @@ describe('TicketRowContextMenu', () => {
         x: 0,
         y: 0,
         selectionCount: 2,
-        group: { names: ['Board drag & drop', 'Search syntax'], current: 'Search syntax', removable: true },
+        group: {
+          groups: [
+            { id: 'Board drag & drop', label: 'Board drag & drop' },
+            { id: '7K3M9P2QXA', label: 'Search syntax' },
+          ],
+          current: '7K3M9P2QXA',
+          removable: true,
+        },
       }),
     );
     expect(markup).toContain('data-context-submenu="group"');
@@ -251,7 +258,7 @@ describe('TicketRowContextMenu', () => {
     const newGroup = markup.indexOf('data-context-group-new="true"'),
       divider = markup.indexOf('role="separator"', newGroup),
       first = markup.indexOf('data-context-group="Board drag &amp; drop"'),
-      second = markup.indexOf('data-context-group="Search syntax"');
+      second = markup.indexOf('data-context-group="7K3M9P2QXA"');
     expect(newGroup).toBeGreaterThan(-1);
     expect(itemTag(markup, `data-context-group="${NEW_TICKET_GROUP_CHOICE}"`)).toContain(
       'data-context-group-new="true"',
@@ -259,7 +266,9 @@ describe('TicketRowContextMenu', () => {
     expect(divider).toBeGreaterThan(newGroup);
     expect(first).toBeGreaterThan(divider);
     expect(second).toBeGreaterThan(first);
-    expect(itemTag(markup, 'data-context-group="Search syntax"')).toContain('aria-checked="true"');
+    // HS2-9KZSD4: an item carries the group's id and shows its display name.
+    expect(itemTag(markup, 'data-context-group="7K3M9P2QXA"')).toContain('aria-checked="true"');
+    expect(markup).toContain('Search syntax');
     expect(itemTag(markup, 'data-context-group="Board drag &amp; drop"')).toContain('aria-checked="false"');
     // Add to Group sits in the same section as the other field submenus, before Change category.
     expect(markup.indexOf('Add to Group')).toBeLessThan(markup.indexOf('Change category'));
@@ -268,13 +277,17 @@ describe('TicketRowContextMenu', () => {
   });
 
   it('hides Remove from Group for ungrouped targets and disables grouping with a reason', () => {
-    const ungrouped = String(TicketRowContextMenu({ x: 0, y: 0, group: { names: [], removable: false } }));
+    const ungrouped = String(TicketRowContextMenu({ x: 0, y: 0, group: { groups: [], removable: false } }));
     expect(ungrouped).toContain('Add to Group');
     expect(ungrouped).not.toContain(REMOVE_FROM_GROUP_CONTEXT_ACTION.action);
     expect(ungrouped).toContain('data-context-group-new="true"');
     const reason = 'One or more selected ticket providers do not support groups.',
       unsupported = String(
-        TicketRowContextMenu({ x: 0, y: 0, group: { names: ['Board'], removable: true, disabledReason: reason } }),
+        TicketRowContextMenu({
+          x: 0,
+          y: 0,
+          group: { groups: [{ id: 'Board', label: 'Board' }], removable: true, disabledReason: reason },
+        }),
       );
     expect(disabledItem(unsupported, 'data-context-submenu="group"')).toBe(true);
     expect(itemTag(unsupported, 'data-context-submenu="group"')).toContain(`title="${reason}"`);

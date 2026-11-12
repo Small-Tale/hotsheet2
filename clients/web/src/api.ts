@@ -38,6 +38,7 @@ import {
   parseGitHubAuthStart,
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
+  parseGroupCreate,
   parseGroupList,
   parseGroupRename,
   parseGroupUngroup,
@@ -1599,7 +1600,7 @@ export function isActorAwareRequest(method: string, path: string): boolean {
       pathname.endsWith('/tickets') ||
       /\/tickets\/[^/]+\/close$/u.test(pathname) ||
       pathname.endsWith('/batch') ||
-      /\/groups\/(?:rename|ungroup)$/u.test(pathname)
+      /\/groups\/(?:rename|ungroup|merge)$/u.test(pathname)
     );
   return false;
 }
@@ -2206,20 +2207,34 @@ export class Api {
       method: 'POST',
       body: JSON.stringify({ updates: updates.map(({ id, patch }) => ({ id, ...prioritiesToWire(patch) })) }),
     });
-  /** Every group in the project with its member count (HS2-PDSHNN). */
+  /** Every group in the project with its display name and member count (HS2-PDSHNN, HS2-9KZSD4). */
+  // HS2-9KZSD4: a background read of registry names that follows project switches and ticket
+  // changes, so it never drives the server-busy indicator (HS2-AZZ9TF).
   checkoutGroups = (checkout: string) =>
-    this.parsed(parseGroupList, `/checkouts/${encodeURIComponent(checkout)}/groups`);
-  /** Rename a group on every member in one atomic write (HS2-8CDFKR). */
-  renameCheckoutGroup = (checkout: string, from: string, to: string) =>
-    this.parsed(parseGroupRename, `/checkouts/${encodeURIComponent(checkout)}/groups/rename`, {
-      method: 'POST',
-      body: JSON.stringify({ from, to }),
-    });
-  /** Clear a group from every member in one atomic write (HS2-8CDFKR). */
-  ungroupCheckoutGroup = (checkout: string, name: string) =>
-    this.parsed(parseGroupUngroup, `/checkouts/${encodeURIComponent(checkout)}/groups/ungroup`, {
+    this.parsed(parseGroupList, `/checkouts/${encodeURIComponent(checkout)}/groups`, {}, false);
+  /** The registry id for a group name, created when no group has that name yet (HS2-9KZSD4). */
+  createCheckoutGroup = (checkout: string, name: string) =>
+    this.parsed(parseGroupCreate, `/checkouts/${encodeURIComponent(checkout)}/groups`, {
       method: 'POST',
       body: JSON.stringify({ name }),
+    });
+  /** Rename a group by its stored value (HS2-8CDFKR, HS2-9KZSD4). */
+  renameCheckoutGroup = (checkout: string, group: string, to: string) =>
+    this.parsed(parseGroupRename, `/checkouts/${encodeURIComponent(checkout)}/groups/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ group, to }),
+    });
+  /** Clear a group from every member in one atomic write (HS2-8CDFKR). */
+  ungroupCheckoutGroup = (checkout: string, group: string) =>
+    this.parsed(parseGroupUngroup, `/checkouts/${encodeURIComponent(checkout)}/groups/ungroup`, {
+      method: 'POST',
+      body: JSON.stringify({ group }),
+    });
+  /** Move every member of `from` into `into`, as when merging duplicate groups (HS2-9KZSD4). */
+  mergeCheckoutGroups = (checkout: string, from: string, into: string) =>
+    this.parsed(parseGroupRename, `/checkouts/${encodeURIComponent(checkout)}/groups/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ from, into }),
     });
   deleteCheckoutNote = (checkout: string, id: string, noteId: string) =>
     this.parsed(

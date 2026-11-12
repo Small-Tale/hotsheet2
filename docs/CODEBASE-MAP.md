@@ -531,7 +531,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/github-account-endpoint.ts # Saved-account complete API endpoint validation/transport, separate from the display origin; explicit invalid/unknown metadata refusal (HS2-WV6QCR)
     src/new-ticket-source.ts # Project ticket sources from provider descriptors; the composer's writable-source choices and last-used/default target resolution (HS2-NZMJBJ)
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, group, and soft-delete patch planning; group menu model
-    src/ticket-groups.ts     #   Ticket group names, clustering, and list/column segments (HS2-3XNTSD); requirements in docs/35-ticket-groups.md
+    src/ticket-groups.ts     #   Ticket group ids and names, clustering, and list/column segments (HS2-3XNTSD, HS2-9KZSD4); requirements in docs/35-ticket-groups.md
     src/ticket-group-state.ts #  Device-local group state: persisted collapse preference, drag target, open name dialog, server-reported names
     src/features/ticket-groups.ts # Group controller shared by the menu, dialog, header, and drag and drop
     src/features/ticket-store-sync.ts # Per-project ticket-store sync health (HS2-ADHFKZ): one load per project on first show, reloads on `ticket_store_sync` events, stale-response and reset safe
@@ -1328,16 +1328,22 @@ HS2-CV5NMC: `hotsheet-model::Note::infer_kind` owns legacy note inference and
 atomic note-kind correction and its id/kind audit; provider `note_kind_edit` gates
 correction. External `note_trailer` carries append intent in native comments.
 
-Ticket groups (HS2-3XNTSD, [35-ticket-groups.md](35-ticket-groups.md)):
-`crates/hotsheet-model/src/group.rs` owns group-name normalization and the comparison
-key every reader and writer uses. `crates/hotsheet-ticketing/src/groups.rs` derives the
-group directory and implements canonical-spelling reuse, rename, and ungroup;
-`saved_views.rs` parses `group:` and `has:group`. The index (schema 23) stores
-`group_name` and `group_key` and filters on `group` and `has_group`.
+Ticket groups (HS2-3XNTSD, HS2-9KZSD4, [35-ticket-groups.md](35-ticket-groups.md)):
+`crates/hotsheet-model/src/group.rs` owns group ids (`is_group_id`, `new_group_id`), the
+legacy-name reader rule (`GroupValue`), name normalization, and the comparison keys every
+reader and writer uses. `crates/hotsheet-ticketing/src/groups.rs` derives the group
+directory and implements name resolution, list, create, rename, ungroup, merge, and the
+explicit migration; `groups/registry.rs` is the project group registry, one committed
+file per group under `<checkout>/.hotsheet2/groups/<id>.json`. `saved_views.rs` parses
+`group:` and `has:group`. The index (schema 24) stores `group_name` (the raw value) and
+`group_key` (the id or a legacy key) and filters on `group`, `group_ids`, and `has_group`.
 `crates/hotsheet-server/src/routes/groups.rs` serves `GET …/groups` and
-`POST …/groups/rename|ungroup` for the default store, `/stores/{id}`,
-`/providers/{id}`, and `/checkouts/{ref}` (the checkout routes share one namespace
-across a project's Git stores). `crates/hotsheet-cli/src/dispatch/groups.rs` provides
-`groups` and `group rename|ungroup`; the MCP tool is `hotsheet_groups`.
+`POST …/groups/rename|ungroup|merge` for the default store, `/stores/{id}`,
+`/providers/{id}`, and `/checkouts/{ref}`, plus the checkout-only `POST
+/checkouts/{ref}/groups` (create) and `/groups/migrate` (the checkout routes share one
+namespace across a project's Git stores and alone have a registry).
+`crates/hotsheet-cli/src/dispatch/groups.rs` provides `groups` and `group
+create|rename|ungroup|merge|migrate` and finds the registry from the working directory;
+the MCP tool is `hotsheet_groups`.
 `ProviderCapabilities.groups` is true for Markdown/Git only. The web client's real-app
 coverage is `clients/web/tests/ticket-groups.spec.ts`.

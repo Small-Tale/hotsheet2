@@ -3,14 +3,26 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   collapsedTicketGroupKeys,
   collapsedTicketGroups,
+  projectTicketGroupName,
+  projectTicketGroups,
   readCollapsedTicketGroups,
-  reportedTicketGroups,
   resetTicketGroupSurfaces,
   ticketGroupCollapsed,
   ticketGroupDialog,
   ticketGroupDropTarget,
+  ticketGroupMatchesSearch,
+  ticketGroupSearchNames,
   toggleTicketGroupCollapsed,
 } from './ticket-group-state';
+
+const summary = (id: string, name: string, flags: { legacy?: boolean; duplicate?: boolean } = {}) => ({
+  id,
+  name,
+  count: 1,
+  named: true,
+  legacy: flags.legacy ?? false,
+  duplicate: flags.duplicate ?? false,
+});
 
 function memoryStorage(initial?: string) {
   const values = new Map<string, string>(initial === undefined ? [] : [['hotsheet.ticket-groups.collapsed', initial]]);
@@ -74,14 +86,48 @@ describe('ticket group collapse preference (HS2-WZ3JGZ)', () => {
 
   it('clears transient surfaces without touching preferences or reported groups', () => {
     toggleTicketGroupCollapsed('p', 'all', 'Board', undefined);
-    reportedTicketGroups.value = { p: ['Board'] };
+    projectTicketGroups.value = { p: [summary('Board', 'Board', { legacy: true })] };
     ticketGroupDropTarget.value = { scope: 'list', key: 'board' };
     ticketGroupDialog.value = { mode: 'new', name: '', groups: [], session: 1, projectId: 'p', slugs: ['HS2-A'] };
     resetTicketGroupSurfaces();
     expect(ticketGroupDropTarget.value).toBeUndefined();
     expect(ticketGroupDialog.value).toBeUndefined();
     expect(ticketGroupCollapsed('p', 'all', 'Board')).toBe(true);
-    expect(reportedTicketGroups.value).toEqual({ p: ['Board'] });
-    reportedTicketGroups.value = {};
+    expect(projectTicketGroups.value).toEqual({ p: [summary('Board', 'Board', { legacy: true })] });
+    projectTicketGroups.value = {};
+  });
+});
+
+describe('ticket group registry names (HS2-9KZSD4)', () => {
+  const SPRINT = '7K3M9P2QXA',
+    OTHER = '8B4N0R3SYB';
+  beforeEach(() => {
+    projectTicketGroups.value = {
+      p: [summary(SPRINT, 'Sprint One'), summary('Board', 'Board', { legacy: true })],
+      q: [summary(OTHER, 'sprint one')],
+    };
+  });
+
+  it('names a project’s groups from its summaries, with fallbacks', () => {
+    expect(projectTicketGroupName('p', SPRINT)).toBe('Sprint One');
+    expect(projectTicketGroupName('p', OTHER)).toBe(`Group ${OTHER}`);
+    expect(projectTicketGroupName('p', 'board')).toBe('Board');
+    expect(projectTicketGroupName(undefined, SPRINT)).toBe(`Group ${SPRINT}`);
+  });
+
+  it('matches group: search terms by display name or by id', () => {
+    expect(ticketGroupMatchesSearch(SPRINT, 'sprint  ONE')).toBe(true);
+    expect(ticketGroupMatchesSearch(SPRINT, SPRINT)).toBe(true);
+    expect(ticketGroupMatchesSearch(SPRINT, 'Sprint')).toBe(false);
+    expect(ticketGroupMatchesSearch('Board', 'board')).toBe(true);
+    expect(ticketGroupMatchesSearch(undefined, 'Board')).toBe(false);
+    expect(ticketGroupMatchesSearch('9C5P1T4VZC', 'Group 9C5P1T4VZC')).toBe(true);
+  });
+
+  it('completes the distinct display names of loaded groups', () => {
+    expect(ticketGroupSearchNames([{ group: SPRINT }, { group: OTHER }, { group: 'Board' }, {}])).toEqual([
+      'Board',
+      'Sprint One',
+    ]);
   });
 });

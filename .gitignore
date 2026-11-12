@@ -3,9 +3,11 @@
 # applications can operate in one repository without overwriting each other.
 /.hotsheet/
 /.hs2-recovery/
-# HS2 project metadata is local except for the shared project settings file.
+# HS2 project metadata is local except for the shared project settings file and the
+# project group registry, one committed file per group (HS2-9KZSD4).
 /.hotsheet2/*
 !/.hotsheet2/settings.json
+!/.hotsheet2/groups/
 
 # --- Claude Code / AI-tool local + harness files ---
 /.claude/settings.local.json

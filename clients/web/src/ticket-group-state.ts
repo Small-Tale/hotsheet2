@@ -1,7 +1,14 @@
 import { signal } from 'kerfjs';
 
 import type { TicketGroupDialogState } from './components/ticket-group-dialog';
-import { ticketGroupCollapseKey, ticketGroupKey } from './ticket-groups';
+import type { CheckoutGroupSummary } from './server-response-parsers';
+import {
+  ticketGroupCollapseKey,
+  ticketGroupDisplayName,
+  ticketGroupKey,
+  ticketGroupNameKey,
+  ticketGroupSummaries,
+} from './ticket-groups';
 
 /**
  * Device-local ticket group UI state (HS2-3XNTSD): which groups are collapsed, the group a
@@ -57,12 +64,12 @@ export function toggleTicketGroupCollapsed(
   }
 }
 
-/** The group keys collapsed in one project view, for a collection's `collapsedGroups` prop. */
+/** The identity keys of the groups collapsed in one project view, for a collection's `collapsedGroups` prop. */
 export function collapsedTicketGroupKeys(projectId: string, view: string, groups: readonly string[]): string[] {
   return groups.filter((group) => ticketGroupCollapsed(projectId, view, group)).map(ticketGroupKey);
 }
 
-/** The group container a dragged ticket is over: its collection scope and group key (HS2-PRXD39). */
+/** The group container a dragged ticket is over: its collection scope and group identity key (HS2-PRXD39). */
 export interface TicketGroupDropTarget {
   scope: string;
   key: string;
@@ -77,10 +84,42 @@ export interface TicketGroupDialogSession extends TicketGroupDialogState {
 export const ticketGroupDialog = signal<TicketGroupDialogSession | undefined>(undefined);
 
 /**
- * Group names the server last reported per project (HS2-PDSHNN). Loaded tickets name most
- * groups, but a paginated view can leave a group's members unloaded.
+ * The group summaries the server last reported per project (HS2-PDSHNN, HS2-9KZSD4): each
+ * stored value's display name, member count, and flags. Loaded tickets store most groups, but a
+ * paginated view can leave a group's members unloaded, and only the registry knows an id's name.
  */
-export const reportedTicketGroups = signal<Readonly<Record<string, readonly string[]>>>({});
+export const projectTicketGroups = signal<Readonly<Partial<Record<string, readonly CheckoutGroupSummary[]>>>>({});
+
+/** The display name of a stored group value in one project, from its last reported summaries. */
+export function projectTicketGroupName(projectId: string | undefined, value: string): string {
+  return ticketGroupDisplayName(
+    value,
+    (projectId === undefined ? undefined : projectTicketGroups.value[projectId]) ?? [],
+  );
+}
+
+/** Every project's reported groups, for lookups that span projects; ids are unique across them. */
+function everyReportedTicketGroup(): CheckoutGroupSummary[] {
+  return Object.values(projectTicketGroups.value).flatMap((groups) => groups ?? []);
+}
+
+/**
+ * Whether a stored group value matches a `group:` search term (HS2-44W3TP, HS2-9KZSD4): the term
+ * names the group's id or legacy value, or its display name in any casing and spacing.
+ */
+export function ticketGroupMatchesSearch(value: string | undefined, term: string): boolean {
+  if (value === undefined) return false;
+  if (ticketGroupKey(value) === ticketGroupKey(term)) return true;
+  return ticketGroupNameKey(ticketGroupDisplayName(value, everyReportedTicketGroup())) === ticketGroupNameKey(term);
+}
+
+/** The distinct display names of the given tickets' groups, for `group:` completion. */
+export function ticketGroupSearchNames(tickets: readonly { group?: string | null }[]): string[] {
+  const names = new Map<string, string>();
+  for (const group of ticketGroupSummaries(tickets, everyReportedTicketGroup()))
+    if (!names.has(ticketGroupNameKey(group.name))) names.set(ticketGroupNameKey(group.name), group.name);
+  return [...names.values()];
+}
 
 /** Clear every transient group surface, as when the project or view changes. */
 export function resetTicketGroupSurfaces(): void {

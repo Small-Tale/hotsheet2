@@ -44,18 +44,24 @@ describe('TicketGroup demo (HS2-WZ3JGZ)', () => {
     ticketGroupSettings.dropTarget.value = true;
     ticketGroupSettings.menu.value = { x: 10, y: 20, group: 'Search syntax' };
     const markup = String(TicketGroupDemo());
-    expect(markup).toContain('data-ticket-group="Search syntax"');
+    // The group carries its fixture id and shows the typed display name (HS2-9KZSD4).
+    expect(markup).toContain('data-ticket-group="7K3M9P2QXA"');
+    expect(markup).toContain('>Search syntax<');
+    expect(markup).not.toContain('merge-ticket-groups');
+    ticketGroupSettings.duplicate.value = true;
+    expect(String(TicketGroupDemo())).toContain('data-action="merge-ticket-groups"');
     expect(markup).not.toContain('data-ticket-slug=');
     expect(markup.match(/data-drop-target="true"/g)).toHaveLength(2);
     expect(markup).toContain('data-ticket-group-menu="true"');
     // An emptied name falls back to the fixture name instead of an unnamed group.
     ticketGroupSettings.name.value = '   ';
-    expect(String(TicketGroupDemo())).toContain('data-ticket-group="Board drag &amp; drop"');
+    expect(String(TicketGroupDemo())).toContain('>Board drag &amp; drop<');
   });
 
   it('offers Reset, which restores every setting and live control', () => {
     expect(String(TicketGroupSettings())).toContain('data-action="reset-settings"');
     ticketGroupSettings.collapsed.value = true;
+    ticketGroupSettings.duplicate.value = true;
     ticketGroupSettings.menu.value = { x: 1, y: 1, group: 'x' };
     const { root, controls } = fakeRoot();
     resetTicketGroupDemo(root);
@@ -64,6 +70,8 @@ describe('TicketGroup demo (HS2-WZ3JGZ)', () => {
     expect(controls['group-name']).toMatchObject({ value: 'Board drag & drop' });
     expect(controls['group-collapsed']).toMatchObject({ checked: false });
     expect(controls['group-drop-target']).toMatchObject({ checked: false });
+    expect(controls['group-duplicate']).toMatchObject({ checked: false });
+    expect(ticketGroupSettings.duplicate.value).toBe(false);
   });
 });
 
@@ -82,7 +90,11 @@ describe('TicketGroupDialog demo (HS2-TX17CM, HS2-8CDFKR)', () => {
     ]);
     expect(ticketGroupDialogState('new', '', 1)).toMatchObject({ mode: 'new', name: '' });
     expect(ticketGroupDialogScenarioName('duplicate')).toBe('board drag & drop');
-    expect(ticketGroupDialogState('rename', 'x', 1)).toMatchObject({ mode: 'rename', group: 'Board drag & drop' });
+    expect(ticketGroupDialogState('rename', 'x', 1)).toMatchObject({
+      mode: 'rename',
+      group: '7K3M9P2QXA',
+      groups: ['Search syntax'],
+    });
     expect(ticketGroupDialogState('rename-busy', 'x', 1).busy).toBe(true);
     expect(ticketGroupDialogState('rename-error', 'x', 1).error).toContain('locked');
   });

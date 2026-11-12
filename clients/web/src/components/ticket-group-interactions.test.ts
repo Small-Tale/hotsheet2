@@ -28,6 +28,7 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
     openMenu: vi.fn(),
     rename: vi.fn(),
     ungroup: vi.fn(),
+    merge: vi.fn(),
     editName: vi.fn(),
     submitName: vi.fn(),
     dismissDialog: vi.fn(),
@@ -70,6 +71,13 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
     handler('click', '[data-action="ungroup-ticket-group"]')(fake(), item());
     expect(bindings.rename.mock.calls).toEqual([['Board']]);
     expect(bindings.ungroup.mock.calls).toEqual([['Search']]);
+  });
+
+  it('routes Merge Duplicate Groups with the group id (HS2-9KZSD4)', () => {
+    const item = (ticketGroup?: string) => ({ dataset: { ticketGroup } }) as unknown as Element;
+    handler('click', '[data-action="merge-ticket-groups"]')(fake(), item('7K3M9P2QXA'));
+    handler('click', '[data-action="merge-ticket-groups"]')(fake(), item());
+    expect(bindings.merge.mock.calls).toEqual([['7K3M9P2QXA']]);
   });
 
   it('reports typed names, submits the field’s live value, and dismisses', () => {

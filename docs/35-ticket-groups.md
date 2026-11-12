@@ -2,56 +2,93 @@
 
 Ticket groups let a person gather related tickets under one named, collapsible
 container in the list and column views. The requirement and the approved mocks are
-on `HS2-3XNTSD`. This document describes the shipped behavior; the field format is
+on `HS2-3XNTSD`; the project group registry is `HS2-9KZSD4`. This document describes the
+shipped behavior; the field format is
 in [17-ticket-file-format.md](17-ticket-file-format.md), storage and merge rules in
 [02-ticket-storage.md](02-ticket-storage.md), the index and search syntax in
 [03-indexing-and-query.md](03-indexing-and-query.md), and the HTTP, CLI, and MCP
 surfaces in [04-core-server-cli.md](04-core-server-cli.md).
 
-## 35.1 Model (HS2-PDSHNN)
+## 35.1 Model (HS2-PDSHNN, HS2-9KZSD4)
 
-- A ticket has an optional `group` name. Tickets are ungrouped by default, and a
-  ticket belongs to at most one group.
-- A group exists while at least one ticket that is not in Trash names it. There is
-  no group registry and no empty group: a group whose last ticket leaves it is gone.
-- Names are trimmed and inner whitespace runs collapse to one space. A name is at
-  most 120 characters on a single line.
-- Names are unique within a project. Two names that differ only by letter case or
-  whitespace are the same group, and setting a ticket to such a name stores the
-  existing group's spelling. A project that connects several Markdown/Git sources
-  shares one group namespace.
+- A ticket has an optional `group` **id**. Tickets are ungrouped by default, and a ticket
+  belongs to at most one group. An id is ten uppercase Crockford base32 characters, for
+  example `7K3M9P2QXA`.
+- **Group registry.** Names belong to the project. The code checkout keeps one committed
+  file per group, `.hotsheet2/groups/<id>.json` holding `{ "name": "…" }`, so two clones
+  that create groups merge without a conflict. One project can group tickets from all of
+  its sources at once: every Markdown/Git source of a checkout shares the registry, and
+  external sources join through HS2-PQ4A2C.
+- A group is listed while at least one ticket that is not in Trash names it. A registry
+  entry with no members is not a visible group, and neither entries nor ticket values are
+  ever deleted automatically.
+- Names are trimmed and inner whitespace runs collapse to one space. A name is at most
+  120 characters on a single line. Names are unique within a project without regard to
+  letter case or whitespace: setting a ticket's group by a name uses the existing group
+  with that name and creates one only when none exists, and a rename to another listed
+  group's name is refused.
+- **Unknown ids.** A ticket can name an id that this project's registry does not name,
+  for example a store shared with another project, or a registry not yet pulled. The group
+  is listed under the placeholder `Group <id>` (`named: false`) and is never dropped;
+  renaming it gives it a name in this project.
+- **Duplicates.** Two clones can each create a group with the same name, leaving two ids.
+  Both are listed and flagged `duplicate` until a merge moves one id's members onto the
+  other. A duplicated name is ambiguous: operations that name it need the id.
+- **Legacy names.** Before HS2-9KZSD4 the field held the display name. Such a value is
+  still read, listed under its own name (`legacy: true`), and matched by name. The
+  explicit migration rewrites it to a registry id (§35.2). Renaming a legacy group also
+  gives it an id.
+- **Stores without a project.** A store or connection addressed without its checkout
+  (the default-store and `/stores` routes, `hotsheet-cli -C <store>` from outside a linked
+  checkout) has no registry. It lists ids under placeholders, accepts ids only, and
+  refuses create, rename, and migrate with `group_registry_required`.
 - Ticketing stays provider-neutral. `ProviderCapabilities.groups` reports whether a
-  source stores groups. Markdown/Git does. GitHub, GitLab, and Jira report `false`
-  and reject a group write with an explicit unsupported error.
-  [16-external-sync-interface.md](16-external-sync-interface.md) records the native
-  mappings that were investigated and why none is enabled (HS2-TEN9X5).
-- Setting or clearing a group does not change a ticket's `updated_at`, like Up Next
-  and priority, so regrouping many tickets does not reorder a list sorted by
-  last update.
+  source stores groups. Markdown/Git does. GitHub, GitLab, and Jira report `false` and
+  reject a group write with an explicit unsupported error until their `hs-group:<id>`
+  label mapping ships (HS2-PQ4A2C).
+  [16-external-sync-interface.md](16-external-sync-interface.md) records the mappings that
+  were investigated (HS2-TEN9X5).
+- Setting or clearing a group does not change a ticket's `updated_at`, like Up Next and
+  priority, so regrouping many tickets does not reorder a list sorted by last update.
 
 ## 35.2 Headless use
 
 Every group operation the graphical client offers has a headless path that calls
-the same workflow.
+the same workflow. Inside a code checkout linked to the store the CLI resolves names
+through that checkout's registry; elsewhere it takes ids.
 
-| Operation                     | CLI                                                           | MCP                                                           |
-| ----------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
-| Set or clear a ticket's group | `hotsheet-cli edit <slug> --group <name>` / `--clear-group`   | `hotsheet_update` with `group` (a string, or `null` to clear) |
-| Create a ticket in a group    | `hotsheet-cli new --group <name>`                             | `hotsheet_create` with `group`                                |
-| List groups with counts       | `hotsheet-cli groups`                                         | `hotsheet_groups` with `action: "list"`                       |
-| Filter tickets by group       | `hotsheet-cli ls --group <name>`, `--has-group`, `--no-group` | `hotsheet_query` with `group` or `has_group`                  |
-| Rename a group                | `hotsheet-cli group rename <from> <to>`                       | `hotsheet_groups` with `action: "rename"`                     |
-| Ungroup every member          | `hotsheet-cli group ungroup <name>`                           | `hotsheet_groups` with `action: "ungroup"`                    |
+| Operation                     | CLI                                                                 | MCP                                                                |
+| ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Set or clear a ticket's group | `hotsheet-cli edit <slug> --group <id or name>` / `--clear-group`   | `hotsheet_update` with `group` (an id or name, or `null` to clear) |
+| Create a ticket in a group    | `hotsheet-cli new --group <id or name>`                             | `hotsheet_create` with `group`                                     |
+| List groups with counts       | `hotsheet-cli groups [--json]`                                      | `hotsheet_groups` with `action: "list"`                            |
+| Filter tickets by group       | `hotsheet-cli ls --group <id or name>`, `--has-group`, `--no-group` | `hotsheet_query` with `group` or `has_group`                       |
+| Create a group                | `hotsheet-cli group create <name>`                                  | `hotsheet_groups` with `action: "create"`                          |
+| Rename a group                | `hotsheet-cli group rename <id or name> <to>`                       | `hotsheet_groups` with `action: "rename"`                          |
+| Ungroup every member          | `hotsheet-cli group ungroup <id or name>`                           | `hotsheet_groups` with `action: "ungroup"`                         |
+| Merge two groups              | `hotsheet-cli group merge <from> <into>`                            | `hotsheet_groups` with `action: "merge"`                           |
+| Migrate legacy names to ids   | `hotsheet-cli group migrate`                                        | `hotsheet_groups` with `action: "migrate"`                         |
 
-Rename and ungroup update every member in one atomic write. Renaming to the name of
-a different existing group is refused; changing only the casing of a group's own
-name is allowed.
+Rename is one registry edit and changes no ticket. Ungroup and merge update every member
+in one atomic write per store. Renaming to the name of a different listed group is
+refused; changing only the casing of a group's own name is allowed.
+
+**Migration (HS2-9KZSD4).** `hotsheet-cli group migrate` (and `POST
+/checkouts/{reference}/groups/migrate`) is the explicit format boundary of
+[19-format-compatibility.md](19-format-compatibility.md) §19.1: reads never migrate on
+their own. It creates one registry entry per distinct legacy name key, reusing an existing
+entry with that key, and rewrites every ticket that still stores the name, Trash included,
+in one write and one commit per store. A rerun finds nothing and changes nothing.
 
 ## 35.3 Rendering (HS2-WZ3JGZ, HS2-HV8S4Y)
 
 One shared `TicketGroup` component renders a group in both views: a Kerf
 `SunkenPanel` holding a `ListHeader` disclosure (size `m`, wrapping, with a count)
-and the group's tickets. The name keeps the user's casing.
+and the group's tickets. Groups are keyed by id (HS2-9KZSD4), so two groups with one name
+render separately. The title is the registry name, which keeps the user's casing, a legacy
+group's own name, or the `Group <id>` placeholder. The client reads names from `GET
+/checkouts/{reference}/groups` when the project loads, after each group operation, and
+once more when loaded tickets name an id it has no name for; it never polls.
 
 - **Order.** A group appears where its first ticket would appear in the active
   sort, and its members follow that same sort. Ungrouped tickets keep their places.
@@ -68,8 +105,8 @@ and the group's tickets. The name keeps the user's casing.
   alignment.
 - **Collapse.** Collapsing a group hides its tickets and keeps its header and count
   in place. The choice is a per-viewer preference for one project, view, and group,
-  stored in the browser under `hotsheet.ticket-groups.collapsed`; it is never sent
-  to the server. In the column view a collapsed group is collapsed in every column.
+  stored in the browser under `hotsheet.ticket-groups.collapsed` and keyed by group
+  id; it is never sent to the server. In the column view a collapsed group is collapsed in every column.
 - **Selection and keyboard.** Arrow keys, range selection, copy, and the reader's
   previous and next follow the rows as drawn, across group boundaries. Tickets
   hidden in a collapsed group are skipped, and Select All does not select them. The
@@ -84,12 +121,14 @@ and the group's tickets. The name keeps the user's casing.
 
 - **Add to Group.** With one or more tickets selected, the ticket context menu and
   the toolbar's More Actions menu show **Add to Group** (Lucide `group`). Its
-  submenu lists **New Group…** first, then the project's existing groups. Choosing
+  submenu lists **New Group…** first, then the project's existing groups; a duplicated
+  name shows its id in parentheses. Choosing
   a group moves every selected ticket into it, replacing any earlier membership.
 - **New Group dialog.** A required Group Name field with Cancel and Create Group.
   A name that matches an existing group, compared case-insensitively, shows an
-  inline error and disables Create Group. Submitting assigns the group to every
-  selected ticket in one bulk update.
+  inline error and disables Create Group. Submitting creates the group in the registry
+  (`POST /checkouts/{reference}/groups`) and then assigns its id to every selected ticket
+  in one bulk update.
 - **Remove from Group** appears when the selection contains a grouped ticket.
 - **Drag and drop.** Dragging tickets over a group outlines the whole group; there
   is no insertion line because order follows the sort. Dropping sets the group. In
@@ -109,8 +148,11 @@ and the group's tickets. The name keeps the user's casing.
 
 Right-clicking a group header, or pressing the keyboard's context-menu key on it,
 opens a menu with **Rename Group…** and **Ungroup**. Rename uses the same dialog as
-New Group and enforces unique names. Both actions go through the server so they
-also reach members that the current view has not loaded.
+New Group and enforces unique names; it is a registry edit by id, and it also names a
+placeholder group. A group flagged as a duplicate also offers **Merge Duplicate Groups**
+(Lucide `merge`), which moves every other group with the same name into this one. These
+actions go through the server so they also reach members that the current view has not
+loaded. Migration has no graphical entry point; it is headless (§35.2).
 
 A visible overflow button on the header is preferred, but Kerf's `ListHeader`
 cannot yet pair its toggle with a separate trailing action. That gap is filed
@@ -120,9 +162,11 @@ in favor of the overflow button when a Kerf release ships it.
 ## 35.6 Search (HS2-44W3TP)
 
 - `group:name` and `group:"name with spaces"` match tickets in that group,
-  case-insensitively.
+  case-insensitively, through the project's registry names; `group:<id>` matches one id.
 - `has:group` matches any grouped ticket, so `NOT has:group` finds ungrouped ones.
 - Both combine with `AND`, `OR`, `NOT`, and parentheses like every other filter.
 - The search field completes `group:` from the project's group names, and the
   syntax help lists the group filters.
+- Saved views resolve `group:` through the checkout's registry on the server too, so
+  notification rules match the same tickets.
 - Saved views accept the same terms.

@@ -16,6 +16,8 @@ export interface TicketGroupBindings {
   readonly openMenu: (group: string, x: number, y: number) => void;
   readonly rename: (group: string) => void;
   readonly ungroup: (group: string) => void;
+  /** Merge every same-named duplicate group into this one (HS2-9KZSD4). */
+  readonly merge: (group: string) => void;
   /** The dialog's name field changed. */
   readonly editName: (name: string) => void;
   readonly submitName: (name: string) => void;
@@ -66,6 +68,12 @@ export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBinding
     delegate(root, 'click', TICKET_GROUP_ACTIONS.ungroupTicketGroup.selector, (_event, target) => {
       const group = (target as HTMLElement).dataset.ticketGroup;
       if (group) bindings.ungroup(group);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', TICKET_GROUP_ACTIONS.mergeTicketGroups.selector, (_event, target) => {
+      const group = (target as HTMLElement).dataset.ticketGroup;
+      if (group) bindings.merge(group);
     }),
   );
   lifetime.add(

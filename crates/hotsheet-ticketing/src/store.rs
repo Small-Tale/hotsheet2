@@ -197,6 +197,10 @@ pub enum StoreError {
     /// A requested ticket group name failed validation (HS2-PDSHNN).
     #[error(transparent)]
     InvalidGroupName(#[from] hotsheet_model::GroupNameError),
+    /// A group was named by text where only an id is accepted: a store or connection
+    /// with no project group registry (HS2-9KZSD4).
+    #[error("group names need a project checkout with a group registry; '{0}' is not a group id")]
+    GroupRegistryRequired(String),
     #[error(transparent)]
     ImageCrop(#[from] crate::image_crop::ImageCropError),
     #[error(transparent)]

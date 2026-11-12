@@ -1,7 +1,8 @@
-//! Ticket groups over the real router (HS2-PDSHNN, HS2-44W3TP, HS2-8CDFKR): the `group`
-//! field on create, update, and batch; the `group` / `has_group` list filters; the
-//! `/groups` routes for the default store, a hosted store, a provider connection, and a
-//! checkout (one namespace across its Git sources); and the explicit refusal from a
+//! Ticket groups over the real router (HS2-PDSHNN, HS2-44W3TP, HS2-8CDFKR, HS2-9KZSD4):
+//! the `group` field on create, update, and batch; the `group` / `has_group` list
+//! filters; the `/groups` routes for the default store, a hosted store, a provider
+//! connection, and a checkout (one namespace across its Git sources, named by the
+//! checkout's group registry); the explicit migration; and the explicit refusal from a
 //! provider without the `groups` capability. Synthetic tickets only.
 
 use axum::body::Body;
@@ -96,11 +97,14 @@ async fn create(router: &axum::Router, uri: &str, title: &str, group: Option<&st
     value
 }
 
+const ID: &str = "7K3M9P2QXA";
+const OTHER_ID: &str = "0000000001";
+
 #[tokio::test]
-async fn hs2_pdshnn_default_store_group_field_filters_and_batch() {
+async fn hs2_9kzsd4_a_store_takes_group_ids_and_refuses_names() {
     let (dir, router) = default_store();
-    let first = create(&router, "/tickets", "first", Some("  Board   Drag & Drop ")).await;
-    assert_eq!(first["group"], "Board Drag & Drop");
+    let first = create(&router, "/tickets", "first", Some(&format!(" {ID} "))).await;
+    assert_eq!(first["group"], ID);
     let second = create(&router, "/tickets", "second", None).await;
     assert_eq!(
         second["group"],
@@ -108,314 +112,128 @@ async fn hs2_pdshnn_default_store_group_field_filters_and_batch() {
         "detail serializes null like blocked_reason"
     );
     assert!(second.as_object().unwrap().contains_key("group"));
-    let third = create(&router, "/tickets", "third", Some("alpha")).await;
     let slug = |value: &Value| value["slug"].as_str().unwrap().to_owned();
-    let patch = |id: String, body: Value| {
-        let router = router.clone();
-        async move { send(&router, "PATCH", &format!("/tickets/{id}"), Some(body)).await }
-    };
-
-    // Set reuses the stored spelling; the detail and the list row both carry the group.
-    let (status, joined) = patch(slug(&second), json!({ "group": "BOARD drag &  drop" })).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(joined["group"], "Board Drag & Drop");
-    let detail = ok(&router, "GET", &format!("/tickets/{}", slug(&second)), None).await;
-    assert_eq!(detail["group"], "Board Drag & Drop");
-    assert_eq!(
-        detail["updated_at"], second["updated_at"],
-        "regrouping does not look like a content edit"
-    );
-    let rows = ok(&router, "GET", "/tickets", None).await;
-    let row = |wanted: &Value| {
-        rows.as_array()
-            .unwrap()
-            .iter()
-            .find(|row| row["slug"] == wanted["slug"])
-            .unwrap()
-            .clone()
-    };
-    assert_eq!(row(&second)["group"], "Board Drag & Drop");
-    assert_eq!(row(&third)["group"], "alpha");
-
-    // Absent leaves it, null clears it, and a cleared row omits the field.
-    let (_, retitled) = patch(slug(&second), json!({ "title": "second again" })).await;
-    assert_eq!(retitled["group"], "Board Drag & Drop");
-    let (status, cleared) = patch(slug(&second), json!({ "group": null })).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(cleared["group"], Value::Null);
-    let rows = ok(&router, "GET", "/tickets", None).await;
-    let cleared_row = rows
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["slug"] == second["slug"])
-        .unwrap();
-    assert!(!cleared_row.as_object().unwrap().contains_key("group"));
-    let (_, emptied) = patch(slug(&third), json!({ "group": "   " })).await;
-    assert_eq!(
-        emptied["group"],
-        Value::Null,
-        "an empty name clears the group"
-    );
-    patch(slug(&third), json!({ "group": "alpha" })).await;
-
-    // Invalid names are a 400 with a stable code and write nothing.
-    for bad in [
-        json!("line\nbreak"),
-        json!("tab\there"),
-        json!("x".repeat(121)),
+    // A store has no registry: a name is refused, never stored as a name.
+    for (method, uri, body) in [
+        (
+            "POST",
+            "/tickets".to_string(),
+            json!({ "title": "named", "group": "Sprint" }),
+        ),
+        (
+            "PATCH",
+            format!("/tickets/{}", slug(&second)),
+            json!({ "group": "Sprint" }),
+        ),
+        (
+            "POST",
+            "/batch".to_string(),
+            json!({ "ids": [slug(&second)], "group": "Sprint" }),
+        ),
     ] {
-        let (status, error) = patch(slug(&first), json!({ "group": bad })).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
-        assert_eq!(error["code"], "invalid_group_name");
-        assert!(error["error"].as_str().unwrap().contains("group name"));
+        let (status, error) = send(&router, method, &uri, Some(body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{method} {uri}: {error}");
+        assert_eq!(error["code"], "group_registry_required", "{method} {uri}");
     }
     let (status, error) = send(
-        &router,
-        "POST",
-        "/tickets",
-        Some(json!({ "title": "bad", "group": "a\nb" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
-    let (status, _) = patch(slug(&first), json!({ "group": 7 })).await;
-    assert!(status.is_client_error(), "a non-string group is refused");
-    let detail = ok(&router, "GET", &format!("/tickets/{}", slug(&first)), None).await;
-    assert_eq!(detail["group"], "Board Drag & Drop");
-
-    // List filters: exact group by normalized name, and has_group both ways.
-    let list = |query: &'static str| {
-        let router = router.clone();
-        async move { slugs(&ok(&router, "GET", &format!("/tickets?{query}"), None).await) }
-    };
-    assert_eq!(
-        list("group=board%20%20DRAG%20%26%20drop").await,
-        vec![slug(&first)]
-    );
-    assert!(list("group=board").await.is_empty());
-    assert!(list("group=%20").await.is_empty());
-    assert_eq!(
-        list("has_group=true").await,
-        sorted(vec![slug(&first), slug(&third)])
-    );
-    assert_eq!(list("has_group=false").await, vec![slug(&second)]);
-    assert_eq!(list("has_group=true&group=ALPHA").await, vec![slug(&third)]);
-
-    // The batch route sets and clears the group, choosing one spelling for the selection.
-    let batch = ok(
-        &router,
-        "POST",
-        "/batch",
-        Some(json!({ "ids": [slug(&first), slug(&second)], "group": "board drag & drop" })),
-    )
-    .await;
-    assert_eq!(batch["updated"].as_array().unwrap().len(), 2, "{batch}");
-    assert!(batch["errors"].as_array().unwrap().is_empty());
-    let groups = ok(&router, "GET", "/groups", None).await;
-    assert_eq!(
-        groups,
-        json!({ "groups": [
-            { "name": "alpha", "count": 1 },
-            { "name": "board drag & drop", "count": 2 },
-        ] }),
-        "the selection held every member, so its new spelling wins"
-    );
-    let (status, error) = send(
-        &router,
-        "POST",
-        "/batch",
-        Some(json!({ "ids": [slug(&first)], "group": "a\nb" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
-    let cleared = ok(
-        &router,
-        "POST",
-        "/batch",
-        Some(json!({ "ids": [slug(&first), slug(&second), "HS-NOPE"], "group": null })),
-    )
-    .await;
-    assert_eq!(cleared["updated"].as_array().unwrap().len(), 2);
-    assert_eq!(cleared["errors"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        ok(&router, "GET", "/groups", None).await,
-        json!({ "groups": [{ "name": "alpha", "count": 1 }] })
-    );
-
-    // The file is the source of truth: the field is in the frontmatter.
-    let store = FsStore::open(dir.path().join("store")).unwrap();
-    let on_disk = store
-        .list_tickets()
-        .unwrap()
-        .into_iter()
-        .find(|ticket| ticket.slug == slug(&third))
-        .unwrap();
-    assert_eq!(on_disk.group.as_deref(), Some("alpha"));
-    assert!(
-        std::fs::read_to_string(store.ticket_path(&on_disk.id))
-            .unwrap()
-            .contains("\ngroup: alpha\n")
-    );
-    // Capabilities advertise the feature.
-    let providers = ok(&router, "GET", "/providers", None).await;
-    assert_eq!(providers[0]["capabilities"]["groups"], true, "{providers}");
-}
-
-#[tokio::test]
-async fn hs2_8cdfkr_default_store_groups_list_rename_and_ungroup() {
-    let (_dir, router) = default_store();
-    assert_eq!(
-        ok(&router, "GET", "/groups", None).await,
-        json!({ "groups": [] })
-    );
-    let a = create(&router, "/tickets", "a", Some("Old")).await;
-    let b = create(&router, "/tickets", "b", Some("old")).await;
-    let other = create(&router, "/tickets", "other", Some("Taken")).await;
-    let trashed = create(&router, "/tickets", "trashed", Some("Old")).await;
-    let id = |value: &Value| value["slug"].as_str().unwrap().to_owned();
-    ok(
         &router,
         "PATCH",
-        &format!("/tickets/{}", id(&trashed)),
-        Some(json!({ "status": "deleted" })),
+        &format!("/tickets/{}", slug(&second)),
+        Some(json!({ "group": "a\nb" })),
     )
     .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    let joined = ok(
+        &router,
+        "PATCH",
+        &format!("/tickets/{}", slug(&second)),
+        Some(json!({ "group": ID })),
+    )
+    .await;
+    assert_eq!(joined["group"], ID);
+    assert_eq!(
+        joined["updated_at"], second["updated_at"],
+        "regrouping keeps updated_at"
+    );
+    let rows = ok(&router, "GET", &format!("/tickets?group={ID}"), None).await;
+    assert_eq!(slugs(&rows), sorted(vec![slug(&first), slug(&second)]));
+    let rows = ok(&router, "GET", "/tickets?group=Sprint", None).await;
+    assert!(slugs(&rows).is_empty(), "a name alone finds no id: {rows}");
+    let rows = ok(&router, "GET", "/tickets?has_group=false", None).await;
+    assert!(slugs(&rows).is_empty());
+
+    // The list shows the id under a placeholder; rename needs a project.
     assert_eq!(
         ok(&router, "GET", "/groups", None).await,
-        json!({ "groups": [{ "name": "Old", "count": 2 }, { "name": "Taken", "count": 1 }] }),
-        "sorted by name without regard to case; a trashed ticket is not counted"
+        json!({ "registry": false, "groups": [{
+            "id": ID, "name": format!("Group {ID}"), "count": 2,
+            "named": false, "legacy": false, "duplicate": false,
+        }] })
     );
-
-    let rename = |from: &'static str, to: &'static str| {
-        let router = router.clone();
-        async move {
-            send(
-                &router,
-                "POST",
-                "/groups/rename",
-                Some(
-                    json!({ "from": from, "to": to, "actor": { "role": "human", "id": "tester" } }),
-                ),
-            )
-            .await
-        }
-    };
-    let (status, error) = rename("missing", "New").await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(
-        error,
-        json!({ "error": "no group named 'missing'", "code": "group_not_found" })
-    );
-    let (status, error) = rename("Old", " TAKEN ").await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(
-        error,
-        json!({ "error": "a group named 'Taken' already exists", "code": "group_name_taken" })
-    );
-    for bad in ["   ", "a\nb"] {
-        let (status, error) = send(
-            &router,
-            "POST",
-            "/groups/rename",
-            Some(json!({ "from": "Old", "to": bad })),
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
-        assert_eq!(error["code"], "invalid_group_name");
-    }
     let (status, error) = send(
         &router,
         "POST",
         "/groups/rename",
-        Some(json!({ "from": "Old", "to": "New", "actor": { "role": "robot" } })),
+        Some(json!({ "group": ID, "to": "Sprint" })),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
-    let (status, _) = send(
+    assert_eq!(error["code"], "group_registry_required");
+
+    // Merge and ungroup work by id.
+    ok(
         &router,
         "POST",
-        "/groups/rename",
-        Some(json!({ "from": "Old" })),
+        "/batch",
+        Some(json!({ "ids": [slug(&second)], "group": OTHER_ID })),
     )
     .await;
-    assert!(status.is_client_error());
+    let (status, error) = send(
+        &router,
+        "POST",
+        "/groups/merge",
+        Some(json!({ "from": ID, "into": ID })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["code"], "invalid_group_merge");
     assert_eq!(
-        ok(&router, "GET", &format!("/tickets/{}", id(&a)), None).await["group"],
-        "Old",
-        "a refused rename writes nothing"
+        ok(
+            &router,
+            "POST",
+            "/groups/merge",
+            Some(json!({ "from": OTHER_ID, "into": ID })),
+        )
+        .await,
+        json!({ "id": ID, "name": format!("Group {ID}"), "updated": 1 })
     );
-
-    // A change of only case or spacing of the same group is allowed.
+    let rows = ok(&router, "GET", &format!("/tickets?group={ID}"), None).await;
+    assert_eq!(slugs(&rows).len(), 2);
     assert_eq!(
-        rename("old", "  OLD ").await,
-        (StatusCode::OK, json!({ "name": "OLD", "updated": 2 }))
+        ok(
+            &router,
+            "POST",
+            "/groups/ungroup",
+            Some(json!({ "group": ID }))
+        )
+        .await,
+        json!({ "updated": 2 })
     );
-    assert_eq!(
-        rename("OLD", "New   name").await,
-        (StatusCode::OK, json!({ "name": "New name", "updated": 2 }))
-    );
-    // The index follows the write: rows, filters, and the listing agree at once.
-    for ticket in [&a, &b, &trashed] {
-        assert_eq!(
-            ok(&router, "GET", &format!("/tickets/{}", id(ticket)), None).await["group"],
-            "New name"
-        );
-    }
-    assert_eq!(
-        slugs(
-            &ok(
-                &router,
-                "GET",
-                "/tickets?group=new%20NAME&collection=all",
-                None
-            )
-            .await
-        ),
-        sorted(vec![id(&a), id(&b)])
-    );
-    assert_eq!(
-        ok(&router, "GET", &format!("/tickets/{}", id(&other)), None).await["group"],
-        "Taken"
-    );
-    assert_eq!(rename("Old", "Else").await.0, StatusCode::NOT_FOUND);
-
-    let ungroup = |name: &'static str| {
-        let router = router.clone();
-        async move {
-            send(
-                &router,
-                "POST",
-                "/groups/ungroup",
-                Some(json!({ "name": name })),
-            )
-            .await
-        }
-    };
-    let (status, error) = ungroup("missing").await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, error) = send(
+        &router,
+        "POST",
+        "/groups/ungroup",
+        Some(json!({ "name": ID })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
     assert_eq!(error["code"], "group_not_found");
     assert_eq!(
-        ungroup(" NEW  name ").await,
-        (StatusCode::OK, json!({ "updated": 2 }))
-    );
-    assert_eq!(ungroup("new name").await.0, StatusCode::NOT_FOUND);
-    assert_eq!(
         ok(&router, "GET", "/groups", None).await,
-        json!({ "groups": [{ "name": "Taken", "count": 1 }] })
+        json!({ "registry": false, "groups": [] })
     );
-    assert_eq!(
-        slugs(
-            &ok(
-                &router,
-                "GET",
-                "/tickets?has_group=false&collection=all",
-                None
-            )
-            .await
-        ),
-        sorted(vec![id(&a), id(&b)])
-    );
-    // The group routes need the secret like every other route.
+    // Both files keep their updated_at and no registry appeared beside the store.
+    assert!(!dir.path().join("store/.hotsheet2/groups").exists());
     let unauthenticated = router
         .clone()
         .oneshot(
@@ -477,6 +295,8 @@ struct Project {
     _dir: tempfile::TempDir,
     router: axum::Router,
     checkout: String,
+    /// The code checkout, whose `.hotsheet2/groups` is the project's group registry.
+    root: std::path::PathBuf,
     /// Connection ids of the two Git sources, in link order.
     git: Vec<String>,
     transport: Arc<OneIssue>,
@@ -484,6 +304,11 @@ struct Project {
 
 /// A checkout linking two Git stores and one GitHub connection.
 fn project() -> Project {
+    project_with(|_| {})
+}
+
+/// [`project`], with `seed` writing to the two Git stores before the server starts.
+fn project_with(seed: impl FnOnce(&[std::path::PathBuf])) -> Project {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("project");
     std::fs::create_dir(&root).unwrap();
@@ -495,6 +320,7 @@ fn project() -> Project {
             store_root
         })
         .collect();
+    seed(&store_roots);
     let registry = dir.path().join("checkouts.json");
     let registered = CheckoutRegistry::new(&registry)
         .register(&root, Some("project"), None, store_roots.clone())
@@ -532,13 +358,14 @@ fn project() -> Project {
         _dir: dir,
         router,
         checkout: registered.id,
+        root,
         git,
         transport,
     }
 }
 
 #[tokio::test]
-async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
+async fn hs2_9kzsd4_a_checkout_names_groups_through_its_registry_across_git_sources() {
     let project = project();
     let router = &project.router;
     let base = format!("/checkouts/{}", project.checkout);
@@ -547,13 +374,23 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
         let router = router.clone();
         async move { create(&router, &uri, title, group).await }
     };
+    // A name creates one registry entry; another spelling in another store reuses it.
     let a = create_in(0, "first store", Some("Sprint")).await;
-    assert_eq!(ticket(&a)["group"], "Sprint", "{a}");
-    // The second store reuses the spelling the first store already carries.
+    let sprint = ticket(&a)["group"].as_str().unwrap().to_owned();
+    assert!(hotsheet_model::is_group_id(&sprint), "{a}");
+    let entry = project
+        .root
+        .join(".hotsheet2/groups")
+        .join(format!("{sprint}.json"));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&std::fs::read(&entry).unwrap()).unwrap(),
+        json!({ "name": "Sprint" })
+    );
     let b = create_in(1, "second store", Some("  SPRINT ")).await;
-    assert_eq!(ticket(&b)["group"], "Sprint", "{b}");
+    assert_eq!(ticket(&b)["group"], sprint.as_str(), "{b}");
     let c = create_in(1, "loose", None).await;
     let d = create_in(0, "other", Some("Backlog cleanup")).await;
+    let backlog = ticket(&d)["group"].as_str().unwrap().to_owned();
     let qualified = |value: &Value| ticket(value)["qualified_id"].as_str().unwrap().to_owned();
 
     let patched = ok(
@@ -563,37 +400,30 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
         Some(json!({ "group": "sprint" })),
     )
     .await;
-    assert_eq!(ticket(&patched)["group"], "Sprint", "{patched}");
-    let detail = ok(
+    assert_eq!(ticket(&patched)["group"], sprint.as_str(), "{patched}");
+    let summary = |id: &str, name: &str, count: usize| {
+        json!({ "id": id, "name": name, "count": count,
+                "named": true, "legacy": false, "duplicate": false })
+    };
+    assert_eq!(
+        ok(router, "GET", &format!("{base}/groups"), None).await,
+        json!({ "registry": true, "groups": [
+            summary(&backlog, "Backlog cleanup", 1),
+            summary(&sprint, "Sprint", 3),
+        ] }),
+        "counts merge by id across the Git sources"
+    );
+    // The checkout filter resolves a name to its id across every source.
+    let rows = ok(router, "GET", &format!("{base}/tickets?group=SPRINT"), None).await;
+    assert_eq!(slugs(&rows).len(), 3, "{rows}");
+    let rows = ok(
         router,
         "GET",
-        &format!("{base}/tickets/{}", qualified(&c)),
+        &format!("{base}/tickets?group={sprint}"),
         None,
     )
     .await;
-    assert_eq!(ticket(&detail)["group"], "Sprint");
-
-    assert_eq!(
-        ok(router, "GET", &format!("{base}/groups"), None).await,
-        json!({ "groups": [
-            { "name": "Backlog cleanup", "count": 1 },
-            { "name": "Sprint", "count": 3 },
-        ] }),
-        "counts merge by name across the Git sources"
-    );
-    // Checkout rows carry the group and the list filters span every source.
-    let rows = ok(router, "GET", &format!("{base}/tickets?group=sprint"), None).await;
     assert_eq!(slugs(&rows).len(), 3, "{rows}");
-    let rows_array = rows
-        .as_array()
-        .or_else(|| rows["items"].as_array())
-        .unwrap();
-    assert!(
-        rows_array
-            .iter()
-            .all(|row| ticket(row)["group"] == "Sprint")
-    );
-    // The GitHub issue is ungrouped, so it appears only under has_group=false.
     let ungrouped = ok(
         router,
         "GET",
@@ -606,34 +436,26 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
         vec!["acme/repo#42".to_string()],
         "{ungrouped}"
     );
-    let grouped = ok(
-        router,
-        "GET",
-        &format!("{base}/tickets?has_group=true"),
-        None,
-    )
-    .await;
-    assert_eq!(slugs(&grouped).len(), 4, "{grouped}");
 
-    // The checkout batch sets a group across stores with one spelling, and clears it.
+    // The checkout batch resolves one name to one id for the whole selection.
     let batch = ok(
         router,
         "POST",
         &format!("{base}/batch"),
         Some(json!({ "updates": [
-            { "id": qualified(&a), "group": "SPRINT" },
-            { "id": qualified(&b), "group": "SPRINT" },
-            { "id": qualified(&c), "group": "SPRINT" },
+            { "id": qualified(&a), "group": "Release" },
+            { "id": qualified(&b), "group": "RELEASE" },
         ] })),
     )
     .await;
+    let release = ticket(&batch[0])["group"].as_str().unwrap().to_owned();
     assert!(
         batch
             .as_array()
             .unwrap()
             .iter()
-            .all(|row| ticket(row)["group"] == "SPRINT"),
-        "the selection held every member, so its spelling wins: {batch}"
+            .all(|row| ticket(row)["group"] == release.as_str()),
+        "{batch}"
     );
     let (status, error) = send(
         router,
@@ -653,25 +475,56 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
         None,
     )
     .await;
-    assert_eq!(
-        ticket(&untouched)["title"],
-        "first store",
-        "the batch stays all-or-nothing"
-    );
+    assert_eq!(ticket(&untouched)["title"], "first store", "all-or-nothing");
     ok(
         router,
         "POST",
         &format!("{base}/batch"),
-        Some(json!({ "updates": [{ "id": qualified(&c), "group": null }] })),
+        Some(json!({ "updates": [
+            { "id": qualified(&a), "group": sprint },
+            { "id": qualified(&b), "group": sprint },
+        ] })),
     )
     .await;
 
-    // Rename and ungroup rewrite the members in every Git source.
+    // Create is find-or-create by name.
+    assert_eq!(
+        ok(
+            router,
+            "POST",
+            &format!("{base}/groups"),
+            Some(json!({ "name": "sprint" }))
+        )
+        .await,
+        json!({ "id": sprint, "name": "Sprint", "created": false })
+    );
+    let created = ok(
+        router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": " Fresh " })),
+    )
+    .await;
+    assert_eq!(
+        (created["name"].clone(), created["created"].clone()),
+        (json!("Fresh"), json!(true))
+    );
+    let (status, error) = send(
+        router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": " " })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["code"], "invalid_group_name");
+
+    // Rename is a registry edit: no ticket changes.
     let (status, error) = send(
         router,
         "POST",
         &format!("{base}/groups/rename"),
-        Some(json!({ "from": "sprint", "to": "backlog CLEANUP" })),
+        Some(json!({ "group": sprint, "to": "backlog CLEANUP" })),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{error}");
@@ -684,27 +537,38 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+    let before = ok(
+        router,
+        "GET",
+        &format!("{base}/tickets/{}", qualified(&a)),
+        None,
+    )
+    .await;
     assert_eq!(
         ok(
             router,
             "POST",
             &format!("{base}/groups/rename"),
-            Some(json!({ "from": "sprint", "to": "Sprint 2" })),
+            Some(json!({ "group": "sprint", "to": "Sprint 2" })),
         )
         .await,
-        json!({ "name": "Sprint 2", "updated": 2 })
+        json!({ "id": sprint, "name": "Sprint 2", "updated": 0 })
     );
-    for value in [&a, &b] {
-        let detail = ok(
-            router,
-            "GET",
-            &format!("{base}/tickets/{}", qualified(value)),
-            None,
-        )
-        .await;
-        assert_eq!(ticket(&detail)["group"], "Sprint 2");
-    }
-    // The per-store and per-connection routes see only their own members.
+    let after = ok(
+        router,
+        "GET",
+        &format!("{base}/tickets/{}", qualified(&a)),
+        None,
+    )
+    .await;
+    assert_eq!(ticket(&after)["group"], sprint.as_str());
+    assert_eq!(ticket(&after)["updated_at"], ticket(&before)["updated_at"]);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&std::fs::read(&entry).unwrap()).unwrap(),
+        json!({ "name": "Sprint 2" })
+    );
+
+    // A store or connection of the project sees ids only.
     assert_eq!(
         ok(
             router,
@@ -712,51 +576,126 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
             &format!("/stores/{}/groups", project.git[1]),
             None
         )
-        .await,
-        json!({ "groups": [{ "name": "Sprint 2", "count": 1 }] })
+        .await["groups"][0]["name"],
+        format!("Group {sprint}")
     );
+    let (status, error) = send(
+        router,
+        "POST",
+        &format!("/providers/{}/groups/rename", project.git[0]),
+        Some(json!({ "group": sprint, "to": "x" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["code"], "group_registry_required");
+    let (status, error) = send(
+        router,
+        "PATCH",
+        &format!(
+            "/providers/{}/tickets/{}",
+            project.git[0],
+            ticket(&d)["id"].as_str().unwrap()
+        ),
+        Some(json!({ "group": "Sprint 2" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["code"], "group_registry_required");
+
+    // Two clones created the same name: both are listed and flagged, and merge folds them.
+    std::fs::write(
+        project
+            .root
+            .join(".hotsheet2/groups")
+            .join(format!("{OTHER_ID}.json")),
+        "{\"name\":\"sprint 2\"}",
+    )
+    .unwrap();
+    ok(
+        router,
+        "PATCH",
+        &format!("{base}/tickets/{}", qualified(&c)),
+        Some(json!({ "group": OTHER_ID })),
+    )
+    .await;
+    let listed = ok(router, "GET", &format!("{base}/groups"), None).await;
+    let duplicates: Vec<String> = listed["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|g| g["duplicate"] == true)
+        .map(|g| g["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        sorted(duplicates),
+        sorted(vec![OTHER_ID.to_string(), sprint.clone()]),
+        "{listed}"
+    );
+    let (status, error) = send(
+        router,
+        "POST",
+        &format!("{base}/groups/rename"),
+        Some(json!({ "group": "SPRINT 2", "to": "x" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{error}");
+    assert_eq!(error["code"], "group_ambiguous");
     assert_eq!(
         ok(
             router,
-            "GET",
-            &format!("/providers/{}/groups", project.git[0]),
-            None
+            "POST",
+            &format!("{base}/groups/merge"),
+            Some(json!({ "from": OTHER_ID, "into": sprint })),
         )
         .await,
-        json!({ "groups": [
-            { "name": "Backlog cleanup", "count": 1 },
-            { "name": "Sprint 2", "count": 1 },
+        json!({ "id": sprint, "name": "Sprint 2", "updated": 1 })
+    );
+    assert_eq!(
+        ok(router, "GET", &format!("{base}/groups"), None).await,
+        json!({ "registry": true, "groups": [
+            summary(&backlog, "Backlog cleanup", 1),
+            summary(&sprint, "Sprint 2", 3),
         ] })
     );
-    assert_eq!(
-        ok(
-            router,
-            "POST",
-            &format!("/providers/{}/groups/rename", project.git[1]),
-            Some(json!({ "from": "Sprint 2", "to": "Second only" })),
-        )
-        .await,
-        json!({ "name": "Second only", "updated": 1 })
+
+    // An id this project does not name shows a placeholder until a rename names it.
+    ok(
+        router,
+        "PATCH",
+        &format!("{base}/tickets/{}", qualified(&c)),
+        Some(json!({ "group": ID })),
+    )
+    .await;
+    let listed = ok(router, "GET", &format!("{base}/groups"), None).await;
+    assert!(
+        listed["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["id"] == ID && g["name"] == format!("Group {ID}") && g["named"] == false),
+        "{listed}"
     );
     assert_eq!(
         ok(
             router,
             "POST",
-            &format!("/stores/{}/groups/ungroup", project.git[1]),
-            Some(json!({ "name": "second ONLY" })),
+            &format!("{base}/groups/rename"),
+            Some(json!({ "group": ID, "to": "Shared" })),
         )
         .await,
-        json!({ "updated": 1 })
+        json!({ "id": ID, "name": "Shared", "updated": 0 })
     );
+
+    // Ungroup by id or name clears every member in every Git source.
     assert_eq!(
         ok(
             router,
             "POST",
             &format!("{base}/groups/ungroup"),
-            Some(json!({ "name": "SPRINT 2" })),
+            Some(json!({ "group": "SPRINT 2" }))
         )
         .await,
-        json!({ "updated": 1 })
+        json!({ "updated": 2 })
     );
     let (status, _) = send(
         router,
@@ -766,16 +705,147 @@ async fn hs2_pdshnn_a_checkout_is_one_group_namespace_across_its_git_sources() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(
-        ok(router, "GET", &format!("{base}/groups"), None).await,
-        json!({ "groups": [{ "name": "Backlog cleanup", "count": 1 }] })
-    );
-    let _ = d;
+    assert!(entry.exists(), "the registry entry is never deleted");
     assert_eq!(
         send(router, "GET", "/checkouts/no-such-checkout/groups", None)
             .await
             .0,
         StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn hs2_9kzsd4_the_checkout_migration_is_explicit_and_idempotent() {
+    let project = project_with(|stores| {
+        // Pre-registry name values, mixed spellings, across both stores and Trash.
+        let seed = |store: &FsStore, title: &str, group: &str, status| {
+            let ticket = hotsheet_ticketing::ops::create(
+                store,
+                hotsheet_model::Ulid::new(),
+                store.metadata().unwrap().ticket_prefix.as_str(),
+                hotsheet_model::Timestamp::new("2026-11-01T00:00:00Z"),
+                hotsheet_ticketing::ops::NewTicket {
+                    title: title.into(),
+                    category: "task".into(),
+                    group: Some(group.into()),
+                    status,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                ticket.group.as_deref(),
+                Some(group),
+                "a legacy value is kept as is"
+            );
+        };
+        let first = FsStore::open(&stores[0]).unwrap();
+        let second = FsStore::open(&stores[1]).unwrap();
+        seed(
+            &first,
+            "a",
+            "Board Drag",
+            hotsheet_model::Status::NotStarted,
+        );
+        seed(
+            &second,
+            "b",
+            "board drag",
+            hotsheet_model::Status::NotStarted,
+        );
+        seed(
+            &second,
+            "trashed",
+            "BOARD DRAG",
+            hotsheet_model::Status::Deleted,
+        );
+        seed(&first, "c", "Search", hotsheet_model::Status::NotStarted);
+    });
+    let router = &project.router;
+    let base = format!("/checkouts/{}", project.checkout);
+    let listed = ok(router, "GET", &format!("{base}/groups"), None).await;
+    assert_eq!(
+        listed["groups"],
+        json!([
+            { "id": "Board Drag", "name": "Board Drag", "count": 2,
+              "named": true, "legacy": true, "duplicate": false },
+            { "id": "Search", "name": "Search", "count": 1,
+              "named": true, "legacy": true, "duplicate": false },
+        ]),
+        "legacy names are read and listed by name until migrated"
+    );
+    // The unfiltered checkout list includes Trash, whose member keeps its group.
+    let rows = ok(
+        router,
+        "GET",
+        &format!("{base}/tickets?group=board%20drag"),
+        None,
+    )
+    .await;
+    assert_eq!(slugs(&rows).len(), 3, "{rows}");
+    // A store has no registry to migrate into.
+    let (status, error) = send(
+        router,
+        "POST",
+        &format!("/checkouts/{}/groups/migrate", "no-such-checkout"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+
+    assert_eq!(
+        ok(
+            router,
+            "POST",
+            &format!("{base}/groups/migrate"),
+            Some(json!({}))
+        )
+        .await,
+        json!({ "created": 2, "reused": 0, "updated": 4 })
+    );
+    let listed = ok(router, "GET", &format!("{base}/groups"), None).await;
+    let groups = listed["groups"].as_array().unwrap();
+    assert_eq!(groups.len(), 2, "{listed}");
+    for (group, name, count) in [(&groups[0], "Board Drag", 2), (&groups[1], "Search", 1)] {
+        assert!(
+            hotsheet_model::is_group_id(group["id"].as_str().unwrap()),
+            "{group}"
+        );
+        assert_eq!(
+            (group["name"].as_str(), group["count"].as_u64()),
+            (Some(name), Some(count))
+        );
+        assert_eq!(group["legacy"], false);
+    }
+    let board = groups[0]["id"].as_str().unwrap();
+    let rows = ok(
+        router,
+        "GET",
+        &format!("{base}/tickets?group={board}"),
+        None,
+    )
+    .await;
+    assert_eq!(slugs(&rows).len(), 3, "{rows}");
+    let rows = ok(
+        router,
+        "GET",
+        &format!("{base}/tickets?group=BOARD%20DRAG"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        slugs(&rows).len(),
+        3,
+        "a name now finds the migrated ids: {rows}"
+    );
+    // Rerun: nothing left to migrate, nothing written.
+    assert_eq!(
+        ok(router, "POST", &format!("{base}/groups/migrate"), None).await,
+        json!({ "created": 0, "reused": 0, "updated": 0 })
+    );
+    assert_eq!(
+        ok(router, "GET", &format!("{base}/groups"), None).await,
+        listed
     );
 }
 
@@ -831,6 +901,11 @@ async fn hs2_pdshnn_a_provider_without_groups_refuses_explicitly() {
             "/providers/github-main/groups/ungroup".to_string(),
             json!({ "name": "a" }),
         ),
+        (
+            "POST",
+            "/providers/github-main/groups/merge".to_string(),
+            json!({ "from": "a", "into": "b" }),
+        ),
     ] {
         let (status, error) = send(router, method, &uri, Some(body)).await;
         assert_eq!(status, StatusCode::CONFLICT, "{method} {uri}: {error}");
@@ -857,7 +932,7 @@ async fn hs2_pdshnn_a_provider_without_groups_refuses_explicitly() {
     // The checkout namespace simply excludes it, and its tickets read as ungrouped.
     assert_eq!(
         ok(router, "GET", &format!("{base}/groups"), None).await,
-        json!({ "groups": [] })
+        json!({ "registry": true, "groups": [] })
     );
     let issue = ok(
         router,

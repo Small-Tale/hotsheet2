@@ -6,7 +6,9 @@ import { TicketGroupDialog, type TicketGroupDialogState } from './ticket-group-d
 
 describe('TicketGroup (HS2-WZ3JGZ, HS2-HV8S4Y)', () => {
   it('renders a lowered panel with a case-preserving disclosure header and count', () => {
-    const markup = String(TicketGroup({ name: 'Board drag & drop', count: 3, scope: 'list', children: [] }));
+    const markup = String(
+      TicketGroup({ group: 'Board drag & drop', name: 'Board drag & drop', count: 3, scope: 'list', children: [] }),
+    );
     expect(markup).toContain('data-component="sunken-panel"');
     expect(markup).toMatch(/data-component="list-header"[^>]*data-size="m"[^>]*data-wrap="true"/);
     expect(markup).toContain('data-action="toggle-ticket-group"');
@@ -23,7 +25,14 @@ describe('TicketGroup (HS2-WZ3JGZ, HS2-HV8S4Y)', () => {
 
   it('keeps the header and removes the region when collapsed', () => {
     const markup = String(
-      TicketGroup({ name: 'Board', count: 1, scope: 'started', presentation: 'column', collapsed: true }),
+      TicketGroup({
+        group: 'Board',
+        name: 'Board',
+        count: 1,
+        scope: 'started',
+        presentation: 'column',
+        collapsed: true,
+      }),
     );
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('aria-label="Board, 1 ticket"');
@@ -33,14 +42,25 @@ describe('TicketGroup (HS2-WZ3JGZ, HS2-HV8S4Y)', () => {
   });
 
   it('keys each column’s copy of a group separately and marks a drop target', () => {
-    const list = String(TicketGroup({ name: 'Board', count: 1, scope: 'list' })),
-      column = String(TicketGroup({ name: 'board', count: 1, scope: 'started', dropTarget: true }));
+    const list = String(TicketGroup({ group: 'Board', name: 'Board', count: 1, scope: 'list' })),
+      column = String(TicketGroup({ group: 'board', name: 'board', count: 1, scope: 'started', dropTarget: true }));
     expect(list).toContain('data-key="ticket-group:list:board"');
     expect(column).toContain('data-key="ticket-group:started:board"');
     expect(/aria-controls="([^"]+)"/.exec(list)![1]).not.toBe(/aria-controls="([^"]+)"/.exec(column)![1]);
     expect(column).toContain('data-drop-target="true"');
     expect(column).toMatch(/data-component="sunken-panel"[^>]*data-outlined="true"/);
     expect(list).not.toMatch(/data-outlined="true"/);
+  });
+
+  it('identifies an id group by its id and shows its display name (HS2-9KZSD4)', () => {
+    const markup = String(TicketGroup({ group: '7K3M9P2QXA', name: 'Sprint', count: 2, scope: 'list' })),
+      twin = String(TicketGroup({ group: '8B4N0R3SYB', name: 'Sprint', count: 1, scope: 'list' }));
+    expect(markup).toContain('data-key="ticket-group:list:7K3M9P2QXA"');
+    expect(markup).toContain('data-ticket-group="7K3M9P2QXA"');
+    expect(markup).toContain('data-ticket-drop-group="7K3M9P2QXA"');
+    expect(markup).toContain('>Sprint<');
+    expect(markup).toContain('aria-label="Sprint group"');
+    expect(/aria-controls="([^"]+)"/.exec(markup)![1]).not.toBe(/aria-controls="([^"]+)"/.exec(twin)![1]);
   });
 });
 
@@ -79,7 +99,8 @@ describe('TicketGroupDialog (HS2-TX17CM, HS2-8CDFKR)', () => {
   });
 
   it('renames with the current name allowed, and reports busy and failed writes', () => {
-    const rename = state({ mode: 'rename', group: 'Board drag & drop', name: 'Board drag & drop' }),
+    // A rename dialog lists only the other groups' names (HS2-9KZSD4).
+    const rename = state({ mode: 'rename', group: '7K3M9P2QXA', name: 'Board drag & drop', groups: ['Search syntax'] }),
       markup = String(TicketGroupDialog({ state: rename }));
     expect(markup).toContain('Rename Group');
     expect(markup).toContain('>Rename<');
@@ -106,6 +127,16 @@ describe('TicketGroupContextMenu (HS2-8CDFKR)', () => {
     expect(markup).toMatch(/data-action="ungroup-ticket-group"/);
     expect(markup.match(/data-ticket-group="Board"/g)).toHaveLength(2);
     expect(markup).not.toContain('aria-disabled="true"');
+  });
+
+  it('offers Merge Duplicate Groups only for a duplicate, labeled by display name (HS2-9KZSD4)', () => {
+    const plain = String(TicketGroupContextMenu({ x: 0, y: 0, group: '7K3M9P2QXA', name: 'Sprint' })),
+      duplicate = String(TicketGroupContextMenu({ x: 0, y: 0, group: '7K3M9P2QXA', name: 'Sprint', mergeable: true }));
+    expect(plain).not.toContain('merge-ticket-groups');
+    expect(plain).toContain('aria-label="Sprint Group Actions"');
+    expect(duplicate).toMatch(/data-action="merge-ticket-groups"/);
+    expect(duplicate).toContain('Merge Duplicate Groups');
+    expect(duplicate.match(/data-ticket-group="7K3M9P2QXA"/g)).toHaveLength(3);
   });
 
   it('disables both actions with the reason when the provider cannot group', () => {

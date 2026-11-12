@@ -1,60 +1,112 @@
 /**
- * Ticket groups (HS2-3XNTSD): a ticket names at most one group, and a group exists while at
- * least one ticket names it. The name rules mirror the server's (HS2-PDSHNN): trimmed, inner
- * whitespace collapsed, compared case-insensitively.
+ * Ticket groups (HS2-3XNTSD, HS2-9KZSD4): a ticket stores at most one group value, and a group
+ * exists while at least one ticket stores it. The value is normally a group id whose display
+ * name lives in the project's group registry; an unmigrated ("legacy") ticket may still store a
+ * plain name. Ids key groups exactly, so two ids with one display name stay two groups; legacy
+ * names key by the server's name rules (HS2-PDSHNN): trimmed, inner whitespace collapsed,
+ * compared case-insensitively.
  */
 
 /** The longest group name the server accepts. */
 export const TICKET_GROUP_NAME_LIMIT = 120;
+
+/** A group id: 10 uppercase Crockford base32 characters (HS2-9KZSD4). */
+const GROUP_ID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{10}$/u;
+
+/** Whether a stored group value is a registry id rather than a legacy name. */
+export function isTicketGroupId(value: string): boolean {
+  return GROUP_ID_PATTERN.test(value);
+}
 
 /** The stored spelling of a typed group name: trimmed, with inner whitespace runs collapsed. */
 export function normalizeTicketGroupName(name: string): string {
   return name.trim().replace(/\s+/gu, ' ');
 }
 
-/** The comparison key of a group name; two names with one key are the same group. */
-export function ticketGroupKey(name: string): string {
+/** The comparison key of a group display name; two names with one key read as the same name. */
+export function ticketGroupNameKey(name: string): string {
   return normalizeTicketGroupName(name).toLowerCase();
 }
 
-/** A ticket's group name, or undefined when it is ungrouped (the wire omits or nulls the field). */
-export function ticketGroupName(ticket: { group?: string | null }): string | undefined {
-  const name = ticket.group ? normalizeTicketGroupName(ticket.group) : '';
-  return name || undefined;
+/**
+ * The identity key of a stored group value: an id is its own key, and a legacy name keys by
+ * its name key, so `Board` and `board ` are one legacy group.
+ */
+export function ticketGroupKey(value: string): string {
+  const trimmed = value.trim();
+  return isTicketGroupId(trimmed) ? trimmed : ticketGroupNameKey(trimmed);
+}
+
+/** A ticket's stored group value, or undefined when it is ungrouped (the wire omits or nulls the field). */
+export function ticketGroupValue(ticket: { group?: string | null }): string | undefined {
+  const value = ticket.group ? normalizeTicketGroupName(ticket.group) : '';
+  return value || undefined;
+}
+
+/** The name shown for an id with no registry entry in this project (HS2-9KZSD4). */
+export function ticketGroupPlaceholderName(id: string): string {
+  return `Group ${id}`;
+}
+
+/** A group as the project lists it: its stored value and display name. */
+export interface TicketGroupOption {
+  /** The value member tickets store: an id, or a legacy group's name. */
+  id: string;
+  name: string;
+  /** Another listed group has the same name key (HS2-9KZSD4). */
+  duplicate?: boolean;
+}
+
+/**
+ * The display name of a stored group value: the registry summary's name for it; otherwise a
+ * legacy value shows itself and an unknown id shows `Group <id>`.
+ */
+export function ticketGroupDisplayName(value: string, groups: readonly TicketGroupOption[] = []): string {
+  const key = ticketGroupKey(value),
+    listed = groups.find((group) => ticketGroupKey(group.id) === key);
+  if (listed) return listed.name;
+  const normalized = normalizeTicketGroupName(value);
+  return isTicketGroupId(normalized) ? ticketGroupPlaceholderName(normalized) : normalized;
 }
 
 export interface TicketGroupSummary {
+  /** The stored value the members share. */
+  id: string;
   name: string;
   count: number;
 }
 
-/** Every group the given tickets name, with member counts, sorted by name. */
-export function ticketGroupSummaries(tickets: readonly { group?: string | null }[]): TicketGroupSummary[] {
-  const groups = new Map<string, TicketGroupSummary>();
+/** Every group the given tickets store, with display names and member counts, sorted by name. */
+export function ticketGroupSummaries(
+  tickets: readonly { group?: string | null }[],
+  groups: readonly TicketGroupOption[] = [],
+): TicketGroupSummary[] {
+  const found = new Map<string, TicketGroupSummary>();
   for (const ticket of tickets) {
-    const name = ticketGroupName(ticket);
-    if (!name) continue;
-    const key = ticketGroupKey(name),
-      existing = groups.get(key);
+    const value = ticketGroupValue(ticket);
+    if (!value) continue;
+    const key = ticketGroupKey(value),
+      existing = found.get(key);
     if (existing) existing.count += 1;
-    else groups.set(key, { name, count: 1 });
+    else found.set(key, { id: value, name: ticketGroupDisplayName(value, groups), count: 1 });
   }
-  return [...groups.values()].sort((left, right) =>
-    left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }),
+  return [...found.values()].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }) || left.id.localeCompare(right.id),
   );
 }
 
-/** The existing group a typed name refers to, in its stored spelling. */
+/** The existing display name a typed name refers to, in its stored spelling. */
 export function existingTicketGroup(name: string, groups: readonly string[]): string | undefined {
-  const key = ticketGroupKey(name);
-  return key ? groups.find((group) => ticketGroupKey(group) === key) : undefined;
+  const key = ticketGroupNameKey(name);
+  return key ? groups.find((group) => ticketGroupNameKey(group) === key) : undefined;
 }
 
 export type TicketGroupNameProblem = 'empty' | 'too-long' | 'invalid' | 'duplicate';
 
 /**
- * Why a typed name cannot name a new group. `allow` is the group being renamed, whose own name
- * (in any casing) is not a duplicate.
+ * Why a typed name cannot name a new group. `groups` are the project's display names; `allow`
+ * is the renamed group's own display name, which (in any casing) is not a duplicate.
  */
 export function ticketGroupNameProblem(
   name: string,
@@ -67,7 +119,8 @@ export function ticketGroupNameProblem(
   if (/[\u0000-\u001f\u007f]/u.test(name.trim())) return 'invalid';
   if (normalized.length > TICKET_GROUP_NAME_LIMIT) return 'too-long';
   const existing = existingTicketGroup(normalized, groups);
-  if (existing && (!allow || ticketGroupKey(allow) !== ticketGroupKey(existing))) return 'duplicate';
+  if (existing && (allow === undefined || ticketGroupNameKey(allow) !== ticketGroupNameKey(existing)))
+    return 'duplicate';
   return undefined;
 }
 
@@ -87,10 +140,10 @@ export function clusterTicketsByGroup<T extends { group?: string | null }>(ticke
   const members = new Map<string, T[]>();
   let grouped = false;
   for (const ticket of tickets) {
-    const name = ticketGroupName(ticket);
-    if (!name) continue;
+    const value = ticketGroupValue(ticket);
+    if (!value) continue;
     grouped = true;
-    const key = ticketGroupKey(name),
+    const key = ticketGroupKey(value),
       list = members.get(key);
     if (list) list.push(ticket);
     else members.set(key, [ticket]);
@@ -99,12 +152,12 @@ export function clusterTicketsByGroup<T extends { group?: string | null }>(ticke
   const result: T[] = [],
     placed = new Set<string>();
   for (const ticket of tickets) {
-    const name = ticketGroupName(ticket);
-    if (!name) {
+    const value = ticketGroupValue(ticket);
+    if (!value) {
       result.push(ticket);
       continue;
     }
-    const key = ticketGroupKey(name);
+    const key = ticketGroupKey(value);
     if (placed.has(key)) continue;
     placed.add(key);
     result.push(...members.get(key)!);
@@ -113,30 +166,39 @@ export function clusterTicketsByGroup<T extends { group?: string | null }>(ticke
 }
 
 export type TicketGroupSegment<T> =
-  { kind: 'ungrouped'; items: T[] } | { kind: 'group'; name: string; key: string; items: T[] };
+  { kind: 'ungrouped'; items: T[] } | { kind: 'group'; group: string; name: string; key: string; items: T[] };
 
 /**
  * Split tickets into the runs a collection renders: each group once, where its first member
- * falls, and each run of ungrouped tickets between groups. The input need not be clustered.
+ * falls, and each run of ungrouped tickets between groups. The input need not be clustered. A
+ * row's `groupName` is its group's display name; without one the stored value's fallback name
+ * shows (HS2-9KZSD4).
  */
-export function ticketGroupSegments<T extends { group?: string | null }>(
+export function ticketGroupSegments<T extends { group?: string | null; groupName?: string }>(
   tickets: readonly T[],
 ): TicketGroupSegment<T>[] {
   const segments: TicketGroupSegment<T>[] = [];
   for (const ticket of clusterTicketsByGroup(tickets)) {
-    const name = ticketGroupName(ticket),
-      key = name ? ticketGroupKey(name) : undefined,
+    const group = ticketGroupValue(ticket),
+      key = group ? ticketGroupKey(group) : undefined,
       last = segments.at(-1);
-    if (!name || !key) {
+    if (!group || !key) {
       if (last?.kind === 'ungrouped') last.items.push(ticket);
       else segments.push({ kind: 'ungrouped', items: [ticket] });
     } else if (last?.kind === 'group' && last.key === key) last.items.push(ticket);
-    else segments.push({ kind: 'group', name, key, items: [ticket] });
+    else
+      segments.push({
+        kind: 'group',
+        group,
+        name: ticket.groupName ?? ticketGroupDisplayName(group),
+        key,
+        items: [ticket],
+      });
   }
   return segments;
 }
 
-/** The collapse-preference key of one group in one project view (HS2-WZ3JGZ). */
+/** The collapse-preference key of one group in one project view (HS2-WZ3JGZ), by its identity key. */
 export function ticketGroupCollapseKey(projectId: string, view: string, group: string): string {
   return JSON.stringify([projectId, view, ticketGroupKey(group)]);
 }
@@ -147,8 +209,8 @@ export function withoutCollapsedGroupMembers<T extends { group?: string | null }
   collapsed: (group: string) => boolean,
 ): T[] {
   return tickets.filter((ticket) => {
-    const name = ticketGroupName(ticket);
-    return !name || !collapsed(name);
+    const value = ticketGroupValue(ticket);
+    return !value || !collapsed(value);
   });
 }
 

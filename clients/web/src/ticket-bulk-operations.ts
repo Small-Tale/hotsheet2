@@ -1,6 +1,6 @@
 import type { Capabilities, CheckoutTicketCounts, TicketRow } from './api';
 import type { TicketGroupMenuModel } from './components/ticket-row-context-menu';
-import { ticketGroupKey, ticketGroupName } from './ticket-groups';
+import { ticketGroupKey, type TicketGroupOption, ticketGroupValue } from './ticket-groups';
 import type { TicketPatch } from './ticket-operations';
 import { isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket } from './ticket-views';
 
@@ -10,7 +10,7 @@ export type BulkTicketAction =
   | { kind: 'reopen' }
   | { kind: 'add-tag'; tag: string }
   | { kind: 'remove-tag'; tag: string }
-  /** Set (a name) or clear (null) the group, optionally with a board column's status (HS2-PRXD39). */
+  /** Set (a stored value: an id or a name) or clear (null) the group, optionally with a board column's status (HS2-PRXD39). */
   | { kind: 'group'; group: string | null; status?: string }
   | { kind: 'delete' };
 
@@ -106,22 +106,29 @@ export function ticketGroupDisabledReason(
     : 'One or more selected ticket providers do not support groups.';
 }
 
-/** The ticket menu's group entries for the target tickets, given every known group name (HS2-TX17CM). */
+/**
+ * The ticket menu's group entries for the target tickets, given every known group (HS2-TX17CM).
+ * A duplicate display name shows its id so same-named groups stay distinguishable (HS2-9KZSD4).
+ */
 export function ticketGroupMenuModel(
   targets: readonly TicketRow[],
-  groups: readonly string[],
+  groups: readonly TicketGroupOption[],
   capabilitiesFor: (connectionId: string) => Capabilities | undefined,
 ): TicketGroupMenuModel | undefined {
   if (targets.length === 0) return undefined;
-  const names = targets.map(ticketGroupName),
-    first = names[0],
+  const values = targets.map(ticketGroupValue),
+    first = values[0],
     shared =
       first !== undefined &&
-      names.every((name) => name !== undefined && ticketGroupKey(name) === ticketGroupKey(first));
+      values.every((value) => value !== undefined && ticketGroupKey(value) === ticketGroupKey(first)),
+    current = shared ? groups.find((group) => ticketGroupKey(group.id) === ticketGroupKey(first)) : undefined;
   return {
-    names: groups,
-    current: shared ? first : undefined,
-    removable: names.some((name) => name !== undefined),
+    groups: groups.map((group) => ({
+      id: group.id,
+      label: group.duplicate === true ? `${group.name} (${group.id})` : group.name,
+    })),
+    current: current?.id ?? (shared ? first : undefined),
+    removable: values.some((value) => value !== undefined),
     disabledReason: ticketGroupDisabledReason(targets, capabilitiesFor),
   };
 }
@@ -136,8 +143,8 @@ export function bulkTicketPatch(
 ): TicketPatch | undefined {
   if (action.kind === 'group') {
     const patch: TicketPatch = {},
-      current = ticketGroupName(ticket);
-    // A group's stored spelling is shared, so the same group in another casing is no change.
+      current = ticketGroupValue(ticket);
+    // Groups compare by identity: an id exactly, and a legacy name in any casing (HS2-9KZSD4).
     if (
       action.group === null
         ? current !== undefined

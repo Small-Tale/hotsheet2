@@ -1277,7 +1277,7 @@ paths:
             type: boolean
         - name: group
           in: query
-          description: Only tickets in this group; letter case and spacing do not matter (HS2-PDSHNN).
+          description: Only tickets in this group, by id or by name (letter case and spacing do not matter). A checkout resolves a name through its group registry; a store matches names only on unmigrated legacy values (HS2-PDSHNN, HS2-9KZSD4).
           schema:
             type: string
         - name: has_group
@@ -6287,7 +6287,7 @@ paths:
             type: boolean
         - name: group
           in: query
-          description: Only tickets in this group; letter case and spacing do not matter (HS2-PDSHNN).
+          description: Only tickets in this group, by id or by name (letter case and spacing do not matter). A checkout resolves a name through its group registry; a store matches names only on unmigrated legacy values (HS2-PDSHNN, HS2-9KZSD4).
           schema:
             type: string
         - name: has_group
@@ -13271,7 +13271,9 @@ paths:
   /groups:
     get:
       operationId: list_groups
-      description: Ticket groups in use with member counts (HS2-PDSHNN). A group exists while a ticket outside Trash names it.
+      description:
+        Ticket groups in use with member counts (HS2-PDSHNN). A group is listed while a ticket outside Trash names
+        it. A store has no group registry, so ids are listed under placeholders (HS2-9KZSD4).
       responses:
         '200':
           description: Server-owned response.
@@ -13289,8 +13291,9 @@ paths:
     post:
       operationId: rename_group
       description:
-        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
-        is allowed.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
+        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
+        allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -13305,19 +13308,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/RenamedTicketGroup'
         '400':
-          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.
+            `group_registry_required`: the route has no project group registry.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: '`group_not_found`: no ticket outside Trash names `from`.'
+          description: '`group_not_found`: no listed group matches `group`.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`group_name_taken`: `to` is a different existing group.'
+          description: '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches
+            several groups; use an id.'
           content:
             application/json:
               schema:
@@ -13331,7 +13336,7 @@ paths:
   /groups/ungroup:
     post:
       operationId: ungroup
-      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      description: Clear a group, by id or name, from every member in one write per store (HS2-8CDFKR). The registry entry is kept.
       requestBody:
         required: true
         content:
@@ -13357,11 +13362,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /groups/merge:
+    post:
+      operationId: merge_groups
+      description: Move every member of one group into another, as after two clones each created a group with the same
+        name (HS2-9KZSD4). Neither registry entry is deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeTicketGroups'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_merge`: `from` and `into` are one group, or `into` is a legacy name.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no listed group matches `from` or `into`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_ambiguous`: a name matches several groups; use an id.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /stores/{store_id}/groups:
     parameters: *a1
     get:
       operationId: list_store_groups
-      description: Ticket groups in use with member counts (HS2-PDSHNN). A group exists while a ticket outside Trash names it.
+      description:
+        Ticket groups in use with member counts (HS2-PDSHNN). A group is listed while a ticket outside Trash names
+        it. A store has no group registry, so ids are listed under placeholders (HS2-9KZSD4).
       responses:
         '200':
           description: Server-owned response.
@@ -13386,8 +13435,9 @@ paths:
     post:
       operationId: rename_store_group
       description:
-        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
-        is allowed.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
+        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
+        allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -13402,19 +13452,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/RenamedTicketGroup'
         '400':
-          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.
+            `group_registry_required`: the route has no project group registry.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: '`group_not_found`: no ticket outside Trash names `from`. Also: Unknown store.'
+          description: '`group_not_found`: no listed group matches `group`. Also: Unknown store.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`group_name_taken`: `to` is a different existing group.'
+          description: '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches
+            several groups; use an id.'
           content:
             application/json:
               schema:
@@ -13429,7 +13481,7 @@ paths:
     parameters: *a1
     post:
       operationId: ungroup_store
-      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      description: Clear a group, by id or name, from every member in one write per store (HS2-8CDFKR). The registry entry is kept.
       requestBody:
         required: true
         content:
@@ -13455,11 +13507,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/groups/merge:
+    parameters: *a1
+    post:
+      operationId: merge_store_groups
+      description: Move every member of one group into another, as after two clones each created a group with the same
+        name (HS2-9KZSD4). Neither registry entry is deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeTicketGroups'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_merge`: `from` and `into` are one group, or `into` is a legacy name.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no listed group matches `from` or `into`. Also: Unknown store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_ambiguous`: a name matches several groups; use an id.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /providers/{connection_id}/groups:
     parameters: *a2
     get:
       operationId: list_provider_groups
-      description: Ticket groups in use with member counts (HS2-PDSHNN). A group exists while a ticket outside Trash names it.
+      description:
+        Ticket groups in use with member counts (HS2-PDSHNN). A group is listed while a ticket outside Trash names
+        it. A store has no group registry, so ids are listed under placeholders (HS2-9KZSD4).
       responses:
         '200':
           description: Server-owned response.
@@ -13484,8 +13581,9 @@ paths:
     post:
       operationId: rename_provider_group
       description:
-        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
-        is allowed.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
+        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
+        allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -13500,13 +13598,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/RenamedTicketGroup'
         '400':
-          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.
+            `group_registry_required`: the route has no project group registry.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: '`group_not_found`: no ticket outside Trash names `from`.'
+          description: '`group_not_found`: no listed group matches `group`.'
           content:
             application/json:
               schema:
@@ -13528,7 +13627,7 @@ paths:
     parameters: *a2
     post:
       operationId: ungroup_provider
-      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      description: Clear a group, by id or name, from every member in one write per store (HS2-8CDFKR). The registry entry is kept.
       requestBody:
         required: true
         content:
@@ -13560,12 +13659,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /providers/{connection_id}/groups/merge:
+    parameters: *a2
+    post:
+      operationId: merge_provider_groups
+      description: Move every member of one group into another, as after two clones each created a group with the same
+        name (HS2-9KZSD4). Neither registry entry is deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeTicketGroups'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_merge`: `from` and `into` are one group, or `into` is a legacy name.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no listed group matches `from` or `into`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: "`group_ambiguous`: a name matches several groups; use an id. Also: A connection without the `groups` capability: provider connection '<id>' does not support 'groups'."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/groups:
     parameters: *a3
     get:
       operationId: list_checkout_groups
-      description: 'Ticket groups of the project: one namespace, counts merged by name across every connection with the
-        `groups` capability (HS2-PDSHNN).'
+      description: "Ticket groups of the project: one namespace, counts merged by id across every connection with the
+        `groups` capability (HS2-PDSHNN), named by the checkout's group registry (HS2-9KZSD4)."
       responses:
         '200':
           description: Server-owned response.
@@ -13585,13 +13727,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    post:
+      operationId: create_checkout_group
+      description: Create a group in the checkout's group registry without assigning tickets, or return the group that
+        already has the name (HS2-9KZSD4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketGroup'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedTicketGroup'
+        '400':
+          description: '`invalid_group_name`: the name is empty, too long, or holds a control character.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Unknown checkout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/groups/rename:
     parameters: *a3
     post:
       operationId: rename_checkout_group
       description:
-        Rename a group on every member in one write per store (HS2-8CDFKR). A change of only letter case or spacing
-        is allowed.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
+        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
+        allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -13606,19 +13784,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/RenamedTicketGroup'
         '400':
-          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.'
+          description: '`invalid_group_name`: the new name is empty, too long, or holds a control character.
+            `group_registry_required`: the route has no project group registry.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: '`group_not_found`: no ticket outside Trash names `from`. Also: Unknown checkout.'
+          description: '`group_not_found`: no listed group matches `group`. Also: Unknown checkout.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`group_name_taken`: `to` is a different existing group.'
+          description: '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches
+            several groups; use an id.'
           content:
             application/json:
               schema:
@@ -13633,7 +13813,7 @@ paths:
     parameters: *a3
     post:
       operationId: ungroup_checkout
-      description: Clear a group from every member in one write per store (HS2-8CDFKR).
+      description: Clear a group, by id or name, from every member in one write per store (HS2-8CDFKR). The registry entry is kept.
       requestBody:
         required: true
         content:
@@ -13649,6 +13829,82 @@ paths:
                 $ref: '#/components/schemas/UngroupedTickets'
         '404':
           description: '`group_not_found`: no ticket outside Trash names the group. Also: Unknown checkout.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/groups/merge:
+    parameters: *a3
+    post:
+      operationId: merge_checkout_groups
+      description: Move every member of one group into another, as after two clones each created a group with the same
+        name (HS2-9KZSD4). Neither registry entry is deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeTicketGroups'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenamedTicketGroup'
+        '400':
+          description: '`invalid_group_merge`: `from` and `into` are one group, or `into` is a legacy name.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: '`group_not_found`: no listed group matches `from` or `into`. Also: Unknown checkout.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_ambiguous`: a name matches several groups; use an id.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/groups/migrate:
+    parameters: *a3
+    post:
+      operationId: migrate_checkout_groups
+      description: "The explicit, idempotent group migration (HS2-9KZSD4): every ticket of the project's Git sources
+        that still stores a group name is rewritten to a registry id, with one registry entry per distinct name key
+        (an existing entry with that key is reused). The same workflow as `hotsheet-cli group migrate`. The body is
+        optional."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateTicketGroups'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigratedTicketGroups'
+        '404':
+          description: Unknown checkout.
           content:
             application/json:
               schema:
@@ -14686,7 +14942,7 @@ components:
           type: string
         group:
           type: string
-          description: Ticket group display name (HS2-PDSHNN); omitted when ungrouped.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; omitted when ungrouped.
         created_at:
           anyOf:
             - type: string
@@ -14863,7 +15119,7 @@ components:
           anyOf: &a4
             - type: string
             - type: 'null'
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -15070,7 +15326,7 @@ components:
           $ref: '#/components/schemas/Actor'
         group:
           anyOf: *a4
-          description: Group to create the ticket in (HS2-PDSHNN).
+          description: Group to create the ticket in (HS2-PDSHNN). An id, or on a checkout route a name resolved through the group registry (HS2-9KZSD4).
       additionalProperties: false
     Actor:
       type: object
@@ -15137,7 +15393,7 @@ components:
             - type: 'null'
         group:
           anyOf: *a4
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         note:
           type: string
         ai_feedback:
@@ -15477,7 +15733,7 @@ components:
             - type: 'null'
         group:
           anyOf: *a4
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -15671,7 +15927,7 @@ components:
             - type: 'null'
         group:
           anyOf: *a4
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -15824,7 +16080,7 @@ components:
             - type: 'null'
         group:
           anyOf: *a4
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         note:
           type: string
         ai_feedback:
@@ -15967,7 +16223,7 @@ components:
             - type: 'null'
         group:
           anyOf: *a4
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -16122,7 +16378,7 @@ components:
                   - type: 'null'
               group:
                 anyOf: *a4
-                description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+                description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
               note:
                 type: string
               ai_feedback:
@@ -18069,7 +18325,7 @@ components:
           description: Atomic persisted note kind correction. Git supports it; remote providers refuse before mutation.
         groups:
           type: boolean
-          description: Tickets carry `group` and the connection lists, renames, and clears groups (HS2-PDSHNN).
+          description: Tickets carry a `group` id and the connection lists, ungroups, and merges groups (HS2-PDSHNN, HS2-9KZSD4).
       additionalProperties: false
     ProviderDescriptor:
       type: object
@@ -22455,7 +22711,7 @@ components:
             - type: 'null'
         group:
           anyOf: *a4
-          description: Ticket group display name (HS2-PDSHNN); null when ungrouped, and JSON null clears it on update.
+          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
@@ -23249,34 +23505,89 @@ components:
     TicketGroups:
       type: object
       required:
+        - registry
         - groups
       properties:
+        registry:
+          type: boolean
+          description: Whether names come from a project group registry (a checkout). Without one, ids are listed under
+            placeholders.
         groups:
           type: array
-          description: Sorted by name without regard to case.
+          description: Sorted by display name without regard to case, then by id.
           items:
             type: object
             required:
+              - id
               - name
               - count
+              - named
+              - legacy
+              - duplicate
             properties:
+              id:
+                type: string
+                description: The value member tickets store, a group id, or a legacy group's stored name.
               name:
                 type: string
+                description: The registry name, a legacy group's own name, or the placeholder `Group <id>`.
               count:
                 type: integer
                 minimum: 1
                 description: Member tickets outside Trash.
+              named:
+                type: boolean
+                description: False when `name` is a placeholder for an id this project does not name.
+              legacy:
+                type: boolean
+                description: An unmigrated pre-registry name value.
+              duplicate:
+                type: boolean
+                description: Another listed named group has the same name key.
             additionalProperties: false
+      additionalProperties: false
+    CreateTicketGroup:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: 'At most 120 characters and no control characters.'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    CreatedTicketGroup:
+      type: object
+      required:
+        - id
+        - name
+        - created
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created:
+          type: boolean
+          description: False when a group with the name key already existed.
       additionalProperties: false
     RenameTicketGroup:
       type: object
       required:
-        - from
         - to
+      anyOf:
+        - required:
+            - group
+        - required:
+            - from
       properties:
+        group:
+          type: string
+          description: The group's id, or its name (letter case and spacing do not matter).
         from:
           type: string
-          description: Current name; letter case and spacing do not matter.
+          description: Pre-registry alias of `group`.
         to:
           type: string
           description: 'New name: at most 120 characters and no control characters.'
@@ -23286,24 +23597,76 @@ components:
     RenamedTicketGroup:
       type: object
       required:
+        - id
         - name
         - updated
       properties:
+        id:
+          type: string
+          description: The group id the members now carry.
         name:
           type: string
-          description: The stored new name.
+          description: The group's stored name.
         updated:
           type: integer
           minimum: 0
-          description: Member tickets outside Trash.
+          description: Member tickets outside Trash that were rewritten (none for a rename of an id group).
+      additionalProperties: false
+    MergeTicketGroups:
+      type: object
+      required:
+        - from
+        - into
+      properties:
+        from:
+          type: string
+          description: The group whose members move, by id or name.
+        into:
+          type: string
+          description: The group they join, by id or name.
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    MigrateTicketGroups:
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    MigratedTicketGroups:
+      type: object
+      required:
+        - created
+        - reused
+        - updated
+      properties:
+        created:
+          type: integer
+          minimum: 0
+          description: Registry entries created for legacy names.
+        reused:
+          type: integer
+          minimum: 0
+          description: Legacy names that joined an existing registry entry with the same key.
+        updated:
+          type: integer
+          minimum: 0
+          description: Tickets rewritten, including tickets in Trash.
       additionalProperties: false
     UngroupTickets:
       type: object
-      required:
-        - name
+      anyOf:
+        - required:
+            - group
+        - required:
+            - name
       properties:
+        group:
+          type: string
+          description: The group's id, or its name.
         name:
           type: string
+          description: Pre-registry alias of `group`.
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false

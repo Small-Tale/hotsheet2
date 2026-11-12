@@ -23,6 +23,8 @@ export const TICKET_GROUP_DIALOG_SCENARIOS: readonly { value: TicketGroupDialogS
 ];
 
 export const TICKET_GROUP_DEMO_GROUPS = ['Board drag & drop', 'Search syntax'];
+/** The fixture group's registry id (HS2-9KZSD4). */
+export const TICKET_GROUP_DEMO_ID = '7K3M9P2QXA';
 const INITIAL_EVENT = 'Choose a presentation in the demo settings.';
 
 export const ticketGroupDialogSettings = {
@@ -50,7 +52,9 @@ export function ticketGroupDialogState(
   return {
     ...base,
     mode: 'rename',
-    group: 'Board drag & drop',
+    // A renamed group may keep its own name, so only the other groups' names are taken.
+    groups: TICKET_GROUP_DEMO_GROUPS.filter((group) => group !== 'Board drag & drop'),
+    group: TICKET_GROUP_DEMO_ID,
     busy: scenario === 'rename-busy',
     error: scenario === 'rename-error' ? 'Could not rename the group: the store is locked.' : undefined,
   };

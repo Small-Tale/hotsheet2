@@ -43,8 +43,13 @@ pub(crate) struct ListParams {
     claimed: Option<bool>,
     /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
     blocked: Option<bool>,
-    /// Only tickets in this group, matched without regard to case or spacing (HS2-PDSHNN).
-    group: Option<String>,
+    /// Only tickets in this group: a group id, or a name matched without regard to case
+    /// or spacing (HS2-PDSHNN). A checkout route resolves the name through its registry.
+    pub(crate) group: Option<String>,
+    /// The ids a checkout's registry resolves `group` to (HS2-9KZSD4); never read from
+    /// the request.
+    #[serde(skip)]
+    pub(crate) group_ids: Vec<String>,
     /// `true` = only grouped tickets; `false` = only ungrouped (HS2-PDSHNN).
     has_group: Option<bool>,
     /// ISO-8601 `created_at` / `updated_at` range bounds (inclusive).
@@ -168,6 +173,7 @@ impl ListParams {
         }
         Ok(TicketQuery {
             group: self.group,
+            group_ids: self.group_ids,
             has_group: self.has_group,
             status: opt_parse(self.status.as_deref())?,
             collection: opt_parse(self.collection.as_deref())?,

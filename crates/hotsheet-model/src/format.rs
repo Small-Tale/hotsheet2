@@ -1278,6 +1278,22 @@ mod tests {
     }
 
     #[test]
+    fn hs2_9kzsd4_group_ids_round_trip_and_legacy_names_still_read() {
+        let id = parse_file(&group_file("group: 7K3M9P2QXA\n")).expect("parses");
+        assert_eq!(id.group.as_deref(), Some("7K3M9P2QXA"));
+        assert!(to_file_string(&id).contains("group: 7K3M9P2QXA\n"));
+        assert_eq!(parse_file(&to_file_string(&id)).unwrap(), id);
+        // A pre-registry name is still read, untouched, until the explicit migration.
+        let legacy = parse_file(&group_file("group: Sprint 12\n")).expect("parses");
+        assert_eq!(legacy.group.as_deref(), Some("Sprint 12"));
+        assert_eq!(
+            crate::GroupValue::of(legacy.group.as_deref().unwrap()),
+            crate::GroupValue::Legacy("Sprint 12")
+        );
+        assert_eq!(parse_file(&to_file_string(&legacy)).unwrap(), legacy);
+    }
+
+    #[test]
     fn unknown_frontmatter_keys_are_preserved() {
         let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
         let text = format!(

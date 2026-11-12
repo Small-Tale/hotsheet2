@@ -1,12 +1,84 @@
-//! Ticket group names (HS2-PDSHNN). A ticket names at most one group; a group exists
-//! while at least one non-deleted ticket names it, so there is no registry. Every writer
-//! and reader normalizes through this module so the display spelling and the comparison
-//! key never diverge between the file format, the index, search, and the API.
+//! Ticket group ids and names (HS2-PDSHNN, HS2-9KZSD4). A ticket names at most one group
+//! by its **id**; the project's group registry maps each id to a display name. A value
+//! that is not id-shaped is a *legacy name* written before HS2-9KZSD4: it is read as is,
+//! shown by name, and rewritten to an id by the explicit group migration. Every writer and
+//! reader classifies through this module so the file format, the index, search, and the
+//! API agree on what a stored value means.
 
 use serde::{Deserialize, Deserializer};
 
 /// Longest accepted display name, in Unicode scalar values.
 pub const GROUP_NAME_MAX_CHARS: usize = 120;
+
+/// Length of a group id: ten Crockford base32 characters, short enough for a 50-character
+/// GitHub label (`hs-group:<id>`) and free of spaces for Jira (HS2-9KZSD4).
+pub const GROUP_ID_LEN: usize = 10;
+
+const CROCKFORD: &str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/// Whether `value` is a group id: exactly [`GROUP_ID_LEN`] uppercase Crockford base32
+/// characters (no `I`, `L`, `O`, or `U`).
+pub fn is_group_id(value: &str) -> bool {
+    value.len() == GROUP_ID_LEN && value.chars().all(|ch| CROCKFORD.contains(ch))
+}
+
+/// A new random group id. The characters are a ULID's random part, so two clones that
+/// create groups at the same moment do not collide.
+pub fn new_group_id() -> String {
+    let ulid = ulid::Ulid::new().to_string();
+    ulid[ulid.len() - GROUP_ID_LEN..].to_string()
+}
+
+/// The display name of a group id this project's registry does not name: a stable
+/// placeholder built from the id, which a rename replaces (HS2-9KZSD4).
+pub fn group_placeholder_name(id: &str) -> String {
+    format!("Group {id}")
+}
+
+/// What a stored `group` value refers to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupValue<'a> {
+    /// A registry id.
+    Id(&'a str),
+    /// A pre-registry display name, not yet migrated.
+    Legacy(&'a str),
+}
+
+impl<'a> GroupValue<'a> {
+    /// Classify a stored value.
+    pub fn of(value: &'a str) -> Self {
+        if is_group_id(value) {
+            Self::Id(value)
+        } else {
+            Self::Legacy(value)
+        }
+    }
+}
+
+/// The comparison key of a stored value: the id itself, or a legacy name's
+/// case-insensitive key. Two values with one key are the same group. A legacy key is
+/// lower-cased, so it never equals an (upper-case) id: a legacy name that is itself
+/// id-shaped is read as an id.
+pub fn group_value_key(value: &str) -> String {
+    match GroupValue::of(value) {
+        GroupValue::Id(id) => id.to_string(),
+        GroupValue::Legacy(name) => group_key(name),
+    }
+}
+
+/// The value keys a typed group filter matches without a registry: the id itself when
+/// the input is an id, and the legacy-name key of the input. A caller with the project's
+/// registry adds the ids whose names match (HS2-9KZSD4). Empty when the input names no
+/// group, so it matches nothing.
+pub fn group_filter_keys(input: &str) -> Vec<String> {
+    let trimmed = input.trim();
+    let mut keys = Vec::new();
+    if is_group_id(trimmed) {
+        keys.push(trimmed.to_string());
+    }
+    keys.extend(group_key_of_input(input));
+    keys
+}
 
 /// Why a requested group name was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -72,7 +144,8 @@ pub fn group_key_of_input(input: &str) -> Option<String> {
 }
 
 /// Frontmatter deserializer for `group`: any scalar is read tolerantly and anything
-/// else (a list, a mapping, null) is treated as ungrouped.
+/// else (a list, a mapping, null) is treated as ungrouped. An id is kept exactly; any
+/// other text is a legacy name and is normalized like one (HS2-9KZSD4).
 pub(crate) fn deserialize_group<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: Deserializer<'de>,
@@ -149,5 +222,44 @@ mod tests {
             Some("board drag".into())
         );
         assert_eq!(group_key_of_input("  "), None);
+    }
+
+    #[test]
+    fn hs2_9kzsd4_ids_are_ten_crockford_characters() {
+        for _ in 0..64 {
+            let id = new_group_id();
+            assert!(is_group_id(&id), "{id}");
+            assert_eq!(GroupValue::of(&id), GroupValue::Id(&id));
+            assert_eq!(group_value_key(&id), id);
+        }
+        assert_ne!(new_group_id(), new_group_id());
+        assert!(is_group_id("7K3M9P2QXA"));
+        assert!(is_group_id("0123456789"));
+        for not_id in [
+            "7k3m9p2qxa",  // lower case
+            "7K3M9P2QX",   // too short
+            "7K3M9P2QXAB", // too long
+            "7K3M9P2QXI",  // I is not Crockford
+            "7K3M9P2QXL",
+            "7K3M9P2QXO",
+            "7K3M9P2QXU",
+            "Sprint",
+            "Board drag",
+            "",
+        ] {
+            assert!(!is_group_id(not_id), "{not_id}");
+            assert_eq!(GroupValue::of(not_id), GroupValue::Legacy(not_id));
+        }
+    }
+
+    #[test]
+    fn hs2_9kzsd4_legacy_keys_never_equal_an_id_key() {
+        assert_eq!(group_value_key("Sprint 12"), "sprint 12");
+        assert_eq!(group_value_key("SPRINT 12"), group_value_key("sprint 12"));
+        // A legacy key is lower case; an id is upper case. A legacy name that looks like an
+        // id is read as that id, so the two key spaces never collide.
+        let legacy = group_value_key("abcdefghjk");
+        assert!(!is_group_id(&legacy));
+        assert_eq!(group_placeholder_name("7K3M9P2QXA"), "Group 7K3M9P2QXA");
     }
 }

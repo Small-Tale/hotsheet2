@@ -9,7 +9,9 @@ import { realTicketServer } from './real-ticket-server';
 /**
  * Ticket groups in the real app against a private real server (HS2-3XNTSD): rendering in the list
  * and the columns, membership through the menu, the dialog, and drag and drop, group rename and
- * ungroup, and group search. Every ticket is synthetic.
+ * ungroup, and group search. Tickets store group ids whose names live in the project's group
+ * registry (HS2-9KZSD4), so the spec seeds through checkout routes and finds groups by display
+ * name. Every ticket is synthetic.
  */
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 const BOARD = 'Board drag & drop',
@@ -39,9 +41,11 @@ const SEEDS: readonly Seed[] = [
 ];
 
 async function seed(server: Server) {
-  const tickets: Record<string, FullTicket> = {};
+  const tickets: Record<string, FullTicket> = {},
+    checkout = `/checkouts/${server.checkoutId}`;
   for (const item of SEEDS) {
-    const created = await server.request<FullTicket>('/tickets', 'POST', {
+    // A checkout route resolves a group name through the registry, creating its entry (HS2-9KZSD4).
+    const created = await server.request<FullTicket>(`${checkout}/tickets`, 'POST', {
       title: item.title,
       category: item.category,
       tags: [],
@@ -49,7 +53,7 @@ async function seed(server: Server) {
       up_next: item.up_next,
     });
     tickets[item.title] = item.status
-      ? await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', { status: item.status })
+      ? await server.request<FullTicket>(`${checkout}/tickets/${created.id}`, 'PATCH', { status: item.status })
       : created;
   }
   return tickets;
@@ -111,15 +115,36 @@ async function open(
 
 const list = (page: Page) => page.locator('[data-component="ticket-list"]');
 const board = (page: Page) => page.locator('[data-component="ticket-board"]');
+/** A group container by its display name; its `data-ticket-group` is the group's id (HS2-9KZSD4). */
 const group = (scope: Locator, name: string, column?: string) =>
   scope.locator(
-    `[data-component="ticket-group"][data-ticket-group="${name}"]${column ? `[data-ticket-group-scope="${column}"]` : ''}`,
+    `[data-component="ticket-group"][aria-label="${name} group"]${column ? `[data-ticket-group-scope="${column}"]` : ''}`,
   );
 const rowOf = (scope: Locator, slug: string) => scope.locator(`[data-ticket-slug="${slug}"]`);
 const slugsIn = (scope: Locator) =>
   scope.locator('[data-ticket-slug]').evaluateAll((rows) => rows.map((row) => (row as HTMLElement).dataset.ticketSlug));
-const groupOf = (server: Server, id: string) =>
-  server.request<FullTicket>(`/tickets/${id}`).then((ticket) => ticket.group ?? null);
+interface GroupSummary {
+  id: string;
+  name: string;
+  count: number;
+}
+const groupsOf = (server: Server) =>
+  server.request<{ groups: GroupSummary[] }>(`/checkouts/${server.checkoutId}/groups`).then((result) => result.groups);
+/** The project's groups as `[name, count]` pairs, sorted by name. */
+const groupCounts = (server: Server) =>
+  groupsOf(server).then((groups) => groups.map((item) => [item.name, item.count] as const));
+/** The id the registry gives a group name. */
+const groupIdOf = (server: Server, name: string) =>
+  groupsOf(server).then((groups) => groups.find((item) => item.name === name)?.id);
+/** A ticket's group display name, resolved through the registry, or null when ungrouped. */
+async function groupOf(server: Server, id: string): Promise<string | null> {
+  const ticket = await server.request<FullTicket>(`/tickets/${id}`);
+  if (!ticket.group) return null;
+  return (await groupsOf(server)).find((item) => item.id === ticket.group)?.name ?? ticket.group;
+}
+/** A ticket's status and group display name. */
+const statusAndGroupOf = async (server: Server, id: string) =>
+  [(await server.request<FullTicket>(`/tickets/${id}`)).status, await groupOf(server, id)] as const;
 
 /** The x of a group title's first glyph and of the first ticket type icon below it. */
 async function titleAndIconLeft(container: Locator) {
@@ -166,8 +191,12 @@ test('HS2-WZ3JGZ renders list groups as segments, aligned and collapsible', asyn
     );
     // Rows appear in one visual order with every group contiguous.
     const order = await slugsIn(view);
+    const boardId = await groupIdOf(server, BOARD);
+    // The group carries its registry id, not its name (HS2-9KZSD4).
+    expect(boardId).toMatch(/^[0-9A-HJKMNP-TV-Z]{10}$/);
+    await expect(boardGroup).toHaveAttribute('data-ticket-group', boardId!);
     const members = Object.values(tickets)
-      .filter((ticket) => ticket.group === BOARD)
+      .filter((ticket) => ticket.group === boardId)
       .map((ticket) => ticket.slug);
     const positions = members.map((slug) => order.indexOf(slug)).sort((a, b) => a - b);
     expect(positions[2] - positions[0]).toBe(2);
@@ -310,7 +339,9 @@ test('HS2-TX17CM adds tickets to a new or existing group and removes them', asyn
     const choices = await menu
       .locator('[data-context-group]')
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.contextGroup));
-    expect(choices).toEqual(['', BOARD, SEARCH]);
+    // Each existing group is offered by its id, labeled with its name (HS2-9KZSD4).
+    expect(choices).toEqual(['', await groupIdOf(server, BOARD), await groupIdOf(server, SEARCH)]);
+    await expect(menu.locator('[data-context-group]').filter({ hasText: BOARD })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Remove from Group' })).toHaveCount(0);
     await capture(page, 'context-add-to-group-light-1440');
     await menu.getByRole('menuitem', { name: 'New Group…' }).click();
@@ -340,15 +371,16 @@ test('HS2-TX17CM adds tickets to a new or existing group and removes them', asyn
     await rowOf(view, onboarding.slug).click();
     await page.getByRole('button', { name: 'More Actions for Selected Tickets' }).click();
     await openGroupSubmenu();
-    await menu.locator(`[data-context-group="${SEARCH}"]`).click();
+    const searchId = (await groupIdOf(server, SEARCH))!;
+    await menu.locator(`[data-context-group="${searchId}"]`).click();
     await expect(group(view, SEARCH).locator('[data-ticket-slug]')).toHaveCount(3);
     await expect.poll(() => groupOf(server, onboarding.id)).toBe(SEARCH);
 
     // Moving a grouped ticket to another group replaces its membership; its current group is checked.
     await rowOf(view, onboarding.slug).click({ button: 'right' });
     await openGroupSubmenu();
-    await expect(menu.locator(`[data-context-group="${SEARCH}"]`)).toHaveAttribute('aria-checked', 'true');
-    await menu.locator('[data-context-group="Terminal polish"]').click();
+    await expect(menu.locator(`[data-context-group="${searchId}"]`)).toHaveAttribute('aria-checked', 'true');
+    await menu.locator(`[data-context-group="${await groupIdOf(server, 'Terminal polish')}"]`).click();
     await expect(created.locator('[data-ticket-slug]')).toHaveCount(3);
     await expect(group(view, SEARCH).locator('[data-ticket-slug]')).toHaveCount(2);
     await expect.poll(() => groupOf(server, onboarding.id)).toBe('Terminal polish');
@@ -364,14 +396,10 @@ test('HS2-TX17CM adds tickets to a new or existing group and removes them', asyn
     await menu.getByRole('menuitem', { name: 'Remove from Group' }).click();
     await expect(created).toHaveCount(0);
     await expect
-      .poll(() =>
-        server
-          .request<{ groups: Array<{ name: string; count: number }> }>(`/checkouts/${server.checkoutId}/groups`)
-          .then((result) => result.groups),
-      )
+      .poll(() => groupCounts(server))
       .toEqual([
-        { name: BOARD, count: 3 },
-        { name: SEARCH, count: 2 },
+        [BOARD, 3],
+        [SEARCH, 2],
       ]);
 
     // The standard Undo shortcut restores the removed membership.
@@ -474,42 +502,33 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
       },
     );
     await expect(startedSearch.locator(`[data-ticket-slug="${onboarding.slug}"]`)).toBeVisible();
-    await expect
-      .poll(() =>
-        server.request<FullTicket>(`/tickets/${onboarding.id}`).then((ticket) => [ticket.status, ticket.group]),
-      )
-      .toEqual(['started', SEARCH]);
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', SEARCH]);
 
     // Dropped in another column outside a group, a grouped ticket keeps its group and changes status.
     await drag(page, rowOf(columns, onboarding.slug), columns.locator('[data-column-id="completed"] > header'));
-    await expect
-      .poll(() =>
-        server.request<FullTicket>(`/tickets/${onboarding.id}`).then((ticket) => [ticket.status, ticket.group]),
-      )
-      .toEqual(['completed', SEARCH]);
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['completed', SEARCH]);
     await expect(group(columns, SEARCH, 'completed').locator('[data-ticket-slug]')).toHaveCount(1);
 
     // Dropped in its own column outside every group, it leaves the group.
     await drag(page, rowOf(columns, onboarding.slug), columns.locator('[data-column-id="completed"] > header'));
-    await expect
-      .poll(() =>
-        server.request<FullTicket>(`/tickets/${onboarding.id}`).then((ticket) => [ticket.status, ticket.group ?? null]),
-      )
-      .toEqual(['completed', null]);
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['completed', null]);
     await expect(group(columns, SEARCH, 'completed')).toHaveCount(0);
   }, page);
 });
 
 test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ page }) => {
   test.setTimeout(120_000);
-  await withServer(async (server) => {
+  await withServer(async (server, tickets) => {
     await open(page, server);
     const view = list(page),
+      boardId = (await groupIdOf(server, BOARD))!,
       menu = page.locator('[data-ticket-group-menu="true"]'),
       dialog = page.locator('[data-dialog-component="ticket-group-dialog"]');
     await group(view, BOARD).locator('[data-component="list-header"]').click({ button: 'right' });
     await expect(menu.getByRole('menuitem', { name: 'Rename Group…' })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Ungroup' })).toBeVisible();
+    // Only a duplicate name offers a merge (HS2-9KZSD4).
+    await expect(menu.getByRole('menuitem', { name: 'Merge Duplicate Groups' })).toHaveCount(0);
     await capture(page, 'group-header-menu-light-1440');
     await menu.getByRole('menuitem', { name: 'Rename Group…' }).click();
     const field = dialog.getByLabel('Group Name'),
@@ -524,15 +543,19 @@ test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ pa
     await field.fill('Board polish');
     await rename.click();
     await expect(dialog).toBeHidden();
-    await expect(group(view, 'Board polish').locator('[data-ticket-slug]')).toHaveCount(3);
+    // A rename is a registry edit: the same id keeps its members and its header (HS2-9KZSD4).
+    const polished = group(view, 'Board polish');
+    await expect(polished.locator('[data-ticket-slug]')).toHaveCount(3);
+    await expect(polished).toHaveAttribute('data-ticket-group', boardId);
+    await expect(polished.getByRole('button', { name: 'Board polish, 3 tickets' })).toBeVisible();
     await expect(group(view, BOARD)).toHaveCount(0);
-    const renamed = await server.request<{ groups: Array<{ name: string; count: number }> }>(
-      `/checkouts/${server.checkoutId}/groups`,
-    );
-    expect(renamed.groups).toEqual([
-      { name: 'Board polish', count: 3 },
-      { name: SEARCH, count: 2 },
+    expect(await groupCounts(server)).toEqual([
+      ['Board polish', 3],
+      [SEARCH, 2],
     ]);
+    expect(await groupIdOf(server, 'Board polish')).toBe(boardId);
+    const boardTicket = Object.values(tickets).find((ticket) => ticket.group === boardId)!;
+    expect((await server.request<FullTicket>(`/tickets/${boardTicket.id}`)).group).toBe(boardId);
 
     // The keyboard context-menu request opens the same menu.
     await group(view, SEARCH).locator('[data-action="toggle-ticket-group"]').focus();
@@ -545,10 +568,7 @@ test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ pa
     await menu.getByRole('menuitem', { name: 'Ungroup' }).click();
     await expect(group(view, SEARCH)).toHaveCount(0);
     await expect(group(view, 'Board polish')).toBeVisible();
-    const remaining = await server.request<{ groups: Array<{ name: string; count: number }> }>(
-      `/checkouts/${server.checkoutId}/groups`,
-    );
-    expect(remaining.groups).toEqual([{ name: 'Board polish', count: 3 }]);
+    expect(await groupCounts(server)).toEqual([['Board polish', 3]]);
     await expect(view.locator('[data-ticket-slug]')).toHaveCount(SEEDS.length);
   }, page);
 });
@@ -565,8 +585,10 @@ test('HS2-44W3TP searches by group and keeps results grouped', async ({ page }) 
     const suggestion = page.locator('[data-search-field-suggestion]').filter({ hasText: BOARD });
     await expect(suggestion).toBeVisible();
     await suggestion.click();
+    const boardId = await groupIdOf(server, BOARD),
+      searchId = await groupIdOf(server, SEARCH);
     const boardSlugs = Object.values(tickets)
-      .filter((ticket) => ticket.group === BOARD)
+      .filter((ticket) => ticket.group === boardId)
       .map((ticket) => ticket.slug)
       .sort();
     await expect.poll(async () => (await slugsIn(view)).sort()).toEqual(boardSlugs);
@@ -583,7 +605,10 @@ test('HS2-44W3TP searches by group and keeps results grouped', async ({ page }) 
       expect.poll(async () => (await slugsIn(view)).sort()).toEqual(expected.map((ticket) => ticket.slug).sort());
     const all = Object.values(tickets);
     await run('group:"search syntax"');
-    await expectSlugs(all.filter((ticket) => ticket.group === SEARCH));
+    await expectSlugs(all.filter((ticket) => ticket.group === searchId));
+    // A group id is also a search term (HS2-9KZSD4).
+    await run(`group:${searchId}`);
+    await expectSlugs(all.filter((ticket) => ticket.group === searchId));
     await run('has:group');
     await expectSlugs(all.filter((ticket) => ticket.group));
     await run('NOT has:group');

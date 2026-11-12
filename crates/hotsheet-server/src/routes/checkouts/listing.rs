@@ -175,6 +175,13 @@ fn merge_checkout_page(
     page_size: usize,
     with_counts: bool,
 ) -> Result<CheckoutMergeResult, ApiError> {
+    // HS2-9KZSD4: a group name matches the ids the project's registry gives it.
+    let mut params = params.clone();
+    if let Some(input) = params.group.clone() {
+        params.group_ids =
+            crate::routes::groups::filter_ids_for_checkout(state, reference, &input)?;
+    }
+    let params = &params;
     let checkout = state
         .checkout_registry
         .resolve(reference)

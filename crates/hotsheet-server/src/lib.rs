@@ -1454,11 +1454,13 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets/{id}/copy", post(copy_ticket_route))
         .route("/tickets/{id}/move", post(move_ticket_route))
         .route("/batch", post(batch_update))
-        // Ticket groups (HS2-PDSHNN, HS2-8CDFKR): default store, one hosted store, one
-        // provider connection, and the project-wide checkout namespace.
+        // Ticket groups (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4): default store, one hosted
+        // store, one provider connection, and the project-wide checkout namespace, which
+        // alone has a group registry (create, rename, migrate).
         .route("/groups", get(routes::groups::list_groups))
         .route("/groups/rename", post(routes::groups::rename_group))
         .route("/groups/ungroup", post(routes::groups::ungroup))
+        .route("/groups/merge", post(routes::groups::merge_groups))
         .route(
             "/stores/{store_id}/groups",
             get(routes::groups::list_store_groups),
@@ -1470,6 +1472,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/stores/{store_id}/groups/ungroup",
             post(routes::groups::ungroup_store),
+        )
+        .route(
+            "/stores/{store_id}/groups/merge",
+            post(routes::groups::merge_store_groups),
         )
         .route(
             "/providers/{connection_id}/groups",
@@ -1484,8 +1490,12 @@ pub fn app(state: AppState) -> Router {
             post(routes::groups::ungroup_provider),
         )
         .route(
+            "/providers/{connection_id}/groups/merge",
+            post(routes::groups::merge_provider_groups),
+        )
+        .route(
             "/checkouts/{reference}/groups",
-            get(routes::groups::list_checkout_groups),
+            get(routes::groups::list_checkout_groups).post(routes::groups::create_checkout_group),
         )
         .route(
             "/checkouts/{reference}/groups/rename",
@@ -1494,6 +1504,14 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/groups/ungroup",
             post(routes::groups::ungroup_checkout),
+        )
+        .route(
+            "/checkouts/{reference}/groups/merge",
+            post(routes::groups::merge_checkout_groups),
+        )
+        .route(
+            "/checkouts/{reference}/groups/migrate",
+            post(routes::groups::migrate_checkout_groups),
         )
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes

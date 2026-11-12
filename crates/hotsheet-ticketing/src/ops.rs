@@ -151,10 +151,15 @@ pub struct TicketQuery {
     /// `Some(true)` = a non-empty `blocked_reason`; `Some(false)` = no blocked reason.
     /// Dependency eligibility is checked separately (HS2-BSYW6F, docs/03 §3.3).
     pub blocked: Option<bool>,
-    /// Only tickets in this group, compared by the normalized group key so letter case
-    /// and whitespace runs do not matter (HS2-PDSHNN). A name that normalizes to nothing
-    /// matches no ticket.
+    /// Only tickets in this group (HS2-PDSHNN, HS2-9KZSD4): a group id, or a name. With
+    /// no registry a name matches only legacy name values, compared by the normalized
+    /// key so letter case and whitespace runs do not matter; a caller with the project's
+    /// registry also passes the ids that name resolves to in `group_ids`. Text that
+    /// normalizes to nothing matches no ticket.
     pub group: Option<String>,
+    /// Ids whose registry names match `group`; a ticket in any of them also matches.
+    /// Ignored without `group`.
+    pub group_ids: Vec<String>,
     /// `Some(true)` = only grouped tickets; `Some(false)` = only ungrouped (HS2-PDSHNN).
     pub has_group: Option<bool>,
     /// Half-open `created_at` / `updated_at` range filters (ISO-8601 strings; inclusive
@@ -261,7 +266,11 @@ impl StoreReadBound {
 pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError> {
     let mut tickets = store.list_tickets()?;
     let text = q.text.as_deref().map(str::to_lowercase);
-    let group_key = q.group.as_deref().map(hotsheet_model::group_key_of_input);
+    let group_keys = q.group.as_deref().map(|input| {
+        let mut keys = hotsheet_model::group_filter_keys(input);
+        keys.extend(q.group_ids.iter().cloned());
+        keys
+    });
     // Keep the done set for is_blocked's compatibility signature; the filter itself
     // uses only blocked_reason (HS2-BSYW6F).
     let done: HashSet<Ulid> = tickets
@@ -317,8 +326,10 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             })
             && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
             && q.blocked.is_none_or(|want| is_blocked(t, &done) == want)
-            && group_key.as_ref().is_none_or(|key| {
-                key.is_some() && t.group.as_deref().map(hotsheet_model::group_key) == *key
+            && group_keys.as_ref().is_none_or(|keys| {
+                t.group
+                    .as_deref()
+                    .is_some_and(|value| keys.contains(&hotsheet_model::group_value_key(value)))
             })
             && q.has_group.is_none_or(|want| t.group.is_some() == want)
             && q.created_after

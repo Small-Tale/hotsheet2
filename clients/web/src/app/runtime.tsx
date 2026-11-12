@@ -239,7 +239,8 @@ import {
   reconcileReaderNoteDraft,
   type TicketFieldConflict,
 } from '../ticket-field-reconciliation';
-import { clusterTicketsByGroup, ticketGroupName } from '../ticket-groups';
+import { projectTicketGroupName } from '../ticket-group-state';
+import { clusterTicketsByGroup, ticketGroupValue } from '../ticket-groups';
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
 import { waitForTicketMotionSettled } from '../ticket-motion';
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
@@ -3354,6 +3355,11 @@ export async function startHotSheetWebClient() {
   };
   const pendingOperations = (ids?: string[]) =>
     ids?.map((id) => providerOutboxOperations.value[id]).filter((item) => item !== undefined) ?? [];
+  /** A row's group display name from the project's registry summaries (HS2-9KZSD4). */
+  const rowGroupName = (ticket: WireTicketRow) => {
+    const value = ticketGroupValue(ticket);
+    return value === undefined ? undefined : projectTicketGroupName(project()?.id, value);
+  };
   const row = (ticket: WireTicketRow): TicketRowProps => ({
     slug: ticket.slug,
     title: ticket.title,
@@ -3366,7 +3372,8 @@ export async function startHotSheetWebClient() {
     ),
     showSourceIcon: (defaultProviders.value[project()?.id ?? '']?.sources.length ?? 0) > 1,
     tags: ticket.tags,
-    group: ticketGroupName(ticket),
+    group: ticketGroupValue(ticket),
+    groupName: rowGroupName(ticket),
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
     feedbackNeeded: ticket.needs_review ?? ticket.feedback_needed,
@@ -5321,7 +5328,9 @@ export async function startHotSheetWebClient() {
     ticketCloseDialog,
     ticketContextMenu,
     tickets,
-    ticketGroupNames: () => ticketGroups.groupNames(),
+    ticketGroups: () => ticketGroups.groups(),
+    ticketGroupName: (group) => ticketGroups.displayName(group),
+    ticketGroupMergeable: (group) => ticketGroups.hasDuplicates(group),
   });
   const terminalOperationsSurface = createTerminalOperationsSurface({
     partialSourcesByProject,
@@ -5450,6 +5459,16 @@ export async function startHotSheetWebClient() {
     executeBulkTicketAction,
     refreshProject: (options) => refreshProject(options),
     showToast,
+  });
+  // Load the project's group summaries on project load, and again when loaded tickets store a
+  // group id they do not name; this follows ticket changes and never polls (HS2-9KZSD4). The read
+  // waits for the next frame so a warm project switch paints from cache first (HS2-8YHY6V).
+  effect(() => {
+    void project();
+    void tickets.value;
+    requestAnimationFrame(() => {
+      ticketGroups.syncGroups();
+    });
   });
   const { workspaceSurfaceProps } = createWorkspaceSurface({
     ticketGroups,

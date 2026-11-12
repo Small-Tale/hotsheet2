@@ -18,6 +18,7 @@ import {
   parseFeedbackDelivery,
   parseFullTicket,
   parseGitHubAuthStatus,
+  parseGroupCreate,
   parseGroupList,
   parseGroupRename,
   parseGroupUngroup,
@@ -332,7 +333,27 @@ describe('server response parsers (HS2-34P6XY)', () => {
     expect(parseTrashPurge({ purged: 1, tickets: ['a'] })).toEqual({ purged: 1, tickets: ['a'] });
     expect(parseGroupRename({ name: 'Board', updated: 2 })).toEqual({ name: 'Board', updated: 2 });
     expect(parseGroupUngroup({ updated: 2 })).toEqual({ updated: 2 });
-    expect(parseGroupList({ groups: [{ name: 'Board', count: 2 }] }).groups).toEqual([{ name: 'Board', count: 2 }]);
+    // A server before the registry (HS2-9KZSD4) lists names only: each reads as a legacy group.
+    expect(parseGroupList({ groups: [{ name: 'Board', count: 2 }] })).toEqual({
+      registry: false,
+      groups: [{ id: 'Board', name: 'Board', count: 2, named: true, legacy: true, duplicate: false }],
+    });
+    const summary = { id: '7K3M9P2QXA', name: 'Sprint', count: 3, named: true, legacy: false, duplicate: true };
+    expect(parseGroupList({ registry: true, groups: [summary] })).toEqual({ registry: true, groups: [summary] });
+    expect(parseGroupList({ groups: [{ id: '7K3M9P2QXA', name: 'Group 7K3M9P2QXA', count: 1 }] }).groups[0]).toEqual({
+      id: '7K3M9P2QXA',
+      name: 'Group 7K3M9P2QXA',
+      count: 1,
+      named: true,
+      legacy: false,
+      duplicate: false,
+    });
+    expect(parseGroupCreate({ id: '7K3M9P2QXA', name: 'Sprint', created: true })).toEqual({
+      id: '7K3M9P2QXA',
+      name: 'Sprint',
+      created: true,
+    });
+    expect(parseGroupRename({ id: '7K3M9P2QXA', name: 'Sprint', updated: 0 }).id).toBe('7K3M9P2QXA');
     expect(parseStringList(['a'])).toEqual(['a']);
   });
 
@@ -352,6 +373,11 @@ describe('server response parsers (HS2-34P6XY)', () => {
     ['group rename', () => parseGroupRename({ name: 'Board', updated: '2' })],
     ['group ungroup', () => parseGroupUngroup({})],
     ['group list', () => parseGroupList({ groups: [{ name: 'Board' }] })],
+    ['group list', () => parseGroupList({ groups: [{ id: 7, name: 'Board', count: 1 }] })],
+    ['group list', () => parseGroupList({ groups: [{ id: 'X', name: 'Board', count: 1, duplicate: 'yes' }] })],
+    ['group list', () => parseGroupList({ registry: 'yes', groups: [] })],
+    ['group create', () => parseGroupCreate({ id: 'X', name: 'Board' })],
+    ['group rename', () => parseGroupRename({ id: 1, name: 'Board', updated: 0 })],
     ['string list', () => parseStringList(['a', 1])],
   ])('rejects a malformed %s body', (what, parse) => {
     expect(parse).toThrow(new ServerResponseShapeError(what));
@@ -374,6 +400,34 @@ describe('Api parsed endpoints (HS2-34P6XY)', () => {
     await expect(new Api('/api', '', { trackBusy: false }).commandGroups()).rejects.toThrow(
       'The server returned an invalid string list response.',
     );
+  });
+
+  it('sends the group registry routes their documented bodies (HS2-9KZSD4)', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch'),
+      api = new Api('/api', '', { trackBusy: false }),
+      sent = () => {
+        const [url, init] = fetch.mock.lastCall!;
+        return [url as string, JSON.parse(init?.body as string) as Record<string, unknown>] as const;
+      };
+    fetch.mockImplementation(
+      async () => new Response(JSON.stringify({ id: '7K3M9P2QXA', name: 'Sprint', created: true })),
+    );
+    await expect(api.createCheckoutGroup('c', 'Sprint')).resolves.toMatchObject({ id: '7K3M9P2QXA' });
+    expect(sent()).toEqual(['/api/checkouts/c/groups', { name: 'Sprint' }]);
+    fetch.mockImplementation(async () => new Response(JSON.stringify({ id: '7K3M9P2QXA', name: 'Next', updated: 0 })));
+    await api.renameCheckoutGroup('c', '7K3M9P2QXA', 'Next');
+    expect(sent()).toEqual([
+      '/api/checkouts/c/groups/rename',
+      { group: '7K3M9P2QXA', to: 'Next', actor: { role: 'human' } },
+    ]);
+    await api.mergeCheckoutGroups('c', '8B4N0R3SYB', '7K3M9P2QXA');
+    expect(sent()).toEqual([
+      '/api/checkouts/c/groups/merge',
+      { from: '8B4N0R3SYB', into: '7K3M9P2QXA', actor: { role: 'human' } },
+    ]);
+    fetch.mockImplementation(async () => new Response(JSON.stringify({ updated: 2 })));
+    await api.ungroupCheckoutGroup('c', '7K3M9P2QXA');
+    expect(sent()).toEqual(['/api/checkouts/c/groups/ungroup', { group: '7K3M9P2QXA', actor: { role: 'human' } }]);
   });
 
   it('accepts empty acknowledgements and keeps rejecting non-JSON bodies', async () => {

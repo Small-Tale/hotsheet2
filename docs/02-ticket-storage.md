@@ -747,36 +747,59 @@ data — a conflict is surfaced, never a silent overwrite. `hotsheet doctor` fla
 any store missing the `.gitattributes` registration so the automatic path can't be
 silently bypassed.
 
-### 2.7.1 Ticket groups (HS2-PDSHNN, HS2-8CDFKR)
+### 2.7.1 Ticket groups (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4)
 
 A ticket may name one **group** in its optional `group` frontmatter field
-([17](17-ticket-file-format.md) §17.2, §17.4). There is no group registry and no empty
-group: a group exists while at least one ticket outside Trash names it, and its member
-count is the number of such tickets. A ticket in Trash keeps its `group`, so restoring it
-puts it back, but it does not keep the group alive. A moved tombstone is never a member.
+([17](17-ticket-file-format.md) §17.2, §17.4). The field holds a **group id**: ten
+uppercase Crockford base32 characters, random, short enough for a 50-character GitHub
+label and free of spaces for Jira. A group is listed while at least one ticket outside
+Trash names it, and its member count is the number of such tickets. A ticket in Trash keeps
+its `group`, so restoring it puts it back, but it does not keep the group listed. A moved
+tombstone is never a member. The full behavior is in
+[35-ticket-groups.md](35-ticket-groups.md).
 
-- **Names are unique without regard to case or spacing.** Setting `group` to a name whose
-  comparison key matches an existing group stores the existing spelling. When the tickets
-  being written are that group's only members, the new spelling wins. Every surface
-  resolves the name through `hotsheet_ticketing::groups::resolve_group_change`.
-- **Namespace.** One store is one namespace. A project (checkout) that links several Git
-  stores shares one namespace across them: the server's checkout routes and the serverless
-  MCP checkout paths list, resolve, rename, and ungroup across every linked Git store. The
-  store-level CLI (`-C <store>`) and the default-store routes see one store.
-- **Rename and ungroup** rewrite every member, tickets in Trash included, in one locked
-  write and one commit per store (`FsStore::write_ticket_changes_committing`); a failed
-  write restores the tickets already rewritten. A rename to a different existing group is
-  refused; a change of only case or spacing is allowed. A project spanning several stores
-  is validated once against the merged namespace and then written store by store.
+- **Group registry.** Names belong to the _project_, not the store. Each code checkout
+  keeps one committed file per group, `<checkout>/.hotsheet2/groups/<id>.json` holding
+  `{ "name": … }`. One file per group means two clones that each create a group merge
+  without a conflict. The checkout's `.gitignore` must allow `/.hotsheet2/groups/` when it
+  ignores the rest of `.hotsheet2/`. A machine-local `.hotsheet2/groups.lock` serializes a
+  find-or-create by name. A registry entry with no members is not a visible group, and no
+  entry or leftover value is ever deleted automatically.
+- **Names are unique without regard to case or spacing.** Setting a group by name resolves
+  it through the registry to the existing group with that key, or creates an entry. A rename
+  to the name of another listed group is refused; a change of only case or spacing is
+  allowed. Every surface resolves through `hotsheet_ticketing::groups`.
+- **Many-to-many.** A store linked by several projects gets its names from each project's
+  registry. An id the project's registry does not name is shown under the placeholder
+  `Group <id>` and never dropped; a rename gives it a name in this project. A store or
+  connection addressed without a checkout (the default-store and `/stores` routes,
+  `hotsheet-cli -C <store>` outside a linked checkout) has no registry: it lists ids under
+  placeholders, accepts only ids, and refuses create, rename, and migrate.
+- **Namespace.** A project that links several Git stores shares one namespace across them:
+  the server's checkout routes and the serverless MCP checkout paths list, resolve, rename,
+  ungroup, merge, and migrate across every linked Git store.
+- **Rename** is one registry edit and touches no ticket on any source. **Ungroup** and
+  **merge** rewrite every member, tickets in Trash included, in one locked write and one
+  commit per store (`FsStore::write_ticket_changes_committing`); a failed write restores
+  the tickets already rewritten.
+- **Legacy names and migration.** Before HS2-9KZSD4 the field held the display name. A
+  value that is not id-shaped is read as such a _legacy name_: it is listed under its own
+  name (flagged `legacy`) and matched by name, and a rename gives it a registry id. The
+  explicit, idempotent `hotsheet-cli group migrate` (or `POST
+/checkouts/{reference}/groups/migrate`) creates one registry entry per distinct name key
+  (reusing an existing entry with that key) and rewrites every legacy value to its id; a
+  rerun changes nothing. Reads never migrate silently ([19](19-format-compatibility.md)
+  §19.1).
 - **Not a content edit.** Like `up_next` and `priority`, a group change does not bump
   `updated_at`.
-- **Merge.** `group` is a last-writer-wins scalar in the semantic merge (layer 3 above):
-  when two clones choose different groups, the side with the newer `updated_at` wins and
-  the ticket ends in exactly one group. Two clones may introduce different spellings of
-  one name; they remain one group by key, listed under its earliest-created member's
-  spelling, until a rename unifies them.
+- **Merge of clones.** `group` is a last-writer-wins scalar in the semantic merge (layer 3
+  above), now holding an id: when two clones choose different groups, the side with the
+  newer `updated_at` wins and the ticket ends in exactly one group. Two clones that each
+  create the same _name_ leave two ids; both are listed, flagged `duplicate`, until a
+  group merge moves one id's members onto the other.
 - **Copy and move.** A same-provider copy or move carries the group. A cross-provider copy
-  carries it only to a destination with the `groups` capability and otherwise drops it
+  carries a group id only to a destination with the `groups` capability and otherwise
+  drops it; a legacy name is not carried
   ([16](16-external-sync-interface.md) §16.4).
 
 ## 2.8 Where a project's default store lives

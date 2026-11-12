@@ -408,6 +408,9 @@ fn parse_date(value: &str, now: OffsetDateTime) -> Option<OffsetDateTime> {
 pub struct ViewQuery {
     source: String,
     shape: Shape,
+    /// The project's group names, so `group:name` matches tickets that store a group
+    /// id (HS2-9KZSD4). Without them a name matches only legacy name values and ids.
+    group_names: Option<crate::groups::GroupNames>,
 }
 
 #[derive(Debug, Clone)]
@@ -462,7 +465,15 @@ impl ViewQuery {
         Self {
             source: query.to_owned(),
             shape,
+            group_names: None,
         }
+    }
+
+    /// Resolve `group:` terms through a project's group registry snapshot.
+    #[must_use]
+    pub fn with_group_names(mut self, names: crate::groups::GroupNames) -> Self {
+        self.group_names = Some(names);
+        self
     }
 
     /// The query text this was parsed from.
@@ -509,6 +520,7 @@ impl ViewQuery {
             ticket,
             now,
             has_commit,
+            group_names: self.group_names.as_ref(),
         };
         match &self.shape {
             Shape::Expression(expr) => eval(expr, &at),
@@ -528,6 +540,21 @@ struct At<'a> {
     ticket: &'a Ticket,
     now: OffsetDateTime,
     has_commit: &'a dyn Fn() -> bool,
+    group_names: Option<&'a crate::groups::GroupNames>,
+}
+
+/// Whether a stored group value is the group `key` names: a legacy name by its key, an
+/// id by itself or by its registry name (HS2-9KZSD4).
+fn group_term_matches(value: &str, key: &str, names: Option<&crate::groups::GroupNames>) -> bool {
+    match hotsheet_model::GroupValue::of(value) {
+        hotsheet_model::GroupValue::Legacy(name) => hotsheet_model::group_key(name) == key,
+        hotsheet_model::GroupValue::Id(id) => {
+            hotsheet_model::group_key(id) == key
+                || names
+                    .and_then(|names| names.get(id))
+                    .is_some_and(|name| hotsheet_model::group_key(name) == key)
+        }
+    }
 }
 
 fn eval(expr: &Expr, at: &At<'_>) -> bool {
@@ -543,7 +570,10 @@ fn term_matches(raw: &str, at: &At<'_>) -> bool {
     let (t, now) = (at.ticket, at.now);
     match classify(raw, now) {
         Term::Tag(name) => t.tags.iter().any(|tag| tag.eq_ignore_ascii_case(&name)),
-        Term::Group(key) => t.group.as_deref().map(hotsheet_model::group_key) == Some(key),
+        Term::Group(key) => t
+            .group
+            .as_deref()
+            .is_some_and(|value| group_term_matches(value, &key, at.group_names)),
         Term::HasGroup => t.group.is_some(),
         Term::Is(state) => is_state(&state, t, now),
         Term::HasAttachment => !t.attachments.is_empty(),
@@ -764,6 +794,27 @@ mod tests {
         t.group = Some("Überarbeitung".into());
         assert!(matches("group:überarbeitung", &t));
         assert!(matches("group:ÜBERARBEITUNG", &t), "Unicode case folding");
+    }
+
+    #[test]
+    fn hs2_9kzsd4_group_terms_match_ids_through_registry_names() {
+        let mut t = ticket();
+        t.group = Some("7K3M9P2QXA".into());
+        let plain = |q: &str| ViewQuery::parse(q).matches(&t, OffsetDateTime::UNIX_EPOCH);
+        let named = |q: &str| {
+            let names = [("7K3M9P2QXA".to_string(), "Board Drag".to_string())]
+                .into_iter()
+                .collect();
+            ViewQuery::parse(q)
+                .with_group_names(names)
+                .matches(&t, OffsetDateTime::UNIX_EPOCH)
+        };
+        assert!(plain("group:7K3M9P2QXA"), "an id always matches itself");
+        assert!(!plain("group:\"board drag\""), "no registry, no name");
+        assert!(named("group:\"BOARD  drag\""));
+        assert!(named("group:7k3m9p2qxa"));
+        assert!(!named("group:board"));
+        assert!(named("has:group AND NOT group:other"));
     }
 
     #[test]

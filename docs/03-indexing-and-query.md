@@ -316,18 +316,24 @@ query(filter, sort, text?, paging) -> TicketRow[]
   Blocked/unblocked uses the normalized, non-empty `blocked_reason` as its single source
   of truth. `blocked_by` edges remain indexed dependency context, but never create a
   blocked state without visible explanatory text.
-  **Groups (HS2-PDSHNN, HS2-44W3TP):** `group=<name>` matches the tickets of one group and
-  `has_group=true|false` matches grouped or ungrouped tickets. The index stores the
-  display name in `group_name` and its comparison key in `group_key` (the
-  Unicode-lowercased name, computed in Rust because SQLite's `lower()` folds only ASCII),
-  with a partial index on `(store_id, group_key)`; the filter compares keys, so letter
-  case and whitespace runs in the requested name do not matter, and a name that
-  normalizes to nothing matches no ticket. `Index::group_members` feeds the group
-  directory (listing, spelling reuse, rename and ungroup candidates) without a store
-  walk. The columns arrived with index schema 23, so an older index file is rebuilt on
-  open like any other schema change (§3.2). CLI `ls --group/--has-group/--no-group`,
-  server `GET /tickets?group=&has_group=` (and the checkout and provider lists), and MCP
+  **Groups (HS2-PDSHNN, HS2-44W3TP, HS2-9KZSD4):** `group=<id or name>` matches the
+  tickets of one group and `has_group=true|false` matches grouped or ungrouped tickets.
+  The index stores the ticket's raw value in `group_name` and its comparison key in
+  `group_key`: the group id itself, or for an unmigrated legacy name its
+  Unicode-lowercased key (computed in Rust because SQLite's `lower()` folds only ASCII).
+  A legacy key is lower case and an id is upper case, so the two never collide. A partial
+  index covers `(store_id, group_key)`. A filter value matches its own id and the legacy
+  key of its text; a caller that has the project's group registry (the checkout routes,
+  the CLI inside a linked checkout, the MCP checkout paths) also passes
+  `TicketQuery::group_ids`, the ids whose registry names have that key, so a name finds
+  id-keyed tickets. A value that normalizes to nothing matches no ticket.
+  `Index::group_members` feeds the group directory (listing, rename, ungroup, merge, and
+  migration candidates) without a store walk. Schema 23 added the columns and schema 24
+  changed `group_key` to hold ids, so an older index file is rebuilt on open like any
+  other schema change (§3.2). CLI `ls --group/--has-group/--no-group`, server `GET
+/tickets?group=&has_group=` (and the checkout and provider lists), and MCP
   `hotsheet_query` share the contract; the file scan (`ops::query`) and the index agree.
+  Saved-view `group:` terms resolve through the checkout's registry the same way.
   A provider without the `groups` capability reports every ticket ungrouped, so both
   filters are answered for it rather than rejected. In the saved-view and notification
   query language (`hotsheet_ticketing::saved_views`), `group:name` and

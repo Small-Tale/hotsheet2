@@ -129,11 +129,17 @@ pub(crate) fn do_provider_create(
     let created_by =
         hotsheet_ticketing::actor::note_actor(parse_actor(req.actor.as_ref())?.as_ref());
     let provider = provider_for(state, connection_id)?;
-    // HS2-PDSHNN: an invalid name is the caller's error (400) whatever the provider.
-    let group = match req.group.as_deref() {
-        Some(name) => hotsheet_model::normalize_group_name(name)
-            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
-        None => None,
+    // HS2-PDSHNN, HS2-9KZSD4: an invalid name is the caller's error (400) whatever the
+    // provider; a connection has no registry, so it takes a group id, not a name. A
+    // checkout route has already resolved names to ids.
+    let group = if req.group_resolved {
+        req.group.clone()
+    } else {
+        crate::routes::groups::validate_for_connection(
+            provider.as_ref(),
+            req.group.clone().map(Some),
+        )?
+        .flatten()
     };
     let new = ops::normalize_new_ticket_input(NewTicket {
         group: None,
@@ -395,12 +401,10 @@ pub(crate) fn do_provider_update(
             scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
         )?;
     }
-    let group = match req.group.clone() {
-        Some(Some(name)) => Some(
-            hotsheet_model::normalize_group_name(&name)
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
-        ),
-        other => other,
+    let group = if req.group_resolved {
+        req.group.clone()
+    } else {
+        crate::routes::groups::validate_for_connection(provider.as_ref(), req.group.clone())?
     };
     let timestamp = now();
     let note = req.note.clone();

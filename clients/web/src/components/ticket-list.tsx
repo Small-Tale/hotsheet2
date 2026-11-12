@@ -99,6 +99,7 @@ export function TicketList({
             {segments.map((segment) =>
               segment.kind === 'group' ? (
                 <TicketGroup
+                  group={segment.group}
                   name={segment.name}
                   count={segment.items.length}
                   scope="list"

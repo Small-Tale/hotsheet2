@@ -9,6 +9,7 @@ import {
   usesBooleanSearchExpression,
 } from './advanced-search';
 import type { TicketRow } from './api';
+import { projectTicketGroups } from './ticket-group-state';
 
 const row = (slug: string, status = 'not_started', extra: Partial<TicketRow> = {}): TicketRow => ({
   connection_id: 'local',
@@ -221,5 +222,19 @@ describe('group search terms (HS2-44W3TP)', () => {
       throw new Error('group terms need no lookup');
     };
     expect(matchesSearchExpression(rows[0], 'has:group AND group:"board drag & drop"', Date.now(), resolve)).toBe(true);
+  });
+
+  it('matches an id group by its registry display name or its id (HS2-9KZSD4)', () => {
+    projectTicketGroups.value = {
+      p: [{ id: '7K3M9P2QXA', name: 'Sprint One', count: 1, named: true, legacy: false, duplicate: false }],
+    };
+    const sprint = row('HS2-S', 'started', { group: '7K3M9P2QXA' }),
+      unknown = row('HS2-U', 'started', { group: '8B4N0R3SYB' });
+    expect(matchesSearchExpression(sprint, 'group:"sprint  one" AND is:started')).toBe(true);
+    expect(matchesSearchExpression(sprint, 'group:7K3M9P2QXA AND is:started')).toBe(true);
+    expect(matchesSearchExpression(sprint, 'group:sprint AND is:started')).toBe(false);
+    expect(matchesSearchExpression(unknown, 'group:"Group 8B4N0R3SYB" AND is:started')).toBe(true);
+    expect(matchesSearchExpression(unknown, 'group:"sprint one" AND is:started')).toBe(false);
+    projectTicketGroups.value = {};
   });
 });

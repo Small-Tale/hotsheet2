@@ -620,13 +620,15 @@ enum Cmd {
     /// Mark a ticket read on this machine (per-user local state; never committed).
     Read { id: String },
     /// List the ticket groups in use, with how many tickets each holds (HS2-PDSHNN). A
-    /// group exists while at least one ticket outside Trash names it.
+    /// group is listed while at least one ticket outside Trash names it; names come from
+    /// the project's group registry (HS2-9KZSD4).
     Groups {
-        /// Print `{"groups":[{"name":…,"count":…}]}` instead of the table.
+        /// Print `{"registry":…,"groups":[{"id","name","count","named","legacy","duplicate"}]}`
+        /// instead of the table.
         #[arg(long)]
         json: bool,
     },
-    /// Rename a ticket group or dissolve it (HS2-8CDFKR).
+    /// Create, rename, ungroup, merge, or migrate ticket groups (HS2-8CDFKR, HS2-9KZSD4).
     #[command(name = "group")]
     TicketGroup {
         #[command(subcommand)]

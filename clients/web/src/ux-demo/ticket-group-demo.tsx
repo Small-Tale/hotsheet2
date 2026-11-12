@@ -23,6 +23,7 @@ import {
   closeTicketGroupDialogDemo,
   setTicketGroupDialogScenario,
   TICKET_GROUP_DEMO_GROUPS,
+  TICKET_GROUP_DEMO_ID,
   ticketGroupDialogSettings,
 } from './ticket-group-dialog-demo';
 
@@ -70,6 +71,8 @@ export const ticketGroupSettings = {
   name: signal(INITIAL_NAME),
   collapsed: signal(false),
   dropTarget: signal(false),
+  /** Another group shares this group's name, so its menu offers Merge Duplicate Groups (HS2-9KZSD4). */
+  duplicate: signal(false),
   menu: signal<{ x: number; y: number; group: string } | undefined>(undefined),
   event: signal(INITIAL_EVENT),
 };
@@ -78,16 +81,17 @@ export function resetTicketGroupDemo(root: ParentNode): void {
   ticketGroupSettings.name.value = INITIAL_NAME;
   ticketGroupSettings.collapsed.value = false;
   ticketGroupSettings.dropTarget.value = false;
+  ticketGroupSettings.duplicate.value = false;
   ticketGroupSettings.menu.value = undefined;
   ticketGroupSettings.event.value = INITIAL_EVENT;
   syncSettingsControls(root, 'ticket-group', {
     values: { 'group-name': INITIAL_NAME },
-    checked: { 'group-collapsed': false, 'group-drop-target': false },
+    checked: { 'group-collapsed': false, 'group-drop-target': false, 'group-duplicate': false },
   });
 }
 
 export function TicketGroupDemo() {
-  const { name, collapsed, dropTarget, menu } = ticketGroupSettings,
+  const { name, collapsed, dropTarget, duplicate, menu } = ticketGroupSettings,
     label = normalizeTicketGroupName(name.value) || INITIAL_NAME;
   return (
     <>
@@ -97,6 +101,7 @@ export function TicketGroupDemo() {
         viewport={{ width: 'full' }}
       >
         <TicketGroup
+          group={TICKET_GROUP_DEMO_ID}
           name={label}
           count={TICKET_GROUP_DEMO_TICKETS.length}
           scope="list"
@@ -121,6 +126,7 @@ export function TicketGroupDemo() {
         viewport={{ width: 'compact' }}
       >
         <TicketGroup
+          group={TICKET_GROUP_DEMO_ID}
           name={label}
           count={2}
           scope="started"
@@ -133,7 +139,7 @@ export function TicketGroupDemo() {
           ))}
         </TicketGroup>
       </CatalogExample>
-      {menu.value && <TicketGroupContextMenu {...menu.value} />}
+      {menu.value && <TicketGroupContextMenu {...menu.value} name={label} mergeable={duplicate.value} />}
       <DemoEvent>{ticketGroupSettings.event.value}</DemoEvent>
     </>
   );
@@ -145,6 +151,7 @@ export function TicketGroupSettings() {
       <TextField name="group-name" label="Group Name" value={ticketGroupSettings.name.value} />
       <Checkbox name="group-collapsed" checked={ticketGroupSettings.collapsed.value} label="Collapsed" />
       <Checkbox name="group-drop-target" checked={ticketGroupSettings.dropTarget.value} label="Drop target" />
+      <Checkbox name="group-duplicate" checked={ticketGroupSettings.duplicate.value} label="Duplicate name" />
       <Button type="button" action={DEMO_ACTIONS.resetSettings.value}>
         Reset
       </Button>
@@ -166,38 +173,47 @@ function wireTicketGroupDemo(root: HTMLElement): () => void {
         name = control.getAttribute('name');
       if (name === 'group-collapsed') ticketGroupSettings.collapsed.value = control.checked;
       if (name === 'group-drop-target') ticketGroupSettings.dropTarget.value = control.checked;
+      if (name === 'group-duplicate') ticketGroupSettings.duplicate.value = control.checked;
     }),
   );
   // The production group header, group menu, and group name dialog handlers, with fixture side
-  // effects (HS2-WZ3JGZ, HS2-8CDFKR).
+  // effects (HS2-WZ3JGZ, HS2-8CDFKR). Handlers receive the group's id; events show its name.
+  const label = () => normalizeTicketGroupName(ticketGroupSettings.name.value) || INITIAL_NAME;
   demoListeners.add(
     wireTicketGroups(root, {
-      toggle: (group) => {
+      toggle: () => {
         const collapsed = !ticketGroupSettings.collapsed.value;
         ticketGroupSettings.collapsed.value = collapsed;
-        ticketGroupSettings.event.value = `“${group}” ${collapsed ? 'collapsed' : 'expanded'}.`;
+        ticketGroupSettings.event.value = `“${label()}” ${collapsed ? 'collapsed' : 'expanded'}.`;
         syncSettingsControls(root, 'ticket-group', { checked: { 'group-collapsed': collapsed } });
       },
       openMenu: (group, x, y) => {
         ticketGroupSettings.menu.value = { x, y, group };
-        ticketGroupSettings.event.value = `Group menu opened for “${group}”.`;
+        ticketGroupSettings.event.value = `Group menu opened for “${label()}”.`;
       },
-      rename: (group) => {
+      rename: () => {
         ticketGroupSettings.menu.value = undefined;
-        ticketGroupSettings.event.value = `Rename requested for “${group}”.`;
+        ticketGroupSettings.event.value = `Rename requested for “${label()}”.`;
         selectDemo('ticket-group-dialog');
         setTicketGroupDialogScenario('rename');
       },
-      ungroup: (group) => {
+      ungroup: () => {
         ticketGroupSettings.menu.value = undefined;
-        ticketGroupSettings.event.value = `Ungroup requested for “${group}”.`;
+        ticketGroupSettings.event.value = `Ungroup requested for “${label()}”.`;
+      },
+      merge: () => {
+        ticketGroupSettings.menu.value = undefined;
+        ticketGroupSettings.event.value = `Merge of the other “${label()}” groups requested.`;
       },
       editName: (name) => {
         ticketGroupDialogSettings.name.value = name;
       },
       submitName: (name) => {
         const renaming = ticketGroupDialogSettings.scenario.value.startsWith('rename');
-        if (ticketGroupNameProblem(name, TICKET_GROUP_DEMO_GROUPS, renaming ? INITIAL_NAME : undefined)) return;
+        const taken = renaming
+          ? TICKET_GROUP_DEMO_GROUPS.filter((group) => group !== INITIAL_NAME)
+          : TICKET_GROUP_DEMO_GROUPS;
+        if (ticketGroupNameProblem(name, taken)) return;
         closeTicketGroupDialogDemo(
           `${renaming ? 'Rename to' : 'New group'} “${normalizeTicketGroupName(name)}” requested.`,
         );

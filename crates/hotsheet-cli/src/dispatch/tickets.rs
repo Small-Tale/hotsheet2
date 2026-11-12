@@ -136,7 +136,7 @@ pub(crate) fn cmd_new(
     let store = FsStore::open(path)?;
     let prefix = store.metadata()?.ticket_prefix;
     let blocked_by = ops::resolve_blockers(&store, None, &blocked_by)?;
-    let group = super::groups::resolve_for_store(&store, group.map(Some), &[])?.flatten();
+    let group = super::groups::resolve_for_store(&store, group.map(Some))?.flatten();
     let source = follow_up_to
         .as_deref()
         .map(|id| resolve(&store, id))
@@ -264,6 +264,10 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         claimed: f.claimed.then_some(true),
         blocked: f.blocked_filter(),
         group: f.group.clone(),
+        group_ids: match f.group.as_deref() {
+            Some(input) => super::groups::filter_ids(&FsStore::open(path)?, input)?,
+            None => Vec::new(),
+        },
         has_group: f.has_group_filter(),
         min_confidence: f.min_confidence,
         max_confidence: f.max_confidence,
@@ -280,6 +284,14 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
     }
     // Per-user unread state comes from the local (gitignored) overlay (HS2-21).
     let overlay = hotsheet_ticketing::LocalOverlay::new(path.clone());
+    // HS2-9KZSD4: grouped rows show the project's group name.
+    let group_names = if tickets.iter().any(|t| t.group.is_some()) {
+        super::groups::registry_for(&FsStore::open(path)?)
+            .map(|registry| registry.names())
+            .transpose()?
+    } else {
+        None
+    };
     for t in &tickets {
         let up = if t.up_next { "*" } else { " " };
         let is_unread =
@@ -302,7 +314,10 @@ pub(crate) fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         let group = t
             .group
             .as_deref()
-            .map(|name| format!("  {{{name}}}"))
+            .map(|value| {
+                let name = super::groups::display_name(group_names.as_ref(), value);
+                format!("  {{{name}}}")
+            })
             .unwrap_or_default();
         println!(
             "{up}{unread} {:<12} {:<12} {}{group}{confidence}",
@@ -984,7 +999,7 @@ pub(crate) fn cmd_edit(
     let group = if group_resolved {
         group
     } else {
-        super::groups::resolve_for_store(&store, group, &[ticket.id])?
+        super::groups::resolve_for_store(&store, group)?
     };
     let patch = TicketPatch {
         group,
@@ -1097,15 +1112,10 @@ pub(crate) fn cmd_batch(
     update: TicketEditArgs,
 ) -> Result<()> {
     let mut edit = TicketEdit::prepare(update)?;
-    // HS2-PDSHNN: choose the group spelling once for the whole selection.
+    // HS2-PDSHNN, HS2-9KZSD4: resolve the group once for the whole selection.
     if matches!(edit.group, Some(Some(_))) {
         let store = FsStore::open(path)?;
-        let patched: Vec<Ulid> = ids
-            .iter()
-            .filter_map(|id| resolve(&store, id).ok())
-            .map(|ticket| ticket.id)
-            .collect();
-        edit.group = super::groups::resolve_for_store(&store, edit.group.take(), &patched)?;
+        edit.group = super::groups::resolve_for_store(&store, edit.group.take())?;
         edit.group_resolved = true;
     }
     let mut updated = Vec::new();

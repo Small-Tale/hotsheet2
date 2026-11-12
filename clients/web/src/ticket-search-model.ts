@@ -16,7 +16,7 @@ import {
   tokenFromRaw,
   toTokenSearchToken,
 } from './inline-search';
-import { existingTicketGroup, normalizeTicketGroupName, ticketGroupKey } from './ticket-groups';
+import { existingTicketGroup, normalizeTicketGroupName, ticketGroupNameKey } from './ticket-groups';
 
 /**
  * The ticket search grammar as Kerf `SearchFieldModel` rules (HS2-5JXBQY, evaluated in
@@ -76,7 +76,7 @@ export function ticketSearchRules(
       },
     },
     {
-      // HS2-44W3TP: `group:` completes existing group names; one group filter applies at a time.
+      // HS2-44W3TP: `group:` completes existing group display names (HS2-9KZSD4); one group filter applies at a time.
       name: 'group',
       parse: (input) => {
         const typed = normalizeTicketGroupName(input);
@@ -84,9 +84,9 @@ export function ticketSearchRules(
       },
       label: (value) => `group:${value}`,
       suggest: (input) => {
-        const prefix = ticketGroupKey(input.replace(/^"/, ''));
+        const prefix = ticketGroupNameKey(input.replace(/^"/, ''));
         return groups()
-          .filter((group) => ticketGroupKey(group).startsWith(prefix))
+          .filter((group) => ticketGroupNameKey(group).startsWith(prefix))
           .slice(0, TICKET_SEARCH_TAG_SUGGESTION_LIMIT)
           .map((group) => ({ value: group, label: `group:${quoteTag(group)}` }));
       },

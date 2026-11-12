@@ -360,6 +360,10 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         ticketContextMenu.value = undefined;
         void ticketGroups.ungroup(group);
       },
+      merge: (group) => {
+        ticketContextMenu.value = undefined;
+        void ticketGroups.mergeDuplicates(group);
+      },
       editName: (name) => {
         ticketGroups.editDialogName(name);
       },

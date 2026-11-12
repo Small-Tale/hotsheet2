@@ -2390,8 +2390,9 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
         .collect::<Vec<_>>();
     assert_eq!(
         (SCHEMA_VERSION, projection),
-        // 23: the group columns (HS2-PDSHNN); the feedback projection is unchanged.
-        (23, vec![true, true, false, true, false]),
+        // 23: the group columns (HS2-PDSHNN); 24: group ids (HS2-9KZSD4). The feedback
+        // projection is unchanged.
+        (24, vec![true, true, false, true, false]),
         "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
     );
 }
@@ -2489,7 +2490,7 @@ fn hs2_pdshnn_group_column_filters_and_directory_follow_the_files() {
         directory,
         hotsheet_ticketing::groups::GroupDirectory::scan(&store).unwrap()
     );
-    assert_eq!(directory.summaries().len(), 2);
+    assert_eq!(directory.summaries(None).len(), 2);
 
     // An upsert follows a regroup, a clear, and a move to Trash.
     let reindex = |id: &Ulid| {
@@ -2516,13 +2517,48 @@ fn hs2_pdshnn_group_column_filters_and_directory_follow_the_files() {
         directory,
         hotsheet_ticketing::groups::GroupDirectory::scan(&store).unwrap()
     );
-    let summaries = directory.summaries();
+    let summaries = directory.summaries(None);
     assert_eq!(summaries.len(), 1);
     assert_eq!(
         (summaries[0].name.as_str(), summaries[0].count),
         ("board drag & drop", 1)
     );
     assert_eq!(directory.member_ids("überarbeitung"), vec![b]);
+
+    // HS2-9KZSD4: an id is indexed as itself; a name finds it only through the ids the
+    // caller resolved from the registry, with the same answer as the file scan.
+    regroup(&a, Some("7K3M9P2QXA"));
+    reindex(&a);
+    for (query, expected) in [
+        (
+            TicketQuery {
+                group: Some(" 7K3M9P2QXA".into()),
+                ..Default::default()
+            },
+            vec![a],
+        ),
+        (
+            TicketQuery {
+                group: Some("Board".into()),
+                ..Default::default()
+            },
+            vec![],
+        ),
+        (
+            TicketQuery {
+                group: Some("Board drag & drop".into()),
+                group_ids: vec!["7K3M9P2QXA".into()],
+                ..Default::default()
+            },
+            vec![a, c],
+        ),
+    ] {
+        let want: HashSet<String> = expected.iter().map(Ulid::to_string).collect();
+        assert_eq!(index_ids(&ix.query(&query).unwrap()), want, "{query:?}");
+        assert_eq!(ops_ids(&store, &query), want, "scan parity for {query:?}");
+    }
+    let directory = hotsheet_ticketing::groups::GroupDirectory::new(ix.group_members().unwrap());
+    assert_eq!(directory.member_ids("7K3M9P2QXA"), vec![a]);
 }
 
 /// HS2-PDSHNN: an index file written before the group columns existed is rebuilt, so
