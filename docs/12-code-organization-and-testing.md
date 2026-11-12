@@ -1393,6 +1393,9 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   which nextest writes on every run per `.config/nextest.toml`; `--vitest <json>`, from
   `--reporter=json --outputFile.json=<path>`; and `--playwright <json>`, from
   `--reporter=json`. CI prints the Rust and web-unit profiles after the tests.
+- **Hung-test bound (HS2-TT8E7S).** `.config/nextest.toml` reports a test as SLOW every
+  60 s and terminates it as a failure after ten periods, so one hung test cannot hold a
+  CI job until the job's own timeout. Nextest prints a timed-out test's captured output.
 - **Gate timing history (HS2-TCCKRZ).** `scripts/check.sh --timings` reads bounded,
   machine-local p75 stage and test-file estimates, with sample count and local/CI
   provenance. Only a fully passing gate adds executed stages; reused receipts and
