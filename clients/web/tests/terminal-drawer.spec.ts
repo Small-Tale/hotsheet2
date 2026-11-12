@@ -83,9 +83,10 @@ for (const width of [1280, 390]) {
     await expect(tab('connected').locator('.terminal-drawer__ai-connection title')).toHaveText(
       /connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z/,
     );
-    // HS2-670ADP: hooks without hotsheet-mcp are not fully connected, so the same badge shows unplug.
+    // HS2-670ADP: hooks without hotsheet-mcp are not fully connected. HS2-YHQM67: their permission
+    // prompts still reach Hot Sheet, so they keep the plug in the warning tone; unplug means no hooks.
     await expect(tab('mcp-missing')).toHaveAttribute('data-ai-connection', 'mcp_missing');
-    await expect(tab('mcp-missing').locator('[data-lucide="unplug"]')).toBeVisible();
+    await expect(tab('mcp-missing').locator('[data-lucide="plug"]')).toBeVisible();
     await expect(tab('mcp-missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
       'aria-label',
       /^Claude is not fully connected to Hot Sheet: MCP not connected\./,

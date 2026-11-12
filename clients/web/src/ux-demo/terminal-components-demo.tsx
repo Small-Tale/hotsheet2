@@ -171,6 +171,17 @@ export function TerminalDrawerDemo() {
           sessions={[
             {
               ...shell,
+              id: 'primary',
+              projectId: 'demo-states',
+              title: 'Primary',
+              tool: 'claude',
+              ai_connection: { agent: 'claude', at: '2026-10-05T08:00:00Z' },
+              mcp_connected: true,
+              feedback_primary: true,
+              aiConnection: 'connected',
+            },
+            {
+              ...shell,
               id: 'connected',
               projectId: 'demo-states',
               title: 'Connected',
@@ -352,6 +363,7 @@ export function TerminalDashboardDemo() {
                     source: 'session_start',
                   },
                   mcp_connected: true,
+                  feedback_primary: true,
                   aiConnection: 'connected',
                   alive: true,
                   busy: true,

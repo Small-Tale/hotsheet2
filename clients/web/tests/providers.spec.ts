@@ -9998,7 +9998,8 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(connection.locator('title')).toHaveText(
       /Codex is connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: PermissionRequest at .*\./,
     );
-    await expect(connection).toHaveAttribute('data-lucide', 'plug');
+    // HS2-YHQM67: the only connected session is the project's primary, so it shows plug-zap.
+    await expect(connection).toHaveAttribute('data-lucide', 'plug-zap');
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(tileConnection).toHaveAttribute('title', (await connection.locator('title').textContent()) as string);
     await page.screenshot({ path: test.info().outputPath('hs2-xysxvt-connected-1280.png') });
@@ -10017,9 +10018,10 @@ test('recovers a missing Codex connection when its interactive permission hook r
     hook({ hook_event_name: 'SessionStart', session_id: 'session-2', source: 'clear' });
     hook({ hook_event_name: 'SessionEnd', session_id: 'session-1', reason: 'other' });
     await expect(tab).toHaveAttribute('data-ai-connection', 'connected');
-    await expect(connection).toHaveAttribute('data-lucide', 'plug');
+    // Connectivity, not primary routing, is under test here (HS2-YHQM67): either plug icon.
+    await expect(connection).toHaveAttribute('data-lucide', /^plug(-zap)?$/);
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
-    await expect(tileConnection.locator('[data-lucide="plug"]')).toBeVisible();
+    await expect(tileConnection.locator('[data-lucide^="plug"]')).toBeVisible();
     await drawer.screenshot({ path: test.info().outputPath('hs2-xysxvt-clear-connected-drawer-1280.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(tab).toHaveAttribute('data-ai-connection', 'connected');

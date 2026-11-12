@@ -523,7 +523,15 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
     for (const aiConnection of ['connected', 'missing', 'mcp_missing'] as const) {
       const markup = String(FixedAspectTerminalCard({ session: { ...session, aiConnection } }));
       expect(markup).toContain(`data-ai-connection="${aiConnection}"`);
-      expect(markup).toContain(`data-lucide="${aiConnection === 'connected' ? 'plug' : 'unplug'}"`);
+      // HS2-YHQM67: hooks that route permission prompts keep a connected plug even without MCP.
+      expect(markup).toContain(`data-lucide="${aiConnection === 'missing' ? 'unplug' : 'plug'}"`);
+      const primary = String(
+        FixedAspectTerminalCard({ session: { ...session, aiConnection, feedback_primary: true } }),
+      );
+      expect(primary).toContain(`data-lucide="${aiConnection === 'missing' ? 'unplug' : 'plug-zap'}"`);
+      expect(primary).toContain('data-ai-primary="true"');
+      expect(primary).toContain('Primary session: feedback notifications for this project are sent here.');
+      expect(markup).not.toContain('data-ai-primary');
       expect(markup).toMatch(
         /class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*data-tone="success"[^>]*aria-label="Busy"/,
       );

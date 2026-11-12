@@ -699,7 +699,8 @@ describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
     expect(missing).toContain('data-lucide="unplug"');
     expect(missing).toContain('Run /hooks in Codex');
     expect(missing).not.toContain('terminal-drawer__busy-dot');
-    // HS2-670ADP: hooks without hotsheet-mcp fold into the same badge as not fully connected.
+    // HS2-670ADP: hooks without hotsheet-mcp are not fully connected; HS2-YHQM67: their permission
+    // prompts still reach Hot Sheet, so the tab keeps a connected plug in the warning tone.
     const mcpMissing = markup({
       busy: false,
       tool: 'claude',
@@ -708,12 +709,55 @@ describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
       mcp_connected: false,
     });
     expect(mcpMissing).toContain('data-ai-connection="mcp_missing"');
-    expect(mcpMissing).toContain('data-lucide="unplug"');
-    expect(mcpMissing).not.toContain('data-lucide="plug"');
+    expect(mcpMissing).toContain('data-lucide="plug"');
+    expect(mcpMissing).not.toContain('data-lucide="unplug"');
     expect(mcpMissing).toContain('Claude is not fully connected to Hot Sheet: MCP not connected.');
     const plain = markup({ busy: false });
     expect(plain).not.toContain('terminal-drawer__status');
     expect(plain).not.toContain('data-ai-connection');
+  });
+  it('marks only the primary session with the energised plug and names its role (HS2-YHQM67)', () => {
+    const tabs = (primary: boolean[]) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions: primary.map((feedback_primary, index) => ({
+            ...sessions[0],
+            id: `claude-${index + 1}`,
+            title: `Claude ${index + 1}`,
+            tool: 'claude',
+            busy: false,
+            aiConnection: 'connected' as const,
+            ai_connection: { agent: 'claude', at: '2026-10-05T08:00:00Z' },
+            feedback_primary,
+          })),
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'grid',
+        }),
+      );
+    // Two connected terminals: both connected, only the first is primary. Each terminal renders as
+    // a drawer tab and as a grid tile, so every mark appears twice per terminal.
+    const both = tabs([true, false]);
+    const count = (pattern: RegExp) => both.match(pattern)?.length ?? 0;
+    expect(count(/data-ai-connection="connected"/g)).toBe(4);
+    expect(count(/data-ai-primary="true"/g)).toBe(2);
+    expect(count(/data-lucide="plug-zap"/g)).toBe(2);
+    expect(count(/data-lucide="plug"/g)).toBe(2);
+    expect(both).not.toContain('data-lucide="unplug"');
+    expect(both).toContain('Primary session: feedback notifications for this project are sent here.');
+    // The primary closed and the server promoted the remaining terminal.
+    const promoted = tabs([true]);
+    expect(promoted).toContain('data-ai-primary="true"');
+    expect(promoted).toContain('data-lucide="plug-zap"');
+    // No primary (for example no push-capable session): every connected tab is a plain plug.
+    const none = tabs([false, false]);
+    expect(none).not.toContain('data-ai-primary');
+    expect(none).not.toContain('plug-zap');
+    expect(none).not.toContain('Primary session');
   });
   it('lets a halt outrank the connection state', () => {
     const halted = markup({

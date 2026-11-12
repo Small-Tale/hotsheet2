@@ -2201,9 +2201,11 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > **Client display (HS2-670ADP).** The web client folds MCP presence into the existing
 > terminal AI connection badge on drawer tabs and dashboard tiles; there is no separate MCP
 > icon and no project-level indicator. The connection is either fully connected or it is
-> not: `plug` only when the hook reported in **and** `mcp_connected` is true, `unplug`
-> otherwise. A hook-only session gets the same 15 s grace, then shows `unplug` with an
-> accessible label that names what is missing ("MCP not connected", how to fix it). A
+> not: the neutral `plug` only when the hook reported in **and** `mcp_connected` is true. A
+> hook-only session gets the same 15 s grace, then keeps the plug in the warning tone with an
+> accessible label that names what is missing ("MCP not connected", how to fix it), because its
+> permission prompts still reach Hot Sheet (HS2-YHQM67); `unplug` is reserved for a session
+> whose hooks never reported. The project's primary session shows `plug-zap` (HS2-YHQM67). A
 > current server always serializes `mcp_connected`; one that omits it predates MCP presence and
 > keeps the hook-only verdict (version skew). The client
 > re-reads terminals on `mcp_presence` events, never by polling.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AI_CONNECTION_GRACE_MS,
+  aiConnectionIcon,
   aiConnectionLabel,
   aiConnectionState,
   deriveAiConnectionStates,
@@ -108,6 +109,23 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
       /^Claude is not fully connected to Hot Sheet: MCP not connected\. .*Last trusted hook report: SessionStart .*setup --refresh/,
     );
     expect(aiConnectionLabel('mcp_missing')).toMatch(/^The AI session is not fully connected/);
+  });
+
+  it('separates hook connectivity from the primary role (HS2-YHQM67)', () => {
+    const icon = (...args: Parameters<typeof aiConnectionIcon>) => {
+      const { name, tone } = aiConnectionIcon(...args);
+      return `${name}:${tone}`;
+    };
+    expect(icon('connected')).toBe('plug:neutral-on-quiet');
+    expect(icon('connected', true)).toBe('plug-zap:neutral-on-quiet');
+    expect(icon('mcp_missing')).toBe('plug:warning-on-quiet');
+    expect(icon('mcp_missing', true)).toBe('plug-zap:warning-on-quiet');
+    expect(icon('missing')).toBe('unplug:warning-on-quiet');
+    expect(icon('missing', true)).toBe('unplug:warning-on-quiet');
+    expect(aiConnectionLabel('connected', 'claude', undefined, undefined, true, true)).toMatch(
+      /^Claude is connected to Hot Sheet: .* Primary session: feedback notifications for this project are sent here\.$/,
+    );
+    expect(aiConnectionLabel('connected', 'claude', undefined, undefined, true, false)).not.toContain('Primary');
   });
 
   it('folds hotsheet-mcp presence into one combined state (HS2-670ADP)', () => {

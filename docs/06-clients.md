@@ -3785,6 +3785,14 @@ explain that MCP connectivity is separate, and point to the read-only
 - **Connected:** the drawer tab and dashboard tile show a neutral Lucide `plug` icon ("Codex is connected to Hot
   Sheet: its permission prompts come to the app"). This applies to any terminal, including a
   plain shell where someone ran `codex` or `claude` by hand.
+- **Primary session (HS2-YHQM67):** the project's primary AI session for proactive feedback
+  delivery (`feedback_primary` from the server, HS2-DB2FQ2) shows Lucide `plug-zap` instead of
+  `plug`, and its label adds "Primary session: feedback notifications for this project are sent
+  here." Every other connected session keeps the plain `plug`, so a secondary session is never
+  drawn as disconnected. Closing the primary moves the icon to the promoted session.
+- **Hooks without MCP:** a session whose hooks route permission prompts but whose `hotsheet-mcp`
+  is not connected keeps the connected plug (or `plug-zap` when primary) in the warning tone, with
+  the "MCP not connected" label (HS2-YHQM67 replaces the earlier `unplug` for this state).
 - **Not connected:** an `ai` terminal that is still running without a report after a 15-second
   grace period shows a warning `unplug` icon. Its label explains that the session's permission
   prompts stay in the terminal and how to fix it: run `/hooks` in Codex, or run

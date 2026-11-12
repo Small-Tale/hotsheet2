@@ -25,10 +25,8 @@ import {
   MessageSquare,
   Minimize2,
   Minus,
-  Plug,
   Plus,
   TriangleAlert,
-  Unplug,
   X,
 } from 'lucide';
 
@@ -36,7 +34,7 @@ import type { TerminalAiConnection, TerminalHalt } from '../api';
 import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
+import { aiConnectionIcon, aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -76,6 +74,8 @@ export interface TerminalDashboardSession {
   last_hook_report?: TerminalAiConnection;
   /** Live `hotsheet-mcp` presence for this terminal (HS2-670ADP). */
   mcp_connected?: boolean;
+  /** The project's primary session for proactive feedback delivery (HS2-YHQM67). */
+  feedback_primary?: boolean;
   /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
   aiConnection?: AiConnectionState;
   /** The server advertises session push for this live terminal connection. */
@@ -359,6 +359,7 @@ function TerminalCard({
                     <span
                       class="terminal-tile__ai-connection"
                       data-ai-connection={session.aiConnection}
+                      data-ai-primary={session.feedback_primary === true ? 'true' : undefined}
                       role="img"
                       aria-label={aiConnectionLabel(
                         session.aiConnection,
@@ -366,6 +367,7 @@ function TerminalCard({
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
                         session.mcp_connected,
+                        session.feedback_primary,
                       )}
                       title={aiConnectionLabel(
                         session.aiConnection,
@@ -373,13 +375,15 @@ function TerminalCard({
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
                         session.mcp_connected,
+                        session.feedback_primary,
                       )}
                     >
-                      {session.aiConnection === 'connected' ? (
-                        <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />
-                      ) : (
-                        <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
-                      )}
+                      <LucideIcon
+                        size="s"
+                        icon={aiConnectionIcon(session.aiConnection, session.feedback_primary).icon}
+                        name={aiConnectionIcon(session.aiConnection, session.feedback_primary).name}
+                        color={uiColor(aiConnectionIcon(session.aiConnection, session.feedback_primary).tone)}
+                      />
                     </span>
                   )}
                 </>

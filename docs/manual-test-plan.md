@@ -901,6 +901,12 @@ capture. For a real incident, record the exact tooltip, terminal snapshot and re
 hook diagnosis at the same time; synthetic state reproduction alone does not identify
 that incident's cause. Never use the running user host or real customer actions.
 
+### Primary AI session icon (HS2-YHQM67)
+
+Open two Claude terminals on a synthetic project. Confirm both tabs show a connected plug and
+only the older one shows `plug-zap` with the "Primary session" label. Close it and confirm the
+other tab takes `plug-zap` without a reload; reopen a terminal and confirm the role stays.
+
 ### Codex questions in the app (HS2-D0QTGB)
 
 In a Hot Sheet Codex terminal on a synthetic project, ask Codex to pose a question with its

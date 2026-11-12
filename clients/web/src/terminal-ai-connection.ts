@@ -5,6 +5,8 @@
  * sends its permission prompts to Hot Sheet. An AI terminal that has not reported in after a short
  * grace period keeps its prompts to itself.
  */
+import { type IconNode, Plug, PlugZap, Unplug } from 'lucide';
+
 import type { TerminalAiConnection } from './api';
 
 /** How long an AI terminal may run before a missing hook report counts as not connected. */
@@ -25,6 +27,8 @@ interface ConnectableSession {
   ai_connection?: TerminalAiConnection;
   /** Live `hotsheet-mcp` presence; absent from servers that predate it (HS2-HNXE38). */
   mcp_connected?: boolean;
+  /** This session is its project's primary for proactive feedback delivery (HS2-YHQM67). */
+  feedback_primary?: boolean;
   aiConnection?: AiConnectionState;
 }
 
@@ -84,8 +88,36 @@ export function deriveAiConnectionStates<S extends ConnectableSession, G extends
   return { groups: derived, ...(nextCheckInMs === undefined ? {} : { nextCheckInMs }) };
 }
 
+/**
+ * The icon for a terminal's connection state (HS2-YHQM67). Hook connectivity and primary routing
+ * are separate facts: every session whose hooks route permission prompts shows a connected plug,
+ * even without MCP (warning tone), and only the project's primary for proactive feedback delivery
+ * shows the energised plug. Only a session whose hooks never reported in shows the unplugged icon.
+ */
+export function aiConnectionIcon(
+  state: AiConnectionState,
+  primary?: boolean,
+): { icon: IconNode; name: 'plug-zap' | 'plug' | 'unplug'; tone: 'neutral-on-quiet' | 'warning-on-quiet' } {
+  if (state === 'missing') return { icon: Unplug, name: 'unplug', tone: 'warning-on-quiet' };
+  const tone = state === 'connected' ? 'neutral-on-quiet' : 'warning-on-quiet';
+  return primary === true ? { icon: PlugZap, name: 'plug-zap', tone } : { icon: Plug, name: 'plug', tone };
+}
+
 /** The tab label for a terminal's connection state: who is connected, or how to connect. */
 export function aiConnectionLabel(
+  state: AiConnectionState,
+  agent?: string,
+  tool?: string,
+  lastReport?: TerminalAiConnection,
+  mcpConnected?: boolean,
+  primary?: boolean,
+): string {
+  const label = connectionLabel(state, agent, tool, lastReport, mcpConnected);
+  // HS2-YHQM67: name the primary role separately from connectivity.
+  return primary === true ? `${label} Primary session: feedback notifications for this project are sent here.` : label;
+}
+
+function connectionLabel(
   state: AiConnectionState,
   agent?: string,
   tool?: string,

@@ -25,13 +25,11 @@ import {
   MessageSquare,
   Minimize2,
   PanelBottomClose,
-  Plug,
   Plus,
   ShieldAlert,
   ShieldCheck,
   SquareTerminal,
   TriangleAlert,
-  Unplug,
   X,
 } from 'lucide';
 
@@ -44,7 +42,7 @@ import {
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionLabel } from '../terminal-ai-connection';
+import { aiConnectionIcon, aiConnectionLabel } from '../terminal-ai-connection';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import {
@@ -256,6 +254,7 @@ export function TerminalDrawer({
                 'data-tab-kind': 'terminal',
                 'data-terminal-id': session.id,
                 'data-ai-connection': session.halt ? undefined : session.aiConnection,
+                'data-ai-primary': session.halt || session.feedback_primary !== true ? undefined : 'true',
               }}
               leading={<LucideIcon icon={SquareTerminal} name="square-terminal" />}
               trailing={
@@ -272,19 +271,21 @@ export function TerminalDrawer({
                   />
                 ) : session.aiConnection ? (
                   <Row vAlign="middle" gap="2xs">
-                    {/* Whether the tab's AI session reaches Hot Sheet (HS2-EV1XK3). */}
+                    {/* Whether the tab's AI session reaches Hot Sheet (HS2-EV1XK3), and whether it is the
+                        project's primary for proactive feedback delivery (HS2-YHQM67). */}
                     <LucideIcon
                       className="terminal-drawer__ai-connection"
                       size="s"
-                      icon={session.aiConnection === 'connected' ? Plug : Unplug}
-                      name={session.aiConnection === 'connected' ? 'plug' : 'unplug'}
-                      color={uiColor(session.aiConnection === 'connected' ? 'neutral-on-quiet' : 'warning-on-quiet')}
+                      icon={aiConnectionIcon(session.aiConnection, session.feedback_primary).icon}
+                      name={aiConnectionIcon(session.aiConnection, session.feedback_primary).name}
+                      color={uiColor(aiConnectionIcon(session.aiConnection, session.feedback_primary).tone)}
                       label={aiConnectionLabel(
                         session.aiConnection,
                         session.ai_connection?.agent,
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
                         session.mcp_connected,
+                        session.feedback_primary,
                       )}
                       title={aiConnectionLabel(
                         session.aiConnection,
@@ -292,6 +293,7 @@ export function TerminalDrawer({
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
                         session.mcp_connected,
+                        session.feedback_primary,
                       )}
                     />
                     {session.busy ? <BusyDot /> : undefined}

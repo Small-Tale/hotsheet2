@@ -41,15 +41,17 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
 
     const tabState = async (id: string, expected: 'missing' | 'mcp_missing' | 'connected') => {
       await expect(tab(id)).toHaveAttribute('data-ai-connection', expected);
-      await expect(icon(id)).toHaveAttribute('data-lucide', expected === 'connected' ? 'plug' : 'unplug');
+      // HS2-YHQM67: hooks that route permission prompts keep a connected plug even without MCP; a
+      // push-capable session may also be its project's primary (plug-zap).
+      await expect(icon(id)).toHaveAttribute('data-lucide', expected === 'missing' ? 'unplug' : /^plug(-zap)?$/);
     };
     const state = async (id: string, expected: 'missing' | 'mcp_missing' | 'connected') => {
       await tabState(id, expected);
       await expect(drawer).toHaveAttribute('data-mode', 'grid');
       await expect(tileIcon(id)).toHaveAttribute('data-ai-connection', expected);
-      await expect(tileIcon(id).locator(`[data-lucide="${expected === 'connected' ? 'plug' : 'unplug'}"]`)).toHaveCount(
-        1,
-      );
+      await expect(
+        tileIcon(id).locator(expected === 'missing' ? '[data-lucide="unplug"]' : '[data-lucide^="plug"]'),
+      ).toHaveCount(1);
       await expect(tileIcon(id)).toHaveAttribute('title', (await icon(id).locator('title').textContent())!);
     };
     const snapshot = async () => {
@@ -235,6 +237,103 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
     await deny(againId, again);
   } finally {
     for (const controller of pending) controller.abort();
+    await app.stop();
+  }
+});
+
+test('keeps every hooked session connected and marks one primary across close and reopen (HS2-YHQM67)', async ({
+  context,
+  baseURL,
+}) => {
+  test.setTimeout(150_000);
+  const app = await desktopApp(context, baseURL!);
+  try {
+    // Synthetic Claude sessions only: each reports a hook-connected session with an inbox that
+    // Hot Sheet could push to, which makes it eligible to be the project's primary.
+    const open = async (id: string) => {
+      await app.server.request('/terminals', 'POST', {
+        id,
+        connect: 'claude',
+        command: '/bin/sh',
+        args: ['-c', 'exec cat'],
+        cwd: app.server.root,
+      });
+      await app.server.request('/mcp-presence', 'POST', {
+        lease_id: `synthetic-mcp-${id}`,
+        pid: process.pid,
+        tool: 'claude',
+        cwd: app.server.root,
+        terminal_id: id,
+      });
+      // The hook report answers 204 with no body.
+      const report = await fetch(`${app.server.url}/terminals/${id}/ai-connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': app.server.secret },
+        body: JSON.stringify({
+          agent: 'claude',
+          session_id: `synthetic-session-${id}`,
+          messaging_socket: `${app.server.root}/synthetic-${id}.sock`,
+          messaging_token: 'synthetic-inbox-token',
+          tool_version: '2.1.302',
+        }),
+      });
+      expect(report.status).toBe(204);
+    };
+    await open('primary-a');
+    await open('primary-b');
+    const page = await app.launch();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    const tab = (id: string) => drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
+    const icon = (id: string) => tab(id).locator('.terminal-drawer__ai-connection');
+    const expectTabs = async (primary: string, secondary: string[]) => {
+      await expect(tab(primary)).toHaveAttribute('data-ai-connection', 'connected');
+      await expect(tab(primary)).toHaveAttribute('data-ai-primary', 'true');
+      await expect(icon(primary)).toHaveAttribute('data-lucide', 'plug-zap');
+      await expect(icon(primary).locator('title')).toContainText('Primary session');
+      for (const id of secondary) {
+        // A connected secondary session is never drawn as disconnected.
+        await expect(tab(id)).toHaveAttribute('data-ai-connection', 'connected');
+        await expect(tab(id)).not.toHaveAttribute('data-ai-primary', 'true');
+        await expect(icon(id)).toHaveAttribute('data-lucide', 'plug');
+        await expect(icon(id).locator('title')).not.toContainText('Primary session');
+      }
+    };
+    const primaries = async () =>
+      (await app.server.request<TerminalInfo[]>('/terminals'))
+        .filter((row) => row.feedback_primary)
+        .map((row) => row.id);
+    await expectTabs('primary-a', ['primary-b']);
+    expect(await primaries()).toEqual(['primary-a']);
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 900],
+      ['narrow', 390],
+      ['wide-return', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 844 });
+      await expectTabs('primary-a', ['primary-b']);
+      await page.screenshot({ path: test.info().outputPath(`hs2-yhqm67-two-sessions-${label}.png`) });
+    }
+    await tab('primary-a').screenshot({ path: test.info().outputPath('hs2-yhqm67-primary-tab-detail.png') });
+
+    // Close the primary from its tab: the remaining session is promoted without a reload.
+    await tab('primary-a').hover();
+    await tab('primary-a').getByRole('button', { name: /close/i }).click();
+    await expect(tab('primary-a')).toHaveCount(0);
+    await expectTabs('primary-b', []);
+    expect(await primaries()).toEqual(['primary-b']);
+    await page.screenshot({ path: test.info().outputPath('hs2-yhqm67-promoted-wide.png') });
+
+    // Reopen a terminal: it is connected, and the promoted primary keeps the role.
+    await open('primary-c');
+    await expect(tab('primary-c')).toBeVisible();
+    await expectTabs('primary-b', ['primary-c']);
+    expect(await primaries()).toEqual(['primary-b']);
+    await page.screenshot({ path: test.info().outputPath('hs2-yhqm67-reopened-wide.png') });
+  } finally {
     await app.stop();
   }
 });
