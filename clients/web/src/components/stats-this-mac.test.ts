@@ -25,6 +25,16 @@ describe('HS2-NS0AYR StatsThisMac', () => {
     expect(crossed).toContain('full in ~8h 36m');
   });
 
+  it('HS2-RBFR94 draws the CPU sparkline on a fixed percent scale, warning-toned once crossed', () => {
+    const normal = String(StatsThisMac({ state: { snapshot: hostHealthFixture('normal'), loading: false } }));
+    const sparklines = normal.match(/<svg[^>]*data-component="glance-sparkline"[^>]*>/gu) ?? [];
+    expect(sparklines).toHaveLength(1);
+    expect(sparklines[0]).toContain('data-tone="neutral"');
+    expect(sparklines[0]).toContain('CPU busy percent, 5-minute averages over the last 45m');
+    const crossed = String(StatsThisMac({ state: { snapshot: hostHealthFixture('crossed'), loading: false } }));
+    expect(crossed).toMatch(/<svg[^>]*data-component="glance-sparkline"[^>]*data-tone="warning"/u);
+  });
+
   it('renders unsupported signals as unsupported, never as values', () => {
     const html = String(StatsThisMac({ state: { snapshot: hostHealthFixture('unsupported'), loading: false } }));
     expect(html).toContain('Server host · Windows · x86_64');

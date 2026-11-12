@@ -19947,7 +19947,7 @@ components:
       additionalProperties: false
     HostHealthCpu:
       type: object
-      description: Whole-machine CPU and the busiest process's executable name.
+      description: Whole-machine CPU, the busiest process's executable name, and the last hour's five-minute averages.
       required:
         - status
         - reason
@@ -19956,6 +19956,7 @@ components:
         - busy_for_seconds
         - top_process
         - top_process_percent
+        - history
       properties:
         status:
           $ref: '#/components/schemas/HostHealthStatus'
@@ -19985,6 +19986,31 @@ components:
           anyOf:
             - type: number
             - type: 'null'
+        history:
+          $ref: '#/components/schemas/HostHealthCpuHistory'
+      additionalProperties: false
+    HostHealthCpuHistory:
+      type: object
+      description: The last hour of CPU (HS2-RBFR94) as twelve dense, epoch-aligned five-minute averages, oldest first, ending with the bucket that holds the newest sample. A bucket with no sample is null.
+      required:
+        - bucket_seconds
+        - ends_at
+        - average_percent
+      properties:
+        bucket_seconds:
+          type: integer
+          minimum: 1
+        ends_at:
+          description: The end of the newest bucket (RFC 3339); null before the first CPU sample.
+          anyOf:
+            - type: string
+            - type: 'null'
+        average_percent:
+          type: array
+          items:
+            anyOf:
+              - type: number
+              - type: 'null'
       additionalProperties: false
     HostHealthPower:
       type: object

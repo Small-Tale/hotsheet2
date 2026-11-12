@@ -29,7 +29,7 @@ the stats with that name.
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `disk`    | Free and total bytes of the volume holding the primary store. Consumption is a robust trend (see [Disk trend](#disk-trend)), with projected hours to full. | free < `disk_warning_free_gib`, or hours to full < `disk_warning_hours_to_full` | free < `disk_critical_free_gib`, or hours to full < `disk_critical_hours_to_full` | `low_free_space`, `projected_full`                                         |
 | `memory`  | OS memory-pressure level and swap in use. Swap growth is a least-squares fit over the last hour.                                                           | OS pressure _warn_, or swap growth ≥ `swap_warning_growth_mib_per_hour`         | OS pressure _critical_                                                            | `pressure`, `swap_growth`                                                  |
-| `cpu`     | Whole-machine busy percent, and the busiest process's executable name and percent (never its arguments or path).                                           | busy ≥ `cpu_warning_percent` continuously for `cpu_sustain_minutes`             | —                                                                                 | `sustained_cpu`                                                            |
+| `cpu`     | Whole-machine busy percent, the busiest process's executable name and percent (never its arguments or path), and the last hour's history (see below).      | busy ≥ `cpu_warning_percent` continuously for `cpu_sustain_minutes`             | —                                                                                 | `sustained_cpu`                                                            |
 | `power`   | On battery, battery percent, lid closed, sleep-prevention assertion held, idle system-sleep timer.                                                         | on battery; or idle sleep enabled with no assertion held                        | lid closed on battery; battery ≤ `battery_critical_percent` on battery            | `on_battery`, `idle_sleep_allowed`, `lid_closed_on_battery`, `battery_low` |
 | `network` | Whether a default route exists, and its interface. No packet is sent.                                                                                      | —                                                                               | no default route                                                                  | `no_default_route`                                                         |
 | `thermal` | Whether the OS records thermal or performance throttling (macOS `CPU_Speed_Limit` below 100, or a recorded warning level).                                 | throttled                                                                       | —                                                                                 | `throttled`                                                                |
@@ -57,6 +57,21 @@ HS2-MEQ46T adds these readers. A missing native API, system utility, counter, or
 policy output remains `unavailable` or `null`; it never implies a healthy reading. Windows
 thermal and lid state have no reader. Linux throttling needs two samples to compare cumulative
 counters; the first sample is `unavailable`.
+
+## CPU history
+
+`signals.cpu.history` (HS2-RBFR94) is the last hour of CPU as twelve five-minute averages of the
+sampled busy percent, kept in server memory only:
+
+- Buckets are aligned to the epoch (every client agrees on the boundaries), oldest first, ending with
+  the bucket that holds the newest sample; `ends_at` is that bucket's end (`null` before the first
+  sample).
+- A bucket with no sample, because the server was down or the reader failed, is `null`, never a
+  guessed value. A restart starts an empty history.
+- A wall clock stepped backwards restarts the window rather than misplacing buckets.
+- An unsupported or unavailable CPU reader keeps the existing history and adds nothing.
+
+The history rides the snapshot reads below; it adds no change event.
 
 ## Disk trend
 

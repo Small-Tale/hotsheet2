@@ -294,8 +294,10 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   and power always show; network and thermal only while warning or critical. Crossed cards take
   the warning or danger tone; `unsupported` and `unavailable` signals say so and show no value. The
   runtime creates one host-health resource fed by every project stream's `host_health` events and
-  resyncs. The CPU sparkline and the largest growing directory wait on server-side history in the
-  snapshot (HS2-RBFR94); the left column beside the cards is reserved for the Overnight timeline.
+  resyncs. The CPU card draws a `GlanceSparkline` of the snapshot's last hour of five-minute
+  averages on a fixed 0 to 100 scale, from the first sampled bucket (HS2-RBFR94; `docs/host-health.md`).
+  The largest growing directory waits on a bounded, private measurement (HS2-KK02QB); the left column
+  beside the cards is reserved for the Overnight timeline.
 - **Host health sampler (HS2-DTAVQA):** a server-side sampler of those signals pushes threshold crossings
   and coarse snapshots over the existing WebSocket; sampling cadence is server-local and clients never
   poll. Thresholds are configurable with CLI and REST parity, and use hysteresis so they do not flap. macOS

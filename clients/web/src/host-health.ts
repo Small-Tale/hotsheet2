@@ -32,6 +32,8 @@ export interface HostHealthSignals {
     busy_for_seconds: number | null;
     top_process: string | null;
     top_process_percent: number | null;
+    /** Absent from a server older than HS2-RBFR94. */
+    history?: HostHealthCpuHistory;
   };
   power: HostHealthSignalHeader & {
     on_battery: boolean | null;
@@ -42,6 +44,15 @@ export interface HostHealthSignals {
   };
   network: HostHealthSignalHeader & { reachable: boolean | null; interface: string | null };
   thermal: HostHealthSignalHeader & { throttled: boolean | null; cpu_speed_limit: number | null };
+}
+/**
+ * The last hour of CPU (HS2-RBFR94): dense, epoch-aligned buckets, oldest first, ending with the bucket
+ * that holds the newest sample. A bucket without a sample is `null`.
+ */
+export interface HostHealthCpuHistory {
+  bucket_seconds: number;
+  ends_at: string | null;
+  average_percent: (number | null)[];
 }
 export interface HostHealthSnapshot {
   host: { name: string; os: string; arch: string };
@@ -93,6 +104,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const nullableString = (value: unknown) => value === null || typeof value === 'string';
 
+function isCpuHistory(value: unknown): value is HostHealthCpuHistory {
+  return (
+    isRecord(value) &&
+    typeof value.bucket_seconds === 'number' &&
+    value.bucket_seconds > 0 &&
+    nullableString(value.ends_at) &&
+    Array.isArray(value.average_percent) &&
+    value.average_percent.every((item) => item === null || typeof item === 'number')
+  );
+}
+
 /** `GET /host-health`: checks every field the glance surfaces read. */
 export const parseHostHealth: ResponseParser<HostHealthSnapshot> = (value) => {
   const what = 'host health';
@@ -107,6 +129,8 @@ export const parseHostHealth: ResponseParser<HostHealthSnapshot> = (value) => {
     if (!isRecord(signal) || !STATUSES.includes(signal.status as string)) return fail();
     if (!nullableString(signal.reason) || !nullableString(signal.since)) return fail();
   }
+  const history = (value.signals.cpu as Record<string, unknown>).history;
+  if (history !== undefined && !isCpuHistory(history)) return fail();
   return value as unknown as HostHealthSnapshot;
 };
 

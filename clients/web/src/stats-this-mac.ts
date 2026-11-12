@@ -15,6 +15,8 @@ export interface ThisMacCard {
   headline: string;
   /** Rate, projection, or context lines, quiet under the headline. */
   details: string[];
+  /** A sparkline under the headline (the CPU's last hour, HS2-RBFR94), when there is one. */
+  trend?: { values: number[]; label: string };
 }
 
 const GIB = 1024 ** 3;
@@ -98,6 +100,25 @@ function memoryCard(memory: HostHealthSignals['memory']): ThisMacCard {
   };
 }
 
+/**
+ * The CPU sparkline (HS2-RBFR94): the server's five-minute averages from the first sampled bucket to the
+ * newest. Buckets before the first sample are dropped rather than drawn as idle; a later gap (the server
+ * was down) reads 0 and the label names the gap. Fewer than two samples draw nothing.
+ */
+export function cpuTrend(history: HostHealthSignals['cpu']['history']): ThisMacCard['trend'] {
+  if (!history) return undefined;
+  const first = history.average_percent.findIndex((value) => value !== null);
+  if (first < 0) return undefined;
+  const series = history.average_percent.slice(first);
+  if (series.filter((value) => value !== null).length < 2) return undefined;
+  const minutes = Math.round(history.bucket_seconds / 60);
+  const gaps = series.some((value) => value === null);
+  return {
+    values: series.map((value) => Math.round(value ?? 0)),
+    label: `CPU busy percent, ${minutes}-minute averages over the last ${formatDuration(series.length * history.bucket_seconds * 1000)}${gaps ? ', 0 where the server took no sample' : ''}`,
+  };
+}
+
 function cpuCard(cpu: HostHealthSignals['cpu']): ThisMacCard {
   const details: string[] = [];
   if (cpu.top_process !== null)
@@ -108,12 +129,14 @@ function cpuCard(cpu: HostHealthSignals['cpu']): ThisMacCard {
     );
   if (cpu.status !== 'normal' && cpu.busy_for_seconds !== null)
     details.push(`busy for ${formatDuration(cpu.busy_for_seconds * 1000)}`);
+  const trend = cpuTrend(cpu.history);
   return {
     id: 'cpu',
     title: TITLES.cpu,
     status: cpu.status,
     headline: cpu.busy_percent === null ? 'Unknown' : `${Math.round(cpu.busy_percent)}%`,
     details,
+    ...(trend === undefined ? {} : { trend }),
   };
 }
 

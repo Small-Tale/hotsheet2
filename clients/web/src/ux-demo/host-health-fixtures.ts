@@ -69,6 +69,13 @@ export function hostHealthFixture(scenario: HostHealthScenario = 'normal'): Host
         busy_for_seconds: crossed ? 960 : 0,
         top_process: 'cargo',
         top_process_percent: crossed ? 410 : 88,
+        history: {
+          bucket_seconds: 300,
+          ends_at: '2026-11-06T10:50:00Z',
+          average_percent: crossed
+            ? [41, 38, 52, 60, 71, 88, 93, 95, 96, 94, 95, 94]
+            : [null, null, null, 12, 18, 9, 22, 41, 37, 28, 31, 34],
+        },
       },
       power: {
         ...header('normal'),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseHostHealth } from './host-health';
-import { formatBytes, hostPlatform, thisMacCards } from './stats-this-mac';
+import { cpuTrend, formatBytes, hostPlatform, thisMacCards } from './stats-this-mac';
 import { hostHealthFixture } from './ux-demo/host-health-fixtures';
 
 const card = (scenario: Parameters<typeof hostHealthFixture>[0], id: string) =>
@@ -88,5 +88,22 @@ describe('HS2-NS0AYR This Mac cards', () => {
     expect(formatBytes(3 * 1024 ** 3)).toBe('3 GB');
     expect(hostPlatform(hostHealthFixture('normal'))).toBe('macOS · aarch64');
     expect(hostPlatform(hostHealthFixture('unsupported'))).toBe('Windows · x86_64');
+  });
+
+  it('HS2-RBFR94 draws the CPU hour from the first sample, naming gaps, and nothing without two samples', () => {
+    expect(card('normal', 'cpu')?.trend).toEqual({
+      values: [12, 18, 9, 22, 41, 37, 28, 31, 34],
+      label: 'CPU busy percent, 5-minute averages over the last 45m',
+    });
+    const history = (average_percent: (number | null)[]) => ({ bucket_seconds: 300, ends_at: null, average_percent });
+    expect(cpuTrend(history([null, 10, null, 30.4]))).toEqual({
+      values: [10, 0, 30],
+      label: 'CPU busy percent, 5-minute averages over the last 15m, 0 where the server took no sample',
+    });
+    expect(cpuTrend(undefined)).toBeUndefined();
+    expect(cpuTrend(history([null, null]))).toBeUndefined();
+    expect(cpuTrend(history([null, 40]))).toBeUndefined();
+    // An unsupported or unavailable CPU card never shows a trend.
+    expect(card('unsupported', 'cpu')?.trend).toBeUndefined();
   });
 });

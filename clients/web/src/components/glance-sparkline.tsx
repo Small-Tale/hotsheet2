@@ -9,16 +9,18 @@ export interface GlanceSparklineProps {
   /** The hover title and accessible name: what the series counts and over which window. */
   label: string;
   tone?: GlanceSparklineTone;
+  /** A fixed top of the scale, such as 100 for a percentage (HS2-RBFR94); defaults to the series' maximum. */
+  max?: number;
 }
 
 const WIDTH = 120;
 const HEIGHT = 28;
 const INSET = 2;
 
-/** The polyline points for `values`, scaled to the series' own maximum. */
-export function glanceSparklinePoints(values: readonly number[]): string {
+/** The polyline points for `values`, scaled to `scale`, or to the series' own maximum. */
+export function glanceSparklinePoints(values: readonly number[], scale?: number): string {
   if (values.length === 0) return '';
-  const max = Math.max(...values, 0);
+  const max = Math.max(...values, scale ?? 0);
   const step = values.length > 1 ? WIDTH / (values.length - 1) : 0;
   return values
     .map((value, index) => {
@@ -33,8 +35,8 @@ export function glanceSparklinePoints(values: readonly number[]): string {
  * area, scaled to its own maximum. Kerf has no sparkline, so this is an app-owned domain visualization
  * like the glance gauge. It carries no visible text; the values are in its title and accessible name.
  */
-export function GlanceSparkline({ values, label, tone = 'neutral' }: GlanceSparklineProps) {
-  const points = glanceSparklinePoints(values);
+export function GlanceSparkline({ values, label, tone = 'neutral', max }: GlanceSparklineProps) {
+  const points = glanceSparklinePoints(values, max);
   const title = `${label}: ${values.join(', ')}`;
   return (
     <svg

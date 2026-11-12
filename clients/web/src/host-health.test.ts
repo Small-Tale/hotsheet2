@@ -66,6 +66,26 @@ describe('host health contract (HS2-DTAVQA)', () => {
     expect(() => parseHostHealth(null)).toThrow(ServerResponseShapeError);
   });
 
+  it('HS2-RBFR94 accepts CPU history or its absence from an older server, and rejects a drifted one', () => {
+    const good = hostHealthFixture();
+    const withHistory = (history: unknown) => ({
+      ...good,
+      signals: { ...good.signals, cpu: { ...good.signals.cpu, history } },
+    });
+    expect(() => parseHostHealth(good)).not.toThrow();
+    expect(() =>
+      parseHostHealth(withHistory({ bucket_seconds: 300, ends_at: null, average_percent: [null, 12.5] })),
+    ).not.toThrow();
+    for (const drifted of [
+      null,
+      { bucket_seconds: 0, ends_at: null, average_percent: [] },
+      { bucket_seconds: 300, ends_at: 5, average_percent: [] },
+      { bucket_seconds: 300, ends_at: null, average_percent: ['12'] },
+      { bucket_seconds: 300, ends_at: null },
+    ])
+      expect(() => parseHostHealth(withHistory(drifted))).toThrow(ServerResponseShapeError);
+  });
+
   it('parses thresholds with nullable configured values', () => {
     const values = {
       sample_seconds: 60,

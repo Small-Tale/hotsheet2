@@ -764,6 +764,78 @@ fn cpu_must_stay_busy_for_the_sustain_window_and_a_dip_restarts_it() {
 }
 
 #[test]
+fn rbfr94_cpu_history_keeps_twelve_aligned_five_minute_averages_with_gaps() {
+    let thresholds = default_thresholds();
+    let busy = |percent: f64| HostReading {
+        cpu: Probe::Value(CpuReading {
+            busy_percent: percent,
+            top_process: None,
+            top_process_percent: None,
+        }),
+        ..healthy()
+    };
+    let bucket = super::CPU_HISTORY_BUCKET_MS;
+    let base = T0 - T0 % bucket;
+    let mut monitor = Monitor::new(host());
+    assert_eq!(
+        monitor.snapshot().signals.cpu.history.average_percent,
+        vec![None; super::CPU_HISTORY_BUCKETS],
+        "empty before the first sample"
+    );
+    assert_eq!(monitor.snapshot().signals.cpu.history.ends_at, None);
+    // Two samples in the first bucket average; the next bucket holds one.
+    monitor.observe(busy(10.0), base, &thresholds);
+    monitor.observe(busy(30.0), base + MINUTE, &thresholds);
+    monitor.observe(busy(50.0), base + bucket, &thresholds);
+    let cpu = &monitor.snapshot().signals.cpu.history;
+    assert_eq!(cpu.bucket_seconds, 300);
+    assert_eq!(cpu.average_percent.len(), 12);
+    assert_eq!(cpu.average_percent[10], Some(20.0));
+    assert_eq!(cpu.average_percent[11], Some(50.0));
+    assert!(cpu.average_percent[..10].iter().all(Option::is_none));
+    assert_eq!(cpu.ends_at, super::rfc3339(base + 2 * bucket));
+
+    // A gap (the server was down for 20 minutes) leaves null buckets, not guesses.
+    monitor.observe(busy(70.0), base + 5 * bucket, &thresholds);
+    let cpu = &monitor.snapshot().signals.cpu.history;
+    assert_eq!(
+        cpu.average_percent[6..],
+        [Some(20.0), Some(50.0), None, None, None, Some(70.0)]
+    );
+
+    // An unavailable reader keeps the past and adds nothing.
+    monitor.observe(
+        HostReading {
+            cpu: Probe::Unavailable,
+            ..healthy()
+        },
+        base + 6 * bucket,
+        &thresholds,
+    );
+    assert_eq!(
+        monitor.snapshot().signals.cpu.history.average_percent[11],
+        Some(70.0)
+    );
+
+    // Older than the hour drops off the front.
+    monitor.observe(busy(90.0), base + 16 * bucket, &thresholds);
+    let cpu = &monitor.snapshot().signals.cpu.history;
+    assert_eq!(cpu.average_percent[11], Some(90.0));
+    assert_eq!(
+        cpu.average_percent[0],
+        Some(70.0),
+        "the bucket an hour back still shows"
+    );
+    assert!(cpu.average_percent[1..11].iter().all(Option::is_none));
+
+    // A wall clock stepped backwards restarts the window instead of misplacing buckets.
+    monitor.observe(busy(40.0), base, &thresholds);
+    let cpu = &monitor.snapshot().signals.cpu.history;
+    assert_eq!(cpu.average_percent[11], Some(40.0));
+    assert!(cpu.average_percent[..11].iter().all(Option::is_none));
+}
+
+#[test]
 fn memory_follows_os_pressure_and_swap_growth() {
     let thresholds = default_thresholds(); // swap growth warns at 1 GiB/h
     let memory = |pressure: Level, swap_gib: f64| HostReading {
@@ -1040,6 +1112,13 @@ mod server {
         assert_eq!(after["signals"]["disk"]["reason"], "low_free_space");
         assert_eq!(after["signals"]["disk"]["free_bytes"], 3 * GIB);
         assert_eq!(after["signals"]["cpu"]["top_process"], "node");
+        // HS2-RBFR94: twelve five-minute buckets on the wire, the newest holding this sample.
+        let history = &after["signals"]["cpu"]["history"];
+        assert_eq!(history["bucket_seconds"], 300);
+        assert_eq!(history["average_percent"].as_array().unwrap().len(), 12);
+        assert_eq!(history["average_percent"][11], 12.0);
+        assert_eq!(history["average_percent"][0], serde_json::Value::Null);
+        assert!(history["ends_at"].is_string());
         assert_eq!(after["signals"]["thermal"]["throttled"], false);
     }
 

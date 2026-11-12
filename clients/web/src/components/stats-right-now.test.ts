@@ -133,6 +133,9 @@ describe('HS2-ERTNJ7 GlanceSparkline', () => {
     expect(glanceSparklinePoints([0, 2, 1])).toBe('0,26 60,2 120,14');
     expect(glanceSparklinePoints([0, 0])).toBe('0,26 120,26');
     expect(glanceSparklinePoints([])).toBe('');
+    // HS2-RBFR94: a fixed scale (a percentage) keeps small values low instead of filling the box.
+    expect(glanceSparklinePoints([0, 50], 100)).toBe('0,26 120,14');
+    expect(glanceSparklinePoints([0, 150], 100)).toBe('0,26 120,2');
     const html = String(GlanceSparkline({ values: [1, 3], label: 'Updates', tone: 'success' }));
     expect(html).toContain('aria-label="Updates: 1, 3"');
     expect(html).toContain('data-tone="success"');

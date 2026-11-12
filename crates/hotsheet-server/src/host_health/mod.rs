@@ -99,6 +99,9 @@ const DISK_SHORT_WINDOW_MS: u64 = 20 * 60 * 1000;
 /// Coarse snapshot notices go out at most this often, and only when the coarse values moved.
 pub(crate) const SNAPSHOT_MIN_INTERVAL_MS: u64 = 5 * 60 * 1000;
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+/// The CPU sparkline's window (HS2-RBFR94): twelve five-minute averages, the last hour.
+pub(crate) const CPU_HISTORY_BUCKETS: usize = 12;
+pub(crate) const CPU_HISTORY_BUCKET_MS: u64 = 5 * 60 * 1000;
 const MIB: f64 = 1024.0 * 1024.0;
 
 /// Environment switch that keeps the sampler off; test fixtures set it to `off` (HS2-DTAVQA).
@@ -198,6 +201,20 @@ pub(crate) struct CpuSignal {
     pub(crate) busy_for_seconds: Option<u64>,
     pub(crate) top_process: Option<String>,
     pub(crate) top_process_percent: Option<f64>,
+    /// Busy-percent averages over the last hour (HS2-RBFR94).
+    pub(crate) history: CpuHistory,
+}
+
+/// Bounded, server-local CPU history (HS2-RBFR94): [`CPU_HISTORY_BUCKETS`] dense buckets of
+/// [`CPU_HISTORY_BUCKET_MS`], aligned to the epoch so every client agrees on the boundaries, oldest
+/// first and ending with the bucket that holds the newest sample. A bucket with no sample (the
+/// server was down, or the reader failed) is `null`, never a guessed value.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(crate) struct CpuHistory {
+    pub(crate) bucket_seconds: u64,
+    /// The end of the newest bucket (RFC 3339); `null` before the first CPU sample.
+    pub(crate) ends_at: Option<String>,
+    pub(crate) average_percent: Vec<Option<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -295,6 +312,8 @@ pub(crate) struct Monitor {
     disk_history: VecDeque<(u64, f64)>,
     swap_history: VecDeque<(u64, f64)>,
     cpu_busy_since: Option<u64>,
+    /// `(bucket start ms, sum of busy percents, sample count)`, oldest first (HS2-RBFR94).
+    cpu_buckets: VecDeque<(u64, f64, u32)>,
     last_snapshot_notice: Option<(u64, String)>,
 }
 
@@ -458,6 +477,11 @@ impl Monitor {
                         busy_for_seconds: None,
                         top_process: None,
                         top_process_percent: None,
+                        history: CpuHistory {
+                            bucket_seconds: CPU_HISTORY_BUCKET_MS / 1000,
+                            ends_at: None,
+                            average_percent: vec![None; CPU_HISTORY_BUCKETS],
+                        },
                     },
                     power: PowerSignal {
                         header: blank(),
@@ -483,6 +507,7 @@ impl Monitor {
             disk_history: VecDeque::new(),
             swap_history: VecDeque::new(),
             cpu_busy_since: None,
+            cpu_buckets: VecDeque::new(),
             last_snapshot_notice: None,
         }
     }
@@ -726,7 +751,9 @@ impl Monitor {
             self.cpu_busy_since = None;
         }
         let busy_for = self.cpu_busy_since.map(|since| now.saturating_sub(since));
+        let history = self.record_cpu_history(now, cpu.busy_percent);
         let signal = &mut self.snapshot.signals.cpu;
+        signal.history = history;
         signal.busy_percent = Some((cpu.busy_percent * 10.0).round() / 10.0);
         signal.busy_for_seconds = busy_for.map(|ms| ms / 1000);
         signal.top_process = cpu.top_process;
@@ -735,6 +762,48 @@ impl Monitor {
             (Status::Warning, Some("sustained_cpu"))
         } else {
             (Status::Normal, None)
+        }
+    }
+
+    /// Add one busy reading to its five-minute bucket and rebuild the dense history. Buckets
+    /// older than the window drop off; a gap (the server was down) stays `null`.
+    fn record_cpu_history(&mut self, now: u64, busy_percent: f64) -> CpuHistory {
+        let start = now - now % CPU_HISTORY_BUCKET_MS;
+        // A wall clock stepped backwards would misplace every bucket; start the window over.
+        if self
+            .cpu_buckets
+            .back()
+            .is_some_and(|(at, _, _)| *at > start)
+        {
+            self.cpu_buckets.clear();
+        }
+        match self.cpu_buckets.back_mut() {
+            Some((at, sum, count)) if *at == start => {
+                *sum += busy_percent;
+                *count += 1;
+            }
+            _ => self.cpu_buckets.push_back((start, busy_percent, 1)),
+        }
+        let window = CPU_HISTORY_BUCKET_MS * CPU_HISTORY_BUCKETS as u64;
+        let oldest = (start + CPU_HISTORY_BUCKET_MS).saturating_sub(window);
+        while self
+            .cpu_buckets
+            .front()
+            .is_some_and(|(at, _, _)| *at < oldest)
+        {
+            self.cpu_buckets.pop_front();
+        }
+        let mut average_percent = vec![None; CPU_HISTORY_BUCKETS];
+        for (at, sum, count) in &self.cpu_buckets {
+            let index = (at.saturating_sub(oldest) / CPU_HISTORY_BUCKET_MS) as usize;
+            if let Some(slot) = average_percent.get_mut(index) {
+                *slot = Some((sum / f64::from(*count) * 10.0).round() / 10.0);
+            }
+        }
+        CpuHistory {
+            bucket_seconds: CPU_HISTORY_BUCKET_MS / 1000,
+            ends_at: rfc3339(start + CPU_HISTORY_BUCKET_MS),
+            average_percent,
         }
     }
 

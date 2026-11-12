@@ -25545,6 +25545,12 @@ test('Stats This Mac cards show the server host, tint crossed thresholds, and re
     'power',
   ]);
   await expect(thisMac.locator('[data-card="power"]')).toContainText('Kept awake');
+  // HS2-RBFR94: the CPU card draws the server's last hour of five-minute averages, at a real size.
+  const cpuSparkline = thisMac.locator('[data-card="cpu"] [data-component="glance-sparkline"]');
+  await expect(cpuSparkline).toHaveAttribute('aria-label', /^CPU busy percent, 5-minute averages over the last 45m/u);
+  const sparkBox = await cpuSparkline.boundingBox();
+  expect(sparkBox?.width ?? 0).toBeGreaterThan(40);
+  expect(sparkBox?.height ?? 0).toBeGreaterThan(8);
   const readsBefore = hostReads;
   expect(readsBefore).toBeGreaterThan(0);
 
@@ -25571,6 +25577,7 @@ test('Stats This Mac cards show the server host, tint crossed thresholds, and re
   await expect(thisMac.locator('[data-card="disk"]')).toHaveAttribute('data-status', 'warning');
   await expect(thisMac.locator('[data-card="network"]')).toHaveAttribute('data-status', 'critical');
   await expect(thisMac.locator('[data-card="memory"]')).toHaveAttribute('data-status', 'normal');
+  await expect(cpuSparkline).toHaveAttribute('data-tone', 'warning');
   expect(hostReads).toBe(readsBefore + 1);
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });

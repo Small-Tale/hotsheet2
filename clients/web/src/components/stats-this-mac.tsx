@@ -14,6 +14,7 @@ import { Cpu, HardDrive, type IconNode, MemoryStick, Plug, Thermometer, WifiOff 
 import type { HostHealthSignalId, HostHealthStatus } from '../host-health';
 import type { HostHealthResourceState } from '../host-health-resource';
 import { hostPlatform, thisMacCards } from '../stats-this-mac';
+import { GlanceSparkline } from './glance-sparkline';
 
 export interface StatsThisMacProps {
   state: HostHealthResourceState;
@@ -106,6 +107,14 @@ export function StatsThisMac({ state }: StatsThisMacProps) {
                 >
                   {card.headline}
                 </Text>
+                {card.trend && (
+                  <GlanceSparkline
+                    values={card.trend.values}
+                    label={card.trend.label}
+                    max={100}
+                    tone={card.status === 'warning' || card.status === 'critical' ? 'warning' : 'neutral'}
+                  />
+                )}
                 {card.details.map((line) => (
                   <Text variant="span" size="compact" tone="quiet" flush>
                     {line}
