@@ -147,6 +147,7 @@ impl Cmd {
             | AiTools { .. }
             | AiSettings { .. }
             | Settings { .. }
+            | HostDisks { .. }
             | PermissionHook { .. }
             | PermissionDiscard { .. }
             | HookDiagnose { .. }

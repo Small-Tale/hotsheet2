@@ -2470,6 +2470,12 @@ export class Api {
   /** Include or ignore one disk in host health (HS2-NHK8V8); answers with the updated snapshot. */
   setHostHealthDisk = (id: string, monitor: boolean) =>
     this.parsed(parseHostHealth, '/host-health/disks', { method: 'PUT', body: JSON.stringify({ id, monitor }) });
+  /** Monitor the volume holding a path on the server's machine (HS2-KBVZV1). */
+  addHostHealthDisk = (path: string) =>
+    this.parsed(parseHostHealth, '/host-health/disks', { method: 'POST', body: JSON.stringify({ path }) });
+  /** Forget a saved disk choice (HS2-KBVZV1). */
+  forgetHostHealthDisk = (id: string) =>
+    this.parsed(parseHostHealth, `/host-health/disks?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
   saveHostHealthThresholds = (value: HostHealthConfiguredThresholds) =>
     this.parsed(parseHostHealthThresholds, '/host-health/thresholds', { method: 'PUT', body: JSON.stringify(value) });
   /** Machine-wide standby settings (HS2-EQVZTZ). */

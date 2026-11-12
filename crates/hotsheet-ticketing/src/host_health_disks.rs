@@ -329,6 +329,103 @@ fn platform_volumes(_ids: &mut VolumeIds) -> Vec<Volume> {
     Vec::new()
 }
 
+/// Why a disk choice could not be made (HS2-KBVZV1).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum DiskChoiceError {
+    #[error("no volume holds {0}")]
+    NotFound(String),
+    #[error("the ticket store's disk is always monitored")]
+    StoreVolume,
+    #[error("unknown disk {0}")]
+    UnknownDisk(String),
+}
+
+/// Read the saved choices from machine-wide settings.
+pub fn load_choices(settings: &crate::Settings) -> Result<DiskChoices, crate::SettingsError> {
+    Ok(stored_choices(
+        settings
+            .get(DISKS_SETTING_KEY, crate::Scope::Global)?
+            .as_ref(),
+    ))
+}
+
+/// Save the choices to machine-wide settings; none clears the setting.
+pub fn save_choices(
+    settings: &crate::Settings,
+    choices: &DiskChoices,
+) -> Result<(), crate::SettingsError> {
+    // A map of plain strings and booleans always serializes.
+    let value = serde_json::to_value(choices).unwrap_or_default();
+    if choices.is_empty() || value.is_null() {
+        settings.unset(DISKS_SETTING_KEY, crate::Scope::Global)?;
+    } else {
+        settings.set(DISKS_SETTING_KEY, value, crate::Scope::Global)?;
+    }
+    Ok(())
+}
+
+/// Add the volume holding `path` as monitored (HS2-KBVZV1), the one workflow behind
+/// `POST /host-health/disks` and `hotsheet-cli host-disks add`. A detected volume keeps its
+/// stable id; any other mount (a network share) is keyed by its mount point. The store's volume
+/// is refused because it is always monitored. Returns the id and the saved choice.
+pub fn add_disk(
+    choices: &mut DiskChoices,
+    path: &Path,
+    store_root: &Path,
+    detected: &[Volume],
+) -> Result<(String, DiskChoice), DiskChoiceError> {
+    let volume = volume_for_path(path, detected)
+        .ok_or_else(|| DiskChoiceError::NotFound(path.display().to_string()))?;
+    if space(store_root).is_some_and(|(_, _, device)| device == volume.device) {
+        return Err(DiskChoiceError::StoreVolume);
+    }
+    let choice = DiskChoice {
+        monitor: true,
+        label: volume.label.clone(),
+        mount: volume.mount.display().to_string(),
+        manual: true,
+    };
+    choices.insert(volume.id.clone(), choice.clone());
+    Ok((volume.id, choice))
+}
+
+/// Include or ignore a known volume: one already saved, or one of `present` (`(id, label, mount)`).
+pub fn set_monitor(
+    choices: &mut DiskChoices,
+    id: &str,
+    monitor: bool,
+    present: &[(String, String, String)],
+) -> Result<DiskChoice, DiskChoiceError> {
+    if id == STORE_VOLUME_ID {
+        return Err(DiskChoiceError::StoreVolume);
+    }
+    let choice = match (
+        choices.get(id),
+        present.iter().find(|(known, _, _)| known == id),
+    ) {
+        (Some(saved), seen) => DiskChoice {
+            monitor,
+            label: seen.map_or_else(|| saved.label.clone(), |(_, label, _)| label.clone()),
+            mount: seen.map_or_else(|| saved.mount.clone(), |(_, _, mount)| mount.clone()),
+            manual: saved.manual,
+        },
+        (None, Some((_, label, mount))) => DiskChoice {
+            monitor,
+            label: label.clone(),
+            mount: mount.clone(),
+            manual: false,
+        },
+        (None, None) => return Err(DiskChoiceError::UnknownDisk(id.to_string())),
+    };
+    choices.insert(id.to_string(), choice.clone());
+    Ok(choice)
+}
+
+/// Forget a saved choice; a still-connected detected disk asks again. Returns whether one existed.
+pub fn forget_disk(choices: &mut DiskChoices, id: &str) -> bool {
+    choices.remove(id).is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

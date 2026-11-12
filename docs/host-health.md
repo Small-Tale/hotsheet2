@@ -129,6 +129,27 @@ also watches other disks the user chooses (HS2-NHK8V8):
   same event at once, so every client re-reads the snapshot. The event never carries a volume name
   or path.
 
+## Managing disks
+
+App Settings → General → **Host health disks** (HS2-KBVZV1) lists every disk in the snapshot's
+`disks`: the store's (always monitored, its switch disabled), each detected disk, and each saved
+disk that is not connected. A Monitor switch saves at once through `PUT /host-health/disks`.
+**Forget** appears on a disconnected disk or one added by path; it calls
+`DELETE /host-health/disks?id=` and drops the saved choice, so a still-connected detected disk asks
+again. **Add Disk…** opens a dialog for a path on the server's machine. `POST /host-health/disks`
+with `{ "path" }` monitors the volume holding that path, which covers mounts detection skips, such
+as a network share:
+
+- A detected volume keeps its UUID id; any other mount is keyed `mount:<path>` and marked `manual`.
+- A path on no volume is 404 and keeps the dialog open with the reason; the store's own volume is
+  409 because it is always monitored.
+- An added mount counts while something is mounted there (its device differs from its parent's).
+
+Headless, `hotsheet-cli host-disks list [--json] | monitor <id> | ignore <id> | add <path> | forget
+<id>` makes the same choices through the same `hotsheet_ticketing::host_health_disks` workflow
+(`add_disk`, `set_monitor`, `forget_disk`) and writes the same machine-wide setting. A running
+server applies it on its next sample.
+
 ## Hysteresis
 
 The sampler is built so that callouts do not flap:

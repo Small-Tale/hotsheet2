@@ -200,6 +200,8 @@ describe('UX demo catalog', () => {
       'trash-settings',
       'terminal-memory-settings',
       'standby-settings',
+      'host-disk-settings',
+      'add-host-disk-dialog',
       'theme-picker',
       'notification-settings',
       'notification-channel-dialog',

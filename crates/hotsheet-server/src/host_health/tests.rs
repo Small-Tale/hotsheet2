@@ -1513,6 +1513,54 @@ mod server {
     }
 
     #[tokio::test]
+    async fn kbvzv1_disks_are_added_by_path_and_forgotten_through_the_shared_workflow() {
+        use hotsheet_sync::LockExt;
+        let (dir, state) = state();
+        let router = app(state.clone());
+        state
+            .host_health
+            .monitor
+            .with_lock(|monitor| monitor.set_volumes(vec![volume("uuid:B", "Scratch", 400)]));
+        super::super::record(&state, healthy(), T0, &default_thresholds());
+        // A path on the store's own volume is already monitored; a missing path holds no volume.
+        let body = serde_json::json!({ "path": dir.path() }).to_string();
+        let (status, error) = json(&router, "POST", "/host-health/disks", Some(&body)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{error}");
+        let body = serde_json::json!({ "path": dir.path().join("missing") }).to_string();
+        let (status, _) = json(&router, "POST", "/host-health/disks", Some(&body)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(
+            super::super::routes::read_disk_choices(&state)
+                .unwrap()
+                .is_empty(),
+            "a refused add writes nothing"
+        );
+
+        // Ignore, then forget: the disk asks again.
+        let (status, ignored) = json(
+            &router,
+            "PUT",
+            "/host-health/disks",
+            Some(r#"{"id":"uuid:B","monitor":false}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(ignored["disks"][1]["decision"], "excluded");
+        let (status, forgotten) =
+            json(&router, "DELETE", "/host-health/disks?id=uuid%3AB", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(forgotten["disks"][1]["decision"], "pending");
+        assert!(
+            super::super::routes::read_disk_choices(&state)
+                .unwrap()
+                .is_empty()
+        );
+        // Forgetting an unknown disk changes nothing.
+        let (status, _) = json(&router, "DELETE", "/host-health/disks?id=uuid%3AZ", None).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn crossings_are_cursored_change_events_a_long_poll_replays() {
         let (_dir, state) = state();
         let router = app(state.clone());

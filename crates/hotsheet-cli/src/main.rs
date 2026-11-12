@@ -17,7 +17,7 @@ use dispatch::providers::{
 };
 use dispatch::remotes::RemoteArgs;
 use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd, TerminalCmd};
-use dispatch::setup::{AiSettingsCmd, PluginCmd, SettingsCmd, TriggerArgs, WorkArgs};
+use dispatch::setup::{AiSettingsCmd, HostDisksCmd, PluginCmd, SettingsCmd, TriggerArgs, WorkArgs};
 use dispatch::store::CheckoutCmd;
 use dispatch::tickets::{AttachArgs, LsFilters, NewArgs, PeopleCmd, TicketEditArgs};
 
@@ -472,6 +472,12 @@ enum Cmd {
     Settings {
         #[command(subcommand)]
         cmd: SettingsCmd,
+    },
+    /// Choose which disks host health monitors on this machine (HS2-KBVZV1): the headless twin of
+    /// App Settings → General → Host health disks. A running server applies it on its next sample.
+    HostDisks {
+        #[command(subcommand)]
+        cmd: HostDisksCmd,
     },
     /// Inspect and run saved commands in a registered checkout through the local server.
     Commands {

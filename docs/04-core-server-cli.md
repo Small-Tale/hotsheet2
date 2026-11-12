@@ -1758,7 +1758,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | AI feedback | `feedback-synthesis` | [23](23-ai-feedback-synthesis.md) |
 | Metrics and confidence | `metrics`, `confidence-report`, `phase-report` | [14](14-metrics-interface.md), §4.4 above |
 | Server-backed feeds | `commands`, `ticket-flow`, `live-state`, `live-history` (reads files), `activity`, `notifications` | §4.3 Headless platform APIs, [15](15-activity-narration-interface.md) |
-| Settings and keys | `settings`, `key` | §4.7, §4.7.1 |
+| Settings and keys | `settings`, `key`, `host-disks` (HS2-KBVZV1, [host-health](host-health.md#managing-disks)) | §4.7, §4.7.1 |
 | Checkouts and accounts | `checkout`, `account` | §4.3 Checkout identity, [16](16-external-sync-interface.md) (HS2-SM9PM8) |
 | Migration | `import` | [07](07-migration.md) |
 | Server and transport security | `serve`, `cert` | §4.3.1, §4.6, [08](08-distributed-and-remote.md) |

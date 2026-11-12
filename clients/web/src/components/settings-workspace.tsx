@@ -22,6 +22,7 @@ import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
 import { DevelopmentStrategySettings, type DevelopmentStrategySettingsProps } from './development-strategy-settings';
 import { GuidanceSettings, type GuidanceSettingsProps } from './guidance-settings';
+import { HostDiskSettings, type HostDiskSettingsProps } from './host-disk-settings';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
@@ -68,8 +69,13 @@ export interface SettingsWorkspaceProps {
   columns: { hideVerified: boolean };
   developmentStrategy?: DevelopmentStrategySettingsProps;
   /** App Settings → General: the browser's theme (HS2-EFTHS6); `standby` is the machine-wide standby
-   *  section (HS2-EQVZTZ). */
-  general: { showLoadingActivity: boolean; theme: ThemePreference; standby?: StandbySettingsProps };
+   *  section (HS2-EQVZTZ); `hostDisks` the server host's monitored disks (HS2-KBVZV1). */
+  general: {
+    showLoadingActivity: boolean;
+    theme: ThemePreference;
+    standby?: StandbySettingsProps;
+    hostDisks?: HostDiskSettingsProps;
+  };
   keyboard: KeyboardSettingsProps;
 }
 
@@ -186,6 +192,7 @@ export function SettingsWorkspace({
                 label="Show loading activity"
               />
               {general.standby && <StandbySettings {...general.standby} />}
+              {general.hostDisks && <HostDiskSettings {...general.hostDisks} />}
             </>
           )}
           {category === 'keyboard' && <KeyboardSettings {...keyboard} />}

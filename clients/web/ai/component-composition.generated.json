@@ -76,6 +76,70 @@
       }
     },
     {
+      "key": "hotsheet-web:add-host-disk-dialog",
+      "package": "hotsheet-web",
+      "id": "add-host-disk-dialog",
+      "name": "AddHostDiskDialog",
+      "kind": "component",
+      "purpose": "Dialog asking for a path on the server host whose volume host health should monitor (HS2-KBVZV1).",
+      "publicExports": [
+        {
+          "name": "AddHostDiskDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/add-host-disk-dialog.tsx"
+      ],
+      "source": "src/components/add-host-disk-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/add-host-disk-dialog.tsx",
+        "composition": "src/components/add-host-disk-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:add-project-action",
       "package": "hotsheet-web",
       "id": "add-project-action",
@@ -3057,6 +3121,70 @@
       "provenance": {
         "selection": "src/components/halted-session-popup.tsx",
         "composition": "src/components/halted-session-popup.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:host-disk-settings",
+      "package": "hotsheet-web",
+      "id": "host-disk-settings",
+      "name": "HostDiskSettings",
+      "kind": "component",
+      "purpose": "Machine-wide list of the disks host health monitors, with a Monitor switch, Forget, and Add Disk by path in App Settings → General (HS2-KBVZV1).",
+      "publicExports": [
+        {
+          "name": "HostDiskSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/host-disk-settings.tsx"
+      ],
+      "source": "src/components/host-disk-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/host-disk-settings.tsx",
+        "composition": "src/components/host-disk-settings.tsx"
       }
     },
     {

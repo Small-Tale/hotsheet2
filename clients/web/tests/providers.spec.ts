@@ -25773,6 +25773,126 @@ test('Stats This Mac asks once about a newly detected disk and shows each monito
   ]);
 });
 
+test('App Settings manages the disks host health monitors, by switch, path, and forget (HS2-KBVZV1)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  let snapshot = hostHealthFixture('disks');
+  await page.route('**/host-health', (route) => route.fulfill({ json: snapshot }));
+  const backup = 'uuid:0A1B2C3D-0000-4000-8000-000000000001',
+    archive = 'uuid:0A1B2C3D-0000-4000-8000-000000000004';
+  const requests: string[] = [];
+  await page.route('**/host-health/disks*', (route) => {
+    const request = route.request(),
+      url = new URL(request.url());
+    requests.push(`${request.method()} ${url.search}${request.postData() ?? ''}`);
+    const disks = snapshot.disks ?? [];
+    if (request.method() === 'PUT') {
+      const { id, monitor } = request.postDataJSON() as { id: string; monitor: boolean };
+      snapshot = {
+        ...snapshot,
+        disks: disks.map((disk) => (disk.id === id ? { ...disk, decision: monitor ? 'included' : 'excluded' } : disk)),
+      };
+    } else if (request.method() === 'POST') {
+      const { path } = request.postDataJSON() as { path: string };
+      if (path === '/nowhere') return route.fulfill({ status: 404, json: { error: 'no volume holds /nowhere' } });
+      snapshot = {
+        ...snapshot,
+        disks: [
+          ...disks,
+          {
+            ...disks[1],
+            id: 'mount:/Volumes/Share',
+            label: 'Share',
+            mount: '/Volumes/Share',
+            manual: true,
+            status: 'normal',
+            reason: null,
+          },
+        ],
+      };
+    } else {
+      const id = url.searchParams.get('id');
+      snapshot = { ...snapshot, disks: disks.filter((disk) => disk.id !== id) };
+    }
+    return route.fulfill({ json: snapshot });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'General', exact: true }).click();
+  const section = page.locator('[data-component="host-disk-settings"]');
+  await expect(section.getByRole('heading', { name: 'Host health disks' })).toBeVisible();
+  await expect(section).toContainText('on studio');
+  const rows = section.locator('[data-host-disk]');
+  expect(await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-host-disk')))).toEqual(
+    (snapshot.disks ?? []).map((disk) => disk.id),
+  );
+  // The store's disk is always monitored; the switch says so and cannot change it.
+  const store = section.getByRole('checkbox', { name: 'Ticket store (store)' });
+  await expect(store).toBeChecked();
+  await expect(store).toBeDisabled();
+  await expect(section.locator(`[data-host-disk="${archive}"]`)).toContainText('not connected');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 1024],
+      ['narrow', 600],
+      ['wide-again', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(section).toBeVisible();
+      expect(await section.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await section.screenshot({ path: `target/visual-captures/hs2-kbvzv1-host-disks-${scheme}-${label}.png` });
+      await page.screenshot({ path: `target/visual-captures/hs2-kbvzv1-settings-page-${scheme}-${label}.png` });
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // A switch saves at once, and the list follows the server's answer.
+  const backupSwitch = section.getByRole('checkbox', { name: 'Backup' });
+  await expect(backupSwitch).toBeChecked();
+  await backupSwitch.uncheck();
+  await expect.poll(() => requests.at(-1)).toBe(`PUT {"id":"${backup}","monitor":false}`);
+  await expect(backupSwitch).not.toBeChecked();
+
+  // Add Disk… asks for a path in a dialog: a path on no volume keeps the dialog and the typed path and
+  // says why; a real one adds its volume and closes.
+  await section.getByRole('button', { name: 'Add Disk…' }).click();
+  const dialog = page.locator('[data-add-host-disk-dialog]');
+  await expect(dialog).toBeVisible();
+  const path = dialog.getByRole('textbox', { name: 'Path on the Disk' });
+  await expect(path).toBeFocused();
+  await path.fill('/nowhere');
+  await dialog.getByRole('button', { name: 'Add Disk' }).click();
+  await expect(dialog).toContainText('no volume holds /nowhere');
+  await expect(path).toHaveValue('/nowhere');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-kbvzv1-add-disk-dialog-failed.png' });
+  await path.fill('/Volumes/Share');
+  await path.press('Enter');
+  await expect(dialog).toBeHidden();
+  await expect(section.locator('[data-host-disk="mount:/Volumes/Share"]')).toContainText('added by path');
+  expect(requests.filter((request) => request.startsWith('POST'))).toEqual([
+    'POST {"path":"/nowhere"}',
+    'POST {"path":"/Volumes/Share"}',
+  ]);
+  // Escape closes the dialog without adding anything.
+  await section.getByRole('button', { name: 'Add Disk…' }).click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  // Forget drops a disconnected disk's saved choice.
+  await section.locator(`[data-host-disk="${archive}"]`).getByRole('button', { name: 'Forget' }).click();
+  await expect(section.locator(`[data-host-disk="${archive}"]`)).toHaveCount(0);
+  expect(requests.at(-1)).toBe(`DELETE ?id=${encodeURIComponent(archive)}`);
+});
+
 test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({
   page,
 }) => {

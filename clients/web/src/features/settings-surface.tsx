@@ -64,6 +64,8 @@ export interface SettingsSurfaceDependencies {
   themePreference: Readable<ThemePreference>;
   /** App Settings → General → Standby (HS2-EQVZTZ). */
   standbySettings?: () => NonNullable<Props['general']['standby']>;
+  /** App Settings → General → Host health disks (HS2-KBVZV1). */
+  hostDiskSettings?: () => NonNullable<Props['general']['hostDisks']>;
   keyboardShortcutOverrides: Readable<Props['keyboard']['overrides']>;
   capturingShortcutId: Readable<Props['keyboard']['capturingId']>;
   appleShortcutPlatform: boolean;
@@ -122,6 +124,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     showLoadingActivity,
     themePreference,
     standbySettings,
+    hostDiskSettings,
     keyboardShortcutOverrides,
     capturingShortcutId,
     appleShortcutPlatform,
@@ -225,6 +228,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           showLoadingActivity: showLoadingActivity.value,
           theme: themePreference.value,
           standby: standbySettings?.(),
+          hostDisks: hostDiskSettings?.(),
         }}
         keyboard={{
           overrides: keyboardShortcutOverrides.value,

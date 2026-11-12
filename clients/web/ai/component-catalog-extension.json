@@ -28,6 +28,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "add-host-disk-dialog",
+      "name": "AddHostDiskDialog",
+      "kind": "component",
+      "purpose": "Dialog asking for a path on the server host whose volume host health should monitor (HS2-KBVZV1).",
+      "useWhen": [
+        "Hot Sheet adds a disk to host health by path."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AddHostDiskDialog behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/add-host-disk-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "add-project-action",
       "name": "AddProjectAction",
       "kind": "component",
@@ -1009,6 +1030,27 @@
         "notes": [
           "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
         ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "host-disk-settings",
+      "name": "HostDiskSettings",
+      "kind": "component",
+      "purpose": "Machine-wide list of the disks host health monitors, with a Monitor switch, Forget, and Add Disk by path in App Settings → General (HS2-KBVZV1).",
+      "useWhen": [
+        "Hot Sheet needs the server host's monitored-disk choices."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific HostDiskSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/host-disk-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
       },
       "documentation": "../../docs/ux-components.md"
     },

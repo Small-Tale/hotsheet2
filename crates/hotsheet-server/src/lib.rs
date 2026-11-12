@@ -2207,7 +2207,9 @@ pub fn app(state: AppState) -> Router {
         // Include or ignore a detected disk (HS2-NHK8V8).
         .route(
             "/host-health/disks",
-            axum::routing::put(host_health::routes::put_host_health_disk),
+            axum::routing::put(host_health::routes::put_host_health_disk)
+                .post(host_health::routes::post_host_health_disk)
+                .delete(host_health::routes::delete_host_health_disk),
         )
         .route(
             "/host-health/thresholds",

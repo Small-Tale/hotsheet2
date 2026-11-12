@@ -151,6 +151,9 @@ export interface ShellAndGlobalInteractionsDependencies {
     setOvernightWindow?: (window: OvernightWindow) => void;
     /** Include or ignore a detected disk in host health (HS2-NHK8V8). */
     chooseHostDisk?: (id: string, monitor: boolean) => void;
+    /** Forget a saved disk, and the Add Disk dialog (HS2-KBVZV1). */
+    forgetHostDisk?: (id: string) => void;
+    addHostDisk?: { open: () => void; input: (value: string) => void; submit: () => void; cancel: () => void };
   };
 }
 
@@ -271,6 +274,46 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.chooseHostDisk.selector, (_event, target) => {
       const { diskId, diskMonitor } = data(target);
       if (diskId) standby?.chooseHostDisk?.(diskId, diskMonitor === 'true');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', SHELL_AND_GLOBAL_ACTIONS.toggleHostDisk.selector, (_event, target) => {
+      const name = target.getAttribute('name') ?? '';
+      if (name.startsWith('host-disk:'))
+        standby?.chooseHostDisk?.(name.slice('host-disk:'.length), (target as HTMLInputElement).checked);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.openAddHostDisk.selector, () => {
+      standby?.addHostDisk?.open();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', SHELL_AND_GLOBAL_TARGETS.hostDiskPath.selector, (_event, field) => {
+      standby?.addHostDisk?.input((field as HTMLInputElement).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', SHELL_AND_GLOBAL_ACTIONS.submitAddHostDisk.selector, (event) => {
+      event.preventDefault();
+      standby?.addHostDisk?.submit();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.cancelAddHostDisk.selector, () => {
+      standby?.addHostDisk?.cancel();
+    }),
+  );
+  // The close button and Escape ask to close; clear the state in the same turn (controlled-open).
+  lifetime.add(
+    delegate(document.body, 'kui-request-close', '[data-add-host-disk-dialog]', () => {
+      standby?.addHostDisk?.cancel();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.forgetHostDisk.selector, (_event, target) => {
+      const { diskId } = data(target);
+      if (diskId) standby?.forgetHostDisk?.(diskId);
     }),
   );
   lifetime.add(

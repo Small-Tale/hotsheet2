@@ -5023,6 +5023,16 @@ export async function startHotSheetWebClient() {
     showLoadingActivity,
     themePreference,
     standbySettings: () => ({ settings: standby.settings.value, message: standby.settingsMessage.value }),
+    // App Settings → General → Host health disks (HS2-KBVZV1), from the pushed host-health snapshot.
+    hostDiskSettings: () => {
+      const snapshot = hostHealth.state.value.snapshot;
+      return {
+        ...(snapshot?.disks === undefined ? {} : { disks: snapshot.disks }),
+        ...(snapshot === undefined ? {} : { hostName: snapshot.host.name }),
+        ...(hostDisks.dialog.value === undefined ? {} : { dialog: hostDisks.dialog.value }),
+        ...(hostDisks.message.value === undefined ? {} : { message: hostDisks.message.value }),
+      };
+    },
     keyboardShortcutOverrides,
     capturingShortcutId,
     appleShortcutPlatform,
@@ -6554,6 +6564,23 @@ export async function startHotSheetWebClient() {
       },
       chooseHostDisk: (id, monitor) => {
         void hostDisks.choose(id, monitor);
+      },
+      forgetHostDisk: (id) => {
+        void hostDisks.forget(id);
+      },
+      addHostDisk: {
+        open: () => {
+          hostDisks.add.open();
+        },
+        input: (value) => {
+          hostDisks.add.input(value);
+        },
+        submit: () => {
+          void hostDisks.add.submit();
+        },
+        cancel: () => {
+          hostDisks.add.cancel();
+        },
       },
       openAwayEvent: (projectId, slug) => {
         standby.dismissAwayDigest();

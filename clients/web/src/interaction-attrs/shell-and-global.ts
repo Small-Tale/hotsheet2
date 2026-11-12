@@ -19,6 +19,12 @@ export const SHELL_AND_GLOBAL_ACTIONS = {
   openAwayEvent: action('open-away-event'),
   /** Include or ignore a newly detected disk in host health (HS2-NHK8V8). */
   chooseHostDisk: action('choose-host-disk'),
+  /** App Settings → Host health disks (HS2-KBVZV1): a Monitor switch, Forget, and the Add Disk dialog. */
+  toggleHostDisk: action('toggle-host-disk'),
+  forgetHostDisk: action('forget-host-disk'),
+  openAddHostDisk: action('open-add-host-disk'),
+  submitAddHostDisk: action('submit-add-host-disk'),
+  cancelAddHostDisk: action('cancel-add-host-disk'),
 } as const;
 
 /**
@@ -28,4 +34,6 @@ export const SHELL_AND_GLOBAL_ACTIONS = {
  */
 export const SHELL_AND_GLOBAL_TARGETS = {
   duplicateTicketDropAction: attr('data-ticket-drop-action', 'duplicate'),
+  /** The Add Disk dialog's path field (HS2-KBVZV1). */
+  hostDiskPath: attr('name', 'host-disk-path'),
 } as const;

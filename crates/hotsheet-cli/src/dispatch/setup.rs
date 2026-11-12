@@ -500,6 +500,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::AiTools { json } => cmd_ai_tools(json),
         Cmd::AiSettings { cmd } => cmd_ai_settings(path, cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
+        Cmd::HostDisks { cmd } => cmd_host_disks(path, cwd, cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
         Cmd::Guidance { project, cmd } => cmd_guidance(path, &project, cmd),
         Cmd::PermissionDiscard {
@@ -1665,6 +1666,138 @@ pub(crate) enum SettingsCmd {
         #[arg(long)]
         scope: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum HostDisksCmd {
+    /// List the store's disk, every detected disk, and every saved choice with its decision.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Count a detected or saved disk in host health.
+    Monitor { id: String },
+    /// Stop counting a disk; the choice is kept, so it does not ask again.
+    Ignore { id: String },
+    /// Monitor the volume holding PATH, including mounts detection skips (a network share).
+    Add { path: std::path::PathBuf },
+    /// Forget a saved choice; a still-connected detected disk asks again.
+    Forget { id: String },
+}
+
+/// `hotsheet-cli host-disks` (HS2-KBVZV1): the headless twin of App Settings → Host Health Disks,
+/// writing the same machine-wide `host_health.disks` setting through the same workflow as
+/// `PUT`/`POST`/`DELETE /host-health/disks`. A running server applies it on its next sample.
+pub(crate) fn cmd_host_disks(store: &Path, cwd: &Path, cmd: HostDisksCmd) -> Result<()> {
+    use hotsheet_ticketing::host_health_disks::{
+        self as disks, STORE_VOLUME_ID, VolumeIds, add_disk, detected_volumes, forget_disk,
+        load_choices, save_choices, set_monitor,
+    };
+    let settings = settings_for_cli(store, cwd);
+    let mut choices = load_choices(&settings)?;
+    let store_device = disks::space(store).map(|(_, _, device)| device);
+    let detected: Vec<disks::Volume> = detected_volumes(&mut VolumeIds::default())
+        .into_iter()
+        .filter(|volume| Some(volume.device) != store_device)
+        .collect();
+    let present: Vec<(String, String, String)> = detected
+        .iter()
+        .map(|volume| {
+            (
+                volume.id.clone(),
+                volume.label.clone(),
+                volume.mount.display().to_string(),
+            )
+        })
+        .collect();
+    match cmd {
+        HostDisksCmd::List { json } => {
+            let mut rows = vec![serde_json::json!({
+                "id": STORE_VOLUME_ID, "label": "Ticket store", "mount": store.display().to_string(),
+                "decision": "included", "present": true, "store": true, "manual": false,
+            })];
+            for (id, label, mount) in &present {
+                let decision = match choices.get(id) {
+                    Some(choice) if choice.monitor => "included",
+                    Some(_) => "excluded",
+                    None => "pending",
+                };
+                rows.push(serde_json::json!({
+                    "id": id, "label": label, "mount": mount, "decision": decision,
+                    "present": true, "store": false,
+                    "manual": choices.get(id).is_some_and(|choice| choice.manual),
+                }));
+            }
+            for (id, choice) in &choices {
+                if present.iter().any(|(known, _, _)| known == id) {
+                    continue;
+                }
+                // An added mount is present while something is mounted there.
+                let mounted = choice.manual
+                    && disks::space(Path::new(&choice.mount)).is_some_and(|(_, _, device)| {
+                        Some(device) != store_device
+                            && Path::new(&choice.mount)
+                                .parent()
+                                .and_then(disks::space)
+                                .map(|(_, _, parent)| parent)
+                                != Some(device)
+                    });
+                rows.push(serde_json::json!({
+                    "id": id, "label": choice.label, "mount": choice.mount,
+                    "decision": if choice.monitor { "included" } else { "excluded" },
+                    "present": mounted, "store": false, "manual": choice.manual,
+                }));
+            }
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else {
+                for row in rows {
+                    let present = if row["present"] == true {
+                        "connected"
+                    } else {
+                        "not connected"
+                    };
+                    println!(
+                        "{}\t{}\t{}\t{}\t{}",
+                        row["id"].as_str().unwrap_or_default(),
+                        row["decision"].as_str().unwrap_or_default(),
+                        present,
+                        row["label"].as_str().unwrap_or_default(),
+                        row["mount"].as_str().unwrap_or_default(),
+                    );
+                }
+            }
+        }
+        HostDisksCmd::Monitor { id } => {
+            set_monitor(&mut choices, &id, true, &present)?;
+            save_choices(&settings, &choices)?;
+            println!("monitoring {id}");
+        }
+        HostDisksCmd::Ignore { id } => {
+            set_monitor(&mut choices, &id, false, &present)?;
+            save_choices(&settings, &choices)?;
+            println!("ignoring {id}");
+        }
+        HostDisksCmd::Add { path } => {
+            let path = if path.is_absolute() {
+                path
+            } else {
+                cwd.join(path)
+            };
+            let (id, choice) = add_disk(&mut choices, &path, store, &detected)?;
+            save_choices(&settings, &choices)?;
+            println!("monitoring {id} ({} at {})", choice.label, choice.mount);
+        }
+        HostDisksCmd::Forget { id } => {
+            if forget_disk(&mut choices, &id) {
+                save_choices(&settings, &choices)?;
+                println!("forgot {id}");
+            } else {
+                println!("no saved choice for {id}");
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Subcommand)]

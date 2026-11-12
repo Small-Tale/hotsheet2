@@ -10406,6 +10406,103 @@ fn host_health_thresholds_are_set_headlessly_as_validated_machine_wide_settings(
 }
 
 #[test]
+fn host_disks_are_chosen_headlessly_with_rest_parity_hs2_kbvzv1() {
+    // HS2-KBVZV1 headless parity with App Settings → General → Host health disks.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let settings = home.path().join("settings.json");
+    std::fs::write(
+        &settings,
+        r#"{"host_health.disks":{"uuid:SYNTHETIC-1":{"monitor":true,"label":"Archive","mount":"/Volumes/Archive"}}}"#,
+    )
+    .unwrap();
+    let disks = || -> serde_json::Value {
+        let global: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        global["host_health.disks"].clone()
+    };
+    // The store's disk lists first and always included; a saved disk that is not connected keeps
+    // its choice.
+    let listed = hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "list", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let listed: serde_json::Value = serde_json::from_slice(&listed).unwrap();
+    assert_eq!(listed[0]["id"], "store");
+    assert_eq!(listed[0]["decision"], "included");
+    let archive = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "uuid:SYNTHETIC-1")
+        .expect("the saved disk is listed");
+    assert_eq!(archive["present"], false);
+    assert_eq!(archive["decision"], "included");
+
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "ignore", "uuid:SYNTHETIC-1"])
+        .assert()
+        .success();
+    assert_eq!(disks()["uuid:SYNTHETIC-1"]["monitor"], false);
+    assert_eq!(disks()["uuid:SYNTHETIC-1"]["label"], "Archive");
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "monitor", "uuid:SYNTHETIC-1"])
+        .assert()
+        .success();
+    assert_eq!(disks()["uuid:SYNTHETIC-1"]["monitor"], true);
+
+    // An unknown disk and the store's own are refused without writing.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "monitor", "uuid:NOT-HERE"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown disk"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "ignore", "store"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("always monitored"));
+    // A path on the store's own volume is already monitored.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "add", p.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("always monitored"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "add", p.join("missing").to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no volume holds"));
+
+    // Forget drops the choice; a second forget is a no-op, and the last one clears the setting.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "forget", "uuid:SYNTHETIC-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("forgot uuid:SYNTHETIC-1"));
+    assert!(disks().is_null());
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["host-disks", "forget", "uuid:SYNTHETIC-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no saved choice"));
+}
+
+#[test]
 fn standby_settings_are_set_headlessly_as_validated_machine_wide_settings() {
     // HS2-EQVZTZ headless parity with PUT /standby-settings and App Settings → General.
     let dir = tempfile::tempdir().unwrap();

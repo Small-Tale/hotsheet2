@@ -2468,6 +2468,13 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
 - `StandbySettings` — **demo built** (HS2-EQVZTZ): App Settings → General → Standby. A Kerf
   `Checkbox` turns idle entry on or off and a `Select` picks the idle threshold (presets plus any
   value set from the CLI); both save at once to the machine-wide `PUT /standby-settings`.
+- `HostDiskSettings` — **demo built** (`components/host-disk-settings.tsx`, HS2-KBVZV1): App Settings →
+  General → Host health disks. A Kerf `FramedList` row per disk with a Monitor `Checkbox` (the
+  store's disk checked and disabled), its mount, size, and state as the hint, and a Forget `Button`
+  for a disconnected or added disk. **Add Disk…** opens `AddHostDiskDialog`.
+- `AddHostDiskDialog` — **demo built** (`components/add-host-disk-dialog.tsx`, HS2-KBVZV1): a Kerf
+  `DialogSurface` with one path `TextField`; a refused path keeps the dialog and shows the reason in a
+  danger `StateBanner`. Cancel, Escape, and the close button clear its state.
 - `TerminalSettings`
 - `ThemePicker` (the planned `AppearanceSettings`) — **demo built** (HS2-EFTHS6): App Settings →
   General → Theme. Auto (default), Light, and Dark tiles, each a stylized Hot Sheet window in that
