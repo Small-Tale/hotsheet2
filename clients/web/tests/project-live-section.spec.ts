@@ -3,12 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
 import { realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
 /** Open the real app on an isolated server through the dev proxy, as archive-load-more does. */
-async function openProject(page: Page, server: Server) {
+async function openProject(page: Page, server: Server, beforeLoad?: () => Promise<unknown>) {
   const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
   await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({
@@ -30,6 +31,8 @@ async function openProject(page: Page, server: Server) {
       await route.abort().catch(() => undefined);
     }
   });
+  // Routes registered here win over the project proxy above (Playwright tries the newest first).
+  await beforeLoad?.();
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -129,6 +132,51 @@ test('project sidebar Live section is compact by default and remembers the detai
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await expect(live.locator('button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-compact-1280.png' });
+  } finally {
+    await server.stop();
+  }
+});
+
+// HS2-0EQMZZ: a host callout keeps 16px (the 8px grid's next step) below the gauges and badges in both
+// modes, wide to medium to wide while the sidebar shows (narrower widths make it a drawer), in the real app with the server's host health replaced
+// by a synthetic critical-disk snapshot.
+test('keeps 16px between the Live gauges and a host callout in both modes (HS2-0EQMZZ)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server, () =>
+      page.route('**/host-health', (route) => route.fulfill({ json: demoHostHealth('disk-critical') })),
+    );
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    const callout = live.locator('[data-host-callout="disk"]');
+    await expect(callout).toBeVisible({ timeout: 30_000 });
+    const gap = () =>
+      live.evaluate((section) => {
+        const toggle = section.querySelector('.project-live-section__toggle')!.getBoundingClientRect(),
+          banner = section.querySelector('[data-host-callout]')!.getBoundingClientRect();
+        return Math.round(banner.top - toggle.bottom);
+      });
+    for (const width of [1440, 1120, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const mode of ['compact', 'expanded']) {
+        if ((await live.getAttribute('data-mode')) !== mode) await live.locator('button').first().click();
+        await expect(live).toHaveAttribute('data-mode', mode);
+        expect(await gap(), `${mode} at ${width}`).toBe(16);
+      }
+    }
+    await page.mouse.move(640, 880);
+    await expect(live.locator('button').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await page.screenshot({ path: 'target/visual-captures/hs2-0eqmzz-live-expanded-callout-1440.png' });
+    await live.locator('button').first().click();
+    await page.mouse.move(640, 880);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(live.locator('button').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await page.screenshot({ path: 'target/visual-captures/hs2-0eqmzz-live-compact-callout-1440.png' });
   } finally {
     await server.stop();
   }

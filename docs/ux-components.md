@@ -353,7 +353,7 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   `toggle-live-section` action, named for the mode it switches to, and the choice persists in the
   workspace preferences.
   Host conditions past a threshold (HS2-DTAVQA) are full-width Kerf `StateBanner` callouts in both
-  modes. Numbers derive in `project-live-summary.ts`; ages re-render from a local render-only clock.
+  modes, 16px below the gauges and badges (HS2-0EQMZZ). Numbers derive in `project-live-summary.ts`; ages re-render from a local render-only clock.
 
 - `GridSidebarGauges` — **demo built** (`components/grid-sidebar-gauges.tsx`, HS2-E1AQE8; mock
   `r4-grid-sidebar-page2`): the workspace grid sidebar's gauge-page body. Two medium bare

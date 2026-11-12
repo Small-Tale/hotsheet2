@@ -97,6 +97,20 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     expect(warning).not.toContain('data-component="glance-gauge"');
   });
 
+  it('puts 16px between the gauges and badges and the host callouts, 8px between callouts (HS2-0EQMZZ)', () => {
+    const callouts = [
+      ...hostCallouts(demoHostHealth('disk-critical')),
+      ...hostCallouts(demoHostHealth('disk-warning')),
+    ];
+    for (const expanded of [false, true]) {
+      const markup = String(ProjectLiveSection({ summary: quiet, callouts, expanded }));
+      // The section's outer List spaces the toggle from the callouts on the 8px grid (Kerf m = 16px).
+      expect(markup).toMatch(/<section[^>]*>\s*<div class="kui-list"[^>]*--_kui-list-gap:var\(--kui-space-m\)/);
+      expect(markup).toMatch(/data-host-callouts=""[^>]*--_kui-list-gap:var\(--kui-space-xs\)/);
+    }
+    expect(String(ProjectLiveSection({ summary: quiet }))).not.toContain('data-host-callouts');
+  });
+
   it('sits under the completion chart in the real project sidebar, and is absent without data', () => {
     const base = {
       completedToday: 6,

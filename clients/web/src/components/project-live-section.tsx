@@ -112,7 +112,8 @@ export function ProjectLiveSection({ summary, callouts = [], expanded = false }:
       data-mode={expanded ? 'expanded' : 'compact'}
       aria-label="Live"
     >
-      <List gap="xs">
+      {/* 16px between the gauges and badges and the host callouts (HS2-0EQMZZ); callouts stay 8px apart. */}
+      <List gap="m">
         {summary && (
           <button
             type="button"
@@ -124,15 +125,21 @@ export function ProjectLiveSection({ summary, callouts = [], expanded = false }:
             {expanded ? expandedContent(summary) : compactContent(summary, chips)}
           </button>
         )}
-        {callouts.map((callout) => (
-          <StateBanner
-            title={callout.text}
-            tone={callout.level === 'critical' ? 'danger' : 'warning'}
-            urgency={callout.level === 'critical' ? 'alert' : 'status'}
-            icon={<LucideIcon icon={CALLOUT_ICONS[callout.signal].icon} name={CALLOUT_ICONS[callout.signal].name} />}
-            rootAttributes={{ 'data-host-callout': callout.signal }}
-          />
-        ))}
+        {callouts.length > 0 && (
+          <List gap="xs" rootAttributes={{ 'data-host-callouts': '' }}>
+            {callouts.map((callout) => (
+              <StateBanner
+                title={callout.text}
+                tone={callout.level === 'critical' ? 'danger' : 'warning'}
+                urgency={callout.level === 'critical' ? 'alert' : 'status'}
+                icon={
+                  <LucideIcon icon={CALLOUT_ICONS[callout.signal].icon} name={CALLOUT_ICONS[callout.signal].name} />
+                }
+                rootAttributes={{ 'data-host-callout': callout.signal }}
+              />
+            ))}
+          </List>
+        )}
       </List>
     </section>
   );
