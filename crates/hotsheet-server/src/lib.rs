@@ -1200,6 +1200,34 @@ impl AppState {
         roots
     }
 
+    /// The root of every checkout linked to a hosted Git store, sorted and without
+    /// duplicates: the code checkouts whose group registries the sync loop publishes and
+    /// refreshes (HS2-9EGWC4).
+    pub fn group_registry_checkout_roots(&self) -> Vec<String> {
+        let canonical = |path: &FsPath| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let hosted: Vec<std::path::PathBuf> = self
+            .hosted_store_roots()
+            .into_iter()
+            .map(|(_, root)| canonical(FsPath::new(&root)))
+            .collect();
+        let mut roots: Vec<String> = self
+            .checkout_registry
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|checkout| {
+                checkout.sources.iter().any(|source| {
+                    source.provider == "git"
+                        && hosted.contains(&canonical(FsPath::new(&source.locator)))
+                })
+            })
+            .map(|checkout| checkout.root)
+            .collect();
+        roots.sort();
+        roots.dedup();
+        roots
+    }
+
     /// Effective automatic Trash retention for a hosted store. A store may be shared by
     /// several checkouts; the longest configured retention wins so one project cannot
     /// permanently remove another project's recoverable tickets early.

@@ -168,6 +168,10 @@ pub(crate) struct GroupsResponse {
     /// under a placeholder.
     registry: bool,
     groups: Vec<GroupSummary>,
+    /// How the checkout's registry was last committed and published (HS2-9EGWC4); absent
+    /// without a registry or before the first attempt.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    registry_sync: Option<groups::git_sync::RegistrySyncStatus>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -261,6 +265,7 @@ fn do_list(scope: &Scope) -> Result<Json<GroupsResponse>, ApiError> {
         registry: scope.registry.is_some(),
         groups: groups::list_groups(&directory(&scope.entries)?, scope.registry.as_ref())
             .map_err(group_error)?,
+        registry_sync: scope.registry.as_ref().and_then(GroupRegistry::sync_status),
     }))
 }
 
@@ -540,6 +545,7 @@ pub(crate) async fn list_provider_groups(
         ConnectionScope::Provider(provider) => Ok(Json(GroupsResponse {
             registry: false,
             groups: provider_directory(provider.as_ref())?.summaries(None),
+            registry_sync: None,
         })),
     }
 }

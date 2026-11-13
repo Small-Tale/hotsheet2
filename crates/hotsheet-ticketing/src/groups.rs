@@ -12,6 +12,7 @@
 //! checkout has no registry, so it lists ids under placeholders and accepts only ids.
 //! Every surface (server, CLI, MCP) calls this module so they agree.
 
+pub mod git_sync;
 pub mod registry;
 
 use std::collections::BTreeMap;

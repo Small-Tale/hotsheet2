@@ -16,7 +16,8 @@ surfaces in [04-core-server-cli.md](04-core-server-cli.md).
   example `7K3M9P2QXA`.
 - **Group registry.** Names belong to the project. The code checkout keeps one committed
   file per group, `.hotsheet2/groups/<id>.json` holding `{ "name": "…" }`, so two clones
-  that create groups merge without a conflict. One project can group tickets from all of
+  that create groups merge without a conflict. Hot Sheet commits and pushes these files
+  itself (§35.7). One project can group tickets from all of
   its sources at once: every Markdown/Git source of a checkout shares the registry, and
   external sources join through HS2-PQ4A2C.
 - A group is listed while at least one ticket that is not in Trash names it. A registry
@@ -172,3 +173,60 @@ in favor of the overflow button when a Kerf release ships it.
 - Saved views resolve `group:` through the checkout's registry on the server too, so
   notification rules match the same tickets.
 - Saved views accept the same terms.
+
+## 35.7 Publishing the registry (HS2-9EGWC4)
+
+The registry lives in the code checkout, so Hot Sheet commits and publishes it the way the
+ticket store publishes tickets, without disturbing anything else in that checkout.
+
+- **Commit.** Every registry write (create, rename, a placeholder's name, migration),
+  from the app, the server, the CLI, or MCP, is committed in the checkout. The commit
+  holds only the changed `.hotsheet2/groups/*.json` files (`git commit --only`): other
+  staged or unstaged changes stay exactly as they were. Messages are shaped like the
+  ticket store's autocommits:
+  - `Create group Sprint`
+  - `Rename group 7K3M9P2QXA to Release train`
+  - `Migrate 3 group names to the group registry`
+
+  The server commits in the background and coalesces a burst of writes into one commit,
+  such as `Create group Alpha (+2 more)`. The CLI and MCP commit as each write returns.
+
+- **Push.** The commit is pushed to the current branch's upstream, with the repository's
+  hooks, never forced and never with `--no-verify`, and only as a fast-forward that
+  publishes registry commits alone. It stays local, and the sync status says why, when
+  the branch has no upstream, is behind its upstream, or has other unpublished commits or
+  a merge (those are the user's to publish). A refused push or a failing hook also leaves
+  it local. `git pull --rebase` drops a local registry commit that the upstream already
+  has; `git merge --ff-only` cannot fast-forward past it. Whether Hot Sheet should
+  republish such a stranded commit itself is `HS2-TM7XSX`.
+- **Commits land on the checked-out branch**, including a feature branch or a worktree's
+  branch. They reach `main` when that branch does.
+- **Waiting states.** A write never fails because of Git. When the checkout is mid
+  merge, rebase, cherry-pick, or revert, or `HEAD` is detached, the write is left
+  uncommitted and committed by the next write or sync pass. A checkout that is not a Git
+  work tree, or that ignores `.hotsheet2/groups/`, is not committed at all; neither is any
+  checkout while `HOTSHEET_NO_AUTOCOMMIT` is set.
+- **Pull.** On the ticket store's sync cadence (every 30 s while the server runs), the
+  server fetches the upstream branch of each checkout linked to a hosted store. Entries
+  the upstream added or renamed, and that this checkout has not changed since the two
+  histories split, are read from a machine-local overlay
+  (`.hotsheet2/groups-remote.json`) so groups created in another clone appear without a
+  manual pull. The branch and working tree are not touched; the files arrive with the
+  user's next pull. A local edit always wins over the overlay. The same pass commits
+  anything a busy state or a failing hook left behind and retries the push.
+- **Status.** The last attempt is recorded in `.hotsheet2/groups-sync.json` as
+  `synced`, `local_only`, `waiting`, `blocked`, or `failed`, with one line of detail; a
+  registry Hot Sheet does not publish (no Git, ignored, disabled) has none. `GET /checkouts/{reference}/groups` returns it as `registry_sync`, and so does
+  `hotsheet-cli groups --json`. `hotsheet-cli groups` prints a warning for `blocked` and
+  `failed`, and the server logs them. Showing it in the graphical client is
+  `HS2-VFYSQK`.
+
+**This repository's hooks.** Measured on a loaded maintainer machine, the pre-commit
+format check took 64-78 s, a pre-push of `main` needs a main-integration window and is
+refused without one, and a pre-push of another branch spent 28 s before refusing without a
+reviewed test plan. Both hooks therefore pass a registry-only change on a narrow path:
+`pre-commit` runs only the whitespace check when every staged path is a registry entry,
+and `pre-push` accepts a ref update that is a fast-forward, contains no merge, and touches
+only registry entries. Anything else takes the full gate. A registry push to `main` does
+not take the main-integration window; an integrator whose window it overtakes re-runs its
+preflight.

@@ -10,8 +10,24 @@ main_remote_sha=''
 last_remote_ref=''
 last_local_sha=''
 last_remote_sha=''
+# HS2-9EGWC4: Hot Sheet publishes its project group registry (`.hotsheet2/groups/*.json`) by
+# itself. A fast-forward whose new commits touch only those data files, with no merge, skips the
+# gate and the main-integration window; anything else takes the normal path below.
+registry_only=1
+registry_only_update() {
+  local local_sha="$1" remote_sha="$2" paths
+  [[ ! "$local_sha" =~ ^0+$ && ! "$remote_sha" =~ ^0+$ ]] || return 1
+  git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null || return 1
+  [[ -z "$(git rev-list --merges "$remote_sha..$local_sha")" ]] || return 1
+  paths=$(git log --format= --name-only --no-renames "$remote_sha..$local_sha")
+  [[ -n "${paths//[[:space:]]/}" ]] || return 1
+  ! grep -qvE '^(\.hotsheet2/groups/[^/]+\.json)?$' <<<"$paths"
+}
 while read -r local_ref local_sha remote_ref remote_sha; do
   total_updates=$((total_updates + 1))
+  if ! registry_only_update "$local_sha" "$remote_sha"; then
+    registry_only=0
+  fi
   last_remote_ref="$remote_ref"
   last_local_sha="$local_sha"
   last_remote_sha="$remote_sha"
@@ -25,6 +41,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     main_remote_sha="$remote_sha"
   fi
 done
+if [[ "$total_updates" -gt 0 && "$registry_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
+  exit 0
+fi
 # HS2-GT57BQ: a reserved ci-staged push to the integration branch carries the window token;
 # verify it against that reservation and its smoke receipt instead of running the root gate.
 if [[ "$updates" -eq 0 && -n "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then

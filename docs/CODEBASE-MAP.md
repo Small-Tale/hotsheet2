@@ -257,7 +257,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/throughput-baseline.mjs # Read-only integrator/worker throughput spans from coordination, claims, notes, Git and main CI (HS2-34PWSK; tests: throughput-baseline.test.mjs; report: docs/27-integrator-throughput-baseline.md)
   scripts/{check,push,install-git-hooks}.sh # Exact-input local gate, reserved main push wrapper, and hook setup (HS2-CD3D2T, HS2-BND42N, HS2-Q390N2)
   scripts/main-integration-{options,window}.mjs # Strict main target parser and Git-ref compare-and-swap reservation across preflight, gate or explicit skip-tests override, push and confirmation; linked store default and transient ref-read retry (HS2-822EVF), atomic snapshot read (HS2-W110HQ), coordinator authority check (HS2-BND42N; tests: main-integration-{options,authority,window}.test.mjs)
-  .githooks/{pre-commit,pre-push} # Staged whitespace/format check and main reservation plus exact-receipt or explicit override enforcement (HS2-CD3D2T, HS2-BND42N, HS2-Q390N2)
+  .githooks/{pre-commit,pre-push} # Staged whitespace/format check and main reservation plus exact-receipt or explicit override enforcement; a registry-only commit or fast-forward takes a narrow path (HS2-CD3D2T, HS2-BND42N, HS2-Q390N2, HS2-9EGWC4)
   package.json, gitgist.config.json # Root repository tooling: pinned gitgist and Rulesync 38.0.0; commit:msg / commit:msg:offline drafting; provider, fallback, and generated-file exclusions (HS2-VA97HW; tests: scripts/gitgist-tooling.test.mjs)
   scripts/check-rulesync-generation.mjs # AGENTS.md must equal the pinned Rulesync regeneration of guidance/rulesync/project-selection.json + the local rule; CI runs --fetch (HS2-VA97HW; tests: check-rulesync-generation.test.mjs)
   scripts/platform-cfg.mjs   # Diff scan for Rust changes inside platform cfg gates (target_os/windows/unix, #![cfg], cfg-declared mod files) that this host never compiles: gate plan/receipt `platformCfg` and the "Platform cfg code deferred to CI" line (HS2-A7X8F5; tests in local-gate.test.mjs)
@@ -1350,7 +1350,12 @@ legacy-name reader rule (`GroupValue`), name normalization, and the comparison k
 reader and writer uses. `crates/hotsheet-ticketing/src/groups.rs` derives the group
 directory and implements name resolution, list, create, rename, ungroup, merge, and the
 explicit migration; `groups/registry.rs` is the project group registry, one committed
-file per group under `<checkout>/.hotsheet2/groups/<id>.json`. `saved_views.rs` parses
+file per group under `<checkout>/.hotsheet2/groups/<id>.json`; `groups/git_sync.rs`
+commits each registry write in the code checkout (`git commit --only`), pushes
+registry-only fast-forwards to the branch's upstream, keeps the upstream overlay
+(`.hotsheet2/groups-remote.json`) and status (`.hotsheet2/groups-sync.json`), and runs a
+background burst committer in the server (HS2-9EGWC4); the server sync loop's
+`sync_group_registries` retries and pulls each linked checkout. `saved_views.rs` parses
 `group:` and `has:group`. The index (schema 24) stores `group_name` (the raw value) and
 `group_key` (the id or a legacy key) and filters on `group`, `group_ids`, and `has_group`.
 `crates/hotsheet-server/src/routes/groups.rs` serves `GET …/groups` and

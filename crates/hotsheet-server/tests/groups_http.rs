@@ -297,6 +297,8 @@ struct Project {
     checkout: String,
     /// The code checkout, whose `.hotsheet2/groups` is the project's group registry.
     root: std::path::PathBuf,
+    /// The server state behind `router`, for driving the sync loop's passes.
+    state: AppState,
     /// Connection ids of the two Git sources, in link order.
     git: Vec<String>,
     transport: Arc<OneIssue>,
@@ -347,18 +349,18 @@ fn project_with(seed: impl FnOnce(&[std::path::PathBuf])) -> Project {
         GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
         transport.clone(),
     );
-    let router = app(
-        AppState::new(FsStore::open(&store_roots[0]).unwrap(), SECRET.into())
-            .unwrap()
-            .with_default_codex_home(dir.path().join("no-codex-home"))
-            .with_checkout_registry(&registry)
-            .with_ticket_provider(Arc::new(provider)),
-    );
+    let state = AppState::new(FsStore::open(&store_roots[0]).unwrap(), SECRET.into())
+        .unwrap()
+        .with_default_codex_home(dir.path().join("no-codex-home"))
+        .with_checkout_registry(&registry)
+        .with_ticket_provider(Arc::new(provider));
+    let router = app(state.clone());
     Project {
         _dir: dir,
         router,
         checkout: registered.id,
         root,
+        state,
         git,
         transport,
     }
@@ -942,4 +944,91 @@ async fn hs2_pdshnn_a_provider_without_groups_refuses_explicitly() {
     )
     .await;
     assert_eq!(ticket(&issue)["group"], Value::Null);
+}
+
+/// Run `git -C root <args>` and return its trimmed output.
+fn run_git(root: &std::path::Path, args: &[&str]) -> String {
+    let output = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+/// HS2-9EGWC4: a group created through the server is committed in the code checkout and
+/// pushed to a (local, bare) upstream, and a sync-loop pass shows groups another clone
+/// pushed, without moving the checkout's branch.
+#[tokio::test]
+async fn hs2_9egwc4_a_server_group_write_is_committed_and_pushed_and_the_sync_loop_pulls() {
+    let project = project();
+    let root = &project.root;
+    let parent = root.parent().unwrap();
+    run_git(parent, &["init", "-q", "--bare", "-b", "main", "code.git"]);
+    let remote = parent.join("code.git");
+    run_git(root, &["init", "-q", "-b", "main"]);
+    std::fs::write(
+        root.join(".gitignore"),
+        "/.hotsheet2/*\n!/.hotsheet2/groups/\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("README.md"), "code\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-q", "-m", "Seed"]);
+    run_git(root, &["remote", "add", "origin", remote.to_str().unwrap()]);
+    run_git(root, &["push", "-q", "-u", "origin", "main"]);
+    // The user's own uncommitted work in the checkout.
+    std::fs::write(root.join("README.md"), "unsaved edit\n").unwrap();
+
+    let base = format!("/checkouts/{}", project.checkout);
+    let created = ok(
+        &project.router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Sprint" })),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        run_git(&remote, &["log", "-1", "--format=%s", "main"]),
+        "Create group Sprint"
+    );
+    assert_eq!(
+        run_git(&remote, &["show", "--name-only", "--format=", "main"]),
+        format!(".hotsheet2/groups/{id}.json")
+    );
+    assert_eq!(run_git(root, &["status", "--porcelain"]), "M README.md");
+    let listed = ok(&project.router, "GET", &format!("{base}/groups"), None).await;
+    assert_eq!(listed["registry_sync"]["state"], "synced", "{listed}");
+
+    // Another clone creates a group and publishes it.
+    run_git(parent, &["clone", "-q", remote.to_str().unwrap(), "other"]);
+    let (theirs, _, _) =
+        hotsheet_ticketing::groups::GroupRegistry::for_checkout(&parent.join("other"))
+            .find_or_create("Elsewhere")
+            .unwrap();
+    let head = run_git(root, &["rev-parse", "HEAD"]);
+    let statuses = hotsheet_server::sync_loop::sync_group_registries(&project.state);
+    assert_eq!(statuses.len(), 1, "{statuses:?}");
+    assert_eq!(
+        statuses[0].1.state,
+        hotsheet_ticketing::groups::git_sync::RegistrySyncState::Synced
+    );
+    assert_eq!(run_git(root, &["rev-parse", "HEAD"]), head);
+    // The server now resolves that name to the other clone's group instead of a duplicate.
+    let again = ok(
+        &project.router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "ELSEWHERE" })),
+    )
+    .await;
+    assert_eq!(again["id"], theirs.as_str(), "{again}");
+    assert_eq!(again["created"], false);
 }

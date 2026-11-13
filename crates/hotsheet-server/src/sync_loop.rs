@@ -93,6 +93,33 @@ pub fn sync_all_with_sizes(
         .collect()
 }
 
+/// Publish and refresh the group registry of every checkout linked to a hosted store
+/// (HS2-9EGWC4): commit registry changes no write committed (Git was busy, or a hook
+/// refused), fetch the branch's upstream so groups made in other clones appear, and push
+/// unpublished registry commits. Each checkout's status is recorded beside its registry.
+pub fn sync_group_registries(
+    state: &AppState,
+) -> Vec<(
+    String,
+    hotsheet_ticketing::groups::git_sync::RegistrySyncStatus,
+)> {
+    let Some(_lifecycle_guard) = state.begin_background_work() else {
+        return Vec::new();
+    };
+    hotsheet_ticketing::groups::git_sync::flush_background();
+    state
+        .group_registry_checkout_roots()
+        .into_iter()
+        .map(|root| {
+            let status = hotsheet_ticketing::groups::git_sync::sync_checkout(Path::new(&root));
+            if status.state.needs_attention() {
+                tracing::warn!(checkout = %root, "group registry: {}", status.detail);
+            }
+            (root, status)
+        })
+        .collect()
+}
+
 /// A store's git object size rising past a GitHub limit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SizeCrossing {
@@ -182,12 +209,22 @@ pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
 fn run(state: AppState, base: Duration, rx: Receiver<()>) {
     let mut last_trash_purge: Option<std::time::Instant> = None;
     let mut levels = SizeLevels::default();
+    let mut last_registry_sync: Option<std::time::Instant> = None;
     drive(base, &mut ChannelWaker::new(rx), || {
         if last_trash_purge.is_none_or(|at| at.elapsed() >= TRASH_PURGE_INTERVAL) {
             purge_all_trash(&state);
             last_trash_purge = Some(std::time::Instant::now());
         }
-        sync_all_with_sizes(&state, &mut levels, git_object_size)
+        let reports = sync_all_with_sizes(&state, &mut levels, git_object_size);
+        // Ticket writes kick the loop often; code checkouts are fetched on the base cadence
+        // only. Registry writes publish themselves as they happen (HS2-9EGWC4).
+        // A second of slack keeps a timer pass that wakes just early on schedule.
+        let registry_interval = base.saturating_sub(Duration::from_secs(1));
+        if last_registry_sync.is_none_or(|at| at.elapsed() >= registry_interval) {
+            sync_group_registries(&state);
+            last_registry_sync = Some(std::time::Instant::now());
+        }
+        reports
     });
 }
 
