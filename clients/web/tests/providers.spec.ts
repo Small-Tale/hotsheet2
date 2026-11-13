@@ -39543,11 +39543,17 @@ test('records shell and AI command launches through the real server and lists th
     await page.getByRole('button', { name: 'Build Shell Command', exact: true }).click();
     await expect.poll(() => launches.length).toBe(2);
     expect(launches[1]).toEqual({ kind: 'shell', terminal_id: expect.any(String), terminal_label: 'Build' });
-    // The real server lists both launches in the project's run history.
-    const recorded = await server.request<Array<{ command_id: string; launch?: { kind: string } }>>(
-      `/checkouts/${server.checkoutId}/command-runs`,
-    );
-    expect(recorded.map((run) => `${run.command_id}:${run.launch?.kind}`)).toEqual(['build:shell', 'everything:ai']);
+    // The real server lists both launches in the project's run history. The route above sees the
+    // launch request before the server records it, so wait on the recorded state (HS2-7KNJ34).
+    await expect
+      .poll(async () =>
+        (
+          await server.request<Array<{ command_id: string; launch?: { kind: string } }>>(
+            `/checkouts/${server.checkoutId}/command-runs`,
+          )
+        ).map((run) => `${run.command_id}:${run.launch?.kind}`),
+      )
+      .toEqual(['build:shell', 'everything:ai']);
 
     await openHistory('Everything AI command');
     await expect(history.getByRole('list', { name: 'Recent launches' })).toBeVisible();
