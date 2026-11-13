@@ -1152,7 +1152,7 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
       'prerequisite_not_finished',
       'validation_step_missing',
     ]);
-    const stepId = String((dependent.body.step as { step_id: string }).step_id);
+    const stepId = (dependent.body.step as { step_id: string }).step_id;
 
     const plan = await act('plan', {});
     expect(plan.body.counts).toEqual({ blocked: 1, confirmed: 1 });
@@ -1477,7 +1477,7 @@ test('HS2-ECWG50 real scheduler responses match the OpenAPI contract', async () 
       actor,
     });
     expect(defined.status, JSON.stringify(defined.body)).toBe(200);
-    const stepId = String((defined.body.step as { step_id: string }).step_id);
+    const stepId = (defined.body.step as { step_id: string }).step_id;
     const act = async (operation: string, body: Record<string, unknown>, schema: string) => {
       const answer = await send('POST', `${base}/scheduler/${operation}`, { ...body, actor });
       expect(answer.status, JSON.stringify(answer.body)).toBe(200);
