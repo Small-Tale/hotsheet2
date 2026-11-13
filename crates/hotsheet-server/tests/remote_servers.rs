@@ -484,6 +484,8 @@ mod grants;
 mod orchestration;
 #[path = "remote_servers/policy.rs"]
 mod policy;
+#[path = "remote_servers/readiness.rs"]
+mod readiness;
 #[path = "remote_servers/recovery.rs"]
 mod recovery;
 #[path = "remote_servers/runs.rs"]

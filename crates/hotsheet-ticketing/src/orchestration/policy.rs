@@ -160,6 +160,9 @@ pub enum ApprovalGate {
     /// HS2-5JBYPV: running a target's deploy script. A production deployment asks a
     /// person whether or not the policy lists this.
     Deployment,
+    /// HS2-42TARA: dispatching work the plan says is not ready. Always asked of a
+    /// person for the exact operation; listing it in a policy changes nothing.
+    ReadinessOverride,
 }
 
 impl ApprovalGate {
@@ -173,6 +176,7 @@ impl ApprovalGate {
             Self::RoleSessionStart => "role_session_start",
             Self::ProvisionalDispatch => "provisional_dispatch",
             Self::Deployment => "deployment",
+            Self::ReadinessOverride => "readiness_override",
         }
     }
 }
@@ -512,6 +516,14 @@ impl PolicyBody {
         let gates: BTreeSet<_> = self.approval.required_for.iter().collect();
         if gates.len() != self.approval.required_for.len() {
             report("duplicate_approval", "approval gate is listed twice", None);
+        }
+        // HS2-42TARA: an override of readiness is asked per operation, never by policy.
+        if gates.contains(&ApprovalGate::ReadinessOverride) {
+            report(
+                "approval_not_configurable",
+                "a readiness override always asks a person",
+                None,
+            );
         }
         if !(1..=MAX_SPECULATION_DEPTH).contains(&self.speculation.max_depth) {
             report(

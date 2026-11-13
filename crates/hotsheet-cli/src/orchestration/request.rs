@@ -52,6 +52,8 @@ pub fn is_path(path: &str) -> bool {
             // HS2-WN0MXZ: validation steps (orchestrating) and the hosted execution.
             | ["checkouts", _, "orchestration", "validations", _]
             | ["checkouts", _, "target-validations"]
+            // HS2-42TARA: the plan of prerequisites and its readiness.
+            | ["checkouts", _, "orchestration", "readiness", _]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -111,6 +113,8 @@ pub fn is_machine_path(path: &str) -> bool {
             // passes its grants. The hosted `target-validations` route stays ordinary
             // authenticated data so a remote orchestrator can reach it.
             | ["checkouts", _, "orchestration", "validations", _]
+            // HS2-42TARA: the plan and what it is computed from are this machine's.
+            | ["checkouts", _, "orchestration", "readiness", _]
     )
 }
 
@@ -529,6 +533,28 @@ impl OrchestrationRuntime {
                     }
                     "remove" => {
                         value(self.validation_remove(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
+            // HS2-42TARA: the plan of prerequisites. The reads contact no target.
+            ("POST", ["checkouts", owner, "orchestration", "readiness", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "define" => {
+                        value(self.readiness_define(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "show" => {
+                        let step: super::PlanStepRef = decode(body)?;
+                        value(self.readiness(owner, &step.step_id, tx)?)
+                    }
+                    "plan" => value(self.readiness_plan(owner, tx)?),
+                    "ready" => value(self.ready_work(owner, tx)?),
+                    "refresh" => {
+                        value(self.readiness_refresh(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "remove" => {
+                        value(self.readiness_remove(owner, &decode(body)?, actor.as_ref(), tx)?)
                     }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }

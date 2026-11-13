@@ -2160,6 +2160,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/validations/{operation}",
             post(routes::orchestration::write),
         )
+        // HS2-42TARA: the plan of prerequisites and its readiness (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/readiness/{operation}",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{checkout}/target-validations",
             get(routes::orchestration::read).post(routes::orchestration::write),

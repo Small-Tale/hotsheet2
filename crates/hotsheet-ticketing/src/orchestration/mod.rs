@@ -10,6 +10,7 @@ mod gates;
 mod grants;
 mod manifest;
 mod policy;
+mod readiness;
 mod reconcile;
 mod run_events;
 mod runs;
@@ -52,6 +53,12 @@ pub use policy::{
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PolicyBody, PolicyDenial,
     PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SetPolicy,
     Speculation, TargetPolicy, ToolPolicy, WindDown,
+};
+pub use readiness::{
+    GateFacts, GateRequirement, LevelChange, MAX_PLAN_STEPS, MAX_STEP_PLAN_PREREQUISITES,
+    NewPlanStep, PlanFacts, PlanRecord, PlanRegistry, PlanStep, Prerequisite, PublishedLevel,
+    ReadinessError, ReadinessLevel, ReadinessReason, StepReadiness, TicketFacts, TicketKey,
+    TicketRecord, TicketSeen, TicketUpdate, evaluate_plan, ticket_key,
 };
 pub use reconcile::{
     Alignment, Assessment, Disposition, ExternalSource, ExternalWork, MAX_FINDINGS, Observations,
@@ -124,6 +131,9 @@ pub enum OrchestrationError {
     /// HS2-5JBYPV: the gate, or its provider adapter, refused the request.
     #[error("orchestration gate refused the request: {}", .0.code())]
     Gate(GateError),
+    /// HS2-42TARA: the plan step is unknown, or its work is not ready to dispatch.
+    #[error("orchestration readiness refused the request: {}", .0.code())]
+    Readiness(ReadinessError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -151,6 +161,7 @@ impl OrchestrationError {
             Self::Run(error) => error.code(),
             Self::Validation(error) => error.code(),
             Self::Gate(error) => error.code(),
+            Self::Readiness(error) => error.code(),
         }
     }
 }
@@ -241,6 +252,8 @@ mod gate_tests;
 mod grant_tests;
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod readiness_tests;
 #[cfg(test)]
 mod reconcile_tests;
 #[cfg(test)]

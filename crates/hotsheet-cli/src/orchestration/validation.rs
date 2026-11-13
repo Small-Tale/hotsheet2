@@ -701,6 +701,10 @@ impl OrchestrationRuntime {
                 },
             );
         }
+        // HS2-42TARA: evidence outside any run is published nowhere else.
+        if result.run_id.is_none() {
+            self.readiness_reevaluate(owner_id, tx.clock.now_ms());
+        }
         if !result.state.is_final() {
             return;
         }

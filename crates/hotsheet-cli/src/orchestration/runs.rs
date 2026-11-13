@@ -53,6 +53,10 @@ pub struct DispatchRun {
     pub worker_label: Option<String>,
     #[serde(default)]
     pub lease_minutes: Option<u32>,
+    /// HS2-42TARA: ask a person to let this exact operation start although the plan
+    /// says its work is not ready. Never set by automation on its own.
+    #[serde(default)]
+    pub override_readiness: bool,
 }
 
 /// The longest one events request waits; a client re-polls with its cursor.
@@ -235,9 +239,12 @@ impl OrchestrationRuntime {
     /// HS2-7QHWHJ: record one fact in the owner's run event stream. Best effort: a run
     /// operation is never failed because its event could not be written.
     pub(super) fn run_event(&self, owner_id: &str, event: RunEvent) {
+        let at_ms = event.at_ms;
         if let Ok(journal) = RunEventJournal::new(&self.home, owner_id) {
             let _ = journal.record(event);
         }
+        // HS2-42TARA: whatever changed may change what is ready.
+        self.readiness_reevaluate(owner_id, at_ms);
     }
 
     /// Apply a change to a run and publish what actually changed as events. Every run
@@ -546,6 +553,24 @@ impl OrchestrationRuntime {
             let native_id = text(&seen.ticket, "native_id")
                 .unwrap_or(&request.target.native_id)
                 .to_owned();
+            // HS2-42TARA: planned work starts only when it is ready, or when a person
+            // overrides that for this exact operation.
+            self.readiness_guard(
+                owner_id,
+                &super::readiness::GuardedDispatch {
+                    target: &RunTarget {
+                        target_id: request.target.target_id.clone(),
+                        connection_id: request.target.connection_id.clone(),
+                        native_id: native_id.clone(),
+                    },
+                    found: &seen.ticket,
+                    operation_id: &request.operation_id,
+                    override_readiness: request.override_readiness,
+                },
+                &authorized,
+                actor,
+                tx,
+            )?;
             let (run, created) = self.runs().begin(
                 owner_id,
                 NewRun {

@@ -6,6 +6,7 @@ mod capacity;
 mod gates;
 mod observer;
 mod policy;
+mod readiness;
 mod recovery;
 mod request;
 mod runs;
@@ -22,6 +23,10 @@ pub use gates::{
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
+pub use readiness::{
+    DefinePlanStep, PlanStepRef, PlanView, PrerequisiteRequest, ReadyItem, RefreshReadiness,
+    RefreshView, StepView,
+};
 pub use recovery::{CorrectRun, HandoffRun, PauseRun, ReconcileFailure, ReconcileSummary};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
 pub use runs::{
@@ -396,6 +401,12 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
             | hotsheet_ticketing::orchestration::ValidationError::ResultNotFound,
         ) => 404,
         OrchestrationError::Validation(_) => 409,
+        // HS2-42TARA: an unknown step is absent; work that is not ready is a state
+        // conflict a person can resolve.
+        OrchestrationError::Readiness(
+            hotsheet_ticketing::orchestration::ReadinessError::StepNotFound,
+        ) => 404,
+        OrchestrationError::Readiness(_) => 409,
         OrchestrationError::Gate(error) => {
             use hotsheet_ticketing::orchestration::GateError as E;
             match error {

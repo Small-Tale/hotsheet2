@@ -9,6 +9,8 @@
 > with immutable result references (§26.12, HS2-WN0MXZ), CI and deployment gates of
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
+> the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
+> HS2-42TARA; provisional dispatch is HS2-2SJPCH and HS2-JSF985),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI and the scheduler remain design
@@ -532,6 +534,8 @@ approval is consumed by the one call it allows and must be used within an hour; 
 denial is final for that operation; an unanswered request lapses after a day. Reads
 and gate observation never wait for a person. A provisional dispatch asks under
 `provisional_dispatch` first. Answers are audited; an `ai` actor cannot give one.
+A `readiness_override` request (§26.15) is filed per operation by the dispatch guard
+and cannot be listed in a policy (`approval_not_configurable`).
 
 ### Dry run
 
@@ -630,6 +634,9 @@ transition. A person's correction is the one exception to the edges (§26.14).
   policy that asks a person first applies. Renewing and cancelling continue that
   decision: grants and policy limits still apply, but nobody is asked again.
   Supervising with `sync` needs `tickets_read`.
+- **Readiness.** A target ticket that a plan step works is dispatched only when that
+  step is `confirmed`, or when a person overrides it for the exact operation
+  (§26.15). A ticket no step works is not gated.
 - **Refusals.** The target ticket is read first, so a ticket that does not exist is
   never recorded as a run. A definitive target refusal ends the run as `failed` with
   the target's code; a failure that may be transient leaves it `requested` so the
@@ -692,9 +699,10 @@ can be trusted.
 journal per owning checkout, `${HOTSHEET_HOME}/orchestration-run-events/`, with the
 same sequence cursor, rotation and gap reporting as the audit journal. Event kinds
 are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable`,
-`cancel_requested`, `validation` (§26.12), `gate` (§26.13) and the recovery kinds of
-§26.14 (`reconciled`, `paused`, `resumed`, `handoff`, `corrected`), with `session`
-reserved for the ticket that adds it. Each event says whether the orchestrator did it or it was learned
+`cancel_requested`, `validation` (§26.12), `gate` (§26.13), the recovery kinds of
+§26.14 (`reconciled`, `paused`, `resumed`, `handoff`, `corrected`) and `readiness`
+(§26.15, about a plan step rather than a run), with `session` reserved for the ticket
+that adds it. Each event says whether the orchestrator did it or it was learned
 from the target, and carries identifiers, states and codes only.
 
 - **Ordering.** Events are recorded in arrival order and keep the time the fact was
@@ -1566,3 +1574,182 @@ MCP `hotsheet_targets` adds `run_reconcile` (all runs without `run_id`), `run_pa
 `run_resume`, `run_handoff` and `run_correct`. Acting on a disposition is the
 scheduler's (HS2-AH8CRS), validation steps join reconciliation in HS2-G5H9FQ, and
 the workspace view is HS2-XM692S.
+
+## 26.15 Prerequisites and readiness (HS2-42TARA)
+
+Orchestrated work across projects has an order: a change in one target must be
+finished, and its gates green, before work in another starts on top of it. The
+**plan** records that order on the orchestrating machine, and **readiness** is
+computed from what this machine has confirmed. Nothing is written to a target, and
+no provider's own dependency or blocking field is read or changed: a GitHub, Jira,
+GitLab or git ticket keeps its own semantics.
+
+### Plan steps and prerequisites
+
+A **step** is one orchestration ticket's work on one exact target ticket,
+`(target_id, connection_id, native_id)`. A target ticket has at most one step per
+owning checkout; planning it again for the same orchestration ticket changes that
+step, and for another orchestration ticket conflicts. The step id is a ULID the
+plan assigns. A step holds at most 16 **prerequisites**, each named once:
+
+| Kind         | Fields                                                                | Holds when                                                                          |
+| ------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ticket`     | `target_id`, `connection_id`, `native_id`, `gates`, optional `commit` | That qualified target ticket is confirmed finished and the required gates are green |
+| `validation` | `step_id`, optional orchestration `ticket` (the step's own otherwise) | The latest evidence of that validation step (§26.12) is `passed`                    |
+
+`gates` is `ci` when omitted (every standing CI gate passed), `deployment` (CI and
+the requested deployment passed) or `none` (the ticket being finished is enough).
+The gates are those of the latest run on the prerequisite ticket (§26.13), or of
+`commit` when the prerequisite pins one. Superseded gates count for nothing, as in
+every gate roll-up.
+
+A prerequisite on a ticket that another step works is an edge of the plan graph, in
+whatever target that ticket lives, so a cycle across projects is found. A
+prerequisite on a ticket no step works is a plain condition. Defining a step reads
+every ticket it names through the gate as `tickets_read` and stores the provider's
+canonical ids, so a slug is only a label; a ticket that cannot be read is not
+planned. A step cannot require its own ticket. An owner plans at most 256 steps.
+
+The plan is `${HOTSHEET_HOME}/orchestration-plan.json` (private, locked, atomically
+replaced, version 1, at most 8 MiB): the steps, the last read of each ticket they
+name, and the level last published per step. A read never creates it, and damaged or
+newer data is an error that is never overwritten. It belongs to this machine like
+the runs, gates and validation records it is computed from; sharing a plan between
+machines is HS2-YDY5HJ.
+
+### Levels
+
+Evaluation is a pure function
+(`crates/hotsheet-ticketing/src/orchestration/readiness.rs`) over the steps and typed
+facts: per ticket the last confirmed read and whether it is stale, the tickets an
+unfinished run stands on, rolled-up gates, and validation evidence. The same steps
+and facts give the same answer in any order.
+
+| Level         | Meaning                                                                                   | Dispatched         |
+| ------------- | ----------------------------------------------------------------------------------------- | ------------------ |
+| `confirmed`   | Every prerequisite is confirmed. The default level for starting work                      | Yes                |
+| `provisional` | Nothing is against it, but a prerequisite rests on an integrated commit not yet confirmed | No (HS2-JSF985)    |
+| `blocked`     | A prerequisite is confirmed not to hold                                                   | Only by override   |
+| `stale`       | Nothing is known against it, but something it rests on could not be confirmed             | Only by override   |
+| `cyclic`      | Its prerequisites lead back to itself                                                     | Only by override   |
+| `in_progress` | An unfinished run already stands on its ticket                                            | Existing run rules |
+| `finished`    | Its own ticket is confirmed finished                                                      | Nothing to start   |
+
+A step's own state is decided first: an unfinished run, then a confirmed finished
+ticket, then a cycle, then its own ticket being unread, unreachable or missing. After
+that the worst prerequisite sets the level (`blocked`, then `stale`, then
+`provisional`) and every prerequisite that does not hold is listed as a reason: a
+stable code, the prerequisite, and for a provisional one the commits it rests on.
+
+- **Confirmed target state.** A ticket counts as finished when a successful read
+  showed it `completed`, `verified` or archived. The read is the newest of the plan's
+  own and the last confirmed observation of any run on that ticket (§26.9). While
+  the target cannot be confirmed, or before any read, the prerequisite is `stale`
+  (`target_unreachable`, `not_observed`) even when the last read said finished. A
+  ticket the target no longer has is `blocked` (`prerequisite_ticket_missing`).
+- **Gates.** `failed` blocks (`gate_failed`). No standing gate blocks a finished
+  ticket (`gate_not_linked`), and an `unknown` gate makes it stale (`gate_unknown`).
+  An unfinished ticket with nothing integrated is `prerequisite_not_finished`.
+  Deployments: `deployment_not_requested`, `deployment_pending`, `deployment_failed`
+  block and `deployment_unknown` is stale. Whether a pending deployment should be
+  provisional is HS2-QBERH6.
+- **Provisional.** A CI gate that is `pending` on a linked commit means the
+  prerequisite is integrated and awaiting its gate (`gate_pending`); a gate that
+  passed while the ticket is not yet confirmed finished is the same level
+  (`prerequisite_not_finished`). `base_commits` records the commits such a step would
+  be built on. This is the provisional level of §26.8: it is a distinct computed
+  answer, listed by `ready` beside confirmed work, and never dispatched here.
+  Dispatching on it by policy is HS2-JSF985 across targets and HS2-2SJPCH within a
+  project.
+- **Validation.** `validation_step_missing`, `validation_not_run`,
+  `validation_step_changed`, `validation_failed`, `validation_running`,
+  `validation_skipped` and `validation_unavailable` block; other unverified evidence
+  is stale (`validation_unverified`).
+- **Cycles.** Every step of a cycle is `cyclic` (`plan_cycle`) with the sorted step
+  ids of its cycle, whatever the targets say: the plan is wrong and nothing in it
+  starts by itself. A step outside the cycle whose prerequisite is inside it is
+  blocked with `prerequisite_in_cycle`. Changing one prerequisite dissolves it.
+
+Each step also lists `unblocks`: the unfinished steps that name its ticket.
+
+### Dispatch guard and override
+
+`run dispatch` (§26.9) reads the target ticket, records that read as the step's own
+confirmed state, and refuses a planned ticket whose step is not `confirmed` with
+409 `readiness_blocked`, `readiness_stale`, `readiness_cyclic` or
+`readiness_provisional`. Nothing is claimed and no run is recorded. Repeating a
+dispatch that was already admitted is the same run and is not judged again.
+
+A person can let one exact operation through. A dispatch sent with
+`override_readiness` files a `readiness_override` approval (§26.8) for its
+`(target, actor, operation id)` and answers 403 `approval_required` until someone
+approves it; an AI actor cannot. The approved request then proceeds once, a denial
+answers `readiness_override_denied` from then on, and work that is ready needs and
+files nothing. The audit journal records the request, the person's answer and the
+use under `readiness_override` with the operation id and the level that was
+overridden, and the orchestration ticket gets an activity note naming the step, the
+level, the operation, the approval and who gave it, by identifiers only. The
+scheduler never sets the flag.
+
+### Reevaluation and events
+
+Readiness is recomputed where the things it reads change: wherever a run event is
+published (state, observation, target unreachable or reachable again, recovery),
+wherever a gate changes, when a validation attempt outside any run starts or ends,
+and after a plan change, a refresh or a dispatch's own read. A step whose level
+differs from the one last published gets one `readiness` event in the run event
+stream of §26.9. Its `reason` is the new level, and because a step may have no run
+its `run_id` holds the step id, so `run events --run <step-id>` replays one step's
+levels (a dedicated field is HS2-J7RG42). Repeated evaluation publishes nothing,
+concurrent evaluations publish a change once, and a level reached again later is its
+own event. The scheduler (HS2-ECWG50) waits on that stream; nothing polls.
+
+`readiness refresh` reads the named tickets again through the gate and lists under
+`unverified` those it could not confirm. It is how a prerequisite ticket without a
+run is confirmed today; following such tickets on the target's change feed is
+HS2-TMA4YA. A level that only time changes (a running validation attempt passing its
+deadline) is correct in every read and published at the next event (HS2-J7N3PQ).
+
+### Reads for the scheduler
+
+`OrchestrationRuntime::ready_work(owner_id, tx) -> Result<Vec<ReadyItem>, OrchestrationError>`
+lists the work that could start now, confirmed items first and then provisional ones,
+each by step id. A `ReadyItem` holds the step id, the orchestration ticket, the
+target ticket, the `level`, the `reasons` and `base_commits` of a provisional item,
+what it `unblocks`, when it became ready, and the target ticket's own `priority`,
+`up_next` mark and creation time as last read. `readiness(owner_id, step_id, tx)`
+answers one step and `readiness_plan(owner_id, tx)` every step with counts per level
+and each cycle once. All three read this machine's records, pass no gate, contact no
+target and write nothing.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration readiness define --project <owner> --ticket <orchestration-ticket> \
+  --target <target-id> --connection <source> --id <target-ticket> \
+  [--requires <target-id>/<connection>:<ticket>]... [--gates none|ci|deployment] \
+  [--requires-validation <step>]... [--prerequisite '<json>']...
+hotsheet-cli ... orchestration readiness show <step-id> --project <owner>
+hotsheet-cli ... orchestration readiness plan|ready --project <owner>
+hotsheet-cli ... orchestration readiness refresh [<step-id>] --project <owner>
+hotsheet-cli ... orchestration readiness remove <step-id> --project <owner>
+hotsheet-cli ... orchestration run dispatch ... --override-readiness
+```
+
+`--gates` applies to every `--requires` of the command; `--prerequisite` takes one
+prerequisite as JSON for what the flags do not say, such as a pinned `commit`.
+
+| Route                                                                                | Methods and purpose                               |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/readiness/{define,show,plan,ready,refresh,remove}` | POST plan and readiness operations; machine-local |
+
+MCP `hotsheet_targets` adds `readiness_define`, `readiness_show`, `readiness_plan`,
+`readiness_ready`, `readiness_refresh` and `readiness_remove`, and `run_dispatch`
+takes `override_readiness`. Removing a step needs an identified actor and is audited
+(`readiness_remove`); whether plan changes should need a grant of their own is
+HS2-TZT505.
+
+Milestones and wider cross-project planning stay with their own tickets: the
+milestone model (HS2-8T71YW, HS2-A820C1, HS2-PX50E8, HS2-6E0H3X), cross-project
+planning (HS2-HX5MH3) and aggregate views (HS2-42B2FD). A milestone as a prerequisite
+kind is HS2-2CR7H3, and the workspace view of the plan is HS2-15G5T4.

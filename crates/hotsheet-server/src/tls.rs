@@ -425,6 +425,13 @@ mod tests {
             "/checkouts/owner/orchestration/validations/run",
             "/checkouts/owner/orchestration/validations/remove",
             "/checkouts/owner/orchestration/validations/evidence",
+            // HS2-42TARA: the plan and the records it is computed from are this machine's.
+            "/checkouts/owner/orchestration/readiness/define",
+            "/checkouts/owner/orchestration/readiness/show",
+            "/checkouts/owner/orchestration/readiness/plan",
+            "/checkouts/owner/orchestration/readiness/ready",
+            "/checkouts/owner/orchestration/readiness/refresh",
+            "/checkouts/owner/orchestration/readiness/remove",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

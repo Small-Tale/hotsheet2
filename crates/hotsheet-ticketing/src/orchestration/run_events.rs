@@ -38,6 +38,9 @@ pub enum RunEventKind {
     Resumed,
     Handoff,
     Corrected,
+    /// HS2-42TARA: a plan step's readiness level changed. `run_id` holds the step id
+    /// (a step may have no run yet) and `reason` the new level.
+    Readiness,
 }
 
 /// Who learned the fact: the orchestrator acting, or a change observed on the target.

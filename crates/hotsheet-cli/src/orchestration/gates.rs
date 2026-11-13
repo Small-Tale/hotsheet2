@@ -333,6 +333,8 @@ impl OrchestrationRuntime {
         ) {
             let _ = journal.record(event);
         }
+        // HS2-42TARA: a gate verdict may change what is ready.
+        self.readiness_reevaluate(&gate.owner_checkout_id, gate.updated_at_ms);
     }
 
     /// Read the gate's adapter and record what it says. Returns the gate as it now

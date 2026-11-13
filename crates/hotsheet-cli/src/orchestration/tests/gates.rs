@@ -18,14 +18,14 @@ use serde_json::json;
 use super::tickets::{Machine, bind_and_grant, human, machine, unsupported, worker};
 use super::*;
 
-const CI: &str = "scripted-ci";
-fn sha(digit: char) -> String {
+pub(super) const CI: &str = "scripted-ci";
+pub(super) fn sha(digit: char) -> String {
     std::iter::repeat_n(digit, 40).collect()
 }
 
 /// A provider adapter a test moves by hand. `wait` blocks on a condition variable, so a
 /// test proves a waiter is woken by the change and not by a timer.
-struct Scripted {
+pub(super) struct Scripted {
     name: &'static str,
     kind: GateKind,
     readings: Mutex<HashMap<String, GateReading>>,
@@ -36,7 +36,7 @@ struct Scripted {
     waits: AtomicUsize,
 }
 impl Scripted {
-    fn new(name: &'static str, kind: GateKind) -> Arc<Self> {
+    pub(super) fn new(name: &'static str, kind: GateKind) -> Arc<Self> {
         Arc::new(Self {
             name,
             kind,
@@ -48,7 +48,7 @@ impl Scripted {
             waits: AtomicUsize::new(0),
         })
     }
-    fn set(&self, commit: &str, reading: GateReading) {
+    pub(super) fn set(&self, commit: &str, reading: GateReading) {
         self.readings.lock().unwrap().insert(commit.into(), reading);
         *self.cursor.lock().unwrap() += 1;
         self.changed.notify_all();
@@ -102,7 +102,7 @@ impl GateProvider for Scripted {
     }
 }
 
-fn verdict(
+pub(super) fn verdict(
     provider: &str,
     state: GateState,
     order: u64,
@@ -158,7 +158,7 @@ fn with_run(actions: &[TargetAction], tx: &mut Transaction<'_>) -> (Machine, Str
         .run_id;
     (m, run)
 }
-fn link(commit: &str, provider: &str) -> LinkGate {
+pub(super) fn link(commit: &str, provider: &str) -> LinkGate {
     serde_json::from_value(
         json!({"commit": commit, "provider": provider, "repository": "example/widgets"}),
     )

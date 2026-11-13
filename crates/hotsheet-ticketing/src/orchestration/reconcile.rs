@@ -124,8 +124,13 @@ impl TargetFacts {
     }
 
     fn finished(&self) -> bool {
-        matches!(self.status.as_str(), "completed" | "verified" | "archive")
+        ticket_finished(&self.status)
     }
+}
+
+/// The ticket statuses that mean its work is over. HS2-42TARA reads the same rule.
+pub(super) fn ticket_finished(status: &str) -> bool {
+    matches!(status, "completed" | "verified" | "archive")
 }
 
 /// Work outside the target ticket that a run may have started: a CI run, a

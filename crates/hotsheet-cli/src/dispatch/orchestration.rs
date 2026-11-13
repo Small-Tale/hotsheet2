@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use super::Ctx;
 use super::orchestration_capacity::{self as capacity, Planned};
+use super::orchestration_readiness as readiness;
 use super::orchestration_validation as validation;
 use crate::Cmd;
 
@@ -43,6 +44,9 @@ enum OrchestrationCmd {
     Admission(capacity::AdmissionArgs),
     /// Define, list, run and remove extra validation steps of an orchestration ticket.
     Validation(validation::ValidationArgs),
+    /// HS2-42TARA: plan prerequisites between orchestration steps and target tickets,
+    /// and read what is ready, blocked, stale or cyclic.
+    Readiness(readiness::ReadinessArgs),
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -253,6 +257,11 @@ enum RunCmd {
         /// Lease length for a direct claim, 5 to 240 (default 30).
         #[arg(long)]
         lease_minutes: Option<u32>,
+        /// HS2-42TARA: ask a person to let this operation start although its plan
+        /// step is not ready. The request waits as `approval_required` until someone
+        /// approves it with `approval approve`; repeat the command afterwards.
+        #[arg(long)]
+        override_readiness: bool,
     },
     /// Runs of this project; --active leaves out finished ones.
     List {
@@ -352,13 +361,14 @@ fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
             worker,
             worker_label,
             lease_minutes,
+            override_readiness,
         } => (
             "POST",
             base,
             json!({"ticket":{"connection_id":source,"native_id":ticket},"target_id":target,
                 "connection_id":connection,"native_id":id,"operation_id":operation_id,
                 "mode":via,"worker_id":worker,"worker_label":worker_label,
-                "lease_minutes":lease_minutes}),
+                "lease_minutes":lease_minutes,"override_readiness":override_readiness}),
         ),
         RunCmd::List { active } => ("GET", format!("{base}?active={active}"), Value::Null),
         RunCmd::Show { run_id } => ("GET", format!("{base}/{run_id}"), Value::Null),
@@ -1209,6 +1219,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Validation(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = validation::route(&owner_id, arguments)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Readiness(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = readiness::route(&owner_id, arguments)?;
             (owner_id, request)
         }
         OrchestrationCmd::Gate(arguments) => {

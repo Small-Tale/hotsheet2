@@ -2393,6 +2393,72 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/readiness/{operation}:
+    description:
+      Machine-local plan of prerequisites between orchestration steps and qualified target tickets, and the readiness
+      computed from it (HS2-42TARA). A step is one orchestration ticket's work on one exact target ticket. Readiness is
+      computed from this machine's confirmed target reads, gates and validation evidence; nothing is written to a
+      target or to a provider's own dependency fields.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestrateReadiness
+      description:
+        '`define` plans or changes a step and `refresh` reads the named tickets again; both pass the grant and policy
+        gate as `tickets_read`. `show`, `plan` and `ready` answer from the records of this machine and contact nothing.
+        `remove` withdraws a step. An unknown step is 404 `readiness_step_not_found`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadinessOperation'
+      responses:
+        '200':
+          description:
+            The step's readiness (`define`, `show`), the plan (`plan`, `refresh`), the work that could start now
+            (`ready`), or the removed step (`remove`).
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - $ref: '#/components/schemas/StepReadiness'
+                  - $ref: '#/components/schemas/ReadinessPlan'
+                  - $ref: '#/components/schemas/PlanStep'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/ReadyItem'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - define
+            - show
+            - plan
+            - ready
+            - refresh
+            - remove
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -17246,6 +17312,7 @@ components:
         - role_session_start
         - provisional_dispatch
         - deployment
+        - readiness_override
     OrchestrationPolicyView:
       type: object
       required:
@@ -17790,6 +17857,11 @@ components:
             - 'null'
           minimum: 5
           maximum: 240
+        override_readiness:
+          description:
+            HS2-42TARA. Ask a person to let this exact operation start although its plan step is not ready. The request
+            answers 403 `approval_required` until the `readiness_override` approval is given.
+          type: boolean
       additionalProperties: false
     OrchestrationRun:
       type: object
@@ -18027,6 +18099,7 @@ components:
                   - resumed
                   - handoff
                   - corrected
+                  - readiness
               source:
                 enum:
                   - orchestrator
@@ -19433,6 +19506,308 @@ components:
               code:
                 type: string
             additionalProperties: false
+      additionalProperties: false
+    OrchestrationTicketRef:
+      description: An orchestration ticket; an empty connection id selects the project's only git source.
+      type: object
+      required:
+        - native_id
+      properties:
+        connection_id:
+          type: string
+          maxLength: 160
+        native_id:
+          type: string
+          maxLength: 256
+      additionalProperties: false
+    ReadinessOperation:
+      description:
+        Body of a readiness operation (HS2-42TARA). `define` takes `ticket`, `target_id`, `connection_id`, `native_id`
+        and `prerequisites`; `show` and `remove` take `step_id`; `refresh` takes an optional `step_id`; `plan` and
+        `ready` take nothing.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        ticket:
+          $ref: '#/components/schemas/OrchestrationTicketRef'
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        connection_id:
+          type: string
+          maxLength: 160
+        native_id:
+          description: The target ticket the step works; a slug is accepted and stored as the canonical id.
+          type: string
+          maxLength: 200
+        prerequisites:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/PlanPrerequisite'
+        step_id:
+          type:
+            - string
+            - 'null'
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      additionalProperties: false
+    PlanPrerequisite:
+      description:
+        Something that must hold before a step is dispatched (HS2-42TARA). `ticket` names a qualified target ticket
+        that must be confirmed finished with the required gates green, judged by the gates of the latest run on it or
+        of `commit` when named. `validation` names a validation step whose latest evidence must be `passed`.
+      oneOf:
+        - type: object
+          required:
+            - kind
+            - target_id
+            - connection_id
+            - native_id
+          properties:
+            kind:
+              const: ticket
+            target_id:
+              type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            connection_id:
+              type: string
+              maxLength: 160
+            native_id:
+              type: string
+              maxLength: 256
+            gates:
+              description: Defaults to `ci`.
+              enum:
+                - none
+                - ci
+                - deployment
+            commit:
+              type:
+                - string
+                - 'null'
+              pattern: ^[0-9a-fA-F]{40}$
+          additionalProperties: false
+        - type: object
+          required:
+            - kind
+            - step_id
+          properties:
+            kind:
+              const: validation
+            ticket:
+              description: The step's own orchestration ticket when omitted in a request.
+              anyOf:
+                - $ref: '#/components/schemas/OrchestrationTicketRef'
+                - type: 'null'
+            step_id:
+              type: string
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
+          additionalProperties: false
+    PlanStep:
+      type: object
+      required:
+        - step_id
+        - owner_checkout_id
+        - ticket
+        - target
+        - revision
+        - created_at_ms
+        - updated_at_ms
+      properties:
+        step_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        owner_checkout_id:
+          type: string
+        ticket:
+          $ref: '#/components/schemas/OrchestrationTicketRef'
+        target:
+          type: object
+          required:
+            - target_id
+            - connection_id
+            - native_id
+          properties:
+            target_id:
+              type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+          additionalProperties: false
+        prerequisites:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanPrerequisite'
+        revision:
+          type: integer
+          minimum: 1
+        created_at_ms:
+          type: integer
+          minimum: 0
+        updated_at_ms:
+          type: integer
+          minimum: 0
+        updated_by:
+          type: string
+      additionalProperties: false
+    ReadinessLevel:
+      description:
+        '`confirmed` is the only level work is dispatched on. `provisional` rests on an integrated commit whose gate is
+        still pending or whose ticket is not yet confirmed finished. `blocked`, `stale` and `cyclic` are not ready;
+        `in_progress` and `finished` have nothing to start (HS2-42TARA).'
+      enum:
+        - confirmed
+        - provisional
+        - blocked
+        - stale
+        - cyclic
+        - in_progress
+        - finished
+    ReadinessReason:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          description: A stable code such as `prerequisite_not_finished`, `gate_pending` or `target_unreachable`.
+          type: string
+        prerequisite:
+          $ref: '#/components/schemas/PlanPrerequisite'
+        commits:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    StepReadiness:
+      type: object
+      required:
+        - step
+        - level
+      properties:
+        step:
+          $ref: '#/components/schemas/PlanStep'
+        level:
+          $ref: '#/components/schemas/ReadinessLevel'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessReason'
+        base_commits:
+          description: The recorded commits a provisional step rests on.
+          type: array
+          items:
+            type: string
+        unblocks:
+          description: Unfinished steps that name this step's ticket as a prerequisite.
+          type: array
+          items:
+            type: string
+        cycle:
+          description: The steps of the cycle a cyclic step is part of.
+          type: array
+          items:
+            type: string
+        since_ms:
+          description: When the current level was first published as a `readiness` run event.
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    ReadinessPlan:
+      type: object
+      required:
+        - steps
+        - counts
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/StepReadiness'
+        counts:
+          description: Steps per level; a level with none is left out.
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+        cycles:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+        unverified:
+          description: '`refresh` only. Tickets whose read could not be confirmed.'
+          type: array
+          items:
+            type: object
+            required:
+              - target_id
+              - connection_id
+              - native_id
+            properties:
+              target_id:
+                type: string
+              connection_id:
+                type: string
+              native_id:
+                type: string
+            additionalProperties: false
+      additionalProperties: false
+    ReadyItem:
+      description: One piece of work that could be started, as the scheduler reads it (HS2-42TARA).
+      type: object
+      required:
+        - step_id
+        - ticket
+        - target
+        - level
+      properties:
+        step_id:
+          type: string
+        ticket:
+          $ref: '#/components/schemas/OrchestrationTicketRef'
+        target:
+          type: object
+          required:
+            - target_id
+            - connection_id
+            - native_id
+          properties:
+            target_id:
+              type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+          additionalProperties: false
+        level:
+          enum:
+            - confirmed
+            - provisional
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessReason'
+        base_commits:
+          type: array
+          items:
+            type: string
+        unblocks:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
+        up_next:
+          type: boolean
+        ticket_created_at_ms:
+          type: integer
+          minimum: 0
+        ready_since_ms:
+          type: integer
+          minimum: 0
       additionalProperties: false
     RemoteIdentity:
       type: object
