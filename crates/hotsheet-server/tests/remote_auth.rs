@@ -343,11 +343,13 @@ async fn hs2_7dbjms_origin_csrf_rotation_logout_and_restart() {
             .status(),
         StatusCode::FORBIDDEN
     );
+    // A write the session may make; `/stores` names a host path and needs host access since
+    // HS2-S8R3PD, so it no longer proves CSRF acceptance for a plain session.
     let allowed = router
         .clone()
         .oneshot(request(
             "POST",
-            "/stores",
+            "/checkouts/missing-checkout/close",
             Some(json!({})),
             Some(&session),
             Some(&csrf),

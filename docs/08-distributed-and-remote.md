@@ -221,7 +221,10 @@ id, origin, label and request id, then approves read-only or read-write access
 from the trusted local CLI or from App Settings → Devices on the host or an
 admin device. A session approves devices only with the **admin** grant; the
 separate **local** grant marks the host owner's own browser, which may use
-host-only actions such as the folder chooser (HS2-85W6BE). Trust never comes
+host-only actions such as the folder chooser (HS2-85W6BE). The server enforces
+the same grant on its own host-acting routes (difftool, file and attachment
+open/reveal/path, and routes that name an arbitrary host path), because the
+bridge forwards every project API path (HS2-S8R3PD). Trust never comes
 from the hostname, peer address or forwarded headers, because Tailscale Serve
 reaches the host through the same loopback port the owner opens locally. See
 [04](04-core-server-cli.md) §4.6.1 for the grant rules. The server issues a revocable,

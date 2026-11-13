@@ -3,6 +3,7 @@
 use crate::api_error::{ActorReq, ApiError, parse_actor};
 use crate::events::ChangeEvent;
 use crate::multistore::StoreEntry;
+use crate::routes::auth::HostAccess;
 use crate::routes::checkout_tickets::checkout_ticket_owner;
 use crate::routes::checkouts::repository_browser_api_error;
 use crate::routes::project_tools::checkout_settings;
@@ -445,6 +446,7 @@ fn attachment_disk_path(
 
 pub(crate) async fn act_on_checkout_ticket_attachment(
     State(state): State<AppState>,
+    _host: HostAccess,
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
     Json(request): Json<AttachmentHostActionRequest>,
 ) -> Result<Json<AttachmentHostActionResponse>, ApiError> {
@@ -471,6 +473,7 @@ pub(crate) async fn act_on_checkout_ticket_attachment(
 
 pub(crate) async fn act_on_checkout_ticket_attachment_by_name(
     State(state): State<AppState>,
+    _host: HostAccess,
     Path((reference, id, filename)): Path<(String, String, String)>,
     Json(request): Json<AttachmentHostActionRequest>,
 ) -> Result<Json<AttachmentHostActionResponse>, ApiError> {

@@ -70,6 +70,14 @@ a pre-grant catalog, the change cursor (visible changes only) and the long-poll 
 read-only admin, and local admin session (403 without admin, Origin/CSRF on changes,
 no local grant from a non-local admin, `revoke-all` host-only, 404/422 answers) and
 the long poll waking on a pairing and refusing a session revoked while it waited.
+HS2-S8R3PD: `hotsheet-server/tests/remote_host_access.rs` sends every host-acting
+server route (difftool, repository and attachment open/reveal, project open and
+checkout/store/Git-source registration and relink) as a plain session (403
+`host_access_required`, even with a malformed body), a local session and the local
+bearer (both admitted to the same downstream answer), keeps reads, code-review
+discovery and provider source links open to a plain session, and runs the attachment
+`path` action end to end per caller; `routes/auth.rs` unit tests the caller matrix and
+pins every host-launching handler to the `HostAccess` extractor.
 `clients/web/src/remote-auth-bridge.test.ts` gates the folder chooser on the local
 grant (Origin/CSRF still required) and management on the admin grant;
 `client-origin.test.ts` decides local versus remote from the grant on a remote-mode

@@ -10,6 +10,7 @@ pub(crate) use removal::remove_checkout_route;
 
 use crate::api_error::ApiError;
 use crate::multistore::{StoreEntry, StoreHost};
+use crate::routes::auth::{HostAccess, HostTrust};
 use crate::routes::checkout_tickets::{checkout_git_ticket, checkout_ticket_owner};
 use crate::routes::guidance::retry_pending_review;
 use crate::routes::providers::provider_transfer_error;
@@ -208,6 +209,7 @@ fn schedule_worklist_regeneration(
 /// (HS2-2VBN8Y).
 pub(crate) async fn open_project(
     State(state): State<AppState>,
+    _host: HostAccess,
     Json(body): Json<OpenProjectBody>,
 ) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
     let discovered = body.stores.is_none() && body.sources.is_none();
@@ -335,6 +337,7 @@ pub(crate) async fn list_checkouts(
 
 pub(crate) async fn register_checkout(
     State(state): State<AppState>,
+    _host: HostAccess,
     Json(body): Json<RegisterCheckoutBody>,
 ) -> Result<(StatusCode, Json<hotsheet_ticketing::checkouts::Checkout>), ApiError> {
     let mut sources = body.sources;
@@ -392,9 +395,12 @@ pub(crate) struct CheckoutSourceBody {
 pub(crate) async fn add_checkout_source(
     State(state): State<AppState>,
     Path((reference, connection_id)): Path<(String, String)>,
+    host: HostTrust,
     Json(body): Json<CheckoutSourceBody>,
 ) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
     let source = if body.provider == "git" {
+        // A Git source's locator is a store path on the host (HS2-S8R3PD).
+        host.require()?;
         // Hosting a new store builds its index (a full ticket parse): keep it off the
         // async request threads (HS2-2VBN8Y).
         let hosting_state = state.clone();
@@ -500,6 +506,7 @@ pub(crate) struct RelinkGitSourceResponse {
 pub(crate) async fn relink_checkout_git_source(
     State(state): State<AppState>,
     Path((reference, connection_id)): Path<(String, String)>,
+    _host: HostAccess,
     Json(body): Json<RelinkGitSourceBody>,
 ) -> Result<Json<RelinkGitSourceResponse>, ApiError> {
     let hosting_state = state.clone();
@@ -955,6 +962,7 @@ pub(crate) async fn checkout_repository_commits(
 
 pub(crate) async fn open_checkout_repository_review(
     State(state): State<AppState>,
+    _host: HostAccess,
     Path(reference): Path<String>,
     Json(target): Json<code_review::ReviewTarget>,
 ) -> Result<StatusCode, ApiError> {
@@ -981,6 +989,7 @@ pub(crate) async fn open_checkout_repository_review(
 
 pub(crate) async fn checkout_repository_file_action(
     State(state): State<AppState>,
+    _host: HostAccess,
     Path(reference): Path<String>,
     Json(request): Json<repository_browser::RepositoryFileActionRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -1145,6 +1154,7 @@ pub(crate) async fn get_checkout_code_review(
 
 pub(crate) async fn open_checkout_code_review(
     State(state): State<AppState>,
+    _host: HostAccess,
     Path((reference, id)): Path<(String, String)>,
     Json(target): Json<code_review::ReviewTarget>,
 ) -> Result<StatusCode, ApiError> {

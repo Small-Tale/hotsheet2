@@ -35,6 +35,7 @@ pub(crate) struct AddStoreBody {
 /// HS2-GM4FR2).
 pub(crate) async fn add_store(
     State(state): State<AppState>,
+    _host: crate::routes::auth::HostAccess,
     Json(body): Json<AddStoreBody>,
 ) -> Result<(StatusCode, Json<StoreInfo>), ApiError> {
     let (newly, info) = tokio::task::spawn_blocking(move || {

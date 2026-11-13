@@ -3,8 +3,9 @@
 use crate::AppState;
 use crate::api_error::ApiError;
 use axum::extract::ConnectInfo;
-use axum::extract::{Request, State};
-use axum::http::{Method, StatusCode};
+use axum::extract::{FromRequestParts, Request, State};
+use axum::http::request::Parts;
+use axum::http::{Extensions, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
 
@@ -40,9 +41,89 @@ fn primary_store_route(path: &str) -> bool {
         })
 }
 
+// ---- host access (HS2-S8R3PD) ----------------------------------------------------
+
+/// How [`require_secret`] authenticated a request. It is inserted on every request the
+/// middleware admits, so a handler can tell the trusted host from a remote browser.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Caller {
+    /// The machine secret from an allowed (loopback or local-listener) peer.
+    LocalBearer,
+    /// A client certificate accepted by the TLS listener.
+    Certificate,
+    /// A paired browser session; `local` is its host-trust grant (HS2-85W6BE).
+    BrowserSession { local: bool },
+}
+
+impl Caller {
+    /// Whether this caller may act on the host machine itself: launch a host application
+    /// (difftool, open, reveal) or name an arbitrary host path. A request that never passed
+    /// [`require_secret`] carries no caller and is refused.
+    pub(crate) fn host_trusted(caller: Option<&Self>) -> bool {
+        matches!(
+            caller,
+            Some(Self::LocalBearer | Self::Certificate | Self::BrowserSession { local: true })
+        )
+    }
+}
+
+/// Stable error code for [`host_access_required`].
+pub(crate) const HOST_ACCESS_REQUIRED_CODE: &str = "host_access_required";
+
+/// The refusal a remote browser session without the local grant gets from a host-only route.
+pub(crate) fn host_access_required() -> ApiError {
+    ApiError::new(
+        StatusCode::FORBIDDEN,
+        "this action runs on the computer hosting Hot Sheet and needs host access for this device",
+    )
+    .with_code(HOST_ACCESS_REQUIRED_CODE)
+}
+
+/// The one server-side check for host-only routes (HS2-S8R3PD). The browser bridge hides its
+/// own host-only routes, but every project API route is reachable through its proxy, so the
+/// server refuses host-launching and arbitrary-host-path routes itself.
+pub(crate) fn require_host_access(extensions: &Extensions) -> Result<(), ApiError> {
+    if Caller::host_trusted(extensions.get::<Caller>()) {
+        Ok(())
+    } else {
+        Err(host_access_required())
+    }
+}
+
+/// Extractor for a route that always acts on the host. List it before the body so a refused
+/// request never reaches checkout resolution or body parsing.
+pub(crate) struct HostAccess;
+
+impl<S: Send + Sync> FromRequestParts<S> for HostAccess {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        require_host_access(&parts.extensions).map(|()| Self)
+    }
+}
+
+/// Extractor for a route that acts on the host only for some bodies (a Git ticket source's
+/// locator is a host path; another provider's locator is not). Call [`HostTrust::require`]
+/// on that branch.
+pub(crate) struct HostTrust(Result<(), ApiError>);
+
+impl HostTrust {
+    pub(crate) fn require(self) -> Result<(), ApiError> {
+        self.0
+    }
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for HostTrust {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(Self(require_host_access(&parts.extensions)))
+    }
+}
+
 pub(crate) async fn require_secret(
     State(state): State<AppState>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
     let presented = req
@@ -61,11 +142,18 @@ pub(crate) async fn require_secret(
         .extensions()
         .get::<crate::tls::CertificateAuthenticated>()
         .is_some();
-    if !certificate
-        && (presented != Some(state.secret.as_str()) || !state.local_bearer_allowed(peer))
-    {
-        crate::routes::remote_auth::session(&state, req.headers(), is_mutation, false)?;
-    }
+    let caller = if certificate {
+        Caller::Certificate
+    } else if presented == Some(state.secret.as_str()) && state.local_bearer_allowed(peer) {
+        Caller::LocalBearer
+    } else {
+        let device =
+            crate::routes::remote_auth::session(&state, req.headers(), is_mutation, false)?;
+        Caller::BrowserSession {
+            local: device.local,
+        }
+    };
+    req.extensions_mut().insert(caller);
     if primary_store_route(req.uri().path()) {
         state.require_primary_store_identity()?;
     }
@@ -120,5 +208,81 @@ mod primary_store_route_tests {
         ] {
             assert!(!primary_store_route(path), "{path}");
         }
+    }
+}
+
+#[cfg(test)]
+mod host_access_tests {
+    use super::{Caller, require_host_access};
+    use axum::http::{Extensions, StatusCode};
+
+    #[test]
+    fn hs2_s8r3pd_only_host_trusted_callers_pass() {
+        for (caller, trusted) in [
+            (None, false),
+            (Some(Caller::LocalBearer), true),
+            (Some(Caller::Certificate), true),
+            (Some(Caller::BrowserSession { local: true }), true),
+            (Some(Caller::BrowserSession { local: false }), false),
+        ] {
+            let mut extensions = Extensions::new();
+            if let Some(caller) = caller {
+                extensions.insert(caller);
+            }
+            match require_host_access(&extensions) {
+                Ok(()) => assert!(trusted, "{caller:?}"),
+                Err(error) => {
+                    assert!(!trusted, "{caller:?}");
+                    assert_eq!(error.status, StatusCode::FORBIDDEN);
+                }
+            }
+        }
+    }
+
+    /// HS2-S8R3PD policy: a route handler that starts a host program must take the
+    /// `HostAccess` extractor, so a new launcher cannot skip the shared check.
+    #[test]
+    fn hs2_s8r3pd_every_host_launching_handler_takes_host_access() {
+        const LAUNCHERS: &[&str] = &[
+            "repository_browser::act_on_host_path(",
+            "repository_browser::act_on_file(",
+            "code_review::launch(",
+            "code_review::launch_repository(",
+        ];
+        let routes = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/routes");
+        let mut pending = vec![routes];
+        let mut launching = 0;
+        while let Some(dir) = pending.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    pending.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|ext| ext != "rs") {
+                    continue;
+                }
+                let source = std::fs::read_to_string(&path).unwrap();
+                // Production code only: test modules (this one included) name the launchers.
+                let production = source.split("#[cfg(test)]").next().unwrap_or_default();
+                for handler in production.split("pub(crate) async fn ").skip(1) {
+                    if !LAUNCHERS.iter().any(|launcher| handler.contains(launcher)) {
+                        continue;
+                    }
+                    launching += 1;
+                    let signature = handler.split(") ->").next().unwrap_or_default();
+                    let name = handler.split('(').next().unwrap_or_default();
+                    assert!(
+                        signature.contains("HostAccess"),
+                        "{}: `{name}` launches a host program without HostAccess",
+                        path.display()
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            launching, 5,
+            "host-launching handlers changed; review the inventory"
+        );
     }
 }
