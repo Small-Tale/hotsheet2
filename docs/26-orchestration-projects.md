@@ -381,7 +381,8 @@ grant is never dropped, and a target full of active grants refuses a new one.
 A request whose actor role is `ai` is refused with 403 `forbidden`, the routes are
 machine-local like bindings, and the MCP tool offers only the read views. Issuing a
 grant requires the target to resolve as usable at that moment, because the grant
-pins that confirmed destination. Revoking needs no registered owner, manifest,
+pins that confirmed destination. Like `authorize`, it resolves again when a follower
+resolving the same target wins the race (HS2-YZBCX5). Revoking needs no registered owner, manifest,
 binding or reachable target, so authority can always be withdrawn.
 
 The actor id is self-declared, as everywhere in Hot Sheet. Grants scope and record

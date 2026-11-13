@@ -130,7 +130,8 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<GrantView, OrchestrationError> {
         person(actor)?;
-        let resolution = self.resolve(target, tx)?;
+        // HS2-YZBCX5: a follower resolving the same target is no reason to refuse.
+        let resolution = self.resolve_contended(target, tx)?;
         let Some(destination) = resolution
             .binding
             .destination
@@ -165,6 +166,27 @@ impl OrchestrationRuntime {
             )?;
         }
         Ok(view)
+    }
+
+    /// A fresh resolution that survives contention on this machine. Every resolution
+    /// rewrites the binding's observation, so two of the same target at once (a
+    /// follower and a request, or the CLI beside the server) leave the later writer
+    /// with a conflict (HS2-WBREDM). That says nothing about the target: resolve
+    /// again, a bounded number of times, rather than refuse. Used by `authorize` and,
+    /// since HS2-YZBCX5, by a person's `grant`.
+    fn resolve_contended(
+        &self,
+        target: &TargetRef,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TargetResolution, OrchestrationError> {
+        let mut resolution = self.resolve(target, tx);
+        for _ in 0..RESOLVE_ATTEMPTS {
+            if !matches!(resolution, Err(OrchestrationError::Conflict)) {
+                break;
+            }
+            resolution = self.resolve(target, tx);
+        }
+        resolution
     }
 
     /// Withdraw a grant. Needs no registered owner, manifest, binding or reachable
@@ -256,18 +278,7 @@ impl OrchestrationRuntime {
         };
         // An unknown owner, tombstoned target or failed probe is a denial, not an error
         // the caller could mistake for "try the action anyway".
-        let mut resolution = self.resolve(target, tx);
-        // HS2-WBREDM: every resolution rewrites the binding's observation, so two of
-        // the same target at once (a follower and a request, or the CLI beside the
-        // server) leave the later writer with a conflict. That is contention on this
-        // machine and says nothing about the target: resolve again, a bounded number
-        // of times, rather than deny.
-        for _ in 0..RESOLVE_ATTEMPTS {
-            if !matches!(resolution, Err(OrchestrationError::Conflict)) {
-                break;
-            }
-            resolution = self.resolve(target, tx);
-        }
+        let resolution = self.resolve_contended(target, tx);
         let destination = resolution.as_ref().ok().and_then(|resolution| {
             resolution
                 .binding
