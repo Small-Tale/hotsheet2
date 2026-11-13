@@ -467,14 +467,15 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
             effort: Some("high".into()),
             label,
             role: SessionRole::Worker,
-            role_prompt: role_prompt_text(SessionRole::Worker, &hosted.worker_id, None),
+            // HS2-YC2P7K: started for a run, it asks for the run's exact ticket.
+            role_prompt: role_prompt_text(SessionRole::Worker, &hosted.worker_id, Some(&work.slug)),
         }
     );
     assert_eq!(
         *f.host.joined.lock().unwrap(),
         [(
             hosted.session_id.clone(),
-            role_prompt_text(SessionRole::Worker, &hosted.worker_id, None)
+            role_prompt_text(SessionRole::Worker, &hosted.worker_id, Some(&work.slug))
         )]
     );
     // HS2-2DPGDY: the record keeps the answer; the role prompt names the worker id.
@@ -1100,6 +1101,7 @@ fn hs2_gdjxgz_a_crashed_session_is_lost_and_replaced_by_a_new_one() {
                             owner_checkout_id: owner.clone(),
                             project: f.m.owner.alias.clone(),
                             run_id: None,
+                            ticket: None,
                         },
                     },
                     limits: None,
@@ -1382,6 +1384,7 @@ fn hs2_gdjxgz_a_role_session_starts_only_when_the_target_has_none() {
                             owner_checkout_id: "elsewhere-0123456789ab".into(),
                             project: "Another project".into(),
                             run_id: None,
+                            ticket: None,
                         },
                     },
                     limits: None,

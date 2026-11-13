@@ -32,7 +32,7 @@ fn policy(automatic: bool) -> Value {
         "machine": {"max_sessions": 4},
         "tools": [{"tool": IDLE_TOOL, "max_sessions": 2}],
         "targets": [{"target_id": TARGET,
-            "actions": ["tickets_read", "gates_observe", "sessions_manage"],
+            "actions": ["tickets_read", "gates_observe", "sessions_manage", "work_start"],
             "tools": [{"tool": IDLE_TOOL}], "max_sessions": 1}],
         "wind_down": {"idle_minutes": 1, "keep_warm": 0},
         "placement": {"automatic": automatic, "actor": "scheduler-1", "cooldown_minutes": 0}
@@ -176,7 +176,7 @@ async fn hs2_95swq4_an_automatic_policy_starts_a_session_for_ready_work_and_wind
         "POST",
         &format!("{base}/targets/{TARGET}/grants"),
         json!({"actor_id":"scheduler-1",
-            "actions":["tickets_read","gates_observe","sessions_manage"],
+            "actions":["tickets_read","gates_observe","sessions_manage","work_start"],
             "session_scope":{"tools":[{"tool":IDLE_TOOL}],"max_concurrency":2},
             "expires_at_ms":expires,"actor":person}),
         true,
@@ -259,15 +259,18 @@ async fn hs2_95swq4_an_automatic_policy_starts_a_session_for_ready_work_and_wind
     assert_eq!(session["session_id"], start["session_id"]);
     assert_eq!(session["operation_id"], operation);
     assert_eq!(session["state"], "running");
-    assert_eq!(session.get("run_id"), None);
-    // It is an ordinary AI terminal of this server, labelled for the project.
+    // HS2-YC2P7K: the step's run was dispatched for the target's dispatcher and the
+    // session works it.
+    let run_id = session["run_id"].as_str().unwrap().to_owned();
+    assert_eq!(start["run_id"], run_id.as_str());
+    // It is an ordinary AI terminal of this server, labelled for the project's run.
     let terminals = drawer(&router).await;
     assert_eq!(terminals.len(), 1, "{terminals:?}");
     assert_eq!(terminals[0]["id"], session["hosted"]["session_id"]);
     assert_eq!(terminals[0]["tool"], IDLE_TOOL);
     assert_eq!(
         terminals[0]["name"],
-        format!("{}: worker", checkout.alias).as_str()
+        format!("{}: run {}", checkout.alias, &run_id[run_id.len() - 8..]).as_str()
     );
 
     // The terminal is killed from outside, which is what a crash looks like to the
@@ -317,6 +320,11 @@ async fn hs2_95swq4_an_automatic_policy_starts_a_session_for_ready_work_and_wind
     assert_eq!(session["operation_id"], format!("{operation}.2").as_str());
     assert_eq!(session["replaces"], first["session_id"]);
     assert_eq!(session["state"], "running");
+    assert_eq!(
+        session["run_id"],
+        run_id.as_str(),
+        "the same run, not a second"
+    );
     let terminals = drawer(&router).await;
     assert_eq!(terminals.len(), 1, "{terminals:?}");
     assert_eq!(terminals[0]["id"], session["hosted"]["session_id"]);
@@ -333,6 +341,16 @@ async fn hs2_95swq4_an_automatic_policy_starts_a_session_for_ready_work_and_wind
         },
     )
     .unwrap();
+    // The run learns it, as the target's follower would on the change.
+    let synced = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/runs/{run_id}/sync"),
+        json!({"actor":actor}),
+        true,
+    )
+    .await;
+    assert_eq!(synced.1["state"], "completed", "{}", synced.1);
     let refreshed = api(
         router.clone(),
         "POST",

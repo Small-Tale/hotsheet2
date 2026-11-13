@@ -51,8 +51,9 @@ pub use scheduler::{
     TickView,
 };
 pub use session_control::{
-    ExecutorUnavailable, PlacementStart, RecordingSessions, SessionCall, SessionExecutor,
-    SessionExecutorError, StartOutcome, WindDownOutcome, WindDownSession,
+    AssignOutcome, ExecutorUnavailable, PlacementAssign, PlacementStart, RecordingSessions,
+    SessionCall, SessionExecutor, SessionExecutorError, StartOutcome, WindDownOutcome,
+    WindDownSession,
 };
 pub use session_executor::{OwnedSessions, UNCONFIRMED_START_MS};
 pub use sessions::{

@@ -1417,6 +1417,9 @@ pub struct DecisionRecord {
     pub outcome_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
+    /// HS2-YC2P7K: the run an applied start or refill dispatched for its step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
     #[serde(default)]
     pub probe: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1443,6 +1446,7 @@ impl JournalRecord for DecisionRecord {
             self.account.as_ref(),
             self.session_id.as_ref(),
             self.step_id.as_ref(),
+            self.run_id.as_ref(),
             self.reason.as_ref(),
             self.outcome.as_ref(),
             self.outcome_detail.as_ref(),

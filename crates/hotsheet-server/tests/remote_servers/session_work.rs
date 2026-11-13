@@ -6,8 +6,8 @@
 use super::orchestration::api;
 use super::sessions::{drawer, git_project};
 use super::*;
-use hotsheet_ticketing::StoreMetadata;
 use hotsheet_ticketing::checkouts::{Checkout, CheckoutRegistry};
+use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -158,6 +158,18 @@ pub(super) struct World {
 
 impl World {
     pub(super) async fn new(actions: &[&str], agent: &str, plugin_extra: &str) -> Self {
+        Self::with_store(actions, agent, plugin_extra, false).await
+    }
+
+    /// `served`: the project's linked store is the one this server serves, so ticket
+    /// writes through its ticket routes reach its change feed, as they do for a
+    /// project open in it.
+    pub(super) async fn with_store(
+        actions: &[&str],
+        agent: &str,
+        plugin_extra: &str,
+        served: bool,
+    ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
         let root = tempfile::tempdir().unwrap();
@@ -175,8 +187,13 @@ impl World {
             )]);
         let project = root.path().join("project");
         git_project(&project);
-        let project_store = root.path().join("project-store");
-        FsStore::init_git(&project_store, &StoreMetadata::new("TST")).unwrap();
+        let project_store = if served {
+            server_store.clone()
+        } else {
+            let store = root.path().join("project-store");
+            FsStore::init_git(&store, &StoreMetadata::new("TST")).unwrap();
+            store
+        };
         let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
             .register(&project, None, None, vec![project_store.clone()])
             .unwrap();
@@ -254,6 +271,21 @@ impl World {
             .await;
         assert_eq!(status, StatusCode::OK, "{view}");
         view
+    }
+
+    /// A synthetic ticket in the project's own store.
+    pub(super) fn ticket(&self, title: &str) -> hotsheet_model::Ticket {
+        ops::create(
+            &FsStore::open(&self.project_store).unwrap(),
+            hotsheet_model::Ulid::new(),
+            "TST",
+            "2026-10-15T00:00:00Z".into(),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
     }
 
     async fn bind_and_grant(&self, actions: &[&str]) {
@@ -514,4 +546,312 @@ async fn hs2_wefjv8_a_session_in_another_checkout_starts_with_that_checkouts_con
         "tool_setup_failed"
     );
     assert_eq!(drawer(&world.router).await.len(), 1);
+}
+
+/// Every decision record of the owner's scheduler, in order.
+async fn decisions(world: &World) -> Vec<Value> {
+    let mut entries = Vec::new();
+    let mut after = 0;
+    loop {
+        let page = world
+            .call(
+                "POST",
+                "/scheduler/decisions",
+                json!({"after": after, "limit": 200}),
+            )
+            .await
+            .1;
+        entries.extend(page["entries"].as_array().unwrap().iter().cloned());
+        after = page["cursor"].as_u64().unwrap();
+        if page["more"] != true {
+            return entries;
+        }
+    }
+}
+
+/// Waits, woken by the decision log changing, for the first decision wanted.
+async fn decided(
+    world: &World,
+    what: &str,
+    wanted: impl Fn(&Value) -> bool,
+    within: std::time::Duration,
+) -> (Value, Vec<Value>) {
+    let directory = world.home.join("orchestration-scheduler-decisions");
+    std::fs::create_dir_all(&directory).unwrap();
+    let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).unwrap();
+    let deadline = std::time::Instant::now() + within;
+    loop {
+        let log = decisions(world).await;
+        if let Some(found) = log.iter().find(|entry| wanted(entry)) {
+            return (found.clone(), log);
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(!remaining.is_zero(), "no {what}: {log:?}");
+        tokio::task::block_in_place(|| waiter.wait(remaining));
+    }
+}
+
+/// Waits on the run's own event stream (the server's long poll, never a timer) until
+/// its status satisfies `wanted`.
+async fn run_until(
+    world: &World,
+    run_id: &str,
+    what: &str,
+    wanted: impl Fn(&Value) -> bool,
+) -> Value {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let mut cursor = 0;
+    loop {
+        let status = world
+            .call("GET", &format!("/runs/{run_id}/status"), Value::Null)
+            .await
+            .1;
+        if wanted(&status) {
+            return status;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "run never {what}: {status}"
+        );
+        let page = world
+            .call(
+                "GET",
+                &format!("/run-events?after={cursor}&run={run_id}&wait_ms=5000"),
+                Value::Null,
+            )
+            .await
+            .1;
+        cursor = page["cursor"].as_u64().unwrap_or(cursor);
+    }
+}
+
+/// HS2-YC2P7K with HS2-WEFJV8 and HS2-2DPGDY: the whole chain an orchestrator-started
+/// session walks, on one real server with the push-capable fake agent. An automatic
+/// policy and a confirmed ready step; the loop dispatches the step's run and starts a
+/// session linked to it in the target checkout, set up for its tool; the role prompt
+/// reaches the tool when it is ready and asks for the exact ticket; the session joins
+/// the target's pool, claims that ticket under its own worker id and finishes it; the
+/// run follows; the session is wound down at a safe point. Where the test plays the
+/// agent's part (registering, claiming, finishing), it does exactly what the worker
+/// skill does through the same stores.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_yc2p7k_an_orchestrator_started_session_works_its_step_end_to_end() {
+    let actions = [
+        "tickets_read",
+        "gates_observe",
+        "sessions_manage",
+        "work_start",
+    ];
+    let world = World::with_store(&actions, PUSH_AGENT, PUSH_PLUGIN, true).await;
+    let orchestration = world.ticket("Coordinate the synthetic chain");
+    let work = world.ticket("Synthetic chained work");
+    let actor = json!({"role":"ai","id":"scheduler-1"});
+    let defined = world
+        .call(
+            "POST",
+            "/readiness/define",
+            json!({"actor":actor,"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET,"connection_id":world.checkout.sources[0].connection_id,
+                "native_id":work.slug}),
+        )
+        .await;
+    assert_eq!(defined.0, StatusCode::OK, "{}", defined.1);
+    assert_eq!(defined.1["level"], "confirmed", "{}", defined.1);
+    let step = defined.1["step"]["step_id"].as_str().unwrap().to_owned();
+
+    // A person enables automatic placement; the project's orchestration files are
+    // committed like any other project file.
+    world
+        .allow(
+            &actions,
+            json!({"wind_down":{"idle_minutes":1,"keep_warm":0},
+                "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":0}}),
+        )
+        .await;
+    commit_all(&world.project);
+
+    // 1. The loop dispatches the step's run and starts a session linked to it.
+    let minute = std::time::Duration::from_secs(60);
+    let started = |entry: &Value| entry["kind"] == "start" && entry["outcome"] == "started";
+    let (start, _) = decided(&world, "started session", started, minute).await;
+    assert_eq!(start["mode"], "applied");
+    assert_eq!(start["step_id"], step.as_str());
+    let run_id = start["run_id"]
+        .as_str()
+        .expect("the start names its run")
+        .to_owned();
+    let runs = world.call("GET", "/runs", Value::Null).await.1;
+    let runs = runs.as_array().unwrap();
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert_eq!(runs[0]["run_id"], run_id.as_str());
+    assert_eq!(
+        runs[0]["operation_id"],
+        format!("sched-run-{step}").as_str()
+    );
+    assert_eq!(runs[0]["mode"], "dispatcher");
+    let session = world
+        .call(
+            "GET",
+            &format!("/sessions/{}", start["session_id"].as_str().unwrap()),
+            Value::Null,
+        )
+        .await
+        .1;
+    assert_eq!(session["state"], "running", "{session}");
+    assert_eq!(session["run_id"], run_id.as_str(), "{session}");
+    // The step is in progress; the target ticket is queued for the target's dispatcher.
+    let readiness = world
+        .call("POST", "/readiness/show", json!({"step_id": step}))
+        .await
+        .1;
+    assert_eq!(readiness["level"], "in_progress", "{readiness}");
+    let store = FsStore::open(&world.project_store).unwrap();
+    assert!(ops::resolve(&store, &work.slug).unwrap().unwrap().up_next);
+
+    // 2. The session started in the target checkout with its configuration.
+    let terminal = session["hosted"]["session_id"].as_str().unwrap().to_owned();
+    let worker = session["hosted"]["worker_id"].as_str().unwrap().to_owned();
+    let report = launch_report(&world.reports, &terminal);
+    assert_eq!(
+        Path::new(report["cwd"].as_str().unwrap()),
+        world.project.canonicalize().unwrap()
+    );
+    assert_eq!(report["files"]["AGENTS.md"], true, "{report}");
+    assert_eq!(report["files"][".mcp.json"], true, "{report}");
+    assert_eq!(
+        report["env"]["HOTSHEET_WORKER_ID"],
+        worker.as_str(),
+        "{report}"
+    );
+    assert_eq!(report["env"]["HOTSHEET_SESSION_ROLE"], "worker", "{report}");
+
+    // 3. The tool comes up; the role prompt reaches it and asks for the exact ticket.
+    let prompt = received_prompt(&world.reports, &terminal, "`hotsheet-worker`");
+    assert!(prompt.contains(&worker), "{prompt}");
+    assert!(prompt.contains(&format!("`{}`", work.slug)), "{prompt}");
+    let synced = world.sync(&session).await;
+    assert_eq!(synced["role_prompt"], "delivered", "{synced}");
+
+    // 4. The session joins the target's pool as its skill does; the next read
+    //    confirms it.
+    join_pool(&world, &worker);
+    let joined = world.sync(&session).await;
+    assert!(joined["joined_at_ms"].as_u64().is_some(), "{joined}");
+
+    // 5. The target's dispatcher assigns the requested ticket and the session claims
+    //    it under its own worker id. The run follows the target's change feed.
+    // It acts through this server, as its Hot Sheet tools do, so the server's change
+    // feed carries the claim.
+    let ticket_path = format!("/tickets/{}", work.id);
+    let claimed = api(
+        world.router.clone(),
+        "POST",
+        &format!("{ticket_path}/claim"),
+        json!({"worker": worker, "lease_minutes": 30}),
+        true,
+    )
+    .await;
+    assert_eq!(claimed.0, StatusCode::OK, "{}", claimed.1);
+    let dispatched = run_until(&world, &run_id, "dispatched to the session", |status| {
+        status["state"] == "dispatched"
+    })
+    .await;
+    assert_eq!(dispatched["worker_id"], worker.as_str(), "{dispatched}");
+
+    // Repeated passes in all this time started nothing more and dispatched nothing more.
+    let log = decisions(&world).await;
+    assert_eq!(
+        log.iter().filter(|entry| started(entry)).count(),
+        1,
+        "{log:?}"
+    );
+    assert_eq!(
+        world
+            .call("GET", "/runs", Value::Null)
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        world
+            .call("GET", "/sessions", Value::Null)
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(drawer(&world.router).await.len(), 1);
+
+    // 6. The work is finished: committed, completed and the claim released.
+    commit_all(&world.project);
+    let finished = api(
+        world.router.clone(),
+        "PATCH",
+        &ticket_path,
+        json!({"status": "completed"}),
+        true,
+    )
+    .await;
+    assert_eq!(finished.0, StatusCode::OK, "{}", finished.1);
+    let released = api(
+        world.router.clone(),
+        "POST",
+        &format!("{ticket_path}/release"),
+        json!({"worker": worker}),
+        true,
+    )
+    .await;
+    assert_eq!(released.0, StatusCode::OK, "{}", released.1);
+    run_until(&world, &run_id, "completed", |status| {
+        status["state"] == "completed"
+    })
+    .await;
+    let readiness = world
+        .call("POST", "/readiness/show", json!({"step_id": step}))
+        .await
+        .1;
+    assert_eq!(readiness["level"], "finished", "{readiness}");
+
+    // 7. The session idles out and is wound down at its safe point.
+    let (stop, _) = decided(
+        &world,
+        "wind-down",
+        |entry| entry["kind"] == "wind_down" && entry["outcome"] == "wind_down_requested",
+        3 * minute,
+    )
+    .await;
+    assert_eq!(stop["session_id"], session["session_id"]);
+    assert_eq!(stop["reason"], "idle");
+    let after = world
+        .call(
+            "GET",
+            &format!("/sessions/{}", session["session_id"].as_str().unwrap()),
+            Value::Null,
+        )
+        .await
+        .1;
+    assert_eq!(after["state"], "stopped", "{after}");
+    assert!(drawer(&world.router).await.is_empty());
+    // Still one run and one session: the finished step was never dispatched again.
+    assert_eq!(
+        world
+            .call("GET", "/runs", Value::Null)
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let log = decisions(&world).await;
+    assert_eq!(
+        log.iter().filter(|entry| started(entry)).count(),
+        1,
+        "{log:?}"
+    );
 }

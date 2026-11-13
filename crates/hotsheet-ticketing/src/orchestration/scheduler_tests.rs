@@ -1567,6 +1567,7 @@ fn record(kind: DecisionKind) -> DecisionRecord {
         outcome: None,
         outcome_detail: None,
         operation_id: None,
+        run_id: None,
         probe: false,
         retry_at_ms: None,
         score: Some(ScoreParts::default()),

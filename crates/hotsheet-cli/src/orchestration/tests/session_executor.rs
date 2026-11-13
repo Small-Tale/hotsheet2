@@ -7,10 +7,10 @@ use std::cell::Cell;
 use hotsheet_model::Ticket;
 use hotsheet_ticketing::orchestration::{
     ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, CreateGrant, MachineLimits,
-    NewSession, OrchestratedSession, PlacementAction, PlacementPolicy, PolicyBody,
-    ScheduledSession, SchedulerStore, SessionActivity, SessionIdleStore, SessionLoad, SessionOwner,
-    SessionRegistry, SessionRole, SessionScope, SessionState, SetPolicy, TargetAction,
-    TargetPolicy, ToolPolicy, ToolScope, WindDown,
+    NewSession, OrchestratedSession, PlacementAction, PlacementPolicy, PolicyBody, ReadinessLevel,
+    RunState, ScheduledSession, SchedulerStore, SessionActivity, SessionIdleStore, SessionLoad,
+    SessionOwner, SessionRegistry, SessionRole, SessionScope, SessionState, SetPolicy,
+    TargetAction, TargetPolicy, ToolPolicy, ToolScope, WindDown,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::json;
@@ -203,8 +203,40 @@ impl Placed {
             .step
             .step_id
     }
-    /// The work is withdrawn from the plan.
+    /// HS2-YC2P7K: the latest run the scheduler dispatched for a step.
+    fn run_of(&self, step_id: &str) -> hotsheet_ticketing::orchestration::Run {
+        self.m
+            .runtime
+            .run_list(&self.owner(), false)
+            .unwrap()
+            .into_iter()
+            .filter(|run| {
+                run.operation_id
+                    .starts_with(&format!("sched-run-{step_id}"))
+            })
+            .max_by_key(|run| {
+                (
+                    run.created_at_ms,
+                    run.operation_id.len(),
+                    run.operation_id.clone(),
+                )
+            })
+            .unwrap_or_else(|| panic!("no run for {step_id}"))
+    }
+    /// The work is withdrawn: its run is cancelled (HS2-YC2P7K) and its step removed
+    /// from the plan.
     fn gone(&self, step_id: &str, tx: &mut Transaction<'_>) {
+        for run in self.m.runtime.run_list(&self.owner(), true).unwrap() {
+            if run
+                .operation_id
+                .starts_with(&format!("sched-run-{step_id}"))
+            {
+                self.m
+                    .runtime
+                    .run_cancel(&self.owner(), &run.run_id, Some(&worker()), tx)
+                    .unwrap();
+            }
+        }
         self.m
             .runtime
             .readiness_remove(
@@ -346,6 +378,21 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
         tick.outcomes[0].session_id.as_deref(),
         Some(session.session_id.as_str())
     );
+    // HS2-YC2P7K: the step's run was dispatched for the target's dispatcher and the
+    // session works it.
+    let run = f.run_of(&step);
+    assert_eq!(run.operation_id, format!("sched-run-{step}"));
+    assert_eq!(
+        (run.mode, run.state),
+        (
+            hotsheet_ticketing::orchestration::DispatchMode::Dispatcher,
+            hotsheet_ticketing::orchestration::RunState::Queued
+        )
+    );
+    assert_eq!(
+        tick.outcomes[0].run_id.as_deref(),
+        Some(run.run_id.as_str())
+    );
     assert_eq!(
         (
             session.state,
@@ -353,7 +400,12 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
             session.tool.as_str(),
             &session.run_id
         ),
-        (SessionState::Running, SessionRole::Worker, "codex", &None)
+        (
+            SessionState::Running,
+            SessionRole::Worker,
+            "codex",
+            &Some(run.run_id.clone())
+        )
     );
     assert_eq!(f.host.launches().len(), 1);
     // The gate was passed under the scheduler's operation id, as the system acting
@@ -371,18 +423,28 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
             Some(operation.clone())
         )]
     );
-    // A session without a run publishes no run event: its start moved the marker.
-    assert_ne!(f.wake_token(), before);
+    // The step is in progress: it left the ready work.
+    let _ = before;
+    assert_eq!(
+        f.m.runtime
+            .readiness(&f.owner(), &step, &mut tx)
+            .unwrap()
+            .readiness
+            .level,
+        hotsheet_ticketing::orchestration::ReadinessLevel::InProgress
+    );
 
-    // Later passes find the session and start nothing more for the step.
+    // Later passes find the session working its run and start nothing more.
     for _ in 0..3 {
         let again = f.tick(&mut tx);
         assert!(again.outcomes.is_empty());
+        assert!(again.view.schedule.unplaced.is_empty());
         assert_eq!(
             placement(&again, &session.session_id),
-            (PlacementAction::Keep, "refill")
+            (PlacementAction::Keep, "busy")
         );
     }
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
     assert_eq!(f.host.launches().len(), 1);
     let listed = f.listed(&mut tx);
     assert_eq!(listed.len(), 1);
@@ -399,9 +461,10 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
         ),
         (
             session.session_id.as_str(),
-            &None,
+            &Some(run.run_id.clone()),
             Some(f.owner().as_str()),
-            SessionActivity::Idle,
+            // Between turns, but its run is unfinished: it is working.
+            SessionActivity::Busy,
             true,
             false,
             false,
@@ -418,7 +481,7 @@ fn hs2_95swq4_a_repeated_operation_id_is_the_same_start() {
     let step = f.ready("First", &mut tx);
     let request = f.start_request(&step, no_load());
     let first = OwnedSessions.start(&f.m.runtime, &request, &mut tx);
-    let StartOutcome::Started { session_id } = &first else {
+    let StartOutcome::Started { session_id, .. } = &first else {
         panic!("{first:?}");
     };
     // Asked again, twice, and after time has passed: the same session, one launch.
@@ -521,8 +584,25 @@ fn hs2_95swq4_the_gate_sees_the_larger_of_the_decided_and_the_recorded_load() {
     );
     assert_eq!(f.host.launches().len(), 2);
     // And the pass itself, counting from the list, starts nothing for the step: a
-    // free session of the target takes it.
+    // free session of the target takes it, and with it the step's run (HS2-YC2P7K).
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("assigned", None)]);
+    assert_eq!(f.host.launches().len(), 2);
+    let run = f.run_of(&step);
+    assert_eq!(
+        tick.outcomes[0].run_id.as_deref(),
+        Some(run.run_id.as_str())
+    );
+    assert_eq!(
+        f.records()
+            .iter()
+            .filter(|session| session.run_id.as_deref() == Some(run.run_id.as_str()))
+            .count(),
+        1
+    );
+    // Repeated passes assign nothing more: the session works its run now.
     assert!(f.tick(&mut tx).outcomes.is_empty());
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
     let _ = clock;
 }
 
@@ -743,7 +823,19 @@ fn hs2_95swq4_an_idle_session_is_wound_down_only_at_a_safe_point() {
         Some("wound_down")
     );
     assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
-    assert_ne!(f.wake_token(), before, "its exit moved the marker");
+    // Its run was cancelled with the work; its stop is published on that run.
+    let _ = before;
+    let events =
+        f.m.runtime
+            .run_events(&f.owner(), 0, 200, session.run_id.as_deref(), 0)
+            .unwrap();
+    assert!(
+        events
+            .entries
+            .iter()
+            .any(|entry| entry.record.reason.as_deref() == Some("session_stopped")),
+        "its exit is on its run's stream"
+    );
     assert!(f.audited("sessions_manage").contains(&(
         AuditOutcome::Allowed,
         None,
@@ -861,8 +953,21 @@ fn hs2_95swq4_a_crashed_session_is_lost_and_replaced_each_time() {
             lost.history.last().unwrap().reason.as_deref(),
             Some("host_lost")
         );
-        assert_ne!(f.wake_token(), before);
+        // HS2-YC2P7K: the loss is on the run's stream, and the replacement works
+        // the same run: nothing is dispatched twice.
+        let _ = before;
+        let run = f.run_of(&step);
+        assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+        assert!(
+            f.m.runtime
+                .run_events(&f.owner(), 0, 500, Some(&run.run_id), 0)
+                .unwrap()
+                .entries
+                .iter()
+                .any(|entry| entry.record.reason.as_deref() == Some("session_lost"))
+        );
         let replacement = f.record(&format!("{operation}.{generation}"));
+        assert_eq!(replacement.run_id.as_deref(), Some(run.run_id.as_str()));
         assert_eq!(replacement.state, SessionState::Running);
         assert_eq!(
             replacement.replaces.as_deref(),
@@ -1042,4 +1147,171 @@ fn hs2_95swq4_a_session_the_policy_no_longer_permits_is_kept_for_a_person_to_sto
         .unwrap();
     assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
     let _ = clock;
+}
+
+impl Placed {
+    /// HS2-YC2P7K: the target ticket of a step is finished, and its run learns it.
+    fn finish(&self, step_id: &str, tx: &mut Transaction<'_>) {
+        let run = self.run_of(step_id);
+        let ticket = ops::resolve(&self.m.target_store, &run.target.native_id)
+            .unwrap()
+            .unwrap();
+        ops::update(
+            &self.m.target_store,
+            &ticket.id,
+            NOW.into(),
+            hotsheet_ticketing::TicketPatch {
+                status: Some(hotsheet_model::Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        self.m
+            .runtime
+            .run_sync(&self.owner(), &run.run_id, Some(&worker()), tx)
+            .unwrap();
+    }
+    fn level(&self, step_id: &str, tx: &mut Transaction<'_>) -> ReadinessLevel {
+        self.m
+            .runtime
+            .readiness(&self.owner(), step_id, tx)
+            .unwrap()
+            .readiness
+            .level
+    }
+}
+
+/// HS2-YC2P7K: a start whose session is refused leaves its run queued. The step is
+/// in progress, so nothing new is dispatched; once the refusal is waited out a
+/// session starts for that same run.
+#[test]
+fn hs2_yc2p7k_a_refused_session_leaves_its_run_and_a_later_session_takes_it() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.host.refusing.store(true, Ordering::SeqCst);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("refused", Some("session_start_failed"))]);
+    let run = f.run_of(&step);
+    assert_eq!(run.state, RunState::Queued);
+    assert_eq!(f.level(&step, &mut tx), ReadinessLevel::InProgress);
+    // Waiting out the refusal: the orphaned run is work, deferred like any other.
+    f.host.refusing.store(false, Ordering::SeqCst);
+    let waiting = f.tick(&mut tx);
+    assert!(waiting.outcomes.is_empty());
+    assert_eq!(waiting.view.schedule.unplaced[0].step_id, step);
+    assert_eq!(
+        waiting.view.schedule.unplaced[0].reason.code(),
+        "refusal_backoff"
+    );
+    f.at(&clock, START + 2 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(
+        tick.outcomes[0].run_id.as_deref(),
+        Some(run.run_id.as_str())
+    );
+    let session = f.record(&format!("sched-start-{step}.2"));
+    assert_eq!(session.run_id.as_deref(), Some(run.run_id.as_str()));
+    // One run in all, and repeated passes add nothing.
+    for _ in 0..3 {
+        assert!(f.tick(&mut tx).outcomes.is_empty());
+    }
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+}
+
+/// HS2-YC2P7K: placing work is starting work. Without `work_start` in the grant or
+/// the policy nothing is dispatched and no session starts.
+#[test]
+fn hs2_yc2p7k_placing_work_needs_work_start() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let mut body = policy(Vec::new());
+    body.targets[0]
+        .actions
+        .retain(|action| *action != TargetAction::WorkStart);
+    f.set_policy(body, &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("refused", Some("policy_denied"))]);
+    assert!(f.m.runtime.run_list(&f.owner(), false).unwrap().is_empty());
+    assert!(f.records().is_empty() && f.host.launches().is_empty());
+    assert_eq!(f.level(&step, &mut tx), ReadinessLevel::Confirmed);
+    let _ = clock;
+}
+
+/// HS2-YC2P7K: when a step's run finishes, its session is free: it is given the next
+/// ready step's run, and the finished step is never dispatched again. A run that
+/// failed is replaced by the next generation.
+#[test]
+fn hs2_yc2p7k_a_free_session_is_given_the_next_run_and_a_failed_run_is_replaced() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let first = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{first}"));
+    let first_run = f.run_of(&first);
+    f.finish(&first, &mut tx);
+    assert_eq!(f.run_of(&first).state, RunState::Completed);
+    assert_eq!(f.level(&first, &mut tx), ReadinessLevel::Finished);
+    // Free now: listed without a run and idle between turns.
+    let listed = f.listed(&mut tx);
+    assert_eq!(
+        (listed[0].run_id.as_ref(), listed[0].activity),
+        (None, SessionActivity::Idle)
+    );
+
+    // New work: the free session takes it, with its run; no session starts.
+    let second = f.ready("Second", &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("assigned", None)]);
+    let second_run = f.run_of(&second);
+    assert_eq!(
+        tick.outcomes[0].run_id.as_deref(),
+        Some(second_run.run_id.as_str())
+    );
+    assert_eq!(tick.outcomes[0].operation_id, format!("sched-run-{second}"));
+    let relinked = f.record(&format!("sched-start-{first}"));
+    assert_eq!(relinked.session_id, session.session_id);
+    assert_eq!(relinked.run_id.as_deref(), Some(second_run.run_id.as_str()));
+    assert_eq!(f.host.launches().len(), 1);
+    // The link is published on the new run's stream.
+    assert!(
+        f.m.runtime
+            .run_events(&f.owner(), 0, 500, Some(&second_run.run_id), 0)
+            .unwrap()
+            .entries
+            .iter()
+            .any(|entry| entry.record.reason.as_deref() == Some("session_assigned"))
+    );
+    assert!(f.tick(&mut tx).outcomes.is_empty());
+    assert_eq!(
+        f.audited("scheduler_assign"),
+        [(
+            AuditOutcome::Succeeded,
+            Some("assigned".into()),
+            Some(format!("sched-run-{second}"))
+        )]
+    );
+
+    // The second run fails at its target (cancelled): the step is ready again and
+    // its next run is a new generation; the finished first step never is.
+    f.m.runtime
+        .run_cancel(&f.owner(), &second_run.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(f.level(&second, &mut tx), ReadinessLevel::Confirmed);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("assigned", None)]);
+    let third_run = f.run_of(&second);
+    assert_eq!(third_run.operation_id, format!("sched-run-{second}.2"));
+    assert_ne!(third_run.run_id, second_run.run_id);
+    let runs = f.m.runtime.run_list(&f.owner(), false).unwrap();
+    assert_eq!(runs.len(), 3);
+    assert_eq!(
+        runs.iter()
+            .filter(|run| run.run_id == first_run.run_id)
+            .count(),
+        1
+    );
 }

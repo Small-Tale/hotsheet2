@@ -815,6 +815,7 @@ fn hosted(operation: &str, tool: &str) -> NewHostedSession {
             owner_checkout_id: OWNER.into(),
             project: "Release train".into(),
             run_id: Some(id(40)),
+            ticket: None,
         },
     }
 }
@@ -1100,4 +1101,64 @@ fn hs2_2dpgdy_a_session_keeps_its_latest_role_answer_and_its_first_join() {
         assert_eq!(later, joined);
         assert_eq!(later.updated_at_ms, 2_000);
     });
+}
+
+#[test]
+fn hs2_yc2p7k_a_session_is_linked_to_a_run_without_a_state_change() {
+    with_registry(|registry, clock, rng, _| {
+        let mut tx = Transaction { clock, rng };
+        let (session, _) = registry
+            .begin(OWNER, new("op-1", "codex"), None, &mut tx)
+            .unwrap();
+        assert_eq!(session.run_id, None);
+        let link = |run: &str, tx: &mut Transaction<'_>| {
+            registry
+                .update(
+                    OWNER,
+                    &session.session_id,
+                    SessionUpdate {
+                        run_id: Some(run.into()),
+                        ..SessionUpdate::default()
+                    },
+                    tx,
+                )
+                .unwrap()
+        };
+        let linked = link(&id(40), &mut tx);
+        assert_eq!(linked.run_id, Some(id(40)));
+        assert_eq!(linked.history.len(), 1, "not a state change");
+        // The same link again writes nothing; a refill moves it to the next run.
+        assert_eq!(link(&id(40), &mut tx), linked);
+        assert_eq!(link(&id(41), &mut tx).run_id, Some(id(41)));
+        // A finished session is never relinked.
+        registry
+            .update(
+                OWNER,
+                &session.session_id,
+                to(SessionState::Failed, "refused"),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(
+            session_error(registry.update(
+                OWNER,
+                &session.session_id,
+                SessionUpdate {
+                    run_id: Some(id(42)),
+                    ..SessionUpdate::default()
+                },
+                &mut tx,
+            )),
+            SessionError::NotActive
+        );
+    });
+}
+
+#[test]
+fn hs2_yc2p7k_a_hosted_origin_names_its_ticket_and_it_is_validated() {
+    let mut start = hosted("op-1", "codex");
+    start.origin.ticket = Some(id(700));
+    assert!(start.validate().is_ok());
+    start.origin.ticket = Some("not a ticket id".into());
+    assert!(start.validate().is_err());
 }

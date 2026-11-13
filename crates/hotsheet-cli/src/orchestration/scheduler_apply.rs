@@ -146,6 +146,7 @@ impl OrchestrationRuntime {
             outcome: String::new(),
             detail: None,
             operation_id: operation_id.clone(),
+            run_id: None,
         };
         let inputs = &placement.inputs;
         let load = SessionLoad {
@@ -220,9 +221,10 @@ impl OrchestrationRuntime {
         };
         let answer = self.session_executor.start(self, &request, tx);
         let succeeded = match answer {
-            StartOutcome::Started { session_id } => {
+            StartOutcome::Started { session_id, run_id } => {
                 outcome.outcome = "started".into();
                 outcome.session_id = Some(session_id);
+                outcome.run_id = run_id;
                 applied.push((placement.target_id.clone(), PlacementOutcome::Started));
                 if let Some(standing) = &provisional {
                     self.scheduler_started_provisional(
@@ -256,6 +258,64 @@ impl OrchestrationRuntime {
         outcome
     }
 
+    /// HS2-YC2P7K: a free session the pass gave ready work gets that work's run.
+    /// `None` when the executor does not dispatch runs, so nothing is recorded. The
+    /// run's own dispatch passes the gate as `work_start`.
+    pub(super) fn scheduler_assign(
+        &self,
+        owner_id: &str,
+        placement: &Placement,
+        actor: Option<&MutationActor>,
+        actor_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Option<DecisionOutcome> {
+        let step_id = placement.steps.first()?.clone();
+        let session_id = placement.session_id.clone()?;
+        let answer = self.session_executor.assign(
+            self,
+            &PlacementAssign {
+                owner_id: owner_id.into(),
+                target_id: placement.target_id.clone(),
+                session_id: session_id.clone(),
+                step_id: step_id.clone(),
+                actor_id: actor_id.into(),
+            },
+            tx,
+        );
+        let mut outcome = DecisionOutcome {
+            action: PlacementAction::Keep,
+            target_id: placement.target_id.clone(),
+            session_id: Some(session_id),
+            step_id: Some(step_id.clone()),
+            outcome: String::new(),
+            detail: None,
+            operation_id: super::session_executor::run_operation(&step_id),
+            run_id: None,
+        };
+        let succeeded = match answer {
+            AssignOutcome::Unsupported => return None,
+            AssignOutcome::Assigned { run_id } => {
+                outcome.outcome = "assigned".into();
+                outcome.run_id = Some(run_id);
+                true
+            }
+            AssignOutcome::Refused { reason } => {
+                outcome.outcome = "refused".into();
+                outcome.detail = Some(reason);
+                false
+            }
+        };
+        self.scheduler_audit(
+            owner_id,
+            "scheduler_assign",
+            &outcome,
+            succeeded,
+            actor,
+            tx.clock.now_ms(),
+        );
+        Some(outcome)
+    }
+
     #[allow(clippy::too_many_arguments)] // HS2-ECWG50: one placement with the pass's context
     pub(super) fn scheduler_wind_down(
         &self,
@@ -278,6 +338,7 @@ impl OrchestrationRuntime {
             outcome: String::new(),
             detail: None,
             operation_id: operation_id.clone(),
+            run_id: None,
         };
         let target = TargetRef {
             owner_checkout_id: owner_id.into(),

@@ -85,10 +85,12 @@ impl TargetEvents for ServerEvents {
             .filter(|source| source.provider == "git")
             .map(|source| source.connection_id.as_str())
             .collect();
+        // HS2-YC2P7K: a claim or a release is a ticket change a run follows: it is
+        // how a dispatcher-mode run learns which worker took its ticket.
         let ticket_change = |event: &crate::ChangeEvent| {
             matches!(
                 event.kind.as_str(),
-                "created" | "updated" | "deleted" | "changed"
+                "created" | "updated" | "deleted" | "changed" | "claimed" | "released" | "moved"
             ) && sources.contains(event.store.as_str())
         };
         let to_event = |event: &crate::ChangeEvent| {
@@ -330,6 +332,15 @@ fn ensure_scheduler(state: &AppState, owner: &str) {
                 break;
             };
             follow = returned;
+            // HS2-YC2P7K: a pass may have dispatched runs. Their target is followed
+            // like any other unfinished run's, so a claim or a completion there is
+            // learned from the target's change feed.
+            if step.trigger.is_some() {
+                let (state, owner) = (state.clone(), owner.clone());
+                let _ =
+                    tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner))
+                        .await;
+            }
             if !step.active {
                 break;
             }

@@ -53,6 +53,9 @@ pub struct PlacementStart {
 pub enum StartOutcome {
     Started {
         session_id: String,
+        /// HS2-YC2P7K: the run dispatched for the session's step, when the executor
+        /// dispatches one.
+        run_id: Option<String>,
     },
     /// The gate, the target or its machine refused, with a stable code.
     Refused {
@@ -89,6 +92,30 @@ pub enum WindDownOutcome {
     Unavailable,
 }
 
+/// HS2-YC2P7K: a running session the scheduler hands ready work (`refill`). The
+/// executor dispatches the step's run and links it to the session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PlacementAssign {
+    pub owner_id: String,
+    pub target_id: String,
+    pub session_id: String,
+    pub step_id: String,
+    pub actor_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssignOutcome {
+    Assigned {
+        run_id: String,
+    },
+    /// The gate, the readiness guard, the target or the session refused.
+    Refused {
+        reason: String,
+    },
+    /// This executor does not dispatch runs; the session keeps the work as before.
+    Unsupported,
+}
+
 /// Starts, lists and winds down orchestrator-owned sessions. The scheduler decides;
 /// this acts. Implementations must not block for longer than one target request.
 pub trait SessionExecutor: Send + Sync {
@@ -113,6 +140,15 @@ pub trait SessionExecutor: Send + Sync {
         request: &WindDownSession,
         tx: &mut Transaction<'_>,
     ) -> WindDownOutcome;
+    /// HS2-YC2P7K: give a running session the run of the step it was refilled with.
+    fn assign(
+        &self,
+        _runtime: &OrchestrationRuntime,
+        _request: &PlacementAssign,
+        _tx: &mut Transaction<'_>,
+    ) -> AssignOutcome {
+        AssignOutcome::Unsupported
+    }
 }
 
 /// The default: no executor is wired in, so nothing is listed, started or stopped.
@@ -216,7 +252,10 @@ impl SessionExecutor for RecordingSessions {
             human_takeover: false,
             winding_down: false,
         });
-        StartOutcome::Started { session_id }
+        StartOutcome::Started {
+            session_id,
+            run_id: None,
+        }
     }
     fn wind_down(
         &self,

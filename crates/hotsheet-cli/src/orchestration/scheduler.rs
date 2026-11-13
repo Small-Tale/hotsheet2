@@ -108,6 +108,9 @@ pub struct DecisionOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub operation_id: String,
+    /// HS2-YC2P7K: the run dispatched for the step of a start or a refill.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -301,7 +304,8 @@ impl OrchestrationRuntime {
         // Steps blocked by a failed gate, per prerequisite ticket: the work on that
         // ticket is the gate's repair.
         let mut stacked: BTreeMap<(String, String, String), u32> = BTreeMap::new();
-        for step in self.readiness_plan(owner_id, tx)?.steps {
+        let plan = self.readiness_plan(owner_id, tx)?;
+        for step in &plan.steps {
             if step.readiness.level != ReadinessLevel::Blocked {
                 continue;
             }
@@ -329,7 +333,7 @@ impl OrchestrationRuntime {
         for (key, steps) in self.provisional_stacked(owner_id)? {
             *stacked.entry(key).or_default() += u32::try_from(steps.len()).unwrap_or(u32::MAX);
         }
-        Ok(self
+        let mut work: Vec<WorkItem> = self
             .ready_work(owner_id, tx)?
             .into_iter()
             .map(|item| WorkItem {
@@ -364,7 +368,50 @@ impl OrchestrationRuntime {
                 // HS2-JSF985: decided once the involved targets were read.
                 speculation: None,
             })
-            .collect())
+            .collect();
+        // HS2-YC2P7K: a step whose scheduler run is unfinished and no unfinished
+        // session works it (its start was refused, or its session was lost) needs a
+        // session again. The run is reused, so nothing is dispatched twice.
+        let runs = self.run_list(owner_id, true)?;
+        let sessions = self.session_list(owner_id, true)?;
+        for view in plan.steps {
+            let step = view.readiness.step;
+            if view.readiness.level != ReadinessLevel::InProgress {
+                continue;
+            }
+            let Some(run) = runs
+                .iter()
+                .find(|run| super::session_executor::scheduled_run_of(run, &step.step_id))
+            else {
+                continue;
+            };
+            if sessions
+                .iter()
+                .any(|session| session.run_id.as_deref() == Some(run.run_id.as_str()))
+            {
+                continue;
+            }
+            work.push(WorkItem {
+                step_id: step.step_id,
+                target_id: step.target.target_id,
+                connection_id: step.target.connection_id,
+                native_id: step.target.native_id,
+                level: WorkLevel::Confirmed,
+                priority: None,
+                up_next: false,
+                due_at_ms: None,
+                unblocks: u32::try_from(view.readiness.unblocks.len()).unwrap_or(u32::MAX),
+                red_gate_stack: 0,
+                ready_since_ms: Some(run.created_at_ms),
+                created_at_ms: None,
+                tool: None,
+                model: None,
+                resources: step.resources,
+                // HS2-JSF985: an orphaned run's step is placed as confirmed work.
+                speculation: None,
+            });
+        }
+        Ok(work)
     }
 
     /// The running sessions as the executor lists them, with a session whose run
@@ -416,6 +463,9 @@ impl OrchestrationRuntime {
             return Ok(None);
         };
         let now_ms = tx.clock.now_ms();
+        // HS2-YC2P7K: the sessions first. Listing them brings each record in line with
+        // its host, so a run whose session was just found lost is placeable work.
+        let (sessions, executor) = self.scheduler_sessions(owner_id, tx);
         let mut work = self.scheduler_work(owner_id, tx)?;
         // HS2-2FG91X: what the policy requires of every piece of work on a target.
         for item in &mut work {
@@ -426,7 +476,6 @@ impl OrchestrationRuntime {
             }
         }
         let memory = SchedulerStore::new(&self.home).memory(owner_id)?;
-        let (sessions, executor) = self.scheduler_sessions(owner_id, tx);
         // Only a target that could take a session is contacted: confirmed work, a
         // policy that lets sessions run there, and no refusal still being waited out.
         // HS2-JSF985: provisional work counts where the policy opts in for its target.
@@ -977,6 +1026,17 @@ impl OrchestrationRuntime {
         if let (DecisionMode::Applied, Some(actor_id)) = (mode, &actor_id) {
             for placement in &schedule.placements {
                 let outcome = match placement.action {
+                    // HS2-YC2P7K: a free session given ready work gets that work's run.
+                    PlacementAction::Keep
+                        if placement.reason
+                            == hotsheet_ticketing::orchestration::PlacementReason::Refill
+                            && gathered.executor == "available" =>
+                    {
+                        match self.scheduler_assign(owner_id, placement, actor, actor_id, tx) {
+                            Some(outcome) => outcome,
+                            None => continue,
+                        }
+                    }
                     PlacementAction::Keep => continue,
                     PlacementAction::Start => self.scheduler_start(
                         owner_id,
@@ -1096,8 +1156,14 @@ impl OrchestrationRuntime {
                     &placement.steps,
                     // HS2-95SWQ4: two starts that each began a session are two
                     // decisions, so the session an applied start began is part of it.
-                    outcome_of(placement)
-                        .map(|outcome| (&outcome.outcome, &outcome.detail, &outcome.session_id)),
+                    outcome_of(placement).map(|outcome| {
+                        (
+                            &outcome.outcome,
+                            &outcome.detail,
+                            &outcome.session_id,
+                            &outcome.run_id,
+                        )
+                    }),
                 )
                     .hash(&mut hasher);
             }
@@ -1129,6 +1195,7 @@ impl OrchestrationRuntime {
             outcome: None,
             outcome_detail: None,
             operation_id: None,
+            run_id: None,
             probe: false,
             retry_at_ms: None,
             score: None,
@@ -1159,6 +1226,7 @@ impl OrchestrationRuntime {
                 outcome: outcome.map(|outcome| outcome.outcome.clone()),
                 outcome_detail: outcome.and_then(|outcome| outcome.detail.clone()),
                 operation_id: outcome.map(|outcome| outcome.operation_id.clone()),
+                run_id: outcome.and_then(|outcome| outcome.run_id.clone()),
                 probe: placement.probe,
                 retry_at_ms: placement.retry_at_ms,
                 score: placement.score,

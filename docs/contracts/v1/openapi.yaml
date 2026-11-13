@@ -20790,6 +20790,11 @@ components:
           type:
             - string
             - 'null'
+        ticket:
+          description: The exact target ticket the session was started for (HS2-YC2P7K); its role prompt asks for it.
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
       additionalProperties: false
     HostedTargetSession:
       description: One terminal of this machine that an orchestrator started, with what its host knows about it now.
@@ -21273,12 +21278,16 @@ components:
               step_id:
                 type: string
               outcome:
-                description: '`started`, `wind_down_requested`, `executor_unavailable`, `executor_failed`, `refused`,
-                  `not_at_safe_point`, `session_not_found`, or the denial code of the gate such as `approval_required`.'
+                description: '`started`, `assigned`, `wind_down_requested`, `executor_unavailable`, `executor_failed`,
+                  `refused`, `not_at_safe_point`, `session_not_found`, or the denial code of the gate such as
+                  `approval_required`.'
                 type: string
               detail:
                 type: string
               operation_id:
+                type: string
+              run_id:
+                description: The run dispatched for the step of a start or a refill (HS2-YC2P7K).
                 type: string
             additionalProperties: false
         logged:
@@ -21445,6 +21454,9 @@ components:
         outcome_detail:
           type: string
         operation_id:
+          type: string
+        run_id:
+          description: The run an applied start or refill dispatched for its step (HS2-YC2P7K).
           type: string
         probe:
           type: boolean

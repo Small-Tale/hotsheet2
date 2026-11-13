@@ -10,12 +10,16 @@
 //!   runtime's is one session's for good. While the session the id started is
 //!   unfinished the same id is the same start; once it is finished (refused, wound
 //!   down, lost) the next start for that work is a new session that replaces it.
+//! - **Dispatch (HS2-YC2P7K).** A start for a plan step first dispatches the step's run
+//!   in dispatcher mode under `sched-run-<step id>`, through `run_dispatch` with its
+//!   readiness guard, and starts the session linked to that run. The step is then in
+//!   progress. A refill gives a free session the run of its new step the same way.
 //! - **Wind down.** A stop without force. The host checks the safe point itself, so
 //!   nothing here can interrupt work, and a person's session is never stopped.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    OrchestratedSession, SafePoint, ScheduledSession, SessionActivity, SessionError,
-    SessionIdleStore, SessionOwner, SessionState,
+    DispatchMode, OrchestratedSession, Run, RunState, SafePoint, ScheduledSession, SessionActivity,
+    SessionError, SessionIdleStore, SessionOwner, SessionState,
 };
 
 use super::sessions::PlacedGate;
@@ -57,6 +61,27 @@ impl SessionExecutor for OwnedSessions {
     ) -> WindDownOutcome {
         runtime.placed_wind_down(request, tx)
     }
+
+    fn assign(
+        &self,
+        runtime: &OrchestrationRuntime,
+        request: &PlacementAssign,
+        tx: &mut Transaction<'_>,
+    ) -> AssignOutcome {
+        runtime.placed_assign(request, tx)
+    }
+}
+
+/// HS2-YC2P7K: the scheduler's operation id for the run of a plan step. Stable for
+/// the step, so a repeated dispatch is the same run.
+pub fn run_operation(step_id: &str) -> String {
+    format!("sched-run-{step_id}")
+}
+
+/// HS2-YC2P7K: whether `run` is one the scheduler dispatched for a step, under the
+/// step's operation id or a later generation of it.
+pub(super) fn scheduled_run_of(run: &Run, step_id: &str) -> bool {
+    generation(&run_operation(step_id), &run.operation_id).is_some()
 }
 
 /// The scheduler acts for whoever asked, as the orchestrator: never as a person, so
@@ -126,6 +151,12 @@ impl OrchestrationRuntime {
     ) -> Result<Vec<ScheduledSession>, OrchestrationError> {
         let reader = self.placement_reader(owner_id);
         let now_ms = tx.clock.now_ms();
+        let finished_runs: std::collections::BTreeSet<String> = self
+            .run_list(owner_id, false)?
+            .into_iter()
+            .filter(|run| run.state.is_terminal())
+            .map(|run| run.run_id)
+            .collect();
         let mut listed = Vec::new();
         let mut seen = Vec::new();
         for record in self.session_list(owner_id, true)? {
@@ -161,6 +192,13 @@ impl OrchestrationRuntime {
             }
             let idle = idle(safe_point.as_ref());
             seen.push((session.session_id.clone(), idle));
+            // HS2-YC2P7K: a session works its run while the run is unfinished, idle
+            // between turns or not; one whose run finished is free again.
+            let run_id = session
+                .run_id
+                .clone()
+                .filter(|run_id| !finished_runs.contains(run_id));
+            let working = run_id.is_some() || idle != Some(true);
             listed.push(ScheduledSession {
                 started_at_ms: session
                     .history
@@ -172,13 +210,13 @@ impl OrchestrationRuntime {
                 tool: session.tool,
                 account: session.account,
                 model: session.model,
-                run_id: session.run_id,
+                run_id,
                 owner_id: Some(owner_id.to_owned()),
                 // Unknown is busy: a session is never wound down on a guess.
-                activity: if idle == Some(true) {
-                    SessionActivity::Idle
-                } else {
+                activity: if working {
                     SessionActivity::Busy
+                } else {
+                    SessionActivity::Idle
                 },
                 idle_since_ms: None,
                 safe_point: safe_point.is_some_and(|safe_point| safe_point.safe),
@@ -220,17 +258,40 @@ impl OrchestrationRuntime {
                 generation(&request.operation_id, &session.operation_id).map(|n| (n, session))
             })
             .max_by_key(|(n, _)| *n);
-        let (operation_id, replaces) = match latest {
-            None => (request.operation_id.clone(), None),
+        let (operation_id, replaces, earlier_run) = match latest {
+            None => (request.operation_id.clone(), None, None),
             // Still on its way or running: the same start, asked again.
-            Some((_, session)) if !session.state.is_terminal() => {
-                (session.operation_id.clone(), session.replaces.clone())
-            }
+            Some((_, session)) if !session.state.is_terminal() => (
+                session.operation_id.clone(),
+                session.replaces.clone(),
+                session.run_id.clone(),
+            ),
             // Finished: the work gets a new session that replaces it.
             Some((n, session)) => (
                 format!("{}.{}", request.operation_id, n + 1),
                 Some(session.session_id.clone()),
+                None,
             ),
+        };
+        // HS2-YC2P7K: the step's run first, so the session starts linked to it and the
+        // step is in progress. A start being repeated keeps what it named, and is
+        // linked to the run once it runs.
+        let repeated = latest.is_some_and(|(_, session)| !session.state.is_terminal());
+        let run_id = match (earlier_run, request.steps.first()) {
+            (Some(run_id), _) => Some(run_id),
+            (None, Some(step_id)) => match self.scheduler_run(owner_id, step_id, &actor, tx) {
+                Ok(run) => Some(run.run_id),
+                Err(error) => return refused(&error),
+            },
+            (None, None) => None,
+        };
+        let (start_run, link_run) = if repeated {
+            (
+                latest.and_then(|(_, session)| session.run_id.clone()),
+                run_id.clone(),
+            )
+        } else {
+            (run_id.clone(), None)
         };
         let outcome = self.session_start_gated(
             owner_id,
@@ -242,7 +303,7 @@ impl OrchestrationRuntime {
                 effort: None,
                 account: request.account.clone(),
                 role: None,
-                run_id: None,
+                run_id: start_run,
                 replaces,
             },
             Some(&PlacedGate {
@@ -253,9 +314,19 @@ impl OrchestrationRuntime {
             tx,
         );
         match outcome {
-            Ok(view) if view.session.state == SessionState::Running => StartOutcome::Started {
-                session_id: view.session.session_id,
-            },
+            Ok(view) if view.session.state == SessionState::Running => {
+                if let Some(run_id) =
+                    link_run.filter(|run| view.session.run_id.as_ref() != Some(run))
+                    && let Err(error) =
+                        self.session_link(owner_id, &view.session.session_id, &run_id, &actor, tx)
+                {
+                    return refused(&error);
+                }
+                StartOutcome::Started {
+                    session_id: view.session.session_id,
+                    run_id,
+                }
+            }
             // The host launched it for an earlier request and it has ended since.
             Ok(view) => StartOutcome::Refused {
                 reason: ended_as(&view.session),
@@ -279,6 +350,102 @@ impl OrchestrationRuntime {
                     None => refused(&error),
                 }
             }
+        }
+    }
+
+    /// HS2-YC2P7K: the run the scheduler dispatched for a step, or a new one. A
+    /// repeated request is the same run; once that run failed or was cancelled the
+    /// next is `<id>.<n>`. Dispatched in dispatcher mode as `actor`, so the target's
+    /// dispatcher assigns the exact ticket, through the gate (`work_start`) and the
+    /// readiness guard.
+    pub(super) fn scheduler_run(
+        &self,
+        owner_id: &str,
+        step_id: &str,
+        actor: &MutationActor,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Run, OrchestrationError> {
+        let step = self.readiness(owner_id, step_id, tx)?.readiness.step;
+        let base = run_operation(step_id);
+        let latest = self
+            .run_list(owner_id, false)?
+            .into_iter()
+            .filter_map(|run| generation(&base, &run.operation_id).map(|n| (n, run)))
+            .max_by_key(|(n, _)| *n);
+        let operation_id = match latest {
+            None => base,
+            Some((_, run)) if !run.state.is_terminal() => return Ok(run),
+            Some((_, run)) if run.state == RunState::Completed => {
+                return Err(OrchestrationError::Run(
+                    hotsheet_ticketing::orchestration::RunError::NotActive,
+                ));
+            }
+            Some((n, _)) => format!("{base}.{}", n + 1),
+        };
+        self.run_dispatch(
+            owner_id,
+            DispatchRun {
+                ticket: OrchestrationTicket {
+                    connection_id: step.ticket.connection_id.clone(),
+                    native_id: step.ticket.native_id.clone(),
+                },
+                target: TargetTicket {
+                    target_id: step.target.target_id.clone(),
+                    connection_id: step.target.connection_id.clone(),
+                    native_id: step.target.native_id.clone(),
+                },
+                operation_id,
+                mode: Some(DispatchMode::Dispatcher),
+                worker_id: None,
+                worker_label: None,
+                lease_minutes: None,
+                override_readiness: false,
+            },
+            Some(actor),
+            tx,
+        )
+        .map(|view| view.run)
+    }
+
+    /// HS2-YC2P7K: a running session the scheduler refilled gets its step's run.
+    pub(super) fn placed_assign(
+        &self,
+        request: &PlacementAssign,
+        tx: &mut Transaction<'_>,
+    ) -> AssignOutcome {
+        let refused = |error: &OrchestrationError| AssignOutcome::Refused {
+            reason: error.code().into(),
+        };
+        let Some(actor) = orchestrator(&request.actor_id) else {
+            return AssignOutcome::Refused {
+                reason: "actor_required".into(),
+            };
+        };
+        let session = match self.session(&request.owner_id, &request.session_id) {
+            Ok(session) => session,
+            Err(error) => return refused(&error),
+        };
+        if session.target_id != request.target_id
+            || session.state != SessionState::Running
+            || session.owner == SessionOwner::Human
+        {
+            return AssignOutcome::Refused {
+                reason: SessionError::NotActive.code().into(),
+            };
+        }
+        let run = match self.scheduler_run(&request.owner_id, &request.step_id, &actor, tx) {
+            Ok(run) => run,
+            Err(error) => return refused(&error),
+        };
+        match self.session_link(
+            &request.owner_id,
+            &session.session_id,
+            &run.run_id,
+            &actor,
+            tx,
+        ) {
+            Ok(_) => AssignOutcome::Assigned { run_id: run.run_id },
+            Err(error) => refused(&error),
         }
     }
 

@@ -1027,9 +1027,28 @@ impl OrchestrationRuntime {
     }
 
     /// HS2-2DPGDY: the prompt that asks this hosted session to take up its role.
-    fn role_text(_checkout: &Checkout, session: &HostedSession) -> String {
+    /// HS2-YC2P7K: a session started for a run asks for that run's exact ticket.
+    fn role_text(checkout: &Checkout, session: &HostedSession) -> String {
         let worker = hotsheet_aitools::session_worker_id(&session.tool, &session.session_id);
-        role_prompt_text(session.role, &worker, None)
+        let request = session.origin.ticket.as_deref().map(|native| {
+            Self::ticket_label(checkout, native).unwrap_or_else(|| native.to_owned())
+        });
+        role_prompt_text(session.role, &worker, request.as_deref())
+    }
+
+    /// The slug of a ticket in the checkout's git stores, by its canonical id.
+    fn ticket_label(checkout: &Checkout, native_id: &str) -> Option<String> {
+        checkout
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+            .find_map(|source| {
+                let store = checkout.verified_git_source(&source.connection_id).ok()?;
+                ops::resolve(&store, native_id)
+                    .ok()
+                    .flatten()
+                    .map(|ticket| ticket.slug)
+            })
     }
 
     /// HS2-2DPGDY: the host learned something that may have made the session's tool
@@ -1264,6 +1283,7 @@ impl OrchestrationRuntime {
         // HS2-2DPGDY: joining and a new role answer are news without a state change.
         let joined = before.joined_at_ms.is_none() && after.joined_at_ms.is_some();
         let prompted = before.role_prompt != after.role_prompt && after.role_prompt.is_some();
+        let assigned = before.run_id != after.run_id;
         if (joined || prompted) && after.run_id.is_none() {
             Self::scheduler_wake_at(&self.home);
         }
@@ -1307,8 +1327,14 @@ impl OrchestrationRuntime {
                 );
             }
         }
-        if let Some(run_id) = &after.run_id {
+        if let Some(run_id) = after
+            .run_id
+            .as_ref()
+            .filter(|_| joined || prompted || assigned)
+        {
             let news = [
+                // HS2-YC2P7K: the scheduler gave a running session this run.
+                (before.run_id != after.run_id).then(|| "session_assigned".to_owned()),
                 joined.then(|| "session_joined".to_owned()),
                 after
                     .role_prompt
@@ -1338,6 +1364,35 @@ impl OrchestrationRuntime {
             }
         }
         Ok(after)
+    }
+
+    /// HS2-YC2P7K: link a running session to the run the scheduler gave it. Published
+    /// as `session_assigned` on that run.
+    pub(super) fn session_link(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        run_id: &str,
+        actor: &MutationActor,
+        tx: &mut Transaction<'_>,
+    ) -> Result<OrchestratedSession, OrchestrationError> {
+        let session = self.session(owner_id, session_id)?;
+        if self.run(owner_id, run_id)?.target.target_id != session.target_id {
+            return Err(OrchestrationError::Invalid(
+                "the run belongs to another target",
+            ));
+        }
+        self.session_apply(
+            owner_id,
+            session_id,
+            SessionUpdate {
+                run_id: Some(run_id.to_owned()),
+                actor_id: actor.id.clone(),
+                ..SessionUpdate::default()
+            },
+            false,
+            tx,
+        )
     }
 
     fn session_request(
@@ -1596,13 +1651,17 @@ impl OrchestrationRuntime {
         let target = Self::target_ref(owner_id, &request.target_id)?;
         let owner = self.owner(owner_id)?;
         let role = request.role.unwrap_or_default();
+        let mut run_ticket = None;
         if let Some(run_id) = &request.run_id {
             // A session is only ever attached to a run of the same target.
-            if self.run(owner_id, run_id)?.target.target_id != request.target_id {
+            let run = self.run(owner_id, run_id)?;
+            if run.target.target_id != request.target_id {
                 return Err(OrchestrationError::Invalid(
                     "the run belongs to another target",
                 ));
             }
+            // HS2-YC2P7K: its role prompt asks for the run's exact ticket.
+            run_ticket = Some(run.target.native_id);
         }
         let new = NewSession {
             operation_id: request.operation_id.clone(),
@@ -1691,6 +1750,7 @@ impl OrchestrationRuntime {
                         owner_checkout_id: owner.id.clone(),
                         project: project_name(&owner),
                         run_id: session.run_id.clone(),
+                        ticket: run_ticket.clone(),
                     },
                 },
                 limits: Some(policy.machine_limits(&request.target_id)),

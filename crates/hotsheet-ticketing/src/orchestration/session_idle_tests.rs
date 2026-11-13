@@ -181,6 +181,7 @@ fn hs2_95swq4_a_host_knows_which_terminals_an_orchestrator_started() {
             owner_checkout_id: OWNER.into(),
             project: "Release train".into(),
             run_id: None,
+            ticket: None,
         },
     };
     let (reserved, _) = registry

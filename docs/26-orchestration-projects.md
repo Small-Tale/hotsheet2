@@ -19,7 +19,7 @@
 > the throughput scheduler with its plan, explanations, decision log and event-driven
 > loop (§26.17, HS2-ECWG50), which places orchestrator-owned sessions through its
 > session executor (§26.19, HS2-95SWQ4; nothing is placed until a policy sets
-> `placement.automatic`),
+> `placement.automatic`) and dispatches the run of each step it places (HS2-YC2P7K),
 > resource requirements of plan steps and targets with scheduling around held
 > resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads),
 > the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
@@ -610,7 +610,9 @@ answered.
   never names the worker.
 
 The scheduler (HS2-ECWG50) decides the target, tool and model and how many sessions
-run where; the target's dispatcher still assigns each exact ticket. Integration,
+run where; the target's dispatcher still assigns each exact ticket. It dispatches the
+run of each step it places in dispatcher mode under `sched-run-<step id>` (§26.19,
+HS2-YC2P7K). Integration,
 the project's push policy and worktree handoff stay entirely with the target's own
 workflow: a run only claims or queues.
 
@@ -731,7 +733,8 @@ from the target, and carries identifiers, states and codes only.
 
 **Following a target.** A server follows each target that has an unfinished run by
 holding one bounded request open on the target's hosted change feed
-(`/checkouts/{checkout}/target-events`, at most 8 seconds per request). A first
+(`/checkouts/{checkout}/target-events`, at most 8 seconds per request). The feed carries ticket creations, updates,
+deletions, moves, claims and releases (claims and releases since HS2-YC2P7K). A first
 request is a handshake that returns the cursor and no backlog, after which every run
 of that target is caught up once. After that only runs whose ticket changed are
 synced. A cursor that goes backwards or an `overflow` answer means the host no
@@ -1890,7 +1893,9 @@ role, whoever started it. The target's dispatcher still assigns each exact ticke
 
 **Taking up the role (HS2-2DPGDY).** The host asks the new session to run its role
 skill (`hotsheet-worker`, `hotsheet-dispatcher` or `hotsheet-integrator`) with a
-prompt that also names the worker id to register in the pool with. Every
+prompt that also names the worker id to register in the pool with. A session started
+for a run also asks the target's dispatcher for that run's exact ticket, by its slug
+where the host can read it (`origin.ticket`, HS2-YC2P7K). Every
 orchestrator session's environment carries `HOTSHEET_SESSION_ROLE` and
 `HOTSHEET_ROLE_SKILL` as well, whatever happens to the prompt. The prompt reaches
 the tool one of two ways:
@@ -2084,6 +2089,7 @@ function of them and the time:
 | Input           | Source                                                                                                      |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
 | Ready work      | `ready_work` (§26.15). `confirmed` items are placed; `provisional` ones only by the policy's opt-in, §26.22 |
+| Orphaned runs   | Steps whose scheduler run is unfinished and that no unfinished session works (§26.19); placed as confirmed  |
 | Policy          | §26.8, with its `placement` section                                                                         |
 | Target capacity | One snapshot per target with confirmed work (§26.10), read through the gate as `gates_observe`              |
 | Sessions        | The executor's list, as the scheduler's own session view                                                    |
@@ -2168,11 +2174,11 @@ takes nothing, targets on one machine share its room, and every start counts
 against the target, machine, tool and account caps before the next is considered.
 A start on an account that is not verified available is marked `probe`.
 
-A session is **free** when it is idle, when its run waits on CI, a deployment or an
-approval, or when it has no run at all: time spent waiting on an external system is
-capacity. A session started for a step has no run until the target's dispatcher
-assigns the ticket, so it takes that step in the next pass and nothing more starts
-for it. Dispatching the steps a placement is for is HS2-YC2P7K.
+A session is **free** when it is idle with no unfinished run, or when its run waits
+on CI, a deployment or an approval: time spent waiting on an external system is
+capacity. A session whose run is unfinished is working, between turns or not. Each
+start and each refill dispatches its step's run (§26.19, HS2-YC2P7K), so the step is
+in progress from then on and is no longer ready work.
 
 Sessions that nothing was found for:
 
@@ -2380,15 +2386,15 @@ its host first, with one safe-point request per session (§26.16). A crashed ses
 therefore `lost`, and a session a person took over at the host is theirs, before the
 scheduler decides anything.
 
-| Field            | From                                                                                          |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| `owner_id`       | The owning checkout. Only its own records are listed                                          |
-| `run_id`         | The run the session was started for. A placed session has none and is free capacity           |
-| `activity`       | `idle` when the host found it between turns with no claim and no pending handoff; else `busy` |
-| `safe_point`     | The host's safe-point answer. Anything the host could not establish is not safe               |
-| `idle_since_ms`  | When this machine first saw the session idle                                                  |
-| `human_takeover` | A person owns it, whether they took it here or at the host                                    |
-| `winding_down`   | Never set: a stop is immediate at a safe point and refused away from one                      |
+| Field            | From                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `owner_id`       | The owning checkout. Only its own records are listed                                                             |
+| `run_id`         | The run the session works, while it is unfinished. A session whose run finished is listed without one            |
+| `activity`       | `idle` when the host found it between turns with no claim, no pending handoff and no unfinished run; else `busy` |
+| `safe_point`     | The host's safe-point answer. Anything the host could not establish is not safe                                  |
+| `idle_since_ms`  | When this machine first saw the session idle                                                                     |
+| `human_takeover` | A person owns it, whether they took it here or at the host                                                       |
+| `winding_down`   | Never set: a stop is immediate at a safe point and refused away from one                                         |
 
 - **Who asks.** The hosts are read as the policy's `placement.actor`, through the gate
   as `sessions_manage` continuing a decision. A policy that names no actor reads no
@@ -2471,10 +2477,11 @@ safe (HS2-RTX8RJ).
 
 ### How the loop learns of a session
 
-A placed session has no run, so it publishes no run event. Nothing asks on a timer:
+A session with a run publishes each change on that run's event stream, which wakes
+the loop. Nothing asks on a timer:
 
-- Every change this machine records for such a session (started, failed, lost,
-  stopped, taken over) moves the scheduler's wake marker (§26.17).
+- Every change this machine records for a session without a run (started, failed,
+  lost, stopped, taken over) moves the scheduler's wake marker (§26.17).
 - The hosting server moves the same marker when an AI terminal an orchestrator
   started exits or finishes a turn, including one killed from its drawer. It learns
   that from the busy feed it already keeps for every AI terminal. The loop then runs
@@ -2487,11 +2494,63 @@ crash or a new safe point there is learned at the next pass for any other reason
 (HS2-257Q2Z). Removing the last step of a plan publishes no event either
 (HS2-SQS266).
 
+### Dispatching the step (HS2-YC2P7K)
+
+The scheduler dispatches the run of each step it places a session for, so the
+session has an exact ticket and the step leaves the ready work. The executor does
+it, under the scheduler's actor:
+
+1. **The run first.** `run_dispatch` (§26.9) in `dispatcher` mode, under operation id
+   `sched-run-<step id>`, with the step's orchestration ticket and target ticket. It
+   passes the gate as `work_start`, so the grant and the policy's target must allow
+   `work_start` as well as `sessions_manage`, and a policy that asks a person first
+   applies. The readiness guard (§26.15) applies as to any dispatch. The target ticket
+   is marked Up Next for the target's dispatcher, which still assigns it; the
+   orchestrator never names the worker. A refused dispatch refuses the start with
+   the gate's or the target's code, and no session starts.
+2. **Then the session, linked to the run.** It is labelled with the run, publishes on
+   its stream, and its role prompt (§26.16) asks the target's dispatcher for that
+   exact ticket. A start being repeated keeps the run it named, or is linked to the
+   run once it runs.
+
+| The latest scheduler run of the step | The dispatch                                     |
+| ------------------------------------ | ------------------------------------------------ |
+| None                                 | A new run under `sched-run-<step id>`            |
+| Unfinished                           | The same run: nothing is dispatched twice        |
+| Failed or cancelled                  | A new run under `<id>.<n>` (`.2`, `.3`, …)       |
+| Completed                            | None: the step is finished and is not ready work |
+
+**Repeats and replacements.** From the dispatch on, the step is `in_progress`, so
+later passes start nothing for it. A step whose scheduler run is unfinished and that
+no unfinished session works (its session start was refused, or its session was
+lost) is placeable work again: the next start for it, after any refusal backoff, is
+linked to the same run. A pass lists the sessions, and so learns of a lost one,
+before it reads the work.
+
+**Refill.** A free session given ready work (`keep`, `refill`) gets that work's run
+the same way: the executor's `assign` dispatches it and links it to the session,
+published as `session_assigned` on the run, and the decision log records `assigned`
+with the run. A session with an unfinished run reads as busy, so it is never refilled;
+one whose run finished is free again. The refilled session is not told the new
+ticket directly (HS2-R7QH35); the target's dispatcher assigns it.
+
+**Following the run.** After a pass, the server makes sure the run's target is
+followed (§26.9): a claim, a release or a completion of the target ticket syncs the
+run from the target's change feed, which now carries claims and releases. A
+dispatcher-mode run becomes `dispatched` with the worker that claimed, and a finished
+ticket completes it; the step is then `finished`, and its session is free and is
+wound down after its idle time.
+
+Removing a step from the plan leaves its run queued and its session busy until a
+person cancels the run (HS2-YFPZFP). A target with no live dispatcher or integrator
+never assigns the ticket (HS2-T16SK0). Whether ticket writes made outside the hosting
+server reach its change feed is HS2-BDNJ5S.
+
 ### Not wired
 
 Reconciliation's session source (§26.14) is unchanged. `session_work` would report a
 session that was wound down while its run waits on a gate as missing work
-(HS2-75Q254). Dispatching a run for a placed step is HS2-YC2P7K.
+(HS2-75Q254).
 
 ## 26.20 Scheduling around claimable resources (HS2-2FG91X)
 
@@ -2616,9 +2675,11 @@ state, its machine, the expiry or the step that was given it, and `declared_by`
 (`step` or `target`). The orchestration workspace shows none of this yet
 (HS2-5GRXFN).
 
-A session that claims its resource before a run exists for its step makes the same
-step read `resource_held`, because a claim does not say whom it is for (HS2-AK75HT).
-A dispatched run (HS2-YC2P7K) takes the step out of the ready work.
+A step's run is dispatched before its session starts (§26.19), so the step is in
+progress, and out of the ready work, before the session can claim anything: its own
+claim never defers its own step (HS2-AK75HT). Only a run whose session was lost is
+placed again while the lost session's claim may still be live; it waits for that
+claim's expiry like any other holder's.
 
 ### Headless surface
 

@@ -472,6 +472,8 @@ pub struct SessionUpdate {
     pub role_prompt: Option<RolePrompt>,
     /// HS2-2DPGDY: the session was seen in the pool; only the first time is kept.
     pub joined_at_ms: Option<u64>,
+    /// HS2-YC2P7K: the run the session now works, when the scheduler gave it one.
+    pub run_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -685,6 +687,9 @@ impl SessionRegistry {
         if session.joined_at_ms.is_none() {
             session.joined_at_ms = update.joined_at_ms;
         }
+        if let Some(run_id) = update.run_id {
+            session.run_id = Some(run_id);
+        }
         // A control act that changed ownership or the pause without changing the state
         // is still its own history entry.
         if entry.is_none()
@@ -876,6 +881,10 @@ pub struct SessionOrigin {
     pub project: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
+    /// HS2-YC2P7K: the exact target ticket the session was started for, by its
+    /// canonical id. Its role prompt asks the target's dispatcher for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket: Option<String>,
 }
 
 /// One terminal of this machine that an orchestrator started.
@@ -958,6 +967,9 @@ impl NewHostedSession {
         }
         if let Some(run) = &self.origin.run_id {
             valid_token(run)?;
+        }
+        if let Some(ticket) = &self.origin.ticket {
+            valid_identifier(ticket)?;
         }
         Ok(())
     }

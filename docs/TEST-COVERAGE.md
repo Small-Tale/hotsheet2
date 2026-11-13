@@ -2099,6 +2099,7 @@ on the visible right edge and captures the resulting scrolled terminal.
 | orchestration-run-events | docs/26-orchestration-projects.md | Per-run last confirmed target state with staleness and reachability; a bounded run event stream with arrival ordering, keyed de-duplication, filtered cursor replay, gap reporting and a bounded wait instead of polling; following a target's change feed with handshake, overflow catch-up, cursor kept through an outage, bounded backoff and no requests while idle (HS2-7QHWHJ) | `crates/hotsheet-ticketing/src/orchestration/run_event_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/run_tests.rs # hs2_7qhwhj`; `crates/hotsheet-cli/src/orchestration/tests/watch.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/runs.rs # hs2_7qhwhj`; `clients/web/tests/contracts.spec.ts` | HS2-HSMH2Q # workspace run view; HS2-42B2FD # general cross-server views | double-covered |
 | orchestration-run-recovery | docs/26-orchestration-projects.md | Reconciling unfinished runs with their target after an interruption as a pure function over per-source observations (verified, mismatched, unverifiable with a reason); idempotent retries with no duplicate claim, queue mark or target ticket; a pending cancel repeated on reconnect; pause, resume, handoff and manual correction as audited transitions that keep every repeated and reversed step; reconciliation at server start and on follower connect and reconnect without a timer; CLI/HTTP/MCP parity (HS2-WBREDM) | `crates/hotsheet-ticketing/src/orchestration/reconcile_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/recovery.rs`; `crates/hotsheet-cli/src/orchestration/tests/watch.rs # hs2_wbredm`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_wbredm`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/recovery.rs`; `clients/web/tests/contracts.spec.ts` | HS2-7QNK7Y # CI runs; HS2-BYEB60 # deployments; HS2-75Q254 # sessions; HS2-G5H9FQ # validation steps; HS2-XM692S # workspace | double-covered |
 | orchestration-scheduler | docs/26-orchestration-projects.md | Placement decisions (start, keep, wind down per target, tool and model) from confirmed ready work, the policy, target capacity, tool capacity, held resources and placement memory; integer scoring of priority, Up Next, due date, unblocked work, red-gate repair and uncapped aging; packing under target, machine, tool and account caps and the RAM, CPU and disk limits; refill of idle and gate-waiting sessions; the oscillation guard and refusal backoff; dry run unless the policy enables automatic placement; approvals filed for decisions outside the policy; the `SessionExecutor` seam with a typed `executor_unavailable`; the decision log, `explain`, and the event-driven loop; CLI/HTTP/MCP parity (HS2-ECWG50) | `crates/hotsheet-ticketing/src/orchestration/scheduler_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/scheduler.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_ecwg50`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/scheduler.rs`; `clients/web/tests/contracts.spec.ts` | HS2-YC2P7K # dispatch of placed steps; HS2-AWB7BX # capacity events; HS2-77SRHC # workspace | double-covered |
+| orchestration-scheduler-dispatch | docs/26-orchestration-projects.md | The scheduler dispatches the run of each step it places in dispatcher mode under `sched-run-<step id>` (`work_start`, readiness guard) and starts the session linked to it; repeated passes start and dispatch nothing more; a refused start or a lost session leaves an orphaned run that the next session takes; a free session is given the next step's run (refill); a failed run is replaced by a new generation; the run follows claims and completions on the target's change feed; the whole chain from an automatic policy to a wound-down session (HS2-YC2P7K) | `crates/hotsheet-ticketing/src/orchestration/session_tests.rs # hs2_yc2p7k`; `crates/hotsheet-cli/src/orchestration/tests/session_executor.rs # hs2_yc2p7k`; `crates/hotsheet-cli/src/orchestration/tests/session_executor.rs # hs2_95swq4` | `crates/hotsheet-server/tests/remote_servers/session_work.rs # hs2_yc2p7k`; `crates/hotsheet-server/tests/remote_servers/session_executor.rs`; `clients/web/tests/contracts.spec.ts` | HS2-YFPZFP # removed step; HS2-T16SK0 # no target dispatcher; HS2-R7QH35 # refilled session told its ticket; HS2-BDNJ5S # writes outside the server | double-covered |
 | orchestration-session-executor | docs/26-orchestration-projects.md | The scheduler placing orchestrator-owned sessions (§26.19): each record synced with its host and mapped onto the scheduler's view; a start that is the same start while its session is unfinished and a replacement once it is finished; the gate passed under the scheduler's operation id with the larger of the decided and the recorded load; wind-down only at a safe point and never of a person's session; every refusal a typed outcome; idle time remembered from the first sighting; the loop woken by the wake marker when a session without a run starts, ends or finishes a turn | `crates/hotsheet-ticketing/src/orchestration/session_idle_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/session_executor.rs` | `crates/hotsheet-server/tests/remote_servers/session_executor.rs`; `crates/hotsheet-server/tests/remote_servers/scheduler.rs` | HS2-257Q2Z # wake from a remote host; HS2-RG91SK # idle time from the host; HS2-SQS266 # last step removed; HS2-RTX8RJ # stop approval; HS2-7VV79Q # changed tool; HS2-48H57C # disabled target | double-covered |
 | orchestration-resources | docs/26-orchestration-projects.md | Resource requirements declared on a plan step and per target in the policy, validated against the claim service's names; held claims read per machine that hosts the target and treated as unavailable capacity; `resource_held` with the claim's expiry as the retry time, `resource_unknown` under a fail-closed backend and an `unverified` start under a provisional one; a release waking the loop through the claim service's wait primitive; contention in `plan` and per-resource standing in `explain`; the scheduler never claiming; CLI/HTTP/MCP parity (HS2-2FG91X) | `crates/hotsheet-ticketing/src/orchestration/resource_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs # hs2_2fg91x`; `crates/hotsheet-cli/src/orchestration/tests/scheduler/resources.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_2fg91x` | `crates/hotsheet-server/tests/remote_servers/resources.rs`; `clients/web/tests/contracts.spec.ts` | HS2-7YSKXE # a session acquiring its declared resources; HS2-G1PKK2 # release wake across machines; HS2-KCEHVR # a configured offline policy; HS2-5GRXFN # workspace | double-covered |
 | orchestration-progress-summary | docs/26-orchestration-projects.md; docs/14-metrics-interface.md | Read-only progress and cost summary of an owning checkout's runs across targets: lead time, queue wait, blocked time as a union of paused, intervened and unreachable intervals, retries, CI and deployment outcomes and known AI cost from the usage records; every measure known or unknown with a reason code, never zero; one work item per target ticket counted once across redispatches and targets under the `work_item_earliest_run` rule; identifiers and metrics only; CLI/HTTP/MCP parity (HS2-S13719) | `crates/hotsheet-ticketing/src/orchestration/summary_tests.rs`; `crates/hotsheet-ticketing/src/metrics.rs # hs2_s13719`; `crates/hotsheet-cli/src/orchestration/tests/summary.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_s13719` | `crates/hotsheet-server/tests/remote_servers/summary.rs`; `clients/web/tests/contracts.spec.ts` | HS2-XJEH08 # workspace view; HS2-XK7TJS # throughput and utilization measures; HS2-9FXASE # external-wait measures; HS2-B6236S # cost of remote targets | double-covered |
@@ -2992,6 +2993,50 @@ production persistence defect.
 - Not verified: a real Claude, Codex or OpenCode session reading the prompt and
   running its skill (`docs/manual-test-plan.md`); the skill registering by itself
   (the test registers the worker id as the skill would).
+
+### Dispatching the steps the scheduler places (HS2-YC2P7K)
+
+- `session_tests.rs # hs2_yc2p7k` links a session to a run without a state change,
+  idempotently, moves it on a refill, refuses a finished session, and validates the
+  hosted origin's ticket.
+- `tests/session_executor.rs # hs2_yc2p7k` runs real scheduler passes over the real
+  session runtime with the scripted host:
+  - a refused session start leaves its run queued and the step in progress, and the
+    session after the backoff is linked to that same run, with one run in all;
+  - without `work_start` in the policy nothing is dispatched and no session starts;
+  - a finished run frees its session, which is given the next step's run (refill,
+    `session_assigned`), and a cancelled run is replaced by `sched-run-<step>.2`
+    while the finished step never is.
+- The `hs2_95swq4` executor tests now also assert:
+  - one run per step, and the session linked to it and busy while it is unfinished;
+  - the step in progress, with later passes keeping the session `busy`;
+  - a crashed session's replacement linked to the same run, with the loss on the
+    run's stream;
+  - a free session refilled with its step's run, assigned once.
+- `remote_servers/session_executor.rs` runs the automatic loop on a real server
+  with the run dispatched, the tab labelled with it, a killed session replaced on the
+  same run, and the run completed before the wind-down.
+- `remote_servers/session_work.rs # hs2_yc2p7k` walks the whole chain on one real
+  server with the push-capable fake agent:
+  1. an automatic policy and a confirmed step;
+  2. the loop dispatches one dispatcher-mode run and starts one session linked to
+     it, and the step is in progress with the ticket Up Next;
+  3. the session's launch shows the checkout, its instructions, its MCP config, its
+     worker id and its role;
+  4. the role prompt is delivered when the tool comes up and asks for the exact
+     ticket;
+  5. the session joins the pool;
+  6. a claim under its worker id through the server makes the run `dispatched` to
+     that worker from the change feed alone;
+  7. completing and releasing the ticket completes the run and finishes the step;
+  8. the session is wound down at its safe point after its idle time, with one
+     session and one run in all.
+
+  The test plays the agent's part: it registers in the pool and claims and finishes
+  the ticket through the server's routes, as the skill would.
+
+- Not verified: a real tool's skill doing those steps (manual plan); a target on a
+  second server; a target pool with a live dispatcher choosing the session.
 
 ### Scheduling around claimable resources (HS2-2FG91X)
 
