@@ -169,7 +169,8 @@ impl TargetEvents for ServerEvents {
     }
 }
 
-/// Followers of targets with unfinished runs, one per `(machine home, owner, target)`.
+/// Followers of targets with unfinished runs, one per `(server, machine home, owner,
+/// target)` (HS2-KM9CTG).
 static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
     std::sync::OnceLock::new();
 
@@ -189,7 +190,7 @@ fn ensure_watchers(state: &AppState, owner: &str) {
         .map(|run| run.target.target_id)
         .collect();
     for target in targets {
-        let key = format!("{}|{owner}|{target}", state.machine_home().display());
+        let key = format!("{}|{target}", loop_key(state, owner));
         let registry = WATCHERS.get_or_init(Default::default);
         if !registry.lock_or_recover().insert(key.clone()) {
             continue;
@@ -198,7 +199,8 @@ fn ensure_watchers(state: &AppState, owner: &str) {
         tokio::spawn(async move {
             let mut watch = WatchState::default();
             let mut backoff = std::time::Duration::from_secs(1);
-            loop {
+            // HS2-KM9CTG: a stopping server follows nothing more.
+            while !state.is_stopping() {
                 let (task_state, task_owner, task_target) =
                     (state.clone(), owner.clone(), target.clone());
                 let step = tokio::task::spawn_blocking(move || {
@@ -237,7 +239,19 @@ fn ensure_watchers(state: &AppState, owner: &str) {
     }
 }
 
-/// Gate followers, one per `(machine home, owner)`.
+/// HS2-KM9CTG: the registry key of one server's background task for an owner. It
+/// names the server instance as well as the machine home, so a server started after
+/// another over the same home in one process runs its own tasks, while each of them
+/// ends at its next step once its own server is stopping.
+fn loop_key(state: &AppState, owner: &str) -> String {
+    format!(
+        "{}|{:p}|{owner}",
+        state.machine_home().display(),
+        Arc::as_ptr(&state.lifecycle)
+    )
+}
+
+/// Gate followers, one per `(server, machine home, owner)` (HS2-KM9CTG).
 static GATE_FOLLOWERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
     std::sync::OnceLock::new();
 
@@ -246,7 +260,7 @@ static GATE_FOLLOWERS: std::sync::OnceLock<std::sync::Mutex<std::collections::Ha
 /// Actions, the watch Job store), records each change as a run event, and ends when no
 /// gate waits any more. With no such gate nothing is started.
 fn ensure_gate_follower(state: &AppState, owner: &str) {
-    let key = format!("{}|{owner}", state.machine_home().display());
+    let key = loop_key(state, owner);
     if !GATE_FOLLOWERS
         .get_or_init(Default::default)
         .lock_or_recover()
@@ -258,7 +272,8 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
     tokio::spawn(async move {
         let mut follow = GateFollowState::default();
         let mut backoff = std::time::Duration::from_secs(1);
-        loop {
+        // HS2-KM9CTG: a stopping server follows nothing more.
+        while !state.is_stopping() {
             let (task_state, task_owner) = (state.clone(), owner.clone());
             let started = std::time::Instant::now();
             let step = tokio::task::spawn_blocking(move || {
@@ -292,7 +307,7 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
     });
 }
 
-/// Scheduling loops, one per `(machine home, owner)`.
+/// Scheduling loops, one per `(server, machine home, owner)` (HS2-KM9CTG).
 static SCHEDULERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
     std::sync::OnceLock::new();
 
@@ -302,7 +317,7 @@ static SCHEDULERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSe
 /// longer enables it. A policy without automatic placement ends the task at its first
 /// step, having started nothing and contacted no target. Call inside the runtime.
 fn ensure_scheduler(state: &AppState, owner: &str) {
-    let key = format!("{}|{owner}", state.machine_home().display());
+    let key = loop_key(state, owner);
     if !SCHEDULERS
         .get_or_init(Default::default)
         .lock_or_recover()
@@ -314,7 +329,8 @@ fn ensure_scheduler(state: &AppState, owner: &str) {
     tokio::spawn(async move {
         let mut follow = SchedulerFollowState::default();
         let mut backoff = std::time::Duration::from_secs(1);
-        loop {
+        // HS2-KM9CTG: a stopping server places nothing more.
+        while !state.is_stopping() {
             let (task_state, task_owner) = (state.clone(), owner.clone());
             let started = std::time::Instant::now();
             let step = tokio::task::spawn_blocking(move || {

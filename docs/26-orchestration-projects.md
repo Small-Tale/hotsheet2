@@ -2439,7 +2439,10 @@ overwritten.
 
 The server runs one loop per owner whose policy enables automatic placement, started
 at server start and when a policy or scheduler request arrives, and ended when the
-policy no longer enables it. A step runs a pass:
+policy no longer enables it or the server begins stopping. A stopping server's
+followers end the same way, it launches no session (the start stays requested), and
+it reports nothing about its terminals as they go down, so a server started after it
+over the same home runs its own loop and followers at once (HS2-KM9CTG). A step runs a pass:
 
 - when the loop starts;
 - when the owner's run event stream (§26.9) has something new: run, readiness, gate,

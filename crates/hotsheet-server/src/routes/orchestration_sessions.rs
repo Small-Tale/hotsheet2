@@ -43,6 +43,11 @@ impl SessionHost for ServerSessions {
         checkout: &Checkout,
         launch: &HostLaunch,
     ) -> Result<Launched, SessionHostError> {
+        // HS2-KM9CTG: a stopping server launches nothing. The start stays requested and
+        // is repeated on whichever server hosts the checkout next.
+        if self.state.is_stopping() {
+            return Err(SessionHostError::Unavailable);
+        }
         let prompt_at_launch = plugin_role_paths(&launch.tool, &self.state.plugin_dirs)
             .is_some_and(|(at_launch, _)| at_launch);
         let request = OpenTerminalReq {
@@ -76,6 +81,11 @@ impl SessionHost for ServerSessions {
     }
 
     fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
+        // HS2-KM9CTG: a stopping server cannot vouch for its terminals, so nothing is
+        // concluded from it: its sessions are not reported lost as they go down.
+        if self.state.is_stopping() {
+            return None;
+        }
         let infos = self
             .runtime
             .block_on(try_live_terminal_infos(&self.state))
