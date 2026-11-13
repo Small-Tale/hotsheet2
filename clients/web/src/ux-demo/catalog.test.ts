@@ -207,6 +207,9 @@ describe('UX demo catalog', () => {
       'notification-channel-dialog',
       'notification-rule-dialog',
       'permission-rules-settings',
+      'orchestration-mock-workspace',
+      'orchestration-mock-panels',
+      'orchestration-mock-policy',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('list-item')).toMatchObject({ name: 'ListItem' });
