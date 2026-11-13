@@ -25,7 +25,6 @@ export interface RemoteDevicesSettingsProps {
 }
 
 const ACTIONS = NOTIFICATIONS_AND_LINKS_ACTIONS;
-const HOST_ACCESS_REASON = 'Only the host or a device with host access can change host access.';
 
 const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
 
@@ -33,7 +32,8 @@ const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
  * App Settings → Devices (HS2-DXM0YN, docs/08 §8.2.2): pairing requests and paired browsers for the
  * trusted host and admin sessions. Every row action sits in its "…" menu, which the row itself and a
  * right-click also open; the delegated handlers live in `remote-devices-settings-interactions.ts`. A
- * session without the admin grant sees the category with the reason instead of the list.
+ * session without the admin grant sees the category with the reason instead of the list. Every
+ * administrator may change Host Access, including its own (HS2-KTHQE5).
  */
 export function RemoteDevicesSettings({
   state = 'idle',
@@ -43,7 +43,6 @@ export function RemoteDevicesSettings({
   formatTime = deviceTime,
 }: RemoteDevicesSettingsProps) {
   const loading = !list && state !== 'forbidden',
-    hostAccess = list?.manager.local ?? false,
     pending = list?.pending ?? [],
     devices = list?.devices ?? [],
     minutes = Math.round((list?.pair_ttl_seconds ?? 900) / 60);
@@ -190,8 +189,6 @@ export function RemoteDevicesSettings({
                               action: ACTIONS.toggleRemoteDeviceHostAccess.value,
                               icon: <LucideIcon icon={House} name="house" />,
                               checked: device.local,
-                              disabled: !hostAccess,
-                              disabledReason: hostAccess ? undefined : HOST_ACCESS_REASON,
                               attributes,
                             },
                             { kind: 'divider' as const },

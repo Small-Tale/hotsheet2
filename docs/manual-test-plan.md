@@ -512,7 +512,8 @@ the first with `--admin --local` and the second plainly. The loopback browser
 must show the native folder chooser from Open Project and open a project by path;
 the Serve browser keeps the registered-project picker. Grant the Serve browser
 admin from the first browser's Settings → Devices, reload it, and confirm it lists
-devices but cannot change Host Access. A plain session sees "Administrator
+devices and can grant Host Access (HS2-KTHQE5); after granting it to itself and
+reloading, it shows the native folder chooser. A plain session sees "Administrator
 access required." Approve, reject and revoke from the Devices page and confirm
 another open Devices page updates without reload. Confirm a request still
 redeems after 14 minutes and the proposed device name matches the browser and

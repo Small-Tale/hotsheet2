@@ -1183,9 +1183,9 @@ preview/download, server directory browser) are separate design work.
   pairing requests and paired browsers (`components/remote-devices-settings.tsx`). Each row's
   "…" menu, also opened by the row itself and by right-click, holds its commands: a request
   offers Approve Read-Write, Approve Read-Only and Reject; a device offers its read role
-  (Make Read-Only or Allow Changes), Administrator, Host Access and Revoke. Host Access is
-  disabled, with the reason, unless the caller is the trusted host or itself has the local
-  grant. The caller's own row is marked This Device. The request row shows the request id so
+  (Make Read-Only or Allow Changes), Administrator, Host Access and Revoke. Every caller
+  that may open the category may change Host Access, an administrator without it included
+  (HS2-KTHQE5). The caller's own row is marked This Device. The request row shows the request id so
   the owner can compare it with the id on the requesting browser. While the category shows,
   `features/remote-devices.ts` keeps one long poll on `/__hotsheet/remote-auth/owner/changes`
   (cursor replay, 1 s to 30 s failure backoff, no fixed interval) and stops when it hides. A

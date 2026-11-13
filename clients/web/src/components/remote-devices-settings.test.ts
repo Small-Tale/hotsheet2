@@ -60,16 +60,18 @@ describe('HS2-DXM0YN App Settings → Devices', () => {
     expect(markup).toContain('data-role="read_write"');
     expect(markup).toContain('data-device-id="D2"');
     expect(markup).toContain('Read-write, administrator, host access · last used t5');
-    // The trusted host may change host access, so nothing explains a disabled Host Access.
     expect(markup).not.toContain('Only the host or a device with host access');
     expect(markup).not.toContain('This Device');
   });
 
-  it('disables Host Access with its reason for an administrator without host access, and marks its own row', () => {
+  it('HS2-KTHQE5 offers Host Access to an administrator without host access, and marks its own row', () => {
     const markup = render({ state: 'ready', list: fixture({ device_id: 'D2', local: false }), formatTime: at });
-    expect(markup).toContain('Only the host or a device with host access can change host access.');
+    expect(markup).toContain('Host Access');
+    expect(markup).not.toContain('Only the host or a device with host access');
     expect(markup).toContain('This Device');
     expect(markup).toContain('Revoke This Device');
+    // The manager's own host access no longer changes what it may do.
+    expect(markup).toBe(render({ state: 'ready', list: fixture({ device_id: 'D2', local: true }), formatTime: at }));
   });
 
   it('distinguishes loading, empty, refused, and failed states', () => {

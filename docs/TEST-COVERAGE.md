@@ -68,7 +68,8 @@ boundary, admin and local grants through approve, redeem, reopen and change, rej
 a pre-grant catalog, the change cursor (visible changes only) and the long-poll wait.
 `hotsheet-server/tests/remote_auth.rs` walks every management route for a plain,
 read-only admin, and local admin session (403 without admin, Origin/CSRF on changes,
-no local grant from a non-local admin, `revoke-all` host-only, 404/422 answers) and
+a non-local admin granting and removing local, itself included, per HS2-KTHQE5,
+`revoke-all` host-only, 404/422 answers) and
 the long poll waking on a pairing and refusing a session revoked while it waited.
 HS2-S8R3PD: `hotsheet-server/tests/remote_host_access.rs` sends every host-acting
 server route (difftool, repository and attachment open/reveal, project open and

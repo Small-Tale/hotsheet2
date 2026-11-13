@@ -1958,10 +1958,12 @@ Device management (`/remote-auth/owner`, `/owner/changes?after=<revision>`,
 `/owner/approve`, `/owner/reject`, `PATCH|DELETE /owner/devices/{id}`) accepts
 the machine secret from the trusted host or an admin session; a session change
 also needs its paired Origin and CSRF token, and the read role does not limit
-it. Only the trusted host or a local session may grant or remove local, so an
-admin cannot make itself host-trusted. `revoke-all` stays with the trusted host.
+it. Any manager may grant or remove local, an admin session included, even for
+itself (HS2-KTHQE5, a maintainer decision): the admin grant is therefore enough to
+gain host access, so grant admin only to devices you would trust with the host.
+`revoke-all` stays with the trusted host.
 The list answer names its change cursor and its caller (`manager.device_id`,
-`manager.local`); `/owner/changes` is a 25-second long poll that answers when
+`manager.local`, whether the caller itself has host access); `/owner/changes` is a 25-second long poll that answers when
 the cursor moves and re-authorizes after the wait. The headless equivalents are
 `remote sessions reject <request-id>` and `remote sessions update <device-id>
 [--role read_only|read_write] [--admin true|false] [--local true|false]`. A

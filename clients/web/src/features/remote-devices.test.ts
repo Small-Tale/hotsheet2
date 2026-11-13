@@ -190,9 +190,7 @@ describe('HS2-DXM0YN remote devices controller', () => {
       { admin: true },
     ]);
     expect(devices.message.value).toBe('');
-    update.answer(
-      Response.json({ error: 'only the host or a host-trusted device can change host access' }, { status: 403 }),
-    );
+    update.answer(Response.json({ error: 'administrator access required' }, { status: 403 }));
     expect(await updating).toBe(false);
 
     const revoking = devices.revoke('D1');
