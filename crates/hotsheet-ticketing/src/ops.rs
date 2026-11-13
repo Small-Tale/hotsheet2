@@ -902,6 +902,61 @@ pub fn add_follow_up(
     })
 }
 
+/// Record or advance a link from an orchestration ticket to a target ticket
+/// (HS2-AZ15GA). Idempotent by subject: the same target ticket (matched by create
+/// operation or native id) is merged, never duplicated, and never moves backwards.
+/// Nothing is written when the stored link already says as much.
+pub fn upsert_orchestration_link(
+    store: &FsStore,
+    source: &Ulid,
+    link: hotsheet_model::OrchestrationLink,
+    now: Timestamp,
+) -> Result<Ticket, StoreError> {
+    store.with_ticket_transaction(|| {
+        let mut ticket = store.read_ticket(source)?;
+        match ticket
+            .orchestration_links
+            .iter_mut()
+            .find(|existing| existing.same_subject(&link))
+        {
+            Some(existing) => {
+                let merged = existing.merged_with(&link);
+                if *existing == merged {
+                    return Ok(ticket);
+                }
+                *existing = merged;
+            }
+            None => ticket.orchestration_links.push(link),
+        }
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    })
+}
+
+/// Remove every link to one target ticket; removing an absent link writes nothing.
+/// The target ticket itself is never touched (HS2-AZ15GA).
+pub fn remove_orchestration_link(
+    store: &FsStore,
+    source: &Ulid,
+    link: &hotsheet_model::OrchestrationLink,
+    now: Timestamp,
+) -> Result<Ticket, StoreError> {
+    store.with_ticket_transaction(|| {
+        let mut ticket = store.read_ticket(source)?;
+        let before = ticket.orchestration_links.len();
+        ticket
+            .orchestration_links
+            .retain(|existing| !existing.same_subject(link));
+        if ticket.orchestration_links.len() == before {
+            return Ok(ticket);
+        }
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    })
+}
+
 fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
     let mut before = before.clone();
     let after = after.clone();
@@ -3372,6 +3427,101 @@ mod tests {
         assert_eq!(
             published.claim_history.last().unwrap().kind,
             ClaimEventKind::Release
+        );
+    }
+
+    /// HS2-AZ15GA: a link advances planned to created without duplicating, an equal or
+    /// older report writes nothing, and removal is idempotent.
+    #[test]
+    fn hs2_az15ga_orchestration_link_upsert_advances_and_never_regresses() {
+        use hotsheet_model::{OrchestrationLink, OrchestrationRelation as R};
+        let (_dir, store) = store();
+        let source = titled(&store, "Orchestration ticket");
+        let link = |native: Option<&str>, relation, operation: Option<&str>| OrchestrationLink {
+            target_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".into(),
+            connection_id: "target-source".into(),
+            native_id: native.map(Into::into),
+            relation,
+            operation_id: operation.map(Into::into),
+        };
+        let planned = upsert_orchestration_link(
+            &store,
+            &source.id,
+            link(None, R::Planned, Some("op-1")),
+            ts("2026-10-15T01:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(
+            planned.orchestration_links,
+            vec![link(None, R::Planned, Some("op-1"))]
+        );
+        assert_eq!(planned.updated_at, ts("2026-10-15T01:00:00Z"));
+        let path = store.ticket_path(&source.id);
+        let bytes = std::fs::read(&path).unwrap();
+        // The same report again changes neither the file nor the timestamp.
+        let repeated = upsert_orchestration_link(
+            &store,
+            &source.id,
+            link(None, R::Planned, Some("op-1")),
+            ts("2026-10-15T02:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(repeated.updated_at, ts("2026-10-15T01:00:00Z"));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let created = upsert_orchestration_link(
+            &store,
+            &source.id,
+            link(Some("42"), R::Created, Some("op-1")),
+            ts("2026-10-15T03:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(
+            created.orchestration_links,
+            vec![link(Some("42"), R::Created, Some("op-1"))]
+        );
+        // A late planned or observed report for the same ticket cannot move it back.
+        for late in [
+            link(None, R::Planned, Some("op-1")),
+            link(Some("42"), R::Observed, None),
+        ] {
+            let after =
+                upsert_orchestration_link(&store, &source.id, late, ts("2026-10-15T04:00:00Z"))
+                    .unwrap();
+            assert_eq!(after.orchestration_links, created.orchestration_links);
+            assert_eq!(after.updated_at, ts("2026-10-15T03:00:00Z"));
+        }
+        // A different target ticket is a second link.
+        let two = upsert_orchestration_link(
+            &store,
+            &source.id,
+            link(Some("43"), R::Observed, None),
+            ts("2026-10-15T05:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(two.orchestration_links.len(), 2);
+        let removed = remove_orchestration_link(
+            &store,
+            &source.id,
+            &link(None, R::Observed, Some("op-1")),
+            ts("2026-10-15T06:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(
+            removed.orchestration_links,
+            vec![link(Some("43"), R::Observed, None)]
+        );
+        let again = remove_orchestration_link(
+            &store,
+            &source.id,
+            &link(Some("42"), R::Observed, None),
+            ts("2026-10-15T07:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(again.updated_at, ts("2026-10-15T06:00:00Z"));
+        // The stored file reads back with the same links.
+        assert_eq!(
+            store.read_ticket(&source.id).unwrap().orchestration_links,
+            removed.orchestration_links
         );
     }
 

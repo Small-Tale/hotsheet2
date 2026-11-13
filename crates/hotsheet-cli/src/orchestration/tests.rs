@@ -20,6 +20,7 @@ use super::*;
 
 mod access;
 mod policy;
+mod tickets;
 
 fn id(n: u128) -> String {
     ulid::Ulid::from(n).to_string()

@@ -38,6 +38,7 @@ const KNOWN_KEYS: &[&str] = &[
     "tags",
     "blocked_by",
     "follow_ups",
+    "orchestration_links",
     "blocked_reason",
     "group",
     "created_at",
@@ -1762,6 +1763,49 @@ mod tests {
         ));
     }
 
+    /// HS2-AZ15GA: links round-trip through the file, a ticket without them emits no
+    /// key, and a file written before the field existed reads with none.
+    #[test]
+    fn hs2_az15ga_orchestration_links_round_trip_and_old_files_read_empty() {
+        use crate::{OrchestrationLink, OrchestrationRelation};
+        let plain = sample();
+        let old_text = to_file_string(&plain);
+        assert!(!old_text.contains("orchestration_links"));
+        assert!(
+            parse_file(&old_text)
+                .unwrap()
+                .orchestration_links
+                .is_empty()
+        );
+        let mut linked = sample();
+        linked.orchestration_links = vec![
+            OrchestrationLink {
+                target_id: "01ARZ3NDEKTSV4RRFFQ69G5FC2".into(),
+                connection_id: "github-main".into(),
+                native_id: None,
+                relation: OrchestrationRelation::Planned,
+                operation_id: Some("op-1".into()),
+            },
+            OrchestrationLink {
+                target_id: "01ARZ3NDEKTSV4RRFFQ69G5FC2".into(),
+                connection_id: "jira-eng".into(),
+                native_id: Some("ENG-42".into()),
+                relation: OrchestrationRelation::Validated,
+                operation_id: None,
+            },
+        ];
+        let text = to_file_string(&linked);
+        assert!(text.contains("orchestration_links:"));
+        assert!(text.contains("relation: planned"));
+        assert!(text.contains("native_id: ENG-42"));
+        let parsed = parse_file(&text).unwrap();
+        assert_eq!(parsed.orchestration_links, linked.orchestration_links);
+        // Byte-stable: writing what was read changes nothing.
+        assert_eq!(to_file_string(&parsed), text);
+        // The key is part of the schema, never preserved as an unknown extra.
+        assert!(!parsed.extra.contains_key("orchestration_links"));
+    }
+
     #[test]
     fn known_keys_cover_serialized_fields() {
         // Guard against KNOWN_KEYS drifting from the struct: every key a fully
@@ -1784,6 +1828,13 @@ mod tests {
         t.duplicate_of = Some("01ARZ3NDEKTSV4RRFFQ69G5FC0".into());
         t.blocked_by = vec![ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1")];
         t.blocked_reason = Some("x".into());
+        t.orchestration_links = vec![crate::OrchestrationLink {
+            target_id: "01ARZ3NDEKTSV4RRFFQ69G5FC2".into(),
+            connection_id: "c".into(),
+            native_id: Some("n".into()),
+            relation: crate::OrchestrationRelation::Created,
+            operation_id: Some("o".into()),
+        }];
         t.group = Some("g".into());
         t.claimed_by = Some("w".into());
         t.claim_lease_expires_at = Some("x".into());

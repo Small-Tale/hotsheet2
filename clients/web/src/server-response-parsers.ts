@@ -50,6 +50,7 @@ import type {
   NotifierDescriptor,
   NotifierList,
   NotifierSettingField,
+  OrchestrationLink,
   PermissionRequest,
   PhaseReport,
   PollResponse,
@@ -745,6 +746,13 @@ const projectTicketRef = shape<ProjectTicketRef>('project ticket reference', {
   native_id: isString,
 });
 
+/** A link from an orchestration ticket to a ticket in a declared target (HS2-AZ15GA). */
+const orchestrationLink = shape<OrchestrationLink>(
+  'orchestration link',
+  { target_id: isString, connection_id: isString, relation: isString },
+  { native_id: isString, operation_id: isString },
+);
+
 /** A recorded actor such as a ticket's creator (HS2-9FPHWY): a role and an optional stable id. */
 const actor = shape<NoteActor>('actor', { role: isString }, { id: isString });
 
@@ -758,6 +766,7 @@ const rowOptional: Record<string, Check> = {
   tags: isStringArray,
   blocked_by: isStringArray,
   follow_ups: listOf(projectTicketRef.check),
+  orchestration_links: listOf(orchestrationLink.check),
   claim_count: isNumber,
   created_by: actor.check,
   notes: listOf(note.check),

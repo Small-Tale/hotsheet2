@@ -56,6 +56,9 @@ pub struct ApiTicket {
     /// Explicit follow-up targets, including project and provider identity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub follow_ups: Vec<hotsheet_model::ProjectTicketRef>,
+    /// Links to tickets in declared orchestration targets (HS2-AZ15GA).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub orchestration_links: Vec<hotsheet_model::OrchestrationLink>,
     /// Creation succeeded, but the requested source link still needs an idempotent repair.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow_up_link_error: Option<String>,
@@ -286,6 +289,7 @@ impl ApiTicket {
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             follow_ups: t.follow_ups.clone(),
+            orchestration_links: t.orchestration_links.clone(),
             follow_up_link_error: None,
             blocked_reason: t.blocked_reason.clone(),
             group: t.group.clone(),
@@ -664,6 +668,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "native_url",
     "needs_review",
     "notes",
+    "orchestration_links",
     "pending_operation_ids",
     "priority",
     "qualified_id",

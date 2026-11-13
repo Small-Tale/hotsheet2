@@ -62,6 +62,10 @@ pub enum OrchestrationError {
     /// HS2-SBQ3T8: the caller may never perform this operation, whatever is granted.
     #[error("orchestration operation is forbidden: {0}")]
     Forbidden(&'static str),
+    /// HS2-AZ15GA: the target's own ticket source refused or could not perform an
+    /// authorized operation. The target stays authoritative; nothing is retried elsewhere.
+    #[error("target ticket operation failed: {}", .0.code())]
+    TargetOperation(TargetOpError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -85,7 +89,68 @@ impl OrchestrationError {
             Self::Storage(_) => "storage_unavailable",
             Self::Denied(reason) => reason.code(),
             Self::Forbidden(_) => "forbidden",
+            Self::TargetOperation(error) => error.code(),
         }
+    }
+}
+
+/// HS2-AZ15GA: why a target's ticket source did not perform an authorized operation.
+/// Content-free: provider messages can hold ticket text and never cross this boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetOpError {
+    /// The ticket, or the source connection, does not exist in the target.
+    NotFound,
+    /// The target's provider does not support the operation; no other source is tried.
+    Unsupported,
+    /// The provider reported a conflict, including an operation id reused for a
+    /// different source ticket and a stale concurrency token.
+    Conflict,
+    /// The target's provider credentials were refused or are missing.
+    Unauthorized,
+    RateLimited,
+    /// The target's source connection is disabled.
+    Disabled,
+    /// The request itself is malformed for this provider.
+    Invalid,
+    /// The peer does not offer orchestrated target operations.
+    PeerUnsupported,
+    /// The orchestration ticket's own source cannot store structured links.
+    LinksUnsupported,
+    Failed,
+}
+
+impl TargetOpError {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::NotFound => "target_ticket_not_found",
+            Self::Unsupported => "target_operation_unsupported",
+            Self::Conflict => "target_conflict",
+            Self::Unauthorized => "target_provider_unauthorized",
+            Self::RateLimited => "target_rate_limited",
+            Self::Disabled => "target_source_disabled",
+            Self::Invalid => "target_request_invalid",
+            Self::PeerUnsupported => "target_peer_unsupported",
+            Self::LinksUnsupported => "orchestration_links_unsupported",
+            Self::Failed => "target_operation_failed",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        [
+            Self::NotFound,
+            Self::Unsupported,
+            Self::Conflict,
+            Self::Unauthorized,
+            Self::RateLimited,
+            Self::Disabled,
+            Self::Invalid,
+            Self::PeerUnsupported,
+            Self::LinksUnsupported,
+            Self::Failed,
+        ]
+        .into_iter()
+        .find(|error| error.code() == code)
     }
 }
 

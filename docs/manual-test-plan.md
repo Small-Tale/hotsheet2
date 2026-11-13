@@ -985,6 +985,20 @@ recover. At 1,000 total issue keys with no eligible v2 key, verify the write
 is refused before PUT. At more than 1,000 keys, reads stop for operator
 recovery. Retain every v1 marker even when expired or released.
 
+## Orchestration target tickets (HS2-AZ15GA)
+
+Use disposable homes, synthetic projects and the always-safe internal testing
+repositories only. The automated flows cover git sources on a local and a real
+remote server; external providers are covered only by refusal paths. Not yet run:
+
+1. Bind a target whose source is a GitHub, GitLab or Jira connection on an internal
+   testing project. Create a ticket with `orchestration ticket create`, repeat the
+   command, and confirm exactly one issue exists and carries the operation marker.
+2. Update its title and status, link it from a second orchestration ticket, and
+   confirm `orchestration ticket links --resolve` shows both links resolved.
+3. Disable the connection on the target machine and confirm the next operation is
+   refused without contacting the provider.
+
 ## Orchestration grants and audit (HS2-SBQ3T8)
 
 Use disposable machine homes and synthetic projects only. No rendered interface is

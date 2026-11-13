@@ -1090,6 +1090,174 @@ paths:
         schema:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/tickets/{operation}:
+    description:
+      Machine-local target-ticket operations for an orchestration ticket (HS2-AZ15GA). Every call passes the grant and
+      policy gate; the target's own source stays authoritative and an unsupported operation is never rerouted.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestrateTargetTicket
+      description:
+        '`create` (idempotent by a retained `operation_id`), `read`, `update`, `link`, `unlink` and `links`. Denials are
+        403 with the denial code; target refusals use the `target_*` codes.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetTicketOperation'
+      responses:
+        '200':
+          description: A ticket, a create result, or the orchestration ticket's links, depending on the operation.
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - type: object
+                  - type: array
+                    items:
+                      type: object
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - create
+            - read
+            - update
+            - link
+            - unlink
+            - links
+  /checkouts/{checkout}/target-tickets:
+    description:
+      Provider-neutral ticket operations on one source of a hosted checkout, for a local or remote orchestration project
+      (HS2-AZ15GA). Ordinary authenticated project data under the caller's device role.
+    get:
+      operationId: readHostedTargetTicket
+      parameters:
+        - name: connection_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 160
+        - name: native_id
+          in: query
+          description: Exactly one of `native_id` or `operation_id`.
+          schema:
+            type: string
+            maxLength: 200
+        - name: operation_id
+          in: query
+          description: Find the ticket an operation created; answers null when it created none.
+          schema:
+            type: string
+            maxLength: 160
+      responses:
+        '200':
+          description: The ticket, or null for an unknown operation id.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/HostedTargetTicket'
+                  - type: 'null'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: createHostedTargetTicket
+      description:
+        Create through the source's own provider. Idempotent by `operation_id`; the same id for a different source
+        ticket is 409 `target_conflict`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHostedTargetTicket'
+      responses:
+        '200':
+          description: The created or existing ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetTicket'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    patch:
+      operationId: updateHostedTargetTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHostedTargetTicket'
+      responses:
+        '200':
+          description: The updated ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetTicket'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -16144,6 +16312,259 @@ components:
         decided_by:
           type: string
       additionalProperties: false
+    OrchestrationLink:
+      description:
+        A link from an orchestration ticket to a ticket in a declared target (HS2-AZ15GA). No slug, origin, path or
+        machine id.
+      type: object
+      required:
+        - target_id
+        - connection_id
+        - relation
+      properties:
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        connection_id:
+          type: string
+          maxLength: 160
+        native_id:
+          description: Absent only while a planned create has not produced its ticket.
+          type: string
+          maxLength: 200
+        relation:
+          enum:
+            - planned
+            - observed
+            - created
+            - validated
+        operation_id:
+          type: string
+          maxLength: 160
+      additionalProperties: false
+    HostedTargetTicket:
+      type: object
+      required:
+        - ticket
+      properties:
+        ticket:
+          description: The provider-neutral ticket as its own source returned it.
+          type: object
+        created:
+          description: False when an earlier request with the same operation id already created it.
+          type: boolean
+      additionalProperties: false
+    CreateHostedTargetTicket:
+      type: object
+      required:
+        - connection_id
+        - operation_id
+        - source
+        - title
+      properties:
+        connection_id:
+          type: string
+          maxLength: 160
+        operation_id:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        source:
+          description: The orchestration ticket, recorded as provenance on the created ticket.
+          type: object
+          required:
+            - connection_id
+            - native_id
+          properties:
+            connection_id:
+              type: string
+              maxLength: 160
+            native_id:
+              type: string
+              maxLength: 200
+          additionalProperties: false
+        actor:
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationActor'
+            - type: 'null'
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        details:
+          type:
+            - string
+            - 'null'
+        category:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        priority:
+          type:
+            - string
+            - 'null'
+        status:
+          type:
+            - string
+            - 'null'
+        tags:
+          anyOf:
+            - type: array
+              maxItems: 64
+              items:
+                type: string
+                maxLength: 120
+            - type: 'null'
+        up_next:
+          type:
+            - boolean
+            - 'null'
+      additionalProperties: false
+    UpdateHostedTargetTicket:
+      type: object
+      required:
+        - connection_id
+        - native_id
+      properties:
+        connection_id:
+          type: string
+          maxLength: 160
+        native_id:
+          type: string
+          maxLength: 200
+        expected_token:
+          description: The provider's concurrency token from a previous read.
+          type:
+            - string
+            - 'null'
+        actor:
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationActor'
+            - type: 'null'
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        details:
+          type:
+            - string
+            - 'null'
+        category:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        priority:
+          type:
+            - string
+            - 'null'
+        status:
+          type:
+            - string
+            - 'null'
+        tags:
+          anyOf:
+            - type: array
+              maxItems: 64
+              items:
+                type: string
+                maxLength: 120
+            - type: 'null'
+        up_next:
+          type:
+            - boolean
+            - 'null'
+      additionalProperties: false
+    TargetTicketOperation:
+      description: The body of an orchestrating-side operation. `create` needs `ticket`, `target_id`, `connection_id`,
+        `operation_id` and `title`; `read` and `update` need the target ticket; `link` and `unlink` need both; `links`
+        needs `ticket`.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        ticket:
+          description: The orchestration ticket; an empty connection id selects the project's only git source.
+          type: object
+          required:
+            - native_id
+          properties:
+            connection_id:
+              type: string
+              maxLength: 160
+            native_id:
+              type: string
+              maxLength: 200
+          additionalProperties: false
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        connection_id:
+          description: The target's ticket source; always explicit, so a multi-source target is never guessed.
+          type: string
+          maxLength: 160
+        native_id:
+          type:
+            - string
+            - 'null'
+          maxLength: 200
+        operation_id:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        expected_token:
+          type:
+            - string
+            - 'null'
+        relation:
+          description: '`link` only.'
+          anyOf:
+            - enum:
+                - observed
+                - validated
+            - type: 'null'
+        resolve:
+          description: '`links` only: also read each linked target ticket.'
+          type: boolean
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        details:
+          type:
+            - string
+            - 'null'
+        category:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        priority:
+          type:
+            - string
+            - 'null'
+        status:
+          type:
+            - string
+            - 'null'
+        tags:
+          anyOf:
+            - type: array
+              maxItems: 64
+              items:
+                type: string
+                maxLength: 120
+            - type: 'null'
+        up_next:
+          type:
+            - boolean
+            - 'null'
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:
@@ -16673,6 +17094,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectTicketRef'
+        orchestration_links:
+          description: Links to tickets in declared orchestration targets (HS2-AZ15GA); omitted when empty.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationLink'
         follow_up_link_error:
           type: string
           description: Target creation succeeded but its source relation needs idempotent repair.

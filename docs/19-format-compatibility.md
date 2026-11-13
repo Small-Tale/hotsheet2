@@ -32,7 +32,11 @@ Before publishing a release, add an immutable, release-named fixture corpus cont
 all four persisted surfaces. CI must run the current readers against every retained
 corpus. Never edit an old fixture to make a test pass; add migration/read compatibility.
 
-Writers may add optional fields that old readers preserve or ignore. A genuinely
+Writers may add optional fields that old readers preserve or ignore. The
+`orchestration_links` ticket field (HS2-AZ15GA) is such an addition: a ticket without
+links emits no key, a file written before the field reads with an empty list, and an
+older reader keeps the key verbatim among its preserved unknown frontmatter. It needs
+no version marker. A genuinely
 incompatible new shape requires a new explicit version marker. Readers encountering a
 marker above their supported range return the stable `upgrade_required` classification
 and the message that the item was created by a newer Hot Sheet 2, cannot be opened by

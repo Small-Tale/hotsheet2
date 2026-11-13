@@ -22,6 +22,9 @@ pub fn is_path(path: &str) -> bool {
             ]
             | ["checkouts", _, "orchestration", "approvals"]
             | ["checkouts", _, "orchestration", "approvals", _]
+            // HS2-AZ15GA: orchestrating-side ticket operations and the hosted half.
+            | ["checkouts", _, "orchestration", "tickets", _]
+            | ["checkouts", _, "target-tickets"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -51,6 +54,10 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "policy", "dry-run"]
             | ["checkouts", _, "orchestration", "approvals"]
             | ["checkouts", _, "orchestration", "approvals", _]
+            // HS2-AZ15GA: orchestrating uses this machine's grants and bindings. The
+            // hosted `target-tickets` routes stay ordinary authenticated project data,
+            // because a remote orchestrator must reach them.
+            | ["checkouts", _, "orchestration", "tickets", _]
     )
 }
 
@@ -88,6 +95,23 @@ fn query_number(path: &str, key: &str, default: u64) -> Result<u64, Orchestratio
     }
     Ok(found.unwrap_or(default))
 }
+/// HS2-AZ15GA: one percent-decoded text query value; a repeated key is invalid.
+fn query_text(path: &str, key: &str) -> Result<Option<String>, OrchestrationError> {
+    let Some((_, query)) = path.split_once('?') else {
+        return Ok(None);
+    };
+    let mut found = None;
+    for pair in query.split('&').filter(|pair| !pair.is_empty()) {
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if name == key {
+            if found.is_some() {
+                return Err(OrchestrationError::Invalid("repeated query parameter"));
+            }
+            found = Some(super::tickets::decode_query(value)?);
+        }
+    }
+    Ok(found)
+}
 /// HS2-SBQ3T8: the optional acting role and id every adapter may attach to a body.
 fn actor(body: &Value) -> Result<Option<MutationActor>, OrchestrationError> {
     let Some(actor) = body.get("actor").filter(|actor| !actor.is_null()) else {
@@ -115,6 +139,11 @@ fn decode<T: DeserializeOwned>(body: &Value) -> Result<T, OrchestrationError> {
         object.remove("actor");
     }
     serde_json::from_value(body).map_err(|_| OrchestrationError::Invalid("invalid target request"))
+}
+/// HS2-AZ15GA: hosted bodies keep their `actor`; it attributes the target's write.
+fn hosted<T: DeserializeOwned>(body: &Value) -> Result<T, OrchestrationError> {
+    serde_json::from_value(body.clone())
+        .map_err(|_| OrchestrationError::Invalid("invalid target ticket request"))
 }
 fn reference(owner: &str, id: &str) -> Result<TargetRef, OrchestrationError> {
     let target = TargetRef {
@@ -308,6 +337,63 @@ impl OrchestrationRuntime {
             ("POST", ["checkouts", owner, "orchestration", "targets", id, "access"]) => {
                 let request: AccessRequest = decode(body)?;
                 value(self.access(&reference(owner, id)?, &request, tx)?)
+            }
+            // HS2-AZ15GA hosted half: provider-neutral ticket operations on one source
+            // of a checkout this machine hosts.
+            ("GET", ["checkouts", checkout, "target-tickets"]) => {
+                let connection = query_text(path, "connection_id")?
+                    .ok_or(OrchestrationError::Invalid("connection_id is required"))?;
+                match (
+                    query_text(path, "native_id")?,
+                    query_text(path, "operation_id")?,
+                ) {
+                    (Some(native_id), None) => {
+                        value(self.hosted_ticket(checkout, &connection, &native_id)?)
+                    }
+                    (None, Some(operation_id)) => value(self.hosted_ticket_by_operation(
+                        checkout,
+                        &connection,
+                        &operation_id,
+                    )?),
+                    _ => Err(OrchestrationError::Invalid(
+                        "exactly one of native_id or operation_id is required",
+                    )),
+                }
+            }
+            ("POST", ["checkouts", checkout, "target-tickets"]) => {
+                value(self.hosted_ticket_create(checkout, hosted(body)?, tx)?)
+            }
+            ("PATCH", ["checkouts", checkout, "target-tickets"]) => {
+                value(self.hosted_ticket_update(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-AZ15GA orchestrating half.
+            ("POST", ["checkouts", owner, "orchestration", "tickets", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "create" => value(self.target_ticket_create(
+                        owner,
+                        decode(body)?,
+                        actor.as_ref(),
+                        tx,
+                    )?),
+                    "read" => {
+                        value(self.target_ticket_read(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "update" => value(self.target_ticket_update(
+                        owner,
+                        decode(body)?,
+                        actor.as_ref(),
+                        tx,
+                    )?),
+                    "link" => {
+                        value(self.target_ticket_link(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "unlink" => value(self.target_ticket_unlink(owner, decode(body)?, tx)?),
+                    "links" => {
+                        value(self.target_ticket_links(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
             }
             ("GET", ["checkouts", owner, "orchestration", "policy"]) => value(self.policy(owner)?),
             ("PUT", ["checkouts", owner, "orchestration", "policy"]) => {

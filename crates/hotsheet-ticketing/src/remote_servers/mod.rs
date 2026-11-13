@@ -2,7 +2,7 @@
 
 mod checkout_observation;
 mod contract;
-pub use checkout_observation::{RemoteCheckoutProof, RemoteCheckoutTransport};
+pub use checkout_observation::{RemoteCheckoutProof, RemoteCheckoutTransport, TargetReply};
 mod registry;
 mod workflow;
 

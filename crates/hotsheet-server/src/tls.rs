@@ -382,6 +382,9 @@ mod tests {
             "/checkouts/owner/orchestration/policy/dry-run",
             "/checkouts/owner/orchestration/approvals",
             "/checkouts/owner/orchestration/approvals/id",
+            // HS2-AZ15GA: orchestrating uses this machine's grants.
+            "/checkouts/owner/orchestration/tickets/create",
+            "/checkouts/owner/orchestration/tickets/links",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

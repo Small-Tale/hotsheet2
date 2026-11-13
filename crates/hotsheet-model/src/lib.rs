@@ -14,6 +14,7 @@ pub mod format;
 pub mod group;
 pub mod ids;
 pub mod note_doctor;
+pub mod orchestration_link;
 pub mod ticket;
 pub mod ticket_ref;
 pub mod timestamp;
@@ -26,6 +27,7 @@ pub use group::{
     normalize_group_name, normalize_group_name_lossy,
 };
 pub use ids::{Ulid, derive_slug};
+pub use orchestration_link::{OrchestrationLink, OrchestrationRelation};
 pub use ticket::{
     AiFeedback, AiFeedbackRating, AnnotationArrowHead, AnnotationPoint, AnnotationShape,
     Attachment, AttachmentActor, AttachmentActorRole, AttachmentMetadata, AttachmentPurpose,

@@ -762,6 +762,8 @@ export interface TicketRow {
   tags: string[];
   blocked_by: string[];
   follow_ups?: ProjectTicketRef[];
+  /** Links to tickets in declared orchestration targets (HS2-AZ15GA). */
+  orchestration_links?: OrchestrationLink[];
   blocked_reason?: string;
   /** The ticket's group name (HS2-PDSHNN); absent or null when ungrouped. */
   group?: string | null;
@@ -1024,6 +1026,15 @@ export interface CodeReviewFile {
   original_path?: string;
   change: Exclude<RepositoryFileChange, 'unmerged' | 'untracked'>;
   category: 'docs' | 'tests' | 'source' | 'other';
+}
+/** One target ticket an orchestration ticket refers to (HS2-AZ15GA). */
+export interface OrchestrationLink {
+  target_id: string;
+  connection_id: string;
+  /** Absent only while a planned create has not produced its ticket. */
+  native_id?: string;
+  relation: 'planned' | 'observed' | 'created' | 'validated';
+  operation_id?: string;
 }
 export interface ProjectTicketRef {
   project_id: string;

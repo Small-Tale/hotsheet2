@@ -214,7 +214,73 @@ impl hotsheet_ticketing::remote_servers::RemoteCheckoutTransport for MtlsRemoteT
         }
         Ok(projection)
     }
+
+    /// HS2-AZ15GA: the same pinned, no-redirect, time-bounded agent and credentials as
+    /// discovery. Every status the peer returns is the caller's to interpret; only
+    /// transport, trust, redirect and size failures are reported here.
+    fn target_call(
+        &self,
+        origin: &str,
+        credentials: &RemoteCredentials,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<
+        hotsheet_ticketing::remote_servers::TargetReply,
+        hotsheet_ticketing::orchestration::TargetFailure,
+    > {
+        use hotsheet_ticketing::orchestration::TargetFailure;
+        if !matches!(method, "GET" | "POST" | "PATCH" | "PUT" | "DELETE") || !path.starts_with('/')
+        {
+            return Err(TargetFailure::InvalidResponse);
+        }
+        let agent = remote_agent(origin, credentials).map_err(TargetFailure::from)?;
+        let request = remote_auth_request(
+            agent.request(method, &format!("{origin}{path}")),
+            origin,
+            credentials,
+        )
+        .set("Accept", "application/json");
+        let result = match body {
+            Some(body) => request
+                .set("Content-Type", "application/json")
+                .send_bytes(body),
+            None => request.call(),
+        };
+        let response = match result {
+            Ok(response) => response,
+            Err(ureq::Error::Status(300..=399, _)) => return Err(TargetFailure::Redirect),
+            Err(ureq::Error::Status(_, response)) => response,
+            Err(ureq::Error::Transport(error)) => {
+                return Err(if error.kind() == ureq::ErrorKind::ConnectionFailed {
+                    TargetFailure::Unreachable
+                } else {
+                    TargetFailure::TrustFailed
+                });
+            }
+        };
+        let status = response.status();
+        if (300..400).contains(&status) {
+            return Err(TargetFailure::Redirect);
+        }
+        let mut bytes = Vec::new();
+        response
+            .into_reader()
+            .take((MAX_TARGET_REPLY_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .map_err(|_| TargetFailure::Unreachable)?;
+        if bytes.len() > MAX_TARGET_REPLY_BYTES {
+            return Err(TargetFailure::ResponseLimit);
+        }
+        Ok(hotsheet_ticketing::remote_servers::TargetReply {
+            status,
+            body: bytes,
+        })
+    }
 }
+
+/// One ticket with its notes fits comfortably; anything larger is not a ticket reply.
+const MAX_TARGET_REPLY_BYTES: usize = 2 * 1024 * 1024;
 
 fn remote_agent(
     origin: &str,

@@ -757,6 +757,7 @@ impl GitHubProvider {
                 .collect(),
             blocked_by: vec![],
             follow_ups: vec![],
+            orchestration_links: Vec::new(),
             follow_up_link_error: None,
             blocked_reason: None,
             created_at: issue.created_at,

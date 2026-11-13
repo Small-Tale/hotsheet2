@@ -5,9 +5,15 @@ mod access;
 mod observer;
 mod policy;
 mod request;
+mod tickets;
 pub use access::{ActionRequest, Authorized};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
+pub use tickets::{
+    CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
+    LinkTargetTicket, LinkView, ListLinks, OrchestrationTicket, ReadTargetTicket, TargetTicket,
+    TargetTicketFields, TargetTicketResult, UnlinkTargetTicket, UpdateTargetTicket,
+};
 #[cfg(test)]
 mod tests;
 
@@ -33,6 +39,8 @@ pub struct OrchestrationRuntime {
     secrets: Arc<dyn SecretStore + Send + Sync>,
     transport: Arc<dyn RemoteCheckoutTransport + Send + Sync>,
     server_id: String,
+    /// HS2-AZ15GA: opens a hosted checkout's external ticket sources.
+    external: Arc<dyn ExternalProviders>,
 }
 
 impl OrchestrationRuntime {
@@ -59,6 +67,7 @@ impl OrchestrationRuntime {
         }
         Ok(Self {
             remotes: RemoteRegistry::new(home.join("remotes.json")),
+            external: Arc::new(tickets::LiveExternalProviders { home: home.clone() }),
             home,
             checkouts,
             providers,
@@ -66,6 +75,13 @@ impl OrchestrationRuntime {
             transport,
             server_id,
         })
+    }
+
+    /// HS2-AZ15GA: replace how external ticket sources are opened (tests, embedders).
+    #[must_use]
+    pub fn with_external_providers(mut self, external: Arc<dyn ExternalProviders>) -> Self {
+        self.external = external;
+        self
     }
 
     fn owner(&self, id: &str) -> Result<Checkout, OrchestrationError> {
@@ -321,5 +337,16 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         OrchestrationError::Corrupt => 500,
         OrchestrationError::Storage(_) => 503,
         OrchestrationError::Denied(_) | OrchestrationError::Forbidden(_) => 403,
+        OrchestrationError::TargetOperation(error) => {
+            use hotsheet_ticketing::orchestration::TargetOpError as E;
+            match error {
+                E::NotFound => 404,
+                E::Conflict | E::Disabled => 409,
+                E::Invalid => 400,
+                E::Unsupported | E::LinksUnsupported => 422,
+                E::RateLimited => 429,
+                E::Unauthorized | E::PeerUnsupported | E::Failed => 502,
+            }
+        }
     }
 }

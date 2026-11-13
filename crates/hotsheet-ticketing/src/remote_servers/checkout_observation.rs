@@ -16,6 +16,28 @@ pub trait RemoteCheckoutTransport: RemoteTransport {
         credentials: &RemoteCredentials,
         checkout_id: &str,
     ) -> Result<CheckoutProjection, TargetFailure>;
+
+    /// HS2-AZ15GA: one authenticated, bounded JSON request to a path under the peer's
+    /// hosted checkout. A transport that cannot do this reports the peer as not
+    /// supporting orchestrated target operations; it never falls back to another route.
+    fn target_call(
+        &self,
+        _origin: &str,
+        _credentials: &RemoteCredentials,
+        _method: &str,
+        _path: &str,
+        _body: Option<&[u8]>,
+    ) -> Result<TargetReply, TargetFailure> {
+        Err(TargetFailure::UnsupportedMetadata)
+    }
+}
+
+/// The peer's HTTP answer to a target call. Any status the peer chose is returned for
+/// the caller to interpret; transport, trust and redirect failures are `TargetFailure`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetReply {
+    pub status: u16,
+    pub body: Vec<u8>,
 }
 
 /// Process-local, registry-scoped proof. No serde/Debug/field access: no credential
@@ -109,6 +131,55 @@ impl RemoteRegistry {
             return Err(TargetFailure::IdentityChanged);
         }
         Ok(projection)
+    }
+
+    /// HS2-AZ15GA: issue one request to the reviewed peer's hosted checkout. The caller
+    /// has just resolved the target freshly; this re-reads the registration so a revoke,
+    /// re-review or credential change in between still fails closed. `path` is appended
+    /// to `/checkouts/{checkout_id}` and must start with `/`.
+    #[allow(clippy::too_many_arguments)] // HS2-AZ15GA: mirrors observe_checkout plus the request triple.
+    pub fn call_checkout<T: RemoteCheckoutTransport + ?Sized>(
+        &self,
+        registration_id: &str,
+        identity: &ReviewedRemoteIdentity,
+        checkout_id: &str,
+        secrets: &dyn SecretStore,
+        transport: &T,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<TargetReply, TargetFailure> {
+        let file = self.read().map_err(|_| TargetFailure::InvalidResponse)?;
+        let binding = file
+            .servers
+            .iter()
+            .find(|binding| binding.id == registration_id)
+            .ok_or(TargetFailure::SourceMissing)?;
+        if binding.revoked {
+            return Err(TargetFailure::Revoked);
+        }
+        if binding.identity != *identity {
+            return Err(TargetFailure::IdentityChanged);
+        }
+        crate::orchestration::contract::valid_identifier(checkout_id)
+            .map_err(|_| TargetFailure::InvalidResponse)?;
+        if !path.starts_with('/') || path.contains("..") || path.chars().any(char::is_control) {
+            return Err(TargetFailure::InvalidResponse);
+        }
+        let credentials =
+            super::workflow::read_credentials(binding, secrets).map_err(TargetFailure::from)?;
+        if credentials.trust_fingerprint(&binding.origin).ok().as_ref()
+            != Some(&binding.identity.ca_fingerprint)
+        {
+            return Err(TargetFailure::TrustFailed);
+        }
+        transport.target_call(
+            &binding.origin,
+            &credentials,
+            method,
+            &format!("/checkouts/{checkout_id}{path}"),
+            body,
+        )
     }
 
     /// Nest last (checkout -> provider -> manifest -> bindings -> remote), retaining

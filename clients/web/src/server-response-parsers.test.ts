@@ -461,6 +461,17 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
   };
   const valid: Array<[ResponseParser<unknown>, unknown]> = [
     [parseFullTicket, ticket],
+    // HS2-AZ15GA: an orchestration ticket carries its target links; a planned link has no native id yet.
+    [
+      parseFullTicket,
+      {
+        ...ticket,
+        orchestration_links: [
+          { target_id: '01T', connection_id: 'git', relation: 'planned', operation_id: 'op-1' },
+          { target_id: '01T', connection_id: 'jira', native_id: 'ENG-1', relation: 'validated' },
+        ],
+      },
+    ],
     [parseStoredTicket, { ...ticket, store: '/s' }],
     [parseStoredTicket.list, [{ ...ticket, store: '/s' }]],
     // A `fields=` projection keeps only `slug` (and `store`).
@@ -513,6 +524,15 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     ],
   ];
   const invalid: Array<[ResponseParser<unknown>, unknown]> = [
+    // HS2-AZ15GA: a link without its relation, or with a non-string id, is drift.
+    [parseFullTicket, { ...ticket, orchestration_links: [{ target_id: '01T', connection_id: 'git' }] }],
+    [
+      parseFullTicket,
+      {
+        ...ticket,
+        orchestration_links: [{ target_id: '01T', connection_id: 'git', relation: 'created', native_id: 7 }],
+      },
+    ],
     [parseFullTicket, { ...ticket, notes: undefined }],
     [parseFullTicket, { ...ticket, notes: [{ id: 'n1' }] }],
     [parseStoredTicket, { ...ticket, store: 7 }],

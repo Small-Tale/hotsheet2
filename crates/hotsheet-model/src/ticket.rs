@@ -774,6 +774,10 @@ pub struct Ticket {
     /// directed relationships from this source to provider-qualified targets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub follow_ups: Vec<ProjectTicketRef>,
+    /// Structured links to tickets in declared orchestration targets (HS2-AZ15GA,
+    /// docs/26 §26.3). Empty for every ticket that is not an orchestration ticket.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub orchestration_links: Vec<crate::OrchestrationLink>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
     /// The one group this ticket belongs to (HS2-PDSHNN); absent means ungrouped. Holds a

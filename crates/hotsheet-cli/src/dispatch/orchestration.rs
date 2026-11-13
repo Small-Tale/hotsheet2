@@ -1,6 +1,6 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
-//! HS2-YCJDEB the throughput policy and approvals.
+//! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -21,6 +21,8 @@ enum OrchestrationCmd {
     Target(TargetArgs),
     /// List, issue, revoke and check delegated authority over one bound target.
     Grant(GrantArgs),
+    /// Create, read, update and link tickets in a declared target.
+    Ticket(TicketArgs),
     /// Show, set, validate and dry-run the checked-in throughput policy.
     Policy(PolicyArgs),
     /// List and answer decisions the policy will not take without a person.
@@ -36,6 +38,233 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 100)]
         limit: u64,
     },
+}
+#[derive(Args)]
+struct TicketArgs {
+    /// Registered owning checkout id.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: TicketCmd,
+}
+/// The fields an orchestration project may set on a target ticket.
+#[derive(Args)]
+struct TicketFields {
+    #[arg(long)]
+    title: Option<String>,
+    #[arg(long)]
+    details: Option<String>,
+    #[arg(long)]
+    category: Option<String>,
+    #[arg(long)]
+    priority: Option<String>,
+    #[arg(long)]
+    status: Option<String>,
+    /// Replaces the ticket's tags. Repeatable.
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    #[arg(long)]
+    up_next: Option<bool>,
+}
+impl TicketFields {
+    fn into_map(self) -> serde_json::Map<String, Value> {
+        let mut map = serde_json::Map::new();
+        for (key, value) in [
+            ("title", self.title),
+            ("details", self.details),
+            ("category", self.category),
+            ("priority", self.priority),
+            ("status", self.status),
+        ] {
+            if let Some(value) = value {
+                map.insert(key.into(), value.into());
+            }
+        }
+        if !self.tags.is_empty() {
+            map.insert("tags".into(), self.tags.into());
+        }
+        if let Some(up_next) = self.up_next {
+            map.insert("up_next".into(), up_next.into());
+        }
+        map
+    }
+}
+#[derive(Subcommand)]
+enum TicketCmd {
+    /// Create a ticket in a target for an orchestration ticket. Repeating the command
+    /// with the same --operation-id never creates a second ticket.
+    Create {
+        /// The orchestration ticket (slug or id) the new ticket is for.
+        #[arg(long)]
+        ticket: String,
+        /// The orchestration ticket's source connection; omit when the project has
+        /// one git ticket source.
+        #[arg(long, default_value = "")]
+        source: String,
+        #[arg(long)]
+        target: String,
+        /// The target's ticket source to create in.
+        #[arg(long)]
+        connection: String,
+        #[arg(long)]
+        operation_id: String,
+        #[command(flatten)]
+        fields: TicketFields,
+    },
+    /// Read one target ticket.
+    Show {
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        connection: String,
+        #[arg(long)]
+        id: String,
+    },
+    /// Change fields of one target ticket through its own provider.
+    Update {
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        connection: String,
+        #[arg(long)]
+        id: String,
+        /// The provider's concurrency token from a previous read.
+        #[arg(long)]
+        expected_token: Option<String>,
+        #[arg(long)]
+        operation_id: Option<String>,
+        #[command(flatten)]
+        fields: TicketFields,
+    },
+    /// Link an existing target ticket to an orchestration ticket.
+    Link {
+        #[arg(long)]
+        ticket: String,
+        #[arg(long, default_value = "")]
+        source: String,
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        connection: String,
+        #[arg(long)]
+        id: String,
+        /// observed (default) or validated.
+        #[arg(long)]
+        relation: Option<String>,
+    },
+    /// Remove an orchestration ticket's link; the target ticket is not touched.
+    Unlink {
+        #[arg(long)]
+        ticket: String,
+        #[arg(long, default_value = "")]
+        source: String,
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        connection: String,
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        operation_id: Option<String>,
+    },
+    /// An orchestration ticket's links; --resolve also reads each target ticket.
+    Links {
+        #[arg(long)]
+        ticket: String,
+        #[arg(long, default_value = "")]
+        source: String,
+        #[arg(long)]
+        resolve: bool,
+    },
+}
+fn ticket_route(project: &str, command: TicketCmd) -> (&'static str, String, Value) {
+    let path = |operation: &str| format!("/checkouts/{project}/orchestration/tickets/{operation}");
+    let orchestration =
+        |ticket: String, source: String| json!({"connection_id":source,"native_id":ticket});
+    let with = |mut body: Value, fields: TicketFields| {
+        if let Some(object) = body.as_object_mut() {
+            object.extend(fields.into_map());
+        }
+        body
+    };
+    match command {
+        TicketCmd::Create {
+            ticket,
+            source,
+            target,
+            connection,
+            operation_id,
+            fields,
+        } => (
+            "POST",
+            path("create"),
+            with(
+                json!({"ticket":orchestration(ticket, source),"target_id":target,
+                    "connection_id":connection,"operation_id":operation_id}),
+                fields,
+            ),
+        ),
+        TicketCmd::Show {
+            target,
+            connection,
+            id,
+        } => (
+            "POST",
+            path("read"),
+            json!({"target_id":target,"connection_id":connection,"native_id":id}),
+        ),
+        TicketCmd::Update {
+            target,
+            connection,
+            id,
+            expected_token,
+            operation_id,
+            fields,
+        } => (
+            "POST",
+            path("update"),
+            with(
+                json!({"target_id":target,"connection_id":connection,"native_id":id,
+                    "expected_token":expected_token,"operation_id":operation_id}),
+                fields,
+            ),
+        ),
+        TicketCmd::Link {
+            ticket,
+            source,
+            target,
+            connection,
+            id,
+            relation,
+        } => (
+            "POST",
+            path("link"),
+            json!({"ticket":orchestration(ticket, source),"target_id":target,
+                "connection_id":connection,"native_id":id,"relation":relation}),
+        ),
+        TicketCmd::Unlink {
+            ticket,
+            source,
+            target,
+            connection,
+            id,
+            operation_id,
+        } => (
+            "POST",
+            path("unlink"),
+            json!({"ticket":orchestration(ticket, source),"target_id":target,
+                "connection_id":connection,"native_id":id,"operation_id":operation_id}),
+        ),
+        TicketCmd::Links {
+            ticket,
+            source,
+            resolve,
+        } => (
+            "POST",
+            path("links"),
+            json!({"ticket":orchestration(ticket, source),"resolve":resolve}),
+        ),
+    }
 }
 #[derive(Args)]
 struct PolicyArgs {
@@ -457,6 +686,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Grant(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = grant_route(&owner_id, arguments.command)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Ticket(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = ticket_route(&owner_id, arguments.command);
             (owner_id, request)
         }
         OrchestrationCmd::Policy(arguments) => {

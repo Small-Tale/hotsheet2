@@ -3,9 +3,16 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list"]},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links"]},
+        "ticket":{"type":"object","description":"ticket_create/link/unlink/links: the orchestration ticket {native_id, connection_id?}; connection_id may be omitted when the project has one git ticket source"},
+        "connection_id":{"type":"string","description":"ticket_*: the target's ticket source connection id"},
+        "native_id":{"type":"string","description":"ticket_read/update/link/unlink: the target ticket's provider-native id"},
+        "fields":{"type":"object","description":"ticket_create/ticket_update: {title, details, category, priority, status, tags, up_next}"},
+        "expected_token":{"type":"string","description":"ticket_update: the provider's concurrency token from a previous read"},
+        "relation":{"type":"string","enum":["observed","validated"],"description":"ticket_link"},
+        "resolve":{"type":"boolean","description":"ticket_links: also read each linked target ticket"},
         "policy":{"type":"object","description":"policy_validate/policy_dry_run: a proposed throughput policy body; omit to examine the stored one"},
         "for_actor":{"type":"string","description":"access_check: the actor id the grant must cover (not the caller's own actor_id)"},
         "target_action":{"type":"string","enum":["tickets_read","tickets_write","work_start","gates_observe","validation_run","sessions_manage"],"description":"access_check: the delegated action"},
@@ -61,6 +68,12 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             | "audit"
             | "policy_dry_run"
             | "approval_list"
+            | "ticket_create"
+            | "ticket_read"
+            | "ticket_update"
+            | "ticket_link"
+            | "ticket_unlink"
+            | "ticket_links"
     ) || (action == "list" && id.is_some());
     // Preflight before any backend request; HttpBackend repeats it for actual origin.
     if machine && !backend.machine_local() {
@@ -142,6 +155,46 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
                 .map_err(crate::be_msg);
         }
         _ => {}
+    }
+    // HS2-AZ15GA: target tickets for an orchestration ticket.
+    if let Some(operation) = action.strip_prefix("ticket_") {
+        let mut body = serde_json::Map::new();
+        if let Some(Value::Object(fields)) = args.get("fields") {
+            body.extend(fields.clone());
+        }
+        // Named arguments win over anything a `fields` object tried to set.
+        for key in [
+            "ticket",
+            "connection_id",
+            "native_id",
+            "operation_id",
+            "expected_token",
+            "relation",
+            "resolve",
+        ] {
+            if let Some(value) = args.get(key) {
+                body.insert(key.into(), value.clone());
+            }
+        }
+        if operation != "links" {
+            body.insert(
+                "target_id".into(),
+                id.ok_or("target_id is required")?.into(),
+            );
+        }
+        if !matches!(
+            operation,
+            "create" | "read" | "update" | "link" | "unlink" | "links"
+        ) {
+            return Err("unsupported target action".into());
+        }
+        return backend
+            .send(
+                "POST",
+                &format!("{base}/tickets/{operation}"),
+                &Value::Object(body),
+            )
+            .map_err(crate::be_msg);
     }
     if action == "inspect" {
         let checkout_id = required(args, "destination_checkout")?;
@@ -234,6 +287,13 @@ mod tests {
             // HS2-YCJDEB
             "policy_dry_run",
             "approval_list",
+            // HS2-AZ15GA
+            "ticket_create",
+            "ticket_read",
+            "ticket_update",
+            "ticket_link",
+            "ticket_unlink",
+            "ticket_links",
         ] {
             assert!(
                 dispatch(&json!({"action":action}), &backend)

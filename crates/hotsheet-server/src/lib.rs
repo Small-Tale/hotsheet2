@@ -2079,6 +2079,18 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/approvals/{approval}",
             post(routes::orchestration::write),
         )
+        // HS2-AZ15GA: orchestrating-side ticket operations (machine-local) and the hosted
+        // half a local or remote orchestrator reaches (ordinary authenticated data).
+        .route(
+            "/checkouts/{owner}/orchestration/tickets/{operation}",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{checkout}/target-tickets",
+            get(routes::orchestration::read)
+                .post(routes::orchestration::write)
+                .patch(routes::orchestration::write),
+        )
         // Resource claims (HS2-FMHH9Y): leases on named machine resources. `acquire` and
         // `wait` may park on the backend's release signal (a long poll).
         .route(

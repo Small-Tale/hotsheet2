@@ -218,6 +218,11 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     m.tags = union3(&base.tags, &ours.tags, &theirs.tags);
     m.blocked_by = union3(&base.blocked_by, &ours.blocked_by, &theirs.blocked_by);
     m.follow_ups = union3(&base.follow_ups, &ours.follow_ups, &theirs.follow_ups);
+    m.orchestration_links = merge_orchestration_links(
+        &base.orchestration_links,
+        &ours.orchestration_links,
+        &theirs.orchestration_links,
+    );
     m.assignees = union3(&base.assignees, &ours.assignees, &theirs.assignees);
 
     // Review requests each carry their own ULID (`by`), so — like notes — they **union**:
@@ -326,6 +331,31 @@ fn union3<T: Clone + PartialEq>(base: &[T], ours: &[T], theirs: &[T]) -> Vec<T> 
     out
 }
 
+/// HS2-AZ15GA: links union by subject (same target, source and create operation or
+/// native id). A link both sides kept merges to the further relation with every known
+/// id; a link one side removed stays removed, as for any set.
+fn merge_orchestration_links(
+    base: &[hotsheet_model::OrchestrationLink],
+    ours: &[hotsheet_model::OrchestrationLink],
+    theirs: &[hotsheet_model::OrchestrationLink],
+) -> Vec<hotsheet_model::OrchestrationLink> {
+    let has = |side: &[hotsheet_model::OrchestrationLink],
+               link: &hotsheet_model::OrchestrationLink| {
+        side.iter().any(|other| other.same_subject(link))
+    };
+    let mut merged: Vec<hotsheet_model::OrchestrationLink> = Vec::new();
+    for link in ours.iter().chain(theirs.iter()) {
+        if has(base, link) && (!has(ours, link) || !has(theirs, link)) {
+            continue;
+        }
+        match merged.iter_mut().find(|kept| kept.same_subject(link)) {
+            Some(kept) => *kept = kept.merged_with(link),
+            None => merged.push(link.clone()),
+        }
+    }
+    merged
+}
+
 /// Union notes by ULID; a note on both sides resolves by its newest edit timestamp. The
 /// The final order is explicit creation time then ULID, including imported notes whose
 /// provider-native ids may not encode creation time.
@@ -414,6 +444,73 @@ mod tests {
         t.details = "original body".into();
         t.tags = vec!["a".into(), "b".into()];
         t
+    }
+
+    /// HS2-AZ15GA: links merge by subject, never duplicate, never move backwards, and
+    /// honor a removal made on one side.
+    #[test]
+    fn hs2_az15ga_orchestration_links_merge_by_subject() {
+        use hotsheet_model::{OrchestrationLink, OrchestrationRelation as R};
+        let link = |connection: &str, native: Option<&str>, relation, operation: Option<&str>| {
+            OrchestrationLink {
+                target_id: "01ARZ3NDEKTSV4RRFFQ69G5FC2".into(),
+                connection_id: connection.into(),
+                native_id: native.map(Into::into),
+                relation,
+                operation_id: operation.map(Into::into),
+            }
+        };
+        let merged = |base: &Ticket, ours: &Ticket, theirs: &Ticket| {
+            merge_tickets(base, ours, theirs).ticket.orchestration_links
+        };
+        let base = base_ticket();
+        // One clone recorded the intent, the other the finished create: one link results.
+        let mut ours = base.clone();
+        ours.orchestration_links = vec![link("git", None, R::Planned, Some("op-1"))];
+        let mut theirs = base.clone();
+        theirs.orchestration_links = vec![
+            link("git", Some("42"), R::Created, Some("op-1")),
+            link("jira", Some("ENG-7"), R::Observed, None),
+        ];
+        let expected = vec![
+            link("git", Some("42"), R::Created, Some("op-1")),
+            link("jira", Some("ENG-7"), R::Observed, None),
+        ];
+        assert_eq!(merged(&base, &ours, &theirs), expected);
+        assert_eq!(merged(&base, &theirs, &ours), expected);
+        // A later validation on one side survives an untouched other side.
+        let mut with_links = base.clone();
+        with_links.orchestration_links = expected.clone();
+        let mut validated = with_links.clone();
+        validated.orchestration_links[1].relation = R::Validated;
+        assert_eq!(
+            merged(&with_links, &validated, &with_links)[1].relation,
+            R::Validated
+        );
+        assert_eq!(
+            merged(&with_links, &with_links, &validated)[1].relation,
+            R::Validated
+        );
+        // A link removed on one side stays removed even though the other kept it.
+        let mut unlinked = with_links.clone();
+        unlinked.orchestration_links.remove(1);
+        assert_eq!(
+            merged(&with_links, &unlinked, &validated),
+            vec![expected[0].clone()]
+        );
+        assert_eq!(
+            merged(&with_links, &validated, &unlinked),
+            vec![expected[0].clone()]
+        );
+        // Unrelated additions on both sides are both kept.
+        let mut a = with_links.clone();
+        a.orchestration_links
+            .push(link("git", Some("50"), R::Observed, None));
+        let mut b = with_links.clone();
+        b.orchestration_links
+            .push(link("git", None, R::Planned, Some("op-2")));
+        assert_eq!(merged(&with_links, &a, &b).len(), 4);
+        assert_eq!(merged(&with_links, &with_links, &with_links), expected);
     }
 
     #[test]

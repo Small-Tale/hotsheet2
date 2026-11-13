@@ -2,9 +2,10 @@
 
 > **Status: Partial (HS2-4J6V46, HS2-SBQ3T8, HS2-YCJDEB).** Shared declarations,
 > reviewed machine bindings, delegated grants with their audit journal (§26.7), the
-> throughput policy with approvals (§26.8), and the headless CLI, authenticated HTTP
+> throughput policy with approvals (§26.8), structured ticket links with target
+> ticket operations (§26.3, HS2-AZ15GA), and the headless CLI, authenticated HTTP
 > and MCP adapters are implemented and covered by automated tests; the OpenAPI
-> contract describes them. Workspace UI, ticket relationships and dispatch
+> contract describes them. Workspace UI and dispatch
 > remain design work under their separate implementation tickets.
 
 ## 26.1 Boundary and existing foundations
@@ -96,22 +97,92 @@ Cached remote observations never authorize target resolution or mutation.
 
 An orchestration ticket can link zero or more target tickets. Each link is a
 structured reference with `target_id`, target `connection_id`, provider-native
-`native_id`, relation (`planned`, `created`, `observed`, or `validated`), and an
+`native_id`, relation (`planned`, `observed`, `created`, or `validated`), and an
 idempotent operation id when orchestration created the target ticket. The target
 id selects the declared project; source and native id select the ticket within
-that project. Display slugs are labels only. Resolution follows existing
-connection aliases and rejects ambiguity or a retargeted source. A missing
-binding or inaccessible source leaves the link intact with an unresolved reason.
+that project. Display slugs are labels only. A missing binding or inaccessible
+source leaves the link intact with an unresolved reason.
 
-These links require a new optional field in the canonical ticket schema; the
-implementation must update [17](17-ticket-file-format.md), the parser/writer,
-provider mapping, index/backlinks, and format compatibility together. Do not
-encode machine-specific origins in a ticket or infer a target from a bare slug.
-The existing `@<project-id>/<connection-id>:<native-id>` syntax retains its
-current meaning; the orchestration field supplies the logical target id without
-changing prose-link parsing in this design ticket. Provider-native backlink
-support can arrive later, but an orchestration ticket must always retain its own
-outbound relationship.
+The links are the optional `orchestration_links` field of the ticket file
+(HS2-AZ15GA, [17](17-ticket-file-format.md)), an additive field under the rules of
+[19](19-format-compatibility.md): older tickets read with an empty list and a ticket
+without links emits no key. A link holds no origin, path, checkout id or other
+machine-specific value, and a target is never inferred from a bare slug. The
+existing `@<project-id>/<connection-id>:<native-id>` prose syntax keeps its meaning.
+Two links describe the same target ticket when they share the target and source and
+either the create operation or the native id; the merge driver unions links by that
+subject, keeps the further relation and every known id, and honors a removal made on
+one side. Only a git ticket source can store links; an orchestration ticket in a
+source that cannot is refused with `orchestration_links_unsupported`.
+
+### Target ticket operations (HS2-AZ15GA)
+
+Every operation passes the authorization gate of §26.7 and §26.8 (`tickets_read` to
+read, link and resolve; `tickets_write` to create and update) and is audited with
+its outcome code. The target's own ticket source stays authoritative: operations go
+through its provider, an unsupported operation is reported as
+`target_operation_unsupported`, and nothing is rerouted to another source. The
+target's source is always named explicitly, so a multi-source target is never
+guessed, and it must be one the freshly resolved target lists.
+
+- **Create** is idempotent by a caller-retained `operation_id` and runs in three
+  recoverable steps: record a `planned` link with the operation id, create through
+  the target's provider, advance the link to `created` with the native id. It reuses
+  the provider-neutral transfer provenance every provider already implements, so the
+  created ticket records the operation id and the orchestration ticket as its
+  origin, and a repeated request returns the existing ticket (`created: false`). The
+  same operation id for a different orchestration ticket is `target_conflict`. If the
+  target ticket was created but the link could not be written, the result says
+  `link.recorded: false` with `link_write_failed`; repeating the same request repairs
+  it. A definitive refusal withdraws the planned link; a transient failure keeps it,
+  because it names the operation to resume.
+- **Read** returns the provider-neutral ticket. **Update** changes title, details,
+  category, priority, status, tags or Up Next through the provider, optionally under
+  the provider's concurrency token.
+- **Link** records an existing target ticket as `observed` or `validated` after
+  reading it, storing the provider's canonical native id. **Unlink** removes the
+  orchestration ticket's own link without contacting or changing the target, so it
+  works while a target is unbound or unreachable.
+- **Links** lists an orchestration ticket's links. With `resolve` each is read
+  through the gate: a resolved link carries the target ticket's title, status and
+  slug and whether the target ticket names this orchestration ticket as its origin
+  (the backlink); a link that cannot be read stays in the list with its reason code;
+  a planned link is looked up by its operation id.
+
+The orchestrating side reaches a hosted half that performs the provider operation
+where the target lives: in process for a local destination, and over the reviewed
+remote registration (pinned origin, mTLS, no redirects, bounded reply) for a remote
+one. The target server still enforces its own device role, so a read-only pairing
+refuses writes whatever a grant says. Target refusals are content-free codes:
+`target_ticket_not_found`, `target_operation_unsupported`, `target_conflict`,
+`target_provider_unauthorized`, `target_rate_limited`, `target_source_disabled`,
+`target_request_invalid`, `target_peer_unsupported` (an older peer without the
+route), `target_operation_failed`. Provider message text is never forwarded.
+
+```sh
+hotsheet-cli --actor-role ai --actor-id <worker-id> -C <configured-host-source> orchestration ticket create \
+  --project <owner-checkout-id> --ticket <orchestration-ticket> --target <target-id> \
+  --connection <target-source> --operation-id <retained-id> --title "..." [--details ...] [--tag ...]
+hotsheet-cli ... orchestration ticket show --project <owner> --target <target-id> --connection <source> --id <native-id>
+hotsheet-cli ... orchestration ticket update --project <owner> --target <target-id> --connection <source> --id <native-id> --status started
+hotsheet-cli ... orchestration ticket link --project <owner> --ticket <orchestration-ticket> --target <target-id> --connection <source> --id <native-id> [--relation validated]
+hotsheet-cli ... orchestration ticket unlink --project <owner> --ticket <orchestration-ticket> --target <target-id> --connection <source> --id <native-id>
+hotsheet-cli ... orchestration ticket links --project <owner> --ticket <orchestration-ticket> [--resolve]
+```
+
+`--source` names the orchestration ticket's connection and may be omitted when the
+project has one git ticket source. An identified actor is required.
+
+| Route                                                                             | Methods and purpose                                                                              |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/tickets/{create,read,update,link,unlink,links}` | POST orchestrating-side operations; machine-local                                                |
+| `/checkouts/{checkout}/target-tickets`                                            | Hosted half: GET by `connection_id` and `native_id` or `operation_id`; POST create; PATCH update |
+
+The hosted route is ordinary authenticated project data under the caller's device
+role, because a remote orchestration project must reach it. MCP `hotsheet_targets`
+adds `ticket_create`, `ticket_read`, `ticket_update`, `ticket_link`,
+`ticket_unlink` and `ticket_links`. The workspace flows for the same operations are
+part of HS2-HSMH2Q.
 
 ## 26.4 Headless and service contract
 
@@ -198,9 +269,8 @@ fragment/control/whitespace-bearing malformed locators require review before an
 identity can be published. Explicit configured endpoint ports retain their identity.
 
 Requests naming an orchestration ticket identify its owning checkout and source
-explicitly when ambiguous. Target ticket writes later route through the target's
-ordinary checkout/source API with qualified ids and an operation id
-(HS2-AZ15GA). AI dispatch uses its ordinary exact claim path (HS2-EBHDSB).
+explicitly when ambiguous. Target ticket operations route through the target's own
+source with qualified ids and an operation id (§26.3). AI dispatch uses its ordinary exact claim path (HS2-EBHDSB).
 Neither declaration nor binding authorizes a target mutation by itself;
 target-scoped grants and their audit journal are §26.7 (HS2-SBQ3T8).
 
