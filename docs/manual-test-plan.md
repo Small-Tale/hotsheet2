@@ -1183,3 +1183,34 @@ sync <session-id> --project <owner>` and confirm `role_prompt` is `delivered`, a
    `hotsheet-cli coordination --project <target> status` lists its worker id. Sync
    again and confirm `joined_at_ms` is set.
 4. Stop each session as a person with `--force`. Remove the temporary directories.
+
+## Orchestration end to end with real tools and hosts (HS2-2EY9DP)
+
+The end-to-end scenarios (§26.23) run fake AI tools, a loopback GitHub Actions
+provider and two servers in one process on macOS. These checks need what they cannot
+have. Use throwaway `HOTSHEET_HOME` directories, synthetic projects and a scratch
+GitHub repository; never a customer project.
+
+1. **Two real machines.** Pair a second machine (Linux, then Windows) with
+   `hotsheet-cli remote register` over mTLS and declare one of its checkouts as target
+   B, with this machine's checkout as target A (§26.2, §26.7). Store a policy with
+   `placement.automatic` and the real `claude` tool on A and `codex` on B.
+2. **The loop.** Plan B after A with `--gates ci` (§26.15). Confirm a session appears
+   in this machine's drawer for A, takes up its worker role and claims A's ticket.
+   Push a commit for A to the scratch repository and link its CI gate with
+   `orchestration gate link` (without `HOTSHEET_GITHUB_API_URL`). Confirm the gate
+   goes green from the real workflow run with no further command, B's step becomes
+   `confirmed`, and a session appears in the other machine's drawer for B.
+3. **Outage and restart.** Disconnect the second machine's network while its session
+   works B: `run status` shows `unreachable` and `stale`; reconnect and confirm the run
+   catches up. Restart this machine's server while B is worked: no second session
+   starts on either machine.
+4. **Lost access.** Revoke the grant for B as a person: `run sync` answers
+   `grant_revoked`, and nothing starts or stops on B. Grant again and let B finish;
+   confirm both sessions are wound down after `idle_minutes`.
+5. **Windows host.** On a Windows target, confirm the session starts in the target
+   checkout (its PTY and process handling differ, HS2-2R32SD) and that capacity
+   reports `null` memory and CPU (§26.10) without blocking admission when the owner
+   set `allow_unknown`.
+6. Stop every session as a person with `--force`, unbind both targets, delete the
+   scratch repository's workflow runs and remove the temporary directories.

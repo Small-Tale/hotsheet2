@@ -476,6 +476,16 @@ async fn hs2_1y45mz_shipped_project_path_and_server_mcp_stdio_share_remote_workf
 
 #[path = "remote_servers/capacity.rs"]
 mod capacity;
+// HS2-2EY9DP: end-to-end fixtures and scenarios; real PTYs of the Unix fake agent.
+#[cfg(unix)]
+#[path = "remote_servers/e2e.rs"]
+mod e2e;
+#[cfg(unix)]
+#[path = "remote_servers/e2e_failures.rs"]
+mod e2e_failures;
+#[cfg(unix)]
+#[path = "remote_servers/e2e_loop.rs"]
+mod e2e_loop;
 #[path = "remote_servers/gates.rs"]
 mod gates;
 #[path = "remote_servers/grants.rs"]

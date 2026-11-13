@@ -15,15 +15,15 @@ use std::path::Path;
 const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FE9";
 const NOW: &str = "2026-10-15T00:00:00Z";
 const TOKEN: &str = "synthetic-token-for-tests";
-const RUNS: &str = "/repos/acme/widgets/actions/runs?branch=main&event=push&per_page=30";
+pub(super) const RUNS: &str = "/repos/acme/widgets/actions/runs?branch=main&event=push&per_page=30";
 
 /// The etag version, the routes by path (etag, body), and the number of requests.
 type Routes = (u64, HashMap<String, (String, String)>, usize);
 /// A loopback provider answering the REST shapes the watch source reads.
 #[derive(Clone, Default)]
-struct Provider(Arc<std::sync::Mutex<Routes>>);
+pub(super) struct Provider(Arc<std::sync::Mutex<Routes>>);
 impl Provider {
-    fn start(&self) -> String {
+    pub(super) fn start(&self) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let state = self.0.clone();
@@ -69,14 +69,14 @@ impl Provider {
         });
         url
     }
-    fn serve(&self, path: &str, body: Value) {
+    pub(super) fn serve(&self, path: &str, body: Value) {
         let mut provider = self.0.lock_or_recover();
         provider.0 += 1;
         let etag = format!("W/\"v{}\"", provider.0);
         provider.1.insert(path.to_owned(), (etag, body.to_string()));
     }
     /// The only run of the workflow on the branch: `id` built `sha`.
-    fn run(&self, id: u64, sha: &str, conclusion: Option<&str>) {
+    pub(super) fn run(&self, id: u64, sha: &str, conclusion: Option<&str>) {
         self.serve(
             RUNS,
             json!({"total_count": 1, "workflow_runs": [{
@@ -93,7 +93,7 @@ impl Provider {
             json!({"total_count": 0, "jobs": []}),
         );
     }
-    fn requests(&self) -> usize {
+    pub(super) fn requests(&self) -> usize {
         self.0.lock_or_recover().2
     }
 }
@@ -114,7 +114,7 @@ fn ticket(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
 
 /// The runtime a server on this machine uses, with the monitor it starts pointed at
 /// the loopback provider.
-fn with_monitor(source: &Path, home: &Path, url: &str) -> OrchestrationRuntime {
+pub(super) fn with_monitor(source: &Path, home: &Path, url: &str) -> OrchestrationRuntime {
     shared_runtime(source, home, &Arc::new(Memory::default())).with_job_monitor(Arc::new(
         DetachedJobMonitor::new("hotsheet-server")
             .flags(["--poll-ms", "40", "--idle-exit-ms", "3000"].map(String::from))

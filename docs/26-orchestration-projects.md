@@ -28,7 +28,8 @@
 > the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
 > cost is read for targets on this machine only),
 > and the headless CLI,
-> authenticated HTTP and MCP adapters are implemented and covered by automated tests;
+> authenticated HTTP and MCP adapters are implemented and covered by automated tests,
+> with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
 > the OpenAPI contract describes them. Workspace UI remains design work under its
 > separate implementation tickets.
 
@@ -3196,3 +3197,45 @@ No route was added: `speculation` and `reopen` are operations of
 plan. MCP `hotsheet_targets` adds `readiness_speculation` and `readiness_reopen`.
 The policy fields are those of §26.8; the target's own setting is set with
 `coordination speculation-policy` in that project.
+
+## 26.23 End-to-end coverage across servers (HS2-2EY9DP)
+
+Each section above has its own real-server test. A shared fixture exercises the
+whole loop across them, through the shipped server routes, the server's own
+scheduling loop and followers, the hosted halves over mTLS, the stdio MCP tool, the
+CLI and a real Job monitor process, so that a seam between separately built parts
+shows up as a failing scenario that names it.
+
+**The fleet** (`crates/hotsheet-server/tests/remote_servers/e2e.rs`). Two servers on
+synthetic homes: the controller hosts the orchestration project and target A in the
+store it serves, and a peer reached over a reviewed mTLS registration hosts target B.
+Each target runs a different fake AI tool (the workspace `hs-fake-agent` as a
+Claude-like tool that takes its role by session push and a Codex-like tool that takes
+it at launch). CI evidence comes from a loopback GitHub Actions provider observed by
+the Job monitor the server starts. Nothing leaves loopback; no AI tool, provider
+account or GitHub repository is contacted. Where a scenario plays an agent (joining
+the pool, claiming, finishing), it does what the worker skill does, through the
+hosting server's own ticket routes.
+
+| Scenario                                                | What it shows                                                                                                                                                                                                                       |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2e_loop` the loop completes a plan across two servers | A readiness plan where B waits on A's ticket and CI; automatic placement starts a session on each server in turn; A's gate goes green through the monitor; both tickets complete through the change feeds; both sessions wound down |
+| a restarted controller resumes the plan                 | Restarts while A's gate waits and while B's remote session works: the gate is observed again, the remote session is adopted, nothing starts twice                                                                                   |
+| a partial target outage                                 | The peer drops off the network: B's run reads `unreachable` and stale, A's work completes meanwhile, nothing replaces B's session, and B completes from the replayed feed when the peer returns                                     |
+| lost access mid-run                                     | A revoked and then an expired grant: typed denials in the answers and the audit journal, nothing started or stopped, and a new grant lets the run finish                                                                            |
+| cancelling a remote run                                 | The pooled worker's claim is kept, the planned step is dispatched again (§26.19), and removing the step and cancelling withdraws the Up Next mark on the peer                                                                       |
+| duplicate requests                                      | Concurrent passes over HTTP and the stdio MCP tool and replayed scheduler operation ids give one run, one session and one terminal                                                                                                  |
+| out-of-order and replayed events                        | A worker hands the ticket over and it is finished while the controller cannot see the peer; the run settles once from the latest state, and repeated syncs and reconciliations record nothing                                       |
+| a refusing peer and a limited tool                      | A rate-limited tool fails over to the other allowed tool; the peer owner's admission (set by the CLI) refuses the start; after the backoff the replacement start lands on the peer                                                  |
+
+Two scenarios are quarantined on the gaps they found (see
+[test-quarantine.md](test-quarantine.md)): a remote session freed without any run
+event is never re-read (HS2-257Q2Z), and a session lost while its run waits on CI is
+replaced although reconciliation finds no lost work (HS2-3REXQ7). Defects these
+scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9CTG
+(§26.17). Open findings: HS2-HV9ED3 (what a person's cancel of a scheduler run
+means), HS2-WC3W2G (a cancel denied by the gate reads as an unverified target),
+HS2-7Q428Z (concurrent passes each log a start), HS2-68DWAM (a stale shown
+reconciliation). External-provider targets and a contended resource are HS2-30XYPY.
+Checks that need a real AI tool, a real GitHub repository or Windows and Linux hosts
+are in [the manual test plan](manual-test-plan.md#orchestration-end-to-end-with-real-tools-and-hosts-hs2-2ey9dp).
