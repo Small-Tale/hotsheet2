@@ -18,6 +18,8 @@
 > loop (§26.17, HS2-ECWG50), which places orchestrator-owned sessions through its
 > session executor (§26.19, HS2-95SWQ4; nothing is placed until a policy sets
 > `placement.automatic`),
+> resource requirements of plan steps and targets with scheduling around held
+> resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI remains design work under its
@@ -493,7 +495,7 @@ rather than evaluated. All quantities are integers: megabytes, percent and cents
 | `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                          |
 | `approval`    | `required_for`: any of `tickets_write`, `work_start`, `validation_run`, `session_start`, `session_stop`, `role_session_start`, `provisional_dispatch`, `deployment`.     |
 | `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`.   |
-| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5. Left out of the file while it holds only defaults.                             |
+| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults. |
 
 A target the policy does not list, or lists as disabled, is not permitted. A tool
 listed for a target must be configured under `tools`. A tool configured with
@@ -792,7 +794,10 @@ estimated in its place.
   started inside the checkout.
 - **Claims** are reported for the namespaces the caller names with `claim_namespaces`
   (at most eight). The claims API cannot enumerate namespaces yet (HS2-YDZAFH), so
-  without a name `claims` is `null`, not an empty list.
+  without a name `claims` is `null`, not an empty list. When a named namespace's
+  backend cannot be read, `claims` is `null` as a whole and `claims_offline` says
+  what that backend's configuration asks for meanwhile (`fail_closed` or
+  `provisional`, §26.20); the member is absent otherwise.
 - **Privacy** follows HS2-SW5ZK3. A process is a session id, a tool name and numbers.
   No process path, command line, working directory, user name or claim metadata is in
   a snapshot, for a local or a remote reader.
@@ -1625,6 +1630,9 @@ newer data is an error that is never overwritten. It belongs to this machine lik
 the runs, gates and validation records it is computed from; sharing a plan between
 machines is HS2-YDY5HJ.
 
+A step may also name up to four **resources** its session must hold (§26.20). They
+are not prerequisites: readiness ignores them, and the scheduler waits on them.
+
 ### Levels
 
 Evaluation is a pure function
@@ -1997,24 +2005,24 @@ One pass reads only typed inputs, and the core
 (`crates/hotsheet-ticketing/src/orchestration/scheduler.rs`, `plan`) is a pure
 function of them and the time:
 
-| Input           | Source                                                                                                   |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| Ready work      | `ready_work` (§26.15). Only `confirmed` items are placed; `provisional` ones are ranked and never placed |
-| Policy          | §26.8, with its `placement` section                                                                      |
-| Target capacity | One snapshot per target with confirmed work (§26.10), read through the gate as `gates_observe`           |
-| Sessions        | The executor's list, as the scheduler's own session view                                                 |
-| Tool capacity   | The machine's capacity records and plugin declarations (§26.11)                                          |
-| Held resources  | Live resource claims in the namespaces the work names                                                    |
-| Memory          | Per target, the last start, the last wind-down and the refusals since the last start                     |
+| Input           | Source                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| Ready work      | `ready_work` (§26.15). Only `confirmed` items are placed; `provisional` ones are ranked and never placed    |
+| Policy          | §26.8, with its `placement` section                                                                         |
+| Target capacity | One snapshot per target with confirmed work (§26.10), read through the gate as `gates_observe`              |
+| Sessions        | The executor's list, as the scheduler's own session view                                                    |
+| Tool capacity   | The machine's capacity records and plugin declarations (§26.11)                                             |
+| Held resources  | Live resource claims in the namespaces the work names, per machine, and the namespaces that were unreadable |
+| Memory          | Per target, the last start, the last wind-down and the refusals since the last start                        |
 
 A target is contacted only when it has confirmed work, the policy lets sessions run
 there and no refusal is being waited out. Without an identified actor no target is
 contacted and its work reads `target_unavailable` (`actor_required`). A target whose
 machine cannot be read gets no session: nothing is assumed in a snapshot's place.
 
-Declaring which resources a ticket or target needs is HS2-2FG91X; until then no work
-names a resource. A due date, a milestone date and a preferred tool or model are
-inputs of the core that a plan step does not carry yet (HS2-TH53NN).
+The resources work names are those its plan step declares and those the policy
+requires of its target (§26.20). A due date, a milestone date and a preferred tool
+or model are inputs of the core that a plan step does not carry yet (HS2-TH53NN).
 
 ### Policy section
 
@@ -2057,7 +2065,8 @@ Work is placed best first. For each item, in this order:
 1. A provisional item is `provisional_not_dispatched` (HS2-JSF985).
 2. A resource it needs that someone holds, or that better-ranked work took in this
    pass, is `resource_held`. A held resource is unavailable capacity until its claim
-   expires.
+   expires. A resource whose claims could not be read is `resource_unknown` unless
+   its backend allows provisional claims (§26.20).
 3. A **free session** of the target takes it (`keep`, `refill`): an idle session
    first, then one whose run waits on a gate. No session starts for it.
 4. `policy_denied` with the policy's own code, then `target_cap`.
@@ -2113,7 +2122,7 @@ asked again for one minute, doubling per refusal to 30 minutes. A start clears i
 
 A schedule names `retry_at_ms`, the earliest time one of its decisions changes by
 time alone: an idle time, a cooldown, a backoff, a tool limit's reset or a claim's
-expiry.
+expiry. A claim released before its expiry wakes the loop instead (§26.20).
 
 ### Applying a decision
 
@@ -2190,8 +2199,9 @@ policy no longer enables it. A step runs a pass:
 - when the owner's run event stream (§26.9) has something new: run, readiness, gate,
   validation, session and reconciliation events. A lease renewal is not a reason;
 - when the scheduler's wake marker changed: a tool limit or recovery was recorded
-  (§26.11), the policy was replaced, or a session without a run started, ended or
-  finished a turn (§26.19);
+  (§26.11), the policy was replaced, a session without a run started, ended or
+  finished a turn (§26.19), a plan step's definition changed, or a resource the last
+  pass deferred work for was released (§26.20);
 - when the time the last pass named in `retry_at_ms` has come.
 
 Otherwise it waits on the journal and the marker themselves. There is no interval.
@@ -2217,8 +2227,8 @@ hotsheet-cli ... orchestration scheduler tick [--dry-run] --project <owner>
 
 `plan` computes the schedule and changes and logs nothing. `explain` answers
 `running`, `finished`, `not_planned`, `not_ready` (with the readiness reasons),
-`start`, `keep` or `not_placed` with the reason, its detail, the rank and score, and
-when to expect a change. `tick` is one pass. A headless process hosts no sessions and
+`start`, `keep` or `not_placed` with the reason, its detail, the rank and score,
+when to expect a change, and each resource the work requires (§26.20). `tick` is one pass. A headless process hosts no sessions and
 asks the server on the same machine for capacity (§26.10); with none running the
 machine reads as `capacity_unknown`.
 
@@ -2402,3 +2412,144 @@ crash or a new safe point there is learned at the next pass for any other reason
 Reconciliation's session source (§26.14) is unchanged. `session_work` would report a
 session that was wound down while its run waits on a gate as missing work
 (HS2-75Q254). Dispatching a run for a placed step is HS2-YC2P7K.
+
+## 26.20 Scheduling around claimable resources (HS2-2FG91X)
+
+Some work needs a thing only one process may use at a time, such as the one macOS VM
+a machine has. The resource-claim service ([36](36-resource-claims.md)) leases such
+a resource to one holder. Orchestration declares which resources work needs, reads
+who holds them, and does not start work that would only wait.
+
+**The scheduler never claims.** It does not acquire, renew or release a resource for
+anyone. The session that does the work acquires the resource itself with the claim
+service's primitives (§36.10), keeps the renewal token, renews while it works and
+releases when done (§36.1, §36.4). A stuck session lets its lease lapse. The
+scheduler's part ends at naming the resources in the start request
+(`PlacementStart.resources`). Passing them into the started session and teaching the
+acquire-and-hand-off pattern are HS2-7YSKXE and HS2-SHDW2Q; neither is built.
+
+### Declaring a requirement
+
+A requirement is `{ "namespace", "resource" }` in the claim service's names (§36.1),
+written `<namespace>/<resource>` on a command line. It is declared in two places:
+
+| Where       | How                                                                      | Applies to                        | Limit        |
+| ----------- | ------------------------------------------------------------------------ | --------------------------------- | ------------ |
+| A plan step | `resources` of `readiness define` (§26.15); CLI `--resource`, repeatable | That step's work                  | 4 per step   |
+| The policy  | `placement.resources[]`, each `{ "target_id", "resources" }` (§26.8)     | Every piece of work on the target | 4 per target |
+
+Work requires the union of both, each resource once. A step's set is stored sorted,
+so the same set in another order is the same definition; a changed set is a new
+revision and wakes the scheduler; defining a step without `resources` withdraws
+them. A requirement is not a prerequisite: readiness (§26.15) does not look at it.
+
+Validation refuses a malformed name, a resource named twice and more than four, on
+a step before any target is read. Policy validation adds `invalid_resource`,
+`invalid_resource_count`, `duplicate_resource`, `duplicate_resource_target` and
+`resources_without_target` (the entry names a target the policy does not list). A
+policy without requirements is stored as before.
+
+### Whose resource it is
+
+A namespace is machine-scoped (§36.1), so a resource name means something only on
+one machine. A requirement is read on **the machine that hosts the target**: the
+capacity read of §26.10 lists that machine's live claims for the namespaces its
+ready work names, over the reviewed transport when the target is hosted elsewhere.
+The same name on two machines is two resources; two targets on one machine share
+that machine's. Each claim reaches the scheduler as a namespace, a resource and an
+expiry, never a holder, a token or metadata.
+
+One read lists at most eight namespaces. A namespace beyond that is unknown, not
+assumed free (HS2-KCEHVR).
+
+### What a pass decides
+
+For each piece of confirmed work, in rank order, each required resource is in one
+state:
+
+| State        | Meaning                                                                               | The work                                                |
+| ------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `free`       | No live claim, and no better-ranked work was given it                                 | May be placed                                           |
+| `held`       | A live claim holds it until `expires_at_ms` unless renewed or released                | `resource_held`, retried at the expiry                  |
+| `taken`      | Nobody holds it; better-ranked work was given it in this pass                         | `resource_held`                                         |
+| `unreadable` | Its claims could not be read and the backend fails closed                             | `resource_unknown`                                      |
+| `unverified` | Its claims could not be read and the backend allows provisional claims                | May be placed; the next one is `resource_held`          |
+| `not_read`   | The machine that hosts the target was not read (unavailable, or in a refusal backoff) | The target's own reason; never handed to a free session |
+
+Work is given every resource it requires when it is placed, whether a session
+starts for it or a free session takes it, so one resource is given to one piece of
+work per pass. The first resource that defers work, in the stored order, is the one
+the reason's `detail` names. Work deferred for one resource takes none of its
+others. A claim is over at its expiry, so work may be placed at that instant.
+
+### Release, expiry and renewal
+
+- **Expiry.** A `held` resource's expiry is a retry time of the schedule
+  (`retry_at_ms`). The loop looks again then. A holder that renewed is still
+  holding, and the new expiry is the new retry time.
+- **Release.** After a pass that deferred work for a `held` resource of its own
+  machine, the loop waits for that resource with the claim service's wait
+  primitive (`wait_until_free`, §36.12), on one thread per resource and at most 16
+  at a time. When the wait ends, the scheduler's wake marker is written and the
+  loop runs a pass. The wait is the backend's release signal (§36.6), not a poll,
+  and a resource is waited on once however many passes defer work for it.
+- **Another machine.** A claim on another machine's backend has no wait from here
+  yet (HS2-G1PKK2): the loop looks again at its expiry or at the next event.
+
+A one-shot `plan`, `explain` or `tick` waits on nothing.
+
+### When a claim backend cannot be reached
+
+What to do is a choice of the backend's configuration (§36.7), and the machine that
+hosts the target reports it with its capacity (`claims_offline`):
+
+| Offline policy          | A pass                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `fail_closed` (default) | Work that needs a resource of that namespace is `resource_unknown`. Work that needs nothing is unaffected |
+| `provisional`           | The best-ranked work starts with the resource marked `unverified`; its session takes a provisional claim  |
+
+Under `fail_closed`, an applied pass that started nothing on that target counts
+the unread claims as a refusal, so its machine is asked again after one minute,
+doubling to 30 (§26.17), not on every event. Under `provisional` a second piece of
+work is never started on the same unverified resource in one pass, and when the
+backend returns, the claim the session took is read like any other. A provisional
+claim is never treated as exclusive.
+
+Backend configurations do not exist yet (HS2-JJWESD). Every namespace is served by
+the local machine backend, which is never offline; a namespace whose stored state
+cannot be read fails closed. The `provisional` policy is reached only through the
+claim-source seam (`ClaimSource`), which the configured backends will implement
+(HS2-KCEHVR). An older peer that reports no policy fails closed.
+
+### Reading contention
+
+`scheduler plan` and `tick` add `contention`: one entry per resource that deferred
+work, or that work was started on unverified, with `server_id` (the machine),
+`namespace`, `resource`, `state`, `expires_at_ms` for a held one, `unreadable`
+(`backend_unreachable` or `namespace_limit`), `taken_by` (the step given it) and
+`waiting` (the steps deferred, best first). It is left out when empty. The pass
+record of the decision log counts `held_resources` and `unreadable_namespaces`,
+and each deferred step's record carries the reason, the resource and the expiry.
+
+`scheduler explain` adds `resources`: every resource the work requires with its
+state, its machine, the expiry or the step that was given it, and `declared_by`
+(`step` or `target`). The orchestration workspace shows none of this yet
+(HS2-5GRXFN).
+
+A session that claims its resource before a run exists for its step makes the same
+step read `resource_held`, because a claim does not say whom it is for (HS2-AK75HT).
+A dispatched run (HS2-YC2P7K) takes the step out of the ready work.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration readiness define --ticket <slug> --target <target-id> \
+  --connection <source> --id <ticket> --resource vm/macos-vm --project <owner>
+hotsheet-cli ... orchestration policy set --file <policy.json> --project <owner>
+hotsheet-cli ... orchestration scheduler plan --project <owner>
+hotsheet-cli ... orchestration scheduler explain <step-id> --project <owner>
+```
+
+No route was added: `readiness/define`, the policy body, the capacity snapshot and
+the scheduler responses carry the new members, and MCP `hotsheet_targets`
+`readiness_define` takes `resources`.

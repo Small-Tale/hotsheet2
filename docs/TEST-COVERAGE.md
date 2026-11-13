@@ -2082,6 +2082,7 @@ on the visible right edge and captures the resulting scrolled terminal.
 | orchestration-run-recovery | docs/26-orchestration-projects.md | Reconciling unfinished runs with their target after an interruption as a pure function over per-source observations (verified, mismatched, unverifiable with a reason); idempotent retries with no duplicate claim, queue mark or target ticket; a pending cancel repeated on reconnect; pause, resume, handoff and manual correction as audited transitions that keep every repeated and reversed step; reconciliation at server start and on follower connect and reconnect without a timer; CLI/HTTP/MCP parity (HS2-WBREDM) | `crates/hotsheet-ticketing/src/orchestration/reconcile_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/recovery.rs`; `crates/hotsheet-cli/src/orchestration/tests/watch.rs # hs2_wbredm`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_wbredm`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/recovery.rs`; `clients/web/tests/contracts.spec.ts` | HS2-7QNK7Y # CI runs; HS2-BYEB60 # deployments; HS2-75Q254 # sessions; HS2-G5H9FQ # validation steps; HS2-XM692S # workspace | double-covered |
 | orchestration-scheduler | docs/26-orchestration-projects.md | Placement decisions (start, keep, wind down per target, tool and model) from confirmed ready work, the policy, target capacity, tool capacity, held resources and placement memory; integer scoring of priority, Up Next, due date, unblocked work, red-gate repair and uncapped aging; packing under target, machine, tool and account caps and the RAM, CPU and disk limits; refill of idle and gate-waiting sessions; the oscillation guard and refusal backoff; dry run unless the policy enables automatic placement; approvals filed for decisions outside the policy; the `SessionExecutor` seam with a typed `executor_unavailable`; the decision log, `explain`, and the event-driven loop; CLI/HTTP/MCP parity (HS2-ECWG50) | `crates/hotsheet-ticketing/src/orchestration/scheduler_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/scheduler.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_ecwg50`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/scheduler.rs`; `clients/web/tests/contracts.spec.ts` | HS2-YC2P7K # dispatch of placed steps; HS2-AWB7BX # capacity events; HS2-77SRHC # workspace | double-covered |
 | orchestration-session-executor | docs/26-orchestration-projects.md | The scheduler placing orchestrator-owned sessions (§26.19): each record synced with its host and mapped onto the scheduler's view; a start that is the same start while its session is unfinished and a replacement once it is finished; the gate passed under the scheduler's operation id with the larger of the decided and the recorded load; wind-down only at a safe point and never of a person's session; every refusal a typed outcome; idle time remembered from the first sighting; the loop woken by the wake marker when a session without a run starts, ends or finishes a turn | `crates/hotsheet-ticketing/src/orchestration/session_idle_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/session_executor.rs` | `crates/hotsheet-server/tests/remote_servers/session_executor.rs`; `crates/hotsheet-server/tests/remote_servers/scheduler.rs` | HS2-257Q2Z # wake from a remote host; HS2-RG91SK # idle time from the host; HS2-SQS266 # last step removed; HS2-RTX8RJ # stop approval; HS2-7VV79Q # changed tool; HS2-48H57C # disabled target | double-covered |
+| orchestration-resources | docs/26-orchestration-projects.md | Resource requirements declared on a plan step and per target in the policy, validated against the claim service's names; held claims read per machine that hosts the target and treated as unavailable capacity; `resource_held` with the claim's expiry as the retry time, `resource_unknown` under a fail-closed backend and an `unverified` start under a provisional one; a release waking the loop through the claim service's wait primitive; contention in `plan` and per-resource standing in `explain`; the scheduler never claiming; CLI/HTTP/MCP parity (HS2-2FG91X) | `crates/hotsheet-ticketing/src/orchestration/resource_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs # hs2_2fg91x`; `crates/hotsheet-cli/src/orchestration/tests/scheduler/resources.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_2fg91x` | `crates/hotsheet-server/tests/remote_servers/resources.rs`; `clients/web/tests/contracts.spec.ts` | HS2-7YSKXE # a session acquiring its declared resources; HS2-G1PKK2 # release wake across machines; HS2-KCEHVR # a configured offline policy; HS2-5GRXFN # workspace | double-covered |
 | orchestration-readiness | docs/26-orchestration-projects.md | Prerequisites between orchestration steps and qualified target tickets without touching provider dependency fields; readiness levels (confirmed, provisional with base commits, blocked, stale, cyclic, in progress, finished) computed from confirmed target reads, CI and deployment gates and validation evidence; cross-target cycles; the dispatch guard with typed refusals and a person's audited override per operation; level changes published once as run events on run, gate and validation changes without a timer; `ready_work` for the scheduler; CLI/HTTP/MCP parity (HS2-42TARA) | `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/readiness.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_42tara`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/readiness.rs`; `clients/web/tests/contracts.spec.ts` | HS2-JSF985 # provisional dispatch; HS2-TMA4YA # prerequisite tickets without a run; HS2-J7N3PQ # time-only changes; HS2-15G5T4 # workspace | double-covered |
 | orchestration-sessions | docs/26-orchestration-projects.md | Starting an AI session on a target's own server through the ordinary AI terminal launch with tool, model and effort; the drawer label naming the orchestration project and run; worker, dispatcher and integrator roles with one active role session per target; duplicate start suppression by operation id on both machines; grants, policy caps and approvals at the gate and the host's own admission; safe-point wind-down that refuses mid-turn, a held claim, uncommitted changes, a pending handoff and anything unknown; a crashed session found lost and replaced; a person's stop, pause and takeover with ownership that never returns; CLI/HTTP/MCP parity (HS2-GDJXGZ) | `crates/hotsheet-ticketing/src/orchestration/session_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/sessions.rs`; `crates/hotsheet-cli/src/dispatch/orchestration_sessions.rs # hs2_gdjxgz`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_gdjxgz`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/sessions.rs`; `clients/web/tests/contracts.spec.ts` | HS2-KTHJN2 # drawer label in a browser; HS2-2DPGDY # role joining confirmed; HS2-TRP2MJ # worktree attribution; HS2-6MNMVB # host-side takeover; HS2-75Q254 # reconciliation source | double-covered |
 | orchestration-tool-capacity | docs/26-orchestration-projects.md | Plugin `[capacity]` declarations; limit, recovery and usage signals; the full capacity transition table with bounded backoff, reported reset times, unconfirmed recovery, unknown plugins, idempotent and out-of-order signals, account isolation and daily budgets; failover selection under tool and account caps; registry capacity and corrupt data; usage-limit halts and resumes recorded by the server; CLI/HTTP/MCP parity (HS2-AHG7HW) | `crates/hotsheet-ticketing/src/orchestration/tool_capacity_tests.rs`; `crates/hotsheet-plugins/src/tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/tool_capacity.rs`; `crates/hotsheet-server/src/tool_capacity_signals.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/tool_capacity.rs`; `crates/hotsheet-server/tests/live_state.rs`; `clients/web/tests/contracts.spec.ts` | HS2-XFMKHQ # automatic usage feed; HS2-PFHRS9 # account attribution; HS2-HSMH2Q # workspace | double-covered |
@@ -2895,6 +2896,53 @@ production persistence defect.
   HS2-257Q2Z); a headless `tick` that applies a start through the local server's
   terminals (the headless session start itself is covered by HS2-GDJXGZ); Linux and
   Windows; the browser drawer (HS2-KTHJN2).
+
+### Scheduling around claimable resources (HS2-2FG91X)
+
+- `resource_tests.rs` tables the names against the claim service's rules and every
+  reading of one resource: free, held, lapsed, held on another machine, another
+  resource of the namespace, unreadable under each offline policy and under both,
+  held and unreadable, and a target that was not read. Each case is checked for the
+  reason, the contention entry, the same answer for reordered inputs and its wire
+  form. Sequences walk one resource through two ready steps: one given it, the
+  other deferred, the holder's claim read, a renewal moving the retry time, an early
+  release, a new holder, the last millisecond before the expiry and the expiry
+  itself, an empty pass and a refill. Further cases cover two claims of one
+  resource, two targets on two machines and on one, several resources per step, a
+  free session taking the work and its resource, the per-step standings, the
+  policy's `placement.resources` problems and the snapshot's `claims_offline`.
+  `readiness_tests.rs # hs2_2fg91x` covers a step's declaration: stored sorted,
+  unchanged for the same set in another order, a new revision for a changed one,
+  withdrawn by a definition without it, ignored by readiness, and refused without
+  a write when invalid.
+- `tests/scheduler/resources.rs` drives the shared runtime with the recording
+  executor on the real local claim backend: two ready tickets needing one VM, where
+  one session starts and is told what to hold, the scheduler claims nothing, the
+  other is deferred with the claim's expiry, a renewal moves it, and a release
+  starts it; a following loop that reads nothing while the VM is held and is woken
+  by the claim service's release signal alone; a target on another machine whose
+  claim is read from that machine over the reviewed transport while the same name
+  held locally changes nothing; the policy's per-target requirement; validation at
+  both declarations and agreement of the names with the claim service's parsers; a
+  ninth namespace read as unknown; and the local backend failing closed on damaged
+  state without rewriting it. A scripted claim source covers what the local backend
+  cannot: an expiry and a renewal at chosen times as named retry times, and an
+  unreachable backend under `fail_closed` (deferred, backed off, not read again,
+  placed once it answers) and under `provisional` (one unverified start, the next
+  deferred, reconciled when the backend returns).
+- `remote_servers/resources.rs` uses the owned CLI process with no server
+  (`--resource`, the policy file, the claim CLI taking and releasing the VM, `plan`,
+  `explain` and the decision log), then a real server: the routes validating the
+  declaration, the loop deferring the work, and a release through the claim route
+  causing a `signal` pass with nothing else happening; and the stdio MCP tools
+  declaring a requirement, acquiring the resource and reading contention.
+- `contracts.spec.ts # HS2-2FG91X` validates the real server's plan step, ready
+  list, policy, capacity snapshot, schedule, explanation and decision log with the
+  new members against the contract.
+- Not verified: a session acquiring, renewing and releasing its declared resources,
+  since nothing passes them into a started session yet (HS2-7YSKXE, HS2-SHDW2Q);
+  a release on another machine waking the loop (HS2-G1PKK2); a `provisional` policy reported by a real
+  backend configuration (HS2-KCEHVR, HS2-JJWESD); Linux and Windows.
 
 ### Orchestration prerequisites and readiness (HS2-42TARA)
 

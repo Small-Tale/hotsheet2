@@ -178,7 +178,10 @@ What happens when a remote backend is unreachable is a per-configuration choice:
 closed (the default, `backend_unreachable`) or provisional advisory local claims that
 are reconciled and conflict-flagged on reconnect. A provisional claim is never reported
 as exclusive. The local machine backend has no remote and is never offline. Design
-only; HS2-JJWESD.
+only; HS2-JJWESD. The orchestration scheduler already acts on either choice when a
+machine reports it (§26.20 of
+[26-orchestration-projects.md](26-orchestration-projects.md); HS2-KCEHVR connects
+the configured value).
 
 ## 36.8 Plugin form
 
@@ -302,3 +305,10 @@ unavailable capacity through `hotsheet_resource_claims`:
   `list`, and `resolve_backend` returns the `ClaimBackend` for a namespace.
 
 All of these block; an async caller runs them on a blocking thread.
+
+Orchestration uses them this way
+([26-orchestration-projects.md](26-orchestration-projects.md) §26.20, HS2-2FG91X): a
+plan step or a target declares the resources its work must hold, the scheduler
+lists a namespace's live claims and defers work whose resource is held, and it waits
+for a release with `wait_until_free`. It never acquires, renews or releases; the
+session that does the work does, as §36.1 prescribes.

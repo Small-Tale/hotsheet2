@@ -94,6 +94,10 @@ pub struct PlanStep {
     pub target: RunTarget,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prerequisites: Vec<Prerequisite>,
+    /// HS2-2FG91X: resources the session working this step must hold, sorted. They
+    /// are not prerequisites: readiness ignores them and the scheduler waits on them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceNeed>,
     /// Starts at 1 and grows with every changed definition.
     pub revision: u32,
     pub created_at_ms: u64,
@@ -108,6 +112,7 @@ pub struct NewPlanStep {
     pub ticket: RunTicket,
     pub target: RunTarget,
     pub prerequisites: Vec<Prerequisite>,
+    pub resources: Vec<ResourceNeed>,
 }
 
 /// A target ticket as of one successful read. Codes and identifiers only.
@@ -750,11 +755,12 @@ impl PlanRegistry {
     pub fn define(
         &self,
         owner_checkout_id: &str,
-        new: NewPlanStep,
+        mut new: NewPlanStep,
         actor_id: Option<String>,
         tx: &mut Transaction<'_>,
     ) -> Result<(PlanStep, bool), OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
+        new.resources.sort();
         let now_ms = tx.clock.now_ms();
         let _lock = self.storage.lock()?;
         let mut file = self.read_file()?;
@@ -767,10 +773,11 @@ impl PlanRegistry {
                 if step.ticket != new.ticket {
                     return Err(OrchestrationError::Conflict);
                 }
-                if step.prerequisites == new.prerequisites {
+                if step.prerequisites == new.prerequisites && step.resources == new.resources {
                     return Ok((step.clone(), false));
                 }
                 step.prerequisites = new.prerequisites;
+                step.resources = new.resources;
                 step.revision = step.revision.saturating_add(1);
                 step.updated_at_ms = now_ms;
                 step.updated_by = actor_id;
@@ -792,6 +799,7 @@ impl PlanRegistry {
                     ticket: new.ticket,
                     target: new.target,
                     prerequisites: new.prerequisites,
+                    resources: new.resources,
                     revision: 1,
                     created_at_ms: now_ms,
                     updated_at_ms: now_ms,
@@ -1020,6 +1028,7 @@ fn validate_step(step: &PlanStep) -> Result<(), OrchestrationError> {
     if let Some(actor) = &step.updated_by {
         valid_identifier(actor)?;
     }
+    validate_needs(&step.resources, MAX_STEP_RESOURCES)?;
     if step.prerequisites.len() > MAX_STEP_PLAN_PREREQUISITES {
         return Err(OrchestrationError::Invalid(
             "a step has at most 16 prerequisites",

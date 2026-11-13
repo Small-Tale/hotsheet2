@@ -6,7 +6,7 @@
 use std::sync::Mutex;
 
 use hotsheet_ticketing::orchestration::{
-    MachineLimits, ScheduledSession, SessionActivity, SessionLoad, Transaction,
+    MachineLimits, ResourceNeed, ScheduledSession, SessionActivity, SessionLoad, Transaction,
 };
 use serde::Serialize;
 
@@ -43,6 +43,10 @@ pub struct PlacementStart {
     pub limits: MachineLimits,
     /// The tool account is not verified available.
     pub probe: bool,
+    /// HS2-2FG91X: resources the steps' work requires, which the session claims
+    /// itself with the claim service's primitives (`docs/36-resource-claims.md`).
+    /// Neither the scheduler nor the executor claims, renews or releases for it.
+    pub resources: Vec<ResourceNeed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

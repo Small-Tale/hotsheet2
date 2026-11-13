@@ -12,6 +12,7 @@ mod manifest;
 mod policy;
 mod readiness;
 mod reconcile;
+mod resources;
 mod run_events;
 mod runs;
 mod scheduler;
@@ -67,6 +68,11 @@ pub use reconcile::{
     Alignment, Assessment, Disposition, ExternalSource, ExternalWork, MAX_FINDINGS, Observations,
     Observed, RunReconciliation, SOURCE_NOT_WIRED, SourceFinding, TargetFacts, Verification, align,
     assess,
+};
+pub use resources::{
+    MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
+    ResourceState, TargetResources, UnreadableClaims, UnreadableReason, resource_standings,
+    validate_needs,
 };
 pub use run_events::{
     RunEvent, RunEventEntry, RunEventJournal, RunEventKind, RunEventPage, RunEventSource,
@@ -279,6 +285,8 @@ mod policy_tests;
 mod readiness_tests;
 #[cfg(test)]
 mod reconcile_tests;
+#[cfg(test)]
+mod resource_tests;
 #[cfg(test)]
 mod run_event_tests;
 #[cfg(test)]

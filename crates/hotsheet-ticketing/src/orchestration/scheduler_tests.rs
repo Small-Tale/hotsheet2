@@ -4,26 +4,26 @@
 
 use super::*;
 
-const MIN: u64 = 60 * 1000;
+pub(super) const MIN: u64 = 60 * 1000;
 const HOUR: u64 = 60 * MIN;
 const DAY: u64 = 24 * HOUR;
-const T0: u64 = 20_000 * DAY + 12 * HOUR;
-const OWNER: &str = "owner-a1b2c3";
+pub(super) const T0: u64 = 20_000 * DAY + 12 * HOUR;
+pub(super) const OWNER: &str = "owner-a1b2c3";
 
 /// One change to an otherwise valid value, for a table of cases.
 type Edit<T> = Box<dyn Fn(&mut T)>;
 
-const FULL: SignalSupport = SignalSupport {
+pub(super) const FULL: SignalSupport = SignalSupport {
     limits: true,
     reset_times: true,
     usage: true,
     cost: true,
 };
 
-fn id(n: u128) -> String {
+pub(super) fn id(n: u128) -> String {
     ulid::Ulid::from(n).to_string()
 }
-fn target(n: u128) -> String {
+pub(super) fn target(n: u128) -> String {
     id(1000 + n)
 }
 
@@ -70,7 +70,7 @@ fn policy(targets: &[(u128, u32)]) -> PolicyBody {
     }
 }
 
-fn work(n: u128, on: u128) -> WorkItem {
+pub(super) fn work(n: u128, on: u128) -> WorkItem {
     WorkItem {
         step_id: id(n),
         target_id: target(on),
@@ -95,7 +95,7 @@ fn prio(mut item: WorkItem, priority: &str) -> WorkItem {
 }
 
 /// A machine with both tools installed, a quiet CPU and plenty of disk.
-fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> CapacitySnapshot {
+pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> CapacitySnapshot {
     CapacitySnapshot {
         schema_version: 1,
         server_id: id(9000 + server),
@@ -136,9 +136,10 @@ fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> CapacitySnapshot {
         ),
         claims: None,
         claim_namespaces: Vec::new(),
+        claims_offline: None,
     }
 }
-fn state(n: u128, capacity: CapacitySnapshot) -> TargetState {
+pub(super) fn state(n: u128, capacity: CapacitySnapshot) -> TargetState {
     TargetState {
         target_id: target(n),
         capacity: Some(capacity),
@@ -181,7 +182,7 @@ fn limited(tool: &str, until_ms: u64) -> CapacityEntry {
     ])
 }
 
-fn session(name: &str, on: u128, activity: SessionActivity) -> ScheduledSession {
+pub(super) fn session(name: &str, on: u128, activity: SessionActivity) -> ScheduledSession {
     ScheduledSession {
         session_id: name.into(),
         target_id: target(on),
@@ -201,18 +202,20 @@ fn session(name: &str, on: u128, activity: SessionActivity) -> ScheduledSession 
 }
 
 #[derive(Default)]
-struct World {
-    policy: PolicyBody,
-    work: Vec<WorkItem>,
-    targets: Vec<TargetState>,
-    sessions: Vec<ScheduledSession>,
-    tools: Vec<CapacityEntry>,
-    held: Vec<HeldResource>,
-    memory: Vec<PlacementMemory>,
+pub(super) struct World {
+    pub(super) policy: PolicyBody,
+    pub(super) work: Vec<WorkItem>,
+    pub(super) targets: Vec<TargetState>,
+    pub(super) sessions: Vec<ScheduledSession>,
+    pub(super) tools: Vec<CapacityEntry>,
+    pub(super) held: Vec<HeldResource>,
+    pub(super) memory: Vec<PlacementMemory>,
+    /// HS2-2FG91X
+    pub(super) unreadable: Vec<UnreadableClaims>,
 }
 
 impl World {
-    fn new(targets: &[(u128, u32)]) -> Self {
+    pub(super) fn new(targets: &[(u128, u32)]) -> Self {
         Self {
             policy: policy(targets),
             targets: targets.iter().map(|(n, _)| roomy(*n)).collect(),
@@ -220,7 +223,7 @@ impl World {
             ..Self::default()
         }
     }
-    fn at(&self, now_ms: u64) -> Schedule {
+    pub(super) fn at(&self, now_ms: u64) -> Schedule {
         plan(
             &ScheduleInput {
                 now_ms,
@@ -231,17 +234,18 @@ impl World {
                 sessions: &self.sessions,
                 tool_entries: &self.tools,
                 held: &self.held,
+                unreadable: &self.unreadable,
                 memory: &self.memory,
             },
             &|_| FULL,
         )
     }
-    fn now(&self) -> Schedule {
+    pub(super) fn now(&self) -> Schedule {
         self.at(T0)
     }
 }
 
-fn starts(schedule: &Schedule) -> Vec<(String, String)> {
+pub(super) fn starts(schedule: &Schedule) -> Vec<(String, String)> {
     schedule
         .placements
         .iter()
@@ -249,7 +253,7 @@ fn starts(schedule: &Schedule) -> Vec<(String, String)> {
         .map(|placement| (placement.steps[0].clone(), placement.tool.clone()))
         .collect()
 }
-fn blocked(schedule: &Schedule, n: u128) -> (&'static str, Option<String>) {
+pub(super) fn blocked(schedule: &Schedule, n: u128) -> (&'static str, Option<String>) {
     let item = schedule
         .unplaced
         .iter()
@@ -257,7 +261,7 @@ fn blocked(schedule: &Schedule, n: u128) -> (&'static str, Option<String>) {
         .unwrap_or_else(|| panic!("step {n} was placed: {schedule:#?}"));
     (item.reason.code(), item.detail.clone())
 }
-fn fate(schedule: &Schedule, name: &str) -> (&'static str, &'static str) {
+pub(super) fn fate(schedule: &Schedule, name: &str) -> (&'static str, &'static str) {
     let placement = schedule
         .placements
         .iter()
@@ -1393,6 +1397,7 @@ fn hs2_ecwg50_a_held_resource_is_unavailable_capacity() {
         namespace: "ports".into(),
         resource: "8080".into(),
         expires_at_ms: T0 + 10 * MIN,
+        server_id: None,
     }];
     let schedule = world.now();
     assert_eq!(starts(&schedule), vec![(id(3), "alpha".into())]);

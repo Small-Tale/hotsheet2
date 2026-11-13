@@ -248,6 +248,7 @@ impl Placed {
             load,
             limits: MachineLimits::default(),
             probe: false,
+            resources: Vec::new(),
         }
     }
     fn stop_request(&self, session_id: &str) -> WindDownSession {

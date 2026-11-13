@@ -1356,3 +1356,196 @@ test('HS2-ECWG50 real scheduler responses match the OpenAPI contract', async () 
     await server.stop();
   }
 });
+
+test('HS2-2FG91X real resource requirement and contention responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const shaped = (schema: string, value: unknown) => {
+    const validate = ajv.compile({ $ref: `#/components/schemas/${schema}`, components: openapi.components });
+    expect(validate(value), `${schema}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const target = '01ARZ3NDEKTSV4RRFFQ69G5FF4';
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const schedulerRoute = '/checkouts/{owner}/orchestration/scheduler/{operation}';
+    const readinessRoute = '/checkouts/{owner}/orchestration/readiness/{operation}';
+    const person = { role: 'human', id: 'maintainer' };
+    const actor = { role: 'ai', id: 'scheduler-1' };
+    const vm = { namespace: 'vm', resource: 'macos-vm' };
+
+    const added = await send('POST', `${base}/targets`, { target_id: target, label: 'Self', expected_revision: null });
+    expect(added.status).toBe(200);
+    const candidate = await send('POST', `${base}/inspect`, {
+      destination: { kind: 'local', checkout_id: server.checkoutId },
+    });
+    const bound = await send('PUT', `${base}/targets/${target}/binding`, {
+      target: { owner_checkout_id: server.checkoutId, target_id: target },
+      expected_manifest_revision: added.body.revision,
+      expected_binding_revision: 0,
+      previous_destination: null,
+      destination: candidate.body.destination,
+    });
+    expect(bound.status).toBe(200);
+    const granted = await send('POST', `${base}/targets/${target}/grants`, {
+      actor_id: 'scheduler-1',
+      actions: ['tickets_read', 'gates_observe'],
+      expires_at_ms: Date.now() + 3_600_000,
+      actor: person,
+    });
+    expect(granted.status).toBe(200);
+    const orchestration = await server.request<{ id: string }>('/tickets', 'POST', {
+      title: 'Coordinate around a resource',
+    });
+    const work = await server.request<{ id: string; connection_id: string }>('/tickets', 'POST', {
+      title: 'Synthetic work in the VM',
+    });
+
+    // A step declares the resources its session must hold.
+    const defined = await send('POST', `${base}/readiness/define`, {
+      ticket: { native_id: orchestration.id },
+      target_id: target,
+      connection_id: work.connection_id,
+      native_id: work.id,
+      resources: [vm, { namespace: 'ports', resource: '8080' }],
+      actor,
+    });
+    expect(defined.status, JSON.stringify(defined.body)).toBe(200);
+    matches(readinessRoute, 'post', '200', defined.body);
+    const step = defined.body.step as { step_id: string; resources: object[] };
+    shaped('PlanStep', step);
+    expect(step.resources).toEqual([{ namespace: 'ports', resource: '8080' }, vm]);
+    const ready = await send('POST', `${base}/readiness/ready`, { actor });
+    expect(ready.status).toBe(200);
+    matches(readinessRoute, 'post', '200', ready.body);
+    expect(ready.body).toMatchObject([{ step_id: step.step_id, resources: step.resources }]);
+    const invalid = await send('POST', `${base}/readiness/define`, {
+      ticket: { native_id: orchestration.id },
+      target_id: target,
+      connection_id: work.connection_id,
+      native_id: work.id,
+      resources: [{ namespace: 'VM', resource: 'macos-vm' }],
+      actor,
+    });
+    expect(invalid.status).toBe(400);
+    matches(readinessRoute, 'post', 'default', invalid.body);
+
+    // The policy requires a resource of every piece of work on the target.
+    const policy = await send('PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'synthetic-tool', max_sessions: 2 }],
+        targets: [
+          {
+            target_id: target,
+            actions: ['tickets_read', 'gates_observe', 'sessions_manage'],
+            tools: [{ tool: 'synthetic-tool' }],
+            max_sessions: 2,
+          },
+        ],
+        placement: {
+          actor: 'scheduler-1',
+          resources: [{ target_id: target, resources: [{ namespace: 'sim', resource: 'ios-17' }] }],
+        },
+      },
+      actor: person,
+    });
+    expect(policy.status, JSON.stringify(policy.body)).toBe(200);
+    matches('/checkouts/{owner}/orchestration/policy', 'put', '200', policy.body);
+    expect((policy.body.policy as { placement: { resources: object[] } }).placement.resources).toEqual([
+      { target_id: target, resources: [{ namespace: 'sim', resource: 'ios-17' }] },
+    ]);
+
+    // Someone holds the VM, taken through the claim service's own route.
+    const grant = await send('POST', '/resource-claims/vm/macos-vm/acquire', { duration_ms: 600_000 });
+    expect(grant.status, JSON.stringify(grant.body)).toBe(200);
+    expect(grant.body.acquired).toBe(true);
+    const snapshot = await send('GET', `/checkouts/${server.checkoutId}/target-capacity?claim_namespaces=vm`);
+    expect(snapshot.status).toBe(200);
+    matches('/checkouts/{checkout}/target-capacity', 'get', '200', snapshot.body);
+    expect(snapshot.body.claims).toEqual([{ ...vm, expires_at_ms: grant.body.expires_at_ms }]);
+
+    const act = async (operation: string, body: Record<string, unknown>, schema: string) => {
+      const answer = await send('POST', `${base}/scheduler/${operation}`, { ...body, actor });
+      expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+      matches(schedulerRoute, 'post', '200', answer.body);
+      shaped(schema, answer.body);
+      return answer.body;
+    };
+    const plan = await act('plan', {}, 'SchedulerSchedule');
+    expect(plan).toMatchObject({
+      unplaced: [
+        {
+          step_id: step.step_id,
+          reason: 'resource_held',
+          detail: 'vm/macos-vm',
+          retry_at_ms: grant.body.expires_at_ms,
+        },
+      ],
+      retry_at_ms: grant.body.expires_at_ms,
+      contention: [
+        {
+          server_id: snapshot.body.server_id,
+          ...vm,
+          state: 'held',
+          expires_at_ms: grant.body.expires_at_ms,
+          waiting: [step.step_id],
+        },
+      ],
+      inputs: { held_resources: 1, unreadable_namespaces: 0 },
+    });
+    const explained = await act('explain', { step_id: step.step_id }, 'SchedulerExplanation');
+    expect(explained).toMatchObject({
+      standing: 'not_placed',
+      reason: 'resource_held',
+      detail: 'vm/macos-vm',
+      resources: [
+        { namespace: 'ports', resource: '8080', state: 'free', declared_by: 'step' },
+        { ...vm, state: 'held', expires_at_ms: grant.body.expires_at_ms, declared_by: 'step' },
+        { namespace: 'sim', resource: 'ios-17', state: 'free', declared_by: 'target' },
+      ],
+    });
+    const tick = await act('tick', {}, 'SchedulerSchedule');
+    expect(tick).toMatchObject({ mode: 'dry_run', logged: 2 });
+    const log = await act('decisions', { limit: 10 }, 'SchedulerDecisionPage');
+    expect(log.entries).toMatchObject([
+      { kind: 'tick', tick: { held_resources: 1, unreadable_namespaces: 0 } },
+      { kind: 'unplaced', step_id: step.step_id, reason: 'resource_held', detail: 'vm/macos-vm' },
+    ]);
+
+    // Released with its own token: nothing waits on a resource any more.
+    const released = await send('POST', '/resource-claims/vm/macos-vm/release', {
+      renewal_token: grant.body.renewal_token,
+    });
+    expect(released.status).toBe(200);
+    const after = await act('plan', {}, 'SchedulerSchedule');
+    expect(after.contention).toBeUndefined();
+    expect(after).toMatchObject({ unplaced: [{ step_id: step.step_id, reason: 'no_tool_available' }] });
+  } finally {
+    await server.stop();
+  }
+});

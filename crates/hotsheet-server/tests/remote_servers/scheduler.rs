@@ -606,3 +606,7 @@ async fn hs2_ecwg50_server_routes_event_loop_and_stdio_mcp_share_the_scheduler()
         .unwrap()
         .unwrap();
 }
+
+/// HS2-2FG91X: scheduling around claimable resources, on the same fixtures.
+#[path = "resources.rs"]
+mod resources;

@@ -18,9 +18,12 @@ enum SchedulerCmd {
     /// Where and how many sessions the scheduler would start, keep or wind down now,
     /// with every piece of ready work ranked and a reason for each one not placed.
     /// A dry run: it reads target capacity (gates_observe) and changes and logs nothing.
+    /// Resources that deferred work are listed under `contention` with who waits
+    /// (HS2-2FG91X).
     Plan,
     /// Why one piece of work is not running: by plan step, or by exact target ticket
-    /// with --target, --connection and --id (the provider's own ticket id).
+    /// with --target, --connection and --id (the provider's own ticket id). Each
+    /// resource the work must hold is listed with how it stands (HS2-2FG91X).
     Explain {
         step_id: Option<String>,
         /// The declared target project.

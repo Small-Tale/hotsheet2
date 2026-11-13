@@ -12,11 +12,11 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     ApprovalGate, ApprovalRegistry, ApprovalState, AuditOutcome, AuditRecord, DenialReason,
-    GateFacts, GateFilter, GateRequirement, NewPlanStep, PlanFacts, PlanRegistry, PlanStep,
-    Prerequisite, ReadinessError, ReadinessLevel, ReadinessReason, RunEvent, RunEventJournal,
-    RunEventKind, RunEventSource, RunTarget, RunTicket, RunUnreachable, StepReadiness,
-    TargetAction, TargetOpError, TicketFacts, TicketKey, TicketSeen, TicketUpdate,
-    ValidationRegistry, evaluate_plan, summarize, ticket_key,
+    GateFacts, GateFilter, GateRequirement, MAX_STEP_RESOURCES, NewPlanStep, PlanFacts,
+    PlanRegistry, PlanStep, Prerequisite, ReadinessError, ReadinessLevel, ReadinessReason,
+    ResourceNeed, RunEvent, RunEventJournal, RunEventKind, RunEventSource, RunTarget, RunTicket,
+    RunUnreachable, StepReadiness, TargetAction, TargetOpError, TicketFacts, TicketKey, TicketSeen,
+    TicketUpdate, ValidationRegistry, evaluate_plan, summarize, ticket_key, validate_needs,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -55,6 +55,9 @@ pub struct DefinePlanStep {
     pub target: TargetTicket,
     #[serde(default)]
     pub prerequisites: Vec<PrerequisiteRequest>,
+    /// HS2-2FG91X: resources the session working the step must hold.
+    #[serde(default)]
+    pub resources: Vec<ResourceNeed>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -127,6 +130,10 @@ pub struct ReadyItem {
     /// When the step reached this level.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ready_since_ms: Option<u64>,
+    /// HS2-2FG91X: resources the step itself requires. The policy may require more
+    /// of its whole target.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceNeed>,
 }
 
 /// One audit entry of a plan change or an override.
@@ -412,6 +419,7 @@ impl OrchestrationRuntime {
                 ReadyItem {
                     step_id: step.step_id,
                     ticket: step.ticket,
+                    resources: step.resources,
                     priority: read.and_then(|seen| seen.priority.clone()),
                     up_next: read.and_then(|seen| seen.up_next),
                     ticket_created_at_ms: read.and_then(|seen| seen.created_at_ms),
@@ -463,6 +471,8 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<StepView, OrchestrationError> {
+        // HS2-2FG91X: a malformed requirement is refused before any target is read.
+        validate_needs(&request.resources, MAX_STEP_RESOURCES)?;
         let (_, source_id, source_connection) =
             self.orchestration_store(owner_id, &request.ticket)?;
         let ticket = RunTicket {
@@ -567,6 +577,7 @@ impl OrchestrationRuntime {
                     ticket: ticket.clone(),
                     target,
                     prerequisites,
+                    resources: request.resources.clone(),
                 },
                 actor.and_then(|actor| actor.id.clone()),
                 tx,
@@ -582,6 +593,9 @@ impl OrchestrationRuntime {
                 )?;
             }
             if changed {
+                // HS2-2FG91X: a changed requirement moves no level, so no readiness
+                // event would tell a running scheduler to look again.
+                self.scheduler_wake(owner_id);
                 self.readiness_audit(
                     owner_id,
                     &step.target.target_id,

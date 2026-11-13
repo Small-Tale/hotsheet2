@@ -9,6 +9,7 @@ mod policy;
 mod readiness;
 mod recovery;
 mod request;
+mod resources;
 mod runs;
 mod scheduler;
 mod scheduler_apply;
@@ -34,13 +35,15 @@ pub use readiness::{
 };
 pub use recovery::{CorrectRun, HandoffRun, PauseRun, ReconcileFailure, ReconcileSummary};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
+pub use resources::{ClaimSource, ClaimsUnreachable, MAX_CLAIM_WATCHES, MachineClaims};
 pub use runs::{
     DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,
     RunStatus, RunView,
 };
 pub use scheduler::{
     DecisionOutcome, DecisionsRequest, ExplainRequest, Explanation, MAX_SCHEDULER_WAIT_MS,
-    PlanRequest, ScheduleView, SchedulerFollowState, SchedulerStep, TickRequest, TickView,
+    PlanRequest, RequiredResource, ScheduleView, SchedulerFollowState, SchedulerStep, TickRequest,
+    TickView,
 };
 pub use session_control::{
     ExecutorUnavailable, PlacementStart, RecordingSessions, SessionCall, SessionExecutor,
@@ -110,6 +113,8 @@ pub struct OrchestrationRuntime {
     sessions: Arc<dyn SessionHost>,
     /// HS2-ECWG50: who starts and winds down the sessions the scheduler places.
     session_executor: Arc<dyn SessionExecutor>,
+    /// HS2-2FG91X: this machine's live resource claims, for the hosted half.
+    claims: Arc<dyn ClaimSource>,
 }
 
 impl OrchestrationRuntime {
@@ -142,6 +147,7 @@ impl OrchestrationRuntime {
             gate_providers: vec![Arc::new(GithubActionsGates::new(&home))],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),
+            claims: Arc::new(MachineClaims::new(&home)),
             home,
             checkouts,
             providers,

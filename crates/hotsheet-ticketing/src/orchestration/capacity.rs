@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use super::contract::{bounded_text, valid_identifier};
 use super::policy::{MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MachineLimits};
 use super::storage::{Storage, decode};
-use super::{ORCHESTRATION_VERSION, OrchestrationError};
+use super::{ORCHESTRATION_VERSION, OfflinePolicy, OrchestrationError};
 
 /// The estimate used for a tool the machine owner configured no footprint for.
 pub const DEFAULT_SESSION_FOOTPRINT_MB: u64 = 1024;
@@ -106,6 +106,10 @@ pub struct CapacitySnapshot {
     /// they could not be read.
     pub claims: Option<Vec<HeldClaim>>,
     pub claim_namespaces: Vec<String>,
+    /// HS2-2FG91X: set when a named namespace's backend could not be reached, with
+    /// what its configuration says to do meanwhile. `claims` is then `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claims_offline: Option<OfflinePolicy>,
 }
 
 impl CapacitySnapshot {
@@ -128,7 +132,16 @@ impl CapacitySnapshot {
             sessions: host.sessions,
             claims,
             claim_namespaces,
+            claims_offline: None,
         }
+    }
+
+    /// HS2-2FG91X: the claims could not be read; say what the backend's offline
+    /// policy is. Ignored while the claims are known.
+    #[must_use]
+    pub fn with_claims_offline(mut self, offline: Option<OfflinePolicy>) -> Self {
+        self.claims_offline = offline.filter(|_| self.claims.is_none());
+        self
     }
 
     /// The host's own part, as a probe that relays another server's snapshot needs it.

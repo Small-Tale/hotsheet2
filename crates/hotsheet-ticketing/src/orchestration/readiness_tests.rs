@@ -60,6 +60,7 @@ fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> P
         ticket: orchestration_ticket(),
         target: target.clone(),
         prerequisites,
+        resources: Vec::new(),
         revision: 1,
         created_at_ms: 1,
         updated_at_ms: 1,
@@ -921,6 +922,8 @@ struct Fixture {
     registry: PlanRegistry,
     clock: Clock,
     rng: Rng,
+    /// HS2-2FG91X: what the next definition requires; taken by it.
+    resources: Vec<ResourceNeed>,
 }
 impl Fixture {
     fn new() -> Self {
@@ -930,6 +933,7 @@ impl Fixture {
             home,
             clock: Clock(std::cell::Cell::new(1_000)),
             rng: Rng(1_000),
+            resources: Vec::new(),
         }
     }
     fn define_for(
@@ -945,6 +949,7 @@ impl Fixture {
                 ticket: orchestration_ticket(),
                 target: target.clone(),
                 prerequisites,
+                resources: std::mem::take(&mut self.resources),
             },
             Some("worker-1".into()),
             &mut Transaction {
@@ -1014,6 +1019,7 @@ fn hs2_42tara_define_is_idempotent_revises_on_change_and_validates() {
             },
             target: b.clone(),
             prerequisites: Vec::new(),
+            resources: Vec::new(),
         },
         None,
         &mut Transaction {
@@ -1334,4 +1340,78 @@ fn hs2_42tara_damaged_or_newer_plan_data_is_an_error_and_never_overwritten() {
         );
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
+}
+
+#[test]
+fn hs2_2fg91x_a_step_declares_the_resources_its_session_must_hold() {
+    let need = |text: &str| ResourceNeed::parse(text).unwrap();
+    let mut fixture = Fixture::new();
+    let a = ticket(1, "a");
+    // A step without requirements is stored as it always was.
+    let plain = fixture.define(&a, Vec::new());
+    assert!(plain.resources.is_empty());
+    assert!(
+        serde_json::to_value(&plain)
+            .unwrap()
+            .get("resources")
+            .is_none()
+    );
+
+    // Declared in any order, stored sorted; the same set again changes nothing.
+    fixture.resources = vec![need("vm/macos-vm"), need("ports/8080")];
+    let (declared, changed) = fixture.define_for(OWNER, &a, Vec::new()).unwrap();
+    assert!(changed);
+    assert_eq!(declared.revision, 2);
+    assert_eq!(
+        declared.resources,
+        [need("ports/8080"), need("vm/macos-vm")]
+    );
+    fixture.resources = vec![need("ports/8080"), need("vm/macos-vm")];
+    let (same, changed) = fixture.define_for(OWNER, &a, Vec::new()).unwrap();
+    assert!(!changed);
+    assert_eq!(same, declared);
+    fixture.resources = vec![need("vm/macos-vm"), need("ports/8080")];
+    assert!(!fixture.define_for(OWNER, &a, Vec::new()).unwrap().1);
+
+    // A changed set is a new revision; a definition without any withdraws them.
+    fixture.resources = vec![need("vm/macos-vm")];
+    let (fewer, changed) = fixture.define_for(OWNER, &a, Vec::new()).unwrap();
+    assert!(changed);
+    assert_eq!((fewer.revision, fewer.resources.len()), (3, 1));
+    assert_eq!(fixture.registry.get(OWNER, &fewer.step_id).unwrap(), fewer);
+    let (none, changed) = fixture.define_for(OWNER, &a, Vec::new()).unwrap();
+    assert!(changed);
+    assert_eq!((none.revision, none.resources.len()), (4, 0));
+
+    // Requirements are not prerequisites: readiness does not look at them.
+    fixture.resources = vec![need("vm/macos-vm")];
+    let step = fixture.define_for(OWNER, &a, Vec::new()).unwrap().0;
+    let levels = evaluate_plan(std::slice::from_ref(&step), &PlanFacts::default());
+    let mut bare = step.clone();
+    bare.resources.clear();
+    assert_eq!(
+        levels[0].level,
+        evaluate_plan(&[bare], &PlanFacts::default())[0].level
+    );
+
+    // An invalid, repeated or oversized set is refused and nothing is written.
+    let before = fixture.registry.records(OWNER).unwrap();
+    let bad = ResourceNeed {
+        namespace: "VM".into(),
+        resource: "macos-vm".into(),
+    };
+    for resources in [
+        vec![bad],
+        vec![need("vm/a"), need("vm/a")],
+        (0..=MAX_STEP_RESOURCES)
+            .map(|n| need(&format!("vm/r{n}")))
+            .collect(),
+    ] {
+        fixture.resources = resources;
+        assert!(matches!(
+            fixture.define_for(OWNER, &a, Vec::new()),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    assert_eq!(fixture.registry.records(OWNER).unwrap(), before);
 }

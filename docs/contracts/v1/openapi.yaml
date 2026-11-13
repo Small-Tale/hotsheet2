@@ -17824,6 +17824,28 @@ components:
               minimum: 0
               maximum: 1440
               default: 5
+            resources:
+              description:
+                Resources every piece of work on a target must hold (HS2-2FG91X). The scheduler reads their claims on
+                the machine that hosts the target and never claims; the session does.
+              type: array
+              maxItems: 256
+              items:
+                type: object
+                required:
+                  - target_id
+                  - resources
+                properties:
+                  target_id:
+                    type: string
+                    pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+                  resources:
+                    type: array
+                    minItems: 1
+                    maxItems: 4
+                    items:
+                      $ref: '#/components/schemas/OrchestrationResourceNeed'
+                additionalProperties: false
           additionalProperties: false
       additionalProperties: false
     OrchestrationApprovalGate:
@@ -19181,6 +19203,14 @@ components:
           maxItems: 8
           items:
             type: string
+        claims_offline:
+          description:
+            Present only when a named namespace's claim backend could not be reached and `claims` is therefore null
+            (HS2-2FG91X). It is what that backend's configuration says to do meanwhile; `fail_closed` when any
+            unreachable backend says so. Absent means `fail_closed`.
+          enum:
+            - fail_closed
+            - provisional
     HostedTargetAdmissionRequest:
       type: object
       required:
@@ -20071,6 +20101,14 @@ components:
           maxItems: 16
           items:
             $ref: '#/components/schemas/PlanPrerequisite'
+        resources:
+          description:
+            '`define` only (HS2-2FG91X). Resources the session working the step must hold. Left out, the step requires
+            none.'
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/OrchestrationResourceNeed'
         step_id:
           type:
             - string
@@ -20166,6 +20204,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlanPrerequisite'
+        resources:
+          description: Resources the session working the step must hold, sorted (HS2-2FG91X).
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/OrchestrationResourceNeed'
         revision:
           type: integer
           minimum: 1
@@ -20333,6 +20377,11 @@ components:
         ready_since_ms:
           type: integer
           minimum: 0
+        resources:
+          description: Resources the step itself requires (HS2-2FG91X). The policy may require more of its target.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationResourceNeed'
       additionalProperties: false
     OrchestrationSessionRole:
       description: The part a started session plays in its target's existing role model (HS2-GDJXGZ).
@@ -20943,6 +20992,7 @@ components:
             - no_tool_available
             - machine_refused
             - resource_held
+            - resource_unknown
             - cooldown
             - refusal_backoff
         detail:
@@ -20996,6 +21046,10 @@ components:
           type: integer
           minimum: 0
         held_resources:
+          type: integer
+          minimum: 0
+        unreadable_namespaces:
+          description: Claim namespaces a machine could not read for this pass (HS2-2FG91X).
           type: integer
           minimum: 0
         executor:
@@ -21074,6 +21128,13 @@ components:
           description: The earliest time a decision here changes by time alone.
           type: integer
           minimum: 0
+        contention:
+          description:
+            Every resource that deferred work in this pass, or that work was started on without its claims being
+            readable (HS2-2FG91X). Left out when there is none.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerResourceContention'
         outcomes:
           type: array
           items:
@@ -21154,6 +21215,41 @@ components:
           minimum: 0
         placement:
           $ref: '#/components/schemas/SchedulerPlacement'
+        resources:
+          description: Every resource ready work requires and how this pass saw it (HS2-2FG91X).
+          type: array
+          items:
+            type: object
+            required:
+              - namespace
+              - resource
+              - state
+              - declared_by
+            properties:
+              namespace:
+                type: string
+              resource:
+                type: string
+              state:
+                $ref: '#/components/schemas/SchedulerResourceState'
+              server_id:
+                type: string
+              expires_at_ms:
+                type: integer
+                minimum: 0
+              unreadable:
+                enum:
+                  - backend_unreachable
+                  - namespace_limit
+              taken_by:
+                description: The better-ranked step that was given the resource in this pass.
+                type: string
+              declared_by:
+                description: '`step` when the plan step names it, `target` when the policy requires it of the target.'
+                enum:
+                  - step
+                  - target
+            additionalProperties: false
         mode:
           enum:
             - dry_run
@@ -21379,6 +21475,67 @@ components:
           enum:
             - rebase_onto_fix
             - reverify_by_covering_run
+    OrchestrationResourceNeed:
+      description: A resource of the resource-claim service that orchestrated work must hold (HS2-2FG91X), written
+        `<namespace>/<resource>` elsewhere. The scheduler only reads its claim.
+      type: object
+      required:
+        - namespace
+        - resource
+      properties:
+        namespace:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{0,63}$
+        resource:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$
+      additionalProperties: false
+    SchedulerResourceState:
+      description:
+        How one pass saw a required resource (HS2-2FG91X). `free`; `held` by a live claim; `taken` by better-ranked
+        work in this pass; `unreadable` when its claims could not be read and the backend fails closed; `unverified`
+        when they could not be read and the backend allows a provisional claim; `not_read` when the machine that hosts
+        the target was not read.
+      enum:
+        - free
+        - held
+        - taken
+        - unreadable
+        - unverified
+        - not_read
+    SchedulerResourceContention:
+      description: One contended resource of a pass (HS2-2FG91X). Identifiers and a time only, never a holder.
+      type: object
+      required:
+        - namespace
+        - resource
+        - state
+      properties:
+        server_id:
+          description: The machine whose claim backend holds the resource; absent for `not_read`.
+          type: string
+        namespace:
+          type: string
+        resource:
+          type: string
+        state:
+          $ref: '#/components/schemas/SchedulerResourceState'
+        expires_at_ms:
+          description: When the live claim lapses unless it is renewed; only for `held`.
+          type: integer
+          minimum: 0
+        unreadable:
+          enum:
+            - backend_unreachable
+            - namespace_limit
+        taken_by:
+          description: The step this pass gave the resource to.
+          type: string
+        waiting:
+          description: Steps this pass deferred for it, best first.
+          type: array
+          items:
+            type: string
       additionalProperties: false
     RemoteIdentity:
       type: object

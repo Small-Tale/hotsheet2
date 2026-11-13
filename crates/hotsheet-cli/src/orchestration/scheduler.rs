@@ -25,10 +25,11 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     Blocker, CapacityState, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
     DecisionRecord, GateFilter, GateRegistry, GateState, HeldResource, MAX_SCHEDULE_SESSIONS,
-    Placement, PlacementAction, PlacementOutcome, PolicyBody, Prerequisite, ReadinessLevel,
-    RunEventJournal, RunEventKind, Schedule, ScheduleInput, ScheduledSession, SchedulerStore,
-    ScoreParts, SessionActivity, SignalSupport, TargetAction, TargetState, TickInputs,
-    ToolCapacityRegistry, Unplaced, WorkItem, WorkLevel, plan, state_at, summarize,
+    OfflinePolicy, Placement, PlacementAction, PlacementOutcome, PolicyBody, Prerequisite,
+    ReadinessLevel, ResourceNeed, ResourceStanding, RunEventJournal, RunEventKind, Schedule,
+    ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, SignalSupport,
+    TargetAction, TargetState, TickInputs, ToolCapacityRegistry, Unplaced, UnreadableClaims,
+    UnreadableReason, WorkItem, WorkLevel, plan, resource_standings, state_at, summarize,
 };
 use serde::{Deserialize, Serialize};
 
@@ -147,8 +148,21 @@ pub struct Explanation {
     pub retry_at_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<Placement>,
+    /// HS2-2FG91X: every resource ready work requires, and how this pass saw it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<RequiredResource>,
     /// `dry_run` when a placement shown here would not be applied by a tick.
     pub mode: DecisionMode,
+}
+
+/// One resource a step's work requires, with who declared it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RequiredResource {
+    #[serde(flatten)]
+    pub standing: ResourceStanding,
+    /// `step` when the plan step names it, `target` when the policy requires it of
+    /// every piece of work on the target.
+    pub declared_by: &'static str,
 }
 
 /// What a host's follower remembers between steps.
@@ -176,7 +190,7 @@ pub struct SchedulerStep {
 pub(super) struct Gathered {
     pub(super) policy: PolicyBody,
     revision: Option<String>,
-    work: Vec<WorkItem>,
+    pub(super) work: Vec<WorkItem>,
     targets: Vec<TargetState>,
     sessions: Vec<ScheduledSession>,
     /// `available`, `unavailable` or `failed`.
@@ -184,7 +198,28 @@ pub(super) struct Gathered {
     entries: Vec<hotsheet_ticketing::orchestration::CapacityEntry>,
     supports: BTreeMap<String, SignalSupport>,
     held: Vec<HeldResource>,
+    /// HS2-2FG91X: namespaces whose claims a machine could not read.
+    unreadable: Vec<UnreadableClaims>,
     memory: Vec<hotsheet_ticketing::orchestration::PlacementMemory>,
+}
+
+impl Gathered {
+    /// HS2-2FG91X: every resource the named steps' work requires, each once.
+    pub(super) fn resources_of(&self, steps: &[String]) -> Vec<ResourceNeed> {
+        let mut needs: Vec<ResourceNeed> = Vec::new();
+        for item in self
+            .work
+            .iter()
+            .filter(|item| steps.contains(&item.step_id))
+        {
+            for need in &item.resources {
+                if !needs.contains(need) {
+                    needs.push(need.clone());
+                }
+            }
+        }
+        needs
+    }
 }
 
 enum Logging<'a> {
@@ -211,6 +246,14 @@ impl OrchestrationRuntime {
         let directory = home.join(WAKE_DIRECTORY);
         if std::fs::create_dir_all(&directory).is_ok() {
             let _ = std::fs::write(directory.join("token"), ulid::Ulid::new().to_string());
+        }
+    }
+
+    /// HS2-2FG91X: wake the owner's scheduling loop, when its policy runs one. An
+    /// owner without automatic placement has no loop, and nothing is written for it.
+    pub(super) fn scheduler_wake(&self, owner_id: &str) {
+        if matches!(self.scheduler_actor(owner_id), Ok(Some(_))) {
+            Self::scheduler_wake_at(&self.home);
         }
     }
 
@@ -287,15 +330,16 @@ impl OrchestrationRuntime {
                 },
                 priority: item.priority,
                 up_next: item.up_next.unwrap_or(false),
-                // Due dates, milestones, a preferred tool and declared resources are
-                // not in a plan step yet (HS2-2FG91X declares resources).
+                // Due dates, milestones and a preferred tool are not in a plan step
+                // yet (HS2-TH53NN).
                 due_at_ms: None,
                 unblocks: u32::try_from(item.unblocks.len()).unwrap_or(u32::MAX),
                 ready_since_ms: item.ready_since_ms,
                 created_at_ms: item.ticket_created_at_ms,
                 tool: None,
                 model: None,
-                resources: Vec::new(),
+                // HS2-2FG91X: the step's own; the policy's are added per target.
+                resources: item.resources,
             })
             .collect())
     }
@@ -349,7 +393,15 @@ impl OrchestrationRuntime {
             return Ok(None);
         };
         let now_ms = tx.clock.now_ms();
-        let work = self.scheduler_work(owner_id, tx)?;
+        let mut work = self.scheduler_work(owner_id, tx)?;
+        // HS2-2FG91X: what the policy requires of every piece of work on a target.
+        for item in &mut work {
+            for need in policy.target_resources(&item.target_id) {
+                if !item.resources.contains(need) {
+                    item.resources.push(need.clone());
+                }
+            }
+        }
         let memory = SchedulerStore::new(&self.home).memory(owner_id)?;
         let (sessions, executor) = self.scheduler_sessions(owner_id, tx);
         // Only a target that could take a session is contacted: confirmed work, a
@@ -366,20 +418,27 @@ impl OrchestrationRuntime {
             .collect();
         let mut targets = Vec::new();
         let mut held = Vec::new();
+        let mut unreadable = Vec::new();
         for target_id in wanted {
             let waiting = memory
                 .iter()
                 .find(|entry| entry.target_id == target_id)
                 .and_then(|entry| entry.refused_until_ms())
                 .is_some_and(|until| until > now_ms);
-            let namespaces: Vec<String> = work
+            // One read lists a bounded number of namespaces. A namespace left out is
+            // unknown, never assumed free (HS2-2FG91X).
+            let mut namespaces: Vec<String> = work
                 .iter()
-                .filter(|item| item.target_id == target_id)
+                .filter(|item| item.level == WorkLevel::Confirmed && item.target_id == target_id)
                 .flat_map(|item| item.resources.iter().map(|need| need.namespace.clone()))
                 .collect::<BTreeSet<_>>()
                 .into_iter()
-                .take(hotsheet_ticketing::orchestration::MAX_CLAIM_NAMESPACES)
                 .collect();
+            let left_out = namespaces.split_off(
+                namespaces
+                    .len()
+                    .min(hotsheet_ticketing::orchestration::MAX_CLAIM_NAMESPACES),
+            );
             let read = if waiting {
                 Err("refusal_backoff".to_owned())
             } else if actor.is_none() {
@@ -391,10 +450,41 @@ impl OrchestrationRuntime {
             };
             match read {
                 Ok(snapshot) => {
-                    held.extend(snapshot.claims.iter().flatten().map(|claim| HeldResource {
-                        namespace: claim.namespace.clone(),
-                        resource: claim.resource.clone(),
-                        expires_at_ms: claim.expires_at_ms,
+                    // A resource name means something only on the machine that
+                    // answered: its claims are that machine's.
+                    let unread = |namespace: &String, offline, reason| UnreadableClaims {
+                        server_id: snapshot.server_id.clone(),
+                        namespace: namespace.clone(),
+                        offline,
+                        reason,
+                    };
+                    match &snapshot.claims {
+                        Some(claims) => held.extend(
+                            claims
+                                .iter()
+                                .filter(|claim| namespaces.contains(&claim.namespace))
+                                .map(|claim| HeldResource {
+                                    namespace: claim.namespace.clone(),
+                                    resource: claim.resource.clone(),
+                                    expires_at_ms: claim.expires_at_ms,
+                                    server_id: Some(snapshot.server_id.clone()),
+                                }),
+                        ),
+                        // An older peer says nothing of a policy: that fails closed.
+                        None => unreadable.extend(namespaces.iter().map(|namespace| {
+                            unread(
+                                namespace,
+                                snapshot.claims_offline.unwrap_or_default(),
+                                UnreadableReason::BackendUnreachable,
+                            )
+                        })),
+                    }
+                    unreadable.extend(left_out.iter().map(|namespace| {
+                        unread(
+                            namespace,
+                            OfflinePolicy::FailClosed,
+                            UnreadableReason::NamespaceLimit,
+                        )
                     }));
                     targets.push(TargetState {
                         target_id: target_id.into(),
@@ -419,6 +509,7 @@ impl OrchestrationRuntime {
             entries: ToolCapacityRegistry::new(&self.home).entries()?,
             supports: super::tool_capacity::supports(&self.home),
             held,
+            unreadable,
             memory,
         }))
     }
@@ -439,6 +530,7 @@ impl OrchestrationRuntime {
                 sessions: &gathered.sessions,
                 tool_entries: &gathered.entries,
                 held: &gathered.held,
+                unreadable: &gathered.unreadable,
                 memory: &gathered.memory,
             },
             &|tool| gathered.supports.get(tool).copied().unwrap_or_default(),
@@ -491,6 +583,14 @@ impl OrchestrationRuntime {
                     .count(),
             ),
             held_resources: count(gathered.held.len()),
+            unreadable_namespaces: count(
+                gathered
+                    .unreadable
+                    .iter()
+                    .map(|unread| (&unread.server_id, &unread.namespace))
+                    .collect::<BTreeSet<_>>()
+                    .len(),
+            ),
             executor: gathered.executor.into(),
             starts: of(PlacementAction::Start),
             keeps: of(PlacementAction::Keep),
@@ -588,6 +688,7 @@ impl OrchestrationRuntime {
             score: None,
             retry_at_ms: None,
             placement: None,
+            resources: Vec::new(),
             mode: DecisionMode::DryRun,
         };
         let Some(step) = step else {
@@ -615,6 +716,41 @@ impl OrchestrationRuntime {
             ReadinessLevel::Confirmed | ReadinessLevel::Provisional => {
                 let view = self.scheduler_plan(owner_id, actor, tx)?;
                 answer.mode = view.mode;
+                // HS2-2FG91X: what the work must hold, and how this pass saw each.
+                let planned = &step.readiness.step;
+                let of_target: Vec<ResourceNeed> = self
+                    .policy(owner_id)?
+                    .policy
+                    .map(|policy| policy.target_resources(&planned.target.target_id).to_vec())
+                    .unwrap_or_default();
+                let needs: Vec<ResourceNeed> = planned
+                    .resources
+                    .iter()
+                    .chain(
+                        of_target
+                            .iter()
+                            .filter(|need| !planned.resources.contains(need)),
+                    )
+                    .cloned()
+                    .collect();
+                answer.resources = resource_standings(
+                    &view.schedule.contention,
+                    &planned.step_id,
+                    &needs,
+                    view.enabled && level == ReadinessLevel::Confirmed,
+                )
+                .into_iter()
+                .map(|standing| RequiredResource {
+                    declared_by: if planned.resources.iter().any(|need| {
+                        need.namespace == standing.namespace && need.resource == standing.resource
+                    }) {
+                        "step"
+                    } else {
+                        "target"
+                    },
+                    standing,
+                })
+                .collect();
                 match view.schedule.standing(&step.readiness.step.step_id) {
                     Some(standing) => {
                         answer.standing = standing.standing.into();
@@ -746,6 +882,14 @@ impl OrchestrationRuntime {
                         PlacementOutcome::Refused(
                             item.detail.clone().unwrap_or_else(|| "refused".into()),
                         ),
+                    ));
+                }
+                // HS2-2FG91X: a machine whose claims cannot be read is asked again
+                // after the same growing time, not on every event.
+                if item.reason == Blocker::ResourceUnknown {
+                    applied.push((
+                        item.target_id.clone(),
+                        PlacementOutcome::Refused(item.reason.code().into()),
                     ));
                 }
             }
@@ -960,9 +1104,14 @@ impl OrchestrationRuntime {
             return step;
         };
         let wake_directory = self.home.join(WAKE_DIRECTORY);
-        // Watch before reading, so a change in between is not missed.
-        let waiter =
-            hotsheet_jobs::ChangeWaiter::watching(&[journal.directory(), &wake_directory]).ok();
+        // Watch before reading, so a change in between is not missed. A step that
+        // may not wait watches nothing: starting a platform watcher costs far more
+        // than the reads below (HS2-2FG91X).
+        let waiter = (wait_ms > 0)
+            .then(|| {
+                hotsheet_jobs::ChangeWaiter::watching(&[journal.directory(), &wake_directory]).ok()
+            })
+            .flatten();
         let deadline =
             std::time::Instant::now() + Duration::from_millis(wait_ms.min(MAX_SCHEDULER_WAIT_MS));
         loop {
@@ -1020,6 +1169,9 @@ impl OrchestrationRuntime {
                     tx,
                 ) {
                     Ok(view) => {
+                        // HS2-2FG91X: a release wakes this loop; an expiry is the
+                        // retry time below.
+                        self.watch_releases(&view.view.schedule);
                         state.retry_at_ms = view.view.schedule.retry_at_ms;
                         step.failed = view.view.inputs.executor == "failed";
                     }

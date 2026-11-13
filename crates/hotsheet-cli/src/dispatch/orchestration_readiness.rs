@@ -14,6 +14,7 @@ pub(super) struct ReadinessArgs {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)] // HS2-2FG91X: parsed once per process; `define` carries its flags inline for clap
 enum ReadinessCmd {
     /// Plan one orchestration ticket's work on one exact target ticket, with what must
     /// hold before it is dispatched. Every named ticket is read through the gate
@@ -52,6 +53,12 @@ enum ReadinessCmd {
         /// "gates":"ci","commit":"<40-hex>"}. Repeatable.
         #[arg(long = "prerequisite")]
         prerequisites: Vec<String>,
+        /// HS2-2FG91X: a resource the session working this step must hold, as
+        /// `<namespace>/<resource>` in the resource-claim service's names (for
+        /// example `vm/macos-vm`). Repeatable, at most four. The scheduler does not
+        /// start the work while someone holds it and never claims it itself.
+        #[arg(long = "resource")]
+        resources: Vec<String>,
     },
     /// One step's level and the reason for each prerequisite that does not hold.
     /// Answers from this machine's records and contacts nothing.
@@ -100,7 +107,18 @@ pub(super) fn route(
             gates,
             requires_validation,
             prerequisites,
+            resources,
         } => {
+            let mut needs = Vec::new();
+            for spec in &resources {
+                let Some((namespace, resource)) = spec
+                    .split_once('/')
+                    .filter(|(namespace, resource)| !namespace.is_empty() && !resource.is_empty())
+                else {
+                    bail!("--resource takes <namespace>/<resource>");
+                };
+                needs.push(json!({"namespace": namespace, "resource": resource}));
+            }
             let mut all = Vec::new();
             for spec in &requires {
                 all.push(required_ticket(spec, &gates)?);
@@ -119,7 +137,7 @@ pub(super) fn route(
                 format!("{base}/define"),
                 json!({"ticket": {"connection_id": source, "native_id": ticket},
                     "target_id": target, "connection_id": connection, "native_id": id,
-                    "prerequisites": all}),
+                    "prerequisites": all, "resources": needs}),
             )
         }
         ReadinessCmd::Show { step_id } => {

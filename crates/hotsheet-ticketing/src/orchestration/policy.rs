@@ -244,6 +244,10 @@ pub struct PlacementPolicy {
     /// wind-down, or the reverse) within this many minutes.
     #[serde(default = "default_cooldown_minutes")]
     pub cooldown_minutes: u32,
+    /// HS2-2FG91X: resources every piece of work on a target must hold, such as the
+    /// one VM its machine has. The session claims them; the scheduler only reads.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<TargetResources>,
 }
 fn default_aging_minutes() -> u32 {
     60
@@ -258,6 +262,7 @@ impl Default for PlacementPolicy {
             actor: None,
             aging_minutes: default_aging_minutes(),
             cooldown_minutes: default_cooldown_minutes(),
+            resources: Vec::new(),
         }
     }
 }
@@ -397,6 +402,15 @@ impl PolicyBody {
     }
 
     /// The limits the target's machine must satisfy before a session starts there.
+    /// HS2-2FG91X: what the policy requires of every piece of work on a target.
+    pub fn target_resources(&self, target_id: &str) -> &[ResourceNeed] {
+        self.placement
+            .resources
+            .iter()
+            .find(|entry| entry.target_id == target_id)
+            .map_or(&[], |entry| entry.resources.as_slice())
+    }
+
     pub fn machine_limits(&self, target_id: &str) -> MachineLimits {
         self.target(target_id)
             .and_then(|target| target.machine)
@@ -617,6 +631,28 @@ impl PolicyBody {
                 None,
             ),
             _ => {}
+        }
+        // HS2-2FG91X
+        let mut requiring = BTreeSet::new();
+        for entry in &placement.resources {
+            let id = Some(entry.target_id.as_str());
+            if let Some((code, message)) = entry.problem() {
+                report(code, message, id);
+            }
+            if !requiring.insert(entry.target_id.as_str()) {
+                report(
+                    "duplicate_resource_target",
+                    "a target's resources are listed once",
+                    id,
+                );
+            }
+            if !targets.contains(entry.target_id.as_str()) {
+                report(
+                    "resources_without_target",
+                    "resources are required of a target the policy lists",
+                    id,
+                );
+            }
         }
         found
     }

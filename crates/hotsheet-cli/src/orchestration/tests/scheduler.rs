@@ -1386,3 +1386,5 @@ fn hs2_ecwg50_scheduler_routes_share_the_runtime_and_validate_their_bodies() {
     assert!(s.sessions.calls().is_empty());
     let _ = MutationActor::parse("ai", Some("worker-1".into())).unwrap();
 }
+/// HS2-2FG91X: scheduling around claimable resources, on the same fixtures.
+mod resources;

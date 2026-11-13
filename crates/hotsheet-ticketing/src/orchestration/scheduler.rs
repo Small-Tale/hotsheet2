@@ -19,11 +19,13 @@ use serde::{Deserialize, Serialize};
 
 use super::audit::{Journal, JournalEntry, JournalPage, JournalRecord};
 use super::contract::{bounded_text, valid_identifier, valid_token};
+use super::resources::ContentionLog;
 use super::storage::{Storage, decode};
 use super::{
     AdmissionConfig, AdmissionOutcome, AdmissionReason, AdmissionRequest, CapacityEntry,
-    CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OrchestrationError,
-    PolicyBody, PolicyDenial, SelectionRequest, SessionCount, SignalSupport, TargetAction,
+    CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
+    OrchestrationError, PolicyBody, PolicyDenial, ResourceContention, ResourceState,
+    SelectionRequest, SessionCount, SignalSupport, TargetAction, UnreadableClaims,
     decide_admission, select,
 };
 
@@ -58,7 +60,8 @@ pub enum WorkLevel {
     Provisional,
 }
 
-/// A resource one piece of work needs exclusively (declared by HS2-2FG91X).
+/// A resource one piece of work needs exclusively: declared on its plan step or, for
+/// its whole target, in the policy (HS2-2FG91X).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceNeed {
@@ -73,6 +76,10 @@ pub struct HeldResource {
     pub namespace: String,
     pub resource: String,
     pub expires_at_ms: u64,
+    /// HS2-2FG91X: the machine whose claim backend holds it. A resource name means
+    /// something only on its machine; absent, the claim counts on every machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_id: Option<String>,
 }
 
 /// One piece of ready work as the scheduler ranks it.
@@ -527,6 +534,9 @@ pub enum Blocker {
     MachineRefused,
     /// A resource the work needs is held; `detail` names it.
     ResourceHeld,
+    /// HS2-2FG91X: the claims of a resource the work needs could not be read and its
+    /// backend fails closed; `detail` names the resource.
+    ResourceUnknown,
     /// The target wound a session down too recently to start one.
     Cooldown,
     /// The target refused a start and is not asked again yet.
@@ -543,6 +553,7 @@ impl Blocker {
             Self::NoTool => "no_tool_available",
             Self::MachineRefused => "machine_refused",
             Self::ResourceHeld => "resource_held",
+            Self::ResourceUnknown => "resource_unknown",
             Self::Cooldown => "cooldown",
             Self::RefusalBackoff => "refusal_backoff",
         }
@@ -581,6 +592,10 @@ pub struct Schedule {
     /// The earliest time a decision here changes by time alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_at_ms: Option<u64>,
+    /// HS2-2FG91X: every resource that deferred work in this pass, or that work was
+    /// started on without its claims being readable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contention: Vec<ResourceContention>,
 }
 
 /// Where one piece of work stands in a schedule.
@@ -650,6 +665,8 @@ pub struct ScheduleInput<'a> {
     pub sessions: &'a [ScheduledSession],
     pub tool_entries: &'a [CapacityEntry],
     pub held: &'a [HeldResource],
+    /// HS2-2FG91X: namespaces whose claims could not be read, per machine.
+    pub unreadable: &'a [UnreadableClaims],
     pub memory: &'a [PlacementMemory],
 }
 
@@ -825,7 +842,9 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     };
     let mut planned_target: BTreeMap<&str, u32> = BTreeMap::new();
     let mut planned_machine: BTreeMap<&str, u32> = BTreeMap::new();
-    let mut allocated: BTreeSet<&ResourceNeed> = BTreeSet::new();
+    // HS2-2FG91X: a resource given to work in this pass, per machine, and to which step.
+    let mut allocated: BTreeMap<(&str, &ResourceNeed), &str> = BTreeMap::new();
+    let mut contention = ContentionLog::default();
     let mut starts = Vec::new();
     let mut unplaced = Vec::new();
 
@@ -844,7 +863,24 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             skip(Blocker::Provisional, None, None);
             continue;
         }
-        let held = item.resources.iter().find_map(|need| {
+        // HS2-2FG91X: a resource means something only on the machine that hosts the
+        // target. Without a reading of that machine nothing is known about it.
+        let machine = input
+            .targets
+            .iter()
+            .find(|target| target.target_id == item.target_id)
+            .and_then(|target| target.capacity.as_ref())
+            .map(|snapshot| snapshot.server_id.as_str());
+        let mut unverified = Vec::new();
+        let mut deferred = None;
+        for need in &item.resources {
+            let Some(machine) = machine else {
+                contention
+                    .entry(None, need, ResourceState::NotRead)
+                    .waiting
+                    .push(item.step_id.clone());
+                continue;
+            };
             let holder = input
                 .held
                 .iter()
@@ -852,25 +888,63 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     held.namespace == need.namespace
                         && held.resource == need.resource
                         && held.expires_at_ms > now
+                        && held.server_id.as_deref().is_none_or(|id| id == machine)
                 })
                 .map(|held| held.expires_at_ms)
                 .max();
-            match holder {
-                Some(expires) => Some((need, Some(expires))),
-                None if allocated.contains(need) => Some((need, None)),
-                None => None,
+            if let Some(expires) = holder {
+                let entry = contention.entry(Some(machine), need, ResourceState::Held);
+                entry.expires_at_ms = Some(expires);
+                entry.waiting.push(item.step_id.clone());
+                deferred = Some((need, Blocker::ResourceHeld, Some(expires)));
+                break;
             }
-        });
-        if let Some((need, expires)) = held {
+            if let Some(taker) = allocated.get(&(machine, need)) {
+                let entry = contention.entry(Some(machine), need, ResourceState::Taken);
+                entry.taken_by = Some((*taker).to_owned());
+                entry.waiting.push(item.step_id.clone());
+                deferred = Some((need, Blocker::ResourceHeld, None));
+                break;
+            }
+            let unread = input
+                .unreadable
+                .iter()
+                .filter(|unread| unread.server_id == machine && unread.namespace == need.namespace)
+                .min_by_key(|unread| unread.offline);
+            match unread {
+                Some(unread) if unread.offline == OfflinePolicy::FailClosed => {
+                    let entry = contention.entry(Some(machine), need, ResourceState::Unreadable);
+                    entry.unreadable = Some(unread.reason);
+                    entry.waiting.push(item.step_id.clone());
+                    deferred = Some((need, Blocker::ResourceUnknown, None));
+                    break;
+                }
+                Some(unread) => unverified.push((need, unread.reason)),
+                None => {}
+            }
+        }
+        if let Some((need, reason, expires)) = deferred {
             if let Some(at) = expires {
                 earliest(&mut retry_at, at, now);
             }
-            skip(
-                Blocker::ResourceHeld,
-                Some(format!("{}/{}", need.namespace, need.resource)),
-                expires,
-            );
+            skip(reason, Some(need.name()), expires);
             continue;
+        }
+        // Given to this step: nothing ranked below it in this pass gets it too.
+        macro_rules! take {
+            () => {
+                if let Some(machine) = machine {
+                    for need in &item.resources {
+                        allocated.insert((machine, need), item.step_id.as_str());
+                    }
+                    for (need, reason) in &unverified {
+                        let entry =
+                            contention.entry(Some(machine), need, ResourceState::Unverified);
+                        entry.unreadable = Some(*reason);
+                        entry.taken_by = Some(item.step_id.clone());
+                    }
+                }
+            };
         }
         // A free session of the target takes the work: idle ones before those that
         // wait on a gate, which may be called back to their own ticket.
@@ -879,6 +953,8 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .enumerate()
             .filter(|(index, session)| {
                 matches!(fates[*index], Fate::Free)
+                    // Work whose resources were not read is not handed to anyone.
+                    && (machine.is_some() || item.resources.is_empty())
                     && session.target_id == item.target_id
                     && item.tool.as_ref().is_none_or(|tool| tool == &session.tool)
                     && item
@@ -890,7 +966,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .map(|(index, _)| index);
         if let Some(index) = free {
             fates[index] = Fate::Refilled(item.step_id.clone(), *parts);
-            allocated.extend(item.resources.iter());
+            take!();
             continue;
         }
         let selection = select(
@@ -1081,7 +1157,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         *planned_machine
             .entry(snapshot.server_id.as_str())
             .or_default() += 1;
-        allocated.extend(item.resources.iter());
+        take!();
     }
 
     // ---- Free sessions nothing was found for ----
@@ -1194,6 +1270,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             })
             .collect(),
         retry_at_ms: retry_at,
+        contention: contention.finish(),
     }
 }
 
@@ -1233,6 +1310,9 @@ pub struct TickInputs {
     /// Tool accounts with a limit in force.
     pub tools_limited: u32,
     pub held_resources: u32,
+    /// HS2-2FG91X: claim namespaces a machine could not read for this pass.
+    #[serde(default)]
+    pub unreadable_namespaces: u32,
     /// `available`, or why the sessions could not be listed or changed.
     pub executor: String,
     pub starts: u32,

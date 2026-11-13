@@ -4,11 +4,12 @@
 //! admission file, its own decision. The orchestrating half passes the gate and then
 //! reaches that half in process or over the reviewed transport. Nothing here samples
 //! on a timer: a snapshot exists only because a request asked for it.
-use hotsheet_resource_claims::{ClaimService, Namespace};
+use hotsheet_resource_claims::Namespace;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AdmissionDecision, AdmissionRequest, AdmissionStore, CapacitySnapshot, HeldClaim,
-    HostObservation, MAX_CLAIM_NAMESPACES, SessionRequest, TargetAction, decide_admission,
+    HostObservation, MAX_CLAIM_NAMESPACES, OfflinePolicy, SessionRequest, TargetAction,
+    decide_admission,
 };
 use serde::Deserialize;
 
@@ -118,28 +119,33 @@ impl OrchestrationRuntime {
     // ---- Hosted half ----
 
     /// Live claims in the named namespaces, without paths, holders or metadata. An
-    /// unreadable namespace makes the whole list unknown rather than partial.
-    fn held_claims(&self, namespaces: &[String]) -> Option<Vec<HeldClaim>> {
+    /// unreadable namespace makes the whole list unknown rather than partial, and
+    /// the answer then carries the strictest offline policy among the unreadable
+    /// ones (HS2-2FG91X): work may start on an unverified resource only when every
+    /// backend that could not be read allows it.
+    fn held_claims(
+        &self,
+        namespaces: &[String],
+    ) -> (Option<Vec<HeldClaim>>, Option<OfflinePolicy>) {
         if namespaces.is_empty() {
-            return None;
+            return (None, None);
         }
-        let service = ClaimService::new(&self.home);
         let mut held = Vec::new();
+        let mut offline: Option<OfflinePolicy> = None;
         for name in namespaces {
-            let namespace = Namespace::parse(name).ok()?;
-            held.extend(
-                service
-                    .list(&namespace)
-                    .ok()?
-                    .into_iter()
-                    .map(|claim| HeldClaim {
-                        namespace: name.clone(),
-                        resource: claim.resource,
-                        expires_at_ms: claim.expires_at_ms,
-                    }),
-            );
+            match self.claims.held(name) {
+                Ok(claims) => held.extend(claims),
+                Err(unreachable) => {
+                    offline = Some(
+                        offline.map_or(unreachable.offline, |known| known.min(unreachable.offline)),
+                    );
+                }
+            }
         }
-        Some(held)
+        match offline {
+            Some(policy) => (None, Some(policy)),
+            None => (Some(held), None),
+        }
     }
 
     /// This machine's capacity for one checkout it hosts.
@@ -149,13 +155,15 @@ impl OrchestrationRuntime {
         namespaces: &[String],
     ) -> Result<CapacitySnapshot, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
+        let (claims, offline) = self.held_claims(namespaces);
         Ok(CapacitySnapshot::new(
             self.server_id.clone(),
             checkout.id.clone(),
             self.capacity.observe(&checkout),
             namespaces.to_vec(),
-            self.held_claims(namespaces),
-        ))
+            claims,
+        )
+        .with_claims_offline(offline))
     }
 
     /// This machine's own answer: its snapshot, its admission file, the limits the

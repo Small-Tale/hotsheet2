@@ -151,6 +151,7 @@ impl OrchestrationRuntime {
             load,
             limits: gathered.policy.machine_limits(&placement.target_id),
             probe: placement.probe,
+            resources: gathered.resources_of(&placement.steps),
         };
         let answer = self.session_executor.start(self, &request, tx);
         let succeeded = match answer {
