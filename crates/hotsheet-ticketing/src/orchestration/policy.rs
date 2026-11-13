@@ -224,6 +224,49 @@ impl Default for Speculation {
     }
 }
 
+/// HS2-ECWG50: how the scheduler places sessions. Automatic placement is off unless
+/// a person turns it on, so a policy written before this section starts nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlacementPolicy {
+    /// When false every scheduling pass is a dry run: decisions are computed and
+    /// logged, and no session is started or wound down.
+    #[serde(default)]
+    pub automatic: bool,
+    /// The grant holder the server's scheduling loop acts as. Required with
+    /// `automatic`; a one-shot pass acts as whoever asked for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<String>,
+    /// Waiting this long raises work by one priority band, so nothing starves.
+    #[serde(default = "default_aging_minutes")]
+    pub aging_minutes: u32,
+    /// A target's session count does not reverse direction (a start after a
+    /// wind-down, or the reverse) within this many minutes.
+    #[serde(default = "default_cooldown_minutes")]
+    pub cooldown_minutes: u32,
+}
+fn default_aging_minutes() -> u32 {
+    60
+}
+fn default_cooldown_minutes() -> u32 {
+    5
+}
+impl Default for PlacementPolicy {
+    fn default() -> Self {
+        Self {
+            automatic: false,
+            actor: None,
+            aging_minutes: default_aging_minutes(),
+            cooldown_minutes: default_cooldown_minutes(),
+        }
+    }
+}
+impl PlacementPolicy {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// Everything a person edits; the store adds the version and revision.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -240,6 +283,9 @@ pub struct PolicyBody {
     pub approval: ApprovalPolicy,
     #[serde(default)]
     pub speculation: Speculation,
+    /// HS2-ECWG50: left out of the file while it holds only defaults.
+    #[serde(default, skip_serializing_if = "PlacementPolicy::is_default")]
+    pub placement: PlacementPolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -542,6 +588,35 @@ impl PolicyBody {
                 "opt-out tag must be a bounded tag without spaces",
                 None,
             );
+        }
+        // HS2-ECWG50
+        let placement = &self.placement;
+        if !(1..=7 * 24 * 60).contains(&placement.aging_minutes) {
+            report(
+                "invalid_aging_minutes",
+                "aging minutes must be 1 to 10080",
+                None,
+            );
+        }
+        if placement.cooldown_minutes > 24 * 60 {
+            report(
+                "invalid_cooldown_minutes",
+                "cooldown minutes must be 0 to 1440",
+                None,
+            );
+        }
+        match &placement.actor {
+            Some(actor) if valid_identifier(actor).is_err() => report(
+                "invalid_placement_actor",
+                "placement actor needs a bounded identifier",
+                Some(actor),
+            ),
+            None if placement.automatic => report(
+                "automatic_without_actor",
+                "automatic placement names the grant holder it acts as",
+                None,
+            ),
+            _ => {}
         }
         found
     }

@@ -440,6 +440,11 @@ mod tests {
             "/checkouts/owner/orchestration/sessions/id/stop",
             "/checkouts/owner/orchestration/sessions/id/takeover",
             "/checkouts/owner/orchestration/session-sync",
+            // HS2-ECWG50: scheduling reads and acts on this machine's records.
+            "/checkouts/owner/orchestration/scheduler/plan",
+            "/checkouts/owner/orchestration/scheduler/explain",
+            "/checkouts/owner/orchestration/scheduler/decisions",
+            "/checkouts/owner/orchestration/scheduler/tick",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

@@ -60,6 +60,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "sessions", _, _]
             | ["checkouts", _, "orchestration", "session-sync"]
             | ["checkouts", _, "target-sessions"]
+            // HS2-ECWG50: the scheduler's plan, explanation, decision log and tick.
+            | ["checkouts", _, "orchestration", "scheduler", _]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -128,6 +130,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "sessions", _]
             | ["checkouts", _, "orchestration", "sessions", _, _]
             | ["checkouts", _, "orchestration", "session-sync"]
+            // HS2-ECWG50: scheduling reads and writes this machine's records.
+            | ["checkouts", _, "orchestration", "scheduler", _]
     )
 }
 
@@ -322,6 +326,25 @@ impl OrchestrationRuntime {
         self.watch_step(
             owner_id,
             target_id,
+            state,
+            wait_ms,
+            &mut Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            },
+        )
+    }
+
+    /// HS2-ECWG50: one scheduling step on the real clock, for a host's follower.
+    pub fn scheduler_follow_step_now(
+        &self,
+        owner_id: &str,
+        state: &mut super::SchedulerFollowState,
+        wait_ms: u64,
+    ) -> super::SchedulerStep {
+        let mut rng = Rng;
+        self.scheduler_follow_step(
+            owner_id,
             state,
             wait_ms,
             &mut Transaction {
@@ -635,6 +658,24 @@ impl OrchestrationRuntime {
                     }
                     "remove" => {
                         value(self.readiness_remove(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
+            // HS2-ECWG50: the scheduler. `plan` and `explain` change nothing.
+            ("POST", ["checkouts", owner, "orchestration", "scheduler", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "plan" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.scheduler_plan(owner, actor.as_ref(), tx)?)
+                    }
+                    "explain" => {
+                        value(self.scheduler_explain(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "decisions" => value(self.scheduler_decisions(owner, &decode(body)?)?),
+                    "tick" => {
+                        value(self.scheduler_tick(owner, &decode(body)?, actor.as_ref(), tx)?)
                     }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }

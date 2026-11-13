@@ -108,6 +108,8 @@ impl OrchestrationRuntime {
         let before = store.read()?.revision;
         let view = store.set(request, Some(&self.declared(owner_id)?), tx)?;
         if view.revision != before {
+            // HS2-ECWG50: a scheduler following this machine plans under the new policy.
+            Self::scheduler_wake_at(&self.home);
             self.audit_record(
                 owner_id,
                 AuditRecord {

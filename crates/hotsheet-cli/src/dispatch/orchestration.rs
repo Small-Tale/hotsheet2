@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use super::Ctx;
 use super::orchestration_capacity::{self as capacity, Planned};
 use super::orchestration_readiness as readiness;
+use super::orchestration_scheduler as scheduler;
 use super::orchestration_sessions as sessions;
 use super::orchestration_validation as validation;
 use crate::Cmd;
@@ -52,6 +53,9 @@ enum OrchestrationCmd {
     /// HS2-42TARA: plan prerequisites between orchestration steps and target tickets,
     /// and read what is ready, blocked, stale or cyclic.
     Readiness(readiness::ReadinessArgs),
+    /// HS2-ECWG50: plan where sessions run, explain why a ticket is not running, read
+    /// the decision log, or run one scheduling pass.
+    Scheduler(scheduler::SchedulerArgs),
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -1230,6 +1234,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Readiness(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = readiness::route(&owner_id, arguments)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Scheduler(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = scheduler::route(&owner_id, arguments)?;
             (owner_id, request)
         }
         OrchestrationCmd::Gate(arguments) => {

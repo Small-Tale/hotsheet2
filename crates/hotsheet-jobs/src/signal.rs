@@ -32,7 +32,15 @@ impl ChangeWaiter {
     /// Watch `dir` and everything below it, creating it when missing. If the platform
     /// watcher cannot start, waits still end at the safety re-check.
     pub fn new(dir: &Path) -> io::Result<Self> {
-        fs::create_dir_all(dir)?;
+        Self::watching(&[dir])
+    }
+
+    /// HS2-ECWG50: one waiter over several directories, for a waiter whose wake can
+    /// come from more than one journal. A change in any of them ends the wait.
+    pub fn watching(dirs: &[&Path]) -> io::Result<Self> {
+        for dir in dirs {
+            fs::create_dir_all(dir)?;
+        }
         let (sender, events) = mpsc::channel();
         let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
             if event.is_ok_and(|event| is_change(&event)) {
@@ -40,7 +48,9 @@ impl ChangeWaiter {
             }
         })
         .and_then(|mut watcher| {
-            watcher.watch(dir, RecursiveMode::Recursive)?;
+            for dir in dirs {
+                watcher.watch(dir, RecursiveMode::Recursive)?;
+            }
             Ok(watcher)
         })
         .ok();

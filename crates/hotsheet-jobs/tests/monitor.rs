@@ -763,3 +763,34 @@ fn a_monitor_that_slept_past_its_lease_keeps_its_jobs() {
     assert_eq!(after.liveness(fx.store.now_ms()), Liveness::Live);
     assert_eq!(source.polls().len(), 2);
 }
+
+/// HS2-ECWG50: one waiter over several directories wakes on a change in any of them.
+#[test]
+fn hs2_ecwg50_a_waiter_over_several_directories_wakes_on_each() {
+    use std::time::Duration;
+
+    let root = tempfile::tempdir().unwrap();
+    let (first, second) = (root.path().join("first"), root.path().join("second/deep"));
+    let waiter = hotsheet_jobs::ChangeWaiter::watching(&[&first, &second]).unwrap();
+    assert!(
+        first.is_dir() && second.is_dir(),
+        "missing directories are created"
+    );
+    settle(&waiter);
+    assert!(!waiter.wait(Duration::from_millis(300)), "nothing changed");
+    for (directory, name) in [(&first, "a"), (&second, "b"), (&first, "c")] {
+        std::fs::write(directory.join(name), b"x").unwrap();
+        let mut woke = false;
+        for _ in 0..20 {
+            woke |= waiter.wait(Duration::from_millis(500));
+            if woke {
+                break;
+            }
+        }
+        assert!(woke, "a write under {name} must wake the waiter");
+        settle(&waiter);
+    }
+    // A lock file is only ever locked: touching one is not a change.
+    std::fs::write(second.join("token.lock"), b"").unwrap();
+    assert!(!waiter.wait(Duration::from_millis(700)));
+}

@@ -14,6 +14,7 @@ mod readiness;
 mod reconcile;
 mod run_events;
 mod runs;
+mod scheduler;
 mod sessions;
 mod storage;
 mod tool_capacity;
@@ -51,9 +52,9 @@ pub use grants::{
 pub use manifest::ManifestStore;
 pub use policy::{
     AccountPolicy, ApprovalGate, ApprovalPolicy, MAX_POLICY_ACCOUNTS, MAX_POLICY_SESSIONS,
-    MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PolicyBody, PolicyDenial,
-    PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SetPolicy,
-    Speculation, TargetPolicy, ToolPolicy, WindDown,
+    MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PlacementPolicy, PolicyBody,
+    PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView,
+    SessionLoad, SetPolicy, Speculation, TargetPolicy, ToolPolicy, WindDown,
 };
 pub use readiness::{
     GateFacts, GateRequirement, LevelChange, MAX_PLAN_STEPS, MAX_STEP_PLAN_PREREQUISITES,
@@ -73,6 +74,14 @@ pub use runs::{
     DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunControl, RunError, RunObservation,
     RunPause, RunRegistry, RunState, RunTarget, RunTicket, RunTransition, RunUnreachable,
     RunUpdate,
+};
+pub use scheduler::{
+    Blocker, DecisionEntry, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
+    DecisionRecord, HeldResource, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement,
+    PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
+    REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, Schedule, ScheduleInput,
+    ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
+    TickInputs, Unplaced, WorkItem, WorkLevel, plan, refusal_backoff_ms, remember, score,
 };
 pub use sessions::{
     HostedRef, HostedSession, HostedSessionRegistry, MAX_HOSTED_SESSIONS, MAX_SESSION_HISTORY,
@@ -272,6 +281,8 @@ mod reconcile_tests;
 mod run_event_tests;
 #[cfg(test)]
 mod run_tests;
+#[cfg(test)]
+mod scheduler_tests;
 #[cfg(test)]
 mod session_tests;
 #[cfg(test)]

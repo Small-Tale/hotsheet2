@@ -6,8 +6,9 @@ use axum::{
     http::{Method, StatusCode},
 };
 use hotsheet_cli::orchestration::{
-    GateFollowState, MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime, TargetEventPage, TargetEvents,
-    TargetTicketEvent, WatchState, error_status, request_cleanup_now,
+    GateFollowState, MAX_SCHEDULER_WAIT_MS, MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime,
+    SchedulerFollowState, TargetEventPage, TargetEvents, TargetTicketEvent, WatchState,
+    error_status, request_cleanup_now,
 };
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{ProviderConfigRegistry, orchestration::OrchestrationError};
@@ -278,6 +279,81 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
     });
 }
 
+/// Scheduling loops, one per `(machine home, owner)`.
+static SCHEDULERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+    std::sync::OnceLock::new();
+
+/// HS2-ECWG50: run the owner's scheduling loop while its policy enables automatic
+/// placement. Each step waits on the owner's run event stream and the scheduler's
+/// wake marker, runs one pass when something changed, and ends when the policy no
+/// longer enables it. A policy without automatic placement ends the task at its first
+/// step, having started nothing and contacted no target. Call inside the runtime.
+fn ensure_scheduler(state: &AppState, owner: &str) {
+    let key = format!("{}|{owner}", state.machine_home().display());
+    if !SCHEDULERS
+        .get_or_init(Default::default)
+        .lock_or_recover()
+        .insert(key.clone())
+    {
+        return;
+    }
+    let (state, owner) = (state.clone(), owner.to_owned());
+    tokio::spawn(async move {
+        let mut follow = SchedulerFollowState::default();
+        let mut backoff = std::time::Duration::from_secs(1);
+        loop {
+            let (task_state, task_owner) = (state.clone(), owner.clone());
+            let started = std::time::Instant::now();
+            let step = tokio::task::spawn_blocking(move || {
+                let step = runtime(&task_state, tokio::runtime::Handle::current()).map(|runtime| {
+                    runtime.scheduler_follow_step_now(
+                        &task_owner,
+                        &mut follow,
+                        MAX_SCHEDULER_WAIT_MS,
+                    )
+                });
+                (step, follow)
+            })
+            .await;
+            let Ok((Ok(step), returned)) = step else {
+                break;
+            };
+            follow = returned;
+            if !step.active {
+                break;
+            }
+            // A failed pass, or a step that neither waited nor planned, backs off
+            // instead of spinning. The follower keeps its cursor, so nothing is missed.
+            let idle =
+                step.trigger.is_none() && started.elapsed() < std::time::Duration::from_millis(250);
+            if step.failed || idle {
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(std::time::Duration::from_secs(60));
+            } else {
+                backoff = std::time::Duration::from_secs(1);
+            }
+        }
+        SCHEDULERS
+            .get_or_init(Default::default)
+            .lock_or_recover()
+            .remove(&key);
+    });
+}
+
+/// The owning checkout of a request that may have turned automatic placement on, or
+/// that asks the scheduler something: its loop is started when the policy enables it.
+fn scheduled_owner(method: &Method, path: &str) -> Option<String> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    match (method.as_str(), parts.as_slice()) {
+        ("PUT", ["checkouts", owner, "orchestration", "policy"])
+        | ("POST", ["checkouts", owner, "orchestration", "scheduler", _]) => {
+            Some((*owner).to_owned())
+        }
+        _ => None,
+    }
+}
+
 impl AppState {
     /// HS2-WBREDM: at server start, follow every target that still has an unfinished
     /// run. A follower's first step reconciles each of those runs with its target, so
@@ -296,6 +372,11 @@ impl AppState {
                 };
                 for owner in shared.run_owners().unwrap_or_default() {
                     ensure_watchers_blocking(&state, &owner);
+                }
+                // HS2-ECWG50: and the scheduling loop of every owner whose policy
+                // enables automatic placement. With none, nothing is started.
+                for owner in shared.scheduler_owners() {
+                    ensure_scheduler_blocking(&state, &owner);
                 }
             })
             .await;
@@ -359,7 +440,13 @@ async fn execute(
         let _ = tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner)).await;
     }
     let follow = watched.map(|owner| (state.clone(), owner));
+    let scheduled = scheduled_owner(&method, &path).map(|owner| (state.clone(), owner));
     let result = execute_blocking(state, method, path, body).await;
+    // HS2-ECWG50: a policy that now enables automatic placement gets its loop.
+    if let (Ok(_), Some((state, owner))) = (&result, scheduled) {
+        let _ =
+            tokio::task::spawn_blocking(move || ensure_scheduler_blocking(&state, &owner)).await;
+    }
     // A new run gets a follower once it exists.
     if let (Ok(_), Some((state, owner))) = (&result, follow) {
         let _ = tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner)).await;
@@ -374,6 +461,13 @@ fn ensure_watchers_blocking(state: &AppState, owner: &str) {
         let _guard = handle.enter();
         ensure_watchers(state, owner);
         ensure_gate_follower(state, owner);
+    }
+}
+
+fn ensure_scheduler_blocking(state: &AppState, owner: &str) {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let _guard = handle.enter();
+        ensure_scheduler(state, owner);
     }
 }
 

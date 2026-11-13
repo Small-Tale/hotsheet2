@@ -81,7 +81,7 @@ pub struct ToolSelection {
 }
 
 /// What each loaded plugin declares it can report; an unlisted tool reports nothing.
-fn supports(home: &Path) -> BTreeMap<String, SignalSupport> {
+pub(super) fn supports(home: &Path) -> BTreeMap<String, SignalSupport> {
     hotsheet_plugins::all_plugins(&[home.join("plugins")])
         .into_iter()
         .map(|plugin| {
@@ -151,9 +151,14 @@ impl OrchestrationRuntime {
         if !supports(home).contains_key(&signal.tool) {
             return Err(OrchestrationError::Invalid("tool is not a loaded plugin"));
         }
-        Ok(ToolCapacityRegistry::new(home)
+        let applied = ToolCapacityRegistry::new(home)
             .record(signal, now_ms)?
-            .applied)
+            .applied;
+        if applied == Applied::Applied {
+            // HS2-ECWG50: a limit or a recovery changes where sessions may start.
+            Self::scheduler_wake_at(home);
+        }
+        Ok(applied)
     }
 
     /// The capacity of every tool account the project's policy configures. A tool
@@ -258,6 +263,9 @@ impl OrchestrationRuntime {
         };
         let before = status(&registry.entries()?);
         let applied = registry.record(&signal, now_ms)?.applied;
+        if applied == Applied::Applied {
+            Self::scheduler_wake_at(&self.home);
+        }
         let status = status(&registry.entries()?);
         if applied == Applied::Applied && status.state.code() != before.state.code() {
             self.audit_record(

@@ -1,0 +1,1388 @@
+//! HS2-ECWG50: the scheduler through the shared runtime against real git ticket
+//! stores, a scripted capacity probe and a recording session executor. Synthetic
+//! tickets and identities only.
+use hotsheet_model::Ticket;
+use hotsheet_ticketing::actor::MutationActor;
+use hotsheet_ticketing::orchestration::{
+    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, CpuCapacity, CreateGrant,
+    DecisionKind, DecisionMode, DiskCapacity, GateKind, HostObservation, LimitSignal,
+    MachineLimits, MemoryCapacity, PlacementAction, PlacementPolicy, PolicyBody, RunEvent,
+    RunEventJournal, RunEventKind, RunEventSource, ScheduledSession, SchedulerStore,
+    SessionActivity, SessionScope, SetPolicy, SignalKind, TargetAction, TargetPolicy,
+    ToolAvailability, ToolPolicy, ToolScope,
+};
+use hotsheet_ticketing::{NewTicket, ops};
+use serde_json::{Value, json};
+use std::time::Duration;
+
+use super::gates::{CI, Scripted as ScriptedGates, link, sha};
+use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::*;
+
+/// A probe whose answer the test sets, counting how often the runtime asked.
+#[derive(Default)]
+struct Probe {
+    observation: Mutex<HostObservation>,
+    asked: AtomicUsize,
+}
+impl Probe {
+    fn set(&self, change: impl FnOnce(&mut HostObservation)) {
+        change(
+            &mut self
+                .observation
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+    }
+    fn asked(&self) -> usize {
+        self.asked.load(Ordering::SeqCst)
+    }
+}
+impl CapacityProbe for Probe {
+    fn observe(&self, _: &Checkout) -> HostObservation {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        self.observation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+/// An idle machine with room and both tools installed.
+fn roomy() -> HostObservation {
+    HostObservation {
+        sampled_at_ms: Some(150),
+        memory: MemoryCapacity {
+            free_mb: Some(8192),
+            total_mb: Some(16_384),
+        },
+        cpu: CpuCapacity {
+            load_percent: Some(10),
+            logical_cpus: Some(8),
+        },
+        disk: DiskCapacity {
+            free_mb: Some(60_000),
+            total_mb: Some(500_000),
+        },
+        tools: Some(
+            ["codex", "claude"]
+                .map(|tool| ToolAvailability {
+                    tool: tool.into(),
+                    installed: true,
+                    configured: true,
+                })
+                .into(),
+        ),
+        sessions: Some(Vec::new()),
+    }
+}
+
+fn scope(tool: &str) -> ToolScope {
+    ToolScope {
+        tool: tool.into(),
+        models: Vec::new(),
+    }
+}
+const ACTIONS: [TargetAction; 4] = [
+    TargetAction::TicketsRead,
+    TargetAction::GatesObserve,
+    TargetAction::SessionsManage,
+    TargetAction::WorkStart,
+];
+/// Target 1 takes two sessions of `codex` (preferred) or `claude`.
+fn policy(automatic: bool, required_for: Vec<ApprovalGate>) -> PolicyBody {
+    PolicyBody {
+        machine: MachineLimits {
+            max_sessions: 4,
+            ..MachineLimits::default()
+        },
+        tools: [("codex", 60), ("claude", 50)]
+            .map(|(tool, weight)| ToolPolicy {
+                tool: tool.into(),
+                max_sessions: 4,
+                weight,
+                accounts: Vec::new(),
+            })
+            .into(),
+        targets: vec![TargetPolicy {
+            target_id: id(1),
+            enabled: true,
+            actions: ACTIONS.to_vec(),
+            tools: vec![scope("codex"), scope("claude")],
+            max_sessions: 2,
+            machine: None,
+            speculation: None,
+        }],
+        approval: ApprovalPolicy { required_for },
+        placement: PlacementPolicy {
+            automatic,
+            actor: Some("worker-1".into()),
+            ..PlacementPolicy::default()
+        },
+        ..PolicyBody::default()
+    }
+}
+fn set_policy(m: &Machine, body: PolicyBody, tx: &mut Transaction<'_>) {
+    let expected_revision = m.runtime.policy(&m.owner.id).unwrap().revision;
+    m.runtime
+        .set_policy(
+            &m.owner.id,
+            SetPolicy {
+                expected_revision,
+                policy: body,
+            },
+            Some(&human()),
+            tx,
+        )
+        .unwrap();
+}
+
+struct Setup {
+    m: Machine,
+    probe: Arc<Probe>,
+    sessions: Arc<RecordingSessions>,
+    orchestration: Ticket,
+}
+
+/// A bound target with a roomy machine, a recording executor, and `worker-1` granted
+/// to read tickets, observe gates, start work and (when `sessions`) manage sessions.
+fn setup(grant_sessions: bool, tx: &mut Transaction<'_>) -> Setup {
+    let mut m = machine(10, false, unsupported);
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    let sessions = Arc::new(RecordingSessions::default());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe.clone())
+        .with_session_executor(sessions.clone());
+    bind_and_grant(
+        &m,
+        1,
+        &[
+            TargetAction::TicketsRead,
+            TargetAction::GatesObserve,
+            TargetAction::WorkStart,
+        ],
+        tx,
+    );
+    if grant_sessions {
+        m.runtime
+            .grant(
+                &m.reference(1),
+                CreateGrant {
+                    grant_id: None,
+                    actor_id: "worker-1".into(),
+                    actions: vec![TargetAction::SessionsManage],
+                    session_scope: Some(SessionScope {
+                        tools: vec![scope("codex"), scope("claude")],
+                        max_concurrency: 4,
+                    }),
+                    expires_at_ms: 10_000,
+                },
+                Some(&human()),
+                tx,
+            )
+            .unwrap();
+    }
+    let orchestration = m.orchestration_ticket("Coordinate");
+    Setup {
+        m,
+        probe,
+        sessions,
+        orchestration,
+    }
+}
+
+impl Setup {
+    fn owner(&self) -> String {
+        self.m.owner.id.clone()
+    }
+    /// A new target ticket planned as a step with no prerequisite: confirmed work.
+    fn ready(&self, title: &str, tx: &mut Transaction<'_>) -> (Ticket, String) {
+        let ticket = ops::create(
+            &self.m.target_store,
+            ulid::Ulid::new(),
+            "TGT",
+            NOW.into(),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let step = self
+            .m
+            .runtime
+            .readiness_define(
+                &self.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": self.m.owner_connection(),
+                        "native_id": self.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": self.m.target_connection(),
+                    "native_id": ticket.slug, "prerequisites": [],
+                }))
+                .unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+            .readiness
+            .step
+            .step_id;
+        (ticket, step)
+    }
+    fn tick(&self, tx: &mut Transaction<'_>) -> TickView {
+        self.m
+            .runtime
+            .scheduler_tick(&self.owner(), &TickRequest::default(), Some(&worker()), tx)
+            .unwrap()
+    }
+    fn log(&self) -> Vec<hotsheet_ticketing::orchestration::DecisionRecord> {
+        self.m
+            .runtime
+            .scheduler_decisions(&self.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries
+            .into_iter()
+            .map(|entry| entry.record)
+            .collect()
+    }
+    fn audited(&self, action: &str) -> Vec<(AuditOutcome, Option<String>, Option<String>)> {
+        self.m
+            .runtime
+            .audit(&self.owner(), 0, 500)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| entry.record.action == action)
+            .map(|entry| {
+                (
+                    entry.record.outcome,
+                    entry.record.reason,
+                    entry.record.operation_id,
+                )
+            })
+            .collect()
+    }
+    fn memory(&self) -> Vec<hotsheet_ticketing::orchestration::PlacementMemory> {
+        SchedulerStore::new(&self.m.home)
+            .memory(&self.owner())
+            .unwrap()
+    }
+}
+
+fn owned(name: &str, owner: &str, activity: SessionActivity) -> ScheduledSession {
+    ScheduledSession {
+        session_id: name.into(),
+        target_id: id(1),
+        tool: "codex".into(),
+        account: None,
+        model: None,
+        run_id: None,
+        owner_id: Some(owner.into()),
+        activity,
+        started_at_ms: 0,
+        idle_since_ms: None,
+        safe_point: activity == SessionActivity::Idle,
+        human_takeover: false,
+        winding_down: false,
+    }
+}
+
+fn outcomes(view: &TickView) -> Vec<(&str, Option<&str>)> {
+    view.outcomes
+        .iter()
+        .map(|outcome| (outcome.outcome.as_str(), outcome.detail.as_deref()))
+        .collect()
+}
+fn unplaced(view: &ScheduleView) -> Vec<(&'static str, Option<&str>)> {
+    view.schedule
+        .unplaced
+        .iter()
+        .map(|item| (item.reason.code(), item.detail.as_deref()))
+        .collect()
+}
+
+macro_rules! tx {
+    ($tx:ident) => {
+        let mut rng = Rng(100);
+        let mut $tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+    };
+}
+
+#[test]
+fn hs2_ecwg50_without_a_policy_nothing_is_scheduled_logged_or_contacted() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    let owner = s.owner();
+    let plan =
+        s.m.runtime
+            .scheduler_plan(&owner, Some(&worker()), &mut tx)
+            .unwrap();
+    assert!(!plan.enabled);
+    assert_eq!(plan.mode, DecisionMode::DryRun);
+    assert!(plan.schedule.placements.is_empty() && plan.schedule.ranking.is_empty());
+    let tick = s.tick(&mut tx);
+    assert!(!tick.view.enabled);
+    assert_eq!((tick.logged, tick.outcomes.len()), (0, 0));
+    assert!(s.log().is_empty());
+    assert_eq!(s.probe.asked(), 0);
+    assert!(s.sessions.calls().is_empty());
+    for file in [
+        "orchestration-scheduler.json",
+        "orchestration-scheduler-decisions",
+        "orchestration-scheduler-wake",
+    ] {
+        assert!(!s.m.home.join(file).exists(), "{file}");
+    }
+    assert!(s.m.runtime.scheduler_owners().is_empty());
+    let explained =
+        s.m.runtime
+            .scheduler_explain(
+                &owner,
+                &serde_json::from_value(json!({"step_id": id(999)})).unwrap(),
+                None,
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(explained.standing, "not_planned");
+}
+
+#[test]
+fn hs2_ecwg50_a_policy_without_automatic_placement_only_plans_and_logs() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    let (_, second) = s.ready("Second", &mut tx);
+    let (_, third) = s.ready("Third", &mut tx);
+    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    let owner = s.owner();
+    assert!(s.m.runtime.scheduler_owners().is_empty());
+
+    // The plan is a read: it reads capacity through the gate and writes nothing.
+    let plan =
+        s.m.runtime
+            .scheduler_plan(&owner, Some(&worker()), &mut tx)
+            .unwrap();
+    assert!(plan.enabled);
+    assert_eq!(plan.mode, DecisionMode::DryRun);
+    assert_eq!(s.probe.asked(), 1, "one target, one reading");
+    let starts: Vec<(&str, &str)> = plan
+        .schedule
+        .placements
+        .iter()
+        .map(|placement| (placement.steps[0].as_str(), placement.tool.as_str()))
+        .collect();
+    assert_eq!(
+        starts,
+        [(first.as_str(), "codex"), (second.as_str(), "codex")]
+    );
+    assert!(
+        plan.schedule
+            .placements
+            .iter()
+            .all(|placement| { placement.action == PlacementAction::Start && placement.probe })
+    );
+    assert_eq!(unplaced(&plan), [("target_cap", None)]);
+    assert_eq!(
+        (plan.inputs.work, plan.inputs.confirmed, plan.inputs.targets),
+        (3, 3, 1)
+    );
+    assert_eq!(plan.inputs.executor, "available");
+    assert!(!plan.inputs.automatic);
+    assert!(s.log().is_empty());
+
+    // Without an actor no target is contacted, and the plan says so.
+    let anonymous = s.m.runtime.scheduler_plan(&owner, None, &mut tx).unwrap();
+    assert_eq!(s.probe.asked(), 1);
+    assert_eq!(
+        unplaced(&anonymous),
+        [("target_unavailable", Some("actor_required")); 3]
+    );
+
+    // A tick computes and logs the same decisions and applies none of them.
+    let tick = s.tick(&mut tx);
+    assert_eq!(tick.view.mode, DecisionMode::DryRun);
+    assert_eq!(tick.trigger, "manual");
+    assert!(tick.outcomes.is_empty());
+    assert!(s.sessions.calls().is_empty());
+    assert!(s.memory().is_empty());
+    assert!(!s.m.home.join("orchestration-scheduler.json").exists());
+    assert_eq!(tick.logged, 4);
+    let log = s.log();
+    assert_eq!(
+        log.iter().map(|record| record.kind).collect::<Vec<_>>(),
+        [
+            DecisionKind::Tick,
+            DecisionKind::Start,
+            DecisionKind::Start,
+            DecisionKind::Unplaced
+        ]
+    );
+    for record in &log {
+        assert_eq!(record.mode, DecisionMode::DryRun);
+        assert_eq!(record.tick_id, tick.tick_id);
+        assert_eq!(record.actor_id.as_deref(), Some("worker-1"));
+        assert!(record.outcome.is_none() && record.operation_id.is_none());
+    }
+    let summary = log[0].tick.as_ref().unwrap();
+    assert_eq!((summary.starts, summary.unplaced, summary.work), (2, 1, 3));
+    assert!(summary.policy_revision.is_some());
+    // Each decision carries its reason and the figures it was decided on.
+    assert_eq!(log[1].reason.as_deref(), Some("ready_work"));
+    assert_eq!(log[1].step_id.as_deref(), Some(first.as_str()));
+    let inputs = log[1].inputs.as_ref().unwrap();
+    assert_eq!(
+        (
+            inputs.target_sessions,
+            inputs.target_cap,
+            inputs.free_ram_mb
+        ),
+        (1, Some(2), Some(8192))
+    );
+    assert_eq!(inputs.tool_state.as_deref(), Some("unknown"));
+    assert!(log[1].score.is_some());
+    assert_eq!(log[3].reason.as_deref(), Some("target_cap"));
+    assert_eq!(log[3].step_id.as_deref(), Some(third.as_str()));
+
+    // The log pages by cursor, and a bad page size is refused.
+    let page =
+        s.m.runtime
+            .scheduler_decisions(
+                &owner,
+                &serde_json::from_value(json!({"limit": 3})).unwrap(),
+            )
+            .unwrap();
+    assert_eq!((page.entries.len(), page.more), (3, true));
+    let rest =
+        s.m.runtime
+            .scheduler_decisions(
+                &owner,
+                &serde_json::from_value(json!({"after": page.cursor})).unwrap(),
+            )
+            .unwrap();
+    assert_eq!(rest.entries.len(), 1);
+    for limit in [0, 201] {
+        assert!(
+            s.m.runtime
+                .scheduler_decisions(
+                    &owner,
+                    &serde_json::from_value(json!({"limit": limit})).unwrap()
+                )
+                .is_err()
+        );
+    }
+    // An explicit dry run of an automatic policy applies nothing either.
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    assert_eq!(s.m.runtime.scheduler_owners(), std::slice::from_ref(&owner));
+    let dry =
+        s.m.runtime
+            .scheduler_tick(
+                &owner,
+                &serde_json::from_value(json!({"dry_run": true})).unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(dry.view.mode, DecisionMode::DryRun);
+    assert!(dry.outcomes.is_empty() && s.sessions.calls().is_empty());
+    // Applying needs someone to act as.
+    let error =
+        s.m.runtime
+            .scheduler_tick(&owner, &TickRequest::default(), None, &mut tx)
+            .unwrap_err();
+    assert_eq!(error.code(), "invalid_request");
+}
+
+#[test]
+fn hs2_ecwg50_automatic_placement_starts_sessions_through_the_executor_once() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+
+    let tick = s.tick(&mut tx);
+    assert_eq!(tick.view.mode, DecisionMode::Applied);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(tick.outcomes[0].session_id.as_deref(), Some("session-1"));
+    let operation = format!("sched-start-{first}");
+    assert_eq!(tick.outcomes[0].operation_id, operation);
+    let [SessionCall::Start(request)] = &s.sessions.calls()[..] else {
+        panic!("one start");
+    };
+    assert_eq!(
+        (
+            request.target_id.clone(),
+            request.tool.as_str(),
+            request.actor_id.as_str(),
+            request.steps.clone(),
+            request.probe
+        ),
+        (id(1), "codex", "worker-1", vec![first.clone()], true)
+    );
+    assert_eq!(request.operation_id, operation);
+    assert_eq!(
+        (
+            request.load.target_sessions,
+            request.load.machine_sessions,
+            request.load.tool_sessions
+        ),
+        (0, 0, 0)
+    );
+    assert_eq!(request.limits.max_sessions, 4);
+    // Logged with its outcome, remembered, and audited.
+    let log = s.log();
+    assert_eq!(log[1].kind, DecisionKind::Start);
+    assert_eq!(log[1].mode, DecisionMode::Applied);
+    assert_eq!(log[1].outcome.as_deref(), Some("started"));
+    assert_eq!(log[1].session_id.as_deref(), Some("session-1"));
+    assert_eq!(log[1].operation_id.as_deref(), Some(operation.as_str()));
+    assert_eq!(s.memory()[0].last_started_at_ms, Some(200));
+    assert_eq!(
+        s.audited("scheduler_start"),
+        [(
+            AuditOutcome::Succeeded,
+            Some("started".into()),
+            Some(operation)
+        )]
+    );
+
+    // The step is still ready until the target's dispatcher assigns it. The session
+    // just started takes it: however often a pass runs, nothing more starts.
+    for _ in 0..3 {
+        let again = s.tick(&mut tx);
+        assert!(again.outcomes.is_empty());
+        let placement = &again.view.schedule.placements[0];
+        assert_eq!(
+            (placement.action, placement.reason.code(), &placement.steps),
+            (PlacementAction::Keep, "refill", &vec![first.clone()])
+        );
+    }
+    assert_eq!(s.sessions.calls().len(), 1);
+    // More work: one more session, to the target's cap of two, and no further.
+    s.ready("Second", &mut tx);
+    s.ready("Third", &mut tx);
+    let more = s.tick(&mut tx);
+    assert_eq!(outcomes(&more), [("started", None)]);
+    assert_eq!(unplaced(&more.view), [("target_cap", None)]);
+    let SessionCall::Start(second) = &s.sessions.calls()[1] else {
+        panic!("a start");
+    };
+    assert_eq!(
+        (second.load.target_sessions, second.load.tool_sessions),
+        (1, 1)
+    );
+    assert!(s.tick(&mut tx).outcomes.is_empty());
+    assert_eq!(s.sessions.calls().len(), 2);
+}
+
+#[test]
+fn hs2_ecwg50_outside_the_policy_an_approval_is_filed_and_nothing_is_done() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    set_policy(
+        &s.m,
+        policy(true, vec![ApprovalGate::SessionStart]),
+        &mut tx,
+    );
+    let owner = s.owner();
+
+    // The policy asks a person before a session starts: asked once, however often.
+    for _ in 0..3 {
+        let tick = s.tick(&mut tx);
+        assert_eq!(
+            outcomes(&tick),
+            [("approval_required", Some("session_start"))]
+        );
+    }
+    assert!(s.sessions.calls().is_empty());
+    assert!(s.memory().is_empty());
+    let approvals = s.m.runtime.approvals(&owner, &mut tx).unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(
+        (
+            approvals[0].gate,
+            approvals[0].state,
+            approvals[0].operation_id.clone(),
+            approvals[0].actor_id.as_str()
+        ),
+        (
+            ApprovalGate::SessionStart,
+            ApprovalState::Pending,
+            format!("sched-start-{first}"),
+            "worker-1"
+        )
+    );
+    assert_eq!(
+        s.log()
+            .iter()
+            .filter(|record| record.kind == DecisionKind::Start)
+            .map(|record| (record.outcome.clone(), record.outcome_detail.clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                Some("approval_required".into()),
+                Some("session_start".into())
+            );
+            3
+        ]
+    );
+
+    // A person approves: the next pass hands the start to the executor, whose own
+    // gate uses the approval. The scheduler does not consume it.
+    s.m.runtime
+        .decide_approval(
+            &owner,
+            &approvals[0].approval_id,
+            true,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(outcomes(&s.tick(&mut tx)), [("started", None)]);
+    assert_eq!(s.sessions.calls().len(), 1);
+    assert_eq!(
+        s.m.runtime.approvals(&owner, &mut tx).unwrap()[0].state,
+        ApprovalState::Approved
+    );
+}
+
+#[test]
+fn hs2_ecwg50_a_denied_approval_and_a_missing_grant_are_typed_outcomes() {
+    tx!(tx);
+    // No `sessions_manage` grant: the gate denies, and no approval is filed for it.
+    let s = setup(false, &mut tx);
+    s.ready("First", &mut tx);
+    set_policy(
+        &s.m,
+        policy(true, vec![ApprovalGate::SessionStart]),
+        &mut tx,
+    );
+    let owner = s.owner();
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("action_not_granted", None)]);
+    assert!(s.sessions.calls().is_empty());
+    assert!(s.m.runtime.approvals(&owner, &mut tx).unwrap().is_empty());
+    assert_eq!(
+        s.audited("sessions_manage").last().unwrap().0,
+        AuditOutcome::Denied
+    );
+
+    // A person says no: that operation is never started.
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    set_policy(
+        &s.m,
+        policy(true, vec![ApprovalGate::SessionStart]),
+        &mut tx,
+    );
+    let owner = s.owner();
+    s.tick(&mut tx);
+    let approval = s.m.runtime.approvals(&owner, &mut tx).unwrap().remove(0);
+    s.m.runtime
+        .decide_approval(
+            &owner,
+            &approval.approval_id,
+            false,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    for _ in 0..2 {
+        let tick = s.tick(&mut tx);
+        assert_eq!(tick.outcomes.len(), 1);
+        assert_ne!(tick.outcomes[0].outcome, "started");
+    }
+    assert!(s.sessions.calls().is_empty());
+    assert_eq!(s.m.runtime.approvals(&owner, &mut tx).unwrap().len(), 1);
+}
+
+#[test]
+fn hs2_ecwg50_without_an_executor_the_outcome_is_typed_and_logged() {
+    tx!(tx);
+    let mut s = setup(true, &mut tx);
+    s.m.runtime =
+        s.m.runtime
+            .clone()
+            .with_session_executor(Arc::new(ExecutorUnavailable));
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    for _ in 0..2 {
+        let tick = s.tick(&mut tx);
+        assert_eq!(tick.view.inputs.executor, "unavailable");
+        assert_eq!(tick.view.mode, DecisionMode::Applied);
+        assert_eq!(outcomes(&tick), [("executor_unavailable", None)]);
+    }
+    let log = s.log();
+    assert_eq!(log[0].tick.as_ref().unwrap().executor, "unavailable");
+    assert_eq!(log[1].outcome.as_deref(), Some("executor_unavailable"));
+    // Nothing happened, so nothing is remembered or audited as done.
+    assert!(s.memory().is_empty());
+    assert!(s.audited("scheduler_start").is_empty());
+
+    // An executor that cannot list its sessions: the pass is marked, nothing is
+    // started on a guess, and the listing is not treated as empty.
+    let failing = Arc::new(RecordingSessions::default());
+    *failing.fail_list.lock().unwrap() = Some("session_store_unreadable".into());
+    s.m.runtime = s.m.runtime.clone().with_session_executor(failing.clone());
+    let tick = s.tick(&mut tx);
+    assert_eq!(tick.view.inputs.executor, "failed");
+    assert_eq!(outcomes(&tick), [("executor_failed", None)]);
+    assert!(failing.calls().is_empty());
+    // A listing that carries anything but identifiers is refused whole.
+    *failing.fail_list.lock().unwrap() = None;
+    let mut bad = owned("s 1", &s.owner(), SessionActivity::Idle);
+    bad.tool = "a tool".into();
+    failing.sessions.lock().unwrap().push(bad);
+    assert_eq!(s.tick(&mut tx).view.inputs.executor, "failed");
+}
+
+#[test]
+fn hs2_ecwg50_a_refused_start_backs_off_and_leaves_the_target_alone() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    *s.sessions.refuse_starts.lock().unwrap() = Some("below_ram_floor".into());
+
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("refused", Some("below_ram_floor"))]);
+    let memory = s.memory();
+    assert_eq!(
+        (
+            memory[0].refusals,
+            memory[0].refused_at_ms,
+            memory[0].refusal_reason.as_deref()
+        ),
+        (1, Some(200), Some("below_ram_floor"))
+    );
+    assert_eq!(
+        s.audited("scheduler_start"),
+        [(
+            AuditOutcome::Failed,
+            Some("refused".into()),
+            Some(tick.outcomes[0].operation_id.clone())
+        )]
+    );
+    // While the backoff runs the target is neither read nor asked again.
+    let (asked, calls) = (s.probe.asked(), s.sessions.calls().len());
+    for _ in 0..3 {
+        let tick = s.tick(&mut tx);
+        assert!(tick.outcomes.is_empty());
+        assert_eq!(
+            unplaced(&tick.view),
+            [("refusal_backoff", Some("below_ram_floor"))]
+        );
+        assert_eq!(tick.view.schedule.retry_at_ms, Some(200 + 60_000));
+    }
+    assert_eq!((s.probe.asked(), s.sessions.calls().len()), (asked, calls));
+    assert_eq!(s.memory()[0].refusals, 1, "waiting is not another refusal");
+}
+
+#[test]
+fn hs2_ecwg50_a_machine_without_room_is_reported_and_backed_off() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    let owner = s.owner();
+    // 2500 MB free against a 2048 MB floor and a 1024 MB session.
+    s.probe
+        .set(|observation| observation.memory.free_mb = Some(2500));
+    let explain = |tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .scheduler_explain(
+                &owner,
+                &serde_json::from_value(json!({"step_id": first})).unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+    };
+    let before = explain(&mut tx);
+    assert_eq!(
+        (
+            before.running,
+            before.standing.as_str(),
+            before.reason.as_str(),
+            before.detail.as_deref(),
+            before.rank
+        ),
+        (
+            false,
+            "not_placed",
+            "machine_refused",
+            Some("below_ram_floor"),
+            Some(1)
+        )
+    );
+    assert!(s.memory().is_empty(), "explaining remembers nothing");
+
+    let tick = s.tick(&mut tx);
+    assert!(tick.outcomes.is_empty() && s.sessions.calls().is_empty());
+    assert_eq!(
+        unplaced(&tick.view),
+        [("machine_refused", Some("below_ram_floor"))]
+    );
+    assert_eq!(s.memory()[0].refusals, 1);
+    let asked = s.probe.asked();
+    let after = explain(&mut tx);
+    assert_eq!(
+        (after.reason.as_str(), after.retry_at_ms),
+        ("refusal_backoff", Some(60_200))
+    );
+    assert_eq!(s.probe.asked(), asked);
+}
+
+#[test]
+fn hs2_ecwg50_explain_answers_for_every_standing_a_ticket_can_have() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (first_ticket, first) = s.ready("First", &mut tx);
+    let (second_ticket, second) = s.ready("Second", &mut tx);
+    let (third_ticket, third) = s.ready("Third", &mut tx);
+    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    let owner = s.owner();
+    let ask = |body: Value, tx: &mut Transaction<'_>| {
+        s.m.runtime.scheduler_explain(
+            &owner,
+            &serde_json::from_value(body).unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    // Would start, by step and by exact ticket; a dry run says it would not be applied.
+    let by_ticket = ask(
+        json!({"target_id": id(1), "connection_id": s.m.target_connection(),
+            "native_id": first_ticket.id.to_string()}),
+        &mut tx,
+    )
+    .unwrap();
+    assert_eq!(by_ticket.step_id.as_deref(), Some(first.as_str()));
+    assert_eq!(
+        (
+            by_ticket.standing.as_str(),
+            by_ticket.reason.as_str(),
+            by_ticket.mode
+        ),
+        ("start", "ready_work", DecisionMode::DryRun)
+    );
+    assert_eq!(by_ticket.placement.unwrap().tool, "codex");
+    assert_eq!(by_ticket.level.unwrap().code(), "confirmed");
+    // Not placed, with the limit that stops it.
+    let capped = ask(json!({"step_id": third}), &mut tx).unwrap();
+    assert_eq!(
+        (
+            capped.standing.as_str(),
+            capped.reason.as_str(),
+            capped.rank
+        ),
+        ("not_placed", "target_cap", Some(3))
+    );
+    assert!(capped.score.is_some());
+
+    // Not ready: a step whose prerequisite is unfinished names the readiness reason.
+    let blocked =
+        s.m.runtime
+            .readiness_define(
+                &owner,
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": s.m.owner_connection(),
+                        "native_id": s.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": s.m.target_connection(),
+                    "native_id": third_ticket.slug,
+                    "prerequisites": [{"kind": "ticket", "target_id": id(1),
+                        "connection_id": s.m.target_connection(),
+                        "native_id": second_ticket.slug, "gates": "none"}],
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(blocked.readiness.step.step_id, third);
+    let waiting = ask(json!({"step_id": third}), &mut tx).unwrap();
+    assert_eq!(
+        (
+            waiting.standing.as_str(),
+            waiting.reason.as_str(),
+            waiting.readiness_reasons.clone()
+        ),
+        (
+            "not_ready",
+            "blocked",
+            vec!["prerequisite_not_finished".to_owned()]
+        )
+    );
+    // Running: an unfinished run stands on the ticket.
+    s.m.runtime
+        .run_dispatch(
+            &owner,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": s.m.owner_connection(),
+                    "native_id": s.orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": s.m.target_connection(),
+                "native_id": second_ticket.slug, "operation_id": "op-second",
+                "worker_id": "worker-a",
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let running = ask(json!({"step_id": second}), &mut tx).unwrap();
+    assert_eq!(
+        (
+            running.running,
+            running.standing.as_str(),
+            running.reason.as_str()
+        ),
+        (true, "running", "in_progress")
+    );
+    // Not planned, and requests that name nothing or too much.
+    let unknown = ask(
+        json!({"target_id": id(1), "connection_id": "git", "native_id": "nothing"}),
+        &mut tx,
+    )
+    .unwrap();
+    assert_eq!(
+        (unknown.standing.as_str(), unknown.reason.as_str()),
+        ("not_planned", "no_plan_step")
+    );
+    for body in [
+        json!({}),
+        json!({"step_id": first, "target_id": id(1)}),
+        json!({"target_id": id(1)}),
+    ] {
+        assert_eq!(ask(body, &mut tx).unwrap_err().code(), "invalid_request");
+    }
+}
+
+#[test]
+fn hs2_ecwg50_a_tool_limit_moves_the_next_start_to_another_tool_and_wakes_followers() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    let owner = s.owner();
+    let tool = |tx: &mut Transaction<'_>| {
+        let plan =
+            s.m.runtime
+                .scheduler_plan(&owner, Some(&worker()), tx)
+                .unwrap();
+        (
+            plan.schedule
+                .placements
+                .first()
+                .map(|placement| placement.tool.clone()),
+            plan.inputs.tools_limited,
+        )
+    };
+    assert_eq!(tool(&mut tx), (Some("codex".into()), 0));
+    let token = |m: &Machine| {
+        std::fs::read_to_string(m.home.join("orchestration-scheduler-wake/token")).unwrap()
+    };
+    let before = token(&s.m);
+    let limit = |tool: &str| LimitSignal {
+        tool: tool.into(),
+        account: None,
+        kind: SignalKind::UsageLimit,
+        at_ms: 150,
+        resets_at_ms: Some(100_000),
+        cost_cents: None,
+        session: None,
+    };
+    s.m.runtime
+        .tool_capacity_signal(&owner, limit("codex"), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_ne!(token(&s.m), before, "a limit wakes the scheduler");
+    assert_eq!(tool(&mut tx), (Some("claude".into()), 1));
+    // The same signal again changes nothing and wakes nobody.
+    let after = token(&s.m);
+    s.m.runtime
+        .tool_capacity_signal(&owner, limit("codex"), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(token(&s.m), after);
+    // Every allowed tool limited: nothing starts, until the first reset.
+    OrchestrationRuntime::record_tool_signal_at(&s.m.home, &limit("claude"), 200).unwrap();
+    assert_ne!(token(&s.m), after);
+    let plan =
+        s.m.runtime
+            .scheduler_plan(&owner, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(unplaced(&plan), [("no_tool_available", Some("limited"))]);
+    assert_eq!(plan.schedule.retry_at_ms, Some(100_000));
+}
+
+#[test]
+fn hs2_ecwg50_sessions_are_wound_down_through_the_gate_at_a_safe_point() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    // Three idle sessions on a target whose cap is two; one a person took over.
+    let mut taken = owned("taken", &owner, SessionActivity::Idle);
+    taken.human_takeover = true;
+    *s.sessions.sessions.lock().unwrap() = vec![
+        owned("a", &owner, SessionActivity::Idle),
+        owned("b", &owner, SessionActivity::Idle),
+        taken,
+    ];
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    let [SessionCall::WindDown(request)] = &s.sessions.calls()[..] else {
+        panic!("one wind-down");
+    };
+    assert_eq!(
+        (
+            request.session_id.as_str(),
+            request.reason.as_str(),
+            request.operation_id.as_str(),
+            request.actor_id.as_str()
+        ),
+        ("a", "over_cap", "sched-stop-a", "worker-1")
+    );
+    assert_eq!(s.memory()[0].last_wound_down_at_ms, Some(200));
+    assert_eq!(
+        s.audited("scheduler_wind_down"),
+        [(
+            AuditOutcome::Succeeded,
+            Some("wind_down_requested".into()),
+            Some("sched-stop-a".into())
+        )]
+    );
+    // It is leaving: the next pass asks nothing more of it or of anyone.
+    let again = s.tick(&mut tx);
+    assert!(again.outcomes.is_empty());
+    assert_eq!(s.sessions.calls().len(), 1);
+
+    // The policy stops permitting the target: the remaining owned session is asked
+    // to stop on the strength of the grant, and the taken-over one is left alone.
+    let mut disabled = policy(true, Vec::new());
+    disabled.targets[0].enabled = false;
+    set_policy(&s.m, disabled, &mut tx);
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    let SessionCall::WindDown(request) = &s.sessions.calls()[1] else {
+        panic!("a wind-down");
+    };
+    assert_eq!(
+        (request.session_id.as_str(), request.reason.as_str()),
+        ("b", "policy_not_permitted")
+    );
+    let log = s.log();
+    let last = log
+        .iter()
+        .rev()
+        .find(|record| record.kind == DecisionKind::WindDown)
+        .unwrap();
+    assert_eq!(last.detail.as_deref(), Some("policy_target_disabled"));
+    assert_eq!(last.outcome.as_deref(), Some("wind_down_requested"));
+
+    // Every other answer of the executor is a typed outcome.
+    for (answer, expected) in [
+        (WindDownOutcome::NotAtSafePoint, "not_at_safe_point"),
+        (WindDownOutcome::NotFound, "session_not_found"),
+        (
+            WindDownOutcome::Refused {
+                reason: "handoff_pending".into(),
+            },
+            "refused",
+        ),
+        (WindDownOutcome::Unavailable, "executor_unavailable"),
+    ] {
+        *s.sessions.sessions.lock().unwrap() = vec![owned("c", &owner, SessionActivity::Idle)];
+        *s.sessions.wind_down_answer.lock().unwrap() = Some(answer);
+        assert_eq!(s.tick(&mut tx).outcomes[0].outcome, expected);
+    }
+}
+
+#[test]
+fn hs2_ecwg50_a_wind_down_the_policy_wants_approved_waits_for_a_person() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    let mut body = policy(true, vec![ApprovalGate::SessionStop]);
+    body.targets[0].max_sessions = 1;
+    set_policy(&s.m, body, &mut tx);
+    *s.sessions.sessions.lock().unwrap() = vec![
+        owned("a", &owner, SessionActivity::Idle),
+        owned("b", &owner, SessionActivity::Idle),
+    ];
+    let tick = s.tick(&mut tx);
+    assert_eq!(
+        outcomes(&tick),
+        [("approval_required", Some("session_stop"))]
+    );
+    assert!(s.sessions.calls().is_empty());
+    let approvals = s.m.runtime.approvals(&owner, &mut tx).unwrap();
+    assert_eq!(
+        (approvals[0].gate, approvals[0].operation_id.as_str()),
+        (ApprovalGate::SessionStop, "sched-stop-a")
+    );
+    // A grant that does not cover session management: the policy path cannot
+    // stop a session either.
+    let s = setup(false, &mut tx);
+    let owner = s.owner();
+    let mut disabled = policy(true, Vec::new());
+    disabled.targets[0].enabled = false;
+    set_policy(&s.m, disabled, &mut tx);
+    *s.sessions.sessions.lock().unwrap() = vec![owned("a", &owner, SessionActivity::Idle)];
+    assert_eq!(outcomes(&s.tick(&mut tx)), [("action_not_granted", None)]);
+    assert!(s.sessions.calls().is_empty());
+}
+
+#[test]
+fn hs2_ecwg50_a_session_whose_run_waits_on_ci_is_free_capacity() {
+    tx!(tx);
+    let mut s = setup(true, &mut tx);
+    let ci = ScriptedGates::new(CI, GateKind::Ci);
+    s.m.runtime = s.m.runtime.clone().with_gate_provider(ci);
+    let owner = s.owner();
+    let mut body = policy(false, Vec::new());
+    body.targets[0].max_sessions = 1;
+    set_policy(&s.m, body, &mut tx);
+    // A run on one ticket, integrated at a commit whose CI gate is pending.
+    let (working, _) = s.ready("Working", &mut tx);
+    let run =
+        s.m.runtime
+            .run_dispatch(
+                &owner,
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": s.m.owner_connection(),
+                        "native_id": s.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": s.m.target_connection(),
+                    "native_id": working.slug, "operation_id": "op-working",
+                    "worker_id": "worker-a",
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .run;
+    let mut session = owned("s1", &owner, SessionActivity::Busy);
+    session.run_id = Some(run.run_id.clone());
+    *s.sessions.sessions.lock().unwrap() = vec![session];
+    let (_, independent) = s.ready("Independent", &mut tx);
+    let fate = |tx: &mut Transaction<'_>| {
+        let plan =
+            s.m.runtime
+                .scheduler_plan(&owner, Some(&worker()), tx)
+                .unwrap();
+        let placement = plan.schedule.placements[0].clone();
+        (
+            placement.reason.code(),
+            placement.steps,
+            unplaced(&plan)
+                .into_iter()
+                .map(|(code, _)| code)
+                .collect::<Vec<_>>(),
+        )
+    };
+    // Busy on its run: the target is full and the independent work waits.
+    assert_eq!(fate(&mut tx), ("busy", Vec::new(), vec!["target_cap"]));
+    // Its commit goes to CI: the session waits on the gate, and takes the work.
+    s.m.runtime
+        .gate_link(
+            &owner,
+            &run.run_id,
+            link(&sha('a'), CI),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(fate(&mut tx), ("refill", vec![independent], Vec::new()));
+}
+
+fn event(kind: RunEventKind) -> RunEvent {
+    RunEvent {
+        at_ms: 200,
+        run_id: id(500),
+        kind,
+        source: RunEventSource::Orchestrator,
+        state: None,
+        reason: None,
+        actor_id: None,
+        dedupe: None,
+        gate_id: None,
+        gate_state: None,
+    }
+}
+
+#[test]
+fn hs2_ecwg50_the_follower_runs_a_pass_on_events_and_never_on_its_own() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    let (_, first) = s.ready("First", &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let step = |state: &mut SchedulerFollowState, wait_ms: u64, tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .scheduler_follow_step(&owner, state, wait_ms, tx)
+    };
+    // No policy, then a policy without automatic placement: there is no loop.
+    assert_eq!(step(&mut state, 0, &mut tx), SchedulerStep::default());
+    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    assert!(!step(&mut state, 0, &mut tx).active);
+    assert!(s.log().is_empty() && s.sessions.calls().is_empty());
+
+    // Enabled: the first step is a pass, acting as the policy's actor.
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    let started = step(&mut state, 0, &mut tx);
+    assert_eq!(
+        (started.active, started.trigger, started.failed),
+        (true, Some("start"), false)
+    );
+    let [SessionCall::Start(request)] = &s.sessions.calls()[..] else {
+        panic!("one start");
+    };
+    assert_eq!(request.actor_id, "worker-1");
+    assert_eq!(request.steps, [first]);
+    let logged = s.log().len();
+    assert_eq!(s.log()[0].trigger, "start");
+
+    // Nothing changed: no pass, no reading, no log entry, however often it steps.
+    let asked = s.probe.asked();
+    for _ in 0..3 {
+        let idle = step(&mut state, 0, &mut tx);
+        assert_eq!((idle.active, idle.trigger), (true, None));
+    }
+    assert_eq!((s.probe.asked(), s.log().len()), (asked, logged));
+
+    // A lease renewal is not a reason to plan. Any other run event is.
+    let journal = RunEventJournal::new(&s.m.home, &owner).unwrap();
+    journal.record(event(RunEventKind::Lease)).unwrap();
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    for kind in [
+        RunEventKind::Session,
+        RunEventKind::Readiness,
+        RunEventKind::Gate,
+        RunEventKind::Validation,
+        RunEventKind::State,
+    ] {
+        journal.record(event(kind)).unwrap();
+        assert_eq!(
+            step(&mut state, 0, &mut tx).trigger,
+            Some("event"),
+            "{kind:?}"
+        );
+        assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    }
+    // The decisions did not change, so those passes logged nothing new.
+    assert_eq!(
+        s.log().len(),
+        logged + 2,
+        "the refill after the start, once"
+    );
+    assert_eq!(s.sessions.calls().len(), 1);
+
+    // A tool limit or a policy change is a signal.
+    OrchestrationRuntime::scheduler_wake_at(&s.m.home);
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, Some("signal"));
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    // A time the last pass named has come.
+    state.retry_at_ms = Some(150);
+    let retried = step(&mut state, 0, &mut tx);
+    assert_eq!(
+        (retried.trigger, retried.retry_at_ms),
+        (Some("retry"), None)
+    );
+    // A time still ahead is not a reason.
+    state.retry_at_ms = Some(201);
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, None);
+    state.retry_at_ms = None;
+
+    // A waiting step is woken by the event itself.
+    let home = s.m.home.clone();
+    let waker = std::thread::spawn(move || OrchestrationRuntime::scheduler_wake_at(&home));
+    let waited = std::time::Instant::now();
+    let mut woken = None;
+    while woken.is_none() && waited.elapsed() < Duration::from_secs(20) {
+        woken = step(&mut state, 5_000, &mut tx).trigger;
+    }
+    waker.join().unwrap();
+    assert_eq!(woken, Some("signal"));
+
+    // Automatic placement is turned off: the change wakes the follower, which ends
+    // without a pass.
+    let logged = s.log().len();
+    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    assert_eq!(step(&mut state, 0, &mut tx), SchedulerStep::default());
+    assert_eq!(s.log().len(), logged);
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    assert_eq!(step(&mut state, 0, &mut tx).trigger, Some("signal"));
+
+    // An executor that fails marks the step, so the host backs off.
+    *s.sessions.fail_list.lock().unwrap() = Some("session_store_unreadable".into());
+    OrchestrationRuntime::scheduler_wake_at(&s.m.home);
+    assert!(step(&mut state, 0, &mut tx).failed);
+    // A policy that can no longer be read keeps the loop alive, and failing.
+    std::fs::write(
+        std::path::Path::new(&s.m.owner.root).join(".hotsheet2/orchestration-policy.json"),
+        b"{not json",
+    )
+    .unwrap();
+    let broken = step(&mut state, 0, &mut tx);
+    assert_eq!(
+        (broken.active, broken.failed, broken.trigger),
+        (true, true, None)
+    );
+}
+
+#[test]
+fn hs2_ecwg50_scheduler_routes_share_the_runtime_and_validate_their_bodies() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    let owner = s.owner();
+    let base = format!("/checkouts/{owner}/orchestration/scheduler");
+    let actor = json!({"role": "ai", "id": "worker-1"});
+    let mut call = |operation: &str, mut body: Value| {
+        body["actor"] = actor.clone();
+        s.m.runtime
+            .request("POST", &format!("{base}/{operation}"), &body, &mut tx)
+    };
+    let plan = call("plan", json!({})).unwrap();
+    assert_eq!(plan["enabled"], true);
+    assert_eq!(plan["mode"], "dry_run");
+    assert_eq!(plan["placements"][0]["action"], "start");
+    assert_eq!(plan["placements"][0]["steps"][0], first.as_str());
+    assert_eq!(plan["ranking"][0]["score"]["priority"], 2000);
+    let explained = call("explain", json!({"step_id": first})).unwrap();
+    assert_eq!(explained["standing"], "start");
+    let tick = call("tick", json!({})).unwrap();
+    assert_eq!(tick["mode"], "dry_run");
+    assert_eq!(tick["logged"], 2);
+    assert_eq!(tick["outcomes"], json!([]));
+    let log = call("decisions", json!({})).unwrap();
+    assert_eq!(log["entries"][0]["kind"], "tick");
+    assert_eq!(log["entries"][1]["kind"], "start");
+    assert_eq!(log["entries"][1]["reason"], "ready_work");
+    // Unknown members and operations are refused, and nothing was started.
+    for (operation, body) in [
+        ("plan", json!({"extra": 1})),
+        ("tick", json!({"dry": true})),
+        ("explain", json!({"step": first})),
+        ("decisions", json!({"since": 0})),
+        ("apply", json!({})),
+    ] {
+        assert_eq!(
+            call(operation, body).unwrap_err().code(),
+            "invalid_request",
+            "{operation}"
+        );
+    }
+    for path in [format!("{base}/plan"), format!("{base}/tick")] {
+        assert!(is_path(&path) && is_machine_path(&path), "{path}");
+    }
+    assert!(s.sessions.calls().is_empty());
+    let _ = MutationActor::parse("ai", Some("worker-1".into())).unwrap();
+}

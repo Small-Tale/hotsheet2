@@ -2165,6 +2165,12 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/readiness/{operation}",
             post(routes::orchestration::write),
         )
+        // HS2-ECWG50: the scheduler's plan, explanation, decision log and tick
+        // (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/scheduler/{operation}",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{checkout}/target-validations",
             get(routes::orchestration::read).post(routes::orchestration::write),

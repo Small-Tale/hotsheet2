@@ -12,10 +12,14 @@
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; provisional dispatch is HS2-2SJPCH and HS2-JSF985),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
-> HS2-GDJXGZ), and the headless CLI,
+> HS2-GDJXGZ),
+> the throughput scheduler with its plan, explanations, decision log and event-driven
+> loop (§26.17, HS2-ECWG50; it applies decisions through a session executor seam that
+> answers `executor_unavailable` until HS2-95SWQ4 wires HS2-GDJXGZ in),
+> and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
-> the OpenAPI contract describes them. Workspace UI and the scheduler remain design
-> work under their separate implementation tickets.
+> the OpenAPI contract describes them. Workspace UI remains design work under its
+> separate implementation tickets.
 
 ## 26.1 Boundary and existing foundations
 
@@ -487,6 +491,7 @@ rather than evaluated. All quantities are integers: megabytes, percent and cents
 | `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                          |
 | `approval`    | `required_for`: any of `tickets_write`, `work_start`, `validation_run`, `session_start`, `session_stop`, `role_session_start`, `provisional_dispatch`, `deployment`.     |
 | `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`.   |
+| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5. Left out of the file while it holds only defaults.                             |
 
 A target the policy does not list, or lists as disabled, is not permitted. A tool
 listed for a target must be configured under `tools`. A tool configured with
@@ -1975,3 +1980,240 @@ ordinary terminal routes of the Hot Sheet server running on the same machine, so
 session they start still lands in that server's drawer, and without a running server a
 start fails closed. The start uses the drawer's launch path as it is, including where
 that path runs the tool's setup (HS2-WEFJV8).
+
+## 26.17 Throughput scheduler (HS2-ECWG50)
+
+The scheduler decides where and how many AI sessions run: for each target, tool and
+model it starts a session, keeps one or winds one down. It decides how many sessions
+run where; the target's dispatcher still assigns each exact ticket. Starting and
+stopping a session is the executor's act (HS2-GDJXGZ), reached through one seam.
+
+### Inputs
+
+One pass reads only typed inputs, and the core
+(`crates/hotsheet-ticketing/src/orchestration/scheduler.rs`, `plan`) is a pure
+function of them and the time:
+
+| Input           | Source                                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| Ready work      | `ready_work` (§26.15). Only `confirmed` items are placed; `provisional` ones are ranked and never placed |
+| Policy          | §26.8, with its `placement` section                                                                      |
+| Target capacity | One snapshot per target with confirmed work (§26.10), read through the gate as `gates_observe`           |
+| Sessions        | The executor's list, as the scheduler's own session view                                                 |
+| Tool capacity   | The machine's capacity records and plugin declarations (§26.11)                                          |
+| Held resources  | Live resource claims in the namespaces the work names                                                    |
+| Memory          | Per target, the last start, the last wind-down and the refusals since the last start                     |
+
+A target is contacted only when it has confirmed work, the policy lets sessions run
+there and no refusal is being waited out. Without an identified actor no target is
+contacted and its work reads `target_unavailable` (`actor_required`). A target whose
+machine cannot be read gets no session: nothing is assumed in a snapshot's place.
+
+Declaring which resources a ticket or target needs is HS2-2FG91X; until then no work
+names a resource. A due date, a milestone date and a preferred tool or model are
+inputs of the core that a plan step does not carry yet (HS2-TH53NN).
+
+### Policy section
+
+`placement` is optional and is left out of the stored policy while it holds only
+defaults, so a policy written earlier is unchanged.
+
+| Field              | Default | Meaning                                                                                |
+| ------------------ | ------- | -------------------------------------------------------------------------------------- |
+| `automatic`        | `false` | When false every pass is a dry run: decisions are computed and logged, nothing applied |
+| `actor`            | none    | The grant holder the server's loop acts as. Required with `automatic`                  |
+| `aging_minutes`    | 60      | Waiting this long raises work by one priority band (1 to 10080)                        |
+| `cooldown_minutes` | 5       | A target's session count does not reverse direction within this time (0 to 1440)       |
+
+Validation adds `automatic_without_actor`, `invalid_placement_actor`,
+`invalid_aging_minutes` and `invalid_cooldown_minutes`.
+
+### Scoring
+
+Each piece of work gets a score in points, with every term reported:
+
+| Term       | Points                                                                                             |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `priority` | 1000 per band: `lowest` 0, `low` 1, `default` or unknown 2, `high` 3, `highest` 4                  |
+| `up_next`  | 1500 when the target ticket is marked Up Next                                                      |
+| `due`      | 2000 overdue, 1000 due within a day, 300 due within a week                                         |
+| `unblocks` | 200 per unfinished step waiting on it, at most five                                                |
+| `red_gate` | 2000 when a step is blocked by a failed gate of this ticket, plus 250 per such step up to eight    |
+| `aging`    | 1000 per `aging_minutes` since the work became ready, without a ceiling                            |
+| risk       | Provisional work keeps `100 - speculation.risk_weight` percent of its sum (0 ranks like confirmed) |
+
+Ties go to the work that has been ready longer, then to the lower step id. Because
+aging has no ceiling, low-priority work eventually outranks anything that keeps
+arriving. The repair of a red gate outranks new work of equal priority, and more so
+the more work stands on that gate.
+
+### Packing
+
+Work is placed best first. For each item, in this order:
+
+1. A provisional item is `provisional_not_dispatched` (HS2-JSF985).
+2. A resource it needs that someone holds, or that better-ranked work took in this
+   pass, is `resource_held`. A held resource is unavailable capacity until its claim
+   expires.
+3. A **free session** of the target takes it (`keep`, `refill`): an idle session
+   first, then one whose run waits on a gate. No session starts for it.
+4. `policy_denied` with the policy's own code, then `target_cap`.
+5. `refusal_backoff` while the target is left alone after a refusal, then `cooldown`
+   after a recent wind-down there.
+6. `target_unavailable` when the machine was not read.
+7. Tool accounts are tried in the order of `select` (§26.11). A `degraded` account
+   takes one session at a time (`probe_in_flight`). For each candidate the machine
+   check is `decide_admission` (§26.10) with the policy's limits for the target and
+   one session more than this pass already placed on that machine. A tool the
+   machine does not have moves on to the next candidate; a cap or floor ends the
+   search as `machine_refused` with the limit (`below_ram_floor`,
+   `session_cap_reached`, `above_cpu_ceiling`, `below_disk_floor`,
+   `capacity_unknown`). No candidate left is `no_tool_available` with the nearest
+   cause.
+
+So a limited tool moves work to another allowed tool, a machine below its RAM floor
+takes nothing, targets on one machine share its room, and every start counts
+against the target, machine, tool and account caps before the next is considered.
+A start on an account that is not verified available is marked `probe`.
+
+A session is **free** when it is idle, when its run waits on CI, a deployment or an
+approval, or when it has no run at all: time spent waiting on an external system is
+capacity. A session started for a step has no run until the target's dispatcher
+assigns the ticket, so it takes that step in the next pass and nothing more starts
+for it. Dispatching the steps a placement is for is HS2-YC2P7K.
+
+Sessions that nothing was found for:
+
+| Decision    | Reason                        | When                                                                    |
+| ----------- | ----------------------------- | ----------------------------------------------------------------------- |
+| `keep`      | `busy`, `waiting_on_gate`     | It works a run, or waits on a gate with nothing ready                   |
+| `keep`      | `keep_warm`, `idle_grace`     | One of the `keep_warm` most recently idle, or idle under `idle_minutes` |
+| `keep`      | `cooldown`                    | The target started a session within the cooldown                        |
+| `keep`      | `awaiting_safe_point`         | It should stop and is not at a safe point                               |
+| `keep`      | `human_takeover`, `not_owned` | A person took it over, or this owner's orchestrator did not start it    |
+| `keep`      | `winding_down`                | A wind-down was already asked for                                       |
+| `wind_down` | `idle`                        | Idle past `idle_minutes`, beyond `keep_warm`, at a safe point           |
+| `wind_down` | `over_cap`                    | The target's cap was lowered below what runs; the freest go first       |
+| `wind_down` | `policy_not_permitted`        | The policy no longer permits the target, tool or model                  |
+
+A session the scheduler does not own counts as load and is never refilled or wound
+down. A busy session is never interrupted.
+
+**Oscillation guard.** A session is wound down for idling only after `idle_minutes`,
+and a target does not reverse direction within `cooldown_minutes`: no start after a
+wind-down and no wind-down after a start. Work that comes and goes is taken by the
+same session.
+
+**Refusals.** After a start is refused by the executor, the target or its machine,
+or a pass finds the machine without room or unreadable, the target is not read or
+asked again for one minute, doubling per refusal to 30 minutes. A start clears it.
+
+A schedule names `retry_at_ms`, the earliest time one of its decisions changes by
+time alone: an idle time, a cooldown, a backoff, a tool limit's reset or a claim's
+expiry.
+
+### Applying a decision
+
+A pass is **applied** only when the policy sets `placement.automatic`, the caller did
+not ask for a dry run, and an identified actor is given. Otherwise it is a **dry
+run**: computed, logged by a `tick`, and nothing is started or wound down. Merging
+this section therefore starts no session anywhere until a person enables it.
+
+Inside the policy the scheduler acts and logs. For each start or wind-down it asks
+the side-effect-free `access` check with the load and a stable operation id
+(`sched-start-<step id>`, `sched-stop-<session id>`):
+
+- **Allowed.** The request goes to the executor, whose own gate passes the start
+  with the same load and operation id (§26.10) and uses an approval a person gave.
+  The scheduler does not consume it.
+- **Not allowed.** The action passes `authorize`, which files the approval a policy
+  asks for (`session_start`, `session_stop`) once and audits the denial. The outcome
+  is the gate's code, such as `approval_required`, and nothing is done. A person's
+  approval lets the next pass through; a denial is final for that operation.
+
+A session the policy no longer permits is stopped on the strength of the grant
+alone, because the policy gate denies every action on a target it disabled; whether
+the gate itself should allow that stop is HS2-48H57C.
+
+The seam is `SessionExecutor`
+(`crates/hotsheet-cli/src/orchestration/session_control.rs`):
+
+```rust
+pub trait SessionExecutor: Send + Sync {
+    fn list(&self, owner_id: &str) -> Result<Vec<SessionView>, SessionControlError>;
+    fn start(&self, request: &StartSession) -> StartOutcome;
+    fn wind_down(&self, request: &WindDownSession) -> WindDownOutcome;
+}
+```
+
+`StartOutcome` is `Started { session_id }`, `Refused { reason }` or `Unavailable`;
+`WindDownOutcome` is `Requested`, `NotAtSafePoint`, `NotFound`, `Refused { reason }`
+or `Unavailable`. The default executor is `ExecutorUnavailable`: nothing is listed,
+and an applied start or wind-down ends as the typed, logged outcome
+`executor_unavailable`. An executor that cannot list its sessions marks the pass
+`failed`, and nothing is started on a guess. Wiring the real executor is HS2-95SWQ4.
+Role sessions (a target's dispatcher or integrator) are HS2-TK9ADC.
+
+### Decision log and memory
+
+Every `tick` appends to `${HOTSHEET_HOME}/orchestration-scheduler-decisions/`, one
+bounded journal per owner with a sequence cursor: one `tick` record with what the
+pass read (the policy revision, counts of work, sessions, targets, limited tools and
+held resources, and whether the executor answered) and one record per `start`,
+`keep`, `wind_down` and `unplaced` decision with its reason, its score parts, the
+figures it was decided on (sessions against the target, machine and tool caps, free
+RAM and the session footprint, the tool account's state) and, when applied, the
+outcome and operation id. Records hold identifiers, codes and numbers only.
+
+`${HOTSHEET_HOME}/orchestration-scheduler.json` holds the placement memory per
+owner (private, locked, atomically replaced, version 1). A read never creates it, a
+dry run never changes it, and damaged or newer data is an error that is never
+overwritten.
+
+### Reevaluation
+
+The server runs one loop per owner whose policy enables automatic placement, started
+at server start and when a policy or scheduler request arrives, and ended when the
+policy no longer enables it. A step runs a pass:
+
+- when the loop starts;
+- when the owner's run event stream (§26.9) has something new: run, readiness, gate,
+  validation, session and reconciliation events. A lease renewal is not a reason;
+- when the scheduler's wake marker changed: a tool limit or recovery was recorded
+  (§26.11), or the policy was replaced;
+- when the time the last pass named in `retry_at_ms` has come.
+
+Otherwise it waits on the journal and the marker themselves. There is no interval.
+A failed pass, such as an executor that cannot list its sessions, backs off from one
+second, doubling to a minute. A pass whose decisions equal the last logged ones logs
+nothing, so an event that changes nothing leaves no record.
+
+Capacity has no event stream yet (HS2-P5GTSW), so a machine that gains room is
+noticed at the end of the refusal backoff or at the next event (HS2-AWB7BX). Each
+capacity read is audited, which a busy loop makes numerous (HS2-SV4SMY).
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration scheduler plan --project <owner>
+hotsheet-cli ... orchestration scheduler explain <step-id> --project <owner>
+hotsheet-cli ... orchestration scheduler explain --target <target-id> --connection <source> \
+  --id <canonical-ticket-id> --project <owner>
+hotsheet-cli ... orchestration scheduler decisions [--after <cursor>] [--limit N] --project <owner>
+hotsheet-cli ... orchestration scheduler tick [--dry-run] --project <owner>
+```
+
+`plan` computes the schedule and changes and logs nothing. `explain` answers
+`running`, `finished`, `not_planned`, `not_ready` (with the readiness reasons),
+`start`, `keep` or `not_placed` with the reason, its detail, the rank and score, and
+when to expect a change. `tick` is one pass. A headless process hosts no sessions and
+asks the server on the same machine for capacity (§26.10); with none running the
+machine reads as `capacity_unknown`.
+
+| Route                                                                      | Methods and purpose                      |
+| -------------------------------------------------------------------------- | ---------------------------------------- |
+| `/checkouts/{owner}/orchestration/scheduler/{plan,explain,decisions,tick}` | POST scheduler operations; machine-local |
+
+MCP `hotsheet_targets` adds `scheduler_plan`, `scheduler_explain`,
+`scheduler_decisions` and `scheduler_tick` (with `dry_run`). The workspace view is
+HS2-77SRHC.

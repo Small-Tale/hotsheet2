@@ -16,6 +16,7 @@ pub(crate) mod notify;
 pub(crate) mod orchestration;
 mod orchestration_capacity;
 mod orchestration_readiness;
+mod orchestration_scheduler;
 mod orchestration_sessions;
 mod orchestration_validation;
 pub(crate) mod providers;
