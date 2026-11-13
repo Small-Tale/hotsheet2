@@ -1011,9 +1011,10 @@ test('HS2-WBREDM real run reconciliation and control responses match the OpenAPI
     // Reconcile: the stored outcome names each source, and exactly the unverified ones.
     const reconciled = await act('reconcile', {});
     expect(reconciled.status).toBe(200);
-    // HS2-7QNK7Y, HS2-BYEB60, HS2-G5H9FQ: a run without gates or validation attempts
-    // has those sources verified as `no_gate`, `no_deployment` and `no_validation`.
-    expect(reconciled.body.unverified).toEqual(['session']);
+    // HS2-7QNK7Y, HS2-BYEB60, HS2-G5H9FQ, HS2-75Q254: a run without gates, attempts or
+    // sessions has every source verified (`no_gate`, `no_deployment`, `no_validation`,
+    // `no_session`), so nothing is unverified.
+    expect(reconciled.body.unverified).toBeUndefined();
     expect(reconciled.body.reconciliation).toMatchObject({ disposition: 'continue' });
     const findings = (reconciled.body.reconciliation as { findings: { source: string; verification: string }[] })
       .findings;
@@ -1031,6 +1032,7 @@ test('HS2-WBREDM real run reconciliation and control responses match the OpenAPI
     expect(findings[4]).toEqual({ source: 'ci_run', verification: 'verified', reason: 'no_gate' });
     expect(findings[5]).toEqual({ source: 'deployment', verification: 'verified', reason: 'no_deployment' });
     expect(findings[6]).toEqual({ source: 'validation', verification: 'verified', reason: 'no_validation' });
+    expect(findings[7]).toEqual({ source: 'session', verification: 'verified', reason: 'no_session' });
 
     // Pause, a refused renewal, resume, handoff and a person's correction.
     const paused = await act('pause', { reason: 'maintenance' });

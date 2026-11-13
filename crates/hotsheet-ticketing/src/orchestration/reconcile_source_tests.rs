@@ -858,3 +858,155 @@ fn hs2_g5h9fq_attempts_combine_and_an_empty_run_says_so() {
         work(None, None, Some("execution_lost"))
     );
 }
+
+fn session(n: u128, state: SessionState) -> OrchestratedSession {
+    OrchestratedSession {
+        session_id: id(n),
+        owner_checkout_id: "owner-0123456789ab".into(),
+        operation_id: format!("start-{n}"),
+        target_id: id(1),
+        role: SessionRole::default(),
+        tool: "claude".into(),
+        model: None,
+        effort: None,
+        account: None,
+        run_id: Some(id(900)),
+        replaces: None,
+        state,
+        owner: SessionOwner::default(),
+        paused: false,
+        hosted: None,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+        history: Vec::new(),
+    }
+}
+
+#[test]
+fn hs2_75q254_every_session_state_against_what_the_run_needs() {
+    use SessionState::{Failed, Lost, Requested, Running, Stopped};
+    use Verification::{Mismatched, Verified};
+    let gate = SessionNeed::Waiting(NOTE_WAITING_ON_GATE);
+    let validation = SessionNeed::Waiting(NOTE_WAITING_ON_VALIDATION);
+    type Row = (
+        SessionState,
+        SessionNeed,
+        Verification,
+        Option<&'static str>,
+        bool,
+    );
+    // (the run's latest session, what the run needs, finding, reason, may start)
+    let rows: Vec<Row> = vec![
+        (Running, SessionNeed::Working, Verified, None, false),
+        (Running, gate, Verified, None, false),
+        (Running, SessionNeed::Idle, Verified, None, false),
+        // Wound down on purpose, whatever the run waits on: never missing work. This
+        // is the case HS2-95SWQ4 found would have read as `recorded_work_missing`.
+        (
+            Stopped,
+            SessionNeed::Working,
+            Verified,
+            Some("session_stopped"),
+            true,
+        ),
+        (Stopped, gate, Verified, Some("session_stopped"), true),
+        (Stopped, validation, Verified, Some("session_stopped"), true),
+        (
+            Requested,
+            SessionNeed::Working,
+            Verified,
+            Some("start_unconfirmed"),
+            true,
+        ),
+        (Failed, SessionNeed::Working, Verified, None, true),
+        // Lost: missing work only while the run is being worked.
+        (
+            Lost,
+            SessionNeed::Working,
+            Mismatched,
+            Some("recorded_work_missing"),
+            true,
+        ),
+        (Lost, gate, Verified, Some("waiting_on_gate"), true),
+        (
+            Lost,
+            validation,
+            Verified,
+            Some("waiting_on_validation"),
+            true,
+        ),
+        (
+            Lost,
+            SessionNeed::Idle,
+            Verified,
+            Some("session_lost"),
+            true,
+        ),
+    ];
+    for (state, need, verification, reason, may_start) in rows {
+        let observed = session_work(&[(session(1, state), None)], need);
+        assert_eq!(
+            finding_of_source(&observed, ExternalSource::Session),
+            (verification, reason.map(Into::into), may_start),
+            "{state:?} {need:?}"
+        );
+    }
+}
+
+#[test]
+fn hs2_75q254_sessions_combine_and_a_duplicate_is_never_the_runs() {
+    use SessionState::{Lost, Running, Stopped};
+    use Verification::{Mismatched, Unverifiable, Verified};
+    let need = SessionNeed::Working;
+    let seen = |states: &[SessionState]| -> Vec<(OrchestratedSession, Option<String>)> {
+        states
+            .iter()
+            .enumerate()
+            .map(|(n, state)| (session(n as u128 + 1, *state), None))
+            .collect()
+    };
+    let session_finding = |sessions: &[(OrchestratedSession, Option<String>)]| {
+        finding_of_source(&session_work(sessions, need), ExternalSource::Session)
+    };
+    // Empty, then refilled, then empty.
+    assert_eq!(
+        session_work(&[], need),
+        work(None, None, Some("no_session"))
+    );
+    assert_eq!(
+        session_work(&seen(&[Running]), need),
+        work(Some(&id(1)), Some(&id(1)), None)
+    );
+    assert_eq!(
+        session_work(&[], need),
+        work(None, None, Some("no_session"))
+    );
+    // A lost session replaced by a running one: the replacement is the run's.
+    assert_eq!(
+        session_finding(&seen(&[Lost, Running])),
+        (Verified, None, false)
+    );
+    // Two running sessions for one run: the older one is a duplicate.
+    assert_eq!(
+        session_finding(&seen(&[Running, Running])),
+        (Mismatched, Some("different_live_work".into()), false)
+    );
+    // The latest was wound down while an older one still runs: live work the run does
+    // not name.
+    assert_eq!(
+        session_finding(&seen(&[Running, Stopped])),
+        (Mismatched, Some("unrecorded_live_work".into()), false)
+    );
+    // One host that cannot be asked holds the source, in either position.
+    for position in [0, 1] {
+        let mut sessions = seen(&[Running, Running]);
+        sessions[position].1 = Some("session_host_unavailable".into());
+        assert_eq!(
+            session_finding(&sessions),
+            (Unverifiable, Some("session_host_unavailable".into()), false)
+        );
+    }
+    // The same input twice is the same answer.
+    let twice = seen(&[Stopped, Lost]);
+    assert_eq!(session_work(&twice, need), session_work(&twice, need));
+}

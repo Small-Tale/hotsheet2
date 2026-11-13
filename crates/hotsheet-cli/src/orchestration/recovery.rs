@@ -179,6 +179,8 @@ impl OrchestrationRuntime {
             }
         }
         if run.state.is_terminal() {
+            // HS2-75Q254: the run's sessions have nothing left to do for it.
+            self.wind_down_finished_run(owner_id, &run, lead.as_ref(), tx);
             return Ok(view(run));
         }
         let observations = self.run_observations(owner_id, &run, target, lead.as_ref(), tx);

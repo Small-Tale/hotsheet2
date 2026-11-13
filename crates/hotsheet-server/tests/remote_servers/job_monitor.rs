@@ -269,12 +269,8 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
         reconciled["reconciliation"]["findings"][5],
         json!({"source":"deployment","verification":"verified","reason":"no_deployment"})
     );
-    assert!(
-        !reconciled["unverified"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("ci_run"))
-    );
+    // HS2-75Q254: with every source reported, nothing is unverified at all.
+    assert_eq!(reconciled["unverified"], Value::Null, "{reconciled}");
     // The provider finishes the run green. Nobody runs a CLI command; the monitor
     // observes it and the server's follower records the verdict.
     provider.run(9, &a, Some("success"));

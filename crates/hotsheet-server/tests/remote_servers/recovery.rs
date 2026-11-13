@@ -9,7 +9,6 @@ use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
 const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FE1";
 const NOW: &str = "2026-10-15T00:00:00Z";
 const LEASE: &str = "2100-01-01T00:00:00Z";
-const NOT_WIRED: [&str; 1] = ["session"];
 
 fn ticket(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
     ops::create(
@@ -171,7 +170,9 @@ async fn hs2_wbredm_cli_controls_a_run_and_a_starting_server_reconciles_what_was
     let reconciled = ok(&worker, on_run("reconcile", &[]));
     assert_eq!(reconciled["state"], "dispatched");
     assert_eq!(reconciled["reconciliation"]["disposition"], "continue");
-    assert_eq!(reconciled["unverified"], json!(NOT_WIRED));
+    // Every source is wired (HS2-7QNK7Y, HS2-BYEB60, HS2-G5H9FQ, HS2-75Q254): with
+    // the target answering, nothing is unverified.
+    assert_eq!(reconciled["unverified"], Value::Null);
     // Pause, then resume: the target is not told, and a paused run is not renewed.
     let paused = ok(&worker, on_run("pause", &["--reason", "maintenance"]));
     assert_eq!(paused["paused"]["reason"], "maintenance");
@@ -445,7 +446,9 @@ async fn hs2_wbredm_stdio_mcp_reconciles_and_controls_a_run() {
         reconciled["reconciliation"]["disposition"], "continue",
         "{reconciled}"
     );
-    assert_eq!(reconciled["unverified"], json!(NOT_WIRED));
+    // Every source is wired (HS2-7QNK7Y, HS2-BYEB60, HS2-G5H9FQ, HS2-75Q254): with
+    // the target answering, nothing is unverified.
+    assert_eq!(reconciled["unverified"], Value::Null);
     assert_eq!(
         reconciled["reconciliation"]["findings"][2],
         json!({"source":"target_claim","verification":"verified"})

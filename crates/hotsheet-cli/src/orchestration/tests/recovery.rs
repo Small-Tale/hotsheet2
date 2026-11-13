@@ -3,8 +3,8 @@
 use hotsheet_model::{NoteKind, Status, Ticket};
 use hotsheet_ticketing::orchestration::{
     AuditOutcome, DenialReason, DispatchMode, Disposition, ExternalSource, NewRun, Run, RunControl,
-    RunError, RunEventKind, RunRegistry, RunState, RunTarget, RunTicket, SOURCE_NOT_WIRED,
-    TargetAction, TargetOpError, Verification,
+    RunError, RunEventKind, RunRegistry, RunState, RunTarget, RunTicket, TargetAction,
+    TargetOpError, Verification,
 };
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::{Value, json};
@@ -13,10 +13,11 @@ use super::tickets::{Machine, NOW, bind_and_grant, human, machine, op, unsupport
 use super::*;
 
 const LEASE: &str = "2030-01-01T00:00:00Z";
-/// The sources nobody reports yet. HS2-7QNK7Y, HS2-BYEB60 and HS2-G5H9FQ wired
-/// `ci_run`, `deployment` and `validation`: a run without gates or attempts has them
-/// verified as `no_gate`, `no_deployment` and `no_validation`.
-const NOT_WIRED: [&str; 1] = ["session"];
+/// HS2-7QNK7Y, HS2-BYEB60, HS2-G5H9FQ and HS2-75Q254 wired every source outside the
+/// target ticket: a run without gates, attempts or sessions has each of them verified
+/// (`no_gate`, `no_deployment`, `no_validation`, `no_session`), so nothing is listed
+/// as unverified while the target answers.
+const NOTHING_UNVERIFIED: [&str; 0] = [];
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
     ops::create(
@@ -240,10 +241,10 @@ fn hs2_wbredm_a_restart_reconciles_each_interrupted_dispatch_without_a_duplicate
     assert!(view.run.lease_expires_at_ms.is_some());
     assert_eq!(disposition(&view), Disposition::Continue);
     // Exactly the sources nobody reports yet are named, with the reason.
-    assert_eq!(view.unverified, NOT_WIRED);
+    assert_eq!(view.unverified, NOTHING_UNVERIFIED);
     assert_eq!(
         finding(&view, ExternalSource::Session),
-        (Verification::Unverifiable, Some(SOURCE_NOT_WIRED.into()))
+        (Verification::Verified, Some("no_session".into()))
     );
     assert_eq!(
         finding(&view, ExternalSource::CiRun),
@@ -346,7 +347,7 @@ fn hs2_wbredm_a_restart_reconciles_each_interrupted_dispatch_without_a_duplicate
         finding(&view, ExternalSource::TargetClaim),
         (Verification::Mismatched, Some("claim_held_by_other".into()))
     );
-    assert_eq!(view.unverified, NOT_WIRED);
+    assert_eq!(view.unverified, NOTHING_UNVERIFIED);
     assert_eq!(held(&m, &taken), (Some("human-1".into()), 1));
 
     // 4. Queued for the target's dispatcher with the answer lost: the worker its
@@ -429,7 +430,12 @@ fn hs2_wbredm_a_restart_reconciles_each_interrupted_dispatch_without_a_duplicate
             ("op-4", Disposition::Continue),
         ]
     );
-    assert!(summary.runs.iter().all(|view| view.unverified == NOT_WIRED));
+    assert!(
+        summary
+            .runs
+            .iter()
+            .all(|view| view.unverified == NOTHING_UNVERIFIED)
+    );
 
     // 7. A target ticket created for the work is never created twice either.
     let create = json!({
@@ -472,7 +478,7 @@ fn hs2_wbredm_an_unreachable_target_is_named_unverified_and_a_pending_cancel_wai
         .into_iter()
         .filter(|source| source.is_target())
         .map(ExternalSource::code)
-        .chain(NOT_WIRED)
+        .chain(NOTHING_UNVERIFIED)
         .collect();
     assert_eq!(dark.unverified, expected);
     for source in ExternalSource::ALL.into_iter().filter(|s| s.is_target()) {
@@ -547,7 +553,7 @@ fn hs2_wbredm_an_unreachable_target_is_named_unverified_and_a_pending_cancel_wai
         .run_reconcile(&m.owner.id, &run.run_id, Some(&worker()), &mut tx)
         .unwrap();
     assert_eq!(disposition(&read), Disposition::Paused);
-    assert_eq!(read.unverified, NOT_WIRED);
+    assert_eq!(read.unverified, NOTHING_UNVERIFIED);
     assert_eq!(read.run.unreachable, None);
     assert!(read.run.cancel_requested);
     assert_eq!(read.run.observed.as_ref().unwrap().status, "started");
@@ -1062,14 +1068,18 @@ fn hs2_wbredm_recovery_routes_reach_the_same_runtime() {
     let reconciled = post("reconcile", json!({}), &ai).unwrap();
     assert_eq!(reconciled["state"], "dispatched");
     assert_eq!(reconciled["reconciliation"]["disposition"], "continue");
-    assert_eq!(reconciled["unverified"], json!(NOT_WIRED));
+    assert_eq!(
+        reconciled["unverified"],
+        Value::Null,
+        "nothing is unverified"
+    );
     assert_eq!(
         reconciled["reconciliation"]["findings"][0],
         json!({"source":"target_reachability","verification":"verified"})
     );
     assert_eq!(
         reconciled["reconciliation"]["findings"][7],
-        json!({"source":"session","verification":"unverifiable","reason":"source_not_wired"})
+        json!({"source":"session","verification":"verified","reason":"no_session"})
     );
     let paused = post("pause", json!({"reason":"maintenance"}), &ai).unwrap();
     assert_eq!(paused["paused"]["reason"], "maintenance");

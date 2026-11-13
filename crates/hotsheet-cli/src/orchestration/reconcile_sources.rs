@@ -5,10 +5,13 @@
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AttemptAnswer, AttemptRecord, ExternalWork, GateError, GateFilter, GateKind, GateObservation,
-    Observations, Observed, ResultUpdate, Run, TargetAction, TargetFacts, ValidationResult,
-    ValidationState, ValidationStep, ci_work, deployment_work, evaluate, validation_attempt,
-    validation_work,
+    GateState, NOTE_WAITING_ON_GATE, NOTE_WAITING_ON_VALIDATION, Observations, Observed,
+    OrchestratedSession, ResultUpdate, Run, RunState, SafePointBlocker, SessionNeed, SessionOwner,
+    TargetAction, TargetFacts, ValidationResult, ValidationState, ValidationStep, ci_work,
+    deployment_work, evaluate, session_work, validation_attempt, validation_work,
 };
+
+use super::sessions::StopSession;
 
 use super::tickets::encode;
 use super::validation::{HostedExecutionState, HostedValidation};
@@ -29,10 +32,17 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Observations {
+        let ci = self.run_ci_work(owner_id, &run.run_id);
+        let deployment = self.run_deployment_work(owner_id, &run.run_id);
+        // Validation first: it may record that an attempt ended, which changes whether
+        // the run still waits on one.
+        let validation = self.run_validation_work(owner_id, &run.run_id, actor, tx);
+        let session = self.run_session_work(owner_id, run, actor, tx);
         Observations {
-            ci: self.run_ci_work(owner_id, &run.run_id),
-            deployment: self.run_deployment_work(owner_id, &run.run_id),
-            validation: self.run_validation_work(owner_id, &run.run_id, actor, tx),
+            ci,
+            deployment,
+            validation,
+            session,
             ..Observations::target_only(target)
         }
     }
@@ -253,5 +263,154 @@ impl OrchestrationRuntime {
             Ok(_) => (AttemptAnswer::Running, None, None),
             Err(error) => unreachable(error),
         }
+    }
+
+    /// HS2-75Q254: the orchestrator-owned sessions started for a run, for
+    /// reconciliation. Each active one is first read from its host as `actor` (the
+    /// same safe-point read the scheduler makes), so a crashed session is `lost` and a
+    /// person's takeover at the host is learned; a host that cannot be asked leaves the
+    /// source unverifiable (`session_unknown`, or the refusal's code). The run's
+    /// latest session is then judged against whether the run needs one now
+    /// ([`SessionNeed`]): a session wound down on purpose is never missing work, and a
+    /// lost one is missing work only while the run is being worked.
+    pub fn run_session_work(
+        &self,
+        owner_id: &str,
+        run: &Run,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Observed<ExternalWork> {
+        let sessions = match self.session_list(owner_id, false) {
+            Ok(sessions) => sessions,
+            Err(_) => return Observed::Unverifiable("session_records_unreadable".into()),
+        };
+        let mut seen = Vec::new();
+        for session in sessions
+            .into_iter()
+            .filter(|session| session.run_id.as_deref() == Some(run.run_id.as_str()))
+        {
+            if session.state.is_terminal() {
+                seen.push((session, None));
+                continue;
+            }
+            // The safe-point read syncs the record and says whether the terminal host
+            // could be asked at all, which a plain sync leaves unsaid.
+            match self.session_safe_point(owner_id, &session.session_id, actor, tx) {
+                Ok(view) => {
+                    let unknown = view.safe_point.as_ref().is_some_and(|point| {
+                        point.blockers.contains(&SafePointBlocker::SessionUnknown)
+                    });
+                    let code = (unknown && view.session.state.is_active())
+                        .then(|| SafePointBlocker::SessionUnknown.code().to_owned());
+                    seen.push((view.session, code));
+                }
+                Err(error) => seen.push((session, Some(error.code().to_owned()))),
+            }
+        }
+        session_work(&seen, self.session_need(owner_id, run, tx.clock.now_ms()))
+    }
+
+    /// HS2-75Q254: whether a run needs a live session now. A dispatched run waits,
+    /// and needs none, while a CI or deployment gate of it waits on a provider or a
+    /// person, while its target ticket is in `final_testing`, or while a validation
+    /// attempt of it runs. Reads this machine's records only.
+    pub fn session_need(&self, owner_id: &str, run: &Run, now_ms: u64) -> SessionNeed {
+        if run.state != RunState::Dispatched {
+            return SessionNeed::Idle;
+        }
+        let gates = self
+            .gate_registry()
+            .list(
+                owner_id,
+                &GateFilter {
+                    run_id: Some(run.run_id.clone()),
+                    current_only: true,
+                    ..GateFilter::default()
+                },
+            )
+            .unwrap_or_default();
+        let gated = gates
+            .iter()
+            .any(|gate| gate.awaits_provider() || gate.state == GateState::AwaitingApproval)
+            || run
+                .observed
+                .as_ref()
+                .and_then(|observed| observed.started_phase.as_deref())
+                == Some("final_testing");
+        if gated {
+            return SessionNeed::Waiting(NOTE_WAITING_ON_GATE);
+        }
+        let validating = self
+            .validations()
+            .steps(owner_id, None, now_ms)
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|evidence| &evidence.history)
+            .any(|result| {
+                result.run_id.as_deref() == Some(run.run_id.as_str())
+                    && result.state == ValidationState::Running
+            });
+        if validating {
+            return SessionNeed::Waiting(NOTE_WAITING_ON_VALIDATION);
+        }
+        SessionNeed::Working
+    }
+
+    /// HS2-75Q254: the session that still holds a run's work, from this machine's
+    /// records: its latest session while that is `requested` or `running`. A start for
+    /// the run's work while this answers `Some` would be a duplicate; the start path
+    /// should adopt it instead (see the handoff of HS2-75Q254).
+    pub fn run_session_holder(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+    ) -> Result<Option<OrchestratedSession>, OrchestrationError> {
+        Ok(self
+            .session_list(owner_id, false)?
+            .into_iter()
+            .rfind(|session| session.run_id.as_deref() == Some(run_id))
+            .filter(|session| session.state.is_active()))
+    }
+
+    /// HS2-75Q254: a run reconciliation found finished no longer needs its sessions.
+    /// When the policy enables automatic placement the scheduler's idle wind-down
+    /// keeps or stops them (it applies `idle_minutes` and `keep_warm`); otherwise
+    /// nobody else would, so each orchestrator-owned session of the run is asked to stop
+    /// at a safe point its host confirms. A session that is not at one is left
+    /// running; a person's session is never touched. Returns the sessions stopped.
+    pub(super) fn wind_down_finished_run(
+        &self,
+        owner_id: &str,
+        run: &Run,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Vec<String> {
+        let automatic = self
+            .policy(owner_id)
+            .ok()
+            .and_then(|view| view.policy)
+            .is_some_and(|policy| policy.placement.automatic);
+        if automatic || actor.is_none() {
+            return Vec::new();
+        }
+        let sessions = self.session_list(owner_id, true).unwrap_or_default();
+        sessions
+            .into_iter()
+            .filter(|session| {
+                session.run_id.as_deref() == Some(run.run_id.as_str())
+                    && session.owner != SessionOwner::Human
+            })
+            .filter_map(|session| {
+                self.session_stop(
+                    owner_id,
+                    &session.session_id,
+                    StopSession { force: false },
+                    actor,
+                    tx,
+                )
+                .ok()
+                .map(|stopped| stopped.session.session_id)
+            })
+            .collect()
     }
 }

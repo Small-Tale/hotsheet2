@@ -80,8 +80,10 @@ pub use reconcile::{
 pub use reconcile_sources::{
     AttemptAnswer, AttemptRecord, DEADLINE_PASSED, EXECUTION_LOST, EXECUTION_NOT_FOUND,
     EXECUTION_UNCONFIRMED, GateObservation, NOTE_AWAITING_APPROVAL, NOTE_DEPLOYMENT_NOT_EXECUTED,
-    NOTE_NO_DEPLOYMENT, NOTE_NO_GATE, NOTE_NO_VALIDATION, NOTE_WATCH_ADOPTED, SourceWork, ci_work,
-    combine_work, deployment_work, validation_attempt, validation_work,
+    NOTE_NO_DEPLOYMENT, NOTE_NO_GATE, NOTE_NO_SESSION, NOTE_NO_VALIDATION, NOTE_SESSION_LOST,
+    NOTE_SESSION_STOPPED, NOTE_START_UNCONFIRMED, NOTE_WAITING_ON_GATE, NOTE_WAITING_ON_VALIDATION,
+    NOTE_WATCH_ADOPTED, SessionNeed, SourceWork, ci_work, combine_work, deployment_work,
+    session_work, validation_attempt, validation_work,
 };
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,

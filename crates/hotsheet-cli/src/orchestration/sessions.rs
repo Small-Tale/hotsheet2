@@ -1241,25 +1241,27 @@ impl OrchestrationRuntime {
             .load(owner_id, target_id, server.as_deref(), tool, account)
     }
 
-    /// HS2-75Q254 reads this for reconciliation: the session a run recorded and the
-    /// one still running for it, from this machine's records alone.
+    /// HS2-75Q254: the session source of a run from this machine's records alone,
+    /// classified as reconciliation classifies it, without asking any host. Use
+    /// `run_session_work` to sync with the hosts first.
     pub fn session_work(&self, owner_id: &str, run_id: &str) -> Observed<ExternalWork> {
+        let Ok(run) = self.run(owner_id, run_id) else {
+            return Observed::Verified(ExternalWork {
+                note: Some(hotsheet_ticketing::orchestration::NOTE_NO_SESSION.into()),
+                ..ExternalWork::default()
+            });
+        };
         match self.session_registry().list(owner_id, false) {
             Ok(sessions) => {
-                let of_run = || {
-                    sessions
-                        .iter()
-                        .filter(|session| session.run_id.as_deref() == Some(run_id))
-                };
-                Observed::Verified(ExternalWork {
-                    recorded: of_run()
-                        .next_back()
-                        .map(|session| session.session_id.clone()),
-                    live: of_run()
-                        .rfind(|session| session.state == SessionState::Running)
-                        .map(|session| session.session_id.clone()),
-                    note: None,
-                })
+                let seen: Vec<_> = sessions
+                    .into_iter()
+                    .filter(|session| session.run_id.as_deref() == Some(run_id))
+                    .map(|session| (session, None))
+                    .collect();
+                hotsheet_ticketing::orchestration::session_work(
+                    &seen,
+                    self.session_need(owner_id, &run, 0),
+                )
             }
             Err(_) => Observed::Unverifiable("session_records_unreadable".into()),
         }

@@ -11,7 +11,10 @@
 //! started a second time.
 
 use super::reconcile::{ExternalWork, Observed};
-use super::{Gate, GateKind, GateReading, GateState, ValidationResult, ValidationState};
+use super::{
+    Gate, GateKind, GateReading, GateState, OrchestratedSession, SessionState, ValidationResult,
+    ValidationState,
+};
 
 /// A verified source's note: no CI gate is linked to the run.
 pub const NOTE_NO_GATE: &str = "no_gate";
@@ -310,4 +313,85 @@ pub fn validation_attempt(
 /// HS2-G5H9FQ: the validation attempts of a run, combined.
 pub fn validation_work(attempts: Vec<SourceWork>) -> Observed<ExternalWork> {
     combine_work(attempts, Some(NOTE_NO_VALIDATION))
+}
+
+/// HS2-75Q254: no orchestrator-owned session was started for the run.
+pub const NOTE_NO_SESSION: &str = "no_session";
+/// HS2-75Q254: the run's session was stopped on purpose: wound down at a safe point, or
+/// by a person.
+pub const NOTE_SESSION_STOPPED: &str = "session_stopped";
+/// HS2-75Q254: the run's latest start was never confirmed by its host and nothing runs;
+/// the same start may be repeated under its operation id.
+pub const NOTE_START_UNCONFIRMED: &str = "start_unconfirmed";
+/// HS2-75Q254: the run's session ended without anyone stopping it.
+pub const NOTE_SESSION_LOST: &str = "session_lost";
+/// HS2-75Q254: the run waits on a CI or deployment gate, and needs no session for that.
+pub const NOTE_WAITING_ON_GATE: &str = "waiting_on_gate";
+/// HS2-75Q254: the run waits on a validation attempt, and needs no session for that.
+pub const NOTE_WAITING_ON_VALIDATION: &str = "waiting_on_validation";
+
+/// HS2-75Q254: whether a run needs a live session for its work right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionNeed {
+    /// The run's worker is doing its work: a session that ended unasked took that work
+    /// with it.
+    Working,
+    /// The run waits on something no session does (the note says what): a gate or a
+    /// validation attempt. A session wound down, or lost, meanwhile loses nothing.
+    Waiting(&'static str),
+    /// The run is not being worked: queued, not dispatched yet, or taken over.
+    Idle,
+}
+
+/// HS2-75Q254: the orchestrator-owned sessions started for a run, each as its host
+/// showed it just now (or the code of why its host could not be asked), oldest first.
+///
+/// The latest session is the run's. Running, it is verified and adopted. Stopped on
+/// purpose, failed, or never confirmed, nothing runs and nothing is missing. Lost (it
+/// ended and nobody stopped it), it is missing work only while the run is being
+/// worked; a run that waits on a gate or validation, or is not being worked, needed
+/// no session. Any other running session for the same run is live work the run does
+/// not name: a duplicate. A session whose host could not be asked leaves the source
+/// unverifiable.
+pub fn session_work(
+    sessions: &[(OrchestratedSession, Option<String>)],
+    need: SessionNeed,
+) -> Observed<ExternalWork> {
+    if let Some(code) = sessions.iter().find_map(|(_, error)| error.clone()) {
+        return Observed::Unverifiable(code);
+    }
+    let Some((latest, _)) = sessions.last() else {
+        return Observed::Verified(ExternalWork {
+            recorded: None,
+            live: None,
+            note: Some(NOTE_NO_SESSION.into()),
+        });
+    };
+    let other_live = sessions[..sessions.len() - 1]
+        .iter()
+        .rev()
+        .find(|(session, _)| session.state == SessionState::Running)
+        .map(|(session, _)| session.session_id.clone());
+    let (recorded, note) = match latest.state {
+        SessionState::Running => (Some(latest.session_id.clone()), None),
+        SessionState::Requested => (None, Some(NOTE_START_UNCONFIRMED)),
+        SessionState::Stopped => (None, Some(NOTE_SESSION_STOPPED)),
+        SessionState::Failed => (None, None),
+        SessionState::Lost => match need {
+            SessionNeed::Working => (Some(latest.session_id.clone()), None),
+            SessionNeed::Waiting(note) => (None, Some(note)),
+            SessionNeed::Idle => (None, Some(NOTE_SESSION_LOST)),
+        },
+    };
+    let live = if latest.state == SessionState::Running {
+        // A second running session for the same run is never the run's.
+        other_live.or_else(|| recorded.clone())
+    } else {
+        other_live
+    };
+    Observed::Verified(ExternalWork {
+        recorded,
+        live,
+        note: note.map(Into::into),
+    })
 }

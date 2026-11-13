@@ -11,7 +11,7 @@
 > the Job monitor is started by whoever links or follows a gate, HS2-VVHVF0),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM;
 > reconciliation reads the CI runs gating a run, HS2-7QNK7Y, its deployments,
-> HS2-BYEB60, and its validation attempts, HS2-G5H9FQ),
+> HS2-BYEB60, its validation attempts, HS2-G5H9FQ, and its sessions, HS2-75Q254),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
@@ -1487,26 +1487,29 @@ Reconciliation is a pure function over typed observations
 **source** is observed as verified facts or as unverifiable with a reason code, and
 yields one **finding**: `verified`, `mismatched` or `unverifiable`.
 
-| Source                | What is compared                                            | Reported today                                  |
-| --------------------- | ----------------------------------------------------------- | ----------------------------------------------- |
-| `target_reachability` | Whether the target answered at all                          | Yes                                             |
-| `target_ticket`       | The target ticket's existence and status                    | Yes                                             |
-| `target_claim`        | Who holds a live claim, against the run's state and worker  | Yes                                             |
-| `run_lease`           | The lease the run recorded, against the lease on the ticket | Yes                                             |
-| `ci_run`              | CI runs gating the run                                      | Yes (HS2-7QNK7Y)                                |
-| `deployment`          | Deployments started for the run                             | Yes (HS2-BYEB60)                                |
-| `validation`          | Validation attempts of the run on the hosts of their steps  | Yes (HS2-G5H9FQ)                                |
-| `session`             | Orchestrator-owned sessions working the run                 | `unverifiable`, `source_not_wired` (HS2-75Q254) |
+| Source                | What is compared                                            | Reported today   |
+| --------------------- | ----------------------------------------------------------- | ---------------- |
+| `target_reachability` | Whether the target answered at all                          | Yes              |
+| `target_ticket`       | The target ticket's existence and status                    | Yes              |
+| `target_claim`        | Who holds a live claim, against the run's state and worker  | Yes              |
+| `run_lease`           | The lease the run recorded, against the lease on the ticket | Yes              |
+| `ci_run`              | CI runs gating the run                                      | Yes (HS2-7QNK7Y) |
+| `deployment`          | Deployments started for the run                             | Yes (HS2-BYEB60) |
+| `validation`          | Validation attempts of the run on the hosts of their steps  | Yes (HS2-G5H9FQ) |
+| `session`             | Orchestrator-owned sessions working the run                 | Yes (HS2-75Q254) |
 
 When the target cannot be confirmed, all four target sources are `unverifiable` with
-the reason the read failed for, such as `target_unavailable`. The last three sources
-take the same typed input (what the run recorded it started, and what is live) and
-already classify it: the same work is `verified`, live work the run never recorded is
-`unrecorded_live_work`, recorded work that is gone is `recorded_work_missing`. A source
-nobody reports yet is passed as `source_not_wired`. That reason does not hold a run
-back, because the run records no such work; any other unverifiable reason does. A
-verified finding may carry a reason too: a code that says what the verified answer
-rests on, such as `no_gate`.
+the reason the read failed for, such as `target_unavailable`. The other four sources
+are this machine's records and the records of the machines that host the work, so they
+are answered whether or not the target ticket can be read. They take the same typed
+input (what the run's records say is in flight, and what is live) and classify it the
+same way: the same work is `verified`, live work the run never recorded is
+`unrecorded_live_work`, recorded work that is gone is `recorded_work_missing`, and two
+different pieces are `different_live_work`. Every source is reported since HS2-75Q254;
+the reason `source_not_wired` remains for a source a future version adds before it is
+read, and it does not hold a run back, because the run records no such work. Any other
+unverifiable reason does. A verified finding may carry a reason too: a code that says
+what the verified answer rests on, such as `no_gate`.
 
 ### CI runs (HS2-7QNK7Y)
 
@@ -1596,6 +1599,48 @@ operation id runs the step again. An `unverified` attempt keeps its reason as th
 finding's reason on every later reconciliation. A repeated step request with the same
 operation id still returns or continues the same attempt (§26.12); reconciliation
 never creates one.
+
+### Sessions (HS2-75Q254)
+
+The session source reads the orchestrator-owned sessions started for the run
+(§26.16). Each active one is first read from its host with the same safe-point read the
+scheduler makes, as the run's supervisor. That brings the record in line: a session
+that crashed or died with its server becomes `lost`, and a person's takeover at the
+host is learned. A host that cannot be asked leaves the source `unverifiable` with
+`session_unknown`, or the refusal's code.
+
+The run's latest session (in the order they were started) is then judged against
+whether the run needs a live session now. A dispatched run waits, and needs none,
+while one of its CI or deployment gates waits on a provider or a person, while its
+target ticket is in `final_testing`, or while a validation attempt of it runs. A run
+that is queued, requested or taken over is not being worked.
+
+| The run's latest session                    | The run                         | Finding                                                         |
+| ------------------------------------------- | ------------------------------- | --------------------------------------------------------------- |
+| None                                        | Any                             | `verified`, reason `no_session`                                 |
+| `running`                                   | Any                             | `verified`; adopted, `may_start` false                          |
+| `stopped` (wound down, or by a person)      | Any                             | `verified`, reason `session_stopped`                            |
+| `requested`, never confirmed by its host    | Any                             | `verified`, reason `start_unconfirmed`                          |
+| `failed`                                    | Any                             | `verified`                                                      |
+| `lost`                                      | Being worked                    | `mismatched`, `recorded_work_missing`                           |
+| `lost`                                      | Waiting on a gate or validation | `verified`, reason `waiting_on_gate` or `waiting_on_validation` |
+| `lost`                                      | Not being worked                | `verified`, reason `session_lost`                               |
+| Any, while an older session of the run runs | Any                             | `mismatched`, `different_live_work` or `unrecorded_live_work`   |
+
+A deliberate wind-down is therefore never read as lost work, which the scheduler's
+wind-down of a session whose run waits on CI (§26.19) relies on.
+
+**Adopt or wind down.** A surviving session is adopted: the run continues with it and
+nothing is started. When reconciliation finds the run finished, its orchestrator-owned
+sessions are left to the scheduler if the policy sets `placement.automatic` (its idle
+wind-down applies `idle_minutes` and `keep_warm`); otherwise nobody else would stop
+them, so each is asked to stop at a safe point its host confirms. One that is not at a
+safe point keeps running, and a person's session is never touched.
+
+**Never a duplicate.** `may_start(session)` is false while a session runs, and
+`run_session_holder(owner, run_id)` names the session that still holds a run's work.
+The session start path does not consult it yet: wiring it in, once a scheduler-started
+session is linked to its run (HS2-YC2P7K), is HS2-DG0YPA.
 
 **Never a duplicate.** New work of a kind may be started for a run only when that
 source was read and shows none going on (`Assessment::may_start`). A source that
@@ -2119,9 +2164,9 @@ frees its place under the caps, and its replacement is an ordinary start that na
 A session started for a run publishes each change to that run's event stream (§26.9)
 as kind `session`, with a reason code such as `session_running`, `session_lost` or
 `session_takeover`. A session without a run has no stream to publish on; each of its
-changes moves the scheduler's wake marker instead (§26.19). `session_work` gives reconciliation (§26.14) the session a run
-recorded and the one still running for it; wiring it into `run_reconcile` is
-HS2-75Q254.
+changes moves the scheduler's wake marker instead (§26.19). Reconciliation (§26.14)
+reads the sessions of a run from their hosts and judges them (HS2-75Q254);
+`session_work` gives the same judgement from this machine's records alone.
 
 ### What the scheduler calls
 
@@ -2660,6 +2705,13 @@ server reach its change feed is HS2-BDNJ5S.
 Reconciliation's session source (§26.14) is unchanged. `session_work` would report a
 session that was wound down while its run waits on a gate as missing work
 (HS2-75Q254).
+
+### Reconciliation
+
+Reconciliation's session source (§26.14, HS2-75Q254) tells a wind-down from a loss: a
+session the scheduler wound down at a safe point is `session_stopped`, never missing
+work, and a session lost while its run waits on a gate or a validation attempt is no
+missing work either.
 
 ## 26.20 Scheduling around claimable resources (HS2-2FG91X)
 

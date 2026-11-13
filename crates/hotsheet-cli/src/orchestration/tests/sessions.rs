@@ -557,7 +557,10 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
     );
     assert_eq!(
         f.m.runtime.session_work(&owner, &id(4242)),
-        Observed::Verified(ExternalWork::default())
+        Observed::Verified(ExternalWork {
+            note: Some("no_session".into()),
+            ..ExternalWork::default()
+        })
     );
     // A run of another target cannot be named.
     assert!(matches!(
@@ -1840,4 +1843,225 @@ fn hs2_2dpgdy_pool_joined_matches_the_role_slot_and_the_lease() {
         .workers
         .insert(worker.into(), live_session("other", 10));
     assert!(!pool_joined(&state, SessionRole::Worker, worker, 5));
+}
+
+/// HS2-75Q254: reconciliation rediscovers a run's sessions on their host, adopts a
+/// surviving one, tells a deliberate wind-down from a loss, names a duplicate, and
+/// winds the sessions of a finished run down at a safe point.
+#[test]
+fn hs2_75q254_reconciliation_reads_adopts_and_winds_down_the_sessions_of_a_run() {
+    use hotsheet_ticketing::TicketPatch;
+    use hotsheet_ticketing::orchestration::{Disposition, ExternalSource, RunState, Verification};
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(Vec::new(), &mut tx);
+    // A clean work tree, so a session between turns is at a safe point.
+    f.git(&["init", "-q"]);
+    let owner = f.m.owner.id.clone();
+    let orchestration = f.m.orchestration_ticket("Coordinate");
+    let work = f.target_ticket("Do the work");
+    let run =
+        f.m.runtime
+            .run_dispatch(
+                &owner,
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": f.m.owner_connection(),
+                        "native_id": orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": f.m.target_connection(),
+                    "native_id": work.id.to_string(), "operation_id": "run-1",
+                    "worker_id": "worker-a",
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .run;
+    assert_eq!(run.state, RunState::Dispatched);
+    let reconcile = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .run_reconcile(&owner, &run.run_id, Some(&worker()), tx)
+            .unwrap()
+    };
+    let session = |view: &RunView| super::recovery::finding(view, ExternalSource::Session);
+    let disposition = |view: &RunView| super::recovery::disposition(view);
+    let for_run = json!({"run_id": run.run_id});
+    // No session yet.
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        session(&view),
+        (Verification::Verified, Some("no_session".into()))
+    );
+    assert!(
+        f.m.runtime
+            .run_session_holder(&owner, &run.run_id)
+            .unwrap()
+            .is_none()
+    );
+    // A running session is the run's: verified, and it holds the run's work.
+    let first = f
+        .start("session-1", 1, "codex", for_run.clone(), &mut tx)
+        .unwrap()
+        .session;
+    let view = reconcile(&mut tx);
+    assert_eq!(session(&view), (Verification::Verified, None));
+    assert_eq!(disposition(&view), Disposition::Continue);
+    assert_eq!(
+        f.m.runtime
+            .run_session_holder(&owner, &run.run_id)
+            .unwrap()
+            .map(|session| session.session_id),
+        Some(first.session_id.clone())
+    );
+    // It crashes while the run is being worked: rediscovered as lost, missing work.
+    f.host
+        .crash(&first.hosted.as_ref().unwrap().session_id.clone());
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        session(&view),
+        (
+            Verification::Mismatched,
+            Some("recorded_work_missing".into())
+        )
+    );
+    assert_eq!(disposition(&view), Disposition::NeedsAttention);
+    assert_eq!(
+        f.m.runtime
+            .session(&owner, &first.session_id)
+            .unwrap()
+            .state,
+        SessionState::Lost
+    );
+    assert!(
+        f.m.runtime
+            .run_session_holder(&owner, &run.run_id)
+            .unwrap()
+            .is_none()
+    );
+    // The target ticket moves to final testing: the run waits on CI and needed no
+    // session for that, so the same loss is no longer missing work.
+    hotsheet_ticketing::ops::update(
+        &f.m.target_store,
+        &work.id,
+        NOW.into(),
+        TicketPatch {
+            started_phase: Some(Some(hotsheet_model::StartedPhase::FinalTesting)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    for _ in 0..2 {
+        let view = reconcile(&mut tx);
+        assert_eq!(
+            session(&view),
+            (Verification::Verified, Some("waiting_on_gate".into()))
+        );
+        assert_eq!(disposition(&view), Disposition::Continue);
+    }
+    // A replacement is the run's again; wound down at a safe point it is never missing
+    // work, whether or not the run waits (the case HS2-95SWQ4 found).
+    let second = f
+        .start(
+            "session-2",
+            1,
+            "codex",
+            json!({"run_id": run.run_id, "replaces": first.session_id}),
+            &mut tx,
+        )
+        .unwrap()
+        .session;
+    assert_eq!(session(&reconcile(&mut tx)), (Verification::Verified, None));
+    let stopped = f
+        .stop(&second.session_id, false, &worker(), &mut tx)
+        .unwrap();
+    assert_eq!(stopped.session.state, SessionState::Stopped);
+    hotsheet_ticketing::ops::update(
+        &f.m.target_store,
+        &work.id,
+        NOW.into(),
+        TicketPatch {
+            started_phase: Some(Some(hotsheet_model::StartedPhase::Working)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        session(&view),
+        (Verification::Verified, Some("session_stopped".into()))
+    );
+    assert_eq!(disposition(&view), Disposition::Continue);
+    // Two sessions running for one run: the older one is a duplicate the run does
+    // not name.
+    let third = f
+        .start("session-3", 1, "codex", for_run.clone(), &mut tx)
+        .unwrap()
+        .session;
+    let fourth = f
+        .start("session-4", 1, "codex", for_run.clone(), &mut tx)
+        .unwrap()
+        .session;
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        session(&view),
+        (Verification::Mismatched, Some("different_live_work".into()))
+    );
+    // The host cannot be asked: nothing is concluded and the run is held.
+    f.host.down.store(true, Ordering::SeqCst);
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        session(&view),
+        (Verification::Unverifiable, Some("session_unknown".into()))
+    );
+    assert_eq!(disposition(&view), Disposition::HoldUnverified);
+    assert_eq!(
+        f.m.runtime
+            .session(&owner, &third.session_id)
+            .unwrap()
+            .state,
+        SessionState::Running
+    );
+    f.host.down.store(false, Ordering::SeqCst);
+    // A person takes the newest over; then the target ticket is finished. The run is
+    // over: its own session is wound down at a safe point, the person's is left alone.
+    f.m.runtime
+        .session_takeover(
+            &owner,
+            &fourth.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let stops = f.host.stops.load(Ordering::SeqCst);
+    hotsheet_ticketing::ops::update(
+        &f.m.target_store,
+        &work.id,
+        NOW.into(),
+        TicketPatch {
+            status: Some(hotsheet_model::Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let view = reconcile(&mut tx);
+    assert_eq!(view.run.state, RunState::Completed);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), stops + 1);
+    assert_eq!(
+        f.m.runtime
+            .session(&owner, &third.session_id)
+            .unwrap()
+            .state,
+        SessionState::Stopped
+    );
+    assert_eq!(
+        f.m.runtime
+            .session(&owner, &fourth.session_id)
+            .unwrap()
+            .state,
+        SessionState::Running
+    );
 }
