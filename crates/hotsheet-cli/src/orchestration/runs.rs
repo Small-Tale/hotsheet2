@@ -988,6 +988,18 @@ impl OrchestrationRuntime {
             }
             Ok(RunView::from(updated))
         })();
+        // HS2-2C5N1W: a concurrent sync (the server's follower) finished the run while
+        // this one read the target. A sync of a finished run answers the record, so
+        // this one does too, rather than `run_not_active`.
+        let outcome = match outcome {
+            Err(OrchestrationError::Run(RunError::NotActive)) => self
+                .run(owner_id, run_id)
+                .ok()
+                .filter(|run| run.state.is_terminal())
+                .map(RunView::from)
+                .ok_or(OrchestrationError::Run(RunError::NotActive)),
+            other => other,
+        };
         self.finish(&target, &authorized, &outcome, tx)?;
         outcome
     }

@@ -670,7 +670,9 @@ transition. A person's correction is the one exception to the edges (§26.14).
   completes the run. A queued run becomes dispatched when the ticket shows a live
   claim, recording that worker. A dispatched run whose claim was released or taken
   becomes `intervened`, and returns to `dispatched` when its own worker holds a live
-  claim again. A lapsed lease is not a live claim.
+  claim again. A lapsed lease is not a live claim. A sync that a concurrent one (the
+  server's follower) beat to finishing the run answers the finished run, not
+  `run_not_active` (HS2-2C5N1W).
 - **On the orchestration ticket** the run adds a link to the target ticket and an
   activity note with the run id at dispatch and when it finishes. The note holds
   identifiers only.

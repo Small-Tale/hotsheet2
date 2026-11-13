@@ -888,3 +888,86 @@ fn hs2_ebhdsb_hosted_claim_routes_and_run_routes() {
         ));
     }
 }
+
+/// HS2-2C5N1W: several syncs of one run at once, as a person's request beside the
+/// server's follower, after its target ticket was completed. Every one answers the
+/// finished run; none is told `run_not_active`, and the run finishes once.
+#[test]
+fn hs2_2c5n1w_concurrent_syncs_of_a_run_that_finishes_all_answer_the_finished_run() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(300);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    for round in 0..4u128 {
+        let work = target_ticket(&m, "Finished while synced");
+        let view = m
+            .runtime
+            .run_dispatch(
+                &m.owner.id,
+                dispatch(
+                    &m,
+                    &orchestration,
+                    &work.slug,
+                    &format!("op-race-{round}"),
+                    json!({"worker_id": "worker-race", "lease_minutes": 30}),
+                ),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+        ops::update(
+            &m.target_store,
+            &work.id,
+            NOW.into(),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let run_id = view.run.run_id.clone();
+        let barrier = std::sync::Barrier::new(6);
+        let answers: Vec<_> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..6u128)
+                .map(|thread| {
+                    let (runtime, owner, run_id, barrier) =
+                        (&m.runtime, &m.owner.id, &run_id, &barrier);
+                    scope.spawn(move || {
+                        let mut rng = Rng(400 + round * 10 + thread);
+                        let mut tx = Transaction {
+                            clock: &Clock,
+                            rng: &mut rng,
+                        };
+                        barrier.wait();
+                        runtime
+                            .run_sync(owner, run_id, Some(&worker()), &mut tx)
+                            .map(|view| view.run.state)
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .collect()
+        });
+        for answer in answers {
+            assert_eq!(answer.unwrap(), RunState::Completed);
+        }
+        let run = m.runtime.run(&m.owner.id, &run_id).unwrap();
+        let completions = run
+            .history
+            .iter()
+            .filter(|entry| entry.to == RunState::Completed)
+            .count();
+        assert_eq!(completions, 1);
+    }
+}
