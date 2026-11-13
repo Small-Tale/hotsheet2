@@ -861,6 +861,235 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/policy:
+    description:
+      The checked-in throughput policy of an orchestration project (HS2-YCJDEB). It says what the orchestrator may
+      want; a grant says what it is authorized to do, and both must allow an action.
+    get:
+      operationId: readOrchestrationPolicy
+      responses:
+        '200':
+          description: The stored policy; an absent policy reads as disabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationPolicyView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    put:
+      operationId: setOrchestrationPolicy
+      description:
+        Replace the policy at the expected revision. Identical content is a no-op; a stale revision is 409; an invalid
+        policy is 400; an `ai` actor is refused with 403 `forbidden`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrchestrationPolicy'
+      responses:
+        '200':
+          description: The stored policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationPolicyView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/policy/validate:
+    description: Report every problem in a proposed or the stored policy (HS2-YCJDEB); never writes.
+    post:
+      operationId: validateOrchestrationPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestrationPolicyProposal'
+      responses:
+        '200':
+          description: Whether the policy is valid, with every problem found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationPolicyValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/policy/dry-run:
+    description:
+      Machine-local evaluation of a proposed or the stored policy against the declared targets and this machine's
+      grants (HS2-YCJDEB). Writes nothing, files no approval request and contacts no target.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: dryRunOrchestrationPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestrationPolicyProposal'
+      responses:
+        '200':
+          description: Per-target outcome of the policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationPolicyDryRun'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/approvals:
+    description: Machine-local approval requests for decisions the policy will not take alone (HS2-YCJDEB).
+    x-hotsheet-machine-local: true
+    get:
+      operationId: listOrchestrationApprovals
+      responses:
+        '200':
+          description: Requests for this owning checkout with their current state.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 256
+                items:
+                  $ref: '#/components/schemas/OrchestrationApproval'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/approvals/{approval}:
+    description: Machine-local answer to one approval request (HS2-YCJDEB).
+    x-hotsheet-machine-local: true
+    post:
+      operationId: decideOrchestrationApproval
+      description:
+        Approve or deny a pending request. Repeating the same answer is a no-op; a request that is no longer pending
+        cannot be answered differently (409). An `ai` actor is refused with 403 `forbidden`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approve
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+                approve:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: The answered request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationApproval'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: approval
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -15195,10 +15424,47 @@ components:
               additionalProperties: false
             - type: 'null'
         operation_id:
+          description: The operation an approval would be for.
           type:
             - string
             - 'null'
           maxLength: 160
+        load:
+          description:
+            Sessions already running, for the policy's concurrency caps (HS2-YCJDEB). A session start without it is
+            denied `policy_load_unknown`.
+          anyOf:
+            - type: object
+              required:
+                - target_sessions
+                - machine_sessions
+                - tool_sessions
+              properties:
+                target_sessions:
+                  type: integer
+                  minimum: 0
+                machine_sessions:
+                  type: integer
+                  minimum: 0
+                tool_sessions:
+                  type: integer
+                  minimum: 0
+                account:
+                  type:
+                    - string
+                    - 'null'
+                  maxLength: 160
+                account_sessions:
+                  type: integer
+                  minimum: 0
+              additionalProperties: false
+            - type: 'null'
+        provisional:
+          description: The work would start on a prerequisite whose gate is still pending.
+          type: boolean
+        role_session:
+          description: The session is a target's integrator or dispatcher rather than a worker.
+          type: boolean
       additionalProperties: false
     TargetAccessDecision:
       type: object
@@ -15224,6 +15490,10 @@ components:
         grant_id:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        detail:
+          description: The specific policy rule or approval gate behind `policy_denied` or `approval_required`.
+          type: string
+          maxLength: 160
       additionalProperties: false
     OrchestrationAuditPage:
       type: object
@@ -15274,6 +15544,9 @@ components:
                   - failed
                   - granted
                   - revoked
+                  - approved
+                  - rejected
+                  - changed
               reason:
                 description: A stable reason code, never free text.
                 type: string
@@ -15291,6 +15564,386 @@ components:
           type: boolean
         more:
           type: boolean
+      additionalProperties: false
+    OrchestrationMachineLimits:
+      description: Limits a machine hosting a target must satisfy before a session starts there (HS2-YCJDEB).
+      type: object
+      properties:
+        max_sessions:
+          type: integer
+          minimum: 1
+          maximum: 64
+          default: 2
+        min_free_ram_mb:
+          type: integer
+          minimum: 0
+          default: 2048
+        max_cpu_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 90
+        min_free_disk_mb:
+          type: integer
+          minimum: 0
+          default: 5120
+      additionalProperties: false
+    OrchestrationPolicy:
+      description:
+        The checked-in throughput policy body (HS2-YCJDEB); every omitted section takes its default. Integer units
+        only.
+      type: object
+      properties:
+        machine:
+          $ref: '#/components/schemas/OrchestrationMachineLimits'
+        tools:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required:
+              - tool
+              - max_sessions
+            properties:
+              tool:
+                type: string
+                maxLength: 160
+                pattern: ^[A-Za-z0-9._-]+$
+              max_sessions:
+                type: integer
+                minimum: 1
+                maximum: 64
+              weight:
+                type: integer
+                minimum: 1
+                maximum: 100
+                default: 50
+              accounts:
+                type: array
+                maxItems: 16
+                items:
+                  type: object
+                  required:
+                    - account
+                    - max_sessions
+                  properties:
+                    account:
+                      type: string
+                      maxLength: 160
+                      pattern: ^[A-Za-z0-9._-]+$
+                    max_sessions:
+                      type: integer
+                      minimum: 1
+                    budget_cents_per_day:
+                      type: integer
+                      minimum: 0
+                  additionalProperties: false
+            additionalProperties: false
+        targets:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            required:
+              - target_id
+              - actions
+            properties:
+              target_id:
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              enabled:
+                type: boolean
+                default: true
+              actions:
+                type: array
+                maxItems: 6
+                items:
+                  $ref: '#/components/schemas/TargetAction'
+              tools:
+                type: array
+                maxItems: 16
+                items:
+                  type: object
+                  required:
+                    - tool
+                  properties:
+                    tool:
+                      type: string
+                      maxLength: 160
+                    models:
+                      type: array
+                      maxItems: 32
+                      items:
+                        type: string
+                        maxLength: 128
+                  additionalProperties: false
+              max_sessions:
+                type: integer
+                minimum: 1
+                maximum: 64
+                default: 1
+              machine:
+                $ref: '#/components/schemas/OrchestrationMachineLimits'
+              speculation:
+                type: boolean
+            additionalProperties: false
+        wind_down:
+          type: object
+          properties:
+            idle_minutes:
+              type: integer
+              minimum: 1
+              maximum: 1440
+              default: 15
+            keep_warm:
+              type: integer
+              minimum: 0
+              maximum: 64
+              default: 0
+          additionalProperties: false
+        approval:
+          type: object
+          properties:
+            required_for:
+              type: array
+              maxItems: 7
+              items:
+                $ref: '#/components/schemas/OrchestrationApprovalGate'
+          additionalProperties: false
+        speculation:
+          type: object
+          properties:
+            allowed:
+              type: boolean
+              default: false
+            max_depth:
+              type: integer
+              minimum: 1
+              maximum: 8
+              default: 1
+            risk_weight:
+              type: integer
+              minimum: 0
+              maximum: 100
+              default: 50
+            opt_out_tag:
+              type: string
+              maxLength: 64
+              default: speculate:never
+          additionalProperties: false
+      additionalProperties: false
+    OrchestrationApprovalGate:
+      description: A decision the orchestrator asks a person about first (HS2-YCJDEB).
+      enum:
+        - tickets_write
+        - work_start
+        - validation_run
+        - session_start
+        - session_stop
+        - role_session_start
+        - provisional_dispatch
+    OrchestrationPolicyView:
+      type: object
+      required:
+        - enabled
+        - revision
+        - policy
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          type:
+            - string
+            - 'null'
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        policy:
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationPolicy'
+            - type: 'null'
+      additionalProperties: false
+    SetOrchestrationPolicy:
+      type: object
+      required:
+        - expected_revision
+        - policy
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        expected_revision:
+          description: The stored revision; null only for an absent policy.
+          type:
+            - string
+            - 'null'
+        policy:
+          $ref: '#/components/schemas/OrchestrationPolicy'
+      additionalProperties: false
+    OrchestrationPolicyProposal:
+      type: object
+      properties:
+        policy:
+          description: A proposed policy; omit or null to examine the stored one.
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationPolicy'
+            - type: 'null'
+        actor_id:
+          description: Dry run only; also report whether this actor's grants cover each action.
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+      additionalProperties: false
+    OrchestrationPolicyProblem:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        subject:
+          description: The tool, account or target id the problem concerns.
+          type: string
+      additionalProperties: false
+    OrchestrationPolicyValidation:
+      type: object
+      required:
+        - valid
+        - problems
+      properties:
+        valid:
+          type: boolean
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationPolicyProblem'
+      additionalProperties: false
+    OrchestrationPolicyDryRun:
+      description: What a policy would let the orchestrator do per declared target; nothing is written or contacted.
+      type: object
+      required:
+        - source
+        - valid
+        - problems
+        - targets
+      properties:
+        source:
+          enum:
+            - stored
+            - proposed
+            - absent
+        valid:
+          type: boolean
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationPolicyProblem'
+        targets:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            required:
+              - target_id
+              - label
+              - bound
+              - policy
+              - machine
+              - speculation
+              - actions
+            properties:
+              target_id:
+                type: string
+              label:
+                type: string
+              bound:
+                type: boolean
+              policy:
+                enum:
+                  - permitted
+                  - disabled
+                  - not_listed
+              max_sessions:
+                type: integer
+              machine:
+                $ref: '#/components/schemas/OrchestrationMachineLimits'
+              speculation:
+                type: boolean
+              actions:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - action
+                    - policy
+                    - automatic
+                  properties:
+                    action:
+                      $ref: '#/components/schemas/TargetAction'
+                    tool:
+                      type: string
+                    policy:
+                      enum:
+                        - allowed
+                        - approval_required
+                        - denied
+                    policy_detail:
+                      type: string
+                    grant:
+                      $ref: '#/components/schemas/TargetAccessDecision'
+                    automatic:
+                      description: The orchestrator could take this action on its own right now.
+                      type: boolean
+                  additionalProperties: false
+            additionalProperties: false
+      additionalProperties: false
+    OrchestrationApproval:
+      type: object
+      required:
+        - approval_id
+        - target
+        - actor_id
+        - gate
+        - operation_id
+        - state
+        - requested_at_ms
+      properties:
+        approval_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        target:
+          type: object
+          required:
+            - owner_checkout_id
+            - target_id
+          properties:
+            owner_checkout_id:
+              type: string
+            target_id:
+              type: string
+          additionalProperties: false
+        actor_id:
+          type: string
+        gate:
+          $ref: '#/components/schemas/OrchestrationApprovalGate'
+        operation_id:
+          type: string
+        state:
+          enum:
+            - pending
+            - approved
+            - denied
+            - consumed
+            - expired
+        requested_at_ms:
+          type: integer
+          minimum: 0
+        decided_at_ms:
+          type: integer
+          minimum: 0
+        decided_by:
+          type: string
       additionalProperties: false
     RemoteIdentity:
       type: object

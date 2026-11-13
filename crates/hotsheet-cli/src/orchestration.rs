@@ -3,8 +3,10 @@
 //! provider account probe, implicit source creation or credential copying.
 mod access;
 mod observer;
+mod policy;
 mod request;
-pub use access::Authorized;
+pub use access::{ActionRequest, Authorized};
+pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
 #[cfg(test)]
 mod tests;

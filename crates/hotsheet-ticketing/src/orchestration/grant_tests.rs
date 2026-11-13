@@ -41,24 +41,17 @@ fn request(actions: &[TargetAction], expires_at_ms: u64) -> CreateGrant {
     }
 }
 fn ask(actor: &str, action: TargetAction) -> AccessRequest {
-    AccessRequest {
-        actor_id: actor.into(),
-        action,
-        session: None,
-        operation_id: None,
-    }
+    AccessRequest::new(actor, action)
 }
 fn session(tool: &str, model: Option<&str>, running: u32, starting: bool) -> AccessRequest {
     AccessRequest {
-        actor_id: "worker-1".into(),
-        action: TargetAction::SessionsManage,
         session: Some(SessionRequest {
             tool: tool.into(),
             model: model.map(Into::into),
             running,
             starting,
         }),
-        operation_id: None,
+        ..AccessRequest::new("worker-1", TargetAction::SessionsManage)
     }
 }
 fn reason(decision: AccessDecision) -> DenialReason {

@@ -3,12 +3,15 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit"]},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list"]},
+        "policy":{"type":"object","description":"policy_validate/policy_dry_run: a proposed throughput policy body; omit to examine the stored one"},
         "for_actor":{"type":"string","description":"access_check: the actor id the grant must cover (not the caller's own actor_id)"},
         "target_action":{"type":"string","enum":["tickets_read","tickets_write","work_start","gates_observe","validation_run","sessions_manage"],"description":"access_check: the delegated action"},
         "session":{"type":"object","description":"access_check for sessions_manage: {tool, model?, running?, starting?}"},
+        "load":{"type":"object","description":"access_check for a session start: {target_sessions, machine_sessions, tool_sessions, account?, account_sessions?}; a start without it is denied policy_load_unknown"},
+        "operation_id":{"type":"string","description":"access_check: the operation an approval would be for"},
         "after":{"type":"integer","minimum":0,"description":"audit: return entries after this sequence number"},
         "limit":{"type":"integer","minimum":1,"maximum":500,"description":"audit: page size"},
         "destination_checkout":{"type":"string","description":"registered local/remote checkout id to inspect"},
@@ -49,7 +52,15 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
     let registration = optional_id(args, "registration_id")?;
     let machine = matches!(
         action,
-        "bind" | "unbind" | "resolve" | "inspect" | "grant_list" | "access_check" | "audit"
+        "bind"
+            | "unbind"
+            | "resolve"
+            | "inspect"
+            | "grant_list"
+            | "access_check"
+            | "audit"
+            | "policy_dry_run"
+            | "approval_list"
     ) || (action == "list" && id.is_some());
     // Preflight before any backend request; HttpBackend repeats it for actual origin.
     if machine && !backend.machine_local() {
@@ -103,6 +114,35 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             )
             .map_err(crate::be_msg);
     }
+    // HS2-YCJDEB: read-only policy and approval views.
+    let base = format!("/checkouts/{owner}/orchestration");
+    match action {
+        "policy_show" => {
+            return backend
+                .get(&format!("{base}/policy"), &[])
+                .map_err(crate::be_msg);
+        }
+        "approval_list" => {
+            return backend
+                .get(&format!("{base}/approvals"), &[])
+                .map_err(crate::be_msg);
+        }
+        "policy_validate" | "policy_dry_run" => {
+            let mut body = json!({"policy":args.get("policy").cloned().unwrap_or(Value::Null)});
+            if action == "policy_dry_run" {
+                body["actor_id"] = args.get("for_actor").cloned().unwrap_or(Value::Null);
+            }
+            let leaf = if action == "policy_validate" {
+                "validate"
+            } else {
+                "dry-run"
+            };
+            return backend
+                .send("POST", &format!("{base}/policy/{leaf}"), &body)
+                .map_err(crate::be_msg);
+        }
+        _ => {}
+    }
     if action == "inspect" {
         let checkout_id = required(args, "destination_checkout")?;
         let destination = match registration {
@@ -144,7 +184,9 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
         "grant_list" => backend.get(&format!("{prefix}/{}/grants", id.ok_or("target_id is required")?), &[]),
         "access_check" => backend.send("POST", &format!("{prefix}/{}/access", id.ok_or("target_id is required")?), &json!({
             "actor_id":required(args,"for_actor")?,"action":required(args,"target_action")?,
-            "session":args.get("session").cloned().unwrap_or(Value::Null)})),
+            "session":args.get("session").cloned().unwrap_or(Value::Null),
+            "load":args.get("load").cloned().unwrap_or(Value::Null),
+            "operation_id":args.get("operation_id").cloned().unwrap_or(Value::Null)})),
         _ => return Err("unsupported target action".into()),
     }.map_err(crate::be_msg)
 }
@@ -189,6 +231,9 @@ mod tests {
             "grant_list",
             "access_check",
             "audit",
+            // HS2-YCJDEB
+            "policy_dry_run",
+            "approval_list",
         ] {
             assert!(
                 dispatch(&json!({"action":action}), &backend)

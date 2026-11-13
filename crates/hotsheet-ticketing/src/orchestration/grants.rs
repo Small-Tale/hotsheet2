@@ -149,6 +149,29 @@ pub struct AccessRequest {
     pub session: Option<SessionRequest>,
     #[serde(default)]
     pub operation_id: Option<String>,
+    /// HS2-YCJDEB: sessions already running, for the policy's concurrency caps.
+    #[serde(default)]
+    pub load: Option<SessionLoad>,
+    /// The work would start on a prerequisite whose gate is still pending.
+    #[serde(default)]
+    pub provisional: bool,
+    /// The session is a target's integrator or dispatcher rather than a worker.
+    #[serde(default)]
+    pub role_session: bool,
+}
+
+impl AccessRequest {
+    pub fn new(actor_id: impl Into<String>, action: TargetAction) -> Self {
+        Self {
+            actor_id: actor_id.into(),
+            action,
+            session: None,
+            operation_id: None,
+            load: None,
+            provisional: false,
+            role_session: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -202,6 +225,10 @@ pub struct AccessDecision {
     pub reason: Option<DenialReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grant_id: Option<String>,
+    /// HS2-YCJDEB: the specific policy rule or approval gate behind a
+    /// `policy_denied` or `approval_required` answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 impl AccessDecision {
@@ -210,6 +237,7 @@ impl AccessDecision {
             allowed: false,
             reason: Some(reason),
             grant_id: None,
+            detail: None,
         }
     }
 }
@@ -429,6 +457,7 @@ impl GrantRegistry {
                         allowed: true,
                         reason: None,
                         grant_id: Some(grant.grant_id.clone()),
+                        detail: None,
                     });
                 }
                 Err(reason) => closest = closest.max(reason),

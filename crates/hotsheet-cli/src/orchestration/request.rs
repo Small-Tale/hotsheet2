@@ -1,6 +1,6 @@
 //! Shared transport adapters select a route only; all transitions live in core.
 use hotsheet_ticketing::actor::MutationActor;
-use hotsheet_ticketing::orchestration::{AccessRequest, CreateGrant};
+use hotsheet_ticketing::orchestration::{AccessRequest, CreateGrant, SetPolicy};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -12,6 +12,16 @@ pub fn is_path(path: &str) -> bool {
         parts.as_slice(),
         ["checkouts", _, "orchestration", "targets", ..]
             | ["checkouts", _, "orchestration", "inspect" | "audit"]
+            | ["checkouts", _, "orchestration", "policy"]
+            | [
+                "checkouts",
+                _,
+                "orchestration",
+                "policy",
+                "validate" | "dry-run"
+            ]
+            | ["checkouts", _, "orchestration", "approvals"]
+            | ["checkouts", _, "orchestration", "approvals", _]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -28,8 +38,19 @@ pub fn is_machine_path(path: &str) -> bool {
             "targets",
             _,
             "binding" | "resolve" | "grants" | "access"
-        ] | ["checkouts", _, "orchestration", "targets", _, "grants", _]
-            | ["checkouts", _, "orchestration", "inspect" | "audit"]
+        ] | [
+            "checkouts",
+            _,
+            "orchestration",
+            "targets",
+            _,
+            "grants",
+            _
+        ] | ["checkouts", _, "orchestration", "inspect" | "audit"]
+            // HS2-YCJDEB: a dry run reads this machine's grants; approvals live here.
+            | ["checkouts", _, "orchestration", "policy", "dry-run"]
+            | ["checkouts", _, "orchestration", "approvals"]
+            | ["checkouts", _, "orchestration", "approvals", _]
     )
 }
 
@@ -287,6 +308,29 @@ impl OrchestrationRuntime {
             ("POST", ["checkouts", owner, "orchestration", "targets", id, "access"]) => {
                 let request: AccessRequest = decode(body)?;
                 value(self.access(&reference(owner, id)?, &request, tx)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "policy"]) => value(self.policy(owner)?),
+            ("PUT", ["checkouts", owner, "orchestration", "policy"]) => {
+                let actor = actor(body)?;
+                let request: SetPolicy = decode(body)?;
+                value(self.set_policy(owner, request, actor.as_ref(), tx)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "policy", "validate"]) => {
+                value(self.validate_policy(owner, decode(body)?)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "policy", "dry-run"]) => {
+                value(self.dry_run_policy(owner, decode(body)?, tx)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "approvals"]) => {
+                value(self.approvals(owner, tx)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "approvals", id]) => {
+                let actor = actor(body)?;
+                let approve = match body.get("approve") {
+                    Some(Value::Bool(approve)) => *approve,
+                    _ => return Err(OrchestrationError::Invalid("approve must be a boolean")),
+                };
+                value(self.decide_approval(owner, id, approve, actor.as_ref(), tx)?)
             }
             ("GET", ["checkouts", owner, "orchestration", "audit"]) => value(self.audit(
                 owner,

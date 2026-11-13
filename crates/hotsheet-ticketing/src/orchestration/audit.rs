@@ -29,6 +29,11 @@ pub enum AuditOutcome {
     Failed,
     Granted,
     Revoked,
+    /// HS2-YCJDEB: a person answered an approval request.
+    Approved,
+    Rejected,
+    /// The shared policy was replaced.
+    Changed,
 }
 
 /// What a caller supplies; the journal assigns `seq`.

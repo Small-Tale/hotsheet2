@@ -2256,6 +2256,16 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
   claim/lease + worktree isolation + "worker never merges, the main agent
   integrates" model. Drop the retired imperative worker-pool orchestration (HS1
   moved to prompt-driven, docs/90 partial retirement); keep it prompt-driven.
+  **Reversed for orchestration projects (HS2-YCJDEB, decided 2026-11-03).** An
+  orchestration project may start, refill and wind down AI sessions imperatively,
+  inside a checked-in throughput policy and delegated grants
+  ([26](26-orchestration-projects.md) §26.8). The reason: balancing priority,
+  machine resources and tool limits across several projects, and filling time spent
+  waiting on CI, needs a scheduler that counts sessions, which a prompt cannot do
+  reliably. The decision above still holds inside one project: sessions the
+  orchestrator starts join the same dispatcher, integrator and worker roles, the
+  dispatcher still assigns each exact ticket, and an ordinary project without an
+  orchestration policy stays prompt-driven.
 
 - **Telemetry/cost attribution & the Announcer** — defer (they ride Claude's OTLP
   stream; port later as their own tickets, tool-agnostic where possible).

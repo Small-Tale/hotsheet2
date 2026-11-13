@@ -2,8 +2,8 @@
 //! shared runtime, for local and remote destinations. Synthetic identities only.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, CreateGrant, DenialReason, GrantState, SessionRequest, SessionScope,
-    TargetAction, ToolScope,
+    AuditOutcome, CreateGrant, DenialReason, GrantState, PolicyBody, SessionLoad, SessionRequest,
+    SessionScope, SetPolicy, TargetAction, TargetPolicy, ToolPolicy, ToolScope,
 };
 use serde_json::{Value, json};
 
@@ -22,6 +22,19 @@ fn create(actions: &[TargetAction]) -> CreateGrant {
         actions: actions.to_vec(),
         session_scope: None,
         expires_at_ms: 10_000,
+    }
+}
+fn act(
+    action: TargetAction,
+    session: Option<SessionRequest>,
+    operation_id: Option<String>,
+) -> ActionRequest {
+    ActionRequest {
+        // HS2-YCJDEB: a session start is only checked against caps with a known load.
+        load: session.as_ref().map(|_| SessionLoad::default()),
+        session,
+        operation_id,
+        ..ActionRequest::new(action)
     }
 }
 fn bind_local(f: &Fixture, tx: &mut Transaction<'_>) -> TargetDestination {
@@ -87,9 +100,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::TicketsWrite,
-            None,
-            Some("op-1".into()),
+            act(TargetAction::TicketsWrite, None, Some("op-1".into())),
             &mut tx
         )),
         DenialReason::TargetUnavailable
@@ -101,9 +112,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::TicketsWrite,
-            None,
-            Some("op-2".into()),
+            act(TargetAction::TicketsWrite, None, Some("op-2".into())),
             &mut tx
         )),
         DenialReason::NoGrant
@@ -143,9 +152,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         .authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::TicketsWrite,
-            None,
-            Some("op-3".into()),
+            act(TargetAction::TicketsWrite, None, Some("op-3".into())),
             &mut tx,
         )
         .unwrap();
@@ -160,9 +167,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
             f.runtime.authorize(
                 &target,
                 actor.as_ref(),
-                TargetAction::TicketsWrite,
-                None,
-                None,
+                act(TargetAction::TicketsWrite, None, None),
                 &mut tx
             ),
             Err(OrchestrationError::Invalid(_))
@@ -172,9 +177,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-2")),
-            TargetAction::TicketsWrite,
-            None,
-            None,
+            act(TargetAction::TicketsWrite, None, None),
             &mut tx
         )),
         DenialReason::NoGrant
@@ -183,9 +186,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::WorkStart,
-            None,
-            None,
+            act(TargetAction::WorkStart, None, None),
             &mut tx
         )),
         DenialReason::ActionNotGranted
@@ -199,9 +200,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::TicketsWrite,
-            None,
-            Some("op-4".into()),
+            act(TargetAction::TicketsWrite, None, Some("op-4".into())),
             &mut tx
         )),
         DenialReason::TargetUnavailable
@@ -214,9 +213,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         .authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::TicketsWrite,
-            None,
-            Some("op-5".into()),
+            act(TargetAction::TicketsWrite, None, Some("op-5".into())),
             &mut tx,
         )
         .unwrap();
@@ -229,9 +226,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::TicketsWrite,
-            None,
-            Some("op-6".into()),
+            act(TargetAction::TicketsWrite, None, Some("op-6".into())),
             &mut tx
         )),
         DenialReason::Revoked
@@ -301,6 +296,38 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         .runtime
         .grant(&target, scoped, Some(&human()), &mut tx)
         .unwrap();
+    // HS2-YCJDEB: session management also needs a policy that permits it.
+    f.runtime
+        .set_policy(
+            &f.owner.id,
+            SetPolicy {
+                expected_revision: None,
+                policy: PolicyBody {
+                    tools: vec![ToolPolicy {
+                        tool: "codex".into(),
+                        max_sessions: 2,
+                        weight: 50,
+                        accounts: Vec::new(),
+                    }],
+                    targets: vec![TargetPolicy {
+                        target_id: id(1),
+                        enabled: true,
+                        actions: vec![TargetAction::SessionsManage, TargetAction::WorkStart],
+                        tools: vec![ToolScope {
+                            tool: "codex".into(),
+                            models: Vec::new(),
+                        }],
+                        max_sessions: 2,
+                        machine: None,
+                        speculation: None,
+                    }],
+                    ..PolicyBody::default()
+                },
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
     let start = |running| SessionRequest {
         tool: "codex".into(),
         model: None,
@@ -312,9 +339,11 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         .authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::SessionsManage,
-            Some(start(0)),
-            Some("op-1".into()),
+            act(
+                TargetAction::SessionsManage,
+                Some(start(0)),
+                Some("op-1".into()),
+            ),
             &mut tx,
         )
         .unwrap();
@@ -324,9 +353,7 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::SessionsManage,
-            Some(start(1)),
-            None,
+            act(TargetAction::SessionsManage, Some(start(1)), None),
             &mut tx
         )),
         DenialReason::ConcurrencyExceeded
@@ -365,9 +392,7 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::WorkStart,
-            None,
-            None,
+            act(TargetAction::WorkStart, None, None),
             &mut tx
         )),
         DenialReason::TargetUnavailable
@@ -380,9 +405,7 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         .authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::WorkStart,
-            None,
-            None,
+            act(TargetAction::WorkStart, None, None),
             &mut tx,
         )
         .unwrap();
@@ -417,9 +440,7 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            TargetAction::WorkStart,
-            None,
-            None,
+            act(TargetAction::WorkStart, None, None),
             &mut tx
         )),
         DenialReason::DestinationChanged

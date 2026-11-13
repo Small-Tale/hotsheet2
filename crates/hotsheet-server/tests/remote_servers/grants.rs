@@ -212,6 +212,35 @@ async fn hs2_sbq3t8_http_cli_and_mcp_share_grants_access_and_audit() {
         scoped["session_scope"]["tools"],
         json!([{"tool":"claude","models":["model-a","model-b"]},{"tool":"codex"}])
     );
+    // HS2-YCJDEB: session management also needs a policy that permits it.
+    let policy = root.path().join("policy.json");
+    std::fs::write(
+        &policy,
+        json!({"tools":[{"tool":"claude","max_sessions":2},{"tool":"codex","max_sessions":2}],
+            "targets":[{"target_id":TARGET,"actions":["tickets_read","tickets_write","sessions_manage"],
+                "tools":[{"tool":"claude","models":["model-a","model-b"]},{"tool":"codex"}],
+                "max_sessions":2}]})
+        .to_string(),
+    )
+    .unwrap();
+    cli_named(
+        &home,
+        &[
+            "--actor-role",
+            "human",
+            "-C",
+            source.to_str().unwrap(),
+            "orchestration",
+            "policy",
+        ],
+        &[
+            "set",
+            "--project",
+            &owner.id,
+            "--file",
+            policy.to_str().unwrap(),
+        ],
+    );
     for (extra, expected) in [
         (&["--tool", "codex", "--starting"][..], json!(true)),
         (
@@ -306,7 +335,8 @@ async fn hs2_sbq3t8_http_cli_and_mcp_share_grants_access_and_audit() {
         "hotsheet_targets",
         json!({"action":"access_check","checkout":owner.id,"target_id":TARGET,
             "for_actor":"worker-1","target_action":"sessions_manage",
-            "session":{"tool":"codex","running":1,"starting":true}}),
+            "session":{"tool":"codex","running":1,"starting":true},
+            "load":{"target_sessions":1,"machine_sessions":1,"tool_sessions":1}}),
     );
     assert_eq!(decision["allowed"], true);
     for action in ["grant_add", "grant_revoke", "grant_create"] {
@@ -431,20 +461,21 @@ async fn hs2_sbq3t8_http_cli_and_mcp_share_grants_access_and_audit() {
         [
             (1, "grant_create".to_owned(), "granted".to_owned()),
             (2, "grant_create".to_owned(), "granted".to_owned()),
-            (3, "grant_revoke".to_owned(), "revoked".to_owned()),
+            (3, "policy_set".to_owned(), "changed".to_owned()),
+            (4, "grant_revoke".to_owned(), "revoked".to_owned()),
         ]
     );
     let (status, page) = api(
         router.clone(),
         "GET",
-        &format!("{audit}?after=2"),
+        &format!("{audit}?after=3"),
         Value::Null,
         true,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["entries"].as_array().unwrap().len(), 1);
-    assert_eq!(page["cursor"], 3);
+    assert_eq!(page["cursor"], 4);
     assert_eq!(
         api(
             router,

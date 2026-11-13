@@ -1,14 +1,20 @@
 //! HS2-4J6V46: shared target declarations and reviewed machine-local bindings.
 //! Network, provider metadata, clock and randomness remain injected boundaries.
 
+mod approvals;
 mod audit;
 mod bindings;
 pub(crate) mod contract;
 mod grants;
 mod manifest;
+mod policy;
 mod storage;
 mod workflow;
 
+pub use approvals::{
+    APPROVAL_PENDING_MS, APPROVAL_VALID_MS, Approval, ApprovalRegistry, ApprovalState,
+    MAX_APPROVALS,
+};
 pub use audit::{
     AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, MAX_AUDIT_PAGE,
     MAX_AUDIT_SEGMENT_BYTES,
@@ -22,6 +28,12 @@ pub use grants::{
     destination_key,
 };
 pub use manifest::ManifestStore;
+pub use policy::{
+    AccountPolicy, ApprovalGate, ApprovalPolicy, MAX_POLICY_ACCOUNTS, MAX_POLICY_SESSIONS,
+    MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PolicyBody, PolicyDenial,
+    PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SetPolicy,
+    Speculation, TargetPolicy, ToolPolicy, WindDown,
+};
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 
 #[derive(Debug, thiserror::Error)]
@@ -90,10 +102,14 @@ impl Transaction<'_> {
 }
 
 #[cfg(test)]
+mod approval_tests;
+#[cfg(test)]
 mod audit_tests;
 #[cfg(test)]
 mod binding_tests;
 #[cfg(test)]
 mod grant_tests;
+#[cfg(test)]
+mod policy_tests;
 #[cfg(test)]
 mod tests;

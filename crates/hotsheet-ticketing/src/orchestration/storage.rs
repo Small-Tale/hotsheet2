@@ -24,8 +24,13 @@ impl Storage {
         &self.anchor
     }
     pub(crate) fn shared(checkout: &Path) -> Self {
+        Self::shared_named(checkout, ".hotsheet2/orchestration.json")
+    }
+
+    /// HS2-YCJDEB: sibling checked-in files beside the target manifest.
+    pub(crate) fn shared_named(checkout: &Path, relative: &str) -> Self {
         Self {
-            path: checkout.join(".hotsheet2/orchestration.json"),
+            path: checkout.join(relative),
             anchor: checkout.into(),
             private: false,
         }

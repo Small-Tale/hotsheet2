@@ -378,6 +378,10 @@ mod tests {
             "/checkouts/owner/orchestration/targets/id/grants/grant",
             "/checkouts/owner/orchestration/targets/id/access",
             "/checkouts/owner/orchestration/audit",
+            // HS2-YCJDEB: a dry run reads this machine's grants; approvals live here.
+            "/checkouts/owner/orchestration/policy/dry-run",
+            "/checkouts/owner/orchestration/approvals",
+            "/checkouts/owner/orchestration/approvals/id",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

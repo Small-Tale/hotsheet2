@@ -1,5 +1,6 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
-//! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime.
+//! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
+//! HS2-YCJDEB the throughput policy and approvals.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -20,6 +21,10 @@ enum OrchestrationCmd {
     Target(TargetArgs),
     /// List, issue, revoke and check delegated authority over one bound target.
     Grant(GrantArgs),
+    /// Show, set, validate and dry-run the checked-in throughput policy.
+    Policy(PolicyArgs),
+    /// List and answer decisions the policy will not take without a person.
+    Approval(ApprovalArgs),
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -31,6 +36,74 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 100)]
         limit: u64,
     },
+}
+#[derive(Args)]
+struct PolicyArgs {
+    /// Registered owning checkout id.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: PolicyCmd,
+}
+#[derive(Subcommand)]
+enum PolicyCmd {
+    /// The stored policy and its revision; an absent policy reads as disabled.
+    Show,
+    /// Replace the policy from a JSON file (`-` for stdin). Re-running with the same
+    /// content changes nothing. A person runs this; an AI actor is refused.
+    Set {
+        #[arg(long)]
+        file: String,
+        /// Require this stored revision; omitted, the current one is read first.
+        #[arg(long)]
+        expected_revision: Option<String>,
+    },
+    /// Report every problem in a policy file, or in the stored policy. Writes nothing.
+    Validate {
+        #[arg(long)]
+        file: Option<String>,
+    },
+    /// What a policy would let the orchestrator do per declared target, and whether
+    /// an actor's grants agree. Writes nothing and contacts no target.
+    DryRun {
+        #[arg(long)]
+        file: Option<String>,
+        #[arg(long)]
+        actor: Option<String>,
+    },
+}
+#[derive(Args)]
+struct ApprovalArgs {
+    /// Registered owning checkout id.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: ApprovalCmd,
+}
+#[derive(Subcommand)]
+enum ApprovalCmd {
+    /// Requests for this project with their state.
+    List,
+    /// Allow one pending request; the approval is used once, within an hour.
+    Approve { approval_id: String },
+    /// Refuse one pending request.
+    Deny { approval_id: String },
+}
+/// A policy body from a file, or stdin for `-`.
+fn policy_file(path: &str) -> Result<Value> {
+    let text = if path == "-" {
+        std::io::read_to_string(std::io::stdin())?
+    } else {
+        std::fs::read_to_string(path)
+            .map_err(|error| anyhow::anyhow!("cannot read policy file: {error}"))?
+    };
+    let mut value: Value =
+        serde_json::from_str(&text).map_err(|_| anyhow::anyhow!("policy file must be JSON"))?;
+    // Accept either a bare policy body or the `show` output, so show > edit > set works.
+    if let Some(policy) = value.get_mut("policy").map(Value::take) {
+        value = policy;
+    }
+    Ok(value)
 }
 #[derive(Args)]
 struct GrantArgs {
@@ -89,6 +162,20 @@ enum GrantCmd {
         /// The check concerns starting one more session.
         #[arg(long)]
         starting: bool,
+        /// HS2-YCJDEB policy caps: orchestrator sessions already on the target.
+        #[arg(long, default_value_t = 0)]
+        target_sessions: u32,
+        /// Orchestrator sessions already on the target's machine.
+        #[arg(long, default_value_t = 0)]
+        machine_sessions: u32,
+        /// Orchestrator sessions already using the tool.
+        #[arg(long, default_value_t = 0)]
+        tool_sessions: u32,
+        /// The tool account the session would run under.
+        #[arg(long)]
+        account: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        account_sessions: u32,
     },
 }
 /// `30m`, `8h`, `14d`, or bare seconds.
@@ -173,7 +260,17 @@ fn grant_route(project: &str, command: GrantCmd) -> Result<(&'static str, String
             model,
             running,
             starting,
+            target_sessions,
+            machine_sessions,
+            tool_sessions,
+            account,
+            account_sessions,
         } => {
+            // A session check always states its load; zeros mean an idle machine.
+            let load = tool.as_ref().map(|_| {
+                json!({"target_sessions":target_sessions,"machine_sessions":machine_sessions,
+                    "tool_sessions":tool_sessions,"account":account,"account_sessions":account_sessions})
+            });
             let session = match tool {
                 Some(tool) => {
                     json!({"tool":tool,"model":model,"running":running,"starting":starting})
@@ -186,7 +283,7 @@ fn grant_route(project: &str, command: GrantCmd) -> Result<(&'static str, String
             (
                 "POST",
                 format!("{}/access", prefix(&target_id)),
-                json!({"actor_id":actor,"action":action,"session":session}),
+                json!({"actor_id":actor,"action":action,"session":session,"load":load}),
             )
         }
     })
@@ -362,6 +459,54 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let request = grant_route(&owner_id, arguments.command)?;
             (owner_id, request)
         }
+        OrchestrationCmd::Policy(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let prefix = format!("/checkouts/{owner_id}/orchestration/policy");
+            let proposal = |file: Option<String>, actor: Option<String>| -> Result<Value> {
+                Ok(json!({
+                    "policy": file.as_deref().map(policy_file).transpose()?,
+                    "actor_id": actor,
+                }))
+            };
+            let request = match arguments.command {
+                PolicyCmd::Show => ("GET", prefix, Value::Null),
+                PolicyCmd::Set {
+                    file,
+                    expected_revision,
+                } => (
+                    "PUT",
+                    prefix,
+                    // `expected_revision` is filled in below when it was omitted.
+                    json!({"policy": policy_file(&file)?, "expected_revision": expected_revision,
+                        "read_revision": expected_revision.is_none()}),
+                ),
+                PolicyCmd::Validate { file } => {
+                    ("POST", format!("{prefix}/validate"), proposal(file, None)?)
+                }
+                PolicyCmd::DryRun { file, actor } => {
+                    ("POST", format!("{prefix}/dry-run"), proposal(file, actor)?)
+                }
+            };
+            (owner_id, request)
+        }
+        OrchestrationCmd::Approval(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let prefix = format!("/checkouts/{owner_id}/orchestration/approvals");
+            let request = match arguments.command {
+                ApprovalCmd::List => ("GET", prefix, Value::Null),
+                ApprovalCmd::Approve { approval_id } => (
+                    "POST",
+                    format!("{prefix}/{approval_id}"),
+                    json!({"approve": true}),
+                ),
+                ApprovalCmd::Deny { approval_id } => (
+                    "POST",
+                    format!("{prefix}/{approval_id}"),
+                    json!({"approve": false}),
+                ),
+            };
+            (owner_id, request)
+        }
         OrchestrationCmd::Audit {
             project,
             after,
@@ -398,8 +543,23 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 "provider configuration is unavailable; pass -C <configured-host-source> containing the project's existing providers.json; no source was created"
             );
         }
-        OrchestrationRuntime::live(&home, registry, ProviderConfigRegistry::new(config))
-            .and_then(|runtime| runtime.request_now(method, &path, &body))
+        OrchestrationRuntime::live(&home, registry, ProviderConfigRegistry::new(config)).and_then(
+            |runtime| {
+                // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
+                // repeated setup run is a no-op and a concurrent edit still conflicts.
+                if body.get("read_revision").is_some() {
+                    let read = body["read_revision"] == true;
+                    if let Some(object) = body.as_object_mut() {
+                        object.remove("read_revision");
+                    }
+                    if read {
+                        body["expected_revision"] =
+                            runtime.request_now("GET", &path, &Value::Null)?["revision"].take();
+                    }
+                }
+                runtime.request_now(method, &path, &body)
+            },
+        )
     };
     let output = result.map_err(|error| anyhow::anyhow!("{}: {}", error.code(), error))?;
     println!("{}", serde_json::to_string_pretty(&output)?);

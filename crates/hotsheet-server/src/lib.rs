@@ -2059,6 +2059,26 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/audit",
             get(routes::orchestration::read),
         )
+        .route(
+            "/checkouts/{owner}/orchestration/policy",
+            get(routes::orchestration::read).put(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/policy/validate",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/policy/dry-run",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/approvals",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/approvals/{approval}",
+            post(routes::orchestration::write),
+        )
         // A client may supervise this process but never owns it: restart is accepted only
         // after mutation admission closes and all server-owned work is proven quiescent.
         .route("/lifecycle/quiescence", get(lifecycle_quiescence))

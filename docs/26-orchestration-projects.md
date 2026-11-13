@@ -1,9 +1,10 @@
 # 26. Orchestration Projects
 
-> **Status: Partial (HS2-4J6V46, HS2-SBQ3T8).** Shared declarations, reviewed machine
-> bindings, delegated grants with their audit journal (§26.7), and the headless CLI,
-> authenticated HTTP and MCP adapters are implemented and covered by automated tests;
-> the OpenAPI contract describes them. Workspace UI, ticket relationships and dispatch
+> **Status: Partial (HS2-4J6V46, HS2-SBQ3T8, HS2-YCJDEB).** Shared declarations,
+> reviewed machine bindings, delegated grants with their audit journal (§26.7), the
+> throughput policy with approvals (§26.8), and the headless CLI, authenticated HTTP
+> and MCP adapters are implemented and covered by automated tests; the OpenAPI
+> contract describes them. Workspace UI, ticket relationships and dispatch
 > remain design work under their separate implementation tickets.
 
 ## 26.1 Boundary and existing foundations
@@ -304,8 +305,9 @@ refused at the concurrency cap, while stopping or winding one down is never bloc
 by the cap. The denial reported is the closest one: `no_grant`,
 `action_not_granted`, `destination_changed`, `grant_revoked`, `grant_expired`,
 `session_scope_required`, `tool_not_granted`, `model_not_granted`,
-`concurrency_exceeded`. `policy_denied` and `approval_required` are reserved for the
-throughput policy (HS2-YCJDEB); both the policy and a grant must allow an action.
+`concurrency_exceeded`. A granted action is then put to the throughput policy
+(§26.8), which can answer `policy_denied` or `approval_required` with a `detail`
+code; both the policy and a grant must allow an action.
 
 `access` is a side-effect-free check against the cached binding. It makes no
 request, reads no secret, writes no audit entry, and is never authority: the action
@@ -358,3 +360,136 @@ All four require the bearer and literal loopback at the serving machine for ever
 device role. MCP `hotsheet_targets` adds the read-only actions `grant_list`,
 `access_check` (with `for_actor`, `target_action` and an optional `session`) and
 `audit`. Errors use 403 with the denial code or `forbidden`.
+
+## 26.8 Orchestrated throughput and its policy (HS2-YCJDEB)
+
+Decided with the maintainer on 2026-11-03 and extended on 2026-11-04.
+
+### Design
+
+- **Goal.** Orchestration creates AI tool sessions as appropriate and maximizes
+  throughput across target projects, balancing priority, urgency, compute, resources
+  such as RAM, and AI tool capacity. Tools may be mixed across targets. A started
+  session appears in the bottom drawer of the server that hosts it.
+- **Automatic within a policy.** Inside the policy the orchestrator starts, refills
+  and winds down sessions on its own and logs every decision. Anything outside it
+  asks a person first.
+- **Roles are unchanged.** Started sessions join the existing dispatcher, integrator
+  and worker roles. The orchestrator decides how many sessions run where; the
+  target's dispatcher still assigns each exact ticket, and worktree isolation with
+  integrator handoff stays the only path to the shipping branch.
+- **Tool capacity is configured plus observed.** The policy holds per-tool and
+  per-account limits; observed limit signals are HS2-AHG7HW.
+- **Central plan, local execution.** The orchestration project's server plans
+  placement. Each target's server starts the session, enforces its own machine
+  limits, and may refuse or reduce a request (HS2-J8PRTV).
+- **Waiting is a cost.** Time blocked on CI, deployments, reviews and provider limits
+  is minimized by doing unrelated work and, where the policy allows, by building
+  ahead on a prerequisite whose gate is still pending (HS2-2SJPCH, HS2-JSF985).
+
+This reverses the earlier decision in [05](05-ai-tool-plugins.md) to keep
+orchestration prompt-driven; the reversal and its reason are recorded there.
+
+### Policy file
+
+`.hotsheet2/orchestration-policy.json` is checked in beside the target manifest:
+`schema_version: 1`, an opaque ULID `revision`, and a `policy` object. A missing
+file reads as disabled and is never created by a read. Every omitted section takes
+its default, a newer version is an explicit unsupported-version error and is never
+overwritten, and a stored policy that no longer validates is treated as corrupt
+rather than evaluated. All quantities are integers: megabytes, percent and cents.
+
+| Section       | Fields and defaults                                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                      |
+| `tools[]`     | `tool`, `max_sessions` (1 to 64), `weight` 50 (1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`.      |
+| `targets[]`   | `target_id`, `enabled` true, `actions` (the grant action names), `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides. |
+| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                          |
+| `approval`    | `required_for`: any of `tickets_write`, `work_start`, `validation_run`, `session_start`, `session_stop`, `role_session_start`, `provisional_dispatch`.                   |
+| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`.   |
+
+A target the policy does not list, or lists as disabled, is not permitted. A tool
+listed for a target must be configured under `tools`. A tool configured with
+accounts runs only under one of them.
+
+`validate` reports every problem at once with a stable code and the tool, account or
+target it concerns. Conflicts are errors: a target cap above its machine cap, an
+account cap above its tool cap, a target tool that is not configured, tools without
+`sessions_manage` or the reverse, duplicates, and a target the manifest does not
+actively declare. `set` refuses an invalid policy, replaces the file at the expected
+revision, and is a no-op for identical content. Like grants, it is a person's act:
+an `ai` actor is refused, because the governed session must not loosen its own
+bounds.
+
+### Place in the authorization gate
+
+`authorize` consults the policy only for an action a grant already allows, so a
+missing grant is always reported as such and no approval request is filed for it.
+
+- **No policy file.** Explicit ticket, gate and validation actions are governed by
+  grants alone, so a project that never enables throughput is unaffected.
+  `sessions_manage` is denied `policy_absent`: nothing automatic runs without a
+  policy. An unreadable or corrupt policy denies everything.
+- **Denials** are `policy_denied` with a `detail`: `policy_target_not_permitted`,
+  `policy_target_disabled`, `policy_action_not_permitted`,
+  `policy_tool_not_permitted`, `policy_model_not_permitted`, `policy_load_unknown`,
+  `policy_target_cap`, `policy_machine_cap`, `policy_tool_cap`,
+  `policy_account_not_permitted`, `policy_account_cap`,
+  `policy_speculation_not_allowed`. The audit entry records the detail.
+- **Caps.** A session start states the current load (sessions on the target, on its
+  machine, on the tool and on the account). A start without it is denied, and each
+  cap denies exactly at its bound. Stopping or winding down needs no headroom.
+- **Resource floors** are not evaluated here. The scheduler and the target's own
+  admission check compare them with the target's capacity report (HS2-J8PRTV,
+  HS2-ECWG50).
+
+### Approvals
+
+When the policy lists a decision under `approval.required_for`, `authorize` needs an
+operation id and answers `approval_required` until a person approves that exact
+`(target, actor, gate, operation id)`. The first request files one `pending` record
+in `${HOTSHEET_HOME}/orchestration-approvals.json`; asking again adds nothing. An
+approval is consumed by the one call it allows and must be used within an hour; a
+denial is final for that operation; an unanswered request lapses after a day. Reads
+and gate observation never wait for a person. A provisional dispatch asks under
+`provisional_dispatch` first. Answers are audited; an `ai` actor cannot give one.
+
+### Dry run
+
+`dry-run` evaluates a proposed policy, or the stored one, against every actively
+declared target and reports per action whether the policy allows it, needs approval
+or denies it and why. With an actor id it adds that actor's grant decision and an
+`automatic` flag for actions both would allow right now. It writes nothing, files no
+approval request and contacts no target, so "the policy allows it, the grant does
+not" is visible before anything is enabled.
+
+### Headless surface
+
+```sh
+hotsheet-cli -C <configured-host-source> orchestration policy show --project <owner-checkout-id>
+hotsheet-cli -C <configured-host-source> orchestration policy validate --project <owner-checkout-id> --file policy.json
+hotsheet-cli -C <configured-host-source> orchestration policy dry-run --project <owner-checkout-id> --file policy.json --actor <worker-id>
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy set --project <owner-checkout-id> --file policy.json
+hotsheet-cli -C <configured-host-source> orchestration approval list --project <owner-checkout-id>
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration approval approve <approval-id> --project <owner-checkout-id>
+```
+
+`--file` takes a policy body or the output of `policy show`, and `-` reads stdin.
+`policy set` without `--expected-revision` reads the current revision first, so a
+repeated setup run changes nothing while a concurrent edit still conflicts.
+`grant check` accepts `--target-sessions`, `--machine-sessions`, `--tool-sessions`,
+`--account` and `--account-sessions` to state the load of a session check.
+
+| Route                                                   | Methods and purpose                                            |
+| ------------------------------------------------------- | -------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/policy`               | GET stored policy; PUT replace at the expected revision        |
+| `/checkouts/{owner}/orchestration/policy/validate`      | POST every problem in a proposed or the stored policy          |
+| `/checkouts/{owner}/orchestration/policy/dry-run`       | POST per-target outcome; machine-local because it reads grants |
+| `/checkouts/{owner}/orchestration/approvals`            | GET requests with their state; machine-local                   |
+| `/checkouts/{owner}/orchestration/approvals/{approval}` | POST `{approve}`; machine-local                                |
+
+The policy itself is ordinary authenticated project data, like the target
+declarations. MCP `hotsheet_targets` adds the read-only actions `policy_show`,
+`policy_validate`, `policy_dry_run` and `approval_list`; setting the policy and
+answering an approval are a person's CLI or HTTP actions. The workspace editor for
+the same policy is part of HS2-HSMH2Q.
