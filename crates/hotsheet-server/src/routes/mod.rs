@@ -14,6 +14,7 @@ pub(crate) mod guidance;
 pub(crate) mod mcp_presence;
 pub(crate) mod notifiers;
 pub(crate) mod orchestration;
+pub(crate) mod orchestration_sessions;
 pub(crate) mod permissions;
 pub(crate) mod project_tools;
 pub(crate) mod providers;

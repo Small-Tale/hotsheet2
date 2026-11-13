@@ -2277,6 +2277,11 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
   orchestrator starts join the same dispatcher, integrator and worker roles, the
   dispatcher still assigns each exact ticket, and an ordinary project without an
   orchestration policy stays prompt-driven.
+  **Built (HS2-GDJXGZ).** Starting, listing, safe-point checks, winding down and a
+  person's takeover of those sessions are in [26](26-orchestration-projects.md)
+  §26.16. A session still launches through the plugin's interactive launch described
+  in §5.4 and takes up its role by running the same role skill a person would invoke;
+  the orchestrator decides only that it starts and when it may stop.
 
 - **Telemetry/cost attribution & the Announcer** — defer (they ride Claude's OTLP
   stream; port later as their own tickets, tool-agnostic where possible).

@@ -432,6 +432,14 @@ mod tests {
             "/checkouts/owner/orchestration/readiness/ready",
             "/checkouts/owner/orchestration/readiness/refresh",
             "/checkouts/owner/orchestration/readiness/remove",
+            // HS2-GDJXGZ: session records, starts and stops pass this machine's grants.
+            "/checkouts/owner/orchestration/sessions",
+            "/checkouts/owner/orchestration/sessions/id",
+            "/checkouts/owner/orchestration/sessions/id/sync",
+            "/checkouts/owner/orchestration/sessions/id/safe-point",
+            "/checkouts/owner/orchestration/sessions/id/stop",
+            "/checkouts/owner/orchestration/sessions/id/takeover",
+            "/checkouts/owner/orchestration/session-sync",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

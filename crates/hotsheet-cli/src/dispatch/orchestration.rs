@@ -2,7 +2,8 @@
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
 //! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
 //! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity; HS2-J8PRTV target capacity and
-//! admission; HS2-WN0MXZ validation steps; HS2-5JBYPV CI and deployment gates of runs.
+//! admission; HS2-WN0MXZ validation steps; HS2-5JBYPV CI and deployment gates of runs;
+//! HS2-GDJXGZ orchestrator-owned sessions.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -12,6 +13,7 @@ use serde_json::{Value, json};
 use super::Ctx;
 use super::orchestration_capacity::{self as capacity, Planned};
 use super::orchestration_readiness as readiness;
+use super::orchestration_sessions as sessions;
 use super::orchestration_validation as validation;
 use crate::Cmd;
 
@@ -30,6 +32,9 @@ enum OrchestrationCmd {
     Ticket(TicketArgs),
     /// Dispatch work to an exact target ticket and supervise the run.
     Run(RunArgs),
+    /// Start, list, sync, stop and take over the AI sessions this project owns on the
+    /// servers that host its targets.
+    Session(sessions::SessionArgs),
     /// Link the CI gate of a target commit to a run, read gates, and request a deployment.
     Gate(GateArgs),
     /// Show, set, validate and dry-run the checked-in throughput policy.
@@ -1216,6 +1221,7 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let request = run_route(&owner_id, arguments.command);
             (owner_id, request)
         }
+        OrchestrationCmd::Session(arguments) => sessions::route(arguments)?,
         OrchestrationCmd::Validation(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = validation::route(&owner_id, arguments)?;

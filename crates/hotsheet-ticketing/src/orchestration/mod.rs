@@ -14,6 +14,7 @@ mod readiness;
 mod reconcile;
 mod run_events;
 mod runs;
+mod sessions;
 mod storage;
 mod tool_capacity;
 mod validation;
@@ -72,6 +73,13 @@ pub use runs::{
     DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunControl, RunError, RunObservation,
     RunPause, RunRegistry, RunState, RunTarget, RunTicket, RunTransition, RunUnreachable,
     RunUpdate,
+};
+pub use sessions::{
+    HostedRef, HostedSession, HostedSessionRegistry, MAX_HOSTED_SESSIONS, MAX_SESSION_HISTORY,
+    MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession, OrchestratedSession,
+    SafePoint, SafePointBlocker, SafePointFacts, SessionControl, SessionError, SessionOrigin,
+    SessionOwner, SessionRegistry, SessionRole, SessionState, SessionTransition, SessionUpdate,
+    StopRequest, decide_safe_point, decide_stop, session_label,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,
@@ -134,6 +142,9 @@ pub enum OrchestrationError {
     /// HS2-42TARA: the plan step is unknown, or its work is not ready to dispatch.
     #[error("orchestration readiness refused the request: {}", .0.code())]
     Readiness(ReadinessError),
+    /// HS2-GDJXGZ: the orchestrator-owned session does not allow this request.
+    #[error("orchestration session refused the request: {}", .0.code())]
+    Session(SessionError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -162,6 +173,7 @@ impl OrchestrationError {
             Self::Validation(error) => error.code(),
             Self::Gate(error) => error.code(),
             Self::Readiness(error) => error.code(),
+            Self::Session(error) => error.code(),
         }
     }
 }
@@ -260,6 +272,8 @@ mod reconcile_tests;
 mod run_event_tests;
 #[cfg(test)]
 mod run_tests;
+#[cfg(test)]
+mod session_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

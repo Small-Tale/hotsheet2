@@ -11,7 +11,8 @@
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; provisional dispatch is HS2-2SJPCH and HS2-JSF985),
-> and the headless CLI,
+> orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
+> HS2-GDJXGZ), and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI and the scheduler remain design
 > work under their separate implementation tickets.
@@ -681,7 +682,7 @@ The hosted claim route is ordinary authenticated project data under the caller's
 device role, like the hosted ticket route. MCP `hotsheet_targets` adds
 `run_dispatch`, `run_list`, `run_show`, `run_renew`, `run_cancel` and `run_sync`.
 Reconciliation after a restart is §26.14, and starting the sessions that do the
-work is HS2-GDJXGZ.
+work is §26.16.
 
 ### Status, events and following targets (HS2-7QHWHJ)
 
@@ -700,9 +701,9 @@ journal per owning checkout, `${HOTSHEET_HOME}/orchestration-run-events/`, with 
 same sequence cursor, rotation and gap reporting as the audit journal. Event kinds
 are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable`,
 `cancel_requested`, `validation` (§26.12), `gate` (§26.13), the recovery kinds of
-§26.14 (`reconciled`, `paused`, `resumed`, `handoff`, `corrected`) and `readiness`
-(§26.15, about a plan step rather than a run), with `session` reserved for the ticket
-that adds it. Each event says whether the orchestrator did it or it was learned
+§26.14 (`reconciled`, `paused`, `resumed`, `handoff`, `corrected`), `readiness`
+(§26.15, about a plan step rather than a run) and `session` (§26.16). Each event says
+whether the orchestrator did it or it was learned
 from the target, and carries identifiers, states and codes only.
 
 - **Ordering.** Events are recorded in arrival order and keep the time the fact was
@@ -753,7 +754,7 @@ MCP `hotsheet_targets` adds `run_status` and `run_events`.
 
 The orchestrator plans placement, and each target's own server decides whether a
 session may start on its machine. This section covers what a machine reports about
-itself and how it answers. Starting the session is HS2-GDJXGZ; the scheduler that
+itself and how it answers. Starting the session is §26.16; the scheduler that
 asks is HS2-ECWG50.
 
 ### Capacity snapshot
@@ -864,7 +865,7 @@ of the session cap and the RAM room. The decision is a pure function
 On the orchestrating side the question passes the gate (§26.7) as `sessions_manage`
 for the tool and model. It starts nothing, so it carries no load and files no
 approval; grant and policy must still permit the tool and model on the target. The
-start itself passes the gate again with its load and any approval (HS2-GDJXGZ).
+start itself passes the gate again with its load and any approval (§26.16).
 Reading capacity passes the gate as `gates_observe`. Both are recorded in the audit
 journal, including a target's failure code.
 
@@ -1753,3 +1754,224 @@ Milestones and wider cross-project planning stay with their own tickets: the
 milestone model (HS2-8T71YW, HS2-A820C1, HS2-PX50E8, HS2-6E0H3X), cross-project
 planning (HS2-HX5MH3) and aggregate views (HS2-42B2FD). A milestone as a prerequisite
 kind is HS2-2CR7H3, and the workspace view of the plan is HS2-15G5T4.
+
+## 26.16 Orchestrator-owned sessions (HS2-GDJXGZ)
+
+The orchestrator starts AI sessions on the servers that host its targets, lists the
+ones it owns, asks whether one may be wound down, and stops it. This section is those
+four operations and what a person can do to any such session. Deciding how many
+sessions run where is the scheduler's (HS2-ECWG50).
+
+A session is started by the machine that hosts the target, through the same AI
+terminal launch its bottom drawer uses: the plugin's interactive launch with the
+chosen tool, model and effort, in the target checkout. It is not a second launch
+path. The session therefore appears in that server's drawer like any other AI
+terminal, with the permission routing, worker id and claim release every AI terminal
+has ([05](05-ai-tool-plugins.md) §5.4).
+
+### Session record and states
+
+The orchestrating machine keeps its sessions in
+`${HOTSHEET_HOME}/orchestration-sessions.json` (mode 0600, version 1, at most 1,024;
+the oldest finished session is forgotten first and an active one never is). A session
+has a `session_id`, the caller's `operation_id`, the target, the `role`, the tool,
+model, effort and account, the run it was started for, the session it `replaces`, an
+`owner`, a `paused` flag, where its host says it lives (`hosted`: the server id, the
+terminal id and the worker id its claims carry), and a history of at most 32
+transitions that always keeps the first. History holds times, states, reason codes and
+actor ids only.
+
+| State       | Meaning                                                     | May become                     |
+| ----------- | ----------------------------------------------------------- | ------------------------------ |
+| `requested` | Recorded before the host was asked                          | `running`, `stopped`, `failed` |
+| `running`   | The host started it                                         | `stopped`, `lost`              |
+| `stopped`   | Wound down at a safe point, or stopped by a person          | nothing                        |
+| `failed`    | The host refused the start, or it could not be made         | nothing                        |
+| `lost`      | The host no longer has it and nobody stopped it: it crashed | nothing                        |
+
+Every other edge is refused with `session_invalid_transition`, and a finished session
+refuses any change with `session_not_active`. A finished session never restarts. Its
+replacement is a new session with its own operation id that names it in `replaces`,
+and only a session that is gone can be replaced.
+
+`requested` and `running` sessions count as load for the policy's caps (§26.8): on
+the target, on the target's machine, on the tool and on the account. A session a
+person took over still runs, so it still counts until it stops.
+
+### Starting
+
+1. The request is checked against this machine's records first. The same operation id
+   returns the same session, whatever became of it, and never launches twice. The same
+   id for another target, tool, model, effort, role, account or run is a conflict. A
+   target has at most one active `dispatcher` and one active `integrator` session
+   (`session_role_active`). None of these asks a person or a target anything.
+2. The start passes the gate (§26.7) as `sessions_manage` for the tool and model, with
+   the load counted from the records and the operation id. A `dispatcher` or
+   `integrator` start asks under `role_session_start` when the policy lists it, a
+   worker under `session_start`. A start that is being repeated does not count against
+   its own caps.
+3. The session is recorded as `requested`, and the target's machine is asked with the
+   policy's machine limits for that target.
+4. The host reserves a terminal id for the operation id in
+   `${HOTSHEET_HOME}/orchestration-hosted-sessions.json`, asks its own admission
+   (§26.10), checks its session cap again on a fresh terminal listing, launches, saves
+   the label and marks the reservation started. A reservation that never launched is
+   forgotten, so the same request can be made again.
+5. The host's answer makes the session `running`. A refusal makes it `failed` with the
+   host's reason code in its history (an admission reason such as `below_ram_floor`,
+   `session_cap_reached`, or a session code) and the caller gets
+   `session_admission_refused`, `session_role_active`, `session_start_failed` or
+   `session_host_unavailable`. A failure that may be transient leaves the session
+   `requested`, and the same request repeats it.
+
+**Label.** The host names the terminal tab `<orchestration project>: run <last eight
+characters of the run id>`, or `<orchestration project>: <role>` when the session
+serves no single run. The label is the saved tab name every client of that server
+already shows ([06](06-clients.md), HS2-89FPV1), so the drawer needs no new component. A Playwright
+test of the real drawer is HS2-KTHJN2; the link from the orchestration workspace is
+HS2-HSMH2Q.
+
+**Roles.** A session joins the target's existing role model
+([05](05-ai-tool-plugins.md) §5.9.1). After the launch the host pushes one prompt
+that names the role skill (`hotsheet-worker`, `hotsheet-dispatcher` or
+`hotsheet-integrator`) and reports `role_prompt` as `delivered`, `unsupported` (the
+tool cannot receive a message from its host) or `failed`. The host also refuses a
+`dispatcher` or `integrator` start while the target's coordination pool shows a live
+session in that role, whoever started it. Confirming that the session registered with
+the pool, and retrying a prompt sent before the tool was ready, is HS2-2DPGDY. The
+target's dispatcher still assigns each exact ticket.
+
+### Safe points and winding down
+
+Only the hosting machine can say whether a session is at a safe point. It establishes
+five facts, and anything it cannot establish counts against the session:
+
+| Blocker                               | When                                                                                                                                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `mid_turn`                            | The tool is in the middle of a turn                                                                                                       |
+| `held_claim`                          | A live ticket claim in one of the checkout's git stores is held under the session's worker id                                             |
+| `uncommitted_changes`                 | A worktree of the checkout has uncommitted changes, untracked files included                                                              |
+| `pending_handoff`                     | An assignment of the session in the target's coordination pool is not `done`; a dispatcher or integrator answers for every unfinished one |
+| `session_unknown`                     | The terminal host could not be asked                                                                                                      |
+| `claims_unknown`                      | A ticket store could not be read                                                                                                          |
+| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read                                     |
+
+The answer lists every blocker at once in that order, with the counts it found. A
+session whose process is already gone has nothing left to interrupt and is safe. The
+decision is a pure function (`decide_safe_point`) of the facts.
+
+`uncommitted_changes` looks at every worktree of the checkout, because a terminal
+cannot yet be tied to the worktrees its session created. One session's unfinished
+work, or a person's edits, holds every orchestrator session of that checkout until it
+is committed. Narrowing this to a session's own worktrees is HS2-TRP2MJ.
+
+A stop is decided by `decide_stop` from who owns the session, who asks, whether they
+force it, and the safe point:
+
+- The orchestrator stops only a session it still owns and only at a safe point. Not at
+  one, the answer is `session_not_safe` and nothing is stopped.
+- The hosting machine checks the safe point itself when the stop arrives. The
+  orchestrator's own belief that a session is idle is never enough.
+- `force` stops a session regardless. It is a person's explicit request; for any other
+  actor it is `session_force_not_permitted`. A person's stop without `force` respects
+  the safe point like the orchestrator's.
+- A stop the orchestrator makes passes the gate as `sessions_manage` and asks a person
+  first when the policy lists `session_stop`.
+
+The scheduler applies `wind_down.idle_minutes` and `keep_warm` (§26.8); this section
+only guarantees that a wind-down it asks for cannot interrupt work.
+
+### A person's session
+
+A person can stop, pause or take over any orchestrator-owned session. A takeover or a
+pause sets `owner` to `human`, a pause also sets `paused`, and neither is undone by
+the orchestrator. From then on the orchestrator leaves the session alone: a wind-down
+is refused `session_human_owned` on the orchestrating machine and again by the hosting
+machine, which keeps its own record of who owns each session.
+
+- These are a person's acts. An AI actor is refused, and MCP has no action for them.
+- A person needs no grant to act on a session of their own orchestration project. The
+  target is resolved freshly and the act is recorded in the audit journal (§26.7) as
+  `session_takeover`, `session_pause` or `session_stop` with its outcome.
+- A takeover changes this machine's record first, so it works while the target cannot
+  be reached. The answer then lists `target_session` in `unverified`.
+- A takeover made at the hosting machine is learned by the orchestrator when it next
+  syncs the session, or from the host's refusal of a wind-down.
+
+Pausing changes ownership only; the tool is not interrupted. Whether a person can hand
+a session back is an open decision (HS2-KR28FS). A host-side command and drawer
+control for takeover are HS2-6MNMVB.
+
+### Crashes
+
+`sync` reads a session from its host. A session the host started and no longer has
+becomes `lost` with `host_lost`; one the host has no record of at all becomes `lost`
+with `host_forgot`. A session still `requested` that the host never saw is left as it
+is, so its start can be repeated or it can be stopped, which ends it as
+`never_started`. While the terminal host cannot be asked nothing is concluded: the
+session keeps its state and its safe point lists `session_unknown`. A lost session
+frees its place under the caps, and its replacement is an ordinary start that names it.
+
+A session started for a run publishes each change to that run's event stream (§26.9)
+as kind `session`, with a reason code such as `session_running`, `session_lost` or
+`session_takeover`. `session_work` gives reconciliation (§26.14) the session a run
+recorded and the one still running for it; wiring it into `run_reconcile` is
+HS2-75Q254.
+
+### What the scheduler calls
+
+`OrchestrationRuntime` in `crates/hotsheet-cli/src/orchestration/sessions.rs`:
+
+| Function                                                          | Purpose                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `session_start(owner, StartSession, actor, tx)`                   | Start, or return the session the operation id already names      |
+| `session_list(owner, active)`                                     | This machine's records; contacts nothing                         |
+| `session_load(owner, target_id, tool, account)`                   | The load the policy's caps count                                 |
+| `session_sync(owner, session_id, actor, tx)` and `sessions_sync`  | Bring one record, or every unfinished one, in line with its host |
+| `session_safe_point(owner, session_id, actor, tx)`                | The host's safe-point answer with every blocker                  |
+| `session_stop(owner, session_id, StopSession, actor, tx)`         | Wind down at a safe point, or a person's stop                    |
+| `session_takeover(owner, session_id, TakeoverSession, actor, tx)` | A person takes it over, optionally pausing it                    |
+| `session_work(owner, run_id)`                                     | `Observed<ExternalWork>` for reconciliation                      |
+
+Reading and syncing pass the gate as `sessions_manage` continuing an existing decision:
+grants and policy limits apply, nothing starts, and nobody is asked.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration session start --project <owner> --target <target-id> \
+  --operation-id <retained-id> --tool <tool> [--model <model>] [--effort <effort>] \
+  [--account <account>] [--role worker|dispatcher|integrator] [--run <run-id>] \
+  [--replaces <session-id>]
+hotsheet-cli ... orchestration session list --project <owner> [--active]
+hotsheet-cli ... orchestration session show|safe-point <session-id> --project <owner>
+hotsheet-cli ... orchestration session sync [<session-id>] --project <owner>
+hotsheet-cli ... orchestration session stop <session-id> --project <owner>
+hotsheet-cli --actor-role human ... orchestration session stop <session-id> --project <owner> --force
+hotsheet-cli --actor-role human ... orchestration session takeover|pause <session-id> --project <owner>
+hotsheet-cli ... orchestration session list --checkout <checkout-id> [--safe-point] # this machine
+```
+
+| Route                                                                                 | Methods and purpose                                                                                   |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/sessions`                                           | GET records (`?active=true`); POST start; machine-local                                               |
+| `/checkouts/{owner}/orchestration/sessions/{session}`                                 | GET one record; machine-local                                                                         |
+| `/checkouts/{owner}/orchestration/sessions/{session}/{sync,safe-point,stop,takeover}` | POST supervise; machine-local                                                                         |
+| `/checkouts/{owner}/orchestration/session-sync`                                       | POST sync every unfinished session; machine-local                                                     |
+| `/checkouts/{checkout}/target-sessions`                                               | Hosted half: GET list (`?operation_id=`, `?safe_point=true`), POST start, DELETE stop, PATCH takeover |
+
+The hosted route is ordinary authenticated project data under the caller's device
+role, like the hosted ticket route. A read-only device can list and cannot start,
+stop or take over. A read-write device can start a session within the machine's
+admission limits (§26.10); whether hosting should need an explicit opt-in is an open
+decision (HS2-CRBR8X). Hosted refusals are answers with a reason code, not HTTP
+errors, so the code survives the reviewed transport. A peer that predates the route answers
+`target_peer_unsupported`. MCP `hotsheet_targets` adds `session_start`,
+`session_list`, `session_show`, `session_sync`, `session_safe_point` and
+`session_stop`; its role argument is `session_role`.
+
+A headless process owns no terminals. `hotsheet-cli` and the MCP core backend use the
+ordinary terminal routes of the Hot Sheet server running on the same machine, so a
+session they start still lands in that server's drawer, and without a running server a
+start fails closed. The start uses the drawer's launch path as it is, including where
+that path runs the tool's setup (HS2-WEFJV8).

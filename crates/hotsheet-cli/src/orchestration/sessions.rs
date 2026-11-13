@@ -1,0 +1,1786 @@
+//! HS2-GDJXGZ: AI sessions the orchestrator starts on the servers that host its targets.
+//!
+//! The hosted half runs where the target lives. It reserves a terminal for an
+//! operation id, asks its own admission, launches through the server's ordinary AI
+//! terminal path, labels the terminal with the orchestration project and run, and is
+//! the only side that can say whether a session is at a safe point. The orchestrating
+//! half passes the gate, keeps this machine's record of what it asked for, and never
+//! stops a session the host does not confirm as safe unless a person says so.
+use hotsheet_ticketing::actor::{ActorRole, MutationActor};
+use hotsheet_ticketing::ops;
+use hotsheet_ticketing::orchestration::{
+    AdmissionOutcome, AdmissionRequest, AuditOutcome, AuditRecord, DenialReason, ExternalWork,
+    HostedRef, HostedSession, HostedSessionRegistry, MachineLimits, NewHostedSession, NewSession,
+    Observed, OrchestratedSession, RunEvent, RunEventKind, RunEventSource, SafePoint,
+    SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin, SessionOwner,
+    SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate, StopRequest,
+    TargetAction, TargetDestination, TargetOpError, decide_safe_point, decide_stop,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::tickets::{encode, identifier, timestamp};
+use super::*;
+
+// ---- The terminal host ----
+
+/// What a host is asked to launch. The id is the terminal the host reserved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostLaunch {
+    pub session_id: String,
+    pub tool: String,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+    /// The drawer label: the orchestration project and its run or role.
+    pub label: String,
+}
+
+/// One live AI session as its host sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostSessionState {
+    pub session_id: String,
+    pub busy: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionHostError {
+    /// No terminal host could be reached.
+    Unavailable,
+    /// The host answered and would not launch or stop it.
+    Refused,
+}
+
+/// Whether the new session was asked to take up its role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RolePrompt {
+    Delivered,
+    /// The tool has no way to receive a message from its host.
+    Unsupported,
+    Failed,
+}
+
+/// The process that owns AI terminals. The server injects itself; a headless process
+/// reaches the server running on this machine; tests script one.
+pub trait SessionHost: Send + Sync {
+    /// Launch the tool in the checkout through the ordinary AI terminal path. Launching
+    /// an id that already runs attaches to it and starts nothing.
+    fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError>;
+
+    /// Every live AI session of this host. `None` when the host could not be asked, so
+    /// a failed listing never reads as "nothing is running".
+    fn sessions(&self, checkout: &Checkout) -> Option<Vec<HostSessionState>>;
+
+    fn stop(&self, checkout: &Checkout, session_id: &str) -> Result<(), SessionHostError>;
+
+    /// Ask the session to run its role skill.
+    fn join_role(&self, checkout: &Checkout, session_id: &str, role: SessionRole) -> RolePrompt;
+}
+
+/// No terminal host is reachable from this process.
+pub struct NoSessionHost;
+impl SessionHost for NoSessionHost {
+    fn start(&self, _: &Checkout, _: &HostLaunch) -> Result<(), SessionHostError> {
+        Err(SessionHostError::Unavailable)
+    }
+    fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
+        None
+    }
+    fn stop(&self, _: &Checkout, _: &str) -> Result<(), SessionHostError> {
+        Err(SessionHostError::Unavailable)
+    }
+    fn join_role(&self, _: &Checkout, _: &str, _: SessionRole) -> RolePrompt {
+        RolePrompt::Failed
+    }
+}
+
+/// The message that asks a started session to take up its role. It names the skill;
+/// the skill itself is the workflow.
+pub fn role_prompt_text(role: SessionRole) -> String {
+    format!(
+        "Hot Sheet orchestration started this session as a {} for this project. Run the `{}` skill and follow its workflow.",
+        role.code(),
+        role.skill()
+    )
+}
+
+/// A headless process hosts no terminals, so it uses the ordinary terminal routes of
+/// the Hot Sheet server running on this machine. Without one, nothing can be started.
+pub struct LocalServerSessions {
+    home: PathBuf,
+}
+impl LocalServerSessions {
+    pub fn new(home: impl Into<PathBuf>) -> Self {
+        Self { home: home.into() }
+    }
+
+    fn servers(&self) -> Vec<crate::external_launch::ServerInstance> {
+        crate::external_launch::running_servers(&self.home)
+    }
+
+    fn call(
+        server: &crate::external_launch::ServerInstance,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<Value, Option<u16>> {
+        let request = ureq::request(
+            method,
+            &format!("{}{path}", server.url.trim_end_matches('/')),
+        )
+        .set("X-Hotsheet-Secret", &server.secret)
+        .timeout(std::time::Duration::from_secs(60));
+        let response = match body {
+            Some(body) => request
+                .set("Content-Type", "application/json")
+                .send_string(&body.to_string()),
+            None => request.call(),
+        };
+        match response {
+            Ok(response) => {
+                Ok(serde_json::from_reader(response.into_reader()).unwrap_or(Value::Null))
+            }
+            Err(ureq::Error::Status(status, _)) => Err(Some(status)),
+            Err(_) => Err(None),
+        }
+    }
+}
+impl SessionHost for LocalServerSessions {
+    fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
+        let mut answered = false;
+        for server in self.servers() {
+            let body = serde_json::json!({
+                "connect": launch.tool,
+                "id": launch.session_id,
+                "cwd": checkout.root,
+                "model": launch.model,
+                "effort": launch.effort,
+            });
+            match Self::call(&server, "POST", "/terminals", Some(body)) {
+                Ok(_) => {
+                    // The label is the saved tab name every client of that server shows.
+                    let _ = Self::call(
+                        &server,
+                        "PUT",
+                        &format!("/terminals/{}/name", launch.session_id),
+                        Some(serde_json::json!({"name": launch.label})),
+                    );
+                    return Ok(());
+                }
+                Err(Some(_)) => answered = true,
+                Err(None) => {}
+            }
+        }
+        Err(if answered {
+            SessionHostError::Refused
+        } else {
+            SessionHostError::Unavailable
+        })
+    }
+
+    fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
+        let mut live = Vec::new();
+        let mut answered = false;
+        for server in self.servers() {
+            let Ok(Value::Array(terminals)) = Self::call(&server, "GET", "/terminals", None) else {
+                continue;
+            };
+            answered = true;
+            for terminal in terminals {
+                let field = |key: &str| terminal.get(key);
+                if field("kind").and_then(Value::as_str) != Some("ai")
+                    || field("alive").and_then(Value::as_bool) != Some(true)
+                {
+                    continue;
+                }
+                if let Some(id) = field("id").and_then(Value::as_str) {
+                    live.push(HostSessionState {
+                        session_id: id.into(),
+                        busy: field("busy").and_then(Value::as_bool).unwrap_or(true),
+                    });
+                }
+            }
+        }
+        answered.then_some(live)
+    }
+
+    fn stop(&self, _: &Checkout, session_id: &str) -> Result<(), SessionHostError> {
+        let mut answered = false;
+        for server in self.servers() {
+            match Self::call(&server, "DELETE", &format!("/terminals/{session_id}"), None) {
+                Ok(_) => return Ok(()),
+                Err(Some(_)) => answered = true,
+                Err(None) => {}
+            }
+        }
+        Err(if answered {
+            SessionHostError::Refused
+        } else {
+            SessionHostError::Unavailable
+        })
+    }
+
+    fn join_role(&self, _: &Checkout, session_id: &str, role: SessionRole) -> RolePrompt {
+        let mut outcome = RolePrompt::Failed;
+        for server in self.servers() {
+            match Self::call(
+                &server,
+                "POST",
+                &format!("/connections/{session_id}/message"),
+                Some(serde_json::json!({"text": role_prompt_text(role)})),
+            ) {
+                Ok(_) => return RolePrompt::Delivered,
+                Err(Some(422)) => outcome = RolePrompt::Unsupported,
+                Err(_) => {}
+            }
+        }
+        outcome
+    }
+}
+
+// ---- Wire types ----
+
+/// The hosted start: what to launch and the orchestrator's machine limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedSessionStart {
+    pub session: NewHostedSession,
+    /// The policy's machine limits for this target; the host's own file may only be
+    /// stricter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<MachineLimits>,
+    /// Who asked, for attribution. The start is decided by this machine either way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<MutationActor>,
+}
+
+/// A hosted session with what its host knows about it right now.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostedSessionView {
+    pub session: HostedSession,
+    pub server_id: String,
+    /// The worker id its claims and assignments carry.
+    pub worker_id: String,
+    /// The name of its tab in the hosting server's drawer.
+    pub label: String,
+    /// `null` when the host could not be asked.
+    pub alive: Option<bool>,
+    pub busy: Option<bool>,
+    /// Present when the caller asked for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safe_point: Option<SafePoint>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostedStartOutcome {
+    Started,
+    /// An earlier request with the same operation id already started it.
+    Existing,
+    Refused,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostedStartReply {
+    pub outcome: HostedStartOutcome,
+    /// Why the host refused: an admission reason or a session code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<HostedSessionView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role_prompt: Option<RolePrompt>,
+}
+
+/// Whether the target's pool already has a live session in each single-holder role.
+/// `null` when the pool could not be read.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostedRoles {
+    pub integrator_live: Option<bool>,
+    pub dispatcher_live: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostedSessionList {
+    pub sessions: Vec<HostedSessionView>,
+    pub roles: HostedRoles,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedSessionStop {
+    pub operation_id: String,
+    /// Stop even when the session is not at a safe point. A person's request only.
+    #[serde(default)]
+    pub force: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<MutationActor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostedStopReply {
+    pub stopped: bool,
+    /// Why not, as a session code; `session_not_found` when the host has no record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safe_point: Option<SafePoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<HostedSessionView>,
+}
+
+/// A person takes a hosted session over, optionally pausing it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedSessionControl {
+    pub operation_id: String,
+    #[serde(default)]
+    pub pause: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<MutationActor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostedControlReply {
+    /// Absent when the host has no record of the operation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<HostedSessionView>,
+}
+
+/// The orchestrating start request.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StartSession {
+    pub target_id: String,
+    /// Retain across retries: the same id is the same session.
+    pub operation_id: String,
+    pub tool: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub effort: Option<String>,
+    /// Required when the policy configures accounts for the tool.
+    #[serde(default)]
+    pub account: Option<String>,
+    /// `worker` (the default), `dispatcher` or `integrator`.
+    #[serde(default)]
+    pub role: Option<SessionRole>,
+    /// The run the session is started for, when it serves one.
+    #[serde(default)]
+    pub run_id: Option<String>,
+    /// The lost or failed session this one replaces.
+    #[serde(default)]
+    pub replaces: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StopSession {
+    /// Stop even when the session is not at a safe point. A person's request only.
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TakeoverSession {
+    /// Also pause it: the orchestrator gives it nothing new.
+    #[serde(default)]
+    pub pause: bool,
+}
+
+/// A session with what this answer learned from its host.
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionView {
+    #[serde(flatten)]
+    pub session: OrchestratedSession,
+    /// The name of its tab in the hosting server's drawer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role_prompt: Option<RolePrompt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safe_point: Option<SafePoint>,
+    /// Names of external state this answer could not verify, such as `target_session`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unverified: Vec<&'static str>,
+}
+
+impl From<OrchestratedSession> for SessionView {
+    fn from(session: OrchestratedSession) -> Self {
+        Self {
+            session,
+            label: None,
+            role_prompt: None,
+            safe_point: None,
+            unverified: Vec::new(),
+        }
+    }
+}
+
+/// One session a bulk sync could not examine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionSyncFailure {
+    pub session_id: String,
+    pub code: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionSyncSummary {
+    pub sessions: Vec<SessionView>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub failed: Vec<SessionSyncFailure>,
+}
+
+fn is_human(actor: Option<&MutationActor>) -> bool {
+    actor.is_some_and(|actor| actor.role == ActorRole::Human)
+}
+
+fn git(root: &Path, args: &[&str]) -> Option<String> {
+    let output = hotsheet_ticketing::git::launch("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// How many worktrees of the checkout have uncommitted changes, untracked files
+/// included. `None` when the checkout is not a git work tree or git could not say.
+fn dirty_worktrees(root: &Path) -> Option<u32> {
+    let listing = git(root, &["worktree", "list", "--porcelain"])?;
+    let mut dirty = 0;
+    for block in listing.split("\n\n") {
+        let mut path = None;
+        let mut skip = false;
+        for line in block.lines() {
+            if let Some(found) = line.strip_prefix("worktree ") {
+                path = Some(found);
+            }
+            // A bare entry has no files; a prunable one has no directory any more.
+            skip |= line == "bare" || line.starts_with("prunable");
+        }
+        let Some(path) = path.filter(|_| !skip) else {
+            continue;
+        };
+        if !git(Path::new(path), &["status", "--porcelain"])?
+            .trim()
+            .is_empty()
+        {
+            dirty += 1;
+        }
+    }
+    Some(dirty)
+}
+
+/// The checkout's coordination pool, read without creating or upgrading it.
+/// `Ok(None)` when the project has no pool.
+fn coordination_state(root: &Path) -> Result<Option<crate::coordination::State>, ()> {
+    let common = git(
+        root,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .ok_or(())?;
+    let path = Path::new(common.trim())
+        .join("hotsheet-coordination")
+        .join("state.json");
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|_| ()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => Err(()),
+    }
+}
+
+impl OrchestrationRuntime {
+    /// Replace the process that owns AI terminals (the session-hosting server, tests).
+    #[must_use]
+    pub fn with_session_host(mut self, host: Arc<dyn SessionHost>) -> Self {
+        self.sessions = host;
+        self
+    }
+
+    // ---- Hosted half ----
+
+    fn hosted_sessions_registry(&self) -> HostedSessionRegistry {
+        HostedSessionRegistry::new(&self.home)
+    }
+
+    /// Live ticket claims held under `worker` in the checkout's git stores. `None`
+    /// when a store could not be read.
+    fn session_claims(
+        &self,
+        checkout: &Checkout,
+        worker: &str,
+        tx: &Transaction<'_>,
+    ) -> Option<u32> {
+        let now = timestamp(tx);
+        let mut held = 0;
+        for source in checkout
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+        {
+            let store = checkout.verified_git_source(&source.connection_id).ok()?;
+            let claimed = ops::query(
+                &store,
+                &ops::TicketQuery {
+                    claimed: Some(true),
+                    ..ops::TicketQuery::default()
+                },
+            )
+            .ok()?;
+            held += claimed
+                .iter()
+                .filter(|ticket| {
+                    ticket.claimed_by.as_deref() == Some(worker)
+                        && !ops::claim_available(ticket, &now)
+                })
+                .count();
+        }
+        u32::try_from(held).ok()
+    }
+
+    /// Assignments of the pool this session still has a part in. A worker answers for
+    /// its own; the dispatcher and the integrator answer for every unfinished one.
+    fn pending_handoffs(checkout: &Checkout, session: &HostedSession, worker: &str) -> Option<u32> {
+        let Some(state) = coordination_state(Path::new(&checkout.root)).ok()? else {
+            return Some(0);
+        };
+        let pending = state
+            .assignments
+            .values()
+            .filter(|assignment| assignment.phase != crate::coordination::Phase::Done)
+            .filter(|assignment| session.role.is_role_session() || assignment.worker == worker)
+            .count();
+        u32::try_from(pending).ok()
+    }
+
+    fn hosted_roles(checkout: &Checkout, now_ms: u64) -> HostedRoles {
+        let now = i64::try_from(now_ms / 1000).unwrap_or(i64::MAX);
+        match coordination_state(Path::new(&checkout.root)) {
+            Ok(Some(state)) => HostedRoles {
+                integrator_live: Some(state.integrator.is_some_and(|s| s.expires_at > now)),
+                dispatcher_live: Some(state.dispatcher.is_some_and(|s| s.expires_at > now)),
+            },
+            Ok(None) => HostedRoles {
+                integrator_live: Some(false),
+                dispatcher_live: Some(false),
+            },
+            Err(()) => HostedRoles::default(),
+        }
+    }
+
+    fn hosted_view(
+        &self,
+        checkout: &Checkout,
+        session: HostedSession,
+        live: Option<&[HostSessionState]>,
+        with_safe_point: bool,
+        tx: &Transaction<'_>,
+    ) -> HostedSessionView {
+        let worker_id = hotsheet_aitools::session_worker_id(&session.tool, &session.session_id);
+        let state = live.map(|live| {
+            live.iter()
+                .find(|state| state.session_id == session.session_id)
+        });
+        let ended = session.ended_at_ms.is_some() || !session.started;
+        let alive = if ended {
+            Some(false)
+        } else {
+            state.map(|state| state.is_some())
+        };
+        let busy = match (alive, state) {
+            (Some(false), _) => Some(false),
+            (_, Some(Some(state))) => Some(state.busy),
+            _ => None,
+        };
+        let safe_point = with_safe_point.then(|| {
+            decide_safe_point(&if alive == Some(false) {
+                SafePointFacts {
+                    alive,
+                    busy,
+                    ..SafePointFacts::default()
+                }
+            } else {
+                SafePointFacts {
+                    alive,
+                    busy,
+                    held_claims: self.session_claims(checkout, &worker_id, tx),
+                    dirty_worktrees: dirty_worktrees(Path::new(&checkout.root)),
+                    pending_handoffs: Self::pending_handoffs(checkout, &session, &worker_id),
+                }
+            })
+        });
+        HostedSessionView {
+            label: session.label(),
+            server_id: self.server_id.clone(),
+            worker_id,
+            alive,
+            busy,
+            safe_point,
+            session,
+        }
+    }
+
+    /// A started session whose terminal is gone ended without anyone stopping it.
+    fn note_lost(
+        &self,
+        session: HostedSession,
+        live: Option<&[HostSessionState]>,
+        now_ms: u64,
+    ) -> Result<HostedSession, OrchestrationError> {
+        let gone = session.started
+            && session.ended_at_ms.is_none()
+            && live.is_some_and(|live| {
+                !live
+                    .iter()
+                    .any(|state| state.session_id == session.session_id)
+            });
+        if !gone {
+            return Ok(session);
+        }
+        Ok(self
+            .hosted_sessions_registry()
+            .end(
+                &session.checkout_id,
+                &session.operation_id,
+                "host_lost",
+                now_ms,
+            )?
+            .unwrap_or(session))
+    }
+
+    /// The sessions orchestrators started on one checkout this machine hosts, with
+    /// what the terminal host says about each now.
+    pub fn hosted_sessions(
+        &self,
+        checkout_id: &str,
+        operation_id: Option<&str>,
+        with_safe_point: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedSessionList, OrchestrationError> {
+        let checkout = self.owner(checkout_id)?;
+        if let Some(operation_id) = operation_id {
+            identifier(operation_id, "bounded operation id required")?;
+        }
+        let live = self.sessions.sessions(&checkout);
+        let now_ms = tx.clock.now_ms();
+        let mut sessions = Vec::new();
+        for session in self.hosted_sessions_registry().list(&checkout.id)? {
+            if operation_id.is_some_and(|wanted| wanted != session.operation_id) {
+                continue;
+            }
+            let session = self.note_lost(session, live.as_deref(), now_ms)?;
+            sessions.push(self.hosted_view(
+                &checkout,
+                session,
+                live.as_deref(),
+                with_safe_point,
+                tx,
+            ));
+        }
+        Ok(HostedSessionList {
+            sessions,
+            roles: Self::hosted_roles(&checkout, now_ms),
+        })
+    }
+
+    /// Start a session on this machine for an orchestration project. The same
+    /// operation id never launches twice. This machine's own admission decides.
+    pub fn hosted_session_start(
+        &self,
+        checkout_id: &str,
+        request: HostedSessionStart,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedStartReply, OrchestrationError> {
+        request.session.validate()?;
+        let checkout = self.owner(checkout_id)?;
+        let registry = self.hosted_sessions_registry();
+        let (reserved, _) = registry.reserve(&checkout.id, &request.session, tx)?;
+        let live = self.sessions.sessions(&checkout);
+        if reserved.started {
+            let session = self.note_lost(reserved, live.as_deref(), tx.clock.now_ms())?;
+            return Ok(HostedStartReply {
+                outcome: HostedStartOutcome::Existing,
+                reason: None,
+                session: Some(self.hosted_view(&checkout, session, live.as_deref(), false, tx)),
+                role_prompt: None,
+            });
+        }
+        // Nothing runs for this reservation yet, so a refusal forgets it and the same
+        // request can be made again later.
+        let refuse = |reason: &str| {
+            registry.release(&checkout.id, &reserved.operation_id)?;
+            Ok(HostedStartReply {
+                outcome: HostedStartOutcome::Refused,
+                reason: Some(reason.into()),
+                session: None,
+                role_prompt: None,
+            })
+        };
+        if reserved.role.is_role_session() {
+            let roles = Self::hosted_roles(&checkout, tx.clock.now_ms());
+            let taken = match reserved.role {
+                SessionRole::Integrator => roles.integrator_live,
+                SessionRole::Dispatcher => roles.dispatcher_live,
+                SessionRole::Worker => Some(false),
+            };
+            let ours = registry.list(&checkout.id)?.into_iter().any(|other| {
+                other.role == reserved.role
+                    && other.started
+                    && other.ended_at_ms.is_none()
+                    && other.operation_id != reserved.operation_id
+                    && live.as_ref().is_none_or(|live| {
+                        live.iter()
+                            .any(|state| state.session_id == other.session_id)
+                    })
+            });
+            if taken == Some(true) || ours {
+                return refuse(SessionError::RoleActive.code());
+            }
+        }
+        let decision = match self.hosted_admission(
+            checkout_id,
+            AdmissionRequest {
+                tool: reserved.tool.clone(),
+                model: reserved.model.clone(),
+                sessions: 1,
+                limits: request.limits,
+            },
+        ) {
+            Ok(decision) => decision,
+            Err(error) => {
+                registry.release(&checkout.id, &reserved.operation_id)?;
+                return Err(error);
+            }
+        };
+        if decision.outcome == AdmissionOutcome::Refused || decision.admitted == 0 {
+            return refuse(
+                decision
+                    .reason
+                    .map_or(SessionError::AdmissionRefused.code(), |reason| {
+                        reason.code()
+                    }),
+            );
+        }
+        // The capacity reading is shared for a few seconds, so a burst of starts could
+        // all see the same count. The cap is checked again on a fresh listing.
+        let Some(live) = live else {
+            return refuse(SessionError::HostUnavailable.code());
+        };
+        if live.len() >= usize::try_from(decision.limits.max_sessions).unwrap_or(usize::MAX)
+            && !live
+                .iter()
+                .any(|state| state.session_id == reserved.session_id)
+        {
+            return refuse("session_cap_reached");
+        }
+        match self.sessions.start(
+            &checkout,
+            &HostLaunch {
+                session_id: reserved.session_id.clone(),
+                tool: reserved.tool.clone(),
+                model: reserved.model.clone(),
+                effort: reserved.effort.clone(),
+                label: reserved.label(),
+            },
+        ) {
+            Ok(()) => {}
+            Err(SessionHostError::Unavailable) => {
+                return refuse(SessionError::HostUnavailable.code());
+            }
+            Err(SessionHostError::Refused) => return refuse(SessionError::StartFailed.code()),
+        }
+        let started = registry
+            .mark_started(&checkout.id, &reserved.operation_id)?
+            .unwrap_or(reserved);
+        let role_prompt = self
+            .sessions
+            .join_role(&checkout, &started.session_id, started.role);
+        let live = self.sessions.sessions(&checkout);
+        Ok(HostedStartReply {
+            outcome: HostedStartOutcome::Started,
+            reason: None,
+            session: Some(self.hosted_view(&checkout, started, live.as_deref(), false, tx)),
+            role_prompt: Some(role_prompt),
+        })
+    }
+
+    /// Stop a hosted session. This machine checks the safe point itself: the
+    /// orchestrator's word that a session is idle is never enough.
+    pub fn hosted_session_stop(
+        &self,
+        checkout_id: &str,
+        request: HostedSessionStop,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedStopReply, OrchestrationError> {
+        identifier(&request.operation_id, "bounded operation id required")?;
+        let checkout = self.owner(checkout_id)?;
+        let registry = self.hosted_sessions_registry();
+        let refused = |reason: &str, safe_point, session| HostedStopReply {
+            stopped: false,
+            reason: Some(reason.into()),
+            safe_point,
+            session,
+        };
+        let Some(session) = registry.get(&checkout.id, &request.operation_id)? else {
+            return Ok(refused(SessionError::NotFound.code(), None, None));
+        };
+        let human = is_human(request.actor.as_ref());
+        let stop = StopRequest {
+            force: request.force,
+            human,
+        };
+        if !session.started {
+            // Reserved and never launched: there is nothing to interrupt.
+            let nothing_runs = decide_safe_point(&SafePointFacts {
+                alive: Some(false),
+                ..SafePointFacts::default()
+            });
+            if let Err(error) = decide_stop(session.owner, stop, &nothing_runs) {
+                return Ok(refused(error.code(), None, None));
+            }
+            registry.release(&checkout.id, &request.operation_id)?;
+            return Ok(HostedStopReply {
+                stopped: true,
+                reason: None,
+                safe_point: None,
+                session: None,
+            });
+        }
+        let live = self.sessions.sessions(&checkout);
+        let session = self.note_lost(session, live.as_deref(), tx.clock.now_ms())?;
+        let view = self.hosted_view(&checkout, session.clone(), live.as_deref(), true, tx);
+        if session.ended_at_ms.is_some() {
+            return Ok(HostedStopReply {
+                stopped: true,
+                reason: session.end_reason.clone(),
+                safe_point: None,
+                session: Some(view),
+            });
+        }
+        let safe_point = view.safe_point.clone().unwrap_or_else(|| {
+            // `hosted_view` was asked for one; an absent answer is not a safe one.
+            decide_safe_point(&SafePointFacts::default())
+        });
+        if let Err(error) = decide_stop(session.owner, stop, &safe_point) {
+            return Ok(refused(error.code(), Some(safe_point), Some(view)));
+        }
+        match self.sessions.stop(&checkout, &session.session_id) {
+            Ok(()) => {}
+            Err(_) => {
+                return Ok(refused(
+                    SessionError::HostUnavailable.code(),
+                    Some(safe_point),
+                    Some(view),
+                ));
+            }
+        }
+        let ended = registry
+            .end(
+                &checkout.id,
+                &request.operation_id,
+                if human {
+                    "person_stopped"
+                } else {
+                    "wound_down"
+                },
+                tx.clock.now_ms(),
+            )?
+            .unwrap_or(session);
+        Ok(HostedStopReply {
+            stopped: true,
+            reason: ended.end_reason.clone(),
+            safe_point: Some(safe_point),
+            session: Some(self.hosted_view(&checkout, ended, None, false, tx)),
+        })
+    }
+
+    /// A person takes a hosted session over. From then on this machine refuses an
+    /// orchestrator's stop for it.
+    pub fn hosted_session_control(
+        &self,
+        checkout_id: &str,
+        request: HostedSessionControl,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedControlReply, OrchestrationError> {
+        identifier(&request.operation_id, "bounded operation id required")?;
+        if !is_human(request.actor.as_ref()) {
+            return Err(OrchestrationError::Forbidden(
+                "only a person takes over or pauses an orchestrator-owned session",
+            ));
+        }
+        let checkout = self.owner(checkout_id)?;
+        let taken = self.hosted_sessions_registry().take_over(
+            &checkout.id,
+            &request.operation_id,
+            request.pause,
+        )?;
+        let live = self.sessions.sessions(&checkout);
+        Ok(HostedControlReply {
+            session: taken
+                .map(|session| self.hosted_view(&checkout, session, live.as_deref(), false, tx)),
+        })
+    }
+
+    // ---- Orchestrating half ----
+
+    pub(super) fn session_registry(&self) -> SessionRegistry {
+        SessionRegistry::new(&self.home)
+    }
+
+    pub fn session(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+    ) -> Result<OrchestratedSession, OrchestrationError> {
+        self.session_registry().get(owner_id, session_id)
+    }
+
+    /// This machine's records of the sessions the owner started. No target is asked.
+    pub fn session_list(
+        &self,
+        owner_id: &str,
+        active: bool,
+    ) -> Result<Vec<OrchestratedSession>, OrchestrationError> {
+        self.session_registry().list(owner_id, active)
+    }
+
+    /// The sessions already occupying the target, its machine, the tool and the
+    /// account, as the policy's caps count them.
+    pub fn session_load(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+        tool: &str,
+        account: Option<&str>,
+    ) -> Result<SessionLoad, OrchestrationError> {
+        let target = Self::target_ref(owner_id, target_id)?;
+        let server = Self::binding_at(&self.home, &target)
+            .ok()
+            .and_then(|binding| binding.destination)
+            .map(|destination| server_of(&destination).to_owned());
+        self.session_registry()
+            .load(owner_id, target_id, server.as_deref(), tool, account)
+    }
+
+    /// HS2-75Q254 reads this for reconciliation: the session a run recorded and the
+    /// one still running for it, from this machine's records alone.
+    pub fn session_work(&self, owner_id: &str, run_id: &str) -> Observed<ExternalWork> {
+        match self.session_registry().list(owner_id, false) {
+            Ok(sessions) => {
+                let of_run = || {
+                    sessions
+                        .iter()
+                        .filter(|session| session.run_id.as_deref() == Some(run_id))
+                };
+                Observed::Verified(ExternalWork {
+                    recorded: of_run()
+                        .next_back()
+                        .map(|session| session.session_id.clone()),
+                    live: of_run()
+                        .rfind(|session| session.state == SessionState::Running)
+                        .map(|session| session.session_id.clone()),
+                })
+            }
+            Err(_) => Observed::Unverifiable("session_records_unreadable".into()),
+        }
+    }
+
+    /// Apply a change to a session and publish what changed for its run. Every session
+    /// update goes through here, so the stream and the record cannot drift apart.
+    fn session_apply(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        update: SessionUpdate,
+        from_target: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<OrchestratedSession, OrchestrationError> {
+        let registry = self.session_registry();
+        let before = registry.get(owner_id, session_id)?;
+        let actor_id = update.actor_id.clone();
+        let after = registry.update(owner_id, session_id, update, tx)?;
+        if let (Some(run_id), Some(entry)) = (&after.run_id, after.history.last()) {
+            if after.history.len() != before.history.len() || before.history.last() != Some(entry) {
+                self.run_event(
+                    owner_id,
+                    RunEvent {
+                        at_ms: after.updated_at_ms,
+                        run_id: run_id.clone(),
+                        kind: RunEventKind::Session,
+                        source: if from_target {
+                            RunEventSource::Target
+                        } else {
+                            RunEventSource::Orchestrator
+                        },
+                        state: None,
+                        // A control act is published as what it was, a plain change
+                        // as the state the session entered.
+                        reason: Some(match entry.control {
+                            Some(control) if entry.from == Some(entry.to) => {
+                                format!("session_{}", control.code())
+                            }
+                            _ => format!("session_{}", entry.to.code()),
+                        }),
+                        actor_id,
+                        dedupe: Some(format!(
+                            "session-{}-{}-{}",
+                            after.session_id,
+                            after.history.len(),
+                            after.updated_at_ms
+                        )),
+                        gate_id: None,
+                        gate_state: None,
+                    },
+                );
+            }
+        }
+        Ok(after)
+    }
+
+    fn session_request(
+        session: &OrchestratedSession,
+        starting: bool,
+        running: u32,
+    ) -> SessionRequest {
+        SessionRequest {
+            tool: session.tool.clone(),
+            model: session.model.clone(),
+            running,
+            starting,
+        }
+    }
+
+    /// The gate for reading or winding down an existing session: grants and policy
+    /// limits apply, nothing new starts, and it carries no load.
+    fn session_gate(
+        &self,
+        session: &OrchestratedSession,
+        actor: Option<&MutationActor>,
+        continuing: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(TargetRef, Authorized), OrchestrationError> {
+        let target = Self::target_ref(&session.owner_checkout_id, &session.target_id)?;
+        let request = ActionRequest {
+            session: Some(Self::session_request(session, false, 0)),
+            role_session: session.role.is_role_session(),
+            ..ActionRequest::new(TargetAction::SessionsManage)
+                .operation(session.operation_id.clone())
+        };
+        let authorized = self.authorize(
+            &target,
+            actor,
+            if continuing {
+                request.continuing()
+            } else {
+                request
+            },
+            tx,
+        )?;
+        Ok((target, authorized))
+    }
+
+    /// A person needs no grant to act on a session of their own orchestration
+    /// project. The target is resolved freshly and the act is audited here.
+    fn person_destination(
+        &self,
+        target: &TargetRef,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TargetDestination, OrchestrationError> {
+        let resolution = self.resolve(target, tx)?;
+        let usable = resolution.usable;
+        resolution
+            .binding
+            .destination
+            .filter(|_| usable)
+            .ok_or(OrchestrationError::Denied(DenialReason::TargetUnavailable))
+    }
+
+    fn session_audit(
+        &self,
+        session: &OrchestratedSession,
+        actor: Option<&MutationActor>,
+        action: &'static str,
+        outcome: &Result<SessionView, OrchestrationError>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        self.audit_record(
+            &session.owner_checkout_id,
+            AuditRecord {
+                at_ms: tx.clock.now_ms(),
+                actor_role: super::access::role_code(actor),
+                actor_id: actor.and_then(|actor| actor.id.clone()),
+                target_id: Some(session.target_id.clone()),
+                action: action.into(),
+                operation_id: Some(session.operation_id.clone()),
+                outcome: if outcome.is_ok() {
+                    AuditOutcome::Succeeded
+                } else {
+                    AuditOutcome::Failed
+                },
+                reason: outcome.as_ref().err().map(|error| error.code().into()),
+                grant_id: None,
+            },
+        )
+    }
+
+    fn hosted_listing(
+        &self,
+        destination: &TargetDestination,
+        session: &OrchestratedSession,
+        with_safe_point: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Option<HostedSessionView>, OrchestrationError> {
+        let query = format!(
+            "?operation_id={}{}",
+            encode(&session.operation_id),
+            if with_safe_point {
+                "&safe_point=true"
+            } else {
+                ""
+            }
+        );
+        let list: HostedSessionList = serde_json::from_value(self.hosted_call_at(
+            destination,
+            "/target-sessions",
+            "GET",
+            &query,
+            None,
+            tx,
+        )?)
+        .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
+        Ok(list
+            .sessions
+            .into_iter()
+            .find(|hosted| hosted.session.operation_id == session.operation_id))
+    }
+
+    /// Bring this machine's record in line with what the host answered.
+    fn session_observe(
+        &self,
+        session: &OrchestratedSession,
+        hosted: Option<&HostedSessionView>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<OrchestratedSession, OrchestrationError> {
+        if session.state.is_terminal() {
+            return Ok(session.clone());
+        }
+        let owner_id = &session.owner_checkout_id;
+        let mut update = SessionUpdate::default();
+        match hosted {
+            // The host has no record. A session it once confirmed is lost; one it never
+            // confirmed may still be asked for again under the same operation id.
+            None if session.state == SessionState::Running => {
+                update.to = Some(SessionState::Lost);
+                update.reason = Some("host_forgot".into());
+            }
+            None => {}
+            Some(hosted) => {
+                update.hosted = Some(HostedRef {
+                    server_id: hosted.server_id.clone(),
+                    session_id: hosted.session.session_id.clone(),
+                    worker_id: hosted.worker_id.clone(),
+                });
+                if hosted.session.owner == SessionOwner::Human {
+                    // Learned from the host: a person took it over there.
+                    update.owner = Some(SessionOwner::Human);
+                    update.paused = Some(hosted.session.paused);
+                    update.control = Some(if hosted.session.paused {
+                        SessionControl::Pause
+                    } else {
+                        SessionControl::Takeover
+                    });
+                    update.reason = Some("host_takeover".into());
+                }
+                let ended = hosted.session.end_reason.as_deref();
+                match (session.state, hosted.alive, ended) {
+                    (_, _, Some(reason @ ("person_stopped" | "wound_down"))) => {
+                        if session.state == SessionState::Requested {
+                            // It ran and was stopped before this record learned it ran.
+                            self.session_apply(
+                                owner_id,
+                                &session.session_id,
+                                SessionUpdate {
+                                    to: Some(SessionState::Running),
+                                    reason: Some("started".into()),
+                                    hosted: update.hosted.clone(),
+                                    ..SessionUpdate::default()
+                                },
+                                true,
+                                tx,
+                            )?;
+                        }
+                        update.to = Some(SessionState::Stopped);
+                        update.reason = Some(reason.into());
+                        update.control = None;
+                    }
+                    (SessionState::Requested, Some(false), _) if hosted.session.started => {
+                        self.session_apply(
+                            owner_id,
+                            &session.session_id,
+                            SessionUpdate {
+                                to: Some(SessionState::Running),
+                                reason: Some("started".into()),
+                                hosted: update.hosted.clone(),
+                                ..SessionUpdate::default()
+                            },
+                            true,
+                            tx,
+                        )?;
+                        update.to = Some(SessionState::Lost);
+                        update.reason = Some("host_lost".into());
+                    }
+                    (SessionState::Running, Some(false), _) => {
+                        update.to = Some(SessionState::Lost);
+                        update.reason = Some("host_lost".into());
+                    }
+                    (SessionState::Requested, _, _) if hosted.session.started => {
+                        update.to = Some(SessionState::Running);
+                        update.reason = Some("started".into());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // An ownership change and a state change learned together are two facts.
+        if update.to.is_some() && update.owner.is_some() {
+            self.session_apply(
+                owner_id,
+                &session.session_id,
+                SessionUpdate {
+                    to: None,
+                    ..update.clone()
+                },
+                true,
+                tx,
+            )?;
+            update.owner = None;
+            update.paused = None;
+            update.control = None;
+        }
+        self.session_apply(owner_id, &session.session_id, update, true, tx)
+    }
+
+    /// Start a session on the target's own server. Repeating the request with the same
+    /// operation id returns the same session and never launches twice.
+    pub fn session_start(
+        &self,
+        owner_id: &str,
+        request: StartSession,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        identifier(&request.operation_id, "bounded operation id required")?;
+        identifier(&request.tool, "bounded tool id required")?;
+        let target = Self::target_ref(owner_id, &request.target_id)?;
+        let owner = self.owner(owner_id)?;
+        let role = request.role.unwrap_or_default();
+        if let Some(run_id) = &request.run_id {
+            // A session is only ever attached to a run of the same target.
+            if self.run(owner_id, run_id)?.target.target_id != request.target_id {
+                return Err(OrchestrationError::Invalid(
+                    "the run belongs to another target",
+                ));
+            }
+        }
+        let new = NewSession {
+            operation_id: request.operation_id.clone(),
+            target_id: request.target_id.clone(),
+            role,
+            tool: request.tool.clone(),
+            model: request.model.clone(),
+            effort: request.effort.clone(),
+            account: request.account.clone(),
+            run_id: request.run_id.clone(),
+            replaces: request.replaces.clone(),
+        };
+        let registry = self.session_registry();
+        // The registry decides whether this is a repeat, a conflict or a start that can
+        // never be recorded, before a person or the target is asked anything.
+        let known = registry.check(owner_id, &new)?;
+        if let Some(known) = known
+            .as_ref()
+            .filter(|known| known.state != SessionState::Requested)
+        {
+            return Ok(SessionView::from(known.clone()));
+        }
+        // A start still in `requested` is being retried: it does not count against
+        // its own caps.
+        let mut load = self.session_load(
+            owner_id,
+            &request.target_id,
+            &request.tool,
+            request.account.as_deref(),
+        )?;
+        if known.is_some() {
+            load.target_sessions = load.target_sessions.saturating_sub(1);
+            load.machine_sessions = load.machine_sessions.saturating_sub(1);
+            load.tool_sessions = load.tool_sessions.saturating_sub(1);
+            load.account_sessions = load.account_sessions.saturating_sub(1);
+        }
+        let authorized = self.authorize(
+            &target,
+            actor,
+            ActionRequest {
+                session: Some(SessionRequest {
+                    tool: request.tool.clone(),
+                    model: request.model.clone(),
+                    running: load.target_sessions,
+                    starting: true,
+                }),
+                load: Some(load),
+                role_session: role.is_role_session(),
+                ..ActionRequest::new(TargetAction::SessionsManage)
+                    .operation(request.operation_id.clone())
+            },
+            tx,
+        )?;
+        let outcome = (|| {
+            let destination = Self::destination(&authorized)?;
+            let (session, _) =
+                registry.begin(owner_id, new, actor.and_then(|actor| actor.id.clone()), tx)?;
+            if session.state != SessionState::Requested {
+                return Ok(SessionView::from(session));
+            }
+            // The gate just evaluated this policy; one that vanished since is a conflict.
+            let policy = self
+                .policy(owner_id)?
+                .policy
+                .ok_or(OrchestrationError::Conflict)?;
+            let body = serde_json::to_value(HostedSessionStart {
+                session: NewHostedSession {
+                    operation_id: session.operation_id.clone(),
+                    tool: session.tool.clone(),
+                    model: session.model.clone(),
+                    effort: session.effort.clone(),
+                    role,
+                    origin: SessionOrigin {
+                        owner_checkout_id: owner.id.clone(),
+                        project: project_name(&owner),
+                        run_id: session.run_id.clone(),
+                    },
+                },
+                limits: Some(policy.machine_limits(&request.target_id)),
+                actor: actor.cloned(),
+            })
+            .map_err(|_| OrchestrationError::Corrupt)?;
+            let fail = |reason: &str, tx: &mut Transaction<'_>| {
+                self.session_apply(
+                    owner_id,
+                    &session.session_id,
+                    SessionUpdate {
+                        to: Some(SessionState::Failed),
+                        reason: Some(reason.into()),
+                        actor_id: actor.and_then(|actor| actor.id.clone()),
+                        ..SessionUpdate::default()
+                    },
+                    false,
+                    tx,
+                )
+            };
+            let reply = match self.hosted_call_at(
+                destination,
+                "/target-sessions",
+                "POST",
+                "",
+                Some(&body),
+                tx,
+            ) {
+                Ok(reply) => serde_json::from_value::<HostedStartReply>(reply)
+                    .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?,
+                // The target said no for good: the session ends, and the same
+                // operation id keeps answering with that failed session.
+                Err(OrchestrationError::TargetOperation(
+                    error @ (TargetOpError::Conflict
+                    | TargetOpError::Unsupported
+                    | TargetOpError::NotFound
+                    | TargetOpError::Invalid
+                    | TargetOpError::Disabled
+                    | TargetOpError::PeerUnsupported),
+                )) => {
+                    fail(error.code(), tx)?;
+                    return Err(OrchestrationError::TargetOperation(error));
+                }
+                // Anything else may be transient: the session stays `requested` so the
+                // same request can be repeated.
+                Err(error) => return Err(error),
+            };
+            let Some(hosted) = reply
+                .session
+                .filter(|_| reply.outcome != HostedStartOutcome::Refused)
+            else {
+                let reason = reply
+                    .reason
+                    .filter(|reason| identifier(reason, "code").is_ok())
+                    .unwrap_or_else(|| SessionError::AdmissionRefused.code().into());
+                fail(&reason, tx)?;
+                // A session code is reported as itself; an admission reason as a
+                // refused admission, with the reason in the session's history.
+                return Err(OrchestrationError::Session(
+                    SessionError::from_code(&reason).unwrap_or(SessionError::AdmissionRefused),
+                ));
+            };
+            if hosted.session.ended_at_ms.is_some() {
+                // The host launched it for an earlier request that never heard back,
+                // and it has ended since: record both facts, not a running session.
+                let after = self.session_observe(&session, Some(&hosted), tx)?;
+                return Ok(SessionView {
+                    label: Some(hosted.label),
+                    ..SessionView::from(after)
+                });
+            }
+            let started = self.session_apply(
+                owner_id,
+                &session.session_id,
+                SessionUpdate {
+                    to: Some(SessionState::Running),
+                    reason: Some("started".into()),
+                    actor_id: actor.and_then(|actor| actor.id.clone()),
+                    hosted: Some(HostedRef {
+                        server_id: hosted.server_id.clone(),
+                        session_id: hosted.session.session_id.clone(),
+                        worker_id: hosted.worker_id.clone(),
+                    }),
+                    ..SessionUpdate::default()
+                },
+                false,
+                tx,
+            )?;
+            Ok(SessionView {
+                label: Some(hosted.label),
+                role_prompt: reply.role_prompt,
+                ..SessionView::from(started)
+            })
+        })();
+        self.finish(&target, &authorized, &outcome, tx)?;
+        outcome
+    }
+
+    /// Read the session from its host and bring the record up to date: a session the
+    /// host lost becomes `lost`, one a person took over there becomes theirs.
+    pub fn session_sync(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        self.session_read(owner_id, session_id, false, actor, tx)
+    }
+
+    /// Whether the session may be wound down now, as its own host established it.
+    pub fn session_safe_point(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        self.session_read(owner_id, session_id, true, actor, tx)
+    }
+
+    fn session_read(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        with_safe_point: bool,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        let session = self.session(owner_id, session_id)?;
+        if session.state.is_terminal() {
+            // Nothing runs, so there is nothing to interrupt and nobody to ask.
+            return Ok(SessionView {
+                safe_point: with_safe_point.then(|| {
+                    decide_safe_point(&SafePointFacts {
+                        alive: Some(false),
+                        busy: Some(false),
+                        ..SafePointFacts::default()
+                    })
+                }),
+                ..SessionView::from(session)
+            });
+        }
+        let (target, authorized) = self.session_gate(&session, actor, true, tx)?;
+        let outcome = (|| {
+            let hosted = self.hosted_listing(
+                Self::destination(&authorized)?,
+                &session,
+                with_safe_point,
+                tx,
+            )?;
+            let after = self.session_observe(&session, hosted.as_ref(), tx)?;
+            Ok(SessionView {
+                label: hosted.as_ref().map(|hosted| hosted.label.clone()),
+                safe_point: match &hosted {
+                    Some(hosted) => hosted.safe_point.clone(),
+                    None => with_safe_point.then(|| {
+                        decide_safe_point(&SafePointFacts {
+                            alive: Some(false),
+                            busy: Some(false),
+                            ..SafePointFacts::default()
+                        })
+                    }),
+                },
+                ..SessionView::from(after)
+            })
+        })();
+        self.finish(&target, &authorized, &outcome, tx)?;
+        outcome
+    }
+
+    /// Sync every unfinished session of the owner. One that cannot be examined is
+    /// listed as failed with its code and left as it was.
+    pub fn sessions_sync(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionSyncSummary, OrchestrationError> {
+        let mut summary = SessionSyncSummary {
+            sessions: Vec::new(),
+            failed: Vec::new(),
+        };
+        for session in self.session_list(owner_id, true)? {
+            match self.session_sync(owner_id, &session.session_id, actor, tx) {
+                Ok(view) => summary.sessions.push(view),
+                Err(error) => summary.failed.push(SessionSyncFailure {
+                    session_id: session.session_id,
+                    code: error.code(),
+                }),
+            }
+        }
+        Ok(summary)
+    }
+
+    /// Stop a session. The orchestrator winds down only its own sessions and only when
+    /// the host confirms a safe point; `force` is a person's explicit request.
+    pub fn session_stop(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        request: StopSession,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        let session = self.session(owner_id, session_id)?;
+        if session.state.is_terminal() {
+            return Err(OrchestrationError::Session(SessionError::NotActive));
+        }
+        let human = is_human(actor);
+        let actor_id =
+            actor
+                .and_then(|actor| actor.id.clone())
+                .ok_or(OrchestrationError::Invalid(
+                    "an identified actor is required to stop a session",
+                ))?;
+        // The cheap refusals first: nothing is asked of the target for them.
+        if request.force && !human {
+            return Err(OrchestrationError::Session(SessionError::ForceNotPermitted));
+        }
+        if session.owner == SessionOwner::Human && !human {
+            return Err(OrchestrationError::Session(SessionError::HumanOwned));
+        }
+        let target = Self::target_ref(owner_id, &session.target_id)?;
+        let (destination, authorized) = if human {
+            (self.person_destination(&target, tx)?, None)
+        } else {
+            let (_, authorized) = self.session_gate(&session, actor, false, tx)?;
+            (Self::destination(&authorized)?.clone(), Some(authorized))
+        };
+        let outcome = (|| {
+            let body = serde_json::to_value(HostedSessionStop {
+                operation_id: session.operation_id.clone(),
+                force: request.force,
+                actor: actor.cloned(),
+            })
+            .map_err(|_| OrchestrationError::Corrupt)?;
+            let reply: HostedStopReply = serde_json::from_value(self.hosted_call_at(
+                &destination,
+                "/target-sessions",
+                "DELETE",
+                "",
+                Some(&body),
+                tx,
+            )?)
+            .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
+            let stopped = |reason: &str, tx: &mut Transaction<'_>| {
+                self.session_apply(
+                    owner_id,
+                    session_id,
+                    SessionUpdate {
+                        to: Some(SessionState::Stopped),
+                        reason: Some(reason.into()),
+                        actor_id: Some(actor_id.clone()),
+                        control: Some(if human {
+                            SessionControl::Stop
+                        } else {
+                            SessionControl::WindDown
+                        }),
+                        ..SessionUpdate::default()
+                    },
+                    false,
+                    tx,
+                )
+            };
+            if !reply.stopped {
+                return match reply.reason.as_deref().and_then(SessionError::from_code) {
+                    // The host never had it, so nothing runs for a start that was
+                    // never confirmed. A session it once confirmed is lost.
+                    Some(SessionError::NotFound) if session.state == SessionState::Requested => {
+                        stopped("never_started", tx).map(SessionView::from)
+                    }
+                    Some(SessionError::NotFound) => self
+                        .session_observe(&session, None, tx)
+                        .map(SessionView::from),
+                    Some(SessionError::HumanOwned) => {
+                        // Learned from the host: it is a person's now.
+                        self.session_observe(&session, reply.session.as_ref(), tx)?;
+                        Err(OrchestrationError::Session(SessionError::HumanOwned))
+                    }
+                    Some(error) => Err(OrchestrationError::Session(error)),
+                    None => Err(OrchestrationError::Observation(
+                        TargetFailure::InvalidResponse,
+                    )),
+                };
+            }
+            let after = match reply.reason.as_deref() {
+                // It was already gone when the stop arrived.
+                Some("host_lost") => self.session_observe(&session, reply.session.as_ref(), tx)?,
+                _ if session.state == SessionState::Requested => stopped("never_started", tx)?,
+                _ => stopped(
+                    if human {
+                        "person_stopped"
+                    } else {
+                        "wound_down"
+                    },
+                    tx,
+                )?,
+            };
+            Ok(SessionView {
+                safe_point: reply.safe_point,
+                ..SessionView::from(after)
+            })
+        })();
+        match &authorized {
+            Some(authorized) => self.finish(&target, authorized, &outcome, tx)?,
+            None => self.session_audit(&session, actor, "session_stop", &outcome, tx)?,
+        }
+        outcome
+    }
+
+    /// A person takes a session over, optionally pausing it. The record changes first,
+    /// so this works while the target cannot be reached; the answer then names what it
+    /// could not tell the host.
+    pub fn session_takeover(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        request: TakeoverSession,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        let actor_id =
+            actor
+                .and_then(|actor| actor.id.clone())
+                .ok_or(OrchestrationError::Invalid(
+                    "an identified actor is required to take a session over",
+                ))?;
+        if !is_human(actor) {
+            return Err(OrchestrationError::Forbidden(
+                "only a person takes over or pauses an orchestrator-owned session",
+            ));
+        }
+        let session = self.session(owner_id, session_id)?;
+        if session.state.is_terminal() {
+            return Err(OrchestrationError::Session(SessionError::NotActive));
+        }
+        let control = if request.pause {
+            SessionControl::Pause
+        } else {
+            SessionControl::Takeover
+        };
+        let taken = self.session_apply(
+            owner_id,
+            session_id,
+            SessionUpdate {
+                owner: Some(SessionOwner::Human),
+                paused: Some(request.pause),
+                control: Some(control),
+                reason: Some(control.code().into()),
+                actor_id: Some(actor_id),
+                ..SessionUpdate::default()
+            },
+            false,
+            tx,
+        )?;
+        let target = Self::target_ref(owner_id, &session.target_id)?;
+        let told = self
+            .person_destination(&target, tx)
+            .and_then(|destination| {
+                let body = serde_json::to_value(HostedSessionControl {
+                    operation_id: session.operation_id.clone(),
+                    pause: request.pause,
+                    actor: actor.cloned(),
+                })
+                .map_err(|_| OrchestrationError::Corrupt)?;
+                self.hosted_call_at(
+                    &destination,
+                    "/target-sessions",
+                    "PATCH",
+                    "",
+                    Some(&body),
+                    tx,
+                )
+            });
+        let outcome = Ok(SessionView {
+            unverified: if told.is_ok() {
+                Vec::new()
+            } else {
+                vec!["target_session"]
+            },
+            ..SessionView::from(taken)
+        });
+        self.session_audit(
+            &session,
+            actor,
+            if request.pause {
+                "session_pause"
+            } else {
+                "session_takeover"
+            },
+            &outcome,
+            tx,
+        )?;
+        outcome
+    }
+}
+
+/// The machine a destination lives on.
+fn server_of(destination: &TargetDestination) -> &str {
+    match destination {
+        TargetDestination::Local { server_id, .. } => server_id,
+        TargetDestination::Remote { identity, .. } => &identity.server_id,
+    }
+}
+
+/// The orchestration project's display name, bounded for a tab label.
+fn project_name(owner: &Checkout) -> String {
+    let name: String = owner
+        .alias
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(hotsheet_ticketing::orchestration::MAX_SESSION_PROJECT_CHARS)
+        .collect();
+    if name.trim().is_empty() {
+        "Orchestration".into()
+    } else {
+        name
+    }
+}

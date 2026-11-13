@@ -2459,6 +2459,445 @@ paths:
             - ready
             - refresh
             - remove
+  /checkouts/{owner}/orchestration/sessions:
+    description: The AI sessions this orchestration project started on the servers that host its targets (HS2-GDJXGZ);
+      machine-local.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: listOrchestrationSessions
+      description: This machine's records, oldest first. Contacts no target.
+      parameters:
+        - name: active
+          in: query
+          required: false
+          description: Leave out finished sessions.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: The owner's sessions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrchestrationSession'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: startOrchestrationSession
+      description:
+        Starts an AI session on the server that hosts the target, through that server's ordinary AI terminal launch.
+        Passes the grant and policy gate as `sessions_manage` with the load counted from this machine's records. The
+        target's own machine may still refuse. The same `operation_id` returns the same session and never launches
+        twice, including a session that already failed. A refusal by the target's admission is `session_admission_refused`
+        with the reason in the failed session's history.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestrationSessionStart'
+      responses:
+        '200':
+          description: The session, with the label of its tab in the hosting server's drawer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationSession'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/sessions/{session}:
+    description: One orchestrator-started session, from this machine's record (HS2-GDJXGZ); machine-local.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationSession
+      responses:
+        '200':
+          description: The session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationSession'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: session
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/sessions/{session}/{operation}:
+    description: Sync, check, stop or take over one orchestrator-started session (HS2-GDJXGZ); machine-local.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: superviseOrchestrationSession
+      description:
+        "`sync` reads the session from its host and brings the record up to date, so a session the host lost becomes
+        `lost` and one a person took over there becomes theirs. `safe-point` adds the host's answer to whether the
+        session may be wound down, with every blocker. `stop` winds the session down only at a safe point the host
+        confirms and is refused `session_not_safe` otherwise; `force` stops it regardless and is a person's request
+        (`session_force_not_permitted` for any other actor). `takeover` hands the session to a person, with `pause` to
+        also pause it; it is a person's act, changes this machine's record first, and lists `target_session` in
+        `unverified` when the host could not be told. A session a person owns is never stopped by the orchestrator
+        (`session_human_owned`)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+                force:
+                  description: '`stop` only. Stop even when the session is not at a safe point.'
+                  type: boolean
+                pause:
+                  description: '`takeover` only. Also pause the session.'
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: The session after the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationSession'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: session
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - sync
+            - safe-point
+            - stop
+            - takeover
+  /checkouts/{owner}/orchestration/session-sync:
+    description: Sync every unfinished session of the owner with its host (HS2-GDJXGZ); machine-local.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: syncOrchestrationSessions
+      description: A session that cannot be examined is listed under `failed` with its code and left as it was.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: Every unfinished session after the sync.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sessions
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrchestrationSession'
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - session_id
+                        - code
+                      properties:
+                        session_id:
+                          type: string
+                        code:
+                          type: string
+                      additionalProperties: false
+                additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-sessions:
+    description:
+      The hosted half of orchestrator-owned sessions (HS2-GDJXGZ). This machine reserves a terminal per operation id,
+      asks its own admission, launches through its ordinary AI terminal path, labels the terminal with the
+      orchestration project and run, and alone decides whether a session is at a safe point. Ordinary authenticated
+      project data; a read-only device role can list and cannot start, stop or take over.
+    get:
+      operationId: listHostedTargetSessions
+      parameters:
+        - name: operation_id
+          in: query
+          required: false
+          description: Only the session of this operation.
+          schema:
+            type: string
+            maxLength: 160
+            pattern: ^[A-Za-z0-9._-]+$
+        - name: safe_point
+          in: query
+          required: false
+          description: Include each session's safe point.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: The sessions orchestrators started on this checkout, and whether its pool has a live integrator or dispatcher.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetSessionList'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: startHostedTargetSession
+      description:
+        The same `operation_id` never launches twice. A refusal (admission, a role already held, no terminal host) is
+        a `refused` outcome with a reason code, and forgets the reservation so the request can be repeated later.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedTargetSessionStart'
+      responses:
+        '200':
+          description: Started, existing or refused.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - outcome
+                properties:
+                  outcome:
+                    enum:
+                      - started
+                      - existing
+                      - refused
+                  reason:
+                    type: string
+                  session:
+                    $ref: '#/components/schemas/HostedTargetSession'
+                  role_prompt:
+                    $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+                additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    patch:
+      operationId: takeOverHostedTargetSession
+      description: A person takes the session over, optionally pausing it. Refused for any other actor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operation_id
+              properties:
+                operation_id:
+                  type: string
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
+                pause:
+                  type: boolean
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: The session, absent when this machine has no record of the operation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session:
+                    $ref: '#/components/schemas/HostedTargetSession'
+                additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    delete:
+      operationId: stopHostedTargetSession
+      description:
+        This machine checks the safe point itself. A refusal is `stopped` false with a session code as `reason`
+        (`session_not_safe`, `session_human_owned`, `session_force_not_permitted`, `session_not_found`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operation_id
+              properties:
+                operation_id:
+                  type: string
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
+                force:
+                  type: boolean
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: Whether the session was stopped, and why not.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - stopped
+                properties:
+                  stopped:
+                    type: boolean
+                  reason:
+                    type: string
+                  safe_point:
+                    $ref: '#/components/schemas/OrchestrationSessionSafePoint'
+                  session:
+                    $ref: '#/components/schemas/HostedTargetSession'
+                additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -19808,6 +20247,417 @@ components:
         ready_since_ms:
           type: integer
           minimum: 0
+      additionalProperties: false
+    OrchestrationSessionRole:
+      description: The part a started session plays in its target's existing role model (HS2-GDJXGZ).
+      enum:
+        - worker
+        - dispatcher
+        - integrator
+    OrchestrationSessionOwner:
+      description: Who decides about the session now. Ownership only ever moves to a person.
+      enum:
+        - orchestrator
+        - human
+    OrchestrationSessionRolePrompt:
+      description: Whether the new session was asked to run its role skill.
+      enum:
+        - delivered
+        - unsupported
+        - failed
+    OrchestrationSessionSafePoint:
+      description:
+        Whether a session may be wound down now, as its own host established it (HS2-GDJXGZ). Anything unknown counts
+        against it.
+      type: object
+      required:
+        - safe
+        - blockers
+        - facts
+      properties:
+        safe:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            enum:
+              - mid_turn
+              - held_claim
+              - uncommitted_changes
+              - pending_handoff
+              - session_unknown
+              - claims_unknown
+              - worktree_unknown
+              - handoff_unknown
+        facts:
+          description: What the host established; null means it could not find out.
+          type: object
+          properties:
+            alive:
+              type:
+                - boolean
+                - 'null'
+            busy:
+              type:
+                - boolean
+                - 'null'
+            held_claims:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+            dirty_worktrees:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+            pending_handoffs:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+          additionalProperties: false
+      additionalProperties: false
+    OrchestrationSessionStart:
+      type: object
+      required:
+        - target_id
+        - operation_id
+        - tool
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        operation_id:
+          description: Retain across retries; the same id is the same session.
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        tool:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        model:
+          type:
+            - string
+            - 'null'
+          maxLength: 128
+        effort:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        account:
+          description: Required when the policy configures accounts for the tool.
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        role:
+          description: Defaults to worker.
+          oneOf:
+            - $ref: '#/components/schemas/OrchestrationSessionRole'
+            - type: 'null'
+        run_id:
+          description: The run the session is started for; its tab is labelled with it.
+          type:
+            - string
+            - 'null'
+        replaces:
+          description: The lost or failed session this one replaces.
+          type:
+            - string
+            - 'null'
+      additionalProperties: false
+    OrchestrationSession:
+      description:
+        This machine's record of one AI session it started on a target's server (HS2-GDJXGZ). Identifiers, states and
+        codes only.
+      type: object
+      required:
+        - session_id
+        - owner_checkout_id
+        - operation_id
+        - target_id
+        - role
+        - tool
+        - state
+        - owner
+        - paused
+        - created_at_ms
+        - updated_at_ms
+        - history
+      properties:
+        session_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        owner_checkout_id:
+          type: string
+        operation_id:
+          type: string
+        target_id:
+          type: string
+        role:
+          $ref: '#/components/schemas/OrchestrationSessionRole'
+        tool:
+          type: string
+        model:
+          type: string
+        effort:
+          type: string
+        account:
+          type: string
+        run_id:
+          type: string
+        replaces:
+          type: string
+        state:
+          enum:
+            - requested
+            - running
+            - stopped
+            - failed
+            - lost
+        owner:
+          $ref: '#/components/schemas/OrchestrationSessionOwner'
+        paused:
+          description: A person paused it. It keeps running and the orchestrator gives it nothing new.
+          type: boolean
+        hosted:
+          description: Where the host says the session lives.
+          type: object
+          required:
+            - server_id
+            - session_id
+            - worker_id
+          properties:
+            server_id:
+              type: string
+            session_id:
+              description: The terminal id in the hosting server's drawer.
+              type: string
+            worker_id:
+              description: The worker id the session's claims and assignments carry.
+              type: string
+          additionalProperties: false
+        created_at_ms:
+          type: integer
+          minimum: 0
+        updated_at_ms:
+          type: integer
+          minimum: 0
+        history:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: object
+            required:
+              - at_ms
+              - to
+            properties:
+              at_ms:
+                type: integer
+                minimum: 0
+              from:
+                type: string
+              to:
+                type: string
+              reason:
+                description: A stable code, never free text.
+                type: string
+              actor_id:
+                type: string
+              control:
+                enum:
+                  - wind_down
+                  - stop
+                  - pause
+                  - takeover
+            additionalProperties: false
+        label:
+          description: The name of its tab in the hosting server's drawer, when this answer learned it.
+          type: string
+        role_prompt:
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        safe_point:
+          $ref: '#/components/schemas/OrchestrationSessionSafePoint'
+        unverified:
+          description: Names of external state this answer could not verify, such as target_session.
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    HostedTargetSessionStart:
+      type: object
+      required:
+        - session
+      properties:
+        session:
+          type: object
+          required:
+            - operation_id
+            - tool
+            - origin
+          properties:
+            operation_id:
+              type: string
+              minLength: 1
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
+            tool:
+              type: string
+              minLength: 1
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
+            model:
+              type:
+                - string
+                - 'null'
+              maxLength: 128
+            effort:
+              type:
+                - string
+                - 'null'
+              maxLength: 160
+            role:
+              $ref: '#/components/schemas/OrchestrationSessionRole'
+            origin:
+              $ref: '#/components/schemas/HostedTargetSessionOrigin'
+          additionalProperties: false
+        limits:
+          description: The orchestrator's policy limits for this machine; the policy defaults when omitted.
+          $ref: '#/components/schemas/OrchestrationMachineLimits'
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+      additionalProperties: false
+    HostedTargetSessionOrigin:
+      description: The orchestration project a hosted session works for. Identifiers and a display name only.
+      type: object
+      required:
+        - owner_checkout_id
+        - project
+      properties:
+        owner_checkout_id:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        project:
+          description: The orchestration project's display name, for the drawer label.
+          type: string
+          minLength: 1
+          maxLength: 240
+        run_id:
+          type:
+            - string
+            - 'null'
+      additionalProperties: false
+    HostedTargetSession:
+      description: One terminal of this machine that an orchestrator started, with what its host knows about it now.
+      type: object
+      required:
+        - session
+        - server_id
+        - worker_id
+        - label
+        - alive
+        - busy
+      properties:
+        session:
+          type: object
+          required:
+            - checkout_id
+            - operation_id
+            - session_id
+            - tool
+            - role
+            - origin
+            - owner
+            - paused
+            - started
+            - created_at_ms
+          properties:
+            checkout_id:
+              type: string
+            operation_id:
+              type: string
+            session_id:
+              description: This machine's terminal id.
+              type: string
+            tool:
+              type: string
+            model:
+              type: string
+            effort:
+              type: string
+            role:
+              $ref: '#/components/schemas/OrchestrationSessionRole'
+            origin:
+              $ref: '#/components/schemas/HostedTargetSessionOrigin'
+            owner:
+              $ref: '#/components/schemas/OrchestrationSessionOwner'
+            paused:
+              type: boolean
+            started:
+              type: boolean
+            created_at_ms:
+              type: integer
+              minimum: 0
+            ended_at_ms:
+              type: integer
+              minimum: 0
+            end_reason:
+              description: A stable code for how it ended.
+              type: string
+          additionalProperties: false
+        server_id:
+          type: string
+        worker_id:
+          type: string
+        label:
+          type: string
+        alive:
+          description: Null when the terminal host could not be asked.
+          type:
+            - boolean
+            - 'null'
+        busy:
+          type:
+            - boolean
+            - 'null'
+        safe_point:
+          $ref: '#/components/schemas/OrchestrationSessionSafePoint'
+      additionalProperties: false
+    HostedTargetSessionList:
+      type: object
+      required:
+        - sessions
+        - roles
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostedTargetSession'
+        roles:
+          description: Whether the target's pool has a live session in each single-holder role; null when unreadable.
+          type: object
+          required:
+            - integrator_live
+            - dispatcher_live
+          properties:
+            integrator_live:
+              type:
+                - boolean
+                - 'null'
+            dispatcher_live:
+              type:
+                - boolean
+                - 'null'
+          additionalProperties: false
       additionalProperties: false
     RemoteIdentity:
       type: object

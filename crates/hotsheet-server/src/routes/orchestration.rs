@@ -14,19 +14,26 @@ use hotsheet_ticketing::{ProviderConfigRegistry, orchestration::OrchestrationErr
 use serde_json::Value;
 use std::sync::Arc;
 
-/// The shared runtime with this server as its capacity probe (HS2-J8PRTV): sessions
-/// live here, so only this process can say what is running. Call on a blocking thread.
+/// The shared runtime with this server as its capacity probe (HS2-J8PRTV) and its
+/// terminal host (HS2-GDJXGZ): sessions live here, so only this process can say what
+/// is running or start another. Call on a blocking thread.
 fn runtime(
     state: &AppState,
     handle: tokio::runtime::Handle,
 ) -> Result<Arc<OrchestrationRuntime>, OrchestrationError> {
     let probe = Arc::new(crate::host_health::capacity::ServerCapacity {
         state: state.clone(),
+        runtime: handle.clone(),
+    });
+    let sessions = Arc::new(crate::routes::orchestration_sessions::ServerSessions {
+        state: state.clone(),
         runtime: handle,
     });
     if let Some(runtime) = &state.orchestration_runtime {
         return Ok(Arc::new(
-            OrchestrationRuntime::clone(runtime).with_capacity_probe(probe),
+            OrchestrationRuntime::clone(runtime)
+                .with_capacity_probe(probe)
+                .with_session_host(sessions),
         ));
     }
     OrchestrationRuntime::live(
@@ -38,6 +45,7 @@ fn runtime(
         runtime
             .with_target_events(target_events(state))
             .with_capacity_probe(probe)
+            .with_session_host(sessions)
     })
     .map(Arc::new)
 }

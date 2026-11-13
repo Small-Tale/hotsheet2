@@ -490,6 +490,10 @@ mod readiness;
 mod recovery;
 #[path = "remote_servers/runs.rs"]
 mod runs;
+// HS2-GDJXGZ: real PTYs run the fake agent, which is a Unix test double.
+#[cfg(unix)]
+#[path = "remote_servers/sessions.rs"]
+mod sessions;
 #[path = "remote_servers/target_tickets.rs"]
 mod target_tickets;
 #[path = "remote_servers/tool_capacity.rs"]

@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(291); // HS2-42TARA orchestration readiness plan, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(296); // HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(291); // HS2-42TARA orchestration readiness plan, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(296); // HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -746,6 +746,113 @@ test('HS2-J8PRTV real target capacity and admission responses match the OpenAPI 
     const badNamespace = await send('GET', `${hosted}/target-capacity?claim_namespaces=Not_Valid`);
     expect(badNamespace.status).toBe(400);
     matches(capacity, 'get', 'default', badNamespace.body);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-GDJXGZ real orchestration session and hosted target session responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const hostedPath = '/checkouts/{checkout}/target-sessions';
+    const hosted = `/checkouts/${server.checkoutId}/target-sessions`;
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    const origin = { owner_checkout_id: server.checkoutId, project: 'Synthetic project', run_id: null };
+
+    // Nothing was started: the hosted listing is empty and names the pool's roles.
+    const empty = await send('GET', `${hosted}?safe_point=true`);
+    expect(empty.status).toBe(200);
+    matches(hostedPath, 'get', '200', empty.body);
+    expect(empty.body.sessions).toEqual([]);
+
+    // A tool this machine does not have is the machine's own refusal, with its reason,
+    // and nothing is reserved: the same request is refused the same way again.
+    const start = { session: { operation_id: 'contract-op', tool: 'synthetic-absent-tool', origin }, actor: person };
+    for (const attempt of ['first', 'repeated']) {
+      const refused = await send('POST', hosted, start);
+      expect(refused.status, attempt).toBe(200);
+      matches(hostedPath, 'post', '200', refused.body);
+      expect(refused.body, attempt).toEqual({ outcome: 'refused', reason: 'tool_not_installed' });
+    }
+    expect((await send('GET', hosted)).body.sessions).toEqual([]);
+
+    // An operation this machine never saw: not stopped, with the code, and no session to take over.
+    const unknown = await send('DELETE', hosted, { operation_id: 'contract-op', actor: person });
+    expect(unknown.status).toBe(200);
+    matches(hostedPath, 'delete', '200', unknown.body);
+    expect(unknown.body).toEqual({ stopped: false, reason: 'session_not_found' });
+    const nobody = await send('PATCH', hosted, { operation_id: 'contract-op', pause: true, actor: person });
+    expect(nobody.status).toBe(200);
+    matches(hostedPath, 'patch', '200', nobody.body);
+    expect(nobody.body).toEqual({});
+    // Taking over is a person's act.
+    const forbidden = await send('PATCH', hosted, { operation_id: 'contract-op', actor: { role: 'ai', id: 'w' } });
+    expect(forbidden.status).toBe(403);
+    matches(hostedPath, 'patch', 'default', forbidden.body);
+    expect(forbidden.body.code).toBe('forbidden');
+    const invalid = await send('POST', hosted, { session: { operation_id: 'has space', tool: 'codex', origin } });
+    expect(invalid.status).toBe(400);
+    matches(hostedPath, 'post', 'default', invalid.body);
+
+    // The orchestrating side's records: none yet, a sync of nothing, and typed refusals.
+    const sessions = '/checkouts/{owner}/orchestration/sessions';
+    const listed = await send('GET', `${base}/sessions?active=true`);
+    expect(listed.status).toBe(200);
+    matches(sessions, 'get', '200', listed.body);
+    expect(listed.body).toEqual([]);
+    const synced = await send('POST', `${base}/session-sync`, { actor: { role: 'ai', id: 'scheduler-1' } });
+    expect(synced.status).toBe(200);
+    matches('/checkouts/{owner}/orchestration/session-sync', 'post', '200', synced.body);
+    expect(synced.body).toEqual({ sessions: [] });
+    const absent = '01ARZ3NDEKTSV4RRFFQ69G5FB0';
+    const missing = await send('GET', `${base}/sessions/${absent}`);
+    expect(missing.status).toBe(404);
+    matches(`${sessions}/{session}`, 'get', 'default', missing.body);
+    expect(missing.body.code).toBe('session_not_found');
+    const operation = `${sessions}/{session}/{operation}`;
+    for (const name of ['sync', 'safe-point', 'stop', 'takeover']) {
+      const answer = await send('POST', `${base}/sessions/${absent}/${name}`, { actor: person });
+      expect(answer.status, name).toBe(404);
+      matches(operation, 'post', 'default', answer.body);
+      expect(answer.body.code, name).toBe('session_not_found');
+    }
+    // A start for a target nobody declared is denied before anything is recorded.
+    const denied = await send('POST', `${base}/sessions`, {
+      target_id: absent,
+      operation_id: 'contract-start',
+      tool: 'codex',
+      actor: { role: 'ai', id: 'scheduler-1' },
+    });
+    expect(denied.status).toBe(403);
+    matches(sessions, 'post', 'default', denied.body);
+    expect((await send('GET', `${base}/sessions`)).body).toEqual([]);
   } finally {
     await server.stop();
   }

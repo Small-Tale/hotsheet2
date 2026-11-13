@@ -2187,6 +2187,31 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/targets/{target}/admission",
             post(routes::orchestration::write),
         )
+        // HS2-GDJXGZ: orchestrator-owned sessions (machine-local records) and the hosted
+        // half that starts, lists and stops them on this machine's terminals.
+        .route(
+            "/checkouts/{owner}/orchestration/sessions",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/sessions/{session}",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/sessions/{session}/{operation}",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/session-sync",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{checkout}/target-sessions",
+            get(routes::orchestration::read)
+                .post(routes::orchestration::write)
+                .patch(routes::orchestration::write)
+                .delete(routes::orchestration::write),
+        )
         // Resource claims (HS2-FMHH9Y): leases on named machine resources. `acquire` and
         // `wait` may park on the backend's release signal (a long poll).
         .route(

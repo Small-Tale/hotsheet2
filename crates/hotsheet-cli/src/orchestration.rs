@@ -10,6 +10,7 @@ mod readiness;
 mod recovery;
 mod request;
 mod runs;
+mod sessions;
 mod tickets;
 mod tool_capacity;
 mod validation;
@@ -32,6 +33,13 @@ pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_
 pub use runs::{
     DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,
     RunStatus, RunView,
+};
+pub use sessions::{
+    HostLaunch, HostSessionState, HostedControlReply, HostedRoles, HostedSessionControl,
+    HostedSessionList, HostedSessionStart, HostedSessionStop, HostedSessionView,
+    HostedStartOutcome, HostedStartReply, HostedStopReply, LocalServerSessions, NoSessionHost,
+    RolePrompt, SessionHost, SessionHostError, SessionSyncFailure, SessionSyncSummary, SessionView,
+    StartSession, StopSession, TakeoverSession, role_prompt_text,
 };
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
@@ -85,6 +93,8 @@ pub struct OrchestrationRuntime {
     capacity: Arc<dyn CapacityProbe>,
     /// HS2-5JBYPV: the adapters gate evidence comes from.
     gate_providers: Vec<Arc<dyn GateProvider>>,
+    /// HS2-GDJXGZ: the process that owns AI terminals, for the hosted half.
+    sessions: Arc<dyn SessionHost>,
 }
 
 impl OrchestrationRuntime {
@@ -115,6 +125,7 @@ impl OrchestrationRuntime {
             target_events: None,
             capacity: Arc::new(UnknownCapacity),
             gate_providers: vec![Arc::new(GithubActionsGates::new(&home))],
+            sessions: Arc::new(NoSessionHost),
             home,
             checkouts,
             providers,
@@ -241,7 +252,12 @@ impl OrchestrationRuntime {
             identity.server_id,
         )
         // HS2-J8PRTV: a headless process asks the server running on this machine.
-        .map(|runtime| runtime.with_capacity_probe(Arc::new(LocalServerCapacity::new(home))))
+        .map(|runtime| {
+            runtime
+                .with_capacity_probe(Arc::new(LocalServerCapacity::new(home)))
+                // HS2-GDJXGZ: and uses that server's terminals.
+                .with_session_host(Arc::new(LocalServerSessions::new(home)))
+        })
     }
 
     pub fn inspect(
@@ -417,6 +433,20 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::InvalidTransition
                 | E::RepositoryMismatch
                 | E::DeploymentActive => 409,
+            }
+        }
+        OrchestrationError::Session(error) => {
+            use hotsheet_ticketing::orchestration::SessionError as E;
+            match error {
+                E::NotFound => 404,
+                E::ForceNotPermitted => 403,
+                E::HostUnavailable | E::StartFailed => 502,
+                E::NotActive
+                | E::InvalidTransition
+                | E::HumanOwned
+                | E::NotSafe
+                | E::AdmissionRefused
+                | E::RoleActive => 409,
             }
         }
         OrchestrationError::TargetOperation(error) => {

@@ -54,6 +54,12 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "target-validations"]
             // HS2-42TARA: the plan of prerequisites and its readiness.
             | ["checkouts", _, "orchestration", "readiness", _]
+            // HS2-GDJXGZ: orchestrator-owned sessions (orchestrating) and the hosted half.
+            | ["checkouts", _, "orchestration", "sessions"]
+            | ["checkouts", _, "orchestration", "sessions", _]
+            | ["checkouts", _, "orchestration", "sessions", _, _]
+            | ["checkouts", _, "orchestration", "session-sync"]
+            | ["checkouts", _, "target-sessions"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -115,6 +121,13 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "validations", _]
             // HS2-42TARA: the plan and what it is computed from are this machine's.
             | ["checkouts", _, "orchestration", "readiness", _]
+            // HS2-GDJXGZ: session records are this machine's and a start passes its
+            // grants. The hosted `target-sessions` route stays ordinary authenticated
+            // data so a remote orchestrator can reach it.
+            | ["checkouts", _, "orchestration", "sessions"]
+            | ["checkouts", _, "orchestration", "sessions", _]
+            | ["checkouts", _, "orchestration", "sessions", _, _]
+            | ["checkouts", _, "orchestration", "session-sync"]
     )
 }
 
@@ -503,6 +516,73 @@ impl OrchestrationRuntime {
                     &execution,
                     query_number(path, "wait_ms", 0)?,
                 )?)
+            }
+            // HS2-GDJXGZ hosted half: sessions an orchestrator started on this machine.
+            ("GET", ["checkouts", checkout, "target-sessions"]) => value(self.hosted_sessions(
+                checkout,
+                query_text(path, "operation_id")?.as_deref(),
+                query_text(path, "safe_point")?.as_deref() == Some("true"),
+                tx,
+            )?),
+            ("POST", ["checkouts", checkout, "target-sessions"]) => {
+                value(self.hosted_session_start(checkout, hosted(body)?, tx)?)
+            }
+            ("DELETE", ["checkouts", checkout, "target-sessions"]) => {
+                value(self.hosted_session_stop(checkout, hosted(body)?, tx)?)
+            }
+            ("PATCH", ["checkouts", checkout, "target-sessions"]) => {
+                value(self.hosted_session_control(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-GDJXGZ orchestrating half.
+            ("GET", ["checkouts", owner, "orchestration", "sessions"]) => {
+                value(self.session_list(
+                    owner,
+                    query_text(path, "active")?.as_deref() == Some("true"),
+                )?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "sessions"]) => {
+                let actor = actor(body)?;
+                value(self.session_start(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "sessions", session]) => {
+                value(self.session(owner, session)?)
+            }
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "sessions",
+                    session,
+                    operation,
+                ],
+            ) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "sync" => value(self.session_sync(owner, session, actor.as_ref(), tx)?),
+                    "safe-point" => {
+                        value(self.session_safe_point(owner, session, actor.as_ref(), tx)?)
+                    }
+                    "stop" => value(self.session_stop(
+                        owner,
+                        session,
+                        decode(body)?,
+                        actor.as_ref(),
+                        tx,
+                    )?),
+                    "takeover" => value(self.session_takeover(
+                        owner,
+                        session,
+                        decode(body)?,
+                        actor.as_ref(),
+                        tx,
+                    )?),
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
+            ("POST", ["checkouts", owner, "orchestration", "session-sync"]) => {
+                value(self.sessions_sync(owner, actor(body)?.as_ref(), tx)?)
             }
             // HS2-WN0MXZ orchestrating half.
             (
