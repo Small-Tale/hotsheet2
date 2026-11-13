@@ -2787,6 +2787,8 @@ paths:
                     $ref: '#/components/schemas/HostedTargetSession'
                   role_prompt:
                     $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+                  tool_setup:
+                    $ref: '#/components/schemas/OrchestrationSessionToolSetup'
                 additionalProperties: false
         default:
           description:
@@ -20705,6 +20707,8 @@ components:
           type: string
         role_prompt:
           $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        tool_setup:
+          $ref: '#/components/schemas/OrchestrationSessionToolSetup'
         safe_point:
           $ref: '#/components/schemas/OrchestrationSessionSafePoint'
         unverified:
@@ -22266,6 +22270,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProvisionalGate'
+      additionalProperties: false
+    OrchestrationSessionToolSetup:
+      description:
+        What the target checkout's own AI-tool setup wrote before the launch (HS2-WEFJV8). The tool starts in the
+        checkout, so its MCP, instruction and hook configuration is written there first.
+      type: object
+      required:
+        - wrote
+      properties:
+        wrote:
+          description: How many files the setup wrote in or for the checkout.
+          type: integer
+          minimum: 0
       additionalProperties: false
     RemoteIdentity:
       type: object

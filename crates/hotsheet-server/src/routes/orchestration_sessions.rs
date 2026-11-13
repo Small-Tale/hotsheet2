@@ -11,7 +11,8 @@ use axum::Json;
 use axum::extract::{Path, State};
 use hotsheet_aitools::session_push::PushMessage;
 use hotsheet_cli::orchestration::{
-    HostLaunch, HostSessionState, RolePrompt, SessionHost, SessionHostError, role_prompt_text,
+    HostLaunch, HostSessionState, RolePrompt, SessionHost, SessionHostError, ToolSetup,
+    role_prompt_text, target_tool_setup,
 };
 use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::orchestration::SessionRole;
@@ -24,6 +25,19 @@ pub(crate) struct ServerSessions {
 }
 
 impl SessionHost for ServerSessions {
+    fn prepare(&self, checkout: &Checkout, tool: &str) -> Result<ToolSetup, SessionHostError> {
+        // HS2-WEFJV8: the project's own headless setup, with this server's plugins.
+        let setup = target_tool_setup(
+            checkout,
+            tool,
+            Some(self.state.store.root()),
+            &self.state.plugin_dirs,
+        )?;
+        // Setting a tool up changes its plugin state; the next discovery must rescan.
+        self.state.invalidate_ai_tool_discovery();
+        Ok(setup)
+    }
+
     fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
         let request = OpenTerminalReq {
             command: None,

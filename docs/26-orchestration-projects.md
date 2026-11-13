@@ -14,7 +14,7 @@
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
-> HS2-GDJXGZ),
+> HS2-GDJXGZ) that start with the target checkout set up for their tool (HS2-WEFJV8),
 > the throughput scheduler with its plan, explanations, decision log and event-driven
 > loop (§26.17, HS2-ECWG50), which places orchestrator-owned sessions through its
 > session executor (§26.19, HS2-95SWQ4; nothing is placed until a policy sets
@@ -1833,15 +1833,47 @@ person took over still runs, so it still counts until it stops.
    policy's machine limits for that target.
 4. The host reserves a terminal id for the operation id in
    `${HOTSHEET_HOME}/orchestration-hosted-sessions.json`, asks its own admission
-   (§26.10), checks its session cap again on a fresh terminal listing, launches, saves
-   the label and marks the reservation started. A reservation that never launched is
-   forgotten, so the same request can be made again.
+   (§26.10), checks its session cap again on a fresh terminal listing, sets the
+   target checkout up for the tool (below), launches, saves the label and marks the
+   reservation started. A reservation that never launched is forgotten, so the same
+   request can be made again.
 5. The host's answer makes the session `running`. A refusal makes it `failed` with the
    host's reason code in its history (an admission reason such as `below_ram_floor`,
    `session_cap_reached`, or a session code) and the caller gets
    `session_admission_refused`, `session_role_active`, `session_start_failed` or
    `session_host_unavailable`. A failure that may be transient leaves the session
    `requested`, and the same request repeats it.
+
+**Tool setup in the target checkout (HS2-WEFJV8).** The tool starts in the target
+checkout and reads its MCP, instruction and hook configuration from there. The
+drawer's launch path sets up the store of the server that serves it, which is a
+different directory whenever the target checkout is not that store, so a target
+nobody had opened in a client started with none of its configuration. Before every
+launch the host therefore runs the target project's own headless setup for the one
+tool ([05](05-ai-tool-plugins.md) §5.1a, the same `setup` the CLI runs), in the
+checkout, with the MCP entry pointing at the checkout's linked Git ticket store (the
+store the project-open refresh chooses), or at the hosting server's store when the
+checkout links none. It is idempotent, so a repeated or replacement start rewrites
+nothing that is current. A checkout that still holds an HS1 store, an unknown tool
+or a setup that fails refuses the start as `tool_setup_failed`; nothing launches and
+the session ends as `failed` with that reason (`session_start_failed` to the caller).
+The start's answer reports how many files the setup wrote (`tool_setup.wrote`). A
+headless host (§26.4) runs the same setup in its own process, with the machine's
+plugin directory, before it asks the local server to launch.
+
+What the session then sees, as a real-server test establishes with a fake agent
+that reports its launch: its working directory is the target checkout; the
+checkout holds the tool's instruction file and MCP configuration, and the MCP entry
+names the checkout's own store; its environment carries the worker id its claims
+use (`HOTSHEET_WORKER_ID`), the terminal id, the actor role `ai`, the server URL and
+secret for permission routing, and `HOTSHEET_PROJECT` naming the checkout.
+
+Setup writes the instruction file and skills into the checkout as project files;
+the machine-local MCP and hook files are excluded from Git. The first setup in a
+checkout therefore leaves uncommitted files, and until someone commits them the
+safe point lists `uncommitted_changes` for every session there (HS2-TRP2MJ narrows
+that check). A terminal a person opens from the drawer in another checkout is still
+set up against the serving store (HS2-MBDKWQ).
 
 **Label.** The host names the terminal tab `<orchestration project>: run <last eight
 characters of the run id>`, or `<orchestration project>: <role>` when the session
@@ -1994,7 +2026,8 @@ A headless process owns no terminals. `hotsheet-cli` and the MCP core backend us
 ordinary terminal routes of the Hot Sheet server running on the same machine, so a
 session they start still lands in that server's drawer, and without a running server a
 start fails closed. The start uses the drawer's launch path as it is, including where
-that path runs the tool's setup (HS2-WEFJV8).
+that path runs the tool's setup; the target checkout's own setup runs first
+(HS2-WEFJV8).
 
 ## 26.17 Throughput scheduler (HS2-ECWG50)
 

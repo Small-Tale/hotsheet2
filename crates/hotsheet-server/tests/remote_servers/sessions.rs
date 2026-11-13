@@ -403,6 +403,11 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
         2
     );
 
+    // HS2-WEFJV8: the first start set the checkout up for its tool, which wrote the
+    // instruction file as a project file. A person commits it.
+    for checkout in &peer_checkouts {
+        super::session_work::commit_all(Path::new(&checkout.root));
+    }
     // The idle session is at a safe point; the busy one is mid-turn and stays.
     let a_id = a["session_id"].as_str().unwrap();
     let b_id = b["session_id"].as_str().unwrap();
@@ -617,7 +622,9 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
     let host = state(&source, &home)
         .with_capacity_source(Box::new(Roomy))
         .with_capacity_cache(std::time::Duration::ZERO)
-        .with_plugin_dirs(vec![fake_plugins(root.path())]);
+        // HS2-WEFJV8: the machine's plugin directory, which the headless CLI's own
+        // setup of the target checkout reads like the server does.
+        .with_plugin_dirs(vec![fake_plugins(&home)]);
     let project = root.path().join("project");
     git_project(&project);
     let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
@@ -802,6 +809,8 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
         call(json!({"action":"session_show","session_id":session_id}))["operation_id"],
         "mcp-op"
     );
+    // HS2-WEFJV8: the start wrote the tool's instruction file; a person commits it.
+    super::session_work::commit_all(&project);
     let point = call(json!({"action":"session_safe_point","session_id":session_id}));
     assert_eq!(point["safe_point"]["safe"], true, "{point}");
     assert_eq!(

@@ -500,6 +500,8 @@ mod scheduler;
 #[path = "remote_servers/session_executor.rs"]
 mod session_executor;
 #[cfg(unix)]
+#[path = "remote_servers/session_work.rs"]
+mod session_work;
 #[path = "remote_servers/sessions.rs"]
 mod sessions;
 #[path = "remote_servers/summary.rs"]

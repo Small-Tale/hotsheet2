@@ -60,9 +60,59 @@ pub enum RolePrompt {
     Failed,
 }
 
+/// HS2-WEFJV8: what the target project's own AI-tool setup did before a launch.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolSetup {
+    /// Files the setup wrote in or for the checkout.
+    pub wrote: u32,
+}
+
+/// HS2-WEFJV8: the store a checkout's AI-tool setup points at. A linked Git source is
+/// the project's own, chosen as the project-open refresh chooses it; a checkout
+/// without one uses the store of the server that hosts it.
+pub fn setup_store(checkout: &Checkout, serving_store: Option<&Path>) -> Option<PathBuf> {
+    checkout
+        .sources
+        .iter()
+        .find(|source| source.provider == "git")
+        .map(|source| PathBuf::from(&source.locator))
+        .or_else(|| serving_store.map(Path::to_path_buf))
+}
+
+/// HS2-WEFJV8: prepare the target checkout for `tool` with the project's own headless
+/// setup ([`crate::setup::run_setup_in`]), so the session finds its MCP, instruction
+/// and hook configuration in the directory it starts in. Every host calls this one
+/// function; there is no second setup workflow.
+pub fn target_tool_setup(
+    checkout: &Checkout,
+    tool: &str,
+    serving_store: Option<&Path>,
+    plugin_dirs: &[PathBuf],
+) -> Result<ToolSetup, SessionHostError> {
+    let project = Path::new(&checkout.root);
+    hotsheet_aitools::launch_safety::assert_no_hs1(project)
+        .map_err(|_| SessionHostError::Refused)?;
+    let store = setup_store(checkout, serving_store).ok_or(SessionHostError::Refused)?;
+    let reports = crate::setup::run_setup_in(&store, project, Some(tool), false, plugin_dirs)
+        .map_err(|_| SessionHostError::Refused)?;
+    Ok(ToolSetup {
+        wrote: u32::try_from(
+            reports
+                .iter()
+                .map(|report| report.wrote.len())
+                .sum::<usize>(),
+        )
+        .unwrap_or(u32::MAX),
+    })
+}
+
 /// The process that owns AI terminals. The server injects itself; a headless process
 /// reaches the server running on this machine; tests script one.
 pub trait SessionHost: Send + Sync {
+    /// HS2-WEFJV8: run the target project's own setup for the tool in the checkout,
+    /// before anything launches there. A setup that cannot be made refuses the start.
+    fn prepare(&self, checkout: &Checkout, tool: &str) -> Result<ToolSetup, SessionHostError>;
+
     /// Launch the tool in the checkout through the ordinary AI terminal path. Launching
     /// an id that already runs attaches to it and starts nothing.
     fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError>;
@@ -80,6 +130,9 @@ pub trait SessionHost: Send + Sync {
 /// No terminal host is reachable from this process.
 pub struct NoSessionHost;
 impl SessionHost for NoSessionHost {
+    fn prepare(&self, _: &Checkout, _: &str) -> Result<ToolSetup, SessionHostError> {
+        Err(SessionHostError::Unavailable)
+    }
     fn start(&self, _: &Checkout, _: &HostLaunch) -> Result<(), SessionHostError> {
         Err(SessionHostError::Unavailable)
     }
@@ -93,6 +146,10 @@ impl SessionHost for NoSessionHost {
         RolePrompt::Failed
     }
 }
+
+/// HS2-WEFJV8: the hosted refusal when the target checkout could not be set up for the
+/// tool. Nothing was launched.
+pub const TOOL_SETUP_FAILED: &str = "tool_setup_failed";
 
 /// The message that asks a started session to take up its role. It names the skill;
 /// the skill itself is the workflow.
@@ -146,6 +203,20 @@ impl LocalServerSessions {
     }
 }
 impl SessionHost for LocalServerSessions {
+    fn prepare(&self, checkout: &Checkout, tool: &str) -> Result<ToolSetup, SessionHostError> {
+        // The headless setup itself, in this process, pointing a checkout without a
+        // linked store at the store of the server that will host the terminal.
+        let servers = self.servers();
+        let Some(server) = servers.first() else {
+            return Err(SessionHostError::Unavailable);
+        };
+        target_tool_setup(
+            checkout,
+            tool,
+            Some(Path::new(&server.store_path)),
+            &hotsheet_plugins::default_dirs(),
+        )
+    }
     fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
         let mut answered = false;
         for server in self.servers() {
@@ -290,6 +361,9 @@ pub struct HostedStartReply {
     pub session: Option<HostedSessionView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role_prompt: Option<RolePrompt>,
+    /// HS2-WEFJV8: what the checkout's tool setup wrote before this launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_setup: Option<ToolSetup>,
 }
 
 /// Whether the target's pool already has a live session in each single-holder role.
@@ -399,6 +473,9 @@ pub struct SessionView {
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role_prompt: Option<RolePrompt>,
+    /// HS2-WEFJV8: what the target checkout's tool setup wrote before the launch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_setup: Option<ToolSetup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_point: Option<SafePoint>,
     /// Names of external state this answer could not verify, such as `target_session`.
@@ -412,6 +489,7 @@ impl From<OrchestratedSession> for SessionView {
             session,
             label: None,
             role_prompt: None,
+            tool_setup: None,
             safe_point: None,
             unverified: Vec::new(),
         }
@@ -722,6 +800,7 @@ impl OrchestrationRuntime {
                 reason: None,
                 session: Some(self.hosted_view(&checkout, session, live.as_deref(), false, tx)),
                 role_prompt: None,
+                tool_setup: None,
             });
         }
         // Nothing runs for this reservation yet, so a refusal forgets it and the same
@@ -733,6 +812,7 @@ impl OrchestrationRuntime {
                 reason: Some(reason.into()),
                 session: None,
                 role_prompt: None,
+                tool_setup: None,
             })
         };
         if reserved.role.is_role_session() {
@@ -792,6 +872,16 @@ impl OrchestrationRuntime {
         {
             return refuse("session_cap_reached");
         }
+        // HS2-WEFJV8: the tool starts in the target checkout, so that is where its MCP,
+        // instruction and hook configuration has to be. The launch path sets up the
+        // serving store only.
+        let tool_setup = match self.sessions.prepare(&checkout, &reserved.tool) {
+            Ok(setup) => setup,
+            Err(SessionHostError::Unavailable) => {
+                return refuse(SessionError::HostUnavailable.code());
+            }
+            Err(SessionHostError::Refused) => return refuse(TOOL_SETUP_FAILED),
+        };
         match self.sessions.start(
             &checkout,
             &HostLaunch {
@@ -820,6 +910,7 @@ impl OrchestrationRuntime {
             reason: None,
             session: Some(self.hosted_view(&checkout, started, live.as_deref(), false, tx)),
             role_prompt: Some(role_prompt),
+            tool_setup: Some(tool_setup),
         })
     }
 
@@ -1469,7 +1560,12 @@ impl OrchestrationRuntime {
                 // A session code is reported as itself; an admission reason as a
                 // refused admission, with the reason in the session's history.
                 return Err(OrchestrationError::Session(
-                    SessionError::from_code(&reason).unwrap_or(SessionError::AdmissionRefused),
+                    SessionError::from_code(&reason).unwrap_or(if reason == TOOL_SETUP_FAILED {
+                        // The machine had room; the start itself could not be made.
+                        SessionError::StartFailed
+                    } else {
+                        SessionError::AdmissionRefused
+                    }),
                 ));
             };
             if hosted.session.ended_at_ms.is_some() {
@@ -1501,6 +1597,7 @@ impl OrchestrationRuntime {
             Ok(SessionView {
                 label: Some(hosted.label),
                 role_prompt: reply.role_prompt,
+                tool_setup: reply.tool_setup,
                 ..SessionView::from(started)
             })
         })();

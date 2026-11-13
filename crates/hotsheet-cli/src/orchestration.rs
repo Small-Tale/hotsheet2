@@ -60,7 +60,8 @@ pub use sessions::{
     HostedSessionList, HostedSessionStart, HostedSessionStop, HostedSessionView,
     HostedStartOutcome, HostedStartReply, HostedStopReply, LocalServerSessions, NoSessionHost,
     RolePrompt, SessionHost, SessionHostError, SessionSyncFailure, SessionSyncSummary, SessionView,
-    StartSession, StopSession, TakeoverSession, role_prompt_text,
+    StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession, ToolSetup, role_prompt_text,
+    setup_store, target_tool_setup,
 };
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,

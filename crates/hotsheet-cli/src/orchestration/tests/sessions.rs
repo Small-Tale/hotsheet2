@@ -27,6 +27,12 @@ pub(super) struct ScriptedHost {
     pub(super) stops: AtomicUsize,
     pub(super) down: AtomicBool,
     pub(super) refusing: AtomicBool,
+    /// HS2-WEFJV8: every setup asked for, as (checkout root, tool), in order with the
+    /// launches, and whether setup fails.
+    prepared: Mutex<Vec<(String, String)>>,
+    pub(super) setup_failing: AtomicBool,
+    /// How many launches had happened when each setup was asked for.
+    prepared_before: Mutex<Vec<usize>>,
 }
 impl ScriptedHost {
     fn live(&self) -> std::sync::MutexGuard<'_, Vec<HostSessionState>> {
@@ -52,6 +58,23 @@ impl ScriptedHost {
     }
 }
 impl SessionHost for ScriptedHost {
+    fn prepare(&self, checkout: &Checkout, tool: &str) -> Result<ToolSetup, SessionHostError> {
+        if self.down.load(Ordering::SeqCst) {
+            return Err(SessionHostError::Unavailable);
+        }
+        if self.setup_failing.load(Ordering::SeqCst) {
+            return Err(SessionHostError::Refused);
+        }
+        self.prepared
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((checkout.root.clone(), tool.into()));
+        self.prepared_before
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(self.launches().len());
+        Ok(ToolSetup { wrote: 2 })
+    }
     fn start(&self, _: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
         if self.down.load(Ordering::SeqCst) {
             return Err(SessionHostError::Unavailable);
@@ -1418,4 +1441,135 @@ fn hs2_gdjxgz_a_start_that_never_reached_the_host_can_be_repeated_or_dropped() {
         SessionState::Stopped
     );
     assert_eq!(f.host.launches().len(), 1);
+}
+
+/// HS2-WEFJV8: a start sets up the target checkout for its tool before it launches,
+/// once per launch; a setup that cannot be made launches nothing and fails the start.
+#[test]
+fn hs2_wefjv8_a_start_sets_up_the_target_checkout_before_it_launches() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(Vec::new(), &mut tx);
+    let owner = f.m.owner.id.clone();
+    let view = f.started("op-1", 1, "codex", &mut tx);
+    assert_eq!(view.tool_setup, Some(ToolSetup { wrote: 2 }));
+    let prepared = f.host.prepared.lock().unwrap().clone();
+    // The target's checkout, not the owner's and not a store.
+    assert_eq!(prepared, [(f.m.target.root.clone(), "codex".to_owned())]);
+    // Asked before the launch.
+    assert_eq!(*f.host.prepared_before.lock().unwrap(), [0]);
+    // A repeat is the same session: no second setup and no second launch.
+    f.started("op-1", 1, "codex", &mut tx);
+    assert_eq!(f.host.prepared.lock().unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+
+    // A setup that fails: refused, recorded as failed with the reason, nothing ran.
+    f.host.setup_failing.store(true, Ordering::SeqCst);
+    assert_eq!(
+        session_error(f.start("op-2", 1, "codex", json!({}), &mut tx)),
+        SessionError::StartFailed
+    );
+    let failed =
+        f.m.runtime
+            .session_list(&owner, false)
+            .unwrap()
+            .into_iter()
+            .find(|session| session.operation_id == "op-2")
+            .unwrap();
+    assert_eq!(failed.state, SessionState::Failed);
+    assert_eq!(
+        failed.history.last().unwrap().reason.as_deref(),
+        Some(TOOL_SETUP_FAILED)
+    );
+    assert_eq!(f.host.launches().len(), 1);
+    // The host forgot the reservation, so a later start under a new id may launch.
+    f.host.setup_failing.store(false, Ordering::SeqCst);
+    let after = f.started("op-3", 1, "codex", &mut tx);
+    assert_eq!(after.session.state, SessionState::Running);
+    assert_eq!(*f.host.prepared_before.lock().unwrap(), [0, 1]);
+}
+
+fn checkout_at(root: &Path, sources: Value) -> Checkout {
+    serde_json::from_value(json!({
+        "id": "target-checkout", "root": root, "alias": "target", "sources": sources,
+    }))
+    .unwrap()
+}
+
+/// HS2-WEFJV8: the setup the hosts share is the project's own headless setup, run in
+/// the checkout with the checkout's own linked store.
+#[test]
+fn hs2_wefjv8_target_setup_writes_the_tools_files_into_the_checkout() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let linked = root.path().join("linked-store");
+    let serving = root.path().join("serving-store");
+    for store in [&linked, &serving] {
+        hotsheet_ticketing::FsStore::init_git(
+            store,
+            &hotsheet_ticketing::StoreMetadata::new("TGT"),
+        )
+        .unwrap();
+    }
+    std::fs::create_dir_all(project.join(".git/info")).unwrap();
+    std::fs::write(project.join(".git/info/exclude"), "").unwrap();
+    let git = json!([{"connection_id":"linked","provider":"git","locator":linked}]);
+    let checkout = checkout_at(&project, git.clone());
+
+    // Which store: the linked Git source, else the serving store, else none.
+    assert_eq!(setup_store(&checkout, Some(&serving)), Some(linked.clone()));
+    let unlinked = checkout_at(&project, json!([]));
+    assert_eq!(
+        setup_store(&unlinked, Some(&serving)),
+        Some(serving.clone())
+    );
+    assert_eq!(setup_store(&unlinked, None), None);
+    let github = checkout_at(
+        &project,
+        json!([{"connection_id":"gh","provider":"github","locator":"synthetic/repo"}]),
+    );
+    assert_eq!(setup_store(&github, Some(&serving)), Some(serving.clone()));
+
+    // The built-in Claude plugin: instructions, MCP and hooks land in the checkout.
+    let setup = target_tool_setup(&checkout, "claude", Some(&serving), &[]).unwrap();
+    assert!(setup.wrote > 0, "{setup:?}");
+    assert!(project.join("CLAUDE.md").is_file());
+    assert!(project.join(".mcp.json").is_file());
+    let mcp = std::fs::read_to_string(project.join(".mcp.json")).unwrap();
+    assert!(mcp.contains("hotsheet"), "{mcp}");
+    // Nothing was written into either store.
+    for store in [&linked, &serving] {
+        assert!(!store.join("CLAUDE.md").exists());
+        assert!(!store.join(".mcp.json").exists());
+    }
+    // Repeating it is idempotent.
+    let before = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap();
+    target_tool_setup(&checkout, "claude", Some(&serving), &[]).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(project.join("CLAUDE.md")).unwrap(),
+        before
+    );
+
+    // Refused, writing nothing: an unknown tool, no store at all, or an HS1 store.
+    assert_eq!(
+        target_tool_setup(&checkout, "no-such-tool", None, &[]),
+        Err(SessionHostError::Refused)
+    );
+    let bare = root.path().join("bare");
+    std::fs::create_dir_all(&bare).unwrap();
+    assert_eq!(
+        target_tool_setup(&checkout_at(&bare, json!([])), "claude", None, &[]),
+        Err(SessionHostError::Refused)
+    );
+    assert!(!bare.join("CLAUDE.md").exists());
+    std::fs::create_dir_all(bare.join(".hotsheet/db")).unwrap();
+    std::fs::write(bare.join(".hotsheet/db/PG_VERSION"), "16").unwrap();
+    assert_eq!(
+        target_tool_setup(&checkout_at(&bare, git), "claude", None, &[]),
+        Err(SessionHostError::Refused)
+    );
+    assert!(!bare.join("CLAUDE.md").exists());
 }

@@ -17,6 +17,9 @@
 //!   --idle                # OSC 133;D (finished → idle)
 //!   --exit 0              # exit with this status
 //!   --permission Bash "rm x" # ask HOTSHEET_SERVER and print its allow/deny decision
+//!   --probe AGENTS.md     # note whether this file exists in the working directory
+//!   --report /tmp/seen    # write what the agent saw at this point, as JSON (HS2-WEFJV8)
+//!   --report-dir /tmp/r   # the same, to <dir>/<HOTSHEET_TERMINAL_ID>.json
 //! ```
 
 use std::io::Write;
@@ -27,6 +30,7 @@ fn main() {
     let out = std::io::stdout();
     let mut w = out.lock();
     let mut exit_code = 0;
+    let mut probes: Vec<String> = Vec::new();
 
     let mut i = 0;
     while i < args.len() {
@@ -77,6 +81,26 @@ fn main() {
                 }
                 i += 2;
             }
+            "--probe" => {
+                probes.push(val(i).to_string());
+                i += 1;
+            }
+            "--report" | "--report-dir" => {
+                let mut path = std::path::PathBuf::from(val(i));
+                if flag == "--report-dir" {
+                    let id = std::env::var("HOTSHEET_TERMINAL_ID").unwrap_or_default();
+                    path = path.join(format!("{id}.json"));
+                }
+                // Written whole and then renamed, so a reader never sees half of it.
+                let partial = path.with_extension("partial");
+                if let Err(e) = std::fs::write(&partial, report(&probes))
+                    .and_then(|()| std::fs::rename(&partial, &path))
+                {
+                    eprintln!("hs-fake-agent: report failed: {e}");
+                    exit_code = 2;
+                }
+                i += 1;
+            }
             "--exit" => {
                 exit_code = val(i).parse::<i32>().unwrap_or(0);
                 i += 1;
@@ -90,6 +114,29 @@ fn main() {
     }
     let _ = w.flush();
     std::process::exit(exit_code);
+}
+
+/// HS2-WEFJV8: what a launched tool sees at its start: its working directory, the
+/// `HOTSHEET_*` environment its host gave it, and whether each probed file exists there.
+fn report(probes: &[String]) -> String {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let env: serde_json::Map<String, serde_json::Value> = std::env::vars()
+        // The bearer secret is named, never written out.
+        .filter(|(key, _)| key.starts_with("HOTSHEET_"))
+        .map(|(key, value)| {
+            let shown = if key == "HOTSHEET_SECRET" {
+                "<set>".to_string()
+            } else {
+                value
+            };
+            (key, serde_json::Value::String(shown))
+        })
+        .collect();
+    let files: serde_json::Map<String, serde_json::Value> = probes
+        .iter()
+        .map(|probe| (probe.clone(), cwd.join(probe).is_file().into()))
+        .collect();
+    serde_json::json!({ "cwd": cwd, "env": env, "files": files }).to_string()
 }
 
 fn ask_permission(tool: &str, action: &str) -> Result<String, Box<dyn std::error::Error>> {

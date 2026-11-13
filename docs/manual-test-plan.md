@@ -1148,3 +1148,20 @@ host-only network can reach the host, verify the exposure choice in
    second release answers 403 `token_invalid` and the host shows the resource free.
 6. Restart the server with the default loopback bind and confirm the guest can no longer
    connect.
+
+## Orchestrator-started session in its target checkout (HS2-WEFJV8)
+
+Automated tests launch the workspace fake agent, which reports the files and
+environment it sees but never reads them. With a real tool, use a throwaway
+`HOTSHEET_HOME`, a server store, and a second git project with its own linked store
+that has never been opened in a client.
+
+1. Declare and bind the project as a target of itself, grant `sessions_manage` for
+   the tool, and store a policy that lists it (§26.7, §26.8).
+2. Run `hotsheet-cli orchestration session start --project <owner> --target <id>
+--operation-id manual-1 --tool claude` (repeat with `codex`).
+3. Confirm the answer has `tool_setup.wrote` above zero, and that the project now
+   holds the tool's instruction file and MCP configuration naming its own store.
+4. In the session's drawer tab, ask the tool to list its Hot Sheet MCP tools and to
+   show the Up Next queue. Confirm it answers from the project's own store.
+5. Stop the session with `--force` as a person. Remove the temporary directories.
