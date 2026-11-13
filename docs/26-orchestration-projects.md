@@ -1413,7 +1413,10 @@ sure of it (HS2-VVHVF0):
 - All three call one workflow, `DetachedJobMonitor` in the shared runtime, which `job
 watch start` uses too. `gate link --no-monitor` starts none.
   `HOTSHEET_JOB_MONITOR_AUTOSTART=off` keeps a process from starting one on its own;
-  the repository's test configuration sets it.
+  the repository's test configuration sets it. A test build (the isolated
+  `test-permission-vault` artifact that browser and script fixtures launch outside
+  Cargo) starts none unless the variable is `on`, because those fixtures inherit the
+  developer's environment and a monitor asks `gh` for a real token.
 
 `authorize` reads the target again, up to three times, when its resolution lost a
 race to a concurrent one, so a follower confirming its authority does not turn a

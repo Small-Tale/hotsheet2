@@ -47,10 +47,18 @@ impl DetachedJobMonitor {
 
     /// The monitor for a runtime that starts one on its own, or `None` when
     /// [`JOB_MONITOR_AUTOSTART_ENV`] is `off`.
+    ///
+    /// A test build (the isolated `test-permission-vault` artifact that browser and
+    /// script fixtures launch outside Cargo) starts none unless the variable is `on`:
+    /// a monitor asks `gh` for the developer's real token, and those fixtures inherit
+    /// the developer's environment rather than the Cargo configuration.
     pub fn automatic() -> Option<Self> {
-        let off = std::env::var(JOB_MONITOR_AUTOSTART_ENV)
-            .is_ok_and(|value| value.trim().eq_ignore_ascii_case("off"));
-        (!off).then(|| Self::new(current_program()))
+        let setting = std::env::var(JOB_MONITOR_AUTOSTART_ENV).ok();
+        autostart(
+            setting.as_deref(),
+            hotsheet_aitools::test_permission_vault_available(),
+        )
+        .then(|| Self::new(current_program()))
     }
 
     /// Extra `job monitor` flags: the timing overrides of `job watch start`.
@@ -138,3 +146,43 @@ fn detach(command: &mut Command) {
 
 #[cfg(not(any(unix, windows)))]
 fn detach(_command: &mut Command) {}
+
+/// Whether a runtime starts the monitor on its own: `off` never does, `on` always does,
+/// and an unset or other value does except in a test build.
+fn autostart(setting: Option<&str>, test_build: bool) -> bool {
+    match setting
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("off") => false,
+        Some("on") => true,
+        _ => !test_build,
+    }
+}
+
+#[cfg(test)]
+mod autostart_tests {
+    use super::autostart;
+
+    /// A browser fixture's server inherits the developer's shell, not the Cargo
+    /// configuration, so a test build must not start a monitor that reaches `gh`.
+    #[test]
+    fn hs2_vvhvf0_a_test_build_starts_no_monitor_unless_asked() {
+        for (setting, test_build, expected) in [
+            (None, false, true),
+            (None, true, false),
+            (Some("off"), false, false),
+            (Some(" OFF "), true, false),
+            (Some("on"), true, true),
+            (Some("on"), false, true),
+            (Some("yes"), true, false),
+            (Some("yes"), false, true),
+        ] {
+            assert_eq!(
+                autostart(setting, test_build),
+                expected,
+                "{setting:?} {test_build}"
+            );
+        }
+    }
+}
