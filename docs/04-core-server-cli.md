@@ -972,6 +972,7 @@ hotsheet provider-enable github-main
 hotsheet provider-remove github-main [--json]  # permanent, every project; the account stays signed in
 hotsheet checkout remove-source web github-main [--json]  # this project only; deletes the connection if no other project uses it
 hotsheet checkout remove <id|path|alias> [--dry-run] [--json]  # unregister a checkout; no-op when not registered (HS2-X4RZ73)
+hotsheet checkout prune [--dry-run] [--json]  # unregister abandoned temporary checkouts (HS2-HM0Y6X)
 hotsheet checkout source-color web github-main              # JSON: checkout_id, connection_id, effective color
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
 hotsheet checkout set-source-color web github-main '#6b7280' # restore the default Gray mark
@@ -1049,6 +1050,25 @@ descriptors include the effective color, and `PATCH /checkouts/{reference}/sourc
 accepts the eight ticket-source palette colors (Blue, Green, Orange, Red, Purple, Pink, Teal,
 and Gray). Gray removes the stored override; Transparent is not a ticket-source option
 (HS2-H1FZNV). Removing or renaming a source removes or moves its project color with it.
+
+`checkout prune` (HS2-HM0Y6X) cleans up throwaway checkouts that tests, reviews, and agents
+created under the OS temporary directory, which running setup there registers. The server
+runs the same prune at startup, so the machine project list recovers without user action:
+
+- **Candidates.** A checkout whose root lies under a temporary directory (the OS temp
+  directory, plus `/tmp`, `/var/tmp`, and `/var/folders` on Unix, in written and resolved
+  forms), whose sources are all Git (so no provider connection is touched), and whose root
+  is gone or holds nothing but Hot Sheet's generated `.hotsheet2/worklist.md`. A temporary
+  checkout with any other content stays registered, as does a missing root elsewhere (an
+  unmounted volume).
+- **Removal.** Each candidate goes through the `checkout remove` workflow above, including
+  its live-server handling. Afterwards only the generated worklist and the two
+  then-empty directories are deleted, each non-recursively, after rechecking.
+- **Test homes.** When the registry itself lives under a temporary directory (a hermetic
+  test home), nothing is considered, and `--json` reports `skipped`.
+- **Cause.** Older releases recreated a deleted checkout's root when they refreshed its
+  worklist. Registered checkout worklists now skip a missing root ([03](03-indexing-and-query.md)
+  §3.6).
 
 A Git source's descriptor carries its store's `ticket_prefix`; other providers omit it.
 `PUT /checkouts/{reference}/sources/{connection_id}/ticket-prefix` accepts

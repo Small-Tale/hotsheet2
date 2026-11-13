@@ -839,6 +839,12 @@ app poll and verifies both readers see the done event. It advances the installed
 virtual clock through the transport's bounded reconnect window before asserting
 the interrupted state, so a frozen test clock cannot strand a pending retry.
 
+HS2-HM0Y6X covers abandoned temporary checkouts: `checkout_removal::tests` walks gone,
+generated-skeleton, skeleton-plus-file, live, missing-non-temporary, and external-source
+checkouts through dry run, removal, and an idempotent rerun, and skips a temporary
+registry; `worklist::tests` deletes and recreates a registered root; and the CLI
+`checkout_remove` tests prune a non-temporary home end to end and skip a test home.
+
 HS2-61ZMVA covers the managed project `.gitignore` block in
 `crates/hotsheet-ticketing/src/project_gitignore_tests.rs`: missing, trailing-blank,
 unterminated, CRLF, legacy-line, hand-written-equivalent, edited, duplicated, and

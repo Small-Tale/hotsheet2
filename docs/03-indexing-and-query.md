@@ -568,7 +568,8 @@ checkout, aggregated from every git ticket store configured for that checkout; i
 writes the projection into a ticket repository. CLI mutations refresh affected local
 checkouts synchronously from an index-bounded Up Next projection (then read only those
 result ticket files), project open/registration seeds it, and server watchers coalesce
-external/git changes. Registered and ad-hoc project projections always carry the explicit
+external/git changes. A registered checkout whose root folder no longer exists is skipped
+rather than recreated (HS2-HM0Y6X). Registered and ad-hoc project projections always carry the explicit
 checkout/root into settings resolution, so two worklists backed by one shared store can
 apply different project guidance; the legacy store-only generator remains an explicit
 compatibility API. The Up Next section includes only `not_started`/`started` tickets

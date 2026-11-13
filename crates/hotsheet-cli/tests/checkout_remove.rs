@@ -293,3 +293,79 @@ fn hs2_x4rz73_an_open_project_or_unreachable_server_refuses_removal() {
         .success()
         .stdout(contains("nothing to remove"));
 }
+
+/// HS2-HM0Y6X headless E2E: `checkout prune` unregisters abandoned temporary checkouts and
+/// deletes only their generated worklist skeleton. The home sits under Cargo's target
+/// tmp dir (not an OS temp dir) so the prune treats it as a real machine registry.
+#[test]
+fn hs2_hm0y6x_prune_unregisters_abandoned_temporary_checkouts() {
+    let home_root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let home = home_root.path().join("home");
+    let scratch = tempfile::tempdir().unwrap();
+    let store = scratch.path().join("app.hs2");
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("AP"))
+        .unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(&home, &store);
+        cmd.args(args);
+        cmd
+    };
+    let register = |name: &str| {
+        let root = scratch.path().join(name);
+        std::fs::create_dir_all(&root).unwrap();
+        run(&[
+            "checkout",
+            "register",
+            root.to_str().unwrap(),
+            "--store",
+            store.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+        root
+    };
+    let gone = register("gone");
+    std::fs::remove_dir_all(&gone).unwrap();
+    let skeleton = register("skeleton");
+    std::fs::create_dir_all(skeleton.join(".hotsheet2")).unwrap();
+    std::fs::write(skeleton.join(".hotsheet2/worklist.md"), "# Up Next\n").unwrap();
+    let live = register("live");
+    std::fs::write(live.join("README.md"), "real project\n").unwrap();
+
+    let plan = json(&mut run(&["checkout", "prune", "--dry-run", "--json"]));
+    assert_eq!(plan["removed"].as_array().unwrap().len(), 2, "{plan}");
+    assert!(skeleton.join(".hotsheet2/worklist.md").is_file());
+
+    let done = json(&mut run(&["checkout", "prune", "--json"]));
+    assert_eq!(done["removed"].as_array().unwrap().len(), 2, "{done}");
+    assert!(
+        !skeleton.exists(),
+        "only the generated skeleton was there, so it is gone"
+    );
+    assert!(live.join("README.md").is_file());
+    let left = json(&mut run(&["checkout", "list"]));
+    let roots: Vec<_> = left
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["root"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(roots.len(), 1, "{roots:?}");
+    assert!(roots[0].ends_with("/live"));
+
+    run(&["checkout", "prune"])
+        .assert()
+        .success()
+        .stdout(contains("No abandoned temporary checkouts are registered."));
+}
+
+#[test]
+fn hs2_hm0y6x_prune_leaves_a_temporary_test_home_alone() {
+    let f = fixture();
+    let report = json(&mut f.run(&["checkout", "prune", "--json"]));
+    assert!(report["skipped"].is_string(), "{report}");
+    f.run(&["checkout", "prune"])
+        .assert()
+        .success()
+        .stdout(contains("Nothing pruned"));
+}

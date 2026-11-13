@@ -14,7 +14,10 @@ use anyhow::{Context, Result};
 use hotsheet_cli::external_launch::ServerInstance;
 use hotsheet_ticketing::FsStore;
 use hotsheet_ticketing::ProviderConfigRegistry;
-use hotsheet_ticketing::checkout_removal::{CheckoutRemoval, remove_checkout};
+use hotsheet_ticketing::checkout_removal::{
+    CheckoutRemoval, TEMPORARY_REGISTRY, TemporaryCheckoutPrune, abandoned_temporary_candidates,
+    clear_abandoned_skeleton, registry_is_temporary, remove_checkout,
+};
 use hotsheet_ticketing::checkouts::CheckoutRegistry;
 
 use super::server::{process_is_alive, server_json_with_body};
@@ -28,8 +31,25 @@ pub(crate) fn cmd_checkout_remove(
     json: bool,
 ) -> Result<()> {
     let servers = live_servers(&hotsheet_plugins::hotsheet_home().join("instances"));
+    let report = remove_one(registry, store, reference, dry_run, &servers)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        print!("{}", render(&report));
+    }
+    Ok(())
+}
+
+/// Remove one checkout through the live servers when there are any, else directly.
+fn remove_one(
+    registry: &CheckoutRegistry,
+    store: &Path,
+    reference: &str,
+    dry_run: bool,
+    servers: &[ServerInstance],
+) -> Result<CheckoutRemoval> {
     let target = registry.find_for_removal(reference)?;
-    let mut report = match (&target, servers.as_slice()) {
+    let mut report = match (&target, servers) {
         (Some(checkout), [first, ..]) => {
             let route = |dry: bool| {
                 format!(
@@ -39,7 +59,7 @@ pub(crate) fn cmd_checkout_remove(
                 )
             };
             let mut plan = None;
-            for server in &servers {
+            for server in servers {
                 plan = Some(ask(server, &route(true))?);
             }
             match plan {
@@ -60,10 +80,47 @@ pub(crate) fn cmd_checkout_remove(
         }
     };
     report.reference = reference.to_owned();
+    Ok(report)
+}
+
+/// `hotsheet-cli checkout prune` (HS2-HM0Y6X): unregister abandoned temporary checkouts,
+/// the same set the server prunes when it starts.
+pub(crate) fn cmd_checkout_prune(
+    registry: &CheckoutRegistry,
+    store: &Path,
+    dry_run: bool,
+    json: bool,
+) -> Result<()> {
+    let servers = live_servers(&hotsheet_plugins::hotsheet_home().join("instances"));
+    let mut report = TemporaryCheckoutPrune {
+        dry_run,
+        skipped: registry_is_temporary(registry).then(|| TEMPORARY_REGISTRY.to_owned()),
+        ..TemporaryCheckoutPrune::default()
+    };
+    for checkout in abandoned_temporary_candidates(registry)? {
+        let removal = remove_one(registry, store, &checkout.id, dry_run, &servers)?;
+        if removal.removed {
+            clear_abandoned_skeleton(Path::new(&checkout.root));
+        }
+        if removal.registered {
+            report.removed.push(removal);
+        }
+    }
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
+    } else if let Some(reason) = &report.skipped {
+        println!("Nothing pruned: {reason}.");
+    } else if report.removed.is_empty() {
+        println!("No abandoned temporary checkouts are registered.");
     } else {
-        print!("{}", render(&report));
+        let verb = if dry_run { "Would remove" } else { "Removed" };
+        for removal in &report.removed {
+            println!(
+                "{verb} {} ({})",
+                removal.checkout_id.as_deref().unwrap_or_default(),
+                removal.root.as_deref().unwrap_or_default()
+            );
+        }
     }
     Ok(())
 }

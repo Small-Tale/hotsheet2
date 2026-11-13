@@ -341,6 +341,7 @@ async fn main() -> Result<()> {
     let index = Index::open_reconciled(&index_path, &store)?;
     println!("index: {}", index_path.display());
     prune_stale_indexes();
+    prune_abandoned_checkouts(store.root());
     // A real run persists the indexes of any POST /stores-registered store too.
     let permission_rules_path = hotsheet_server::multistore::permission_rules_path_for(&store)?;
     let store_id = hotsheet_server::multistore::store_url_id(&store);
@@ -842,6 +843,28 @@ fn prune_stale_indexes() {
             }
         }
         Err(error) => tracing::warn!(%error, "index: could not prune stale index files"),
+    }
+}
+
+/// Unregister abandoned temporary checkouts before any client lists projects
+/// (HS2-HM0Y6X). Best-effort: a failure is logged only.
+fn prune_abandoned_checkouts(store_root: &std::path::Path) {
+    let checkouts = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let providers =
+        hotsheet_ticketing::ProviderConfigRegistry::new(store_root.join("providers.json"));
+    match hotsheet_ticketing::checkout_removal::prune_abandoned_temporary(
+        &providers, &checkouts, false,
+    ) {
+        Ok(report) if !report.removed.is_empty() => println!(
+            "checkouts: pruned {} abandoned temporary checkout(s)",
+            report.removed.len()
+        ),
+        Ok(_) => {}
+        Err(error) => {
+            tracing::warn!(%error, "checkouts: could not prune abandoned temporary checkouts")
+        }
     }
 }
 
