@@ -31,6 +31,10 @@ pub struct ActionRequest {
     pub load: Option<SessionLoad>,
     pub provisional: bool,
     pub role_session: bool,
+    /// HS2-EBHDSB: this continues a decision already taken (renewing or releasing a
+    /// lease the run holds). Grants and policy limits still apply; a person is not
+    /// asked again for something they already approved.
+    pub continuing: bool,
 }
 
 impl ActionRequest {
@@ -42,7 +46,13 @@ impl ActionRequest {
             load: None,
             provisional: false,
             role_session: false,
+            continuing: false,
         }
+    }
+
+    pub fn continuing(mut self) -> Self {
+        self.continuing = true;
+        self
     }
 
     pub fn operation(mut self, operation_id: impl Into<String>) -> Self {
@@ -248,7 +258,12 @@ impl OrchestrationRuntime {
         // HS2-YCJDEB: the policy is consulted only for a granted action, so an approval
         // request is never filed for something the actor was not authorized to do.
         let answer = if granted.allowed {
-            self.policy_answer(&target.owner_checkout_id, &request, &target.target_id)
+            match self.policy_answer(&target.owner_checkout_id, &request, &target.target_id) {
+                policy::PolicyAnswer::Approval(_) if action.continuing => {
+                    policy::PolicyAnswer::Allowed
+                }
+                answer => answer,
+            }
         } else {
             policy::PolicyAnswer::Allowed
         };

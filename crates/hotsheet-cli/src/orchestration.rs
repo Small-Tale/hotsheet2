@@ -5,10 +5,12 @@ mod access;
 mod observer;
 mod policy;
 mod request;
+mod runs;
 mod tickets;
 pub use access::{ActionRequest, Authorized};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
+pub use runs::{DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_LEASE_MINUTES, RunView};
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
     LinkTargetTicket, LinkView, ListLinks, OrchestrationTicket, ReadTargetTicket, TargetTicket,
@@ -337,6 +339,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         OrchestrationError::Corrupt => 500,
         OrchestrationError::Storage(_) => 503,
         OrchestrationError::Denied(_) | OrchestrationError::Forbidden(_) => 403,
+        OrchestrationError::Run(hotsheet_ticketing::orchestration::RunError::NotFound) => 404,
+        OrchestrationError::Run(_) => 409,
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

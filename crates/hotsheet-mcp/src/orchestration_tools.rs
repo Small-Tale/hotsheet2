@@ -3,9 +3,15 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links"]},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync"]},
+        "run_id":{"type":"string","description":"run_show/renew/cancel/sync: the run's id"},
+        "mode":{"type":"string","enum":["direct","dispatcher"],"description":"run_dispatch: direct claims the ticket for worker_id; dispatcher marks it Up Next for the target's own dispatcher"},
+        "worker_id":{"type":"string","description":"run_dispatch direct: the worker the ticket is claimed for"},
+        "worker_label":{"type":"string"},
+        "lease_minutes":{"type":"integer","minimum":5,"maximum":240,"description":"run_dispatch/run_renew"},
+        "active":{"type":"boolean","description":"run_list: leave out finished runs"},
         "ticket":{"type":"object","description":"ticket_create/link/unlink/links: the orchestration ticket {native_id, connection_id?}; connection_id may be omitted when the project has one git ticket source"},
         "connection_id":{"type":"string","description":"ticket_*: the target's ticket source connection id"},
         "native_id":{"type":"string","description":"ticket_read/update/link/unlink: the target ticket's provider-native id"},
@@ -74,6 +80,12 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             | "ticket_link"
             | "ticket_unlink"
             | "ticket_links"
+            | "run_dispatch"
+            | "run_list"
+            | "run_show"
+            | "run_renew"
+            | "run_cancel"
+            | "run_sync"
     ) || (action == "list" && id.is_some());
     // Preflight before any backend request; HttpBackend repeats it for actual origin.
     if machine && !backend.machine_local() {
@@ -155,6 +167,59 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
                 .map_err(crate::be_msg);
         }
         _ => {}
+    }
+    // HS2-EBHDSB: dispatch runs.
+    if let Some(operation) = action.strip_prefix("run_") {
+        let runs = format!("{base}/runs");
+        let run = || -> Result<String, String> {
+            let id = required(args, "run_id")?;
+            if id.len() != 26 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+                return Err("canonical run id required".into());
+            }
+            Ok(format!("{runs}/{id}"))
+        };
+        return match operation {
+            "list" => backend.get(
+                &format!(
+                    "{runs}?active={}",
+                    args.get("active").and_then(Value::as_bool).unwrap_or(false)
+                ),
+                &[],
+            ),
+            "show" => backend.get(&run()?, &[]),
+            "dispatch" => {
+                let mut body = serde_json::Map::new();
+                for key in [
+                    "ticket",
+                    "connection_id",
+                    "native_id",
+                    "operation_id",
+                    "mode",
+                    "worker_id",
+                    "worker_label",
+                    "lease_minutes",
+                ] {
+                    if let Some(value) = args.get(key) {
+                        body.insert(key.into(), value.clone());
+                    }
+                }
+                body.insert(
+                    "target_id".into(),
+                    id.ok_or("target_id is required")?.into(),
+                );
+                backend.send("POST", &runs, &Value::Object(body))
+            }
+            "renew" => backend.send(
+                "POST",
+                &format!("{}/renew", run()?),
+                &json!({"lease_minutes":args.get("lease_minutes").cloned().unwrap_or(Value::Null)}),
+            ),
+            "cancel" | "sync" => {
+                backend.send("POST", &format!("{}/{operation}", run()?), &json!({}))
+            }
+            _ => return Err("unsupported target action".into()),
+        }
+        .map_err(crate::be_msg);
     }
     // HS2-AZ15GA: target tickets for an orchestration ticket.
     if let Some(operation) = action.strip_prefix("ticket_") {
@@ -294,6 +359,13 @@ mod tests {
             "ticket_link",
             "ticket_unlink",
             "ticket_links",
+            // HS2-EBHDSB
+            "run_dispatch",
+            "run_list",
+            "run_show",
+            "run_renew",
+            "run_cancel",
+            "run_sync",
         ] {
             assert!(
                 dispatch(&json!({"action":action}), &backend)

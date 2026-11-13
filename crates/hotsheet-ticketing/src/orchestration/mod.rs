@@ -8,6 +8,7 @@ pub(crate) mod contract;
 mod grants;
 mod manifest;
 mod policy;
+mod runs;
 mod storage;
 mod workflow;
 
@@ -33,6 +34,10 @@ pub use policy::{
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PolicyBody, PolicyDenial,
     PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SetPolicy,
     Speculation, TargetPolicy, ToolPolicy, WindDown,
+};
+pub use runs::{
+    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunError, RunRegistry, RunState,
+    RunTarget, RunTicket, RunTransition, RunUpdate,
 };
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 
@@ -66,6 +71,9 @@ pub enum OrchestrationError {
     /// authorized operation. The target stays authoritative; nothing is retried elsewhere.
     #[error("target ticket operation failed: {}", .0.code())]
     TargetOperation(TargetOpError),
+    /// HS2-EBHDSB: the dispatch run does not allow this request in its current state.
+    #[error("orchestration run refused the request: {}", .0.code())]
+    Run(RunError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -90,6 +98,7 @@ impl OrchestrationError {
             Self::Denied(reason) => reason.code(),
             Self::Forbidden(_) => "forbidden",
             Self::TargetOperation(error) => error.code(),
+            Self::Run(error) => error.code(),
         }
     }
 }
@@ -176,5 +185,7 @@ mod binding_tests;
 mod grant_tests;
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod run_tests;
 #[cfg(test)]
 mod tests;

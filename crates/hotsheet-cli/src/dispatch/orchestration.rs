@@ -1,6 +1,7 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
-//! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets.
+//! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
+//! HS2-EBHDSB dispatch runs.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -23,6 +24,8 @@ enum OrchestrationCmd {
     Grant(GrantArgs),
     /// Create, read, update and link tickets in a declared target.
     Ticket(TicketArgs),
+    /// Dispatch work to an exact target ticket and supervise the run.
+    Run(RunArgs),
     /// Show, set, validate and dry-run the checked-in throughput policy.
     Policy(PolicyArgs),
     /// List and answer decisions the policy will not take without a person.
@@ -38,6 +41,104 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 100)]
         limit: u64,
     },
+}
+#[derive(Args)]
+struct RunArgs {
+    /// Registered owning checkout id.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: RunCmd,
+}
+#[derive(Subcommand)]
+enum RunCmd {
+    /// Start work on one exact target ticket. Repeating the command with the same
+    /// --operation-id returns the same run and never claims twice.
+    Dispatch {
+        /// The orchestration ticket (slug or id) the work is for.
+        #[arg(long)]
+        ticket: String,
+        #[arg(long, default_value = "")]
+        source: String,
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        connection: String,
+        /// The exact target ticket.
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        operation_id: String,
+        /// direct (default): claim the ticket for --worker. dispatcher: mark it Up Next
+        /// and let the target's own dispatcher assign it.
+        #[arg(long)]
+        via: Option<String>,
+        #[arg(long)]
+        worker: Option<String>,
+        #[arg(long)]
+        worker_label: Option<String>,
+        /// Lease length for a direct claim, 5 to 240 (default 30).
+        #[arg(long)]
+        lease_minutes: Option<u32>,
+    },
+    /// Runs of this project; --active leaves out finished ones.
+    List {
+        #[arg(long)]
+        active: bool,
+    },
+    Show {
+        run_id: String,
+    },
+    /// Extend the lease of a directly dispatched run.
+    Renew {
+        run_id: String,
+        #[arg(long)]
+        lease_minutes: Option<u32>,
+    },
+    /// Release the run's claim (or withdraw its Up Next mark) and end the run.
+    Cancel {
+        run_id: String,
+    },
+    /// Read the target ticket and bring the run in line with it.
+    Sync {
+        run_id: String,
+    },
+}
+fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
+    let base = format!("/checkouts/{project}/orchestration/runs");
+    match command {
+        RunCmd::Dispatch {
+            ticket,
+            source,
+            target,
+            connection,
+            id,
+            operation_id,
+            via,
+            worker,
+            worker_label,
+            lease_minutes,
+        } => (
+            "POST",
+            base,
+            json!({"ticket":{"connection_id":source,"native_id":ticket},"target_id":target,
+                "connection_id":connection,"native_id":id,"operation_id":operation_id,
+                "mode":via,"worker_id":worker,"worker_label":worker_label,
+                "lease_minutes":lease_minutes}),
+        ),
+        RunCmd::List { active } => ("GET", format!("{base}?active={active}"), Value::Null),
+        RunCmd::Show { run_id } => ("GET", format!("{base}/{run_id}"), Value::Null),
+        RunCmd::Renew {
+            run_id,
+            lease_minutes,
+        } => (
+            "POST",
+            format!("{base}/{run_id}/renew"),
+            json!({"lease_minutes":lease_minutes}),
+        ),
+        RunCmd::Cancel { run_id } => ("POST", format!("{base}/{run_id}/cancel"), json!({})),
+        RunCmd::Sync { run_id } => ("POST", format!("{base}/{run_id}/sync"), json!({})),
+    }
 }
 #[derive(Args)]
 struct TicketArgs {
@@ -691,6 +792,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Ticket(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = ticket_route(&owner_id, arguments.command);
+            (owner_id, request)
+        }
+        OrchestrationCmd::Run(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = run_route(&owner_id, arguments.command);
             (owner_id, request)
         }
         OrchestrationCmd::Policy(arguments) => {

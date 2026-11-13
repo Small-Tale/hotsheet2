@@ -59,7 +59,7 @@ impl ExternalProviders for LiveExternalProviders {
     }
 }
 
-fn op_error(error: ProviderError) -> OrchestrationError {
+pub(super) fn op_error(error: ProviderError) -> OrchestrationError {
     use TargetOpError as E;
     OrchestrationError::TargetOperation(match error {
         ProviderError::NotFound { .. } | ProviderError::UnknownConnection(_) => E::NotFound,
@@ -84,7 +84,7 @@ fn bounded(value: &str, limit: usize, what: &'static str) -> Result<(), Orchestr
     Ok(())
 }
 
-fn identifier(value: &str, what: &'static str) -> Result<(), OrchestrationError> {
+pub(super) fn identifier(value: &str, what: &'static str) -> Result<(), OrchestrationError> {
     if value.is_empty()
         || value.len() > 160
         || !value
@@ -97,7 +97,7 @@ fn identifier(value: &str, what: &'static str) -> Result<(), OrchestrationError>
 }
 
 /// A provider-native id: bounded, printable, no path or control characters.
-fn native(value: &str) -> Result<(), OrchestrationError> {
+pub(super) fn native(value: &str) -> Result<(), OrchestrationError> {
     if value.is_empty()
         || value.len() > 200
         || value
@@ -111,7 +111,7 @@ fn native(value: &str) -> Result<(), OrchestrationError> {
     Ok(())
 }
 
-fn timestamp(tx: &Transaction<'_>) -> Timestamp {
+pub(super) fn timestamp(tx: &Transaction<'_>) -> Timestamp {
     let nanos = i128::from(tx.clock.now_ms()) * 1_000_000;
     Timestamp::from_datetime(
         time::OffsetDateTime::from_unix_timestamp_nanos(nanos)
@@ -331,7 +331,7 @@ fn summary(ticket: &Value) -> Value {
 impl OrchestrationRuntime {
     // ---- Hosted half: runs on the machine that hosts the target checkout. ----
 
-    fn hosted_provider(
+    pub(super) fn hosted_provider(
         &self,
         checkout_id: &str,
         connection_id: &str,
@@ -509,9 +509,22 @@ impl OrchestrationRuntime {
     // ---- Orchestrating half. ----
 
     /// Reach the hosted half for an authorized destination.
-    fn hosted_call(
+    pub(super) fn hosted_call(
         &self,
         destination: &TargetDestination,
+        method: &'static str,
+        query: &str,
+        body: Option<&Value>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Value, OrchestrationError> {
+        self.hosted_call_at(destination, "/target-tickets", method, query, body, tx)
+    }
+
+    /// The same reach for any hosted route under the target checkout (HS2-EBHDSB).
+    pub(super) fn hosted_call_at(
+        &self,
+        destination: &TargetDestination,
+        leaf: &'static str,
         method: &'static str,
         query: &str,
         body: Option<&Value>,
@@ -521,7 +534,7 @@ impl OrchestrationRuntime {
             // The same machine hosts the target: no server, transport or secret needed.
             TargetDestination::Local { checkout_id, .. } => self.request(
                 method,
-                &format!("/checkouts/{checkout_id}/target-tickets{query}"),
+                &format!("/checkouts/{checkout_id}{leaf}{query}"),
                 body.unwrap_or(&Value::Null),
                 tx,
             ),
@@ -544,7 +557,7 @@ impl OrchestrationRuntime {
                         self.secrets.as_ref(),
                         self.transport.as_ref(),
                         method,
-                        &format!("/target-tickets{query}"),
+                        &format!("{leaf}{query}"),
                         bytes.as_deref(),
                     )
                     .map_err(OrchestrationError::Observation)?;
@@ -577,7 +590,7 @@ impl OrchestrationRuntime {
     /// connection. Structured links live in the ticket file, so a source that cannot
     /// store them is refused explicitly. An empty connection id selects the owner's
     /// only git source and is refused when there are several.
-    fn orchestration_store(
+    pub(super) fn orchestration_store(
         &self,
         owner_id: &str,
         ticket: &OrchestrationTicket,
@@ -623,7 +636,10 @@ impl OrchestrationRuntime {
         Ok((store, id, connection_id))
     }
 
-    fn target_ref(owner_id: &str, target_id: &str) -> Result<TargetRef, OrchestrationError> {
+    pub(super) fn target_ref(
+        owner_id: &str,
+        target_id: &str,
+    ) -> Result<TargetRef, OrchestrationError> {
         let target = TargetRef {
             owner_checkout_id: owner_id.into(),
             target_id: target_id.into(),
@@ -632,7 +648,9 @@ impl OrchestrationRuntime {
         Ok(target)
     }
 
-    fn destination(authorized: &Authorized) -> Result<&TargetDestination, OrchestrationError> {
+    pub(super) fn destination(
+        authorized: &Authorized,
+    ) -> Result<&TargetDestination, OrchestrationError> {
         authorized
             .resolution
             .binding
@@ -643,7 +661,7 @@ impl OrchestrationRuntime {
 
     /// The source must be one the freshly resolved target actually has: a create is
     /// never sent to a connection the target does not list.
-    fn check_source(
+    pub(super) fn check_source(
         authorized: &Authorized,
         connection_id: &str,
     ) -> Result<(), OrchestrationError> {
@@ -798,7 +816,7 @@ impl OrchestrationRuntime {
         outcome
     }
 
-    fn read_authorized(
+    pub(super) fn read_authorized(
         &self,
         authorized: &Authorized,
         target: &TargetTicket,
@@ -1037,7 +1055,7 @@ impl OrchestrationRuntime {
         Ok(views)
     }
 
-    fn finish<T>(
+    pub(super) fn finish<T>(
         &self,
         target: &TargetRef,
         authorized: &Authorized,
@@ -1055,7 +1073,7 @@ impl OrchestrationRuntime {
 }
 
 /// Percent-encode a query value; identifiers are mostly unreserved already.
-fn encode(value: &str) -> String {
+pub(super) fn encode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {

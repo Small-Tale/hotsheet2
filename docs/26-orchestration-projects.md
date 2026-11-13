@@ -3,9 +3,9 @@
 > **Status: Partial (HS2-4J6V46, HS2-SBQ3T8, HS2-YCJDEB).** Shared declarations,
 > reviewed machine bindings, delegated grants with their audit journal (§26.7), the
 > throughput policy with approvals (§26.8), structured ticket links with target
-> ticket operations (§26.3, HS2-AZ15GA), and the headless CLI, authenticated HTTP
-> and MCP adapters are implemented and covered by automated tests; the OpenAPI
-> contract describes them. Workspace UI and dispatch
+> ticket operations (§26.3, HS2-AZ15GA), dispatch runs (§26.9, HS2-EBHDSB), and the
+> headless CLI, authenticated HTTP and MCP adapters are implemented and covered by
+> automated tests; the OpenAPI contract describes them. Workspace UI and the scheduler
 > remain design work under their separate implementation tickets.
 
 ## 26.1 Boundary and existing foundations
@@ -270,7 +270,8 @@ identity can be published. Explicit configured endpoint ports retain their ident
 
 Requests naming an orchestration ticket identify its owning checkout and source
 explicitly when ambiguous. Target ticket operations route through the target's own
-source with qualified ids and an operation id (§26.3). AI dispatch uses its ordinary exact claim path (HS2-EBHDSB).
+source with qualified ids and an operation id (§26.3). Dispatch uses the target's
+ordinary exact claim (§26.9).
 Neither declaration nor binding authorizes a target mutation by itself;
 target-scoped grants and their audit journal are §26.7 (HS2-SBQ3T8).
 
@@ -563,3 +564,106 @@ declarations. MCP `hotsheet_targets` adds the read-only actions `policy_show`,
 `policy_validate`, `policy_dry_run` and `approval_list`; setting the policy and
 answering an approval are a person's CLI or HTTP actions. The workspace editor for
 the same policy is part of HS2-HSMH2Q.
+
+## 26.9 Dispatch runs (HS2-EBHDSB)
+
+A **run** is this machine's record of one attempt to get an exact target ticket
+worked on. It holds no lock of its own. The target ticket's claim and lease are the
+only lock, there is no second claim coordinator, and a run records what the target
+answered.
+
+### Two ways to dispatch
+
+- **`direct`** takes the exact ticket's claim for a named worker through the
+  target's own claim and lease operations. The orchestrator renews and releases that
+  lease. A ticket someone else holds is refused by the target and the run fails with
+  `target_conflict`; nothing is forced.
+- **`dispatcher`** is for a target that runs its own dispatcher. The orchestrator
+  marks the ticket Up Next and waits. The target's dispatcher assigns it and its
+  worker claims it. The orchestrator never assigns inside another project's pool and
+  never names the worker.
+
+The scheduler (HS2-ECWG50) decides the target, tool and model and how many sessions
+run where; the target's dispatcher still assigns each exact ticket. Integration,
+the project's push policy and worktree handoff stay entirely with the target's own
+workflow: a run only claims or queues.
+
+### Run record and states
+
+Runs are stored in `${HOTSHEET_HOME}/orchestration-runs.json` (mode 0600, version 1,
+at most 1,024; the oldest finished run is forgotten first and an active run never
+is). A run has a `run_id`, the caller's `operation_id`, the orchestration ticket,
+the exact target ticket by canonical native id, the mode, the worker, the lease
+expiry, a `cancel_requested` flag and a history of at most 64 transitions that always
+keeps the first. Every history entry is a time, the states, a reason code and an
+actor id; repeated and reversed transitions are all kept.
+
+| State                              | Meaning                                                | May become                                                     |
+| ---------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------- |
+| `requested`                        | Recorded before the target was asked                   | `queued`, `dispatched`, `failed`, `cancelled`                  |
+| `queued`                           | Marked Up Next for the target's dispatcher             | `dispatched`, `completed`, `failed`, `cancelled`, `intervened` |
+| `dispatched`                       | The target ticket is claimed for the run's worker      | `completed`, `failed`, `cancelled`, `intervened`               |
+| `intervened`                       | A person or another worker holds or released the claim | `dispatched`, `completed`, `cancelled`                         |
+| `completed`, `failed`, `cancelled` | Final                                                  | nothing                                                        |
+
+Every other edge is refused with `run_invalid_transition`, and a finished run
+refuses any change with `run_not_active`. A renewed lease is an update, not a
+transition.
+
+### Rules
+
+- **Duplicates.** The same operation id returns the same run and never claims
+  twice, including a run that already failed. The same id for a different ticket,
+  mode or worker is a conflict.
+- **One active run per target ticket**, whatever the operation or worker
+  (`run_target_active`). A worker that already holds an active direct run on a target
+  takes no second ticket there (`run_worker_busy`).
+- **Authority.** Dispatch passes the gate as `work_start` with the operation id, so a
+  policy that asks a person first applies. Renewing and cancelling continue that
+  decision: grants and policy limits still apply, but nobody is asked again.
+  Supervising with `sync` needs `tickets_read`.
+- **Refusals.** The target ticket is read first, so a ticket that does not exist is
+  never recorded as a run. A definitive target refusal ends the run as `failed` with
+  the target's code; a failure that may be transient leaves it `requested` so the
+  same request can be repeated.
+- **Cancel** releases a direct run's claim, or withdraws the Up Next mark of a run
+  still queued, and ends the run. A pooled worker's claim is not the orchestrator's
+  to release; cancelling such a run only lets go of the run. If the target cannot be
+  told, the run stays active with `cancel_requested: true` and the answer lists what
+  it could not verify (`target_claim` or `target_queue`).
+- **Sync** reads the target ticket. A completed, verified or archived ticket
+  completes the run. A queued run becomes dispatched when the ticket shows a live
+  claim, recording that worker. A dispatched run whose claim was released or taken
+  becomes `intervened`, and returns to `dispatched` when its own worker holds a live
+  claim again. A lapsed lease is not a live claim.
+- **On the orchestration ticket** the run adds a link to the target ticket and an
+  activity note with the run id at dispatch and when it finishes. The note holds
+  identifiers only.
+
+Exact claims exist only for git ticket sources; another provider answers
+`target_operation_unsupported` to a direct dispatch. Dispatcher mode works wherever
+the provider can set Up Next.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration run dispatch --project <owner> --ticket <orchestration-ticket> \
+  --target <target-id> --connection <source> --id <target-ticket> --operation-id <retained-id> \
+  --worker <worker-id> [--worker-label ...] [--lease-minutes 30]
+hotsheet-cli ... orchestration run dispatch ... --via dispatcher
+hotsheet-cli ... orchestration run list --project <owner> [--active]
+hotsheet-cli ... orchestration run show|renew|cancel|sync <run-id> --project <owner>
+```
+
+| Route                                                             | Methods and purpose                                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/runs`                           | GET runs (`?active=true`); POST dispatch; machine-local                              |
+| `/checkouts/{owner}/orchestration/runs/{run}`                     | GET one run; machine-local                                                           |
+| `/checkouts/{owner}/orchestration/runs/{run}/{renew,cancel,sync}` | POST supervise; machine-local                                                        |
+| `/checkouts/{checkout}/target-claims`                             | Hosted half: POST claim, PATCH renew, DELETE release of an exact ticket for a worker |
+
+The hosted claim route is ordinary authenticated project data under the caller's
+device role, like the hosted ticket route. MCP `hotsheet_targets` adds
+`run_dispatch`, `run_list`, `run_show`, `run_renew`, `run_cancel` and `run_sync`.
+Reconciliation after a restart is HS2-WBREDM, and starting the sessions that do the
+work is HS2-GDJXGZ.

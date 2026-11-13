@@ -25,6 +25,11 @@ pub fn is_path(path: &str) -> bool {
             // HS2-AZ15GA: orchestrating-side ticket operations and the hosted half.
             | ["checkouts", _, "orchestration", "tickets", _]
             | ["checkouts", _, "target-tickets"]
+            // HS2-EBHDSB: runs (orchestrating) and the hosted exact claim.
+            | ["checkouts", _, "orchestration", "runs"]
+            | ["checkouts", _, "orchestration", "runs", _]
+            | ["checkouts", _, "orchestration", "runs", _, _]
+            | ["checkouts", _, "target-claims"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -58,6 +63,10 @@ pub fn is_machine_path(path: &str) -> bool {
             // hosted `target-tickets` routes stay ordinary authenticated project data,
             // because a remote orchestrator must reach them.
             | ["checkouts", _, "orchestration", "tickets", _]
+            // HS2-EBHDSB: run records are this machine's.
+            | ["checkouts", _, "orchestration", "runs"]
+            | ["checkouts", _, "orchestration", "runs", _]
+            | ["checkouts", _, "orchestration", "runs", _, _]
     )
 }
 
@@ -365,6 +374,50 @@ impl OrchestrationRuntime {
             }
             ("PATCH", ["checkouts", checkout, "target-tickets"]) => {
                 value(self.hosted_ticket_update(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-EBHDSB hosted half: the exact ticket's own claim and lease.
+            ("POST", ["checkouts", checkout, "target-claims"]) => {
+                value(self.hosted_claim(checkout, hosted(body)?, tx)?)
+            }
+            ("PATCH", ["checkouts", checkout, "target-claims"]) => {
+                value(self.hosted_claim_renew(checkout, hosted(body)?, tx)?)
+            }
+            ("DELETE", ["checkouts", checkout, "target-claims"]) => {
+                value(self.hosted_claim_release(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-EBHDSB orchestrating half.
+            ("GET", ["checkouts", owner, "orchestration", "runs"]) => value(self.run_list(
+                owner,
+                query_text(path, "active")?.as_deref() == Some("true"),
+            )?),
+            ("POST", ["checkouts", owner, "orchestration", "runs"]) => {
+                let actor = actor(body)?;
+                value(self.run_dispatch(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "runs", run]) => {
+                value(self.run(owner, run)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "runs", run, operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "renew" => {
+                        let minutes = match body.get("lease_minutes") {
+                            None | Some(Value::Null) => None,
+                            Some(value) => Some(
+                                value
+                                    .as_u64()
+                                    .and_then(|minutes| u32::try_from(minutes).ok())
+                                    .ok_or(OrchestrationError::Invalid(
+                                        "lease_minutes must be an unsigned integer",
+                                    ))?,
+                            ),
+                        };
+                        value(self.run_renew(owner, run, minutes, actor.as_ref(), tx)?)
+                    }
+                    "cancel" => value(self.run_cancel(owner, run, actor.as_ref(), tx)?),
+                    "sync" => value(self.run_sync(owner, run, actor.as_ref(), tx)?),
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
             }
             // HS2-AZ15GA orchestrating half.
             ("POST", ["checkouts", owner, "orchestration", "tickets", operation]) => {

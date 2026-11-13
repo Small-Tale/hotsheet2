@@ -13,17 +13,17 @@ use serde_json::{Value, json};
 
 use super::*;
 
-const NOW: &str = "2026-10-15T00:00:00Z";
+pub(super) const NOW: &str = "2026-10-15T00:00:00Z";
 
-fn human() -> MutationActor {
+pub(super) fn human() -> MutationActor {
     MutationActor::parse("human", Some("maintainer".into())).unwrap()
 }
-fn worker() -> MutationActor {
+pub(super) fn worker() -> MutationActor {
     MutationActor::parse("ai", Some("worker-1".into())).unwrap()
 }
 
-struct Refusing {
-    opened: AtomicBool,
+pub(super) struct Refusing {
+    pub(super) opened: AtomicBool,
     error: fn(&str) -> ProviderError,
 }
 impl ExternalProviders for Refusing {
@@ -39,21 +39,21 @@ impl ExternalProviders for Refusing {
 
 /// One machine: an owner checkout with a git ticket store, a target checkout with a
 /// git ticket store and (optionally) an external source.
-struct Machine {
-    _root: tempfile::TempDir,
-    home: PathBuf,
-    runtime: OrchestrationRuntime,
-    owner: Checkout,
-    owner_store: FsStore,
-    target: Checkout,
-    target_store: FsStore,
-    external: Arc<Refusing>,
+pub(super) struct Machine {
+    pub(super) _root: tempfile::TempDir,
+    pub(super) home: PathBuf,
+    pub(super) runtime: OrchestrationRuntime,
+    pub(super) owner: Checkout,
+    pub(super) owner_store: FsStore,
+    pub(super) target: Checkout,
+    pub(super) target_store: FsStore,
+    pub(super) external: Arc<Refusing>,
 }
 impl Machine {
-    fn owner_connection(&self) -> String {
+    pub(super) fn owner_connection(&self) -> String {
         self.owner.sources[0].connection_id.clone()
     }
-    fn target_connection(&self) -> String {
+    pub(super) fn target_connection(&self) -> String {
         self.target
             .sources
             .iter()
@@ -62,7 +62,7 @@ impl Machine {
             .connection_id
             .clone()
     }
-    fn orchestration_ticket(&self, title: &str) -> Ticket {
+    pub(super) fn orchestration_ticket(&self, title: &str) -> Ticket {
         ops::create(
             &self.owner_store,
             ulid::Ulid::new(),
@@ -75,19 +75,19 @@ impl Machine {
         )
         .unwrap()
     }
-    fn reference(&self, n: u128) -> TargetRef {
+    pub(super) fn reference(&self, n: u128) -> TargetRef {
         TargetRef {
             owner_checkout_id: self.owner.id.clone(),
             target_id: id(n),
         }
     }
-    fn links(&self, ticket: &Ticket) -> Vec<OrchestrationLink> {
+    pub(super) fn links(&self, ticket: &Ticket) -> Vec<OrchestrationLink> {
         self.owner_store
             .read_ticket(&ticket.id)
             .unwrap()
             .orchestration_links
     }
-    fn last_audit(&self) -> (String, AuditOutcome, Option<String>) {
+    pub(super) fn last_audit(&self) -> (String, AuditOutcome, Option<String>) {
         let entry = self
             .runtime
             .audit(&self.owner.id, 0, 500)
@@ -103,7 +103,11 @@ impl Machine {
     }
 }
 
-fn machine(server: u128, with_external: bool, error: fn(&str) -> ProviderError) -> Machine {
+pub(super) fn machine(
+    server: u128,
+    with_external: bool,
+    error: fn(&str) -> ProviderError,
+) -> Machine {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     std::fs::create_dir(&home).unwrap();
@@ -175,7 +179,7 @@ fn machine(server: u128, with_external: bool, error: fn(&str) -> ProviderError) 
     }
 }
 
-fn unsupported(connection: &str) -> ProviderError {
+pub(super) fn unsupported(connection: &str) -> ProviderError {
     ProviderError::Unsupported {
         connection_id: connection.into(),
         capability: "create",
@@ -183,7 +187,12 @@ fn unsupported(connection: &str) -> ProviderError {
 }
 
 /// Declare target `n`, bind it to the local target checkout and grant `actions`.
-fn bind_and_grant(m: &Machine, n: u128, actions: &[TargetAction], tx: &mut Transaction<'_>) {
+pub(super) fn bind_and_grant(
+    m: &Machine,
+    n: u128,
+    actions: &[TargetAction],
+    tx: &mut Transaction<'_>,
+) {
     let before = m.runtime.declarations(&m.owner.id).unwrap();
     let mut targets = before.targets;
     targets.push(TargetDeclaration {
@@ -259,7 +268,7 @@ fn create_request(
     .unwrap()
 }
 
-fn op(result: Result<impl Sized, OrchestrationError>) -> TargetOpError {
+pub(super) fn op(result: Result<impl Sized, OrchestrationError>) -> TargetOpError {
     match result {
         Err(OrchestrationError::TargetOperation(error)) => error,
         Err(other) => panic!("expected a target operation error, got {other}"),
@@ -964,10 +973,10 @@ fn hs2_az15ga_an_external_source_stays_authoritative_and_is_never_rerouted() {
 }
 
 /// A remote peer whose hosted half is a second runtime on another "machine".
-struct RemotePeer {
-    hosted: Machine,
-    calls: Mutex<Vec<(String, String)>>,
-    status_override: Mutex<Option<u16>>,
+pub(super) struct RemotePeer {
+    pub(super) hosted: Machine,
+    pub(super) calls: Mutex<Vec<(String, String)>>,
+    pub(super) status_override: Mutex<Option<u16>>,
 }
 impl RemoteTransport for RemotePeer {
     fn probe(&self, _: &str, _: &RemoteCredentials) -> Result<RemoteSnapshot, RemoteFailure> {

@@ -1258,6 +1258,277 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/runs:
+    description:
+      Machine-local records of work dispatched to exact target tickets (HS2-EBHDSB). The target ticket's own claim is
+      the only lock; a run records what the target answered.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: listOrchestrationRuns
+      parameters:
+        - name: active
+          in: query
+          description: '`true` leaves out finished runs.'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Runs of this owning checkout, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1024
+                items:
+                  $ref: '#/components/schemas/OrchestrationRun'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: dispatchOrchestrationRun
+      description:
+        "Dispatch work on one exact target ticket. `direct` claims it for the named worker; `dispatcher` marks it Up
+        Next for the target's own dispatcher. The same `operation_id` returns the same run. Refusals: `run_target_active`,
+        `run_worker_busy`, the denial codes, and the `target_*` codes."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchOrchestrationRun'
+      responses:
+        '200':
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRun'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/runs/{run}:
+    description: One dispatch run (HS2-EBHDSB); machine-local.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationRun
+      responses:
+        '200':
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRun'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: run
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/runs/{run}/{operation}:
+    description: Supervise one dispatch run (HS2-EBHDSB); machine-local.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: superviseOrchestrationRun
+      description:
+        "`renew` extends a direct run's lease, `cancel` releases its claim or withdraws its Up Next mark, and `sync`
+        reads the target ticket and brings the run in line with it. A cancel that cannot reach the target records the
+        intent and lists what it could not verify."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+                lease_minutes:
+                  description: '`renew` only.'
+                  type:
+                    - integer
+                    - 'null'
+                  minimum: 5
+                  maximum: 240
+              additionalProperties: false
+      responses:
+        '200':
+          description: The run after the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRun'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: run
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - renew
+            - cancel
+            - sync
+  /checkouts/{checkout}/target-claims:
+    description: The exact claim and lease of one ticket on a git source of a hosted checkout, for a local or remote
+      orchestration project (HS2-EBHDSB). Ordinary authenticated project data under the caller's device role; another
+      provider answers `target_operation_unsupported`.
+    post:
+      operationId: claimHostedTargetTicket
+      description: Claim the ticket for the worker. A ticket another worker holds is 409 `target_conflict`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedTargetClaim'
+      responses:
+        '200':
+          description: The claimed ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetTicket'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    patch:
+      operationId: renewHostedTargetClaim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedTargetClaim'
+      responses:
+        '200':
+          description: The ticket with its renewed lease.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetTicket'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    delete:
+      operationId: releaseHostedTargetClaim
+      description: Release the worker's own claim; idempotent, and never forces another holder's claim away.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedTargetClaim'
+      responses:
+        '200':
+          description: The released ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetTicket'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -16564,6 +16835,212 @@ components:
           type:
             - boolean
             - 'null'
+      additionalProperties: false
+    HostedTargetClaim:
+      type: object
+      required:
+        - connection_id
+        - native_id
+        - worker
+      properties:
+        connection_id:
+          type: string
+          maxLength: 160
+        native_id:
+          type: string
+          maxLength: 200
+        worker:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        label:
+          type:
+            - string
+            - 'null'
+        lease_minutes:
+          type:
+            - integer
+            - 'null'
+          minimum: 5
+          maximum: 240
+      additionalProperties: false
+    DispatchOrchestrationRun:
+      type: object
+      required:
+        - ticket
+        - target_id
+        - connection_id
+        - native_id
+        - operation_id
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        ticket:
+          description: The orchestration ticket the work is for.
+          type: object
+          required:
+            - native_id
+          properties:
+            connection_id:
+              type: string
+              maxLength: 160
+            native_id:
+              type: string
+              maxLength: 200
+          additionalProperties: false
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        connection_id:
+          type: string
+          maxLength: 160
+        native_id:
+          description: The exact target ticket.
+          type: string
+          maxLength: 200
+        operation_id:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        mode:
+          anyOf:
+            - enum:
+                - direct
+                - dispatcher
+            - type: 'null'
+        worker_id:
+          description: Required for `direct`; refused for `dispatcher`.
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        worker_label:
+          type:
+            - string
+            - 'null'
+        lease_minutes:
+          type:
+            - integer
+            - 'null'
+          minimum: 5
+          maximum: 240
+      additionalProperties: false
+    OrchestrationRun:
+      type: object
+      required:
+        - run_id
+        - owner_checkout_id
+        - operation_id
+        - ticket
+        - target
+        - mode
+        - state
+        - cancel_requested
+        - created_at_ms
+        - updated_at_ms
+        - history
+      properties:
+        run_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        owner_checkout_id:
+          type: string
+        operation_id:
+          type: string
+        ticket:
+          type: object
+          required:
+            - connection_id
+            - native_id
+          properties:
+            connection_id:
+              type: string
+            native_id:
+              type: string
+          additionalProperties: false
+        target:
+          type: object
+          required:
+            - target_id
+            - connection_id
+            - native_id
+          properties:
+            target_id:
+              type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+          additionalProperties: false
+        mode:
+          enum:
+            - direct
+            - dispatcher
+        worker_id:
+          type: string
+        state:
+          enum:
+            - requested
+            - queued
+            - dispatched
+            - completed
+            - failed
+            - cancelled
+            - intervened
+        lease_expires_at_ms:
+          type: integer
+          minimum: 0
+        cancel_requested:
+          description: A cancel was asked for but the target could not be told yet.
+          type: boolean
+        created_at_ms:
+          type: integer
+          minimum: 0
+        updated_at_ms:
+          type: integer
+          minimum: 0
+        history:
+          description: Every transition in order, including repeated and reversed ones; at most 64.
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            required:
+              - at_ms
+              - to
+            properties:
+              at_ms:
+                type: integer
+                minimum: 0
+              from:
+                enum:
+                  - requested
+                  - queued
+                  - dispatched
+                  - completed
+                  - failed
+                  - cancelled
+                  - intervened
+              to:
+                enum:
+                  - requested
+                  - queued
+                  - dispatched
+                  - completed
+                  - failed
+                  - cancelled
+                  - intervened
+              reason:
+                description: A stable code, never free text.
+                type: string
+              actor_id:
+                type: string
+            additionalProperties: false
+        unverified:
+          description: External state this answer could not verify, such as `target_claim`.
+          type: array
+          items:
+            type: string
       additionalProperties: false
     RemoteIdentity:
       type: object

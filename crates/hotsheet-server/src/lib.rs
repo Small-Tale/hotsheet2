@@ -2085,6 +2085,25 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/tickets/{operation}",
             post(routes::orchestration::write),
         )
+        // HS2-EBHDSB: dispatch runs (machine-local) and the hosted exact claim.
+        .route(
+            "/checkouts/{owner}/orchestration/runs",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/runs/{run}",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/runs/{run}/{operation}",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{checkout}/target-claims",
+            post(routes::orchestration::write)
+                .patch(routes::orchestration::write)
+                .delete(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{checkout}/target-tickets",
             get(routes::orchestration::read)

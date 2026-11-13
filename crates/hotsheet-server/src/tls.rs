@@ -214,11 +214,18 @@ async fn enforce_client_access(
     match access.role {
         hotsheet_tls::DeviceRole::ReadWrite => next.run(request).await,
         hotsheet_tls::DeviceRole::ReadOnly if safe => next.run(request).await,
-        hotsheet_tls::DeviceRole::ReadOnly => (
-            axum::http::StatusCode::FORBIDDEN,
-            "client certificate is read-only",
-        )
-            .into_response(),
+        hotsheet_tls::DeviceRole::ReadOnly => {
+            // HS2-EBHDSB: discard a small request body before refusing. Answering while
+            // the client is still sending resets the connection, and the client then
+            // reports a transport failure instead of this refusal. Bounded, so a
+            // read-only device cannot make the server read more than this.
+            let _ = axum::body::to_bytes(request.into_body(), READ_ONLY_REFUSAL_DRAIN).await;
+            (
+                axum::http::StatusCode::FORBIDDEN,
+                "client certificate is read-only",
+            )
+                .into_response()
+        }
         hotsheet_tls::DeviceRole::Deny => (
             axum::http::StatusCode::FORBIDDEN,
             "client certificate is not authorized",
@@ -226,6 +233,9 @@ async fn enforce_client_access(
             .into_response(),
     }
 }
+
+/// Most of a refused JSON request; anything longer is not worth reading to refuse.
+const READ_ONLY_REFUSAL_DRAIN: usize = 64 * 1024;
 
 fn read_only_request_allowed(method: &axum::http::Method, path: &str) -> bool {
     matches!(
@@ -385,6 +395,10 @@ mod tests {
             // HS2-AZ15GA: orchestrating uses this machine's grants.
             "/checkouts/owner/orchestration/tickets/create",
             "/checkouts/owner/orchestration/tickets/links",
+            // HS2-EBHDSB: run records are this machine's.
+            "/checkouts/owner/orchestration/runs",
+            "/checkouts/owner/orchestration/runs/id",
+            "/checkouts/owner/orchestration/runs/id/sync",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,
