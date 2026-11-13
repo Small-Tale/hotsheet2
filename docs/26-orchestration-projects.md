@@ -3,7 +3,8 @@
 > **Status: Partial (HS2-4J6V46, HS2-SBQ3T8, HS2-YCJDEB).** Shared declarations,
 > reviewed machine bindings, delegated grants with their audit journal (§26.7), the
 > throughput policy with approvals (§26.8), structured ticket links with target
-> ticket operations (§26.3, HS2-AZ15GA), dispatch runs (§26.9, HS2-EBHDSB), and the
+> ticket operations (§26.3, HS2-AZ15GA), dispatch runs with status and events (§26.9,
+> HS2-EBHDSB, HS2-7QHWHJ), and the
 > headless CLI, authenticated HTTP and MCP adapters are implemented and covered by
 > automated tests; the OpenAPI contract describes them. Workspace UI and the scheduler
 > remain design work under their separate implementation tickets.
@@ -667,3 +668,66 @@ device role, like the hosted ticket route. MCP `hotsheet_targets` adds
 `run_dispatch`, `run_list`, `run_show`, `run_renew`, `run_cancel` and `run_sync`.
 Reconciliation after a restart is HS2-WBREDM, and starting the sessions that do the
 work is HS2-GDJXGZ.
+
+### Status, events and following targets (HS2-7QHWHJ)
+
+**Last confirmed state.** A successful read of the target ticket is stored on the
+run as `observed`: when it was read, the ticket's status and phase, who holds the
+claim and until when. An older or replayed read never replaces a newer one. While
+the target cannot be confirmed the run carries `unreachable` with the time the
+outage began and its reason code, and `observed` stays as it was. The status view
+(`run status`, `GET .../runs/{run}/status`) answers from the record alone and adds
+`reachability` (`reachable`, `unreachable`, or `unknown` when never observed),
+`stale` and `last_confirmed_at_ms`, so a viewer always sees how far the shown state
+can be trusted.
+
+**Event stream.** Every change to a run is published to a bounded append-only
+journal per owning checkout, `${HOTSHEET_HOME}/orchestration-run-events/`, with the
+same sequence cursor, rotation and gap reporting as the audit journal. Event kinds
+are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable` and
+`cancel_requested`, with `gate`, `validation` and `session` reserved for the tickets
+that add them. Each event says whether the orchestrator did it or it was learned
+from the target, and carries identifiers, states and codes only.
+
+- **Ordering.** Events are recorded in arrival order and keep the time the fact was
+  true at its source, so a late report is visible as late rather than rewriting order.
+- **Duplicates.** An event can carry a key that identifies the fact. A second report
+  with the same key for the same run is not recorded again, whoever reports it and in
+  whatever order. Re-reading unchanged target state produces no event at all.
+- **Replay.** A reader passes its cursor and gets later events, optionally for one
+  run; the cursor advances past other runs' events too. `gap: true` says retention
+  removed events it had not seen. With `wait_ms` (at most 20 seconds) an empty answer
+  waits for the next event, woken by the journal changing. Clients do not poll.
+
+**Following a target.** A server follows each target that has an unfinished run by
+holding one bounded request open on the target's hosted change feed
+(`/checkouts/{checkout}/target-events`, at most 8 seconds per request). A first
+request is a handshake that returns the cursor and no backlog, after which every run
+of that target is caught up once. After that only runs whose ticket changed are
+synced. A cursor that goes backwards or an `overflow` answer means the host no
+longer has the backlog, and every run is caught up again. On failure the follower
+keeps its cursor, so reconnecting replays what was missed, marks the affected runs
+unreachable once, and retries with bounded backoff from one second up to a minute.
+It confirms its authority through the gate when it connects, after any failure and
+every ten minutes, acting as whoever dispatched the run. A target with no unfinished
+run is not contacted at all, and a run a person took over is still followed.
+
+A follower starts when a run is dispatched through the server or when someone reads
+the event stream, and ends with the last unfinished run of its target. The hosted
+feed comes from the hosting server's own change stream; a process without one, such
+as the bare CLI, answers `target_peer_unsupported`, and `run sync` remains the
+headless way to bring a run up to date. This view covers explicitly dispatched runs
+only; general cross-server aggregate views are HS2-42B2FD.
+
+```sh
+hotsheet-cli ... orchestration run status <run-id> --project <owner>
+hotsheet-cli ... orchestration run events --project <owner> [--after <seq>] [--run <run-id>] [--wait-seconds 20]
+```
+
+| Route                                                | Methods and purpose                                                                            |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/runs/{run}/status` | GET the run with its last confirmed target state; machine-local                                |
+| `/checkouts/{owner}/orchestration/run-events`        | GET events after `after`, optional `run`, `limit` and `wait_ms`; machine-local                 |
+| `/checkouts/{checkout}/target-events`                | Hosted: GET ticket changes after `since` with an optional `wait_ms`; no `since` is a handshake |
+
+MCP `hotsheet_targets` adds `run_status` and `run_events`.

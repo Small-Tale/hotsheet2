@@ -22,6 +22,7 @@ mod access;
 mod policy;
 mod runs;
 mod tickets;
+mod watch;
 
 fn id(n: u128) -> String {
     ulid::Ulid::from(n).to_string()

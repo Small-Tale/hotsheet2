@@ -1372,6 +1372,29 @@ paths:
   /checkouts/{owner}/orchestration/runs/{run}/{operation}:
     description: Supervise one dispatch run (HS2-EBHDSB); machine-local.
     x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationRunStatus
+      description:
+        '`status` only (HS2-7QHWHJ): the run with its last confirmed target state and whether that is stale. Contacts
+        nothing.'
+      responses:
+        '200':
+          description: The run with its reachability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRun'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
     post:
       operationId: superviseOrchestrationRun
       description:
@@ -1436,6 +1459,7 @@ paths:
             - renew
             - cancel
             - sync
+            - status
   /checkouts/{checkout}/target-claims:
     description: The exact claim and lease of one ticket on a git source of a hosted checkout, for a local or remote
       orchestration project (HS2-EBHDSB). Ordinary authenticated project data under the caller's device role; another
@@ -1509,6 +1533,116 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HostedTargetTicket'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/run-events:
+    description:
+      Machine-local event stream of an owning checkout's dispatch runs (HS2-7QHWHJ). Cursor replay with an optional
+      bounded wait; a client never polls on a timer.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationRunEvents
+      parameters:
+        - name: after
+          in: query
+          description: Return events with a greater sequence number.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: run
+          in: query
+          description: Only this run's events; the cursor still advances past the others.
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        - name: wait_ms
+          in: query
+          description: With no event to return, wait up to this long (at most 20000) for the next one.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Events after the cursor, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRunEventPage'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-events:
+    description:
+      Ticket changes of one hosted checkout after a cursor, for a local or remote orchestration project that follows
+      it (HS2-7QHWHJ). Ordinary authenticated project data. A host without a change stream answers
+      `target_peer_unsupported`.
+    get:
+      operationId: readHostedTargetEvents
+      parameters:
+        - name: since
+          in: query
+          description: Omit for a handshake that returns the current cursor and no backlog.
+          schema:
+            type: integer
+            minimum: 0
+        - name: wait_ms
+          in: query
+          description: With no change to return, wait up to this long (at most 8000) for the next one.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Changed tickets after the cursor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetEventPage'
         default:
           description:
             Stable content-free error code; authentication/device-role/locality denial may return a fixed text
@@ -17041,6 +17175,149 @@ components:
           type: array
           items:
             type: string
+        observed:
+          description: The target ticket as last confirmed by a successful read (HS2-7QHWHJ).
+          type: object
+          required:
+            - at_ms
+            - status
+          properties:
+            at_ms:
+              type: integer
+              minimum: 0
+            status:
+              type: string
+            started_phase:
+              type: string
+            claimed_by:
+              type: string
+            lease_expires_at_ms:
+              type: integer
+              minimum: 0
+          additionalProperties: false
+        unreachable:
+          description: Present while the target cannot be confirmed; `observed` is then stale.
+          type: object
+          required:
+            - since_ms
+            - reason
+          properties:
+            since_ms:
+              type: integer
+              minimum: 0
+            reason:
+              type: string
+          additionalProperties: false
+        reachability:
+          description: Status view only.
+          enum:
+            - reachable
+            - unreachable
+            - unknown
+        stale:
+          description: Status view only; the observed target state may no longer be true.
+          type: boolean
+        last_confirmed_at_ms:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    OrchestrationRunEventPage:
+      type: object
+      required:
+        - entries
+        - cursor
+        - gap
+        - more
+      properties:
+        entries:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required:
+              - seq
+              - at_ms
+              - run_id
+              - kind
+              - source
+            properties:
+              seq:
+                type: integer
+                minimum: 1
+              at_ms:
+                description: When the fact was true at its source, which may precede its arrival.
+                type: integer
+                minimum: 0
+              run_id:
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              kind:
+                enum:
+                  - state
+                  - lease
+                  - observed
+                  - target_unreachable
+                  - target_reachable
+                  - cancel_requested
+                  - gate
+                  - validation
+                  - session
+              source:
+                enum:
+                  - orchestrator
+                  - target
+              state:
+                type: string
+              reason:
+                description: A stable code, never free text.
+                type: string
+              actor_id:
+                type: string
+              dedupe:
+                description: Identifies the fact; the same key for one run is recorded once.
+                type: string
+            additionalProperties: false
+        cursor:
+          description: Pass as `after` to continue.
+          type: integer
+          minimum: 0
+        gap:
+          description: Retention removed events between the request cursor and the first one returned.
+          type: boolean
+        more:
+          type: boolean
+      additionalProperties: false
+    HostedTargetEventPage:
+      type: object
+      required:
+        - cursor
+        - events
+        - overflow
+      properties:
+        cursor:
+          description: Pass as `since` to continue.
+          type: integer
+          minimum: 0
+        events:
+          type: array
+          items:
+            type: object
+            required:
+              - cursor
+              - connection_id
+              - native_id
+            properties:
+              cursor:
+                type: integer
+                minimum: 0
+              connection_id:
+                type: string
+              native_id:
+                type: string
+            additionalProperties: false
+        overflow:
+          description: The host no longer retains everything after `since`; treat every ticket as possibly changed.
+          type: boolean
       additionalProperties: false
     RemoteIdentity:
       type: object

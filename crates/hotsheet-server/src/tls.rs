@@ -399,6 +399,7 @@ mod tests {
             "/checkouts/owner/orchestration/runs",
             "/checkouts/owner/orchestration/runs/id",
             "/checkouts/owner/orchestration/runs/id/sync",
+            "/checkouts/owner/orchestration/run-events",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

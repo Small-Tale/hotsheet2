@@ -103,6 +103,25 @@ enum RunCmd {
     Sync {
         run_id: String,
     },
+    /// The run with its last confirmed target state and whether that is stale.
+    /// Contacts nothing.
+    Status {
+        run_id: String,
+    },
+    /// Events after a cursor, oldest first. With --wait-seconds an empty answer waits
+    /// for the next event instead of the caller polling.
+    Events {
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+        #[arg(long, default_value_t = 100)]
+        limit: u64,
+        /// Only this run's events.
+        #[arg(long)]
+        run: Option<String>,
+        /// At most 20.
+        #[arg(long, default_value_t = 0)]
+        wait_seconds: u64,
+    },
 }
 fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
     let base = format!("/checkouts/{project}/orchestration/runs");
@@ -138,6 +157,21 @@ fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
         ),
         RunCmd::Cancel { run_id } => ("POST", format!("{base}/{run_id}/cancel"), json!({})),
         RunCmd::Sync { run_id } => ("POST", format!("{base}/{run_id}/sync"), json!({})),
+        RunCmd::Status { run_id } => ("GET", format!("{base}/{run_id}/status"), Value::Null),
+        RunCmd::Events {
+            after,
+            limit,
+            run,
+            wait_seconds,
+        } => (
+            "GET",
+            format!(
+                "/checkouts/{project}/orchestration/run-events?after={after}&limit={limit}&wait_ms={}{}",
+                wait_seconds.saturating_mul(1000),
+                run.map(|run| format!("&run={run}")).unwrap_or_default()
+            ),
+            Value::Null,
+        ),
     }
 }
 #[derive(Args)]

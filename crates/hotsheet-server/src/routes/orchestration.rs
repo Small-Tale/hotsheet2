@@ -5,7 +5,11 @@ use axum::{
     extract::{OriginalUri, State},
     http::{Method, StatusCode},
 };
-use hotsheet_cli::orchestration::{OrchestrationRuntime, error_status, request_cleanup_now};
+use hotsheet_cli::orchestration::{
+    MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime, TargetEventPage, TargetEvents,
+    TargetTicketEvent, WatchState, error_status, request_cleanup_now,
+};
+use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{ProviderConfigRegistry, orchestration::OrchestrationError};
 use serde_json::Value;
 use std::sync::Arc;
@@ -19,7 +23,192 @@ fn runtime(state: &AppState) -> Result<Arc<OrchestrationRuntime>, OrchestrationE
         state.checkout_registry.clone(),
         ProviderConfigRegistry::new(state.store.root().join("providers.json")),
     )
+    .map(|runtime| runtime.with_target_events(target_events(state)))
     .map(Arc::new)
+}
+
+/// HS2-7QHWHJ: this server's ticket changes as a cursor feed for orchestration
+/// projects that follow one of its checkouts.
+pub(crate) fn target_events(state: &AppState) -> Arc<dyn TargetEvents> {
+    Arc::new(ServerEvents(state.clone()))
+}
+
+struct ServerEvents(AppState);
+
+impl TargetEvents for ServerEvents {
+    fn poll(
+        &self,
+        checkout: &hotsheet_ticketing::checkouts::Checkout,
+        since: Option<u64>,
+        wait_ms: u64,
+    ) -> Result<TargetEventPage, OrchestrationError> {
+        let state = &self.0;
+        // Ticket changes are published under the git connection id of their store.
+        let sources: std::collections::HashSet<&str> = checkout
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+            .map(|source| source.connection_id.as_str())
+            .collect();
+        let ticket_change = |event: &crate::ChangeEvent| {
+            matches!(
+                event.kind.as_str(),
+                "created" | "updated" | "deleted" | "changed"
+            ) && sources.contains(event.store.as_str())
+        };
+        let to_event = |event: &crate::ChangeEvent| {
+            event.cursor.map(|cursor| TargetTicketEvent {
+                cursor,
+                connection_id: event.store.clone(),
+                native_id: event.id.clone(),
+            })
+        };
+        let Some(since) = since else {
+            return Ok(TargetEventPage {
+                cursor: state.event_cursor(),
+                events: Vec::new(),
+                overflow: false,
+            });
+        };
+        // Subscribe before reading the log, so a change in between is not missed.
+        let mut receiver = state.events.subscribe();
+        let (backlog, mut overflow, mut cursor) = state.event_log.with_lock(|log| {
+            let (events, overflow) = log.since(since);
+            (events, overflow, log.seq)
+        });
+        let mut events: Vec<TargetTicketEvent> = backlog
+            .iter()
+            .filter(|event| ticket_change(event))
+            .filter_map(to_event)
+            .collect();
+        if events.is_empty() && !overflow && wait_ms > 0 {
+            // Wait for the next change of this checkout, woken by the stream itself.
+            let Ok(handle) = tokio::runtime::Handle::try_current() else {
+                return Ok(TargetEventPage {
+                    cursor,
+                    events,
+                    overflow,
+                });
+            };
+            let waited = handle.block_on(async {
+                tokio::time::timeout(std::time::Duration::from_millis(wait_ms), async {
+                    loop {
+                        match receiver.recv().await {
+                            Ok(event) if event.cursor.is_some_and(|at| at <= cursor) => {}
+                            Ok(event) => {
+                                if let Some(at) = event.cursor {
+                                    cursor = cursor.max(at);
+                                }
+                                if ticket_change(&event) {
+                                    return to_event(&event).map(Ok);
+                                }
+                            }
+                            // The receiver fell behind: the caller must catch up fully.
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                                return Some(Err(()));
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                        }
+                    }
+                })
+                .await
+            });
+            match waited {
+                Ok(Some(Ok(event))) => events.push(event),
+                Ok(Some(Err(()))) => {
+                    overflow = true;
+                    cursor = state.event_cursor();
+                }
+                Ok(None) | Err(_) => {}
+            }
+        }
+        Ok(TargetEventPage {
+            cursor: events
+                .last()
+                .map_or(cursor, |event| event.cursor.max(cursor)),
+            events,
+            overflow,
+        })
+    }
+}
+
+/// Followers of targets with unfinished runs, one per `(machine home, owner, target)`.
+static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+    std::sync::OnceLock::new();
+
+/// Start a follower for every target of this owner that has an unfinished run and no
+/// follower yet. A follower holds one bounded request open on its target, syncs the
+/// runs whose tickets changed, backs off after a failure, and ends when the target has
+/// no unfinished run. With no runs, nothing is started and no target is contacted.
+fn ensure_watchers(state: &AppState, owner: &str) {
+    let Ok(shared) = runtime(state) else {
+        return;
+    };
+    let targets: std::collections::BTreeSet<String> = shared
+        .run_list(owner, false)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|run| !run.state.is_terminal())
+        .map(|run| run.target.target_id)
+        .collect();
+    for target in targets {
+        let key = format!("{}|{owner}|{target}", state.machine_home().display());
+        let registry = WATCHERS.get_or_init(Default::default);
+        if !registry.lock_or_recover().insert(key.clone()) {
+            continue;
+        }
+        let (state, owner) = (state.clone(), owner.to_owned());
+        tokio::spawn(async move {
+            let mut watch = WatchState::default();
+            let mut backoff = std::time::Duration::from_secs(1);
+            loop {
+                let (task_state, task_owner, task_target) =
+                    (state.clone(), owner.clone(), target.clone());
+                let step = tokio::task::spawn_blocking(move || {
+                    let step = runtime(&task_state).map(|runtime| {
+                        runtime.watch_step_now(
+                            &task_owner,
+                            &task_target,
+                            &mut watch,
+                            MAX_TARGET_EVENT_WAIT_MS,
+                        )
+                    });
+                    (step, watch)
+                })
+                .await;
+                let Ok((Ok(step), returned)) = step else {
+                    break;
+                };
+                watch = returned;
+                if !step.active {
+                    break;
+                }
+                if step.failed {
+                    // Bounded backoff; the watch keeps its cursor, so nothing is missed.
+                    tokio::time::sleep(backoff).await;
+                    backoff = (backoff * 2).min(std::time::Duration::from_secs(60));
+                } else {
+                    backoff = std::time::Duration::from_secs(1);
+                }
+            }
+            WATCHERS
+                .get_or_init(Default::default)
+                .lock_or_recover()
+                .remove(&key);
+        });
+    }
+}
+
+/// The owning checkout of a path that should have its targets followed: a dispatch,
+/// or someone waiting on the run event stream.
+fn watched_owner(method: &Method, path: &str) -> Option<String> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    match (method.as_str(), parts.as_slice()) {
+        ("POST", ["checkouts", owner, "orchestration", "runs"])
+        | ("GET", ["checkouts", owner, "orchestration", "run-events"]) => Some((*owner).to_owned()),
+        _ => None,
+    }
 }
 fn error(error: OrchestrationError) -> ApiError {
     ApiError::new(
@@ -29,6 +218,36 @@ fn error(error: OrchestrationError) -> ApiError {
     .with_code(error.code())
 }
 async fn execute(
+    state: AppState,
+    method: Method,
+    path: String,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    // HS2-7QHWHJ: a subscriber gets followers before it starts waiting.
+    let watched = watched_owner(&method, &path);
+    if let (Some(owner), "GET") = (&watched, method.as_str()) {
+        let (state, owner) = (state.clone(), owner.clone());
+        let _ = tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner)).await;
+    }
+    let follow = watched.map(|owner| (state.clone(), owner));
+    let result = execute_blocking(state, method, path, body).await;
+    // A new run gets a follower once it exists.
+    if let (Ok(_), Some((state, owner))) = (&result, follow) {
+        let _ = tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner)).await;
+    }
+    result
+}
+
+/// `ensure_watchers` reads run records and spawns tasks; it runs off the async threads
+/// and re-enters the runtime only to spawn.
+fn ensure_watchers_blocking(state: &AppState, owner: &str) {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let _guard = handle.enter();
+        ensure_watchers(state, owner);
+    }
+}
+
+async fn execute_blocking(
     state: AppState,
     method: Method,
     path: String,

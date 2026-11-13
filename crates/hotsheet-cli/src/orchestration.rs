@@ -7,14 +7,22 @@ mod policy;
 mod request;
 mod runs;
 mod tickets;
+mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
-pub use runs::{DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_LEASE_MINUTES, RunView};
+pub use runs::{
+    DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,
+    RunStatus, RunView,
+};
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
     LinkTargetTicket, LinkView, ListLinks, OrchestrationTicket, ReadTargetTicket, TargetTicket,
     TargetTicketFields, TargetTicketResult, UnlinkTargetTicket, UpdateTargetTicket,
+};
+pub use watch::{
+    MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetTicketEvent, WatchState,
+    WatchStep,
 };
 #[cfg(test)]
 mod tests;
@@ -43,6 +51,8 @@ pub struct OrchestrationRuntime {
     server_id: String,
     /// HS2-AZ15GA: opens a hosted checkout's external ticket sources.
     external: Arc<dyn ExternalProviders>,
+    /// HS2-7QHWHJ: the host's live ticket changes, when this process has a change stream.
+    target_events: Option<Arc<dyn TargetEvents>>,
 }
 
 impl OrchestrationRuntime {
@@ -70,6 +80,7 @@ impl OrchestrationRuntime {
         Ok(Self {
             remotes: RemoteRegistry::new(home.join("remotes.json")),
             external: Arc::new(tickets::LiveExternalProviders { home: home.clone() }),
+            target_events: None,
             home,
             checkouts,
             providers,
@@ -83,6 +94,14 @@ impl OrchestrationRuntime {
     #[must_use]
     pub fn with_external_providers(mut self, external: Arc<dyn ExternalProviders>) -> Self {
         self.external = external;
+        self
+    }
+
+    /// HS2-7QHWHJ: let a remote or local orchestration project follow this host's
+    /// ticket changes instead of polling for them.
+    #[must_use]
+    pub fn with_target_events(mut self, events: Arc<dyn TargetEvents>) -> Self {
+        self.target_events = Some(events);
         self
     }
 

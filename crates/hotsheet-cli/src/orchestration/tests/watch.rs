@@ -1,0 +1,752 @@
+//! HS2-7QHWHJ: run events, status and following target changes without polling.
+use hotsheet_model::{Status, Ticket};
+use hotsheet_ticketing::checkouts::Checkout;
+use hotsheet_ticketing::orchestration::{
+    DenialReason, RunEventKind, RunEventSource, RunState, TargetAction, TargetOpError,
+};
+use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
+use serde_json::{Value, json};
+
+use super::tickets::{
+    Machine, NOW, RemotePeer, bind_and_grant, human, machine, machine_with, op, unsupported, worker,
+};
+use super::*;
+
+const LEASE: &str = "2030-01-01T00:00:00Z";
+
+/// A host change stream the test drives by hand.
+#[derive(Default)]
+struct Feed {
+    events: Mutex<Vec<TargetTicketEvent>>,
+    cursor: AtomicUsize,
+    calls: Mutex<Vec<(Option<u64>, u64)>>,
+    failing: std::sync::atomic::AtomicBool,
+    overflow: std::sync::atomic::AtomicBool,
+}
+impl Feed {
+    fn push(&self, connection: &str, ticket: &Ticket) {
+        let cursor = self.cursor.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+        self.events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(TargetTicketEvent {
+                cursor,
+                connection_id: connection.into(),
+                native_id: ticket.id.to_string(),
+            });
+    }
+    fn calls(&self) -> Vec<(Option<u64>, u64)> {
+        self.calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+impl TargetEvents for Feed {
+    fn poll(
+        &self,
+        _: &Checkout,
+        since: Option<u64>,
+        wait_ms: u64,
+    ) -> Result<TargetEventPage, OrchestrationError> {
+        self.calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((since, wait_ms));
+        if self.failing.load(Ordering::SeqCst) {
+            return Err(OrchestrationError::TargetOperation(TargetOpError::Failed));
+        }
+        let cursor = self.cursor.load(Ordering::SeqCst) as u64;
+        Ok(TargetEventPage {
+            cursor,
+            events: since.map_or_else(Vec::new, |since| {
+                self.events
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .iter()
+                    .filter(|event| event.cursor > since)
+                    .cloned()
+                    .collect()
+            }),
+            overflow: self.overflow.load(Ordering::SeqCst),
+        })
+    }
+}
+
+fn target_ticket(m: &Machine, title: &str) -> Ticket {
+    ops::create(
+        &m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: title.into(),
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
+fn dispatch(
+    m: &Machine,
+    orchestration: &Ticket,
+    target: &Ticket,
+    operation: &str,
+    worker_id: &str,
+) -> String {
+    let mut rng = Rng(u128::from(operation.len() as u64) * 1000 + 7);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    m.runtime
+        .run_dispatch(
+            &m.owner.id,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": m.owner_connection(), "native_id": orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": m.target_connection(),
+                "native_id": target.id.to_string(), "operation_id": operation,
+                "worker_id": worker_id,
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .run
+        .run_id
+}
+fn complete(m: &Machine, ticket: &Ticket) {
+    ops::update(
+        &m.target_store,
+        &ticket.id,
+        NOW.into(),
+        TicketPatch {
+            status: Some(Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+}
+fn kinds(
+    m: &Machine,
+    run_id: &str,
+) -> Vec<(
+    RunEventKind,
+    RunEventSource,
+    Option<RunState>,
+    Option<String>,
+)> {
+    m.runtime
+        .run_events(&m.owner.id, 0, 500, Some(run_id), 0)
+        .unwrap()
+        .entries
+        .into_iter()
+        .map(|entry| {
+            (
+                entry.record.kind,
+                entry.record.source,
+                entry.record.state,
+                entry.record.reason,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn hs2_7qhwhj_a_watch_is_idle_without_runs_and_syncs_only_changed_tickets() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let mut state = WatchState::default();
+    // No active run: the target is not contacted at all, however often this is asked.
+    for _ in 0..3 {
+        assert_eq!(
+            m.runtime
+                .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx),
+            WatchStep::default()
+        );
+    }
+    assert!(feed.calls().is_empty());
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let first = target_ticket(&m, "First");
+    let second = target_ticket(&m, "Second");
+    let unrelated = target_ticket(&m, "Not a run");
+    let run_one = dispatch(&m, &orchestration, &first, "op-1", "worker-a");
+    let run_two = dispatch(&m, &orchestration, &second, "op-22", "worker-b");
+    // First contact is a handshake: no backlog, so every run is caught up once.
+    let step = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(step.active && !step.failed);
+    assert_eq!(step.synced, [run_one.clone(), run_two.clone()]);
+    assert_eq!(feed.calls(), [(None, 0)]);
+    assert_eq!(state.cursor(), Some(0));
+    // Quiet target: one bounded request, nothing synced.
+    let quiet = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 60_000, &mut tx);
+    assert!(quiet.synced.is_empty());
+    assert_eq!(feed.calls()[1], (Some(0), MAX_TARGET_EVENT_WAIT_MS));
+    // A change to a ticket no run concerns syncs nothing.
+    feed.push(&m.target_connection(), &unrelated);
+    feed.push("another-source", &first);
+    let other = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(other.synced.is_empty());
+    assert_eq!(state.cursor(), Some(2));
+    // The first run's ticket completes on the target: only that run is synced, and
+    // it completes without anyone asking for a sync.
+    complete(&m, &first);
+    feed.push(&m.target_connection(), &first);
+    let changed = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(changed.synced, std::slice::from_ref(&run_one));
+    assert_eq!(
+        m.runtime.run(&m.owner.id, &run_one).unwrap().state,
+        RunState::Completed
+    );
+    assert_eq!(
+        m.runtime.run(&m.owner.id, &run_two).unwrap().state,
+        RunState::Dispatched
+    );
+    // The same change delivered again (a replay) is harmless and adds no event.
+    let before = kinds(&m, &run_two).len();
+    feed.push(&m.target_connection(), &second);
+    feed.push(&m.target_connection(), &second);
+    let replayed = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(replayed.synced, std::slice::from_ref(&run_two));
+    assert_eq!(kinds(&m, &run_two).len(), before);
+    // The stream of the completed run: dispatched, observed, then completed from the
+    // target, each once.
+    use RunEventKind::{Observed, State};
+    use RunEventSource::{Orchestrator, Target};
+    assert_eq!(
+        kinds(&m, &run_one),
+        [
+            (
+                State,
+                Orchestrator,
+                Some(RunState::Dispatched),
+                Some("claimed".into())
+            ),
+            (Observed, Target, None, Some("started".into())),
+            (
+                State,
+                Target,
+                Some(RunState::Completed),
+                Some("target_completed".into())
+            ),
+            (Observed, Target, None, Some("completed".into())),
+        ]
+    );
+    // The host lost its backlog: every remaining run is caught up.
+    feed.overflow.store(true, Ordering::SeqCst);
+    let overflow = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(overflow.synced, std::slice::from_ref(&run_two));
+    feed.overflow.store(false, Ordering::SeqCst);
+    // The last run ends: the watch goes idle again and stops asking.
+    complete(&m, &second);
+    feed.push(&m.target_connection(), &second);
+    m.runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    let calls = feed.calls().len();
+    let idle = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(idle, WatchStep::default());
+    assert_eq!(feed.calls().len(), calls);
+    assert_eq!(state.cursor(), None);
+}
+
+#[test]
+fn hs2_7qhwhj_an_outage_marks_runs_stale_once_and_reconnect_replays_from_the_cursor() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Watched");
+    let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
+    let mut state = WatchState::default();
+    // Never observed yet: the status says so rather than implying it is current.
+    let unknown = m.runtime.run_status(&m.owner.id, &run_id).unwrap();
+    assert_eq!(unknown.reachability, "unknown");
+    assert!(unknown.stale);
+    assert_eq!(unknown.last_confirmed_at_ms, None);
+    m.runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    let confirmed = m.runtime.run_status(&m.owner.id, &run_id).unwrap();
+    assert_eq!(confirmed.reachability, "reachable");
+    assert!(!confirmed.stale);
+    assert_eq!(confirmed.run.observed.as_ref().unwrap().status, "started");
+    assert_eq!(
+        confirmed
+            .run
+            .observed
+            .as_ref()
+            .unwrap()
+            .claimed_by
+            .as_deref(),
+        Some("worker-a")
+    );
+    // The change stream fails but the target still answers reads: the watch backs off
+    // and the run stays confirmed.
+    feed.failing.store(true, Ordering::SeqCst);
+    let flaky = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(flaky.active && flaky.failed);
+    assert_eq!(flaky.synced, std::slice::from_ref(&run_id));
+    assert_eq!(state.cursor(), Some(0));
+    assert_eq!(
+        m.runtime
+            .run_status(&m.owner.id, &run_id)
+            .unwrap()
+            .reachability,
+        "reachable"
+    );
+    // The target itself becomes unusable (its source is disabled): the run goes stale
+    // and keeps its last confirmed state. The outage is one event, however long it lasts.
+    let disabled = |disabled: bool| {
+        // A git source cannot be disabled; unbinding is how this fixture loses the target.
+        let _ = disabled;
+    };
+    disabled(true);
+    let binding = m.runtime.resolve(&m.reference(1), &mut tx).unwrap().binding;
+    let destination = binding.destination.clone();
+    m.runtime
+        .request(
+            "DELETE",
+            &format!(
+                "/checkouts/{}/orchestration/targets/{}/binding",
+                m.owner.id,
+                id(1)
+            ),
+            &json!({"target":m.reference(1),"expected_binding_revision":binding.revision,
+                "previous_destination":destination}),
+            &mut tx,
+        )
+        .unwrap();
+    // While the target was unreachable its ticket changed.
+    feed.failing.store(false, Ordering::SeqCst);
+    complete(&m, &ticket);
+    feed.push(&m.target_connection(), &ticket);
+    for _ in 0..3 {
+        let down = m
+            .runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+        assert!(down.active && down.failed);
+        assert!(down.synced.is_empty());
+    }
+    let stale = m.runtime.run_status(&m.owner.id, &run_id).unwrap();
+    assert_eq!(stale.reachability, "unreachable");
+    assert!(stale.stale);
+    assert_eq!(stale.run.state, RunState::Dispatched);
+    assert_eq!(stale.run.observed.as_ref().unwrap().status, "started");
+    assert_eq!(
+        stale.run.unreachable.as_ref().unwrap().reason,
+        "target_unavailable"
+    );
+    let outages = kinds(&m, &run_id)
+        .into_iter()
+        .filter(|event| event.0 == RunEventKind::TargetUnreachable)
+        .count();
+    assert_eq!(outages, 1);
+    // The cursor was kept through the outage.
+    assert_eq!(state.cursor(), Some(0));
+    assert!(matches!(
+        m.runtime
+            .run_sync(&m.owner.id, &run_id, Some(&worker()), &mut tx),
+        Err(OrchestrationError::Denied(DenialReason::TargetUnavailable))
+    ));
+    // Bound again: the next step replays the change that happened meanwhile.
+    m.runtime
+        .bind(
+            BindTarget {
+                target: m.reference(1),
+                expected_manifest_revision: m
+                    .runtime
+                    .declarations(&m.owner.id)
+                    .unwrap()
+                    .revision
+                    .unwrap(),
+                expected_binding_revision: binding.revision + 1,
+                previous_destination: None,
+                destination: destination.unwrap(),
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let back = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(!back.failed);
+    assert_eq!(back.synced, std::slice::from_ref(&run_id));
+    assert_eq!(feed.calls().last().unwrap().0, Some(0));
+    let done = m.runtime.run_status(&m.owner.id, &run_id).unwrap();
+    assert_eq!(done.run.state, RunState::Completed);
+    assert_eq!(done.reachability, "reachable");
+    let stream: Vec<_> = kinds(&m, &run_id).into_iter().map(|e| e.0).collect();
+    use RunEventKind::{Observed, State, TargetReachable, TargetUnreachable};
+    assert_eq!(
+        stream,
+        [
+            State,
+            Observed,
+            TargetUnreachable,
+            State,
+            Observed,
+            TargetReachable
+        ]
+    );
+}
+
+#[test]
+fn hs2_7qhwhj_events_replay_by_cursor_and_wait_for_the_next_one_without_polling() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Watched");
+    let events = format!("/checkouts/{}/orchestration/run-events", m.owner.id);
+    // Nothing yet: an immediate read is empty and creates nothing.
+    assert_eq!(
+        m.runtime
+            .request("GET", &events, &Value::Null, &mut tx)
+            .unwrap(),
+        json!({"entries":[],"cursor":0,"gap":false,"more":false})
+    );
+    // A waiting read ends at its deadline with the same cursor.
+    let started = std::time::Instant::now();
+    let empty = m.runtime.run_events(&m.owner.id, 0, 10, None, 300).unwrap();
+    assert!(empty.entries.is_empty());
+    assert_eq!(empty.cursor, 0);
+    assert!(started.elapsed() >= std::time::Duration::from_millis(250));
+    // A waiting read returns as soon as an event is recorded, long before its deadline.
+    let run_id = std::thread::scope(|scope| {
+        let waiter = scope.spawn(|| {
+            let started = std::time::Instant::now();
+            let page = m
+                .runtime
+                .run_events(&m.owner.id, 0, 10, None, 15_000)
+                .unwrap();
+            (page, started.elapsed())
+        });
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
+        let (page, waited) = waiter.join().unwrap();
+        assert!(!page.entries.is_empty());
+        assert_eq!(page.entries[0].record.run_id, run_id);
+        assert!(waited < std::time::Duration::from_secs(10), "{waited:?}");
+        run_id
+    });
+    // Cursor replay through the route, filtered to one run.
+    m.runtime
+        .run_renew(&m.owner.id, &run_id, Some(60), Some(&worker()), &mut tx)
+        .unwrap();
+    m.runtime
+        .run_cancel(&m.owner.id, &run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    let first = m
+        .runtime
+        .request(
+            "GET",
+            &format!("{events}?after=0&limit=1&run={run_id}"),
+            &Value::Null,
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(first["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(first["entries"][0]["kind"], "state");
+    assert_eq!(first["entries"][0]["state"], "dispatched");
+    assert_eq!(first["entries"][0]["source"], "orchestrator");
+    assert_eq!(first["more"], true);
+    let rest = m
+        .runtime
+        .request(
+            "GET",
+            &format!("{events}?after={}&run={run_id}", first["cursor"]),
+            &Value::Null,
+            &mut tx,
+        )
+        .unwrap();
+    let rest_kinds: Vec<_> = rest["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["kind"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(rest_kinds, ["lease", "state"]);
+    assert_eq!(rest["entries"][1]["state"], "cancelled");
+    // The status route answers from the record alone.
+    let status = m
+        .runtime
+        .request(
+            "GET",
+            &format!(
+                "/checkouts/{}/orchestration/runs/{run_id}/status",
+                m.owner.id
+            ),
+            &Value::Null,
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(status["state"], "cancelled");
+    assert_eq!(status["reachability"], "unknown");
+    assert_eq!(status["stale"], true);
+    for bad in ["?after=x", "?run=nope", "?wait_ms=-1"] {
+        assert!(
+            m.runtime
+                .request("GET", &format!("{events}{bad}"), &Value::Null, &mut tx)
+                .is_err(),
+            "{bad}"
+        );
+    }
+    assert!(is_path(&events));
+    assert!(is_machine_path(&events));
+    // A host without a change stream says so; the hosted route is not machine-fenced.
+    let hosted = format!("/checkouts/{}/target-events", m.target.id);
+    assert!(is_path(&hosted));
+    assert!(!is_machine_path(&hosted));
+    assert_eq!(
+        op(m.runtime.request("GET", &hosted, &Value::Null, &mut tx)),
+        TargetOpError::PeerUnsupported
+    );
+    let _ = human();
+}
+
+#[test]
+fn hs2_7qhwhj_a_remote_target_is_followed_through_the_reviewed_transport() {
+    let feed = Arc::new(Feed::default());
+    let peer = Arc::new(RemotePeer {
+        hosted: machine_with(99, false, unsupported, Some(feed.clone())),
+        calls: Mutex::new(Vec::new()),
+        status_override: Mutex::new(None),
+    });
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    std::fs::create_dir(&home).unwrap();
+    let project = root.path().join("owner");
+    std::fs::create_dir(&project).unwrap();
+    let store_path = root.path().join("owner-store");
+    let owner_store = hotsheet_ticketing::FsStore::init_git(
+        &store_path,
+        &hotsheet_ticketing::StoreMetadata::new("OWN"),
+    )
+    .unwrap();
+    let checkouts = CheckoutRegistry::new(home.join("checkouts.json"));
+    let owner = checkouts
+        .register(&project, None, None, vec![store_path])
+        .unwrap();
+    let secrets = Arc::new(Memory::default());
+    let runtime = OrchestrationRuntime::new(
+        home,
+        checkouts,
+        ProviderConfigRegistry::new(root.path().join("providers.json")),
+        secrets.clone(),
+        peer.clone(),
+        id(10),
+    )
+    .unwrap();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let target = TargetRef {
+        owner_checkout_id: owner.id.clone(),
+        target_id: id(1),
+    };
+    let manifest = runtime
+        .replace(
+            &owner.id,
+            ReplaceTargets {
+                expected_revision: None,
+                targets: vec![TargetDeclaration {
+                    target_id: id(1),
+                    state: DeclarationState::Active,
+                    label: "Remote".into(),
+                    expected_repository_identity: None,
+                }],
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let registered = runtime
+        .remotes
+        .register(
+            RegisterRemote {
+                id: id(20),
+                label: "Synthetic peer".into(),
+                origin: "http://127.0.0.1:8765".into(),
+                expected_server_id: id(99),
+                credentials: credentials(),
+            },
+            secrets.as_ref(),
+            peer.as_ref(),
+            100,
+        )
+        .unwrap();
+    let projection = peer
+        .hosted
+        .runtime
+        .checkout_projection(&peer.hosted.target.id)
+        .unwrap();
+    runtime
+        .bind(
+            BindTarget {
+                target: target.clone(),
+                expected_manifest_revision: manifest.revision.unwrap(),
+                expected_binding_revision: 0,
+                previous_destination: None,
+                destination: TargetDestination::Remote {
+                    registration_id: id(20),
+                    identity: registered.remote.identity,
+                    checkout_id: projection.checkout_id,
+                    checkout_authority: projection.checkout_authority,
+                },
+            },
+            &mut tx,
+        )
+        .unwrap();
+    runtime
+        .grant(
+            &target,
+            hotsheet_ticketing::orchestration::CreateGrant {
+                grant_id: None,
+                actor_id: "worker-1".into(),
+                actions: vec![TargetAction::TicketsRead, TargetAction::WorkStart],
+                session_scope: None,
+                expires_at_ms: 10_000,
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let orchestration = ops::create(
+        &owner_store,
+        ulid::Ulid::new(),
+        "OWN",
+        NOW.into(),
+        NewTicket {
+            title: "Coordinate remotely".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let ticket = target_ticket(&peer.hosted, "Remote work");
+    let connection = peer.hosted.target_connection();
+    let run_id = runtime
+        .run_dispatch(
+            &owner.id,
+            serde_json::from_value(json!({
+                "ticket": {"native_id": orchestration.slug},
+                "target_id": id(1), "connection_id": connection,
+                "native_id": ticket.id.to_string(), "operation_id": "op-1",
+                "worker_id": "remote-worker",
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .run
+        .run_id;
+    let mut state = WatchState::default();
+    runtime.watch_step(&owner.id, &id(1), &mut state, 8_000, &mut tx);
+    // The peer's ticket is claimed by someone else there; the feed says it changed.
+    ops::release(
+        &peer.hosted.target_store,
+        &ticket.id,
+        NOW.into(),
+        "remote-worker",
+        false,
+    )
+    .unwrap();
+    ops::claim_with_eta(
+        &peer.hosted.target_store,
+        &ticket.id,
+        &NOW.into(),
+        LEASE.into(),
+        "peer-human",
+        None,
+        None,
+    )
+    .unwrap();
+    feed.push(&connection, &ticket);
+    let step = runtime.watch_step(&owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(step.synced, std::slice::from_ref(&run_id));
+    let status = runtime.run_status(&owner.id, &run_id).unwrap();
+    assert_eq!(status.run.state, RunState::Intervened);
+    assert_eq!(
+        status.run.observed.as_ref().unwrap().claimed_by.as_deref(),
+        Some("peer-human")
+    );
+    // The watch reached the peer's hosted feed with its cursor, through the transport.
+    let paths: Vec<_> = peer
+        .calls
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .filter(|call| call.1.contains("/target-events"))
+        .map(|call| call.1.clone())
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            format!("/checkouts/{}/target-events", peer.hosted.target.id),
+            format!(
+                "/checkouts/{}/target-events?since=0&wait_ms=8000",
+                peer.hosted.target.id
+            ),
+        ]
+    );
+    // The peer goes away: the run is stale with its last confirmed state intact.
+    *peer
+        .status_override
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(503);
+    let down = runtime.watch_step(&owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(down.failed);
+    let stale = runtime.run_status(&owner.id, &run_id).unwrap();
+    assert_eq!(stale.reachability, "unreachable");
+    assert_eq!(
+        stale.run.observed.as_ref().unwrap().claimed_by.as_deref(),
+        Some("peer-human")
+    );
+    assert_eq!(state.cursor(), Some(1));
+}

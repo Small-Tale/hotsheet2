@@ -108,6 +108,16 @@ pub(super) fn machine(
     with_external: bool,
     error: fn(&str) -> ProviderError,
 ) -> Machine {
+    machine_with(server, with_external, error, None)
+}
+
+/// HS2-7QHWHJ: the same machine with a live ticket-change feed.
+pub(super) fn machine_with(
+    server: u128,
+    with_external: bool,
+    error: fn(&str) -> ProviderError,
+    events: Option<Arc<dyn TargetEvents>>,
+) -> Machine {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     std::fs::create_dir(&home).unwrap();
@@ -167,6 +177,10 @@ pub(super) fn machine(
     )
     .unwrap()
     .with_external_providers(external.clone());
+    let runtime = match events {
+        Some(events) => runtime.with_target_events(events),
+        None => runtime,
+    };
     Machine {
         _root: root,
         home,

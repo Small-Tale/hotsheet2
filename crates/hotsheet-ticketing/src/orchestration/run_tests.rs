@@ -575,3 +575,106 @@ fn hs2_ebhdsb_capacity_forgets_finished_runs_and_data_fails_closed() {
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
 }
+
+/// HS2-7QHWHJ: the last confirmed observation never moves backwards, and an outage
+/// keeps the time it began.
+#[test]
+fn hs2_7qhwhj_observation_keeps_the_newest_read_and_when_an_outage_began() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = RunRegistry::new(home.path());
+    let clock = Clock(100.into());
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let (run, _) = registry
+        .begin(
+            OWNER,
+            new("op-1", "t1", DispatchMode::Direct, Some("worker-1")),
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    let seen = |at_ms, status: &str| RunUpdate {
+        observed: Some(RunObservation {
+            at_ms,
+            status: status.into(),
+            started_phase: None,
+            claimed_by: Some("worker-1".into()),
+            lease_expires_at_ms: Some(9_000),
+        }),
+        ..RunUpdate::default()
+    };
+    let first = registry
+        .update(OWNER, &run.run_id, seen(500, "started"), &mut tx)
+        .unwrap();
+    assert_eq!(first.observed.as_ref().unwrap().status, "started");
+    // A late read from before the stored one changes nothing.
+    let bytes = std::fs::read(home.path().join("orchestration-runs.json")).unwrap();
+    let late = registry
+        .update(OWNER, &run.run_id, seen(400, "not_started"), &mut tx)
+        .unwrap();
+    assert_eq!(late.observed, first.observed);
+    assert_eq!(
+        std::fs::read(home.path().join("orchestration-runs.json")).unwrap(),
+        bytes
+    );
+    let newer = registry
+        .update(OWNER, &run.run_id, seen(600, "completed"), &mut tx)
+        .unwrap();
+    assert_eq!(newer.observed.as_ref().unwrap().at_ms, 600);
+    assert!(
+        first
+            .observed
+            .as_ref()
+            .unwrap()
+            .same_facts(&late.observed.unwrap())
+    );
+    assert!(
+        !first
+            .observed
+            .unwrap()
+            .same_facts(newer.observed.as_ref().unwrap())
+    );
+    // An outage records when it began; repeated failures keep that time and reason.
+    let down = |since_ms, reason: &str| RunUpdate {
+        unreachable: Some(Some(RunUnreachable {
+            since_ms,
+            reason: reason.into(),
+        })),
+        ..RunUpdate::default()
+    };
+    registry
+        .update(OWNER, &run.run_id, down(700, "unreachable"), &mut tx)
+        .unwrap();
+    let still = registry
+        .update(OWNER, &run.run_id, down(900, "unauthorized"), &mut tx)
+        .unwrap();
+    assert_eq!(
+        still.unreachable,
+        Some(RunUnreachable {
+            since_ms: 700,
+            reason: "unreachable".into()
+        })
+    );
+    // The stale observation is kept while the target is down.
+    assert_eq!(still.observed.as_ref().unwrap().at_ms, 600);
+    let back = registry
+        .update(
+            OWNER,
+            &run.run_id,
+            RunUpdate {
+                unreachable: Some(None),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(back.unreachable, None);
+    // Free text is refused in an observation too.
+    assert!(matches!(
+        registry.update(OWNER, &run.run_id, seen(800, "in progress"), &mut tx),
+        Err(OrchestrationError::Invalid(_))
+    ));
+}

@@ -29,7 +29,9 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "runs"]
             | ["checkouts", _, "orchestration", "runs", _]
             | ["checkouts", _, "orchestration", "runs", _, _]
+            | ["checkouts", _, "orchestration", "run-events"]
             | ["checkouts", _, "target-claims"]
+            | ["checkouts", _, "target-events"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -67,6 +69,7 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "runs"]
             | ["checkouts", _, "orchestration", "runs", _]
             | ["checkouts", _, "orchestration", "runs", _, _]
+            | ["checkouts", _, "orchestration", "run-events"]
     )
 }
 
@@ -249,6 +252,27 @@ fn cleanup(
 }
 
 impl OrchestrationRuntime {
+    /// HS2-7QHWHJ: one watch step on the real clock, for a host's background follower.
+    pub fn watch_step_now(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+        state: &mut super::WatchState,
+        wait_ms: u64,
+    ) -> super::WatchStep {
+        let mut rng = Rng;
+        self.watch_step(
+            owner_id,
+            target_id,
+            state,
+            wait_ms,
+            &mut Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            },
+        )
+    }
+
     pub fn request_now(
         &self,
         method: &str,
@@ -375,6 +399,14 @@ impl OrchestrationRuntime {
             ("PATCH", ["checkouts", checkout, "target-tickets"]) => {
                 value(self.hosted_ticket_update(checkout, hosted(body)?, tx)?)
             }
+            // HS2-7QHWHJ hosted half: ticket changes after a cursor, with a bounded wait.
+            ("GET", ["checkouts", checkout, "target-events"]) => {
+                let since = match query_text(path, "since")? {
+                    None => None,
+                    Some(_) => Some(query_number(path, "since", 0)?),
+                };
+                value(self.hosted_events(checkout, since, query_number(path, "wait_ms", 0)?)?)
+            }
             // HS2-EBHDSB hosted half: the exact ticket's own claim and lease.
             ("POST", ["checkouts", checkout, "target-claims"]) => {
                 value(self.hosted_claim(checkout, hosted(body)?, tx)?)
@@ -396,6 +428,21 @@ impl OrchestrationRuntime {
             }
             ("GET", ["checkouts", owner, "orchestration", "runs", run]) => {
                 value(self.run(owner, run)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "runs", run, "status"]) => {
+                value(self.run_status(owner, run)?)
+            }
+            // HS2-7QHWHJ: cursor replay over the owner's run events, with an optional
+            // bounded wait instead of client polling.
+            ("GET", ["checkouts", owner, "orchestration", "run-events"]) => {
+                let run = query_text(path, "run")?;
+                value(self.run_events(
+                    owner,
+                    query_number(path, "after", 0)?,
+                    usize::try_from(query_number(path, "limit", 100)?).unwrap_or(usize::MAX),
+                    run.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
+                )?)
             }
             ("POST", ["checkouts", owner, "orchestration", "runs", run, operation]) => {
                 let actor = actor(body)?;

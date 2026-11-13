@@ -8,6 +8,7 @@ pub(crate) mod contract;
 mod grants;
 mod manifest;
 mod policy;
+mod run_events;
 mod runs;
 mod storage;
 mod workflow;
@@ -17,8 +18,8 @@ pub use approvals::{
     MAX_APPROVALS,
 };
 pub use audit::{
-    AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, MAX_AUDIT_PAGE,
-    MAX_AUDIT_SEGMENT_BYTES,
+    AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, Journal, JournalEntry,
+    JournalPage, JournalRecord, MAX_AUDIT_PAGE, MAX_AUDIT_SEGMENT_BYTES,
 };
 pub use bindings::BindingRegistry;
 pub use contract::*;
@@ -35,9 +36,12 @@ pub use policy::{
     PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SetPolicy,
     Speculation, TargetPolicy, ToolPolicy, WindDown,
 };
+pub use run_events::{
+    RunEvent, RunEventEntry, RunEventJournal, RunEventKind, RunEventPage, RunEventSource,
+};
 pub use runs::{
-    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunError, RunRegistry, RunState,
-    RunTarget, RunTicket, RunTransition, RunUpdate,
+    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunError, RunObservation, RunRegistry,
+    RunState, RunTarget, RunTicket, RunTransition, RunUnreachable, RunUpdate,
 };
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 
@@ -185,6 +189,8 @@ mod binding_tests;
 mod grant_tests;
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod run_event_tests;
 #[cfg(test)]
 mod run_tests;
 #[cfg(test)]

@@ -878,7 +878,9 @@ impl AppState {
         mut self,
         runtime: hotsheet_cli::orchestration::OrchestrationRuntime,
     ) -> Self {
-        self.orchestration_runtime = Some(Arc::new(runtime));
+        // HS2-7QHWHJ: an injected runtime still follows this server's ticket changes.
+        let events = routes::orchestration::target_events(&self);
+        self.orchestration_runtime = Some(Arc::new(runtime.with_target_events(events)));
         self
     }
 
@@ -2096,7 +2098,16 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/checkouts/{owner}/orchestration/runs/{run}/{operation}",
-            post(routes::orchestration::write),
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
+        // HS2-7QHWHJ: run events with cursor replay and a bounded wait.
+        .route(
+            "/checkouts/{owner}/orchestration/run-events",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{checkout}/target-events",
+            get(routes::orchestration::read),
         )
         .route(
             "/checkouts/{checkout}/target-claims",

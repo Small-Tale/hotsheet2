@@ -128,9 +128,47 @@ pub struct Run {
     /// A cancel was asked for but the target could not be told yet.
     #[serde(default)]
     pub cancel_requested: bool,
+    /// HS2-7QHWHJ: the target ticket as last confirmed by a successful read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed: Option<RunObservation>,
+    /// Set while the target cannot be confirmed; `observed` is then stale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unreachable: Option<RunUnreachable>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub history: Vec<RunTransition>,
+}
+
+/// The target ticket's state as of one successful read. Codes and identifiers only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunObservation {
+    pub at_ms: u64,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_expires_at_ms: Option<u64>,
+}
+
+impl RunObservation {
+    /// The same facts, whenever they were read.
+    pub fn same_facts(&self, other: &Self) -> bool {
+        self.status == other.status
+            && self.started_phase == other.started_phase
+            && self.claimed_by == other.claimed_by
+            && self.lease_expires_at_ms == other.lease_expires_at_ms
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunUnreachable {
+    pub since_ms: u64,
+    /// The stable code of why the target could not be confirmed.
+    pub reason: String,
 }
 
 /// What a caller supplies to start a run.
@@ -153,6 +191,14 @@ pub struct RunUpdate {
     pub lease_expires_at_ms: Option<Option<u64>>,
     pub worker_id: Option<String>,
     pub cancel_requested: Option<bool>,
+    /// HS2-7QHWHJ: a newer confirmed observation. One older than the stored
+    /// observation is ignored, so late or replayed reads never move it backwards.
+    pub observed: Option<RunObservation>,
+    /// `Some(None)` records that the target answered again.
+    pub unreachable: Option<Option<RunUnreachable>>,
+    /// The change was learned from the target rather than done by the orchestrator.
+    /// The registry ignores it; the event stream records it as the source.
+    pub from_target: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -267,6 +313,8 @@ impl RunRegistry {
             state: RunState::Requested,
             lease_expires_at_ms: None,
             cancel_requested: false,
+            observed: None,
+            unreachable: None,
             created_at_ms: now_ms,
             updated_at_ms: now_ms,
             history: vec![RunTransition {
@@ -395,6 +443,22 @@ impl RunRegistry {
         if let Some(cancel) = update.cancel_requested {
             run.cancel_requested = cancel && !run.state.is_terminal();
         }
+        if let Some(observed) = update.observed {
+            if run
+                .observed
+                .as_ref()
+                .is_none_or(|current| observed.at_ms >= current.at_ms)
+            {
+                run.observed = Some(observed);
+            }
+        }
+        if let Some(unreachable) = update.unreachable {
+            // Keep when the outage began; a repeated failure does not restart it.
+            run.unreachable = match (unreachable, run.unreachable.take()) {
+                (Some(_), Some(since)) => Some(since),
+                (next, _) => next,
+            };
+        }
         if *run == before {
             return Ok(before);
         }
@@ -454,6 +518,21 @@ fn validate_fields(run: &Run) -> Result<(), OrchestrationError> {
         for value in [&entry.reason, &entry.actor_id].into_iter().flatten() {
             valid_identifier(value)?;
         }
+    }
+    if let Some(observed) = &run.observed {
+        for value in [
+            Some(&observed.status),
+            observed.started_phase.as_ref(),
+            observed.claimed_by.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            valid_identifier(value)?;
+        }
+    }
+    if let Some(unreachable) = &run.unreachable {
+        valid_identifier(&unreachable.reason)?;
     }
     Ok(())
 }

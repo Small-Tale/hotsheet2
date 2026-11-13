@@ -59,16 +59,36 @@ pub struct AuditRecord {
     pub grant_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuditEntry {
-    pub seq: u64,
-    #[serde(flatten)]
-    pub record: AuditRecord,
+/// HS2-7QHWHJ: what a journal stores. Each record type has its own directory under the
+/// machine home and validates itself as identifiers and codes only.
+pub trait JournalRecord: Serialize + serde::de::DeserializeOwned + Clone {
+    const DIRECTORY: &'static str;
+    fn validate(&self) -> Result<(), OrchestrationError>;
+}
+
+impl JournalRecord for AuditRecord {
+    const DIRECTORY: &'static str = "orchestration-audit";
+    fn validate(&self) -> Result<(), OrchestrationError> {
+        validate(self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuditPage {
-    pub entries: Vec<AuditEntry>,
+#[serde(bound = "R: JournalRecord")]
+pub struct JournalEntry<R> {
+    pub seq: u64,
+    #[serde(flatten)]
+    pub record: R,
+}
+
+pub type AuditEntry = JournalEntry<AuditRecord>;
+pub type AuditPage = JournalPage<AuditRecord>;
+pub type AuditJournal = Journal<AuditRecord>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound = "R: JournalRecord")]
+pub struct JournalPage<R> {
+    pub entries: Vec<JournalEntry<R>>,
     /// Pass as `after` to continue; equals the request cursor when nothing is newer.
     pub cursor: u64,
     /// Retention removed entries between the request cursor and the first one returned.
@@ -78,20 +98,27 @@ pub struct AuditPage {
 }
 
 #[derive(Clone)]
-pub struct AuditJournal {
+pub struct Journal<R> {
     directory: PathBuf,
     owner: String,
     segment_limit: u64,
+    record: std::marker::PhantomData<fn() -> R>,
 }
 
-impl AuditJournal {
+impl<R: JournalRecord> Journal<R> {
     pub fn new(home: &Path, owner_checkout_id: &str) -> Result<Self, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         Ok(Self {
-            directory: home.join("orchestration-audit"),
+            directory: home.join(R::DIRECTORY),
             owner: owner_checkout_id.into(),
             segment_limit: MAX_AUDIT_SEGMENT_BYTES,
+            record: std::marker::PhantomData,
         })
+    }
+
+    /// The directory a waiter watches to learn of a new entry without polling.
+    pub fn directory(&self) -> &Path {
+        &self.directory
     }
 
     #[cfg(test)]
@@ -116,11 +143,28 @@ impl AuditJournal {
     }
 
     /// Append one entry durably and return it with its assigned `seq`.
-    pub fn append(&self, record: AuditRecord) -> Result<AuditEntry, OrchestrationError> {
-        validate(&record)?;
+    pub fn append(&self, record: R) -> Result<JournalEntry<R>, OrchestrationError> {
+        self.append_unless(record, |_| false)
+            .map(|(entry, _)| entry)
+    }
+
+    /// HS2-7QHWHJ: append unless a retained entry already says the same thing, decided
+    /// under the journal lock so two reporters of one fact record it once. Returns the
+    /// existing entry and `false` in that case.
+    pub fn append_unless(
+        &self,
+        record: R,
+        duplicate: impl Fn(&R) -> bool,
+    ) -> Result<(JournalEntry<R>, bool), OrchestrationError> {
+        record.validate()?;
         let _lock = self.lock()?;
-        let seq = self.last_seq()? + 1;
-        let entry = AuditEntry { seq, record };
+        let mut retained = self.entries(&self.previous())?;
+        retained.extend(self.entries(&self.current())?);
+        if let Some(existing) = retained.iter().rev().find(|entry| duplicate(&entry.record)) {
+            return Ok((existing.clone(), false));
+        }
+        let seq = retained.last().map_or(0, |entry| entry.seq) + 1;
+        let entry = JournalEntry { seq, record };
         let mut line = serde_json::to_vec(&entry).map_err(|_| OrchestrationError::Corrupt)?;
         if line.len() > MAX_ENTRY_BYTES {
             return Err(OrchestrationError::Capacity);
@@ -141,22 +185,43 @@ impl AuditJournal {
         file.sync_all()?;
         #[cfg(unix)]
         File::open(&self.directory)?.sync_all()?;
-        Ok(entry)
+        Ok((entry, true))
     }
 
     /// Entries with `seq > after`, oldest first, at most `limit` (capped).
-    pub fn read(&self, after: u64, limit: usize) -> Result<AuditPage, OrchestrationError> {
+    pub fn read(&self, after: u64, limit: usize) -> Result<JournalPage<R>, OrchestrationError> {
+        self.read_matching(after, limit, |_| true)
+    }
+
+    /// Entries after the cursor that `keep` accepts. The cursor still advances past
+    /// entries that were filtered out, so a filtered reader never re-reads them.
+    pub fn read_matching(
+        &self,
+        after: u64,
+        limit: usize,
+        keep: impl Fn(&R) -> bool,
+    ) -> Result<JournalPage<R>, OrchestrationError> {
         let limit = limit.clamp(1, MAX_AUDIT_PAGE);
         let mut retained = self.entries(&self.previous())?;
         retained.extend(self.entries(&self.current())?);
         let first_retained = retained.first().map(|entry| entry.seq);
+        let last_retained = retained.last().map(|entry| entry.seq);
         let mut newer: Vec<_> = retained
             .into_iter()
-            .filter(|entry| entry.seq > after)
+            .filter(|entry| entry.seq > after && keep(&entry.record))
             .collect();
         let more = newer.len() > limit;
         newer.truncate(limit);
-        Ok(AuditPage {
+        if !more && newer.len() < limit {
+            // Nothing further matches: resume after everything that was examined.
+            return Ok(JournalPage {
+                gap: first_retained.is_some_and(|first| first > after + 1),
+                cursor: last_retained.map_or(after, |last| last.max(after)),
+                more,
+                entries: newer,
+            });
+        }
+        Ok(JournalPage {
             gap: first_retained.is_some_and(|first| first > after + 1),
             cursor: newer.last().map_or(after, |entry| entry.seq),
             more,
@@ -164,18 +229,9 @@ impl AuditJournal {
         })
     }
 
-    fn last_seq(&self) -> Result<u64, OrchestrationError> {
-        for path in [self.current(), self.previous()] {
-            if let Some(entry) = self.entries(&path)?.last() {
-                return Ok(entry.seq);
-            }
-        }
-        Ok(0)
-    }
-
     /// Parsed complete lines of one segment. A torn or foreign line is skipped, never
     /// rewritten, so a crash mid-append cannot hide earlier history.
-    fn entries(&self, path: &Path) -> Result<Vec<AuditEntry>, OrchestrationError> {
+    fn entries(&self, path: &Path) -> Result<Vec<JournalEntry<R>>, OrchestrationError> {
         real_directory(&self.directory)?;
         reject_nonregular(path)?;
         let mut file = match open(path, false, false) {
@@ -188,9 +244,9 @@ impl AuditJournal {
         (&mut file)
             .take(self.segment_limit.max(MAX_AUDIT_SEGMENT_BYTES) * 2 + 1)
             .read_to_end(&mut bytes)?;
-        let mut entries: Vec<AuditEntry> = Vec::new();
+        let mut entries: Vec<JournalEntry<R>> = Vec::new();
         for line in bytes.split(|byte| *byte == b'\n') {
-            let Ok(entry) = serde_json::from_slice::<AuditEntry>(line) else {
+            let Ok(entry) = serde_json::from_slice::<JournalEntry<R>>(line) else {
                 continue;
             };
             if entries.last().is_none_or(|last| entry.seq > last.seq) {

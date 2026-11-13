@@ -6,9 +6,11 @@
 //! pushing stay with the target's workflow.
 use hotsheet_model::{NoteKind, OrchestrationLink, OrchestrationRelation, Timestamp, Ulid};
 use hotsheet_ticketing::actor::MutationActor;
+use hotsheet_ticketing::orchestration::DenialReason;
 use hotsheet_ticketing::orchestration::{
-    DispatchMode, NewRun, Run, RunError, RunRegistry, RunState, RunTarget, RunTicket, RunUpdate,
-    TargetAction, TargetOpError,
+    DispatchMode, NewRun, Run, RunError, RunEvent, RunEventJournal, RunEventKind, RunEventPage,
+    RunEventSource, RunObservation, RunRegistry, RunState, RunTarget, RunTicket, RunUnreachable,
+    RunUpdate, TargetAction, TargetOpError,
 };
 use hotsheet_ticketing::{ApiTicket, FsStore, OpError, ops};
 use serde::{Deserialize, Serialize};
@@ -51,6 +53,22 @@ pub struct DispatchRun {
     pub worker_label: Option<String>,
     #[serde(default)]
     pub lease_minutes: Option<u32>,
+}
+
+/// The longest one events request waits; a client re-polls with its cursor.
+pub const MAX_EVENT_WAIT_MS: u64 = 20_000;
+
+/// HS2-7QHWHJ: a run for a viewer, with how far its target state can be trusted.
+#[derive(Debug, Clone, Serialize)]
+pub struct RunStatus {
+    #[serde(flatten)]
+    pub run: Run,
+    /// `reachable`, `unreachable` or `unknown` (never observed yet).
+    pub reachability: &'static str,
+    /// The observed target state may no longer be true.
+    pub stale: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_confirmed_at_ms: Option<u64>,
 }
 
 /// A run with what could not be confirmed against the target just now.
@@ -212,6 +230,173 @@ impl OrchestrationRuntime {
 
     fn runs(&self) -> RunRegistry {
         RunRegistry::new(&self.home)
+    }
+
+    /// HS2-7QHWHJ: record one fact in the owner's run event stream. Best effort: a run
+    /// operation is never failed because its event could not be written.
+    fn run_event(&self, owner_id: &str, event: RunEvent) {
+        if let Ok(journal) = RunEventJournal::new(&self.home, owner_id) {
+            let _ = journal.record(event);
+        }
+    }
+
+    /// Apply a change to a run and publish what actually changed as events. Every run
+    /// update goes through here, so the stream and the record cannot drift apart.
+    fn run_apply(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        update: RunUpdate,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Run, OrchestrationError> {
+        let before = self.runs().get(owner_id, run_id)?;
+        let source = if update.from_target {
+            RunEventSource::Target
+        } else {
+            RunEventSource::Orchestrator
+        };
+        let actor_id = update.actor_id.clone();
+        let after = self.runs().update(owner_id, run_id, update, tx)?;
+        let event = |kind, state, reason: Option<String>, at_ms, dedupe: Option<String>| RunEvent {
+            at_ms,
+            run_id: run_id.into(),
+            kind,
+            source,
+            state,
+            reason,
+            actor_id: actor_id.clone(),
+            dedupe,
+        };
+        let now_ms = after.updated_at_ms;
+        if after.history.len() != before.history.len() {
+            // Keyed by position in the run's history: reported once however many
+            // callers observed the same transition.
+            self.run_event(
+                owner_id,
+                event(
+                    RunEventKind::State,
+                    Some(after.state),
+                    after.history.last().and_then(|entry| entry.reason.clone()),
+                    now_ms,
+                    Some(format!(
+                        "state-{}-{}",
+                        after.history.len(),
+                        after.updated_at_ms
+                    )),
+                ),
+            );
+        } else if after.lease_expires_at_ms != before.lease_expires_at_ms
+            && after.lease_expires_at_ms.is_some()
+        {
+            self.run_event(
+                owner_id,
+                event(RunEventKind::Lease, None, None, now_ms, None),
+            );
+        }
+        if after.cancel_requested && !before.cancel_requested {
+            self.run_event(
+                owner_id,
+                event(RunEventKind::CancelRequested, None, None, now_ms, None),
+            );
+        }
+        if let Some(observed) = after
+            .observed
+            .as_ref()
+            .filter(|observed| before.observed.as_ref() != Some(*observed))
+        {
+            // Only a change of facts is news; re-reading the same facts is not.
+            if before
+                .observed
+                .as_ref()
+                .is_none_or(|previous| !previous.same_facts(observed))
+            {
+                self.run_event(
+                    owner_id,
+                    event(
+                        RunEventKind::Observed,
+                        None,
+                        Some(observed.status.clone()),
+                        observed.at_ms,
+                        // Keyed by the facts, so two readers of one change record it once
+                        // while a later change at the same instant is still its own event.
+                        Some(format!(
+                            "observed-{}-{}-{}-{}",
+                            observed.at_ms,
+                            observed.status,
+                            observed.claimed_by.as_deref().unwrap_or("none"),
+                            observed.lease_expires_at_ms.unwrap_or(0)
+                        )),
+                    ),
+                );
+            }
+        }
+        match (&before.unreachable, &after.unreachable) {
+            (None, Some(down)) => self.run_event(
+                owner_id,
+                event(
+                    RunEventKind::TargetUnreachable,
+                    None,
+                    Some(down.reason.clone()),
+                    down.since_ms,
+                    None,
+                ),
+            ),
+            (Some(_), None) => self.run_event(
+                owner_id,
+                event(RunEventKind::TargetReachable, None, None, now_ms, None),
+            ),
+            _ => {}
+        }
+        Ok(after)
+    }
+
+    /// The run's status for a viewer, without contacting the target: the record, the
+    /// last confirmed target state and whether it is stale.
+    pub fn run_status(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+    ) -> Result<RunStatus, OrchestrationError> {
+        let run = self.run(owner_id, run_id)?;
+        Ok(RunStatus {
+            reachability: match (&run.unreachable, &run.observed) {
+                (Some(_), _) => "unreachable",
+                (None, Some(_)) => "reachable",
+                (None, None) => "unknown",
+            },
+            stale: run.unreachable.is_some() || run.observed.is_none(),
+            last_confirmed_at_ms: run.observed.as_ref().map(|observed| observed.at_ms),
+            run,
+        })
+    }
+
+    /// Events after a cursor, for one run or all of the owner's. With `wait_ms`, an
+    /// empty answer waits for the next event (woken by the journal changing, never by
+    /// a timer loop) and returns empty with the same cursor at the deadline.
+    pub fn run_events(
+        &self,
+        owner_id: &str,
+        after: u64,
+        limit: usize,
+        run_id: Option<&str>,
+        wait_ms: u64,
+    ) -> Result<RunEventPage, OrchestrationError> {
+        let journal = RunEventJournal::new(&self.home, owner_id)?;
+        if wait_ms == 0 {
+            return journal.read(after, limit, run_id);
+        }
+        // Watch before reading, so an event appended in between is not missed.
+        let waiter = hotsheet_jobs::ChangeWaiter::new(journal.directory())?;
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_millis(wait_ms.min(MAX_EVENT_WAIT_MS));
+        loop {
+            let page = journal.read(after, limit, run_id)?;
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if !page.entries.is_empty() || page.gap || remaining.is_zero() {
+                return Ok(page);
+            }
+            waiter.wait(remaining);
+        }
     }
 
     pub fn run(&self, owner_id: &str, run_id: &str) -> Result<Run, OrchestrationError> {
@@ -388,7 +573,7 @@ impl OrchestrationRuntime {
                     | TargetOpError::Invalid
                     | TargetOpError::Disabled),
                 )) => {
-                    self.runs().update(
+                    self.run_apply(
                         owner_id,
                         &run.run_id,
                         RunUpdate {
@@ -404,7 +589,7 @@ impl OrchestrationRuntime {
                 // same request can be repeated.
                 Err(error) => return Err(error),
             };
-            let run = self.runs().update(
+            let run = self.run_apply(
                 owner_id,
                 &run.run_id,
                 RunUpdate {
@@ -481,20 +666,16 @@ impl OrchestrationRuntime {
                 tx,
             )?)
             .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
-            self.runs()
-                .update(
-                    owner_id,
-                    run_id,
-                    RunUpdate {
-                        lease_expires_at_ms: Some(field_ms(
-                            &hosted.ticket,
-                            "claim_lease_expires_at",
-                        )),
-                        ..RunUpdate::default()
-                    },
-                    tx,
-                )
-                .map(RunView::from)
+            self.run_apply(
+                owner_id,
+                run_id,
+                RunUpdate {
+                    lease_expires_at_ms: Some(field_ms(&hosted.ticket, "claim_lease_expires_at")),
+                    ..RunUpdate::default()
+                },
+                tx,
+            )
+            .map(RunView::from)
         })();
         self.finish(&target, &authorized, &outcome, tx)?;
         outcome
@@ -515,7 +696,7 @@ impl OrchestrationRuntime {
             return Err(OrchestrationError::Run(RunError::NotActive));
         }
         let cancelled = |tx: &mut Transaction<'_>| {
-            self.runs().update(
+            self.run_apply(
                 owner_id,
                 run_id,
                 RunUpdate {
@@ -580,7 +761,7 @@ impl OrchestrationRuntime {
                 Ok(run.into())
             }
             Err(_) => {
-                let run = self.runs().update(
+                let run = self.run_apply(
                     owner_id,
                     run_id,
                     RunUpdate {
@@ -603,7 +784,9 @@ impl OrchestrationRuntime {
 
     /// Read the target ticket and bring the run in line with it: completed when the
     /// ticket is, dispatched when the target's dispatcher assigned it, and intervened
-    /// when a person or another worker holds or released the claim.
+    /// when a person or another worker holds or released the claim. A successful read
+    /// becomes the run's last confirmed observation; a target that cannot be confirmed
+    /// marks the run unreachable and leaves that observation in place as stale.
     pub fn run_sync(
         &self,
         owner_id: &str,
@@ -615,15 +798,66 @@ impl OrchestrationRuntime {
         if run.state.is_terminal() {
             return Ok(run.into());
         }
+        let actor_id = actor.and_then(|actor| actor.id.clone());
+        let unreachable = |reason: &'static str, tx: &mut Transaction<'_>| {
+            let _ = self.run_apply(
+                owner_id,
+                run_id,
+                RunUpdate {
+                    unreachable: Some(Some(RunUnreachable {
+                        since_ms: tx.clock.now_ms(),
+                        reason: reason.into(),
+                    })),
+                    from_target: true,
+                    ..RunUpdate::default()
+                },
+                tx,
+            );
+        };
         let target = Self::target_ref(owner_id, &run.target.target_id)?;
-        let authorized = self.authorize(
+        let authorized = match self.authorize(
             &target,
             actor,
             ActionRequest::new(TargetAction::TicketsRead),
             tx,
-        )?;
+        ) {
+            Ok(authorized) => authorized,
+            Err(error) => {
+                // Lost access to the target is an outage of the view, not just a refusal.
+                if matches!(
+                    error,
+                    OrchestrationError::Denied(DenialReason::TargetUnavailable)
+                ) {
+                    unreachable("target_unavailable", tx);
+                }
+                return Err(error);
+            }
+        };
         let outcome = (|| {
-            let ticket = self.read_authorized(&authorized, &Self::run_target(&run), tx)?;
+            let ticket = match self.read_authorized(&authorized, &Self::run_target(&run), tx) {
+                Ok(ticket) => ticket,
+                // The ticket is gone from the target: nothing is left to supervise.
+                Err(OrchestrationError::TargetOperation(TargetOpError::NotFound)) => {
+                    return self
+                        .run_apply(
+                            owner_id,
+                            run_id,
+                            RunUpdate {
+                                to: Some(RunState::Failed),
+                                reason: Some(TargetOpError::NotFound.code().into()),
+                                actor_id: actor_id.clone(),
+                                from_target: true,
+                                ..RunUpdate::default()
+                            },
+                            tx,
+                        )
+                        .map(RunView::from);
+                }
+                Err(error) => {
+                    unreachable(error.code(), tx);
+                    return Err(error);
+                }
+            };
             let holder = text(&ticket, "claimed_by");
             let lease = field_ms(&ticket, "claim_lease_expires_at");
             // A lapsed lease is not a live claim, whoever's name is still on it.
@@ -637,10 +871,10 @@ impl OrchestrationRuntime {
             };
             let update = match (status, run.state) {
                 ("completed" | "verified" | "archive", _) => {
-                    Some(step(RunState::Completed, "target_completed"))
+                    step(RunState::Completed, "target_completed")
                 }
-                ("deleted", _) => Some(step(RunState::Failed, "target_deleted")),
-                (_, RunState::Queued) => live.map(|worker| RunUpdate {
+                ("deleted", _) => step(RunState::Failed, "target_deleted"),
+                (_, RunState::Queued) => live.map_or_else(RunUpdate::default, |worker| RunUpdate {
                     worker_id: Some(worker.into()),
                     lease_expires_at_ms: Some(lease),
                     ..step(RunState::Dispatched, "assigned_by_dispatcher")
@@ -649,34 +883,40 @@ impl OrchestrationRuntime {
                 (_, RunState::Requested | RunState::Intervened)
                     if ours && run.mode == DispatchMode::Direct =>
                 {
-                    Some(RunUpdate {
+                    RunUpdate {
                         lease_expires_at_ms: Some(lease),
                         ..step(RunState::Dispatched, "claim_confirmed")
-                    })
+                    }
                 }
-                (_, RunState::Dispatched) if ours => Some(RunUpdate {
+                (_, RunState::Dispatched) if ours => RunUpdate {
                     lease_expires_at_ms: Some(lease),
                     ..RunUpdate::default()
-                }),
-                (_, RunState::Dispatched) => Some(step(
+                },
+                (_, RunState::Dispatched) => step(
                     RunState::Intervened,
                     if live.is_some() {
                         "claim_taken"
                     } else {
                         "claim_released"
                     },
-                )),
-                _ => None,
-            };
-            let Some(update) = update else {
-                return Ok(RunView::from(run.clone()));
+                ),
+                _ => RunUpdate::default(),
             };
             let finished = update.to.is_some_and(RunState::is_terminal);
-            let updated = self.runs().update(
+            let updated = self.run_apply(
                 owner_id,
                 run_id,
                 RunUpdate {
-                    actor_id: actor.and_then(|actor| actor.id.clone()),
+                    actor_id: actor_id.clone(),
+                    observed: Some(RunObservation {
+                        at_ms: tx.clock.now_ms(),
+                        status: status.into(),
+                        started_phase: text(&ticket, "started_phase").map(Into::into),
+                        claimed_by: holder.map(Into::into),
+                        lease_expires_at_ms: lease,
+                    }),
+                    unreachable: Some(None),
+                    from_target: true,
                     ..update
                 },
                 tx,
