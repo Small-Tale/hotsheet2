@@ -49,7 +49,7 @@ impl OrchestrationRuntime {
         }
     }
 
-    fn scheduler_audit(
+    pub(super) fn scheduler_audit(
         &self,
         owner_id: &str,
         action: &str,

@@ -1352,6 +1352,9 @@ pub enum DecisionKind {
     Keep,
     WindDown,
     Unplaced,
+    /// HS2-T16SK0: a placed step's run that nobody in the target's pool will assign,
+    /// or whose pool could not be read, and what the pass did about it.
+    Assignment,
 }
 
 /// What one pass read, as counts and identifiers.

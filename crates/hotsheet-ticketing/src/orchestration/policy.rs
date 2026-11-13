@@ -248,6 +248,22 @@ pub struct PlacementPolicy {
     /// one VM its machine has. The session claims them; the scheduler only reads.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<TargetResources>,
+    /// HS2-T16SK0: how long a placed step's run waits for a live target dispatcher
+    /// (or legacy integrator) before its session claims the ticket for itself. 0
+    /// claims as soon as the pool shows neither.
+    /// Written only when it differs from the default, so a policy stored earlier reads
+    /// back the same.
+    #[serde(
+        default = "default_dispatcher_wait_minutes",
+        skip_serializing_if = "is_default_dispatcher_wait"
+    )]
+    pub dispatcher_wait_minutes: u32,
+}
+fn default_dispatcher_wait_minutes() -> u32 {
+    super::DEFAULT_DISPATCHER_WAIT_MINUTES
+}
+fn is_default_dispatcher_wait(minutes: &u32) -> bool {
+    *minutes == default_dispatcher_wait_minutes()
 }
 fn default_aging_minutes() -> u32 {
     60
@@ -263,6 +279,7 @@ impl Default for PlacementPolicy {
             aging_minutes: default_aging_minutes(),
             cooldown_minutes: default_cooldown_minutes(),
             resources: Vec::new(),
+            dispatcher_wait_minutes: default_dispatcher_wait_minutes(),
         }
     }
 }
@@ -627,6 +644,13 @@ impl PolicyBody {
             report(
                 "invalid_cooldown_minutes",
                 "cooldown minutes must be 0 to 1440",
+                None,
+            );
+        }
+        if placement.dispatcher_wait_minutes > 24 * 60 {
+            report(
+                "invalid_dispatcher_wait_minutes",
+                "dispatcher wait minutes must be 0 to 1440",
                 None,
             );
         }

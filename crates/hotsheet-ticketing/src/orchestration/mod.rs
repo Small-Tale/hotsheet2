@@ -2,6 +2,7 @@
 //! Network, provider metadata, clock and randomness remain injected boundaries.
 
 mod approvals;
+mod assignment;
 mod audit;
 mod bindings;
 mod capacity;
@@ -30,6 +31,10 @@ mod workflow;
 pub use approvals::{
     APPROVAL_PENDING_MS, APPROVAL_VALID_MS, Approval, ApprovalRegistry, ApprovalState,
     MAX_APPROVALS,
+};
+pub use assignment::{
+    AssignmentDecision, AssignmentInput, AssignmentState, DEFAULT_DISPATCHER_WAIT_MINUTES,
+    decide_assignment,
 };
 pub use audit::{
     AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, Journal, JournalEntry,
@@ -294,6 +299,8 @@ impl Transaction<'_> {
 
 #[cfg(test)]
 mod approval_tests;
+#[cfg(test)]
+mod assignment_tests;
 #[cfg(test)]
 mod audit_tests;
 #[cfg(test)]

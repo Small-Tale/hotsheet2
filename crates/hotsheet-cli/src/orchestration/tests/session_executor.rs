@@ -1436,3 +1436,331 @@ fn hs2_dg0ypa_the_executor_adopts_a_live_holder_and_never_doubles_a_run() {
     assert_eq!(f.host.launches().len(), 3);
     assert!(f.tick(&mut tx).outcomes.is_empty());
 }
+
+impl Placed {
+    /// HS2-T16SK0: write the target's coordination pool, as role sessions leave it.
+    fn pool(&self, change: impl FnOnce(&mut crate::coordination::State)) {
+        let mut state = crate::coordination::State::new("project".into(), "source".into());
+        change(&mut state);
+        let directory = std::path::Path::new(&self.m.target.root)
+            .join(".git")
+            .join("hotsheet-coordination");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("state.json"),
+            serde_json::to_vec(&state).unwrap(),
+        )
+        .unwrap();
+    }
+    fn assignment_log(&self) -> Vec<(Option<String>, Option<String>, Option<u64>)> {
+        self.m
+            .runtime
+            .scheduler_decisions(&self.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| {
+                entry.record.kind == hotsheet_ticketing::orchestration::DecisionKind::Assignment
+            })
+            .map(|entry| {
+                (
+                    entry.record.reason,
+                    entry.record.outcome,
+                    entry.record.retry_at_ms,
+                )
+            })
+            .collect()
+    }
+    fn explain(&self, step_id: &str, tx: &mut Transaction<'_>) -> Explanation {
+        self.m
+            .runtime
+            .scheduler_explain(
+                &self.owner(),
+                &ExplainRequest {
+                    step_id: Some(step_id.into()),
+                    ..ExplainRequest::default()
+                },
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+    }
+}
+
+fn role(id: &str, expires_at: i64) -> crate::coordination::Session {
+    serde_json::from_value(
+        json!({"id": id, "generation": "g1", "expires_at": expires_at,
+        "return_route": {"kind": "human_relay"}}),
+    )
+    .unwrap()
+}
+
+/// HS2-T16SK0: a placed step's run that no target dispatcher will assign is reported
+/// in the tick, the decision log and `explain`, with the time its session claims it;
+/// a dispatcher that comes up in time prevents the claim, one that leaves brings it
+/// back; at the named time the ticket is claimed for the session's own worker id, and
+/// later passes have nothing left to report.
+#[test]
+fn hs2_t16sk0_a_run_nobody_assigns_is_reported_then_claimed_for_its_session() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    // No pool at all in the target: neither a dispatcher nor an integrator.
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let session = f.record(&format!("sched-start-{step}"));
+    let run = f.run_of(&step);
+    let due = START + 2 * MINUTE;
+    let [waiting] = &tick.view.assignments[..] else {
+        panic!("one waiting run: {:?}", tick.view.assignments);
+    };
+    assert_eq!(
+        (
+            waiting.run_id.as_str(),
+            waiting.session_id.as_str(),
+            waiting.step_id.as_deref(),
+            waiting.state.code(),
+            waiting.dispatcher_live,
+            waiting.integrator_live,
+            waiting.claim_at_ms,
+            waiting.outcome.as_deref(),
+        ),
+        (
+            run.run_id.as_str(),
+            session.session_id.as_str(),
+            Some(step.as_str()),
+            "no_live_dispatcher",
+            Some(false),
+            Some(false),
+            Some(due),
+            None
+        )
+    );
+    // The loop wakes at the end of the wait, not before and not on a timer.
+    assert_eq!(tick.view.schedule.retry_at_ms, Some(due));
+    assert_eq!(
+        f.assignment_log(),
+        [(Some("no_live_dispatcher".into()), None, Some(due))]
+    );
+    let explained = f.explain(&step, &mut tx);
+    assert_eq!(
+        (
+            explained.standing.as_str(),
+            explained.reason.as_str(),
+            explained.retry_at_ms
+        ),
+        ("running", "no_live_dispatcher", Some(due))
+    );
+    // Repeated passes before the time claim nothing.
+    f.at(&clock, START + MINUTE);
+    for _ in 0..2 {
+        assert!(f.tick(&mut tx).outcomes.is_empty());
+    }
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Queued
+    );
+
+    // At the time, a session that never took up its role in the pool is given no
+    // claim and no time is named: its joining is the event that lets it go ahead.
+    f.at(&clock, due);
+    let tick = f.tick(&mut tx);
+    let waiting = &tick.view.assignments[0];
+    assert_eq!(
+        (
+            waiting.state.code(),
+            waiting.joined,
+            waiting.outcome.as_deref()
+        ),
+        ("no_live_dispatcher", false, None)
+    );
+    assert_ne!(tick.view.schedule.retry_at_ms, Some(due));
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Queued
+    );
+
+    // The session joins as a worker and a dispatcher comes up with it: the ticket is
+    // left to the dispatcher.
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    let now_s = |ms: u64| i64::try_from(ms / 1000).unwrap();
+    let joined = |state: &mut crate::coordination::State| {
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, now_s(due) + 3600));
+    };
+    f.pool(|state| {
+        joined(state);
+        state.dispatcher = Some(role("dispatcher-1", now_s(due) + 60));
+    });
+    let tick = f.tick(&mut tx);
+    assert!(tick.view.assignments[0].joined);
+    assert_eq!(tick.view.assignments[0].state.code(), "awaiting_dispatcher");
+    assert_eq!(tick.view.assignments[0].claim_at_ms, None);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Queued
+    );
+    assert_eq!(f.explain(&step, &mut tx).reason, "in_progress");
+    // A legacy integrator assigns too.
+    f.pool(|state| {
+        joined(state);
+        state.integrator = Some(role("integrator-1", now_s(due) + 60));
+    });
+    assert_eq!(
+        f.tick(&mut tx).view.assignments[0].state.code(),
+        "awaiting_dispatcher"
+    );
+    // A pool that cannot be read concludes nothing and names no time.
+    let state =
+        std::path::Path::new(&f.m.target.root).join(".git/hotsheet-coordination/state.json");
+    std::fs::write(&state, b"not a pool").unwrap();
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        (
+            tick.view.assignments[0].state.code(),
+            tick.view.assignments[0].claim_at_ms
+        ),
+        ("pool_unknown", None)
+    );
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Queued
+    );
+
+    // The roles lapse: nobody will assign it, and the wait is long over. The ticket
+    // is claimed for the session's own worker id.
+    f.pool(|state| {
+        joined(state);
+        state.dispatcher = Some(role("dispatcher-1", now_s(START)));
+    });
+    f.at(&clock, due + MINUTE);
+    let tick = f.tick(&mut tx);
+    let claimed = &tick.view.assignments[0];
+    assert_eq!(
+        (claimed.state.code(), claimed.outcome.as_deref()),
+        ("no_live_dispatcher", Some("claimed"))
+    );
+    let after = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_eq!(
+        (
+            after.state,
+            after.worker_id.as_deref(),
+            after.history.last().unwrap().reason.as_deref()
+        ),
+        (
+            RunState::Dispatched,
+            Some(worker_id.as_str()),
+            Some("claimed_for_session")
+        )
+    );
+    let ticket = ops::resolve(&f.m.target_store, &run.target.native_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ticket.claimed_by.as_deref(), Some(worker_id.as_str()));
+    assert_eq!(
+        f.audited("scheduler_assignment"),
+        [(
+            AuditOutcome::Succeeded,
+            Some("claimed".into()),
+            Some(run.run_id.clone())
+        )]
+    );
+    assert!(f.assignment_log().contains(&(
+        Some("no_live_dispatcher".into()),
+        Some("claimed".into()),
+        Some(due)
+    )));
+    // Nothing is left waiting: later passes report and claim nothing more.
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.view.assignments.is_empty());
+        assert!(tick.outcomes.is_empty());
+    }
+    assert_eq!(f.host.launches().len(), 1);
+}
+
+/// HS2-T16SK0: a dry run reports and never claims; a ticket someone else claimed
+/// first is a typed refusal the run's sync then learns, so nothing is retried; and a
+/// restarted runtime over the same records names the same claim time.
+#[test]
+fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_agrees() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let run = f.run_of(&step);
+    let due = START + 2 * MINUTE;
+    // A restart: a new runtime over the same home sees the same wait.
+    let restarted = OrchestrationRuntime::new(
+        f.m.home.clone(),
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(f.m.home.join("checkouts.json")),
+        hotsheet_ticketing::ProviderConfigRegistry::new(f.m._root.path().join("providers.json")),
+        Arc::new(super::Memory::default()),
+        Arc::new(super::Peer::default()),
+        id(10),
+    )
+    .unwrap()
+    .with_capacity_probe(f.probe.clone())
+    .with_session_host(f.host.clone())
+    .with_session_executor(Arc::new(OwnedSessions));
+    let view = restarted
+        .scheduler_plan(&f.owner(), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(view.assignments[0].claim_at_ms, Some(due));
+    assert_eq!(view.schedule.retry_at_ms, Some(due));
+    // Automatic placement off: past the time, a pass only reports.
+    let mut manual = policy(Vec::new());
+    manual.placement.automatic = false;
+    f.set_policy(manual, &mut tx);
+    f.at(&clock, due + MINUTE);
+    let dry = f.tick(&mut tx);
+    assert_eq!(dry.view.assignments[0].state.code(), "no_live_dispatcher");
+    assert_eq!(dry.view.assignments[0].outcome, None);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Queued
+    );
+    // Someone else claims the ticket before the loop does.
+    let ticket = ops::resolve(&f.m.target_store, &run.target.native_id)
+        .unwrap()
+        .unwrap();
+    ops::claim_with_eta(
+        &f.m.target_store,
+        &ticket.id,
+        &hotsheet_model::Timestamp::from(NOW),
+        hotsheet_model::Timestamp::from("2030-01-01T00:00:00Z"),
+        "someone-else",
+        None,
+        None,
+    )
+    .unwrap();
+    // The session takes up its role, so the loop would claim for it now.
+    let worker_id = f
+        .record(&format!("sched-start-{step}"))
+        .hosted
+        .unwrap()
+        .worker_id;
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, 4_000_000_000));
+    });
+    f.set_policy(policy(Vec::new()), &mut tx);
+    let tick = f.tick(&mut tx);
+    let refused = &tick.view.assignments[0];
+    assert_eq!(refused.outcome.as_deref(), Some("refused"));
+    assert!(refused.outcome_detail.is_some());
+    // The run learned who holds it, so nothing waits and nothing backs the target off.
+    let after = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_ne!(after.state, RunState::Queued);
+    assert_eq!(after.worker_id.as_deref(), Some("someone-else"));
+    assert!(f.tick(&mut tx).view.assignments.is_empty());
+    assert!(
+        SchedulerStore::new(&f.m.home)
+            .memory(&f.owner())
+            .unwrap()
+            .iter()
+            .all(|entry| entry.refusals == 0)
+    );
+}

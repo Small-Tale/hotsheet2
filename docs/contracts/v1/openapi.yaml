@@ -17883,6 +17883,14 @@ components:
               minimum: 0
               maximum: 1440
               default: 5
+            dispatcher_wait_minutes:
+              description:
+                How long a placed step's run waits for a live target dispatcher or legacy integrator before its session
+                claims the ticket for its own worker id (HS2-T16SK0). 0 claims as soon as the pool shows neither.
+              type: integer
+              minimum: 0
+              maximum: 1440
+              default: 2
             resources:
               description:
                 Resources every piece of work on a target must hold (HS2-2FG91X). The scheduler reads their claims on
@@ -21269,6 +21277,13 @@ components:
               score:
                 $ref: '#/components/schemas/SchedulerScore'
             additionalProperties: false
+        assignments:
+          description:
+            Each placed step's run a running session waits on for the target's dispatcher, with who will assign it
+            (HS2-T16SK0). Absent when none waits.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerAssignment'
         retry_at_ms:
           description: The earliest time a decision here changes by time alone.
           type: integer
@@ -21411,6 +21426,8 @@ components:
           type: array
           items:
             type: string
+        assignment:
+          $ref: '#/components/schemas/SchedulerAssignment'
         mode:
           enum:
             - dry_run
@@ -21456,6 +21473,7 @@ components:
             - keep
             - wind_down
             - unplaced
+            - assignment
         actor_id:
           type: string
         target_id:
@@ -22354,6 +22372,53 @@ components:
         delivered_at_ms:
           type: integer
           minimum: 0
+      additionalProperties: false
+    SchedulerAssignment:
+      description:
+        A placed step's run that a running session waits on for the target's dispatcher (HS2-T16SK0). `state` is
+        `awaiting_dispatcher` while a dispatcher or legacy integrator is live in the target's pool, `no_live_dispatcher`
+        when neither is, and `pool_unknown` when the pool could not be read. Identifiers, flags and times only.
+      type: object
+      required:
+        - run_id
+        - session_id
+        - target_id
+        - state
+        - queued_at_ms
+        - joined
+      properties:
+        run_id:
+          type: string
+        session_id:
+          type: string
+        target_id:
+          type: string
+        step_id:
+          type: string
+        joined:
+          description: The session registered in the target's pool in its role; only then is it given a claim.
+          type: boolean
+        state:
+          enum:
+            - awaiting_dispatcher
+            - no_live_dispatcher
+            - pool_unknown
+        dispatcher_live:
+          type: boolean
+        integrator_live:
+          type: boolean
+        queued_at_ms:
+          type: integer
+          minimum: 0
+        claim_at_ms:
+          description: While nobody will assign the run, when its session claims the ticket for its own worker id.
+          type: integer
+          minimum: 0
+        outcome:
+          description: What an applied pass did, `claimed` or `refused`.
+          type: string
+        outcome_detail:
+          type: string
       additionalProperties: false
     RemoteIdentity:
       type: object

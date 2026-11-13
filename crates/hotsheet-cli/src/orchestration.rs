@@ -2,6 +2,7 @@
 //! Host injects its actual registry/config/secret owners; no store/path discovery,
 //! provider account probe, implicit source creation or credential copying.
 mod access;
+mod assignment;
 mod capacity;
 mod gates;
 mod job_monitor;
@@ -25,6 +26,7 @@ mod tool_capacity;
 mod validation;
 mod watch;
 pub use access::{ActionRequest, Authorized};
+pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
 pub use capacity::{
     CapacityProbe, LocalServerCapacity, ReadCapacity, TargetAdmission, UnknownCapacity,
 };

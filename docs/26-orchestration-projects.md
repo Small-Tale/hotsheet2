@@ -29,6 +29,8 @@
 > the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
 > cost is read for targets on this machine only),
 > one live session per run, adopted rather than doubled (§26.24, HS2-DG0YPA),
+> a placed run no target dispatcher will assign reported and, after a bounded wait,
+> claimed for its session (§26.24, HS2-T16SK0),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -2298,15 +2300,18 @@ or model are inputs of the core that a plan step does not carry yet (HS2-TH53NN)
 `placement` is optional and is left out of the stored policy while it holds only
 defaults, so a policy written earlier is unchanged.
 
-| Field              | Default | Meaning                                                                                |
-| ------------------ | ------- | -------------------------------------------------------------------------------------- |
-| `automatic`        | `false` | When false every pass is a dry run: decisions are computed and logged, nothing applied |
-| `actor`            | none    | The grant holder the server's loop acts as. Required with `automatic`                  |
-| `aging_minutes`    | 60      | Waiting this long raises work by one priority band (1 to 10080)                        |
-| `cooldown_minutes` | 5       | A target's session count does not reverse direction within this time (0 to 1440)       |
+| Field                     | Default | Meaning                                                                                                   |
+| ------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `automatic`               | `false` | When false every pass is a dry run: decisions are computed and logged, nothing applied                    |
+| `actor`                   | none    | The grant holder the server's loop acts as. Required with `automatic`                                     |
+| `aging_minutes`           | 60      | Waiting this long raises work by one priority band (1 to 10080)                                           |
+| `cooldown_minutes`        | 5       | A target's session count does not reverse direction within this time (0 to 1440)                          |
+| `dispatcher_wait_minutes` | 2       | How long a placed run waits for a live target dispatcher before its session claims it (0 to 1440, §26.24) |
 
 Validation adds `automatic_without_actor`, `invalid_placement_actor`,
-`invalid_aging_minutes` and `invalid_cooldown_minutes`.
+`invalid_aging_minutes`, `invalid_cooldown_minutes` and
+`invalid_dispatcher_wait_minutes`. `dispatcher_wait_minutes` is written only when it
+differs from its default.
 
 ### Scoring
 
@@ -2452,7 +2457,8 @@ Every `tick` appends to `${HOTSHEET_HOME}/orchestration-scheduler-decisions/`, o
 bounded journal per owner with a sequence cursor: one `tick` record with what the
 pass read (the policy revision, counts of work, sessions, targets, limited tools and
 held resources, and whether the executor answered) and one record per `start`,
-`keep`, `wind_down` and `unplaced` decision with its reason, its score parts, the
+`keep`, `wind_down` and `unplaced` decision, and one `assignment` record per placed
+run nobody will assign (§26.24), with its reason, its score parts, the
 figures it was decided on (sessions against the target, machine and tool caps, free
 RAM and the session footprint, the tool account's state) and, when applied, the
 outcome and operation id. Records hold identifiers, codes and numbers only.
@@ -2505,7 +2511,10 @@ hotsheet-cli ... orchestration scheduler tick [--dry-run] --project <owner>
 `plan` computes the schedule and changes and logs nothing. `explain` answers
 `running`, `finished`, `not_planned`, `not_ready` (with the readiness reasons),
 `start`, `keep` or `not_placed` with the reason, its detail, the rank and score,
-when to expect a change, and each resource the work requires (§26.20). `tick` is one pass. A headless process hosts no sessions and
+when to expect a change, and each resource the work requires (§26.20). A running
+step whose run waits for a target dispatcher that is not there answers reason
+`no_live_dispatcher` (or `pool_unknown`) with `assignment` and the claim time
+(§26.24). `tick` is one pass. A headless process hosts no sessions and
 asks the server on the same machine for capacity (§26.10); with none running the
 machine reads as `capacity_unknown`.
 
@@ -2739,7 +2748,8 @@ wound down after its idle time.
 
 Removing a step from the plan leaves its run queued and its session busy until a
 person cancels the run (HS2-YFPZFP). A target with no live dispatcher or integrator
-never assigns the ticket (HS2-T16SK0). Whether ticket writes made outside the hosting
+never assigns the ticket; the loop reports that and, after a bounded wait, claims it
+for the session (HS2-T16SK0, §26.24). Whether ticket writes made outside the hosting
 server reach its change feed is HS2-BDNJ5S.
 
 ### Not wired
@@ -3319,3 +3329,66 @@ operation id is still the same start, whatever holds the run.
 
 No route, command or MCP action was added: the start, the refill and the decision
 log carry the new code and outcome.
+
+### A run no target dispatcher will assign (HS2-T16SK0)
+
+A placed step's run is queued in dispatcher mode (§26.19): the target's dispatcher,
+or a legacy integrator, assigns its ticket. A target whose coordination pool has
+neither live never assigns it. The loop now notices that, says so, and after a
+bounded wait lets the session claim the ticket itself. Starting a dispatcher or
+integrator session for the target is HS2-TK9ADC and is not done here.
+
+**Which runs.** A run waits on its target's pool when a running worker session the
+orchestrator owns is linked to it, and the run is in dispatcher mode, `queued`, not
+paused and not being cancelled. Each pass reads the pool once per target with such a
+run, through the hosted session listing (its `roles`: `dispatcher_live`,
+`integrator_live`), as the pass's actor through the gate (`sessions_manage`
+continuing). Nothing else is read for it.
+
+**The decision** is the pure `decide_assignment`
+(`crates/hotsheet-ticketing/src/orchestration/assignment.rs`):
+
+| The target's pool                               | `state`               | What a pass does                                                               |
+| ----------------------------------------------- | --------------------- | ------------------------------------------------------------------------------ |
+| A live dispatcher or legacy integrator          | `awaiting_dispatcher` | Nothing: it assigns the ticket                                                 |
+| Neither live, within the wait                   | `no_live_dispatcher`  | Reports it; the schedule's `retry_at_ms` names the end of the wait             |
+| Neither live, the wait over, the session joined | `no_live_dispatcher`  | An applied pass claims the ticket for the session's worker id                  |
+| Could not be read (or no actor to read as)      | `pool_unknown`        | Reports it and concludes nothing; no time is named, the next event looks again |
+
+The wait is `placement.dispatcher_wait_minutes` (default 2, §26.17), counted from
+when the run was queued. A claim is only given to a session that joined the pool in
+its role (§26.16, "Joining"); one that has not is reported with `joined: false` and
+no time, and its joining, published as `session_joined`, wakes the loop. A session
+that never joins is HS2-NPTKS8's. A pass decides from what it reads then: a dispatcher that
+comes up during the wait is left to assign, and one that leaves (its lease lapses)
+brings the claim back. The decision has no memory of its own, so a restarted server
+names the same time from the run's records.
+
+**The claim.** An applied pass claims the run's target ticket for the session's own
+worker id (the hosted `/target-claims` claim the direct dispatch uses), through the
+gate as `work_start` continuing the run's own dispatch, so an approval the dispatch
+needed is not asked again. The run becomes `dispatched` to that worker with reason
+`claimed_for_session`, a note goes on the orchestration ticket, and the act is
+audited as `scheduler_assignment`. A ticket someone else claimed first is refused as
+a conflict and the run is synced at once, so it learns who holds it and nothing is
+tried again. Any other failure backs the target off like a refused start (one minute,
+doubling to 30, §26.17), and the backoff's end is the next claim time. A dry run
+reports and never claims.
+
+**Reported** in three places:
+
+- the `assignments` member of `scheduler plan` and `tick` (run, session, step, state,
+  the two pool flags, when it was queued, `claim_at_ms`, and an applied pass's
+  `outcome`, `claimed` or `refused` with the code);
+- a decision-log record of kind `assignment` for each run in `no_live_dispatcher` or
+  `pool_unknown`, with the session, step and run, the reason, `retry_at_ms` (the
+  claim time) and the outcome. `awaiting_dispatcher` is not logged;
+- `scheduler explain` for the running step: reason `no_live_dispatcher` or
+  `pool_unknown`, `retry_at_ms`, and the `assignment`.
+
+The session's role prompt asked it to request its ticket from the dispatcher. After
+the claim the ticket is held under its worker id; telling the session so is the
+request prompt of HS2-R7QH35.
+
+No route, command or MCP action was added: `plan`, `tick`, `explain` and
+`decisions` carry the new members on every surface.

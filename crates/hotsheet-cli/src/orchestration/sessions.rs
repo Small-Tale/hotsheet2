@@ -1414,7 +1414,7 @@ impl OrchestrationRuntime {
     /// The gate for reading or winding down an existing session: grants and policy
     /// limits apply, nothing new starts, and it carries no load. It is passed under
     /// the session's own operation id, or under the scheduler's for a stop it placed.
-    fn session_gate(
+    pub(super) fn session_gate(
         &self,
         session: &OrchestratedSession,
         actor: Option<&MutationActor>,

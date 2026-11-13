@@ -23,14 +23,14 @@ use std::time::Duration;
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    Blocker, CapacityState, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
-    DecisionRecord, GateFilter, GateRegistry, GateState, HeldResource, MAX_SCHEDULE_SESSIONS,
-    OfflinePolicy, Placement, PlacementAction, PlacementOutcome, PolicyBody, Prerequisite,
-    ProvisionalStanding, ReadinessLevel, ResourceNeed, ResourceStanding, RunEventJournal,
-    RunEventKind, Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts,
-    SessionActivity, SignalSupport, TargetAction, TargetState, TickInputs, ToolCapacityRegistry,
-    Unplaced, UnreadableClaims, UnreadableReason, WorkItem, WorkLevel, WorkSpeculation, plan,
-    resource_standings, state_at, summarize,
+    AssignmentState, Blocker, CapacityState, DecisionJournal, DecisionKind, DecisionMode,
+    DecisionPage, DecisionRecord, GateFilter, GateRegistry, GateState, HeldResource,
+    MAX_SCHEDULE_SESSIONS, OfflinePolicy, Placement, PlacementAction, PlacementOutcome, PolicyBody,
+    Prerequisite, ProvisionalStanding, ReadinessLevel, ResourceNeed, ResourceStanding,
+    RunEventJournal, RunEventKind, Schedule, ScheduleInput, ScheduledSession, SchedulerStore,
+    ScoreParts, SessionActivity, SignalSupport, TargetAction, TargetState, TickInputs,
+    ToolCapacityRegistry, Unplaced, UnreadableClaims, UnreadableReason, WorkItem, WorkLevel,
+    WorkSpeculation, plan, resource_standings, state_at, summarize,
 };
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +90,11 @@ pub struct ScheduleView {
     pub inputs: TickInputs,
     #[serde(flatten)]
     pub schedule: Schedule,
+    /// HS2-T16SK0: each placed step's run a running session waits on for the target's
+    /// dispatcher, with who will assign it and, applied, whether its session claimed
+    /// it. Absent when none waits.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub assignments: Vec<super::assignment::Assignment>,
 }
 
 /// What applying one placement did.
@@ -168,6 +173,10 @@ pub struct Explanation {
     /// step's ticket. Its work is that gate's repair.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub provisional_dependents: Vec<String>,
+    /// HS2-T16SK0: for a running step whose run waits for the target's dispatcher,
+    /// who will assign it and when its session claims it for itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignment: Option<super::assignment::Assignment>,
     /// `dry_run` when a placement shown here would not be applied by a tick.
     pub mode: DecisionMode,
 }
@@ -763,6 +772,7 @@ impl OrchestrationRuntime {
                 ..TickInputs::default()
             },
             schedule: Schedule::default(),
+            assignments: Vec::new(),
         }
     }
 
@@ -779,7 +789,10 @@ impl OrchestrationRuntime {
         let Some(gathered) = self.scheduler_gather(owner_id, actor, tx)? else {
             return Ok(Self::scheduler_empty(now_ms));
         };
-        let (schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
+        let (mut schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
+        let assignments =
+            self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
+        Self::assignment_retry(&mut schedule, &assignments);
         Ok(ScheduleView {
             now_ms,
             enabled: true,
@@ -790,6 +803,7 @@ impl OrchestrationRuntime {
             },
             inputs,
             schedule,
+            assignments,
         })
     }
 
@@ -845,6 +859,7 @@ impl OrchestrationRuntime {
             speculation: None,
             provisional: None,
             provisional_dependents: Vec::new(),
+            assignment: None,
             mode: DecisionMode::DryRun,
         };
         let Some(step) = step else {
@@ -874,6 +889,24 @@ impl OrchestrationRuntime {
             ReadinessLevel::InProgress => {
                 answer.running = true;
                 answer.standing = "running".into();
+                // HS2-T16SK0: a run its target's pool will never assign says so.
+                let policy = self.policy(owner_id)?.policy;
+                let memory = SchedulerStore::new(&self.home).memory(owner_id)?;
+                if let Some(policy) = policy {
+                    let step_id = &step.readiness.step.step_id;
+                    answer.assignment = self
+                        .scheduler_assignments(owner_id, &policy, &memory, actor, tx)
+                        .into_iter()
+                        .find(|found| found.step_id.as_deref() == Some(step_id.as_str()));
+                }
+                if let Some(found) = answer
+                    .assignment
+                    .as_ref()
+                    .filter(|found| found.state != AssignmentState::AwaitingDispatcher)
+                {
+                    answer.reason = found.state.code().into();
+                    answer.retry_at_ms = found.claim_at_ms;
+                }
             }
             ReadinessLevel::Finished => answer.standing = "finished".into(),
             ReadinessLevel::Blocked | ReadinessLevel::Stale | ReadinessLevel::Cyclic => {
@@ -1020,10 +1053,11 @@ impl OrchestrationRuntime {
             }
             (false, _) => DecisionMode::DryRun,
         };
-        let (schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
+        let (mut schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
 
         let mut outcomes = Vec::new();
         let mut applied: Vec<(String, PlacementOutcome)> = Vec::new();
+        let mut assignments;
         if let (DecisionMode::Applied, Some(actor_id)) = (mode, &actor_id) {
             for placement in &schedule.placements {
                 let outcome = match placement.action {
@@ -1061,6 +1095,10 @@ impl OrchestrationRuntime {
                 };
                 outcomes.push(outcome);
             }
+            // HS2-T16SK0: after the starts, so a session started in this pass is seen.
+            assignments =
+                self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
+            self.assignment_apply(owner_id, &mut assignments, actor, &mut applied, tx);
             // A machine that had no room, or could not be read, is left alone for a
             // bounded, growing time instead of being asked on every event.
             for item in &schedule.unplaced {
@@ -1085,7 +1123,11 @@ impl OrchestrationRuntime {
                 }
             }
             SchedulerStore::new(&self.home).record(owner_id, &applied, now_ms)?;
+        } else {
+            assignments =
+                self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
         }
+        Self::assignment_retry(&mut schedule, &assignments);
 
         let logged = self.scheduler_log(
             owner_id,
@@ -1097,6 +1139,7 @@ impl OrchestrationRuntime {
             &schedule,
             &inputs,
             &outcomes,
+            &assignments,
             logging,
         )?;
         Ok(TickView {
@@ -1108,6 +1151,7 @@ impl OrchestrationRuntime {
                 mode,
                 inputs,
                 schedule,
+                assignments,
             },
             outcomes,
             logged,
@@ -1126,8 +1170,14 @@ impl OrchestrationRuntime {
         schedule: &Schedule,
         inputs: &TickInputs,
         outcomes: &[DecisionOutcome],
+        assignments: &[super::assignment::Assignment],
         logging: Logging<'_>,
     ) -> Result<usize, OrchestrationError> {
+        // HS2-T16SK0: only a run nobody will assign, or whose pool is unknown, is news.
+        let reported: Vec<_> = assignments
+            .iter()
+            .filter(|found| found.state != AssignmentState::AwaitingDispatcher)
+            .collect();
         let outcome_of = |placement: &Placement| {
             outcomes.iter().find(|outcome| {
                 outcome.action == placement.action
@@ -1170,6 +1220,17 @@ impl OrchestrationRuntime {
             }
             for item in &schedule.unplaced {
                 (&item.step_id, item.reason.code(), &item.detail).hash(&mut hasher);
+            }
+            for found in &reported {
+                (
+                    &found.run_id,
+                    &found.session_id,
+                    found.state.code(),
+                    found.claim_at_ms,
+                    &found.outcome,
+                    &found.outcome_detail,
+                )
+                    .hash(&mut hasher);
             }
             let digest = hasher.finish();
             if *last == Some(digest) {
@@ -1260,7 +1321,28 @@ impl OrchestrationRuntime {
             })?;
             logged += 1;
         }
+        for found in reported {
+            journal.append(DecisionRecord {
+                target_id: Some(found.target_id.clone()),
+                session_id: Some(found.session_id.clone()),
+                step_id: found.step_id.clone(),
+                run_id: Some(found.run_id.clone()),
+                reason: Some(found.state.code().into()),
+                outcome: found.outcome.clone(),
+                outcome_detail: found.outcome_detail.clone(),
+                retry_at_ms: found.claim_at_ms,
+                ..base(DecisionKind::Assignment)
+            })?;
+            logged += 1;
+        }
         Ok(logged)
+    }
+
+    /// HS2-T16SK0: the loop wakes when a waiting run's session is due to claim it.
+    fn assignment_retry(schedule: &mut Schedule, assignments: &[super::assignment::Assignment]) {
+        for at in assignments.iter().filter_map(|found| found.retry_at_ms) {
+            schedule.retry_at_ms = Some(schedule.retry_at_ms.map_or(at, |known| known.min(at)));
+        }
     }
 
     fn scheduler_actor(&self, owner_id: &str) -> Result<Option<MutationActor>, OrchestrationError> {
