@@ -234,7 +234,7 @@ impl OrchestrationRuntime {
 
     /// HS2-7QHWHJ: record one fact in the owner's run event stream. Best effort: a run
     /// operation is never failed because its event could not be written.
-    fn run_event(&self, owner_id: &str, event: RunEvent) {
+    pub(super) fn run_event(&self, owner_id: &str, event: RunEvent) {
         if let Ok(journal) = RunEventJournal::new(&self.home, owner_id) {
             let _ = journal.record(event);
         }

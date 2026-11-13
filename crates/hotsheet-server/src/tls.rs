@@ -407,6 +407,11 @@ mod tests {
             // HS2-J8PRTV: asking a target's machine passes this machine's grants.
             "/checkouts/owner/orchestration/targets/id/capacity",
             "/checkouts/owner/orchestration/targets/id/admission",
+            // HS2-WN0MXZ: steps, results and the run gate are this machine's.
+            "/checkouts/owner/orchestration/validations/define",
+            "/checkouts/owner/orchestration/validations/run",
+            "/checkouts/owner/orchestration/validations/remove",
+            "/checkouts/owner/orchestration/validations/evidence",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

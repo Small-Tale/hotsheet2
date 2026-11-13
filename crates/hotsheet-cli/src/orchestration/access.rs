@@ -35,6 +35,9 @@ pub struct ActionRequest {
     /// lease the run holds). Grants and policy limits still apply; a person is not
     /// asked again for something they already approved.
     pub continuing: bool,
+    /// HS2-WN0MXZ: the action is outside what the grant automates, so a person is
+    /// asked under this gate even when the policy would not ask.
+    pub person_gate: Option<hotsheet_ticketing::orchestration::ApprovalGate>,
 }
 
 impl ActionRequest {
@@ -47,6 +50,7 @@ impl ActionRequest {
             provisional: false,
             role_session: false,
             continuing: false,
+            person_gate: None,
         }
     }
 
@@ -258,11 +262,19 @@ impl OrchestrationRuntime {
         // HS2-YCJDEB: the policy is consulted only for a granted action, so an approval
         // request is never filed for something the actor was not authorized to do.
         let answer = if granted.allowed {
-            match self.policy_answer(&target.owner_checkout_id, &request, &target.target_id) {
-                policy::PolicyAnswer::Approval(_) if action.continuing => {
+            match (
+                self.policy_answer(&target.owner_checkout_id, &request, &target.target_id),
+                action.person_gate,
+            ) {
+                (policy::PolicyAnswer::Approval(_), _) if action.continuing => {
                     policy::PolicyAnswer::Allowed
                 }
-                answer => answer,
+                // HS2-WN0MXZ: a policy denial still wins; an allowed action outside the
+                // granted automation scope waits for a person.
+                (policy::PolicyAnswer::Allowed, Some(gate)) if !action.continuing => {
+                    policy::PolicyAnswer::Approval(gate)
+                }
+                (answer, _) => answer,
             }
         } else {
             policy::PolicyAnswer::Allowed

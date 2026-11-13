@@ -9,6 +9,7 @@ mod request;
 mod runs;
 mod tickets;
 mod tool_capacity;
+mod validation;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use capacity::{
@@ -27,6 +28,11 @@ pub use tickets::{
 };
 pub use tool_capacity::{
     SelectTool, SignalResult, ToolCapacityRow, ToolCapacityView, ToolSelection,
+};
+pub use validation::{
+    DefineValidation, HostedExecutionState, HostedValidation, HostedValidationStart,
+    ListValidations, MAX_VALIDATION_OUTPUT_BYTES, MAX_VALIDATION_WAIT_MS, RunValidation,
+    ValidationRunView, ValidationStepRef,
 };
 pub use watch::{
     MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetTicketEvent, WatchState,
@@ -375,6 +381,11 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         OrchestrationError::Denied(_) | OrchestrationError::Forbidden(_) => 403,
         OrchestrationError::Run(hotsheet_ticketing::orchestration::RunError::NotFound) => 404,
         OrchestrationError::Run(_) => 409,
+        OrchestrationError::Validation(
+            hotsheet_ticketing::orchestration::ValidationError::StepNotFound
+            | hotsheet_ticketing::orchestration::ValidationError::ResultNotFound,
+        ) => 404,
+        OrchestrationError::Validation(_) => 409,
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

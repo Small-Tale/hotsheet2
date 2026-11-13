@@ -488,3 +488,6 @@ mod runs;
 mod target_tickets;
 #[path = "remote_servers/tool_capacity.rs"]
 mod tool_capacity;
+#[cfg(unix)]
+#[path = "remote_servers/validation.rs"]
+mod validation;

@@ -43,6 +43,9 @@ pub fn is_path(path: &str) -> bool {
             ]
             // HS2-J8PRTV: the hosted capacity snapshot and admission answer.
             | ["checkouts", _, "target-capacity" | "target-admission"]
+            // HS2-WN0MXZ: validation steps (orchestrating) and the hosted execution.
+            | ["checkouts", _, "orchestration", "validations", _]
+            | ["checkouts", _, "target-validations"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -93,6 +96,10 @@ pub fn is_machine_path(path: &str) -> bool {
                 "tool-capacity",
                 "signals" | "select"
             ]
+            // HS2-WN0MXZ: step definitions and results are this machine's, and a run
+            // passes its grants. The hosted `target-validations` route stays ordinary
+            // authenticated data so a remote orchestrator can reach it.
+            | ["checkouts", _, "orchestration", "validations", _]
     )
 }
 
@@ -449,6 +456,52 @@ impl OrchestrationRuntime {
             )?),
             ("POST", ["checkouts", checkout, "target-admission"]) => {
                 value(self.hosted_admission(checkout, decode(body)?)?)
+            }
+            // HS2-WN0MXZ hosted half: run a validation step where the target lives.
+            ("POST", ["checkouts", checkout, "target-validations"]) => {
+                value(self.hosted_validation_start(checkout, decode(body)?, tx)?)
+            }
+            ("GET", ["checkouts", checkout, "target-validations"]) => {
+                let execution = query_text(path, "execution_id")?
+                    .ok_or(OrchestrationError::Invalid("execution_id is required"))?;
+                value(self.hosted_validation(
+                    checkout,
+                    &execution,
+                    query_number(path, "wait_ms", 0)?,
+                )?)
+            }
+            // HS2-WN0MXZ orchestrating half.
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "validations",
+                    operation,
+                ],
+            ) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "define" => {
+                        value(self.validation_define(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "list" => {
+                        let list: super::ListValidations = decode(body)?;
+                        value(self.validation_list(owner, list.ticket.as_ref(), tx)?)
+                    }
+                    "evidence" => {
+                        let step: super::ValidationStepRef = decode(body)?;
+                        value(self.validation_evidence(owner, &step.ticket, &step.step_id, tx)?)
+                    }
+                    "run" => {
+                        value(self.validation_run(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "remove" => {
+                        value(self.validation_remove(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
             }
             // HS2-J8PRTV orchestrating half.
             (

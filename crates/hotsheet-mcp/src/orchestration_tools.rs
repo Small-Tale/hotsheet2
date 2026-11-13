@@ -3,22 +3,24 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. capacity reads the machine that hosts a target (HS2-J8PRTV): free and total RAM, CPU load, disk headroom, AI tools, running sessions and, for named claim_namespaces, held resource claims, with null for anything it could not measure; it needs a gates_observe grant. admission_check asks that machine whether sessions of a tool may start now and answers accepted, reduced or refused with a reason code; it needs a sessions_manage grant for the tool, starts nothing, and the machine's own limits can only be stricter than the policy's. tool_capacity reads the capacity state of every AI tool account the policy configures (available, limited until a time, degraded or unknown; HS2-AHG7HW) and tool_select orders the tool accounts a session for one target may start on now, with the reason each other one is excluded; unknown or degraded is never the same as available, and limit signals are reported by the server or the CLI, never through this tool. run_status shows the last confirmed target state and whether it is stale, and run_events replays events after a cursor and can wait for the next one (HS2-7QHWHJ); never poll run_show on a timer. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. capacity reads the machine that hosts a target (HS2-J8PRTV): free and total RAM, CPU load, disk headroom, AI tools, running sessions and, for named claim_namespaces, held resource claims, with null for anything it could not measure; it needs a gates_observe grant. admission_check asks that machine whether sessions of a tool may start now and answers accepted, reduced or refused with a reason code; it needs a sessions_manage grant for the tool, starts nothing, and the machine's own limits can only be stricter than the policy's. tool_capacity reads the capacity state of every AI tool account the policy configures (available, limited until a time, degraded or unknown; HS2-AHG7HW) and tool_select orders the tool accounts a session for one target may start on now, with the reason each other one is excluded; unknown or degraded is never the same as available, and limit signals are reported by the server or the CLI, never through this tool. run_status shows the last confirmed target state and whether it is stale, and run_events replays events after a cursor and can wait for the next one (HS2-7QHWHJ); never poll run_show on a timer. validation_define attaches a named validation step to an orchestration ticket: a target, a check that is either {kind:profile,name} (a test profile the target project defines itself) or {kind:command,program,args}, prerequisites, expected evidence, a timeout and a retry policy (HS2-WN0MXZ). validation_run runs it on the machine that hosts the target under a validation_run grant and a retained operation_id: one call takes at most one attempt and waits at most wait_ms (8000) for it, and the same call again waits further or takes the next allowed attempt, so never poll on a timer; a command step answers approval_required until a person approves that operation. Results are passed, failed, skipped (a prerequisite has not passed), unavailable (the target cannot run it) or unverified (the outcome could not be confirmed), and hold digests, sizes, an exit code and timings only, never output. validation_list and validation_evidence read the latest evidence without contacting a target; validation_remove deletes a step. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync","capacity","admission_check","tool_capacity","tool_select","run_status","run_events"]},
-        "wait_ms":{"type":"integer","minimum":0,"maximum":20000,"description":"run_events: wait this long for the next event when there is none (use with after instead of polling)"},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync","capacity","admission_check","tool_capacity","tool_select","run_status","run_events","validation_define","validation_list","validation_evidence","validation_run","validation_remove"]},
+        "wait_ms":{"type":"integer","minimum":0,"maximum":20000,"description":"run_events: wait this long for the next event when there is none (use with after instead of polling); validation_run: wait this long for the attempt to finish, at most 8000"},
+        "step":{"type":"object","description":"validation_define: {step_id, check:{kind:profile,name}|{kind:command,program,args}, prerequisites?, evidence?:{exit_code?,stdout_sha256?}, timeout_seconds?, retry?:{max_attempts}}; target_id is taken from the target_id argument"},
+        "step_id":{"type":"string","description":"validation_evidence/validation_run/validation_remove: the step's name within its orchestration ticket"},
         "tool":{"type":"string","description":"tool_select: the preferred tool id; omit for any tool the target allows; admission_check: the AI tool a session would run"},
         "model":{"type":"string","description":"tool_select: the model the session would use, checked against the target's model list; admission_check: optional model"},
         "tool_load":{"type":"array","items":{"type":"object","required":["tool","sessions"],"properties":{"tool":{"type":"string"},"account":{"type":"string"},"sessions":{"type":"integer","minimum":0}}},"description":"tool_select (required): sessions now running per tool account; an empty list states that none are running"},
         "claim_namespaces":{"type":"array","items":{"type":"string"},"maxItems":8,"description":"capacity: resource-claim namespaces whose live claims to list"},
         "sessions":{"type":"integer","minimum":1,"maximum":64,"description":"admission_check: how many sessions to ask for (default 1)"},
-        "run_id":{"type":"string","description":"run_show/renew/cancel/sync: the run's id"},
+        "run_id":{"type":"string","description":"run_show/renew/cancel/sync: the run's id; validation_run: optionally the dispatch run the validation belongs to"},
         "mode":{"type":"string","enum":["direct","dispatcher"],"description":"run_dispatch: direct claims the ticket for worker_id; dispatcher marks it Up Next for the target's own dispatcher"},
         "worker_id":{"type":"string","description":"run_dispatch direct: the worker the ticket is claimed for"},
         "worker_label":{"type":"string"},
         "lease_minutes":{"type":"integer","minimum":5,"maximum":240,"description":"run_dispatch/run_renew"},
         "active":{"type":"boolean","description":"run_list: leave out finished runs"},
-        "ticket":{"type":"object","description":"ticket_create/link/unlink/links: the orchestration ticket {native_id, connection_id?}; connection_id may be omitted when the project has one git ticket source"},
+        "ticket":{"type":"object","description":"ticket_create/link/unlink/links and validation_*: the orchestration ticket {native_id, connection_id?}; connection_id may be omitted when the project has one git ticket source"},
         "connection_id":{"type":"string","description":"ticket_*: the target's ticket source connection id"},
         "native_id":{"type":"string","description":"ticket_read/update/link/unlink: the target ticket's provider-native id"},
         "fields":{"type":"object","description":"ticket_create/ticket_update: {title, details, category, priority, status, tags, up_next}"},
@@ -30,7 +32,7 @@ pub(crate) fn definition() -> Value {
         "target_action":{"type":"string","enum":["tickets_read","tickets_write","work_start","gates_observe","validation_run","sessions_manage"],"description":"access_check: the delegated action"},
         "session":{"type":"object","description":"access_check for sessions_manage: {tool, model?, running?, starting?}"},
         "load":{"type":"object","description":"access_check for a session start: {target_sessions, machine_sessions, tool_sessions, account?, account_sessions?}; a start without it is denied policy_load_unknown"},
-        "operation_id":{"type":"string","description":"access_check: the operation an approval would be for"},
+        "operation_id":{"type":"string","description":"access_check: the operation an approval would be for; validation_run: retained across repeats of one request"},
         "after":{"type":"integer","minimum":0,"description":"audit: return entries after this sequence number"},
         "limit":{"type":"integer","minimum":1,"maximum":500,"description":"audit: page size"},
         "destination_checkout":{"type":"string","description":"registered local/remote checkout id to inspect"},
@@ -98,6 +100,11 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             | "tool_select"
             | "capacity"
             | "admission_check"
+            | "validation_define"
+            | "validation_list"
+            | "validation_evidence"
+            | "validation_run"
+            | "validation_remove"
     ) || (action == "list" && id.is_some());
     // Preflight before any backend request; HttpBackend repeats it for actual origin.
     if machine && !backend.machine_local() {
@@ -314,6 +321,43 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             )
             .map_err(crate::be_msg);
     }
+    // HS2-WN0MXZ: validation steps of an orchestration ticket.
+    if let Some(operation) = action.strip_prefix("validation_") {
+        if !matches!(operation, "define" | "list" | "evidence" | "run" | "remove") {
+            return Err("unsupported target action".into());
+        }
+        // Each operation's body is strict, so only its own arguments are forwarded.
+        let keys: &[&str] = match operation {
+            "define" | "list" => &["ticket"],
+            "run" => &["ticket", "step_id", "operation_id", "run_id", "wait_ms"],
+            _ => &["ticket", "step_id"],
+        };
+        let mut body = serde_json::Map::new();
+        for key in keys.iter().copied() {
+            if let Some(value) = args.get(key) {
+                body.insert(key.into(), value.clone());
+            }
+        }
+        if operation == "define" {
+            let Some(Value::Object(step)) = args.get("step") else {
+                return Err("step is required".into());
+            };
+            let mut step = step.clone();
+            // The validated argument wins over anything the step object tried to set.
+            step.insert(
+                "target_id".into(),
+                id.ok_or("target_id is required")?.into(),
+            );
+            body.insert("step".into(), Value::Object(step));
+        }
+        return backend
+            .send(
+                "POST",
+                &format!("{base}/validations/{operation}"),
+                &Value::Object(body),
+            )
+            .map_err(crate::be_msg);
+    }
     if action == "inspect" {
         let checkout_id = required(args, "destination_checkout")?;
         let destination = match registration {
@@ -434,6 +478,12 @@ mod tests {
             // HS2-J8PRTV
             "capacity",
             "admission_check",
+            // HS2-WN0MXZ
+            "validation_define",
+            "validation_list",
+            "validation_evidence",
+            "validation_run",
+            "validation_remove",
         ] {
             assert!(
                 dispatch(&json!({"action":action}), &backend)
@@ -866,6 +916,95 @@ mod tests {
             owner,
             json!({"action":"admission_check","target_id":target}),
         );
+        assert!(backend.0.lock_or_recover().is_empty());
+    }
+    #[test]
+    fn hs2_wn0mxz_validation_actions_send_one_body_shape_and_validate_first() {
+        let backend = Recorded(Mutex::new(Vec::new()));
+        let owner = "owner-0123456789ab";
+        let target = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let base = format!("/checkouts/{owner}/orchestration/validations");
+        let actor = json!({"role":"ai","id":"scheduler-1"});
+        let ticket = json!({"native_id":"OWN-ABC123"});
+        let who = |mut arguments: Value| {
+            arguments["actor_role"] = json!("ai");
+            arguments["actor_id"] = json!("scheduler-1");
+            arguments
+        };
+        call(
+            &backend,
+            owner,
+            who(
+                json!({"action":"validation_define","target_id":target,"ticket":ticket,
+                // The validated argument replaces a target the step object names, and
+                // arguments of other actions are not forwarded.
+                "step":{"step_id":"smoke","target_id":"elsewhere","check":{"kind":"profile","name":"smoke"}},
+                "wait_ms":5,"worker_id":"ignored"}),
+            ),
+        );
+        call(
+            &backend,
+            owner,
+            who(
+                json!({"action":"validation_run","ticket":ticket,"step_id":"smoke",
+                "operation_id":"op-1","run_id":target,"wait_ms":8000,"step":{"ignored":true}}),
+            ),
+        );
+        call(&backend, owner, who(json!({"action":"validation_list"})));
+        call(
+            &backend,
+            owner,
+            who(json!({"action":"validation_evidence","ticket":ticket,"step_id":"smoke"})),
+        );
+        call(
+            &backend,
+            owner,
+            who(json!({"action":"validation_remove","ticket":ticket,"step_id":"smoke"})),
+        );
+        assert_eq!(
+            *backend.0.lock_or_recover(),
+            [
+                (
+                    "POST".to_owned(),
+                    format!("{base}/define"),
+                    json!({"ticket":ticket,"actor":actor,
+                        "step":{"step_id":"smoke","target_id":target,"check":{"kind":"profile","name":"smoke"}}})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{base}/run"),
+                    json!({"ticket":ticket,"step_id":"smoke","operation_id":"op-1",
+                        "run_id":target,"wait_ms":8000,"actor":actor})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{base}/list"),
+                    json!({"actor":actor})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{base}/evidence"),
+                    json!({"ticket":ticket,"step_id":"smoke","actor":actor})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{base}/remove"),
+                    json!({"ticket":ticket,"step_id":"smoke","actor":actor})
+                ),
+            ]
+        );
+        // A missing step or target, a malformed target and an unknown operation never
+        // reach the backend.
+        backend.0.lock_or_recover().clear();
+        for arguments in [
+            json!({"action":"validation_define","target_id":target,"ticket":ticket}),
+            json!({"action":"validation_define","target_id":target,"ticket":ticket,"step":"smoke"}),
+            json!({"action":"validation_define","ticket":ticket,"step":{"step_id":"smoke"}}),
+            json!({"action":"validation_define","target_id":"not-a-ulid","ticket":ticket,"step":{}}),
+            json!({"action":"validation_explode","ticket":ticket}),
+        ] {
+            rejected(&backend, owner, arguments);
+        }
         assert!(backend.0.lock_or_recover().is_empty());
     }
 }

@@ -5,7 +5,8 @@
 > throughput policy with approvals (§26.8), structured ticket links with target
 > ticket operations (§26.3, HS2-AZ15GA), dispatch runs with status and events (§26.9,
 > HS2-EBHDSB, HS2-7QHWHJ), target capacity and admission (§26.10, HS2-J8PRTV), AI tool
-> capacity states with tool selection (§26.11, HS2-AHG7HW), and the headless CLI,
+> capacity states with tool selection (§26.11, HS2-AHG7HW), extra validation steps
+> with immutable result references (§26.12, HS2-WN0MXZ), and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI and the scheduler remain design
 > work under their separate implementation tickets.
@@ -316,7 +317,7 @@ cross-server queue. HS2-42B2FD owns general cross-server aggregate views;
 HS2-7QHWHJ can reuse its transport and
 identity work while showing only linked runs. HS2-AZ15GA, HS2-EBHDSB,
 HS2-5JBYPV, and HS2-WN0MXZ implement ticket operations, dispatch, CI/deploy
-gates, and extra validation. HS2-WBREDM owns restart reconciliation, and
+gates, and extra validation (§26.12). HS2-WBREDM owns restart reconciliation, and
 HS2-2EY9DP owns multi-project failure fixtures. The existing remote-mount and
 git-native self-claim decisions in [08](08-distributed-and-remote.md) remain in
 force.
@@ -500,7 +501,9 @@ bounds.
 missing grant is always reported as such and no approval request is filed for it.
 
 - **No policy file.** Explicit ticket, gate and validation actions are governed by
-  grants alone, so a project that never enables throughput is unaffected.
+  grants alone, so a project that never enables throughput is unaffected. A
+  validation step that runs a command chosen by the orchestration project still
+  asks a person (§26.12).
   `sessions_manage` is denied `policy_absent`: nothing automatic runs without a
   policy. An unreadable or corrupt policy denies everything.
 - **Denials** are `policy_denied` with a `detail`: `policy_target_not_permitted`,
@@ -685,9 +688,9 @@ can be trusted.
 **Event stream.** Every change to a run is published to a bounded append-only
 journal per owning checkout, `${HOTSHEET_HOME}/orchestration-run-events/`, with the
 same sequence cursor, rotation and gap reporting as the audit journal. Event kinds
-are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable` and
-`cancel_requested`, with `gate`, `validation` and `session` reserved for the tickets
-that add them. Each event says whether the orchestrator did it or it was learned
+are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable`,
+`cancel_requested` and `validation` (§26.12), with `gate` and `session` reserved for
+the tickets that add them. Each event says whether the orchestrator did it or it was learned
 from the target, and carries identifiers, states and codes only.
 
 - **Ordering.** Events are recorded in arrival order and keep the time the fact was
@@ -1047,3 +1050,212 @@ with no limit, no unconfirmed recovery and no spend for the current day is forgo
 when every record still holds something in force, a new tool account is refused with
 `capacity_reached`.
 ```
+
+## 26.12 Extra validation steps (HS2-WN0MXZ)
+
+An orchestration ticket can carry named **validation steps**: checks that run in a
+target project's own environment and leave evidence the orchestration project can
+rely on later. A step and its results belong to the orchestrating machine. The
+target runs the step and reports what it observed; it stores nothing about it.
+
+### Step
+
+A step is attached to one orchestration ticket and is named by a `step_id` that is
+unique within that ticket.
+
+| Field             | Meaning                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| `step_id`         | The step's name.                                                                                                |
+| `target_id`       | The declared target project the step runs in.                                                                   |
+| `check`           | `{kind: "profile", name}` or `{kind: "command", program, args}`.                                                |
+| `prerequisites`   | At most eight other steps of the same ticket whose latest evidence must be `passed` first.                      |
+| `evidence`        | What passing means: `exit_code` (0 when omitted) and optionally `stdout_sha256`, the digest of standard output. |
+| `timeout_seconds` | 1 to 3600; 300 when omitted.                                                                                    |
+| `retry`           | `max_attempts`, 1 to 5; 1 when omitted. Only a `failed` attempt is retried.                                     |
+
+- A **profile** is a test profile the target project defines itself, in its checked-in
+  `.hotsheet2/validation-profiles.json`: `schema_version: 1` and `profiles`, each a
+  `name`, a `program` and `args`. The orchestration project names the profile and
+  never supplies its command. The file is read where the target lives, at most 64
+  profiles; a damaged, duplicated or newer file is an error and never a guess.
+- A **command** is a program and arguments chosen by the orchestration project. It
+  is started directly, without a shell. A program and its arguments are at most 4,096
+  bytes and 32 arguments together.
+- A program with a directory part (`scripts/check.sh`) is the checkout's own file; a
+  bare name is looked up on the host's `PATH`. Both run with the target checkout as
+  the working directory.
+
+Defining a step again with the same definition changes nothing. A changed definition
+gets the next `revision`, and evidence produced for an earlier revision no longer
+counts. A ticket holds at most 32 steps and a machine 512. A step keeps its 16 most
+recent results.
+
+### Result states
+
+A result is one attempt at a step.
+
+| State         | Meaning                                                                  | May become                                      |
+| ------------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| `running`     | The attempt was started and its outcome is not known yet                 | `passed`, `failed`, `unavailable`, `unverified` |
+| `passed`      | It ran and produced the expected evidence                                | nothing                                         |
+| `failed`      | It ran and did not: wrong exit code or output, timeout, signal, too loud | nothing                                         |
+| `skipped`     | It was not run because a prerequisite has not passed                     | nothing                                         |
+| `unavailable` | The target could not run it at all                                       | nothing                                         |
+| `unverified`  | It may have run, but its outcome could not be confirmed                  | nothing                                         |
+
+A finished result is immutable. Reporting the same outcome again is a no-op and any
+other change is refused with `validation_result_final`; an edge the table does not
+list is `validation_invalid_transition`. A result begins `running`, or directly
+`skipped` or `unavailable` when nothing was started.
+
+Each state other than `passed` and `running` carries a reason code:
+
+- `failed`: `exit_code_mismatch`, `output_mismatch`, `timed_out`,
+  `terminated_by_signal`, `output_limit_exceeded`.
+- `skipped`: `prerequisite_not_passed`.
+- `unavailable`: `profile_not_defined`, `program_not_found`, `launch_failed`, or the
+  target's own refusal code, such as `target_provider_unauthorized` for a read-only
+  pairing, `target_peer_unsupported` for a peer without the route, or
+  `capacity_reached`.
+- `unverified`: `execution_lost` (the host accepted the attempt and no longer knows
+  it), `deadline_passed` (a running attempt outlived its timeout by more than a
+  minute), `exit_code_unknown`, `output_unknown`.
+
+### What a result records
+
+A result holds its `result_id`, the caller's `operation_id`, the attempt number, the
+step revision, the state and reason, the actor, an optional `run_id`, and the
+outcome the host observed: how the execution ended, the exit code, when it started,
+how long it took, and for each of standard output and standard error the SHA-256 and
+the size in bytes.
+
+The host reads a step's output only to digest it and keeps none of it. Output is
+never returned by a route, written to the result file, a journal, an event or a
+ticket note. A step that writes more than 64 MiB to one stream is stopped and
+`failed`. The note added to the orchestration ticket when an attempt finishes names
+the step, the attempt, the state, the result id and the target, and nothing else.
+Keeping a bounded copy of the output on the target's own machine is HS2-ZCR3Y7.
+
+### Evidence
+
+`evidence` answers "what is the latest validation evidence for this orchestration
+ticket and step". It returns the step, the latest result exactly as recorded, the
+retained attempts, and the `state` that evidence amounts to now. That state is the
+latest result's state, except that it is `unverified` when:
+
+- the step never ran (`not_run`);
+- the step's definition changed since the result (`step_changed`);
+- a `running` attempt is past its deadline (`deadline_passed`).
+
+The read contacts no target, passes no gate and writes nothing. It is what a
+readiness decision (HS2-42TARA) consumes: `OrchestrationRuntime::validation_evidence`
+in the shared runtime, over `ValidationRegistry::evidence` in the core.
+
+### Running a step
+
+The step runs on the machine that hosts the target, in the target checkout, reached
+like every hosted half: in process for a local destination and over the reviewed
+remote registration for a remote one. On Unix the step gets its own process group
+and the whole group is stopped at the timeout. Windows process handling is
+HS2-2R32SD, and the environment a step inherits is HS2-W02PTA.
+
+The remote transport allows a request about ten seconds and a step up to an hour,
+so an execution outlives one request. A `run` request starts the attempt and waits
+at most `wait_ms` (8,000) for it:
+
+- While the answer is `running`, the same request again waits on the same execution.
+  Each wait is one request held open on the host until the step ends or the wait is
+  over. Nothing polls on a timer between requests.
+- When the answer is `failed` and `attempts_left` is not zero, the same request again
+  takes the next attempt. Each attempt is its own immutable result.
+- A finished request is answered from the record, without the gate or the target.
+  The same `operation_id` never runs a finished step again; a new id does.
+- The same `operation_id` for another step conflicts. Another request for a step
+  whose attempt is still running is refused with `validation_step_running`.
+- If the target cannot be reached, or refuses a read of an execution it already
+  accepted, the attempt stays `running` and the answer lists `target_execution` under
+  `unverified`. Nothing is concluded from silence. If the target refuses to start the
+  step at all, the result is `unavailable` with the target's code.
+- The host identifies an execution by the result id and never runs one id twice. It
+  remembers executions in memory only: at most 64, four of them running, and a fifth
+  is refused with `capacity_reached`. After the hosting process restarts it answers
+  `unknown` and the attempt becomes `unverified`, never a second run (HS2-7BTV98). A
+  headless CLI that hosts a local target itself must therefore stay until the step
+  ends, which is why `validation run` waits by default.
+- A step whose prerequisite has not passed is recorded as `skipped` without
+  contacting the target and without asking anyone. A later request with a new
+  `operation_id` runs it once the prerequisite passes.
+
+There is no cancel yet (HS2-17ABM2). The scheduler that runs steps without a caller
+is HS2-ECWG50.
+
+### Authority
+
+Validation has its own delegated action. It uses `validation_run` (§26.7), not the
+`work_start` action that dispatch uses, so a grant to dispatch work does not allow
+running checks and the reverse.
+
+- **Define** needs a `validation_run` grant on the step's target. It runs nothing
+  and asks nobody.
+- **Run** passes the gate as `validation_run` with the `operation_id`. A policy that
+  lists `validation_run` under `approval.required_for` (§26.8) asks a person for every
+  run.
+- **A profile is inside the granted automation scope**: the target project chose its
+  command. **A command is outside it.** A `command` step always answers
+  `approval_required` until a person approves that exact operation through the
+  approvals of §26.8, whether or not a policy file exists and whatever it lists.
+  Continuing an approved request, including its retries, does not ask again. Scoping
+  grants to named profiles or reviewed commands is HS2-27ZYX5.
+- **Remove** is a person's without any grant, so a step of an unbound or unreachable
+  target can always be cleaned up; an AI actor needs the grant.
+- An unusable target is a denial (`target_unavailable`) and records no result.
+- The target's server still enforces its own device role: a read-only pairing cannot
+  start an execution, whatever a grant says. The hosted route gives a read-write
+  pairing nothing it did not have: such a caller can already open a terminal on that
+  server. Grants and approvals govern the orchestrating side's automation; they are
+  not a boundary on the target, as §26.7 says of grants in general.
+
+Every gate answer and every finished attempt is in the audit journal under
+`validation_run`, the latter as `succeeded` for `passed` and `failed` with the state
+code otherwise. A changed definition is `validation_define` and a removal
+`validation_remove`. Each bounded wait passes the gate again and is recorded; folding
+those is HS2-5ZT4GY. When a run request names a dispatch `run_id`, that run's event
+stream (§26.9) carries a `validation` event when the attempt starts and when it
+finishes, with the state as its reason and the result id in its key.
+
+### Storage
+
+`${HOTSHEET_HOME}/orchestration-validation.json` on the orchestrating machine holds
+step definitions and results (private, locked, atomically replaced, version 1, at
+most 8 MiB). A read never creates it. Damaged or newer data is an error on every
+route and is never overwritten.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration validation define --project <owner> --ticket <orchestration-ticket> \
+  --step <name> --target <target-id> --profile <profile> [--requires <step>]... \
+  [--expect-exit <code>] [--expect-stdout-sha256 <hex>] [--timeout-seconds 300] [--max-attempts 1]
+hotsheet-cli ... orchestration validation define ... --program <program> [--arg <argument>]...
+hotsheet-cli ... orchestration validation run --project <owner> --ticket <orchestration-ticket> \
+  --step <name> --operation-id <retained-id> [--run <run-id>] [--no-wait]
+hotsheet-cli ... orchestration validation show|remove --project <owner> --ticket <orchestration-ticket> --step <name>
+hotsheet-cli ... orchestration validation list --project <owner> [--ticket <orchestration-ticket>]
+```
+
+`validation run` repeats its one request until the attempt is finished and the retry
+policy has nothing left, and returns at once when the target could not be confirmed.
+The result is in the JSON (`result.state`), not in the exit status. `--source` names
+the orchestration ticket's connection and may be omitted when the project has one git
+ticket source.
+
+| Route                                                                            | Methods and purpose                                                                          |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/validations/{define,list,evidence,run,remove}` | POST orchestrating-side operations; machine-local                                            |
+| `/checkouts/{checkout}/target-validations`                                       | Hosted half: POST start or re-attach by `execution_id`; GET its state, both with a `wait_ms` |
+
+The hosted route is ordinary authenticated project data under the caller's device
+role, like the hosted ticket route. MCP `hotsheet_targets` adds `validation_define`,
+`validation_list`, `validation_evidence`, `validation_run` and `validation_remove`.
+Listing and checking a target's profiles headlessly is HS2-YYNW9F, and the workspace
+view is HS2-9XJEZC.

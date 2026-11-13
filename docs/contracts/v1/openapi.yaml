@@ -2009,6 +2009,150 @@ paths:
         schema:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/validations/{operation}:
+    description:
+      Machine-local validation steps of an orchestration ticket (HS2-WN0MXZ). A step names a target, a command or a test
+      profile the target project defines, prerequisites, expected evidence, a timeout and a retry policy. Results hold
+      digests, sizes, an exit code and timings only; a step's output is never returned or stored.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestrateValidation
+      description:
+        '`define` attaches or changes a step, `list` and `evidence` read the latest evidence, `run` starts or continues
+        the request a retained `operation_id` names, and `remove` deletes a step. `define` and `run` pass the grant and
+        policy gate as `validation_run`; a `command` step also waits for a person (403 `approval_required`). Refusals
+        use the `validation_*` codes.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationOperation'
+      responses:
+        '200':
+          description:
+            The step's evidence (`define`, `evidence`, `remove`), a list of them (`list`), or the request's latest
+            attempt with the evidence (`run`).
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - $ref: '#/components/schemas/ValidationEvidence'
+                  - $ref: '#/components/schemas/ValidationRunView'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationEvidence'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - define
+            - list
+            - evidence
+            - run
+            - remove
+  /checkouts/{checkout}/target-validations:
+    description: Runs a validation step in a checkout this machine hosts, for a local or remote orchestration project
+      (HS2-WN0MXZ). The step's output is digested as it is read and never kept or returned. Ordinary authenticated
+      project data under the caller's device role; a read-only device cannot start an execution.
+    get:
+      operationId: readHostedValidation
+      description:
+        The state of an execution this server process started, waiting at most `wait_ms` for it to finish. `unknown`
+        means this process has no such execution.
+      parameters:
+        - name: execution_id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        - name: wait_ms
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8000
+            default: 0
+      responses:
+        '200':
+          description: Running, finished with its outcome, or unknown.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: startHostedValidation
+      description:
+        Starts the execution an id names and waits at most `wait_ms` for it. The same id again returns the same
+        execution and starts nothing. A profile is resolved from the checkout's own
+        `.hotsheet2/validation-profiles.json`. 409 `capacity_reached` when four executions already run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedValidationStart'
+      responses:
+        '200':
+          description: Running, or finished with its outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -18319,6 +18463,361 @@ components:
             - integer
             - 'null'
           minimum: 0
+    ValidationCheck:
+      description: What a step runs. A profile is defined by the target project; a command is chosen by the caller.
+      oneOf:
+        - type: object
+          required:
+            - kind
+            - program
+          properties:
+            kind:
+              const: command
+            program:
+              type: string
+              minLength: 1
+              maxLength: 4096
+            args:
+              type: array
+              maxItems: 32
+              items:
+                type: string
+                maxLength: 4096
+          additionalProperties: false
+        - type: object
+          required:
+            - kind
+            - name
+          properties:
+            kind:
+              const: profile
+            name:
+              type: string
+              minLength: 1
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
+          additionalProperties: false
+    ValidationStepDefinition:
+      type: object
+      required:
+        - step_id
+        - target_id
+        - check
+      properties:
+        step_id:
+          description: The step's name, unique within its orchestration ticket.
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        check:
+          $ref: '#/components/schemas/ValidationCheck'
+        prerequisites:
+          description: Steps of the same ticket whose latest evidence must be `passed` first.
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 160
+        evidence:
+          type: object
+          properties:
+            exit_code:
+              description: The exit code that means success; zero when omitted.
+              type: integer
+            stdout_sha256:
+              description: When set, the SHA-256 of everything the step wrote to standard output.
+              type: string
+              pattern: ^[0-9a-f]{64}$
+          additionalProperties: false
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+          default: 300
+        retry:
+          type: object
+          properties:
+            max_attempts:
+              description: Attempts one request may make while the result is `failed`.
+              type: integer
+              minimum: 1
+              maximum: 5
+              default: 1
+          additionalProperties: false
+      additionalProperties: false
+    ValidationOperation:
+      description:
+        The body of a validation operation. `define` needs `ticket` and `step`; `evidence` and `remove` need `ticket`
+        and `step_id`; `run` also needs `operation_id`; `list` takes an optional `ticket`.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        ticket:
+          description: The orchestration ticket; an empty connection id selects the project's only git source.
+          type: object
+          required:
+            - native_id
+          properties:
+            connection_id:
+              type: string
+              maxLength: 160
+            native_id:
+              type: string
+              maxLength: 200
+          additionalProperties: false
+        step:
+          $ref: '#/components/schemas/ValidationStepDefinition'
+        step_id:
+          type: string
+          maxLength: 160
+        operation_id:
+          description: Retain across repeats; the same id is the same request and never runs twice.
+          type: string
+          maxLength: 160
+        run_id:
+          description: The dispatch run this validation belongs to; its event stream then reports it.
+          type:
+            - string
+            - 'null'
+        wait_ms:
+          description: How long `run` waits for the attempt to finish.
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 8000
+      additionalProperties: false
+    ValidationStreamRef:
+      description: An immutable reference to one output stream; never its content.
+      type: object
+      required:
+        - sha256
+        - bytes
+      properties:
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        bytes:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    ValidationExecutionOutcome:
+      description: What the hosting machine observed. Codes, numbers and digests only.
+      type: object
+      required:
+        - end
+        - started_at_ms
+        - duration_ms
+      properties:
+        end:
+          enum:
+            - exited
+            - timed_out
+            - signalled
+            - output_limit
+            - profile_not_defined
+            - program_not_found
+            - launch_failed
+        exit_code:
+          type: integer
+        started_at_ms:
+          type: integer
+          minimum: 0
+        duration_ms:
+          type: integer
+          minimum: 0
+        stdout:
+          $ref: '#/components/schemas/ValidationStreamRef'
+        stderr:
+          $ref: '#/components/schemas/ValidationStreamRef'
+      additionalProperties: false
+    ValidationState:
+      enum:
+        - running
+        - passed
+        - failed
+        - skipped
+        - unavailable
+        - unverified
+    ValidationResult:
+      description: One attempt at a step. A finished result never changes.
+      type: object
+      required:
+        - result_id
+        - operation_id
+        - attempt
+        - step_revision
+        - state
+        - host_started
+        - created_at_ms
+      properties:
+        result_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        operation_id:
+          type: string
+          maxLength: 160
+        attempt:
+          type: integer
+          minimum: 1
+          maximum: 5
+        step_revision:
+          type: integer
+          minimum: 1
+        state:
+          $ref: '#/components/schemas/ValidationState'
+        reason:
+          description: A stable code, never free text.
+          type: string
+          maxLength: 160
+        actor_id:
+          type: string
+          maxLength: 160
+        run_id:
+          type: string
+        host_started:
+          description: The hosting machine confirmed that it accepted the execution.
+          type: boolean
+        created_at_ms:
+          type: integer
+          minimum: 0
+        deadline_ms:
+          description: While running, when the attempt stops being believed.
+          type: integer
+          minimum: 0
+        finished_at_ms:
+          type: integer
+          minimum: 0
+        outcome:
+          $ref: '#/components/schemas/ValidationExecutionOutcome'
+      additionalProperties: false
+    ValidationEvidence:
+      description:
+        The latest evidence for one step. `state` is what it amounts to now; it is `unverified` when the step never ran
+        (`not_run`), its definition changed since (`step_changed`), or a running attempt outlived its deadline
+        (`deadline_passed`).
+      type: object
+      required:
+        - step
+        - state
+      properties:
+        step:
+          type: object
+          required:
+            - owner_checkout_id
+            - ticket
+            - definition
+            - revision
+            - created_at_ms
+            - updated_at_ms
+          properties:
+            owner_checkout_id:
+              type: string
+            ticket:
+              type: object
+              required:
+                - connection_id
+                - native_id
+              properties:
+                connection_id:
+                  type: string
+                native_id:
+                  type: string
+              additionalProperties: false
+            definition:
+              $ref: '#/components/schemas/ValidationStepDefinition'
+            revision:
+              type: integer
+              minimum: 1
+            created_at_ms:
+              type: integer
+              minimum: 0
+            updated_at_ms:
+              type: integer
+              minimum: 0
+            updated_by:
+              type: string
+          additionalProperties: false
+        state:
+          $ref: '#/components/schemas/ValidationState'
+        reason:
+          type: string
+          maxLength: 160
+        latest:
+          $ref: '#/components/schemas/ValidationResult'
+        history:
+          description: Retained attempts, oldest first; at most 16.
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/ValidationResult'
+      additionalProperties: false
+    ValidationRunView:
+      type: object
+      required:
+        - result
+        - attempts_left
+        - evidence
+      properties:
+        result:
+          $ref: '#/components/schemas/ValidationResult'
+        attempts_left:
+          description: Attempts the retry policy still allows this request after a `failed` result.
+          type: integer
+          minimum: 0
+        evidence:
+          $ref: '#/components/schemas/ValidationEvidence'
+        unverified:
+          description: External state this answer could not confirm, such as `target_execution`.
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    HostedValidationStart:
+      type: object
+      required:
+        - execution_id
+        - check
+        - timeout_seconds
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        execution_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        check:
+          $ref: '#/components/schemas/ValidationCheck'
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+        wait_ms:
+          type: integer
+          minimum: 0
+          maximum: 8000
+          default: 0
+      additionalProperties: false
+    HostedValidation:
+      type: object
+      required:
+        - execution_id
+        - state
+      properties:
+        execution_id:
+          type: string
+        state:
+          enum:
+            - running
+            - finished
+            - unknown
+        outcome:
+          $ref: '#/components/schemas/ValidationExecutionOutcome'
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:

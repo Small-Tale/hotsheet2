@@ -999,6 +999,22 @@ one real-host reading; this checklist needs real machines and has not been run.
    answers `reduced` or `refused` with `session_cap_reached`.
 3. Run the same checks against a Linux server (HS2-24PQ1R).
 
+## Orchestration validation steps (HS2-WN0MXZ)
+
+Use disposable machine homes and synthetic projects only. No rendered interface is
+added by this ticket. The automated CLI/HTTP/MCP flows run real processes on macOS
+and in Linux CI; this checklist needs real machines and has not been run.
+
+1. On a paired remote machine, add a profile to the target project's
+   `.hotsheet2/validation-profiles.json` that runs its real test command for several
+   minutes. Run `orchestration validation run` from the orchestrating machine and
+   confirm it waits to the end and records the exit code and digests.
+2. Restart the remote server while such a step runs and confirm the result becomes
+   `unverified` with `execution_lost` and the step is not started again (HS2-7BTV98).
+3. Run a step whose command starts background processes past its timeout and confirm
+   none survive on the remote machine.
+4. Repeat steps 1 and 3 against a Windows server (HS2-2R32SD).
+
 ## Orchestration target tickets (HS2-AZ15GA)
 
 Use disposable homes, synthetic projects and the always-safe internal testing

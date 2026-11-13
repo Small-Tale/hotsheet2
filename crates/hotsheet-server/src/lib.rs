@@ -2139,6 +2139,16 @@ pub fn app(state: AppState) -> Router {
                 .post(routes::orchestration::write)
                 .patch(routes::orchestration::write),
         )
+        // HS2-WN0MXZ: validation steps of an orchestration ticket (machine-local) and
+        // the hosted execution of one step where the target lives.
+        .route(
+            "/checkouts/{owner}/orchestration/validations/{operation}",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{checkout}/target-validations",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
         // HS2-J8PRTV: this machine's capacity and its own admission answer, read when
         // asked; and the orchestrating side's gated reach to a target's machine.
         .route(

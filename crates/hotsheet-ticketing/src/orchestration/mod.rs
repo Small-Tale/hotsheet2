@@ -13,6 +13,7 @@ mod run_events;
 mod runs;
 mod storage;
 mod tool_capacity;
+mod validation;
 mod workflow;
 
 pub use approvals::{
@@ -60,6 +61,15 @@ pub use tool_capacity::{
     SignalKind, SignalOutcome, SignalSupport, ToolCapacityRegistry, apply_signal, backoff_ms,
     known_spend_cents, select, state_at, status_for,
 };
+pub use validation::{
+    DEFAULT_STEP_TIMEOUT_SECONDS, ExecutionEnd, ExecutionOutcome, ExpectedEvidence,
+    MAX_COMMAND_ARGS, MAX_COMMAND_BYTES, MAX_STEP_ATTEMPTS, MAX_STEP_PREREQUISITES,
+    MAX_STEP_RESULTS, MAX_STEP_TIMEOUT_SECONDS, MAX_STEPS_PER_TICKET, MAX_VALIDATION_PROFILES,
+    MAX_VALIDATION_STEPS, NewResult, ResultUpdate, RetryPolicy, StepDefinition, StreamRef,
+    VALIDATION_DEADLINE_GRACE_MS, ValidationCheck, ValidationError, ValidationEvidence,
+    ValidationProfile, ValidationProfileStore, ValidationRegistry, ValidationResult,
+    ValidationState, ValidationStep, effective, evaluate, may_retry,
+};
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 
 #[derive(Debug, thiserror::Error)]
@@ -95,6 +105,9 @@ pub enum OrchestrationError {
     /// HS2-EBHDSB: the dispatch run does not allow this request in its current state.
     #[error("orchestration run refused the request: {}", .0.code())]
     Run(RunError),
+    /// HS2-WN0MXZ: the validation step or result does not allow this request.
+    #[error("orchestration validation refused the request: {}", .0.code())]
+    Validation(ValidationError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -120,6 +133,7 @@ impl OrchestrationError {
             Self::Forbidden(_) => "forbidden",
             Self::TargetOperation(error) => error.code(),
             Self::Run(error) => error.code(),
+            Self::Validation(error) => error.code(),
         }
     }
 }
@@ -216,3 +230,5 @@ mod run_tests;
 mod tests;
 #[cfg(test)]
 mod tool_capacity_tests;
+#[cfg(test)]
+mod validation_tests;

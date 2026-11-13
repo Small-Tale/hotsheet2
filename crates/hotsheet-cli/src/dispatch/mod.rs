@@ -15,6 +15,7 @@ pub(crate) mod jobs;
 pub(crate) mod notify;
 pub(crate) mod orchestration;
 mod orchestration_capacity;
+mod orchestration_validation;
 pub(crate) mod providers;
 pub(crate) mod remotes;
 pub(crate) mod resources;

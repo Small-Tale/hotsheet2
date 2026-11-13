@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(285); // HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(287); // HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(285); // HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(287); // HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -746,6 +746,71 @@ test('HS2-J8PRTV real target capacity and admission responses match the OpenAPI 
     const badNamespace = await send('GET', `${hosted}/target-capacity?claim_namespaces=Not_Valid`);
     expect(badNamespace.status).toBe(400);
     matches(capacity, 'get', 'default', badNamespace.body);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-WN0MXZ real hosted validation responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const validations = '/checkouts/{checkout}/target-validations';
+    const hosted = `/checkouts/${server.checkoutId}/target-validations`;
+    const execution = '01ARZ3NDEKTSV4RRFFQ69G5FE5';
+
+    // This server process has started nothing under that id.
+    const unknown = await send('GET', `${hosted}?execution_id=${execution}`);
+    expect(unknown.status).toBe(200);
+    matches(validations, 'get', '200', unknown.body);
+    expect(unknown.body).toEqual({ execution_id: execution, state: 'unknown' });
+
+    // The fixture project defines no profile, so nothing is launched on any platform
+    // and the outcome says so with a code.
+    const start = { execution_id: execution, check: { kind: 'profile', name: 'synthetic-absent' }, timeout_seconds: 5 };
+    const finished = await send('POST', hosted, { ...start, wait_ms: 8000 });
+    expect(finished.status).toBe(200);
+    matches(validations, 'post', '200', finished.body);
+    expect(finished.body.state).toBe('finished');
+    expect((finished.body.outcome as { end: string }).end).toBe('profile_not_defined');
+    // The same id again is the same execution, by either verb.
+    const again = await send('GET', `${hosted}?execution_id=${execution}&wait_ms=0`);
+    matches(validations, 'get', '200', again.body);
+    expect(again.body).toEqual(finished.body);
+    expect((await send('POST', hosted, start)).body).toEqual(finished.body);
+
+    const invalid = await send('POST', hosted, { ...start, timeout_seconds: 0 });
+    expect(invalid.status).toBe(400);
+    matches(validations, 'post', 'default', invalid.body);
+    expect(invalid.body.code).toBe('invalid_request');
+    const tooLong = await send('GET', `${hosted}?execution_id=${execution}&wait_ms=8001`);
+    expect(tooLong.status).toBe(400);
+    matches(validations, 'get', 'default', tooLong.body);
   } finally {
     await server.stop();
   }

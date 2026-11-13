@@ -2,7 +2,7 @@
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
 //! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
 //! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity; HS2-J8PRTV target capacity and
-//! admission.
+//! admission; HS2-WN0MXZ validation steps.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use super::Ctx;
 use super::orchestration_capacity::{self as capacity, Planned};
+use super::orchestration_validation as validation;
 use crate::Cmd;
 
 #[derive(Args)]
@@ -38,6 +39,8 @@ enum OrchestrationCmd {
     Capacity(capacity::CapacityArgs),
     /// Show or set this machine's admission limits, or ask whether a session may start.
     Admission(capacity::AdmissionArgs),
+    /// Define, list, run and remove extra validation steps of an orchestration ticket.
+    Validation(validation::ValidationArgs),
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -961,6 +964,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let request = run_route(&owner_id, arguments.command);
             (owner_id, request)
         }
+        OrchestrationCmd::Validation(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = validation::route(&owner_id, arguments)?;
+            (owner_id, request)
+        }
         OrchestrationCmd::ToolCapacity(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = tool_capacity_route(&owner_id, arguments.command)?;
@@ -1063,6 +1071,10 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                         body["expected_revision"] =
                             runtime.request_now("GET", &path, &Value::Null)?["revision"].take();
                     }
+                }
+                // HS2-WN0MXZ: a validation run waits for its attempt unless told not to.
+                if let Some(result) = validation::until_finished(&runtime, &path, &mut body) {
+                    return result;
                 }
                 runtime.request_now(method, &path, &body)
             },

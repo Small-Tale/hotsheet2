@@ -24,6 +24,8 @@ mod policy;
 mod runs;
 mod tickets;
 mod tool_capacity;
+#[cfg(unix)]
+mod validation;
 mod watch;
 
 fn id(n: u128) -> String {
