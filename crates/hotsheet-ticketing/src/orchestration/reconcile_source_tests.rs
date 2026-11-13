@@ -876,6 +876,8 @@ fn session(n: u128, state: SessionState) -> OrchestratedSession {
         owner: SessionOwner::default(),
         paused: false,
         hosted: None,
+        role_prompt: None,
+        joined_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
         history: Vec::new(),
