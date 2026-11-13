@@ -57,18 +57,13 @@ enum SessionCmd {
         #[arg(long)]
         safe_point: bool,
     },
-    Show {
-        session_id: String,
-    },
+    /// One orchestrator-owned session as this machine recorded it; contacts no host.
+    Show { session_id: String },
     /// Read one session, or every unfinished session without an id, from its host and
     /// bring the record up to date.
-    Sync {
-        session_id: Option<String>,
-    },
+    Sync { session_id: Option<String> },
     /// Whether the session may be wound down now, as its host established it.
-    SafePoint {
-        session_id: String,
-    },
+    SafePoint { session_id: String },
     /// Stop a session. An orchestrator stops only its own sessions at a safe point;
     /// --force is a person's request (pass --actor-role human).
     Stop {
@@ -79,13 +74,9 @@ enum SessionCmd {
     },
     /// Take a session over (a person's action; pass --actor-role human). The
     /// orchestrator treats it as human-owned from then on.
-    Takeover {
-        session_id: String,
-    },
+    Takeover { session_id: String },
     /// Take a session over and pause it: it keeps running and gets nothing new.
-    Pause {
-        session_id: String,
-    },
+    Pause { session_id: String },
 }
 
 /// The owning (or hosted) checkout id and the request for the shared runtime.

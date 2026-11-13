@@ -277,9 +277,8 @@ enum RunCmd {
         #[arg(long)]
         active: bool,
     },
-    Show {
-        run_id: String,
-    },
+    /// One run with its state, lease, history and last confirmed target state.
+    Show { run_id: String },
     /// Extend the lease of a directly dispatched run.
     Renew {
         run_id: String,
@@ -287,23 +286,15 @@ enum RunCmd {
         lease_minutes: Option<u32>,
     },
     /// Release the run's claim (or withdraw its Up Next mark) and end the run.
-    Cancel {
-        run_id: String,
-    },
+    Cancel { run_id: String },
     /// Read the target ticket and bring the run in line with it.
-    Sync {
-        run_id: String,
-    },
+    Sync { run_id: String },
     /// The run with its last confirmed target state and whether that is stale.
     /// Contacts nothing.
-    Status {
-        run_id: String,
-    },
+    Status { run_id: String },
     /// Reconcile one run, or every unfinished run without a run id, with its target
     /// after an interruption. Starts nothing; names what could not be verified.
-    Reconcile {
-        run_id: Option<String>,
-    },
+    Reconcile { run_id: Option<String> },
     /// Stop renewing and repeating a run until it is resumed. The target is not told.
     Pause {
         run_id: String,
@@ -312,9 +303,7 @@ enum RunCmd {
         reason: Option<String>,
     },
     /// Resume a paused run and reconcile it at once.
-    Resume {
-        run_id: String,
-    },
+    Resume { run_id: String },
     /// Hand a run to another worker, or without --to-worker to a person: the run lets
     /// go of its claim and keeps following the ticket.
     Handoff {
