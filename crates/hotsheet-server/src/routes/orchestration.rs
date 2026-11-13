@@ -395,6 +395,12 @@ impl AppState {
                 for owner in shared.run_owners().unwrap_or_default() {
                     ensure_watchers_blocking(&state, &owner);
                 }
+                // HS2-VVHVF0: and every owner with a gate that still waits on a
+                // provider, whether or not its run is finished. The follower's first
+                // step makes sure the Job monitor observes the watch.
+                for owner in shared.gate_owners() {
+                    ensure_watchers_blocking(&state, &owner);
+                }
                 // HS2-ECWG50: and the scheduling loop of every owner whose policy
                 // enables automatic placement. With none, nothing is started.
                 for owner in shared.scheduler_owners() {

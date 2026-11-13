@@ -45,3 +45,8 @@ HOTSHEET_CLAUDE_USER_CONFIG = { value = "target/test-claude-user-config/.claude.
 # that drive install inject a fake), and the agents directory stays under `target/`.
 HOTSHEET_LAUNCHCTL = { value = "target/test-launchctl-disabled/launchctl", force = true, relative = true }
 HOTSHEET_LAUNCH_AGENTS_DIR = { value = "target/test-launch-agents", force = true, relative = true }
+# HS2-VVHVF0: a runtime that links a CI gate otherwise starts the detached Job monitor,
+# which asks `gh` for a token and calls the provider's API. No test process starts one on
+# its own; a test that needs a monitor injects it (`with_job_monitor`) with a loopback
+# provider.
+HOTSHEET_JOB_MONITOR_AUTOSTART = { value = "off", force = true }

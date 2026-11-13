@@ -4,7 +4,6 @@
 //! commands belong to HS2-V4Q2MA.
 
 use std::path::Path;
-use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,7 +13,7 @@ use hotsheet_jobs::{
     ChangeWaiter, CiTarget, CiWatchOptions, Clock, GateReading, GateState, GithubActionsSource,
     Job, JobStore, JournalProbe, Monitor, MonitorClaim, MonitorConfig, MonitorControl, MonitorInfo,
     MonitorSlot, NoProbe, SlotState, StoreConfig, SystemClock, TicketLink, UlidSource, Wake,
-    ensure_ci_watch, ensure_monitor_running, gate_state, rewatch_ci, wait_for_gate_change,
+    ensure_ci_watch, gate_state, rewatch_ci, wait_for_gate_change,
 };
 
 use crate::Cmd;
@@ -301,30 +300,12 @@ fn watch_start(home: &Path, args: MonitorArgs) -> Result<()> {
 }
 
 /// Start the detached monitor unless one already runs, and report the one that does.
-/// Two starts can race: both spawn, one monitor claims the slot and the other exits.
+/// HS2-VVHVF0: the workflow itself is the shared runtime's, so the server and MCP start
+/// the monitor the same way.
 fn ensure_monitor(home: &Path, args: MonitorArgs) -> Result<(MonitorInfo, bool)> {
-    let spawn = || {
-        // HS2-J79CZF: launched without inherited repository or build-pin variables.
-        let mut command = hotsheet_ticketing::git::launch(std::env::current_exe()?);
-        command
-            .args(["job", "monitor"])
-            .args(args.flags())
-            .env("HOTSHEET_HOME", home)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        detach(&mut command);
-        hotsheet_process_journal::LaunchContext {
-            journal: hotsheet_process_journal::ProcessJournal::at(home),
-            supervisor: "hotsheet-cli",
-            purpose: hotsheet_process_journal::Purpose::JobMonitor,
-            project_id: None,
-            session_id: None,
-            binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
-        }
-        .detached(&mut command)
-    };
-    ensure_monitor_running(&MonitorSlot::at(home), spawn, MONITOR_ANSWER)
+    hotsheet_cli::orchestration::DetachedJobMonitor::new("hotsheet-cli")
+        .flags(args.flags())
+        .ensure_info(home)
         .context("starting the Job monitor")
 }
 
@@ -479,26 +460,6 @@ fn watch_stop(home: &Path) -> Result<()> {
         std::thread::sleep(EVENT_SETTLE);
     }
 }
-
-#[cfg(unix)]
-fn detach(command: &mut Command) {
-    use std::os::unix::process::CommandExt;
-
-    // Its own process group, so a Ctrl-C in the starting terminal does not reach it.
-    command.process_group(0);
-}
-
-#[cfg(windows)]
-fn detach(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
-}
-
-#[cfg(not(any(unix, windows)))]
-fn detach(_command: &mut Command) {}
 
 /// Waits between monitor steps: until the next renewal or poll is due, or earlier when
 /// something changes under the Job directory (a new Job, a cancel request, a stop).

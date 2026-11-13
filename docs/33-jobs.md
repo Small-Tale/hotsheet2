@@ -223,7 +223,10 @@ Jobs read as stalled at once and the next start resumes them without waiting.
 `job list` and `job show` print Jobs as JSON with their derived liveness,
 progress, and ETA; `job list` first turns expired producers into `lost` and
 applies retention. The launch of the monitor is recorded in the process journal
-with the purpose `job_monitor`.
+with the purpose `job_monitor`. The same start is made by the server and the MCP
+backend when an orchestration CI gate waits on a watch (HS2-VVHVF0,
+[26](26-orchestration-projects.md) §26.13); it is one shared workflow,
+`DetachedJobMonitor`, which finds `hotsheet-cli` beside the running binary.
 
 **Serving a Job.** The monitor serves a watch Job when it has a source for the
 Job's kind and the Job records its external operation. It attaches to a `queued`

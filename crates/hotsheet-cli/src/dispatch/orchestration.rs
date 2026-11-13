@@ -1200,6 +1200,7 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     };
     // HS2-5JBYPV: a linked CI gate only advances while this machine's Job monitor runs.
     let mut ensure_monitor = false;
+    let mut monitor_off = false;
     let (owner_id, (method, path, mut body)) = match arguments.command {
         OrchestrationCmd::Capacity(arguments) => match capacity::capacity(arguments)? {
             Planned::Request(owner_id, request) => (owner_id, request),
@@ -1247,6 +1248,14 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         }
         OrchestrationCmd::Gate(arguments) => {
             let owner_id = required(arguments.project.clone())?;
+            // HS2-VVHVF0: `--no-monitor` also keeps the runtime from starting one.
+            monitor_off = matches!(
+                &arguments.command,
+                GateCmd::Link {
+                    no_monitor: true,
+                    ..
+                }
+            );
             let (request, monitor) = gate_route(&owner_id, arguments.command);
             ensure_monitor = monitor;
             (owner_id, request)
@@ -1358,6 +1367,13 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         }
         OrchestrationRuntime::live(&home, registry, ProviderConfigRegistry::new(config)).and_then(
             |runtime| {
+                let runtime = if monitor_off {
+                    runtime.with_gate_provider(std::sync::Arc::new(
+                        hotsheet_cli::orchestration::GithubActionsGates::new(&home),
+                    ))
+                } else {
+                    runtime
+                };
                 // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
                 // repeated setup run is a no-op and a concurrent edit still conflicts.
                 if body.get("read_revision").is_some() {

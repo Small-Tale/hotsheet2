@@ -122,7 +122,7 @@ pub(super) fn verdict(
     })
 }
 /// A machine with a dispatched run on its target, and the actions granted to `worker-1`.
-fn with_run(actions: &[TargetAction], tx: &mut Transaction<'_>) -> (Machine, String) {
+pub(super) fn with_run(actions: &[TargetAction], tx: &mut Transaction<'_>) -> (Machine, String) {
     let m = machine(10, false, unsupported);
     let mut granted = vec![TargetAction::TicketsRead, TargetAction::WorkStart];
     granted.extend_from_slice(actions);
@@ -659,7 +659,9 @@ fn hs2_5jbypv_a_sync_and_a_follower_wait_on_the_adapter_and_never_spin() {
         step,
         GateFollowStep {
             active: true,
-            changed: vec![gate.clone()]
+            changed: vec![gate.clone()],
+            // HS2-VVHVF0: the scripted adapter reports itself observed.
+            watching: Some(true),
         }
     );
     assert_eq!(
@@ -1127,7 +1129,7 @@ fn hs2_5jbypv_a_deployment_adapter_supplies_the_only_result_and_the_policy_can_a
 }
 
 /// Finish the watch Job of a gate the way the Job monitor would.
-fn judge(home: &Path, owner: &str, job_id: &str, gate: &str, head: &str, run: u64) {
+pub(super) fn judge(home: &Path, owner: &str, job_id: &str, gate: &str, head: &str, run: u64) {
     let store = JobStore::at(home);
     let (_, token) = store
         .acquire(

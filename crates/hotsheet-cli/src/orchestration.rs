@@ -4,6 +4,7 @@
 mod access;
 mod capacity;
 mod gates;
+mod job_monitor;
 mod observer;
 mod policy;
 mod provisional;
@@ -30,6 +31,7 @@ pub use gates::{
     GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
+pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
@@ -288,6 +290,11 @@ impl OrchestrationRuntime {
                 .with_session_host(Arc::new(LocalServerSessions::new(home)))
                 // HS2-95SWQ4: the scheduler places the sessions this runtime owns.
                 .with_session_executor(Arc::new(OwnedSessions))
+        })
+        // HS2-VVHVF0: a watch this runtime creates is observed without a CLI call.
+        .map(|runtime| match DetachedJobMonitor::automatic() {
+            Some(monitor) => runtime.with_job_monitor(Arc::new(monitor)),
+            None => runtime,
         })
     }
 

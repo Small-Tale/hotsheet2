@@ -7,7 +7,8 @@
 > HS2-EBHDSB, HS2-7QHWHJ), target capacity and admission (§26.10, HS2-J8PRTV), AI tool
 > capacity states with tool selection (§26.11, HS2-AHG7HW), extra validation steps
 > with immutable result references (§26.12, HS2-WN0MXZ), CI and deployment gates of
-> runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed),
+> runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed;
+> the Job monitor is started by whoever links or follows a gate, HS2-VVHVF0),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
@@ -1393,8 +1394,24 @@ polls on a timer. Reads answer from this machine's records and contact nothing.
 
 The watch runs on the orchestrating machine with that machine's GitHub credentials;
 watching on the target's own server is HS2-WDQZ37. A watch only advances while the
-Job monitor runs: `gate link` in the CLI starts it, and a link through the server
-reports `watching: false` until one runs (HS2-VVHVF0).
+machine's Job monitor ([33](33-jobs.md)) runs, so whoever links or follows a gate makes
+sure of it (HS2-VVHVF0):
+
+- `gate link` through the CLI, the server or MCP starts the detached monitor when no
+  monitor holds the machine's slot and the gate still waits. A settled gate starts
+  nothing. The answer's `watching` says whether a monitor runs afterwards.
+- `gate sync` does the same before it waits, and so does each step of the server's
+  gate follower. That check is a lock probe made while the step is awake anyway: a
+  running monitor is found without launching anything, and a stopped, crashed or idle
+  one is started again at the next step. A start that fails is retried after 30
+  seconds, doubling up to 15 minutes.
+- A server that starts follows every owner with a gate still waiting on a provider,
+  also when the gate's run is finished, so a watch left behind by a restart is
+  observed again with nobody asking.
+- All three call one workflow, `DetachedJobMonitor` in the shared runtime, which `job
+watch start` uses too. `gate link --no-monitor` starts none.
+  `HOTSHEET_JOB_MONITOR_AUTOSTART=off` keeps a process from starting one on its own;
+  the repository's test configuration sets it.
 
 `authorize` reads the target again, up to three times, when its resolution lost a
 race to a concurrent one, so a follower confirming its authority does not turn a

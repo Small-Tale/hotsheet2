@@ -20057,6 +20057,11 @@ components:
           items:
             type: string
             pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        watching:
+          description:
+            '`gate-sync` only (HS2-VVHVF0). Whether a Job monitor observes the provider a gate of the run still
+            waits on, after the call made sure of it; absent when no gate waits.'
+          type: boolean
       additionalProperties: false
     OrchestrationRunReconciliation:
       description:

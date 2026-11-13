@@ -247,6 +247,13 @@ pub struct Gate {
 impl Gate {
     /// Whether the evidence is about this gate's commit. A deployment counts only when
     /// it deployed exactly that commit.
+    /// HS2-VVHVF0: the gate still waits on its provider: watched with no verdict, or
+    /// its watch was lost and may be reattached. Such a gate needs an observer.
+    pub fn awaits_provider(&self) -> bool {
+        self.state == GateState::Pending
+            || (self.state == GateState::Unknown && self.reason.as_deref() == Some("watch_lost"))
+    }
+
     pub fn covered_by(&self, evidence: &GateEvidence) -> bool {
         evidence.provider == self.provider
             && match evidence.coverage {
@@ -544,6 +551,18 @@ impl GateRegistry {
             .into_iter()
             .find(|gate| gate.gate_id == gate_id && gate.owner_checkout_id == owner_checkout_id)
             .ok_or(OrchestrationError::Gate(GateError::NotFound))
+    }
+
+    /// HS2-VVHVF0: owning checkouts that have a gate still waiting on a provider.
+    pub fn waiting_owners(&self) -> Result<Vec<String>, OrchestrationError> {
+        let owners: std::collections::BTreeSet<String> = self
+            .read_file()?
+            .gates
+            .into_iter()
+            .filter(Gate::awaits_provider)
+            .map(|gate| gate.owner_checkout_id)
+            .collect();
+        Ok(owners.into_iter().collect())
     }
 
     /// Gates of one owning checkout, oldest link first.

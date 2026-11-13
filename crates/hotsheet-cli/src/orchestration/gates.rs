@@ -21,6 +21,7 @@ use hotsheet_ticketing::orchestration::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::job_monitor::JobMonitor;
 use super::tickets::identifier;
 use super::*;
 
@@ -30,6 +31,10 @@ pub const TARGET_SCRIPT_PROVIDER: &str = "target-script";
 pub const MAX_GATE_WAIT_MS: u64 = 20_000;
 /// A follower re-confirms its authority this often.
 const REAUTHORIZE_MS: u64 = 10 * 60 * 1000;
+/// HS2-VVHVF0: after a monitor start that failed, a follower waits this long before it
+/// tries again, doubling up to the ceiling. A start is a process launch.
+const OBSERVER_RETRY_MS: u64 = 30_000;
+const MAX_OBSERVER_RETRY_MS: u64 = 15 * 60 * 1000;
 
 /// A provider adapter: the only source of gate evidence. An implementation answers
 /// from records it keeps itself (a watch Job, an execution record) and never from text
@@ -56,6 +61,12 @@ pub trait GateProvider: Send + Sync {
     fn watching(&self) -> Option<bool> {
         None
     }
+    /// HS2-VVHVF0: make sure something observes the provider, starting the observer
+    /// when none runs and the adapter was given a way to. Answers like
+    /// [`Self::watching`]. Contacts no provider and is safe to repeat.
+    fn ensure_watching(&self) -> Option<bool> {
+        self.watching()
+    }
 }
 
 /// The GitHub Actions gate of a commit, read from its watch Job (HS2-3R9V0R).
@@ -64,6 +75,8 @@ pub struct GithubActionsGates {
     store: JobStore,
     /// The Job store waiter, kept between follower steps (HS2-N1QDZW).
     waiter: hotsheet_jobs::KeptWaiter,
+    /// HS2-VVHVF0: starts the Job monitor when no monitor observes the watch Jobs.
+    monitor: Option<Arc<dyn JobMonitor>>,
 }
 
 impl GithubActionsGates {
@@ -72,7 +85,15 @@ impl GithubActionsGates {
             home: home.into(),
             store: JobStore::at(home),
             waiter: hotsheet_jobs::KeptWaiter::default(),
+            monitor: None,
         }
+    }
+
+    /// HS2-VVHVF0: let the adapter start the Job monitor for the watches it creates.
+    #[must_use]
+    pub fn with_monitor(mut self, monitor: Arc<dyn JobMonitor>) -> Self {
+        self.monitor = Some(monitor);
+        self
     }
 
     fn target(gate: &Gate) -> Result<CiTarget, GateError> {
@@ -173,6 +194,18 @@ impl GateProvider for GithubActionsGates {
             Ok(SlotState::Held(_))
         ))
     }
+
+    fn ensure_watching(&self) -> Option<bool> {
+        if self.watching() == Some(true) {
+            return Some(true);
+        }
+        // Without a monitor to start, the answer is the plain reading.
+        Some(
+            self.monitor
+                .as_ref()
+                .is_some_and(|monitor| monitor.ensure(&self.home).is_ok()),
+        )
+    }
 }
 
 /// Link the CI gate of one commit to a run.
@@ -246,6 +279,10 @@ pub struct RunGates {
     pub summary: GateSummary,
     /// Gates this call changed.
     pub changed: Vec<String>,
+    /// HS2-VVHVF0: whether something observes the provider a gate of the run still
+    /// waits on, after this call made sure of it; absent when no gate waits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub watching: Option<bool>,
 }
 
 /// What a follower remembers between steps: when each target's authority was last
@@ -253,6 +290,9 @@ pub struct RunGates {
 #[derive(Default)]
 pub struct GateFollowState {
     authorized: BTreeMap<String, (bool, u64)>,
+    /// HS2-VVHVF0: the delay after the last failed observer start, and when the next
+    /// start may be tried.
+    observer_retry: Option<(u64, u64)>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -260,12 +300,15 @@ pub struct GateFollowStep {
     /// False when no gate of the owner still waits on a provider: the follower ends.
     pub active: bool,
     pub changed: Vec<String>,
+    /// HS2-VVHVF0: whether something observes the provider the followed gates wait on.
+    /// `None` when the step did not ask: no gate it may follow, or a failed start is
+    /// still backing off.
+    pub watching: Option<bool>,
 }
 
 /// A gate a follower keeps reading: watched, or lost and possibly reattached.
 fn followed(gate: &Gate) -> bool {
-    gate.state == GateState::Pending
-        || (gate.state == GateState::Unknown && gate.reason.as_deref() == Some("watch_lost"))
+    gate.awaits_provider()
 }
 
 /// `owner/name` of a declared GitHub repository identity, or `None` for another host.
@@ -293,6 +336,20 @@ impl OrchestrationRuntime {
         });
         self.gate_providers.push(provider);
         self
+    }
+
+    /// HS2-VVHVF0: let the GitHub Actions adapter start the machine's Job monitor for
+    /// the watches it creates. Without this the adapter only reports whether one runs.
+    #[must_use]
+    pub fn with_job_monitor(self, monitor: Arc<dyn JobMonitor>) -> Self {
+        let adapter = GithubActionsGates::new(&self.home).with_monitor(monitor);
+        self.with_gate_provider(Arc::new(adapter))
+    }
+
+    /// HS2-VVHVF0: owning checkouts with a gate that still waits on a provider: what a
+    /// restarted host follows, whether or not the gate's run is finished.
+    pub fn gate_owners(&self) -> Vec<String> {
+        self.gate_registry().waiting_owners().unwrap_or_default()
     }
 
     fn gate_registry(&self) -> GateRegistry {
@@ -516,6 +573,13 @@ impl OrchestrationRuntime {
             let started = provider.start(&linked.gate, &run, again);
             let (gate, _) = self.gate_refresh(linked.gate, tx)?;
             started.map_err(OrchestrationError::Gate)?;
+            // HS2-VVHVF0: a gate that still waits needs an observer; a settled one
+            // starts nothing.
+            let watching = if followed(&gate) {
+                provider.ensure_watching()
+            } else {
+                provider.watching()
+            };
             Ok(GateView {
                 gate,
                 created: linked.created,
@@ -524,7 +588,7 @@ impl OrchestrationRuntime {
                     .into_iter()
                     .map(|gate| gate.gate_id)
                     .collect(),
-                watching: provider.watching(),
+                watching,
                 approval_id: None,
             })
         })();
@@ -576,6 +640,10 @@ impl OrchestrationRuntime {
                 Ok((waits_on, changed.len() != before))
             };
             let (waits_on, moved) = refresh(tx)?;
+            // HS2-VVHVF0: a gate that waits is observed before anyone waits on it.
+            let watching = waits_on
+                .as_ref()
+                .and_then(|(provider, _)| provider.ensure_watching());
             if let (Some((provider, cursor)), false, true) = (waits_on, moved, request.wait_ms > 0)
             {
                 provider.wait(
@@ -589,6 +657,7 @@ impl OrchestrationRuntime {
                 run_id: run.run_id.clone(),
                 summary: self.run_gate_state(owner_id, &run.run_id)?,
                 changed,
+                watching,
             })
         })();
         self.finish(&target, &authorized, &outcome, tx)?;
@@ -619,6 +688,7 @@ impl OrchestrationRuntime {
             step.active = !gates.is_empty();
             if gates.is_empty() {
                 state.authorized.clear();
+                state.observer_retry = None;
                 return step;
             }
             let waits_on = gates
@@ -626,6 +696,7 @@ impl OrchestrationRuntime {
                 .find_map(|gate| self.gate_provider(&gate.provider, gate.kind))
                 .map(|provider| (provider.clone(), provider.cursor(owner_id)));
             let now_ms = tx.clock.now_ms();
+            let mut observed: Vec<Arc<dyn GateProvider>> = Vec::new();
             for gate in gates {
                 let fresh = state
                     .authorized
@@ -655,9 +726,31 @@ impl OrchestrationRuntime {
                 if !allowed {
                     continue;
                 }
+                if let Some(provider) = self.gate_provider(&gate.provider, gate.kind) {
+                    if !observed.iter().any(|other| Arc::ptr_eq(other, provider)) {
+                        observed.push(provider.clone());
+                    }
+                }
                 if let Ok((gate, true)) = self.gate_refresh(gate, tx) {
                     step.changed.push(gate.gate_id);
                 }
+            }
+            // HS2-VVHVF0: a gate this follower may read is observed. The check is a
+            // local lock probe at a moment the step is awake anyway; only a missing
+            // observer launches anything, and a failed launch backs off.
+            if round == 0 && state.observer_retry.is_none_or(|(_, at)| now_ms >= at) {
+                for provider in &observed {
+                    if let Some(watching) = provider.ensure_watching() {
+                        step.watching = Some(step.watching.unwrap_or(true) && watching);
+                    }
+                }
+                let delay = state
+                    .observer_retry
+                    .map_or(OBSERVER_RETRY_MS, |(delay, _)| {
+                        (delay * 2).min(MAX_OBSERVER_RETRY_MS)
+                    });
+                state.observer_retry =
+                    (step.watching == Some(false)).then_some((delay, now_ms.saturating_add(delay)));
             }
             if round == 1 || !step.changed.is_empty() || wait_ms == 0 {
                 break;
