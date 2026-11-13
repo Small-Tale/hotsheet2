@@ -8682,6 +8682,18 @@ test('opening and closing a chat message menu keeps the reading position (HS2-BT
     [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
+    // Measure only once the bottom sheet stops moving. On a fast host the six turns finish inside its
+    // open slide, so Playwright found the message unstable and its click retry scrolled the message to
+    // the block end before the pointer went down, which no reader does (HS2-WVKE0R). Endless
+    // decoration (a progress spinner) never finishes, so only finite animations are awaited.
+    await conversation.evaluate(async (node) => {
+      await Promise.all(
+        node
+          .getAnimations({ subtree: true })
+          .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime ?? 0))
+          .map((animation) => animation.finished.catch(() => undefined)),
+      );
+    });
     await messages.nth(5).evaluate((node) => {
       node.scrollIntoView({ block: 'center' });
     });
