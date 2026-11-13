@@ -66,6 +66,9 @@ webp-animation = "0.10"
 png = "0.18"
 libc = "0.2"
 notify = "6"
+# HS2-N1QDZW: macOS waiters register every path before one event-stream start, which
+# needs notify 8's batched path changes. Linux and Windows stay on notify 6.
+notify-batched = { package = "notify", version = "8.2.1" }
 toml = "0.8"
 include_dir = "0.7"
 portable-pty = "0.8"

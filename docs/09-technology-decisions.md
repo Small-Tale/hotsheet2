@@ -128,6 +128,10 @@ bindings are needed.
   `notify` (watching), `portable-pty` (terminals), `tokio`/`axum` (server),
   `rustls`/`reqwest`/`tokio-tungstenite` (the mTLS remote path HS1 already proved
   in Rust).
+  The workspace carries two `notify` versions: 8.2 for macOS waiters, which register
+  every path before one event-stream start, and 6 everywhere else (HS2-N1QDZW,
+  [file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md));
+  moving to one version is HS2-7JKZET.
 - **Correctness + performance** for a long-lived service hosting file-watch,
   indexing, process supervision, and terminals.
 - **CLI ↔ server share one tested engine** — the direct-to-disk CLI and the server

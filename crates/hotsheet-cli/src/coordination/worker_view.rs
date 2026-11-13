@@ -6,9 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use hotsheet_jobs::watch::{Delivery, PathWatcher, RecursiveMode};
 use hotsheet_model::StartedPhase;
 use hotsheet_ticketing::TicketRef;
-use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -491,20 +491,26 @@ impl Coordinator {
         observe: &mut dyn FnMut(WatchStep),
     ) -> anyhow::Result<Snapshot> {
         let (sender, receiver) = mpsc::channel();
-        let mut watcher = notify::recommended_watcher(move |event| {
-            let _ = sender.send(event);
-        })?;
-        watcher.watch(&self.directory, RecursiveMode::NonRecursive)?;
-        watcher.watch(&self.source, RecursiveMode::Recursive)?;
         std::fs::create_dir_all(&self.registry_home)?;
-        watcher.watch(&self.registry_home, RecursiveMode::NonRecursive)?;
         let settings_directory = self.project.join(".hotsheet2");
         let mut settings_directory_watched = settings_directory.is_dir();
-        if settings_directory_watched {
-            watcher.watch(&settings_directory, RecursiveMode::NonRecursive)?;
-        } else {
-            watcher.watch(&self.project, RecursiveMode::NonRecursive)?;
-        }
+        // Every path is registered before the platform watcher starts once
+        // (HS2-N1QDZW).
+        let mut watcher = PathWatcher::start(
+            &[
+                (self.directory.as_path(), RecursiveMode::NonRecursive),
+                (self.source.as_path(), RecursiveMode::Recursive),
+                (self.registry_home.as_path(), RecursiveMode::NonRecursive),
+                if settings_directory_watched {
+                    (settings_directory.as_path(), RecursiveMode::NonRecursive)
+                } else {
+                    (self.project.as_path(), RecursiveMode::NonRecursive)
+                },
+            ],
+            move |event: Delivery| {
+                let _ = sender.send(event);
+            },
+        )?;
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let mut snapshot = self.snapshot(now)?;
         if WorkerView::worker_state_cursor(&snapshot) != after || max_wait.is_zero() {
@@ -573,7 +579,7 @@ impl Coordinator {
             };
             if relevant {
                 if !settings_directory_watched && settings_directory.is_dir() {
-                    watcher.watch(&settings_directory, RecursiveMode::NonRecursive)?;
+                    watcher.add(&settings_directory, RecursiveMode::NonRecursive)?;
                     settings_directory_watched = true;
                 }
                 observe(WatchStep::Rescanned);

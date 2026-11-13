@@ -15,7 +15,13 @@ serde_json.workspace = true
 ulid.workspace = true
 thiserror.workspace = true
 tempfile.workspace = true
+
+# HS2-N1QDZW: see `src/watch.rs` for why the watcher library differs by platform.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
 notify.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+notify-batched.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

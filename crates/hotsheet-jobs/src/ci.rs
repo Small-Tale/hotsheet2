@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use crate::error::JobError;
 use crate::github::{CiTarget, GITHUB_ACTIONS_KIND, RunFloor};
 use crate::model::{Capabilities, Job, JobKind, ProducerFamily, Status, TicketLink};
+use crate::signal::KeptWaiter;
 use crate::store::{JobStore, NewJob};
 
 /// The run a verdict rests on.
@@ -238,13 +239,15 @@ pub fn wait_for_gate_change(
     timeout: Duration,
 ) -> Result<GateReading, JobError> {
     let deadline = Instant::now() + timeout;
+    // One waiter for the whole wait, not one per store change (HS2-N1QDZW).
+    let kept = KeptWaiter::default();
     loop {
         let reading = gate_state(store, checkout_id, target)?;
         let remaining = deadline.saturating_duration_since(Instant::now());
         if &reading.state != last || remaining.is_zero() {
             return Ok(reading);
         }
-        store.wait_for_change(checkout_id, reading.revision, remaining)?;
+        store.wait_for_change_keeping(&kept, checkout_id, reading.revision, remaining)?;
     }
 }
 

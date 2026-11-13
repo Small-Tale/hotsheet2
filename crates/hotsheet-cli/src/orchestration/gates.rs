@@ -62,6 +62,8 @@ pub trait GateProvider: Send + Sync {
 pub struct GithubActionsGates {
     home: PathBuf,
     store: JobStore,
+    /// The Job store waiter, kept between follower steps (HS2-N1QDZW).
+    waiter: hotsheet_jobs::KeptWaiter,
 }
 
 impl GithubActionsGates {
@@ -69,6 +71,7 @@ impl GithubActionsGates {
         Self {
             home: home.into(),
             store: JobStore::at(home),
+            waiter: hotsheet_jobs::KeptWaiter::default(),
         }
     }
 
@@ -159,9 +162,9 @@ impl GateProvider for GithubActionsGates {
     }
 
     fn wait(&self, owner_checkout_id: &str, cursor: u64, timeout: Duration) {
-        let _ = self
-            .store
-            .wait_for_change(owner_checkout_id, cursor, timeout);
+        let _ =
+            self.store
+                .wait_for_change_keeping(&self.waiter, owner_checkout_id, cursor, timeout);
     }
 
     fn watching(&self) -> Option<bool> {

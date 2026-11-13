@@ -61,6 +61,8 @@ pub struct LiveGateProbe {
     reference: Option<String>,
     jobs: JobStore,
     checkout_id: String,
+    /// The Job store waiter, kept between waits (HS2-N1QDZW).
+    waiter: hotsheet_jobs::KeptWaiter,
 }
 
 impl LiveGateProbe {
@@ -82,7 +84,7 @@ impl LiveGateProbe {
     pub fn wait(&self, since: u64, timeout: Duration) -> u64 {
         if self.watchable() {
             self.jobs
-                .wait_for_change(&self.checkout_id, since, timeout)
+                .wait_for_change_keeping(&self.waiter, &self.checkout_id, since, timeout)
                 .unwrap_or(since)
         } else {
             since
@@ -220,6 +222,7 @@ impl Coordinator {
             reference,
             jobs: JobStore::at(&self.registry_home),
             checkout_id: self.project_id.clone(),
+            waiter: hotsheet_jobs::KeptWaiter::default(),
         }
     }
 

@@ -831,11 +831,12 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/probe.rs           #   OwnerProbe; JournalProbe reads process-journal launch ids (never PIDs)
       src/monitor.rs         #   Watch monitor (HS2-5TC1GQ): WatchSource trait, Monitor tick/run, attach/reattach/takeover, renew, conditional-poll and failure backoff, cancel and stop-watching
       src/slot.rs            #   MonitorSlot: one monitor per machine home (held file lock, published info, addressed stop request)
-      src/signal.rs          #   ChangeWaiter and JobStore::wait_for_change: wake on file changes under the Job directory
+      src/watch.rs           #   PathWatcher (HS2-N1QDZW): every path of a waiter registered before one platform watcher start; notify 8 `paths_mut` on macOS, notify 6 per-path watch on Linux and Windows; re-exports the event types of the library in use
+      src/signal.rs          #   ChangeWaiter (flag-based wake over PathWatcher), KeptWaiter, JobStore::wait_for_change and wait_for_change_keeping: wake on file changes under the Job directory, one waiter kept across a follower's steps
       src/fixture.rs         #   FixtureWatchSource: file-backed source for offline process tests (registered by debug CLI builds only)
       src/github.rs          #   GitHub Actions source (HS2-3R9V0R): CiTarget, GithubApi trait (the only provider access), gate decision with ci-gate.mjs covering semantics, steps from run jobs, ETag polls, cancel of the commit's own run
       src/ci.rs              #   CI gate API for other crates: ensure_ci_watch / rewatch_ci, GateState, gate_state, wait_for_gate_change, ci_outcome
-      tests/                 #   transitions.rs (full matrix through the store), adversarial.rs, concurrency.rs (threads and separate processes), monitor.rs (step function, backoff, recovery), github.rs (offline gate sequences with a scripted API)
+      tests/                 #   transitions.rs (full matrix through the store), adversarial.rs, concurrency.rs (threads and separate processes), monitor.rs (step function, backoff, recovery), github.rs (offline gate sequences with a scripted API), waiter.rs (HS2-N1QDZW: one platform start per waiter, kept waiters, source policy)
     hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
       src/limits.rs          #   Physical memory (sysconf) and replay bounds behind the terminal limits (HS2-Y5DYC0)

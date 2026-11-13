@@ -176,6 +176,9 @@ test plan with selected checks, explicit deferrals, and receipt binding
 HS2-DAA8AB/HS2-K1QNGC.
 The measured browser-like test investigation is
 [dom-test-pilot-2026-11-10.md](dom-test-pilot-2026-11-10.md) (HS2-3FQNGT).
+The macOS file watcher start cost behind slow `coordination wait` readiness, and the
+one-start-per-waiter change, are measured in
+[file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md) (HS2-N1QDZW).
 Local test dependency and timing baseline: [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md), with its [proposed dependency manifest](local-verification-dependencies.proposed.yaml) (HS2-D461XW).
 
 | Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Status                  |

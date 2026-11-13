@@ -1,5 +1,23 @@
 # Feature Coverage Matrix
 
+HS2-N1QDZW: `hotsheet-jobs/src/watch.rs` unit tests run the shared file watcher
+against the real platform backend: four paths registered with one start, repeated
+and interleaved writes reported for each path, a path added later, a shallow and
+a deep path in one watcher, a directory created after the start, a missing path
+refused, a watcher with no path that is filled later, and a dropped watcher that
+goes quiet and is started again. `src/signal.rs` unit tests cover the waiter's
+wake flag without a watcher: a change between waits, several events as one wake,
+a change during a wait, a waiter that cannot watch sleeping out its timeout, and
+which events count as a change. `tests/waiter.rs` covers `ChangeWaiter` over
+several directories with one platform start, a waiter dropped and started again,
+a follower that keeps one waiter across its steps, a kept waiter replaced when
+its directory is removed and created again or another checkout is asked for, two
+threads waiting through one kept waiter, and the source policy that keeps direct
+watcher calls out of `hotsheet-jobs` and `hotsheet-cli`. The coordination wait
+and worker view suites cover the migrated callers through the built CLI. Only
+macOS was measured; see
+[file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md).
+
 HS2-3R9V0R: `hotsheet-jobs/src/github.rs` unit tests cover the gate decision for
 every run status and conclusion, covering by a newer run, runs from before the
 commit, a diverged branch, a spent lookup budget, the re-watch floor and a

@@ -2,24 +2,31 @@
 
 use std::fs;
 use std::io;
-use std::path::Path;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::{Duration, Instant};
-
-use notify::{RecursiveMode, Watcher};
 
 use crate::error::JobError;
 use crate::store::JobStore;
+use crate::watch::{Event, EventKind, PathWatcher, RecursiveMode};
 
 /// A missed file event must not strand a waiter, so every wait re-checks at least this
 /// often. The re-check is a local file read, never a network request.
 const SAFETY_RECHECK: Duration = Duration::from_secs(1);
 
-/// Wakes when anything under one directory changes.
+/// Whether something changed since the last wait, and the signal that it did.
+#[derive(Default)]
+struct Changed {
+    seen: Mutex<bool>,
+    woke: Condvar,
+}
+
+/// Wakes when anything under its directories changes.
 pub struct ChangeWaiter {
-    events: Receiver<()>,
+    changed: Arc<Changed>,
     // Dropping the watcher stops the events, so it lives as long as the waiter.
-    _watcher: Option<notify::RecommendedWatcher>,
+    watcher: Option<PathWatcher>,
 }
 
 impl std::fmt::Debug for ChangeWaiter {
@@ -36,48 +43,56 @@ impl ChangeWaiter {
     }
 
     /// HS2-ECWG50: one waiter over several directories, for a waiter whose wake can
-    /// come from more than one journal. A change in any of them ends the wait.
+    /// come from more than one journal. A change in any of them ends the wait. All of
+    /// them are registered before the platform watcher starts once (HS2-N1QDZW).
     pub fn watching(dirs: &[&Path]) -> io::Result<Self> {
         for dir in dirs {
             fs::create_dir_all(dir)?;
         }
-        let (sender, events) = mpsc::channel();
-        let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        let changed = Arc::new(Changed::default());
+        let signal = Arc::clone(&changed);
+        let paths: Vec<(&Path, RecursiveMode)> = dirs
+            .iter()
+            .map(|dir| (*dir, RecursiveMode::Recursive))
+            .collect();
+        let watcher = PathWatcher::start(&paths, move |event| {
             if event.is_ok_and(|event| is_change(&event)) {
-                let _ = sender.send(());
+                *signal.seen.lock().unwrap_or_else(PoisonError::into_inner) = true;
+                signal.woke.notify_all();
             }
-        })
-        .and_then(|mut watcher| {
-            for dir in dirs {
-                watcher.watch(dir, RecursiveMode::Recursive)?;
-            }
-            Ok(watcher)
         })
         .ok();
-        Ok(Self {
-            events,
-            _watcher: watcher,
-        })
+        Ok(Self { changed, watcher })
     }
 
     /// Block until something changed or `timeout` passed, whichever is first, and never
-    /// longer than the safety re-check. Returns whether a change was seen.
+    /// longer than the safety re-check. Returns whether a change was seen. A change
+    /// that arrived between two waits ends the next one at once, and several events of
+    /// one write are one wake.
     pub fn wait(&self, timeout: Duration) -> bool {
-        let changed = match self.events.recv_timeout(timeout.min(SAFETY_RECHECK)) {
-            Ok(()) => true,
-            Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => false,
-        };
-        // One write produces several events; fold them into this wake.
-        while self.events.try_recv().is_ok() {}
-        changed
+        let seen = self
+            .changed
+            .seen
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let (mut seen, _) = self
+            .changed
+            .woke
+            .wait_timeout_while(seen, timeout.min(SAFETY_RECHECK), |seen| !*seen)
+            .unwrap_or_else(PoisonError::into_inner);
+        std::mem::take(&mut *seen)
+    }
+
+    /// How many times the platform watcher was started for this waiter; zero when it
+    /// could not start at all.
+    pub fn platform_starts(&self) -> usize {
+        self.watcher.as_ref().map_or(0, PathWatcher::starts)
     }
 }
 
 /// A content change, as opposed to a file merely being opened or closed. Lock files are
 /// only ever locked, so their events are never a change either.
-fn is_change(event: &notify::Event) -> bool {
-    use notify::EventKind;
-
+fn is_change(event: &Event) -> bool {
     let changed = matches!(
         event.kind,
         EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
@@ -88,6 +103,45 @@ fn is_change(event: &notify::Event) -> bool {
                 .is_some_and(|name| name.to_string_lossy().ends_with(".lock"))
         });
     changed && !only_locks
+}
+
+/// HS2-N1QDZW: the waiter of one checkout, kept between waits so a follower that waits
+/// step after step starts the platform watcher once rather than once per step.
+#[derive(Debug, Default)]
+pub struct KeptWaiter {
+    slot: Mutex<Option<Kept>>,
+    started: AtomicUsize,
+}
+
+#[derive(Debug)]
+struct Kept {
+    dir: PathBuf,
+    identity: DirIdentity,
+    waiter: ChangeWaiter,
+}
+
+/// Which directory a path named when its waiter started. A directory that was removed
+/// and created again is a different one, and a watch of the old one may be dead.
+#[derive(Debug, PartialEq, Eq)]
+struct DirIdentity(Option<(u64, u64)>);
+
+impl DirIdentity {
+    #[cfg(unix)]
+    fn of(dir: &Path) -> Self {
+        use std::os::unix::fs::MetadataExt;
+        Self(fs::metadata(dir).ok().map(|meta| (meta.dev(), meta.ino())))
+    }
+
+    /// Without a stable identity to compare, no waiter is kept: every wait starts its
+    /// own, as before.
+    #[cfg(not(unix))]
+    fn of(_dir: &Path) -> Self {
+        Self(None)
+    }
+
+    fn is_same(&self, other: &Self) -> bool {
+        self.0.is_some() && self == other
+    }
 }
 
 impl JobStore {
@@ -101,8 +155,60 @@ impl JobStore {
         timeout: Duration,
     ) -> Result<u64, JobError> {
         let dir = self.checkout_dir(checkout_id)?;
-        let deadline = Instant::now() + timeout;
+        // Watch before reading, so a change in between is not missed.
         let waiter = ChangeWaiter::new(&dir)?;
+        self.wait_on(&waiter, checkout_id, since, timeout)
+    }
+
+    /// [`JobStore::wait_for_change`] for a caller that waits again and again: the
+    /// waiter stays in `kept` between calls. A change between two calls is not missed,
+    /// because the kept waiter was watching throughout. A second thread that waits
+    /// through the same `kept` at the same time uses a waiter of its own.
+    pub fn wait_for_change_keeping(
+        &self,
+        kept: &KeptWaiter,
+        checkout_id: &str,
+        since: u64,
+        timeout: Duration,
+    ) -> Result<u64, JobError> {
+        let Ok(mut slot) = kept.slot.try_lock() else {
+            return self.wait_for_change(checkout_id, since, timeout);
+        };
+        let dir = self.checkout_dir(checkout_id)?;
+        fs::create_dir_all(&dir)?;
+        let identity = DirIdentity::of(&dir);
+        let reusable = slot
+            .as_ref()
+            .is_some_and(|held| held.dir == dir && held.identity.is_same(&identity));
+        if !reusable {
+            // The old waiter stops before the new one starts.
+            *slot = None;
+        }
+        let held = match slot.take() {
+            Some(held) => held,
+            None => {
+                let waiter = ChangeWaiter::new(&dir)?;
+                kept.started.fetch_add(1, Ordering::Relaxed);
+                Kept {
+                    dir,
+                    identity,
+                    waiter,
+                }
+            }
+        };
+        let waited = self.wait_on(&held.waiter, checkout_id, since, timeout);
+        *slot = Some(held);
+        waited
+    }
+
+    fn wait_on(
+        &self,
+        waiter: &ChangeWaiter,
+        checkout_id: &str,
+        since: u64,
+        timeout: Duration,
+    ) -> Result<u64, JobError> {
+        let deadline = Instant::now() + timeout;
         loop {
             let revision = self.revision(checkout_id)?;
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -111,5 +217,97 @@ impl JobStore {
             }
             waiter.wait(remaining);
         }
+    }
+}
+
+impl KeptWaiter {
+    /// How many waiters, and so platform watchers, have been started through this one
+    /// since it was created. A follower over one unchanged checkout directory stays at
+    /// one however many steps it waits.
+    pub fn waiters_started(&self) -> usize {
+        self.started.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A waiter whose platform watcher could not start.
+    fn unwatched() -> ChangeWaiter {
+        ChangeWaiter {
+            changed: Arc::new(Changed::default()),
+            watcher: None,
+        }
+    }
+
+    fn signal(waiter: &ChangeWaiter) {
+        *waiter.changed.seen.lock().unwrap() = true;
+        waiter.changed.woke.notify_all();
+    }
+
+    #[test]
+    fn hs2_n1qdzw_a_waiter_without_a_watcher_waits_out_its_timeout() {
+        let waiter = unwatched();
+        assert_eq!(waiter.platform_starts(), 0);
+        let started = Instant::now();
+        assert!(!waiter.wait(Duration::from_millis(60)));
+        assert!(!waiter.wait(Duration::from_millis(60)));
+        assert!(
+            started.elapsed() >= Duration::from_millis(120),
+            "a waiter that cannot watch must not spin"
+        );
+        // And never longer than the safety re-check.
+        let started = Instant::now();
+        assert!(!waiter.wait(Duration::from_secs(3600)));
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn hs2_n1qdzw_a_change_between_waits_ends_the_next_one_and_only_that_one() {
+        let waiter = unwatched();
+        // Several events of one write are one wake.
+        signal(&waiter);
+        signal(&waiter);
+        signal(&waiter);
+        let started = Instant::now();
+        assert!(waiter.wait(Duration::from_secs(3600)));
+        assert!(started.elapsed() < Duration::from_secs(30));
+        assert!(!waiter.wait(Duration::from_millis(20)));
+        // Empty, then refilled.
+        signal(&waiter);
+        assert!(waiter.wait(Duration::ZERO), "a zero wait still reports");
+        assert!(!waiter.wait(Duration::ZERO));
+    }
+
+    #[test]
+    fn hs2_n1qdzw_a_change_during_a_wait_ends_it() {
+        let waiter = unwatched();
+        for _ in 0..3 {
+            let entered = std::sync::Barrier::new(2);
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    entered.wait();
+                    signal(&waiter);
+                });
+                entered.wait();
+                // The safety re-check ends a wait that saw nothing, so ask again.
+                assert!((0..30).any(|_| waiter.wait(Duration::from_secs(1))));
+            });
+        }
+    }
+
+    #[test]
+    fn hs2_n1qdzw_lock_files_and_reads_are_not_changes() {
+        use crate::watch::EventKind;
+        let event = |kind: EventKind, name: &str| Event::new(kind).add_path(name.into());
+        let any = EventKind::Any;
+        assert!(is_change(&event(any, "/jobs/a/record.json")));
+        assert!(!is_change(&event(any, "/jobs/a/store.lock")));
+        assert!(is_change(&Event::new(any)), "an event without a path");
+        assert!(is_change(
+            &event(any, "/jobs/a/store.lock").add_path("/jobs/a/record.json".into())
+        ));
+        assert!(!is_change(&event(EventKind::Other, "/jobs/a/record.json")));
     }
 }

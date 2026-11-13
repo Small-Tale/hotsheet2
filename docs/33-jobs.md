@@ -326,5 +326,48 @@ store's file changes.
 `ensure_ci_watch` and `rewatch_ci` (find or create under the checkout lock, so
 concurrent callers get one Job), `gate_state` (returning `GateState` with the Job
 id and the store revision), `wait_for_gate_change`, `JobStore::wait_for_change`,
+`JobStore::wait_for_change_keeping` with its `KeptWaiter` (§33.10),
 `ci_outcome`, and `ensure_monitor_running`. A caller that creates a watch must
 make sure the monitor runs; the CLI does, and other callers are HS2-DVJTQN.
+
+## 33.10 File watchers and change waiters (HS2-N1QDZW)
+
+Every wait in the command-line runtime that wakes on a file change starts its
+platform file watcher through `hotsheet_jobs::watch::PathWatcher`. It takes all of
+the waiter's paths, each with its own depth, registers them, and then starts the
+watcher once. `PathWatcher::add` registers one more path later; the worker view
+uses it for a settings directory that did not exist when the wait began.
+
+The reason is the macOS backend. A watcher there is one event stream for all of
+its paths, and starting or stopping a stream is a call into the system file-event
+service. The watcher library restarted the stream for each path, so a
+`coordination wait` over four paths made four starts and three stops before it
+reported readiness. The measurements and the trace are in
+[file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md).
+
+- **Callers.** `coordination wait` (`Coordinator::next`), the worker view watch,
+  and `ChangeWaiter`, which the run event feed, the scheduler follower, the
+  monitor and the Job store waits use.
+- **Platforms.** macOS uses `notify` 8.2 (`notify-batched` in the workspace
+  manifest), whose `paths_mut` registers several paths before one start. Linux
+  and Windows watch each path separately and have no stream to restart, so they
+  keep `notify` 6 and its per-path call; their code path did not change. The
+  event types `hotsheet_jobs::watch` exports are those of the library in use.
+- **`ChangeWaiter`.** It watches one or several directories recursively and wakes
+  on a content change; reads and lock files are not changes. A change that
+  arrives between two waits ends the next wait at once, and several events of one
+  write are one wake. Every wait also ends at a one-second local re-check, which
+  reads files and sends no request. A waiter whose platform watcher could not
+  start waits out that re-check instead of returning at once.
+- **Followers keep their waiter.** `JobStore::wait_for_change` starts a waiter
+  for one call. A caller that waits step after step passes a `KeptWaiter` to
+  `JobStore::wait_for_change_keeping`, which keeps the waiter of that checkout
+  directory between calls: `wait_for_gate_change`, the orchestration gate
+  follower (`GithubActionsGates`) and the speculation gate probe do. The kept
+  waiter is replaced when the directory was removed and created again or when
+  another checkout is asked for, and a second thread that waits through the same
+  `KeptWaiter` at the same moment uses a waiter of its own. Windows has no
+  directory identity to compare, so nothing is kept there.
+- **Not covered.** The server's ticket watcher and the Claude and Codex usage
+  followers still call the library per path (HS2-654VBY). The workspace
+  carries two versions of the library until it can move as one (HS2-7JKZET).

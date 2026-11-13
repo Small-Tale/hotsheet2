@@ -17,6 +17,10 @@
 //! claimed through a [`MonitorSlot`], observing external operations through
 //! [`WatchSource`] implementations.
 //!
+//! [`watch::PathWatcher`] is the platform file watcher every waiter shares: it registers
+//! all of a waiter's paths before one start (HS2-N1QDZW). [`ChangeWaiter`] wraps it for
+//! waits that only need to know that something changed.
+//!
 //! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
@@ -35,6 +39,7 @@ mod slot;
 mod state;
 mod steps;
 mod store;
+pub mod watch;
 
 pub use ci::{
     CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome, ensure_ci_watch,
@@ -59,7 +64,7 @@ pub use monitor::{
     Tick, WATCH_STATE_KEY, Wake, WatchError, WatchSource,
 };
 pub use probe::{JournalProbe, NoProbe, OwnerProbe, OwnerState};
-pub use signal::ChangeWaiter;
+pub use signal::{ChangeWaiter, KeptWaiter};
 pub use slot::{MonitorClaim, MonitorInfo, MonitorSlot, SlotState, ensure_monitor_running};
 pub use state::{check_transition, transition_allowed};
 pub use steps::{

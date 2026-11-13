@@ -6,8 +6,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
+use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
 use hotsheet_ticketing::FileLock;
-use notify::{Event, RecursiveMode, Watcher};
 use sha2::{Digest, Sha256};
 
 use super::{Coordinator, RequestRefusal, Role, Snapshot, WaitRequest};
@@ -33,22 +33,25 @@ impl Coordinator {
         let _waiter = FileLock::try_acquire(file)?
             .ok_or_else(|| anyhow::anyhow!("another active wait owns this session"))?;
         let (sender, receiver) = mpsc::channel();
-        let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
-            let _ = sender.send(event);
-        })?;
-        // Subscribe before reading/registering: a producer may arrive at any startup
-        // point, and durable state closes the watch/reconnect race.
-        watcher.watch(&self.directory, RecursiveMode::NonRecursive)?;
-        watcher.watch(&self.source, RecursiveMode::NonRecursive)?;
         let registry_home = self.registry_home.clone();
         std::fs::create_dir_all(&registry_home)?;
-        watcher.watch(&registry_home, RecursiveMode::NonRecursive)?;
         let registry_file = registry_home.join("checkouts.json");
         let providers_file = self.source.join("providers.json");
         let tickets = self.source.join("tickets");
+        let mut watched = vec![
+            (self.directory.as_path(), RecursiveMode::NonRecursive),
+            (self.source.as_path(), RecursiveMode::NonRecursive),
+            (registry_home.as_path(), RecursiveMode::NonRecursive),
+        ];
         if tickets.is_dir() {
-            watcher.watch(&tickets, RecursiveMode::Recursive)?;
+            watched.push((tickets.as_path(), RecursiveMode::Recursive));
         }
+        // Subscribe before reading/registering: a producer may arrive at any startup
+        // point, and durable state closes the watch/reconnect race. Every path is
+        // registered before the platform watcher starts once (HS2-N1QDZW).
+        let _watcher = PathWatcher::start(&watched, move |event: Delivery| {
+            let _ = sender.send(event);
+        })?;
         let mut renew_at = now() + request.lease_seconds / 2;
         // HS2-TWZW7X: a dispatcher may start before dispatcher authority exists. It then
         // waits on genuine state events without registering, and says why.
@@ -145,9 +148,7 @@ impl Coordinator {
                     if event.need_rescan()
                         || matches!(
                             event.kind,
-                            notify::EventKind::Create(_)
-                                | notify::EventKind::Modify(_)
-                                | notify::EventKind::Remove(_)
+                            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
                         ) =>
                 {
                     relevant_event = event.need_rescan()
