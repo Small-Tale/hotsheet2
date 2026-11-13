@@ -16,6 +16,7 @@ mod scheduler_apply;
 mod session_control;
 mod session_executor;
 mod sessions;
+mod summary;
 mod tickets;
 mod tool_capacity;
 mod validation;

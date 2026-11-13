@@ -2129,6 +2129,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/run-reconcile",
             post(routes::orchestration::write),
         )
+        // HS2-S13719: the progress and cost summary of the owner's runs (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/summary",
+            get(routes::orchestration::read),
+        )
         // HS2-AHG7HW: observed AI tool capacity (machine-local).
         .route(
             "/checkouts/{owner}/orchestration/tool-capacity",

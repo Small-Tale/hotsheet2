@@ -413,6 +413,8 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id/resume",
             "/checkouts/owner/orchestration/runs/id/handoff",
             "/checkouts/owner/orchestration/runs/id/correct",
+            // HS2-S13719: the summary is computed from this machine's records.
+            "/checkouts/owner/orchestration/summary",
             // HS2-AHG7HW: observed tool capacity is this machine's.
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",

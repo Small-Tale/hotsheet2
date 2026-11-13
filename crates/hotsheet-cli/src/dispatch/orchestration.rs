@@ -67,6 +67,21 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 100)]
         limit: u64,
     },
+    /// HS2-S13719: lead time, blocked time, retries, CI and deployment outcomes and known
+    /// AI cost of this project's runs, per run, work item and target. Identifiers and
+    /// metrics only; a measure that cannot be computed says why instead of reading zero.
+    /// Answers from this machine's records and contacts no target.
+    Summary {
+        /// Registered owning checkout id.
+        #[arg(long)]
+        project: Option<String>,
+        /// Only the runs of this orchestration ticket (its id).
+        #[arg(long)]
+        ticket: Option<String>,
+        /// The ticket source of --ticket, when the project has several.
+        #[arg(long, requires = "ticket")]
+        connection_id: Option<String>,
+    },
 }
 #[derive(Args)]
 struct GateArgs {
@@ -1297,6 +1312,22 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let owner_id = required(project)?;
             let path =
                 format!("/checkouts/{owner_id}/orchestration/audit?after={after}&limit={limit}");
+            (owner_id, ("GET", path, Value::Null))
+        }
+        OrchestrationCmd::Summary {
+            project,
+            ticket,
+            connection_id,
+        } => {
+            let owner_id = required(project)?;
+            let query: Vec<String> = [("ticket", ticket), ("connection_id", connection_id)]
+                .into_iter()
+                .filter_map(|(key, value)| value.map(|value| format!("{key}={value}")))
+                .collect();
+            let mut path = format!("/checkouts/{owner_id}/orchestration/summary");
+            if !query.is_empty() {
+                path = format!("{path}?{}", query.join("&"));
+            }
             (owner_id, ("GET", path, Value::Null))
         }
     };

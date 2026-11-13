@@ -28,6 +28,7 @@ mod runs;
 mod scheduler;
 mod session_executor;
 mod sessions;
+mod summary;
 mod tickets;
 mod tool_capacity;
 #[cfg(unix)]

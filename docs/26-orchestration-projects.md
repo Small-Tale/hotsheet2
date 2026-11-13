@@ -20,6 +20,8 @@
 > `placement.automatic`),
 > resource requirements of plan steps and targets with scheduling around held
 > resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads),
+> the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
+> cost is read for targets on this machine only),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI remains design work under its
@@ -2553,3 +2555,115 @@ hotsheet-cli ... orchestration scheduler explain <step-id> --project <owner>
 No route was added: `readiness/define`, the policy body, the capacity snapshot and
 the scheduler responses carry the new members, and MCP `hotsheet_targets`
 `readiness_define` takes `resources`.
+
+## 26.21 Progress and cost summary (HS2-S13719)
+
+One read answers how an owning checkout's runs are going across its targets: lead
+time, queue wait, blocked time, retries, CI and deployment outcomes, and known AI
+cost. It carries identifiers, states, counts, durations and amounts only: no ticket
+title, body, note or command output. It answers from this machine's records,
+contacts no target, takes no grant and writes nothing, like the gate reads of §26.13.
+
+It is a pure fold (`orchestration/summary.rs`, `summarize_progress`) over the runs
+and their histories and the run event journal (§26.9), validation results (§26.12),
+gates (§26.13), control actions (§26.14) and orchestrator-owned sessions (§26.16).
+The answer does not depend on the order in which records are read.
+
+### Known or unknown, never zero
+
+Every measure is `{"status":"known","value":…}` or
+`{"status":"unknown","reason":"<code>"}`. An aggregate counts its known and unknown
+parts separately and lists the reasons, so a total never silently leaves something
+out. The reason codes:
+
+| Code                       | Meaning                                                                  |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `run_unfinished`           | The run has not finished, so it has no lead time yet                     |
+| `never_dispatched`         | The run was never claimed on its target                                  |
+| `history_truncated`        | The run's bounded history no longer holds the entries the measure needs  |
+| `events_trimmed`           | Retention removed run events older than the oldest one kept              |
+| `clock_inconsistent`       | Recorded times run backwards                                             |
+| `no_gate_linked`           | No CI gate stands for the run                                            |
+| `no_deployment_requested`  | No deployment was requested for the run                                  |
+| `gate_unverified`          | A gate stands with no trustworthy verdict                                |
+| `target_unbound`           | The target has no reviewed destination on this machine                   |
+| `target_remote`            | The target lives on another machine; its usage records are not read here |
+| `usage_source_unsupported` | The target ticket's source is not a Git store                            |
+| `usage_store_unavailable`  | The usage records could not be opened or read                            |
+| `no_usage_recorded`        | The usage records hold nothing for the target ticket                     |
+| `cost_not_read`            | No cost reading was taken for the work item                              |
+
+### Measures of a run
+
+- **Lead time**: from the run's creation to the transition into the state it
+  finished in.
+- **Queue wait**: from the run's creation to its first claim on the target.
+- **Blocked time**: the time the run was paused (§26.14), taken over by a person
+  (`intervened`), or its target could not be confirmed (the `target_unreachable` and
+  `target_reachable` events). `total_ms` counts overlapping causes once, so it can be
+  less than the sum of `paused_ms`, `intervened_ms` and `unreachable_ms`. An interval
+  still open is measured to the run's finish, or to `as_of_ms` for an unfinished run.
+  A run history is bounded to 64 entries and the event journal is trimmed; a run
+  whose history is full, or that began before the oldest event kept in a trimmed
+  journal, reports the measure as unknown instead of a lower figure.
+- **Retries**: validation attempts after the first that name the run, sessions
+  started to replace a lost or failed one, and handoffs. These are counts of retained
+  records.
+- **CI and deployment outcome**: the rolled-up state of the run's standing gates
+  (§26.13). A gate in `unknown` is `gate_unverified`, not a verdict.
+
+### Work items and attribution
+
+A **work item** is one target ticket, `(connection_id, native_id)`. Dispatching the
+same target ticket again is a second run of the same work item (a `redispatch`), and
+two targets whose checkouts share a ticket source reach the same work item, because a
+Git source's connection id identifies the store.
+
+Attribution rule `work_item_earliest_run`: a work item's cost is counted once and
+belongs to the target of its earliest run. A session is counted once by its host's
+id for it (server and terminal), whatever number of records name it, and belongs to
+the target of its earliest record. Each run belongs to its own target. So every run,
+work item and session is in exactly one target's figures, and the targets add up to
+the totals.
+
+Narrowing to one orchestration ticket (`ticket`, with an optional `connection_id`)
+keeps only that ticket's runs. A target ticket dispatched for two orchestration
+tickets then appears in both narrowed answers and once in the whole one.
+
+### Known AI cost
+
+Cost comes from the usage records of [14](14-metrics-interface.md), the same source
+as the analytics dashboards (HS2-38RJMK): `metrics::ticket_cost` reads the events
+attributed to the target ticket in its Git store. It adds the settled rollup's cost
+for the ticket and the priced raw events newer than the rollup, so an event is not
+counted on both sides. There is no second telemetry source.
+
+- The store is read only when the target's reviewed destination is a checkout on this
+  machine. Remote targets report `target_remote` (HS2-B6236S).
+- Raw usage events are per device, so the figure is what this machine recorded.
+- `unpriced_events` counts newer events with no cost; when it is above zero the
+  figure is a lower bound.
+- A ticket with nothing recorded reports `no_usage_recorded`, not a cost of zero.
+- `cost.complete` on a rollup is true only when every work item has a reading and no
+  counted event lacks a cost. Only then is `known_usd` a total.
+- When a work item was reached through several targets, a target that can be read is
+  preferred over one that cannot.
+
+### Not measured yet
+
+Sessions running against their limits, idle-session time and time limited by tool
+capacity or resources are HS2-XK7TJS. Time spent waiting on external systems and
+provisional work started or redone are HS2-9FXASE. The workspace view is HS2-XJEH08.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration summary --project <owner>
+hotsheet-cli ... orchestration summary --project <owner> --ticket <ticket-id> \
+  [--connection-id <source>]
+```
+
+`GET /checkouts/{owner}/orchestration/summary[?ticket=<id>&connection_id=<source>]`
+is machine-local. MCP `hotsheet_targets` has the `summary` action with an optional
+`ticket` of `{native_id, connection_id?}`. All three call
+`OrchestrationRuntime::progress_summary`.

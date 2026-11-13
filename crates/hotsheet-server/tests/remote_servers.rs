@@ -500,6 +500,8 @@ mod session_executor;
 #[cfg(unix)]
 #[path = "remote_servers/sessions.rs"]
 mod sessions;
+#[path = "remote_servers/summary.rs"]
+mod summary;
 #[path = "remote_servers/target_tickets.rs"]
 mod target_tickets;
 #[path = "remote_servers/tool_capacity.rs"]

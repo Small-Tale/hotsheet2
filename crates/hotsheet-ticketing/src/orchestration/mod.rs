@@ -19,6 +19,7 @@ mod scheduler;
 mod session_idle;
 mod sessions;
 mod storage;
+mod summary;
 mod tool_capacity;
 mod validation;
 mod workflow;
@@ -97,6 +98,11 @@ pub use sessions::{
     SafePoint, SafePointBlocker, SafePointFacts, SessionControl, SessionError, SessionOrigin,
     SessionOwner, SessionRegistry, SessionRole, SessionState, SessionTransition, SessionUpdate,
     StopRequest, decide_safe_point, decide_stop, session_label,
+};
+pub use summary::{
+    BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,
+    PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,
+    RunRetries, TargetProgress, UnknownReason, WorkItemKey, WorkItemProgress, summarize_progress,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,
@@ -297,6 +303,8 @@ mod scheduler_tests;
 mod session_idle_tests;
 #[cfg(test)]
 mod session_tests;
+#[cfg(test)]
+mod summary_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

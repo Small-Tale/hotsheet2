@@ -629,6 +629,39 @@ pub fn ticket_usage(store: &FsStore, ticket: &str) -> io::Result<TicketUsage> {
     })
 }
 
+/// What one ticket is known to have cost (HS2-S13719).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TicketCost {
+    /// The settled rollup's cost for the ticket plus the priced raw events newer than it.
+    pub cost_usd: f64,
+    /// Attributed events still held as raw records, whichever side of the rollup.
+    pub events: u64,
+    /// Raw events newer than the rollup that carry no cost. When above zero, `cost_usd`
+    /// is a lower bound.
+    pub unpriced_events: u64,
+}
+
+/// One ticket's known cost from the same records as [`ticket_usage`], counting each event
+/// once: an event the settled rollup already holds is not added again from the raw tail.
+/// `None` when nothing at all is recorded for the ticket, which is not a cost of zero.
+pub fn ticket_cost(store: &FsStore, ticket: &str) -> io::Result<Option<TicketCost>> {
+    let usage = ticket_usage(store, ticket)?;
+    if usage.events.is_empty() && usage.settled_cost_usd == 0.0 {
+        return Ok(None);
+    }
+    let tail = || {
+        usage
+            .events
+            .iter()
+            .filter(|event| event.day() > usage.settled_through.as_str())
+    };
+    Ok(Some(TicketCost {
+        cost_usd: usage.settled_cost_usd + tail().filter_map(|event| event.cost_usd).sum::<f64>(),
+        events: usage.events.len() as u64,
+        unpriced_events: tail().filter(|event| event.cost_usd.is_none()).count() as u64,
+    }))
+}
+
 /// Add `name` to the store's `.gitignore` if absent (raw metrics are per-device).
 pub fn ensure_gitignored(store: &FsStore, name: &str) -> io::Result<()> {
     let gi = store.root().join(".gitignore");
@@ -995,6 +1028,72 @@ mod tests {
         assert_eq!(usage.events[0].ts, "2026-08-20T10:00:00Z");
         assert!((usage.settled_cost_usd - 2.0).abs() < 1e-9, "{usage:?}");
         assert_eq!(usage.settled_through, "2026-08-20");
+    }
+
+    #[test]
+    fn hs2_s13719_ticket_cost_counts_each_event_once_and_is_absent_not_zero() {
+        let (_d, store) = store();
+        let t = "01TICKETAAAAAAAAAAAAAAAAAA";
+        assert_eq!(ticket_cost(&store, t).unwrap(), None);
+        let unpriced = |ts: &str| UsageEvent {
+            cost_usd: None,
+            ..ev(ts, "codex", "gpt", 3, 1, 0.0, Some(t))
+        };
+        record(&store, &unpriced("2026-08-19T08:00:00Z")).unwrap();
+        // Only unpriced events: a known lower bound of zero, flagged as such.
+        assert_eq!(
+            ticket_cost(&store, t).unwrap(),
+            Some(TicketCost {
+                cost_usd: 0.0,
+                events: 1,
+                unpriced_events: 1,
+            })
+        );
+        for (ts, cost) in [("2026-08-19T09:00:00Z", 1.0), ("2026-08-20T10:00:00Z", 0.5)] {
+            record(&store, &ev(ts, "claude", "opus", 5, 1, cost, Some(t))).unwrap();
+        }
+        record(
+            &store,
+            &ev(
+                "2026-08-20T11:00:00Z",
+                "claude",
+                "opus",
+                5,
+                1,
+                9.0,
+                Some("other"),
+            ),
+        )
+        .unwrap();
+        let cost = ticket_cost(&store, t).unwrap().unwrap();
+        assert!((cost.cost_usd - 1.5).abs() < 1e-9, "{cost:?}");
+        assert_eq!((cost.events, cost.unpriced_events), (3, 1));
+        // Settling the first day moves its cost into the rollup without counting it twice.
+        roll_up_through(&store, "2026-08-19").unwrap();
+        let cost = ticket_cost(&store, t).unwrap().unwrap();
+        assert!((cost.cost_usd - 1.5).abs() < 1e-9, "{cost:?}");
+        assert_eq!((cost.events, cost.unpriced_events), (3, 0));
+        // Pruned raw events keep their settled cost; a later event still adds once.
+        roll_up_through(&store, "2026-08-20").unwrap();
+        assert_eq!(prune_raw_before(&store, "2026-08-20").unwrap(), 1);
+        record(
+            &store,
+            &ev(
+                "2026-08-21T10:00:00Z",
+                "claude",
+                "opus",
+                5,
+                1,
+                0.25,
+                Some(t),
+            ),
+        )
+        .unwrap();
+        record(&store, &unpriced("2026-08-21T11:00:00Z")).unwrap();
+        let cost = ticket_cost(&store, t).unwrap().unwrap();
+        assert!((cost.cost_usd - 1.75).abs() < 1e-9, "{cost:?}");
+        assert_eq!((cost.events, cost.unpriced_events), (3, 1));
+        assert_eq!(ticket_cost(&store, "missing").unwrap(), None);
     }
 
     #[test]

@@ -36,6 +36,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "gates", _]
             // HS2-WBREDM: reconcile every unfinished run of the owner.
             | ["checkouts", _, "orchestration", "run-reconcile"]
+            // HS2-S13719: the progress and cost summary of the owner's runs.
+            | ["checkouts", _, "orchestration", "summary"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -108,6 +110,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "gates", _]
             // HS2-WBREDM
             | ["checkouts", _, "orchestration", "run-reconcile"]
+            // HS2-S13719: computed from this machine's records.
+            | ["checkouts", _, "orchestration", "summary"]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -843,6 +847,16 @@ impl OrchestrationRuntime {
             }
             ("POST", ["checkouts", owner, "orchestration", "run-reconcile"]) => {
                 value(self.runs_reconcile(owner, actor(body)?.as_ref(), tx)?)
+            }
+            // HS2-S13719: answers from this machine's records alone.
+            ("GET", ["checkouts", owner, "orchestration", "summary"]) => {
+                let ticket = query_text(path, "ticket")?.map(|native_id| {
+                    Ok::<_, OrchestrationError>(hotsheet_ticketing::orchestration::RunTicket {
+                        connection_id: query_text(path, "connection_id")?.unwrap_or_default(),
+                        native_id,
+                    })
+                });
+                value(self.progress_summary(owner, ticket.transpose()?.as_ref(), tx)?)
             }
             // HS2-AZ15GA orchestrating half.
             ("POST", ["checkouts", owner, "orchestration", "tickets", operation]) => {

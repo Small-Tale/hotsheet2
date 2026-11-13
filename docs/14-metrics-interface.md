@@ -109,6 +109,12 @@ Metrics can be shared across a team **through git** — no server sync needed:
   device-local (§14.3), so per-phase figures reflect this device's recorded sessions.
 - Cross-project + cross-person rollups feed a team cost view (from the shared rollups,
   §14.4).
+- The **orchestration progress summary** ([26](26-orchestration-projects.md) §26.21,
+  HS2-S13719) reads one ticket's known cost through `metrics::ticket_cost`: the settled
+  rollup's `by_ticket` cost plus the priced raw events newer than
+  `last_rolled_up_through`, so no event counts on both sides. It returns nothing, rather
+  than zero, for a ticket with no recorded usage, and counts newer events without a cost
+  so the caller can label the figure a lower bound.
 - The production web `AIConversation` consumes the same per-turn `Usage` projection that
   feeds this interface. Each assistant turn shows input/output token totals and the dialog
   sums only usage events received for that connection; it does not maintain an independent
