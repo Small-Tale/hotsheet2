@@ -971,3 +971,90 @@ fn hs2_2c5n1w_concurrent_syncs_of_a_run_that_finishes_all_answer_the_finished_ru
         assert_eq!(completions, 1);
     }
 }
+
+/// HS2-WC3W2G: a cancel the gate refuses is answered as that refusal. A person with no
+/// grant of their own asks to cancel a queued run: the answer is `no_grant`, the run
+/// records nothing (no `cancel_requested`, so reconciliation repeats nothing), the
+/// target keeps its Up Next mark, and the audit journal holds the denial. Asked
+/// again, the answer is the same. The run's own actor then cancels it. A cancel that
+/// needs no target call is not gated, and an unresolvable target is still reported as
+/// unverified (see the direct-run test above).
+#[test]
+fn hs2_wc3w2g_a_denied_cancel_answers_the_denial_and_records_nothing() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[
+            TargetAction::TicketsRead,
+            TargetAction::TicketsWrite,
+            TargetAction::WorkStart,
+        ],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Queued for the dispatcher");
+    let queued = m
+        .runtime
+        .run_dispatch(
+            &m.owner.id,
+            dispatch(
+                &m,
+                &orchestration,
+                &ticket.id.to_string(),
+                "op-1",
+                json!({"mode":"dispatcher"}),
+            ),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .run;
+    assert_eq!(queued.state, RunState::Queued);
+    for _ in 0..2 {
+        assert!(matches!(
+            m.runtime
+                .run_cancel(&m.owner.id, &queued.run_id, Some(&human()), &mut tx),
+            Err(OrchestrationError::Denied(DenialReason::NoGrant))
+        ));
+        let run = m.runtime.run(&m.owner.id, &queued.run_id).unwrap();
+        assert_eq!(run, queued, "a denied cancel records nothing");
+        assert!(m.target_store.read_ticket(&ticket.id).unwrap().up_next);
+    }
+    let denials: Vec<_> = m
+        .runtime
+        .audit(&m.owner.id, 0, 500)
+        .unwrap()
+        .entries
+        .into_iter()
+        .filter(|entry| {
+            entry.record.actor_id.as_deref() == Some("maintainer")
+                && entry.record.outcome == AuditOutcome::Denied
+        })
+        .map(|entry| (entry.record.action, entry.record.reason))
+        .collect();
+    assert_eq!(
+        denials,
+        vec![("work_start".to_owned(), Some("no_grant".to_owned())); 2]
+    );
+    // Reconciliation finds no cancel to repeat.
+    let reconciled = m
+        .runtime
+        .run_reconcile(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(reconciled.run.state, RunState::Queued);
+    assert!(!reconciled.run.cancel_requested);
+    // The run's own actor may cancel it: the mark is withdrawn and the run ends.
+    let cancelled = m
+        .runtime
+        .run_cancel(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(cancelled.run.state, RunState::Cancelled);
+    assert!(cancelled.unverified.is_empty());
+    assert!(!m.target_store.read_ticket(&ticket.id).unwrap().up_next);
+}

@@ -382,12 +382,17 @@ async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers
         .await;
     let cancel = format!("/runs/{}/cancel", redispatched["run_id"].as_str().unwrap());
     // HS2-WC3W2G: the person holds no grant of their own, so the gate denies telling
-    // the target; the answer reports that as a target it could not verify.
-    let refused = fleet
-        .ok("POST", &cancel, json!({"actor":Fleet::person()}))
+    // the target. The answer is that denial, and the run records nothing.
+    let (status, refused) = fleet
+        .call("POST", &cancel, json!({"actor":Fleet::person()}))
         .await;
-    assert_eq!(refused["state"], "queued", "{refused}");
-    assert_eq!(refused["unverified"], json!(["target_queue"]), "{refused}");
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    assert_eq!(refused["code"], "no_grant", "{refused}");
+    let still = fleet
+        .ok("GET", &cancel.replace("/cancel", ""), Value::Null)
+        .await;
+    assert_eq!(still["state"], "queued", "{still}");
+    assert_eq!(still["cancel_requested"], false, "{still}");
     assert!(peer_ticket().up_next);
     // The run's own actor cancels it.
     let withdrawn = fleet

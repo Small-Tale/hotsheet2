@@ -842,6 +842,15 @@ impl OrchestrationRuntime {
                 self.run_note(owner_id, &run, "cancelled", tx);
                 Ok(run.into())
             }
+            // HS2-WC3W2G: the gate refused this actor. That is the answer, typed and
+            // audited by the gate; the run records nothing and no later
+            // reconciliation repeats a cancel its caller was not allowed to make. A
+            // target that could not be resolved is not a refusal of the actor.
+            Err(error @ OrchestrationError::Denied(reason))
+                if reason != DenialReason::TargetUnavailable =>
+            {
+                Err(error)
+            }
             Err(_) => {
                 let run = self.run_apply(
                     owner_id,

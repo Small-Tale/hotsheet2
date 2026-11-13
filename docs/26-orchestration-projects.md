@@ -667,7 +667,13 @@ transition. A person's correction is the one exception to the edges (§26.14).
   still queued, and ends the run. A pooled worker's claim is not the orchestrator's
   to release; cancelling such a run only lets go of the run. If the target cannot be
   told, the run stays active with `cancel_requested: true` and the answer lists what
-  it could not verify (`target_claim` or `target_queue`).
+  it could not verify (`target_claim` or `target_queue`). A cancel that must tell the
+  target passes the gate as the caller; when the gate refuses the caller (for
+  example a person with no grant of their own, `no_grant`), the answer is that
+  denial and the run records nothing, so no reconciliation repeats it later
+  (HS2-WC3W2G). Only a target that cannot be resolved (`target_unavailable`) is
+  reported as unverified. Whether a person's cancel acts under the run's own grant
+  is HS2-HV9ED3.
 - **Sync** reads the target ticket. A completed, verified or archived ticket
   completes the run. A queued run becomes dispatched when the ticket shows a live
   claim, recording that worker. A dispatched run whose claim was released or taken
@@ -3250,9 +3256,8 @@ replaced although reconciliation finds no lost work (HS2-3REXQ7). A remote sessi
 freed without any run event is now wound down from the session change the peer's
 feed carries (HS2-257Q2Z, §26.9). Defects these
 scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9CTG
-(§26.17). Open findings: HS2-HV9ED3 (what a person's cancel of a scheduler run
-means), HS2-WC3W2G (a cancel denied by the gate reads as an unverified target),
-HS2-7Q428Z (concurrent passes each log a start), HS2-68DWAM (a stale shown
+(§26.17). A cancel the gate denies is answered as the denial (HS2-WC3W2G). Open
+findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q428Z (concurrent passes each log a start), HS2-68DWAM (a stale shown
 reconciliation). External-provider targets and a contended resource are HS2-30XYPY.
 Checks that need a real AI tool, a real GitHub repository or Windows and Linux hosts
 are in [the manual test plan](manual-test-plan.md#orchestration-end-to-end-with-real-tools-and-hosts-hs2-2ey9dp).
