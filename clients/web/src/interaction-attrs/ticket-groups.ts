@@ -10,6 +10,8 @@ export const TICKET_GROUP_ACTIONS = {
   toggleTicketGroup: action('toggle-ticket-group'),
   submitTicketGroupName: action('submit-ticket-group-name'),
   cancelTicketGroupName: action('cancel-ticket-group-name'),
+  /** Select every ticket a group shows in the list or column it was opened in (HS2-EYEGDQ). */
+  selectTicketGroup: action('select-ticket-group'),
   renameTicketGroup: action('rename-ticket-group'),
   ungroupTicketGroup: action('ungroup-ticket-group'),
   mergeTicketGroups: action('merge-ticket-groups'),

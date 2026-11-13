@@ -753,7 +753,7 @@ export async function startHotSheetWebClient() {
   const selectedCorruptKey = signal<string | undefined>(undefined);
   const selectedTicketSlugs = signal<string[]>([]);
   const ticketContextMenu = signal<
-    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string; groupScope?: string } | undefined
   >(undefined);
   const ticketCloseDialog = signal<TicketCloseDialogState | undefined>(undefined);
   const appTabContextMenu = signal<

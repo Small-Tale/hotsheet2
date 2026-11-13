@@ -27,7 +27,7 @@ export interface TicketViewSurfaceDependencies {
   status: (value?: string) => TicketStatus;
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
   ticketContextMenu: Signal<
-    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string; groupScope?: string } | undefined
   >;
   tickets: Signal<WireTicketRow[]>;
   /** Every known group in the project, for the Add to Group submenu (HS2-TX17CM, HS2-9KZSD4). */
@@ -95,6 +95,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
             x: menu.x,
             y: menu.y,
             group: menu.group,
+            scope: menu.groupScope,
             name: ticketGroupName(menu.group),
             mergeable: ticketGroupMergeable(menu.group),
             disabledReason: ticketGroupDisabledReason(members, capabilitiesFor),

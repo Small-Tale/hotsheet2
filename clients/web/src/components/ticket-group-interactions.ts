@@ -12,8 +12,10 @@ import { TICKET_GROUP_ACTIONS, TICKET_GROUP_TARGETS } from '../interaction-attrs
 export interface TicketGroupBindings {
   /** Collapse or expand a group. */
   readonly toggle: (group: string) => void;
-  /** Open the group header menu at a viewport point. */
-  readonly openMenu: (group: string, x: number, y: number) => void;
+  /** Open the group header menu at a viewport point, for the group's container in `scope`. */
+  readonly openMenu: (group: string, x: number, y: number, scope: string) => void;
+  /** Select every ticket the group shows in `scope`: the list, or one board column (HS2-EYEGDQ). */
+  readonly selectAll: (group: string, scope: string) => void;
   readonly rename: (group: string) => void;
   readonly ungroup: (group: string) => void;
   /** Merge every same-named duplicate group into this one (HS2-9KZSD4). */
@@ -28,6 +30,7 @@ export interface TicketGroupBindings {
 const groupSelector = TICKET_GROUP_TARGETS.group.selector;
 const groupOf = (target: Element) =>
   (target as HTMLElement).dataset.ticketGroup ?? target.closest<HTMLElement>(groupSelector)?.dataset.ticketGroup;
+const scopeOf = (target: Element) => target.closest<HTMLElement>(groupSelector)?.dataset.ticketGroupScope ?? 'list';
 
 /** Wire ticket group headers, their menu, and the group name dialog under `root`. */
 export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBindings): () => void {
@@ -55,7 +58,13 @@ export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBinding
           window.innerWidth,
           window.innerHeight,
         );
-      bindings.openMenu(group, position.x, position.y);
+      bindings.openMenu(group, position.x, position.y, scopeOf(target));
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', TICKET_GROUP_ACTIONS.selectTicketGroup.selector, (_event, target) => {
+      const { ticketGroup, ticketGroupScope } = (target as HTMLElement).dataset;
+      if (ticketGroup) bindings.selectAll(ticketGroup, ticketGroupScope ?? 'list');
     }),
   );
   lifetime.add(

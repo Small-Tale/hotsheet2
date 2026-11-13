@@ -605,6 +605,69 @@ test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ pa
   }, page);
 });
 
+test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column from its header menu', async ({ page }) => {
+  test.setTimeout(180_000);
+  await withServer(async (server) => {
+    await open(page, server);
+    const view = list(page),
+      menu = page.locator('[data-ticket-group-menu="true"]'),
+      selectedIn = (scope: Locator) =>
+        scope
+          .locator('[data-row-selected="true"]')
+          .evaluateAll((rows) =>
+            rows.map((row) => row.querySelector<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug),
+          ),
+      boardGroup = group(view, BOARD);
+    // List view: every member of the group, in drawn order, and nothing outside it.
+    await boardGroup.locator('[data-component="list-header"]').click({ button: 'right' });
+    const item = menu.getByRole('menuitem', { name: 'Select All in Group' });
+    await expect(item).toBeVisible();
+    for (const width of [1440, 760]) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await expect(item).toBeInViewport();
+      await capture(page, `select-all-in-group-menu-light-${width}`);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await item.click();
+    await expect(menu).toHaveCount(0);
+    const members = await slugsIn(boardGroup);
+    expect(members).toHaveLength(3);
+    await expect.poll(() => selectedIn(view)).toEqual(members);
+    await capture(page, 'select-all-in-group-list-light-1440');
+
+    // A collapsed group is expanded first, since a selection never holds hidden tickets.
+    await group(view, SEARCH).locator('[data-action="toggle-ticket-group"]').click();
+    await expect(group(view, SEARCH).locator('[data-ticket-slug]')).toHaveCount(0);
+    await group(view, SEARCH).locator('[data-component="list-header"]').click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Select All in Group' }).click();
+    await expect(group(view, SEARCH).locator('[data-action="toggle-ticket-group"]')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    const searchMembers = await slugsIn(group(view, SEARCH));
+    expect(searchMembers).toHaveLength(2);
+    await expect.poll(() => selectedIn(view)).toEqual(searchMembers);
+
+    // Column view: only that column's share of the group.
+    await page.getByLabel('Columns View').click();
+    const columns = board(page),
+      started = group(columns, BOARD, 'started');
+    await expect(started.locator('[data-ticket-slug]')).toHaveCount(2);
+    await started.locator('[data-component="list-header"]').click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Select All in Group' }).click();
+    const startedMembers = await slugsIn(started);
+    await expect.poll(() => selectedIn(columns)).toEqual(startedMembers);
+    await capture(page, 'select-all-in-group-column-light-1440');
+
+    // A group with one ticket in a column is an ordinary single selection.
+    const notStarted = group(columns, BOARD, 'not-started');
+    await notStarted.locator('[data-component="list-header"]').click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Select All in Group' }).click();
+    await expect.poll(() => selectedIn(columns)).toEqual(await slugsIn(notStarted));
+  }, page);
+});
+
 test('HS2-44W3TP searches by group and keeps results grouped', async ({ page }) => {
   test.setTimeout(120_000);
   await withServer(async (server, tickets) => {

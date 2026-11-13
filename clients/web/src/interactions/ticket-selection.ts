@@ -16,6 +16,7 @@ import { createCoalescedInput } from '../debounced-autosave';
 import { draftFiles } from '../draft-file-recovery';
 import type { TicketGroupsController } from '../features/ticket-groups';
 import { routeFilePicker } from '../file-picker-routes';
+import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
@@ -47,7 +48,7 @@ export interface TicketSelectionInteractionsDependencies {
   readonly setInspectorVisible: (visible: boolean) => void;
   readonly openTicketReader: (slug: string, ordered?: string[], trigger?: HTMLElement) => Promise<void>;
   readonly ticketContextMenu: Signal<
-    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
+    { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string; groupScope?: string } | undefined
   >;
   readonly selectedRows: () => WireTicketRow[];
   readonly executeBulkTicketAction: (action: BulkTicketAction, targetSlugs?: string[]) => Promise<boolean>;
@@ -153,6 +154,33 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     notWorkingNoteInput.cancel();
   });
   const menuTicket = (slug: string) => tickets.value.find((item) => item.slug === slug);
+  /** Select a set of tickets at once, as a column header's Select All does. */
+  function selectMany(slugs: string[]): void {
+    cancelTicketDrafts();
+    selectedCorruptKey.value = undefined;
+    selectedTicketSlugs.value = slugs;
+    dependencies.ticketSelectionAnchor = slugs[0];
+    selectedTicket.value = null;
+    setInspectorVisible(true);
+  }
+  /**
+   * Select every ticket a group shows in one container: the list, or one board column
+   * (HS2-EYEGDQ). A collapsed group is expanded first, because Select All never selects
+   * hidden tickets. The rows are read as drawn, so the order follows the active sort.
+   */
+  function selectGroup(group: string, scope: string): void {
+    if (ticketGroups.isCollapsed(group)) ticketGroups.toggleGroup(group);
+    const container = [...document.querySelectorAll<HTMLElement>(TICKET_GROUP_TARGETS.group.selector)].find(
+        (element) => element.dataset.ticketGroup === group && element.dataset.ticketGroupScope === scope,
+      ),
+      rows = container
+        ? [...container.querySelectorAll<HTMLElement>(TICKET_SELECTION_ACTIONS.selectTicketRow.selector)]
+        : [],
+      slugs = rows.map((row) => data(row).ticketSlug!);
+    // One ticket is an ordinary single selection, so the inspector shows it.
+    if (slugs.length === 1) void selectTickets(slugs[0], undefined, slugs, rows[0].dataset.ticketQualifiedId);
+    else if (slugs.length > 1) selectMany(slugs);
+  }
   lifetime.add(
     wireTicketCollection(document.body, {
       selectedSlugs: () => selectedTicketSlugs.value,
@@ -199,12 +227,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         selectedTicketSlugs.value = [...next.selected];
       },
       selectColumn: (slugs) => {
-        cancelTicketDrafts();
-        selectedCorruptKey.value = undefined;
-        selectedTicketSlugs.value = slugs;
-        dependencies.ticketSelectionAnchor = slugs[0];
-        selectedTicket.value = null;
-        setInspectorVisible(true);
+        selectMany(slugs);
       },
       openReader: (slug, ordered, row) => {
         void openTicketReader(slug, ordered, row);
@@ -349,8 +372,12 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       toggle: (group) => {
         ticketGroups.toggleGroup(group);
       },
-      openMenu: (group, x, y) => {
-        ticketContextMenu.value = { x, y, ticketSlug: '', group };
+      openMenu: (group, x, y, scope) => {
+        ticketContextMenu.value = { x, y, ticketSlug: '', group, groupScope: scope };
+      },
+      selectAll: (group, scope) => {
+        ticketContextMenu.value = undefined;
+        selectGroup(group, scope);
       },
       rename: (group) => {
         ticketContextMenu.value = undefined;

@@ -125,8 +125,19 @@ describe('TicketGroupContextMenu (HS2-8CDFKR)', () => {
     expect(markup).toContain('aria-label="Board Group Actions"');
     expect(markup).toMatch(/data-action="rename-ticket-group"/);
     expect(markup).toMatch(/data-action="ungroup-ticket-group"/);
-    expect(markup.match(/data-ticket-group="Board"/g)).toHaveLength(2);
+    expect(markup.match(/data-ticket-group="Board"/g)).toHaveLength(3);
     expect(markup).not.toContain('aria-disabled="true"');
+  });
+
+  it('leads with Select All in Group for the container it was opened on (HS2-EYEGDQ)', () => {
+    const list = String(TicketGroupContextMenu({ x: 0, y: 0, group: 'Board' })),
+      column = String(TicketGroupContextMenu({ x: 0, y: 0, group: 'Board', scope: 'started' }));
+    expect(list).toContain('Select All in Group');
+    expect(list).toMatch(
+      /data-action="select-ticket-group"[^>]*data-ticket-group="Board"[^>]*data-ticket-group-scope="list"|data-ticket-group-scope="list"[^>]*data-action="select-ticket-group"/,
+    );
+    expect(column).toContain('data-ticket-group-scope="started"');
+    expect(list.indexOf('Select All in Group')).toBeLessThan(list.indexOf('Rename Group'));
   });
 
   it('offers Merge Duplicate Groups only for a duplicate, labeled by display name (HS2-9KZSD4)', () => {
@@ -136,13 +147,14 @@ describe('TicketGroupContextMenu (HS2-8CDFKR)', () => {
     expect(plain).toContain('aria-label="Sprint Group Actions"');
     expect(duplicate).toMatch(/data-action="merge-ticket-groups"/);
     expect(duplicate).toContain('Merge Duplicate Groups');
-    expect(duplicate.match(/data-ticket-group="7K3M9P2QXA"/g)).toHaveLength(3);
+    expect(duplicate.match(/data-ticket-group="7K3M9P2QXA"/g)).toHaveLength(4);
   });
 
-  it('disables both actions with the reason when the provider cannot group', () => {
+  it('disables both changes with the reason when the provider cannot group, but still selects', () => {
     const reason = 'One or more selected ticket providers do not support groups.',
       markup = String(TicketGroupContextMenu({ x: 0, y: 0, group: 'Board', disabledReason: reason }));
     expect(markup.match(/aria-disabled="true"/g)).toHaveLength(2);
+    expect(markup).not.toMatch(/data-action="select-ticket-group"[^>]*aria-disabled="true"/);
     expect(markup).toContain(`title="${reason}"`);
   });
 });
