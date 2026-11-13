@@ -593,6 +593,16 @@ export interface TicketStoreOversizedObject {
   bytes: number;
   limit_bytes: number;
 }
+/** How Hot Sheet asked an AI to repair a stall sync cannot finish alone (HS2-QR1K8R). */
+export interface TicketStoreAiHelp {
+  outcome: 'session_asked' | 'started' | 'finished' | 'failed' | 'ticket_only';
+  mode: 'off' | 'session' | 'start';
+  tool?: string;
+  ticket?: string;
+  asked_at: string;
+  finished_at?: string;
+  reason?: string;
+}
 /** One ticket store's durable sync health; computed by the server without contacting the remote. */
 export interface TicketStoreSyncHealth {
   state: TicketStoreSyncState;
@@ -609,6 +619,8 @@ export interface TicketStoreSyncHealth {
   /** Whether ticket merges go through the semantic merge driver in this checkout (HS2-9TV6A2). */
   merge_driver?: 'registered' | 'repaired' | 'missing';
   merge_driver_repaired_at?: string;
+  /** Present while an AI was asked to repair the stall and the store has not published since. */
+  ai_help?: TicketStoreAiHelp;
 }
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ): every linked Git ticket store. */
 export interface TicketStoreSyncReport {

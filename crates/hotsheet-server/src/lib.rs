@@ -45,6 +45,7 @@ mod request_timing;
 mod routes;
 pub mod source_revision;
 pub mod stuck_causes;
+pub mod sync_ai;
 pub mod sync_loop;
 #[cfg(unix)]
 pub mod terminal_broker;

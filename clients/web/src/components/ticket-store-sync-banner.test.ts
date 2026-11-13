@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TicketStoreSyncHealth, TicketStoreSyncReport, TicketStoreSyncState } from '../api';
+import type { TicketStoreAiHelp, TicketStoreSyncHealth, TicketStoreSyncReport, TicketStoreSyncState } from '../api';
 import {
+  aiHelpSentence,
   failingTicketStores,
   PERSISTENT_OFFLINE_FAILURES,
   syncFailureSummary,
@@ -116,5 +117,47 @@ describe('TicketStoreSyncBanner (HS2-ADHFKZ)', () => {
     expect(html).toContain('a.hs2: A ticket changed on both sides');
     expect(html).toContain('1 local change is not published');
     expect(html).toContain('1 more store needs attention');
+  });
+});
+
+describe('TicketStoreSyncBanner AI repair (HS2-QR1K8R)', () => {
+  const help = (outcome: TicketStoreAiHelp['outcome'], tool?: string): TicketStoreAiHelp => ({
+    outcome,
+    mode: 'start',
+    ...(tool ? { tool } : {}),
+    ticket: 'HS-ABC123',
+    asked_at: '2026-11-13T08:00:00Z',
+  });
+  const asked = (outcome: TicketStoreAiHelp['outcome'], tool?: string) =>
+    health('conflict', {
+      unpublished_commits: 3,
+      next_action:
+        'Hot Sheet started codex to repair the store (ticket HS-ABC123); sync publishes once it is repaired.',
+      ai_help: help(outcome, tool),
+    });
+
+  it('says whom Hot Sheet asked, for every outcome', () => {
+    expect(aiHelpSentence(help('started', 'codex'))).toBe('Hot Sheet started codex to repair it.');
+    expect(aiHelpSentence(help('started'))).toBe('Hot Sheet started an AI session to repair it.');
+    expect(aiHelpSentence(help('session_asked'))).toContain('asked the running AI session');
+    expect(aiHelpSentence(help('finished', 'codex'))).toBe('The codex session Hot Sheet started has ended.');
+    expect(aiHelpSentence(help('failed', 'codex'))).toContain('ended with an error');
+    expect(aiHelpSentence(help('ticket_only'))).toBe('Hot Sheet could not ask an AI to repair it.');
+  });
+
+  it('shows the ask and links the repair ticket through the shared ticket-link action', () => {
+    const html = String(TicketStoreSyncBanner({ report: report(['tickets.hs2', asked('started', 'codex')]) }));
+    expect(html).toContain('Hot Sheet started codex to repair it.');
+    expect(html).toContain('sync publishes once it is repaired');
+    expect(html).toContain('href="#ticket-HS-ABC123"');
+    expect(html).toContain('data-ticket-slug="HS-ABC123"');
+    expect(html).toContain('data-action="open-linked-ticket"');
+    expect(html).toContain('Open HS-ABC123');
+  });
+
+  it('has no ticket link and no ask sentence when no AI was asked', () => {
+    const html = String(TicketStoreSyncBanner({ report: report(['tickets.hs2', health('conflict')]) }));
+    expect(html).not.toContain('open-linked-ticket');
+    expect(html).not.toContain('to repair it');
   });
 });

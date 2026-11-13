@@ -1,7 +1,8 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CloudAlert } from 'lucide';
 
-import type { TicketStoreSyncHealth, TicketStoreSyncReport } from '../api';
+import type { TicketStoreAiHelp, TicketStoreSyncHealth, TicketStoreSyncReport } from '../api';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { formatBytes } from './repository-size';
 import { ShellBanner } from './shell-banner';
 
@@ -62,6 +63,23 @@ export function syncFailureSummary(health: TicketStoreSyncHealth): string {
   }
 }
 
+/** Whom Hot Sheet asked to repair the stall and how that went (HS2-QR1K8R); the server's next step says what follows. */
+export function aiHelpSentence(help: TicketStoreAiHelp): string {
+  const tool = help.tool ?? 'an AI session';
+  switch (help.outcome) {
+    case 'session_asked':
+      return 'Hot Sheet asked the running AI session to repair it.';
+    case 'started':
+      return `Hot Sheet started ${tool} to repair it.`;
+    case 'finished':
+      return `The ${tool} session Hot Sheet started has ended.`;
+    case 'failed':
+      return `The ${tool} session Hot Sheet started ended with an error.`;
+    case 'ticket_only':
+      return 'Hot Sheet could not ask an AI to repair it.';
+  }
+}
+
 function unpublishedSentence(count: number): string {
   if (count === 0) return 'Tickets are saved on this computer.';
   return `Tickets are saved on this computer, but ${count.toLocaleString('en-US')} local ${count === 1 ? 'change is' : 'changes are'} not published.`;
@@ -83,8 +101,10 @@ export function TicketStoreSyncBanner({ report }: { report: TicketStoreSyncRepor
     others === 0
       ? `Ticket store ${first.label} is not publishing changes`
       : `${failing.length} ticket stores are not publishing changes`;
+  const help = first.health.ai_help;
   const detail = [
     others === 0 ? syncFailureSummary(first.health) : `${first.label}: ${syncFailureSummary(first.health)}`,
+    help ? aiHelpSentence(help) : undefined,
     unpublishedSentence(first.health.unpublished_commits),
     first.health.next_action,
     others > 0
@@ -100,6 +120,18 @@ export function TicketStoreSyncBanner({ report }: { report: TicketStoreSyncRepor
       title={title}
       detail={detail}
       icon={<LucideIcon icon={CloudAlert} name="cloud-alert" />}
+      action={
+        help?.ticket ? (
+          <a
+            href={`#ticket-${help.ticket}`}
+            {...NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.attrs}
+            data-ticket-slug={help.ticket}
+            title={`Open ${help.ticket}`}
+          >
+            {`Open ${help.ticket}`}
+          </a>
+        ) : undefined
+      }
     />
   );
 }

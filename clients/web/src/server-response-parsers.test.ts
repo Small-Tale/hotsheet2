@@ -607,6 +607,20 @@ describe('HS2-ADHFKZ ticket-store sync health parser matches the Rust SyncHealth
     expect(parseTicketStoreSyncReport({ checkout_id: 'x', stores: [] }).stores).toEqual([]);
   });
 
+  it('reads the HS2-QR1K8R AI repair ask and rejects an unknown outcome', () => {
+    const ask = {
+      outcome: 'started',
+      mode: 'start',
+      tool: 'codex',
+      ticket: 'HS-ABC123',
+      asked_at: '2026-11-13T08:00:00Z',
+    };
+    const health = parseTicketStoreSyncReport(wire({ ...minimal, state: 'conflict', ai_help: ask })).stores[0]?.health;
+    expect(health.ai_help?.ticket).toBe('HS-ABC123');
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, ai_help: { ...ask, outcome: 'pending' } }))).toThrow();
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, ai_help: { ...ask, mode: 'always' } }))).toThrow();
+  });
+
   it('reads the HS2-9TV6A2 merge driver status and rejects an unknown one', () => {
     const repaired = { ...minimal, merge_driver: 'registered', merge_driver_repaired_at: '2026-11-12T08:00:00Z' };
     const health = parseTicketStoreSyncReport(wire(repaired)).stores[0]?.health;

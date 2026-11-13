@@ -253,7 +253,10 @@ ticket source. It reads local state only and never fetches. `health` is the
 `hotsheet-cli sync --status [--json]`, which prints one store's `health`. A cycle continues
 an unfinished rebase that needs no decision by itself ([02](02-ticket-storage.md) §2.12.3,
 HS2-QR1K8R). A stalled rebase or merge is aborted headlessly with
-`hotsheet-cli sync --abort-stalled-rebase`.
+`hotsheet-cli sync --abort-stalled-rebase`. When sync cannot finish alone it
+asks an AI through the same workflow as the server and reports it in `ai_help`;
+`hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree
+(§2.12.4).
 `hotsheet-cli sync` exits non-zero for `rejected`, `rebase_in_progress`, and
 `history_recovery_required`. The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
@@ -2012,6 +2015,11 @@ lock file records the settings path it guards. On Unix, at most once an hour
 exists, plus legacy empty locks, so a lock is not left behind for every temp project ever
 seen (HS2-MZ1TMH). A writer re-checks after locking that its open file is still the one at
 the lock path, and retries if a prune replaced it. Windows does not prune.
+
+`ticket_store_sync.ask_ai` is `off`, `session`, or `start` (the default when unset); the
+settings writer rejects any other value. It chooses how a ticket-store sync that cannot
+finish alone asks an AI ([02](02-ticket-storage.md) §2.12.4, HS2-QR1K8R), together with
+the project's `ai.defaults.tool`.
 
 `trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
 runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings

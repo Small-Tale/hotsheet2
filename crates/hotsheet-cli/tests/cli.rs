@@ -10147,6 +10147,279 @@ fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
     assert_eq!(status_json(a.path())["state"], "up_to_date");
 }
 
+/// HS2-QR1K8R stage 2, headless with no server: a real `conflict` makes `hotsheet-cli sync`
+/// start the project's default AI tool once, as a detached `hotsheet-cli trigger` that
+/// outlives the command and receives the repair prompt; a second `sync` starts nothing.
+/// The tool is the `repair-fixture` plugin (a `/bin/sh` spawn drive that records its
+/// prompt) in an isolated machine home; no AI tool runs.
+#[cfg(unix)]
+#[test]
+fn hs2_qr1k8r_headless_sync_starts_one_detached_session_with_the_prompt() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let home = tempfile::tempdir().unwrap();
+    let cli = |dir: &Path| {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.env("HOTSHEET_HOME", home.path())
+            .env_remove("HOTSHEET_ACTOR_ROLE")
+            .env_remove("HOTSHEET_ACTOR_ID")
+            .arg("-C")
+            .arg(dir);
+        cmd
+    };
+    let received = home.path().join("received-prompts.txt");
+    let plugin = home.path().join("plugins").join("repair-fixture");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    let script = format!("printf '%s\\n----\\n' \"$0\" >> '{}'", received.display());
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!(
+            "id = \"repair-fixture\"\ndisplay_name = \"Repair Fixture\"\nproduct_name = \"Repair \
+             Fixture\"\ntier = \"cli-agent\"\n[detection]\nbinaries = [\"sh\"]\n[instructions]\n\
+             target = \"AGENTS.md\"\nsection = \"instructions.md\"\n[mcp]\ntarget = \".mcp.json\"\n\
+             format = \"claude-json\"\nserver_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = \
+             [\"--path\", \"{{store}}\"]\n[drive]\ntransport = \"spawn\"\nprogram = \"/bin/sh\"\nargs = \
+             [\"-c\", {script:?}]\ncontent = \"arg\"\ninterrupt = false\n"
+        ),
+    )
+    .unwrap();
+
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    cli(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    // The store is its own project here: set up for the tool, which is its default.
+    std::fs::write(
+        a.join(".mcp.json"),
+        r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[]}}}"#,
+    )
+    .unwrap();
+    hotsheet_ticketing::Settings::for_project(a)
+        .set(
+            "ai.defaults",
+            serde_json::json!({ "tool": "repair-fixture" }),
+            hotsheet_ticketing::Scope::Shared,
+        )
+        .unwrap();
+    cli(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+    std::fs::write(a.join("notes.txt"), "local\n").unwrap();
+    assert!(git(a, &["add", "notes.txt"]));
+    assert!(git(a, &["commit", "--quiet", "-m", "local notes"]));
+
+    cli(a)
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started repair-fixture"));
+    // The detached session outlives the command and receives the prompt.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while !std::fs::read_to_string(&received).is_ok_and(|text| text.contains("\n----\n")) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the session never ran"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    cli(a)
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started").not());
+    cli(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "AI asked: started (start, repair-fixture",
+        ));
+    let prompts = std::fs::read_to_string(&received).unwrap();
+    assert_eq!(prompts.matches("\n----\n").count(), 1, "{prompts}");
+    assert!(prompts.contains("State: conflict"), "{prompts}");
+    assert!(prompts.contains("hotsheet-cli -C . show"), "{prompts}");
+}
+
+/// HS2-QR1K8R stage 2, headless: a real `conflict` asks for help (here no AI tool is
+/// configured, so the repair ticket waits and the health says why), the history is
+/// resolved in a temporary worktree, and `sync --adopt` refuses histories that drop local
+/// commits or keep conflict markers before adopting the right one; `sync` then publishes.
+#[test]
+fn hs2_qr1k8r_sync_adopt_takes_a_resolved_history_and_refuses_a_lossy_one() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    hs(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+    std::fs::write(a.join("notes.txt"), "local\n").unwrap();
+    assert!(git(a, &["add", "notes.txt"]));
+    assert!(git(a, &["commit", "--quiet", "-m", "local notes"]));
+    let local_ticket = new_ticket(a, "kept through the repair");
+
+    // The conflict asks for help once; with no default AI tool the ticket waits.
+    hs(a)
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Follow the repair procedure"));
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: conflict"))
+        .stdout(predicate::str::contains("AI asked: ticket_only (start"))
+        .stdout(predicate::str::contains("no default AI tool is configured"));
+    let repair_tickets = || {
+        let out = hs(a)
+            .args(["ls", "--tag", "sync-repair"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        String::from_utf8(out)
+            .unwrap()
+            .matches("Finish syncing the ticket store")
+            .count()
+    };
+    assert_eq!(repair_tickets(), 1);
+    hs(a).arg("sync").assert().failure();
+    assert_eq!(repair_tickets(), 1, "asked once");
+
+    let before = git_out(a, &["rev-parse", "HEAD"]);
+    // Refused: the upstream alone drops the local commits.
+    hs(a)
+        .args(["sync", "--adopt", "@{u}"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is missing"))
+        .stderr(predicate::str::contains("local commits"));
+    // Refused: the local branch does not contain the upstream.
+    hs(a)
+        .args(["sync", "--adopt", "HEAD"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "does not contain the fetched upstream",
+        ));
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), before);
+
+    // Resolve in a temporary worktree, as the repair procedure says.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp = temp_dir.path().join("resolve");
+    assert!(git(
+        a,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            temp.to_str().unwrap(),
+            "HEAD"
+        ]
+    ));
+    let upstream = git_out(a, &["rev-parse", "--abbrev-ref", "@{u}"]);
+    assert!(!git(&temp, &["rebase", "--quiet", &upstream]));
+    // Refused: a resolution that keeps conflict markers.
+    assert!(git(&temp, &["add", "--", "notes.txt"]));
+    assert!(git(
+        &temp,
+        &["-c", "core.editor=true", "rebase", "--continue"]
+    ));
+    let marked = git_out(&temp, &["rev-parse", "HEAD"]);
+    hs(a)
+        .args(["sync", "--adopt", &marked])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("conflict markers in: notes.txt"));
+    // The real resolution.
+    std::fs::write(temp.join("notes.txt"), "local\npeer\n").unwrap();
+    assert!(git(
+        &temp,
+        &["commit", "--quiet", "-a", "--amend", "--no-edit"]
+    ));
+    let resolved = git_out(&temp, &["rev-parse", "HEAD"]);
+    assert!(git(
+        a,
+        &["worktree", "remove", "--force", temp.to_str().unwrap()]
+    ));
+    hs(a)
+        .args(["sync", "--adopt", &resolved])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("refs/hotsheet/sync-backup/"));
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), resolved);
+    assert!(git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    hs(a).arg("sync").assert().success();
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: synced"))
+        .stdout(predicate::str::contains("AI asked").not());
+    assert!(git(&peer, &["pull", "--quiet"]));
+    assert_eq!(
+        std::fs::read_to_string(peer.join("notes.txt")).unwrap(),
+        "local\npeer\n"
+    );
+    hs(&peer).args(["show", &local_ticket]).assert().success();
+}
+
 /// HS2-9TV6A2: a store whose shared history never had `.gitattributes`, cloned by plain Git
 /// and never set up with `init`, still merges ticket files through the real semantic
 /// driver: two frontmatter-only edits of one ticket on two machines publish cleanly,

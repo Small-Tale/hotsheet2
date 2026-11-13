@@ -79,6 +79,11 @@ pub fn sync_all_with_sizes(
             {
                 state.announce_ticket_store_sync(&id, path, after);
             }
+            // HS2-QR1K8R: a stall sync cannot finish alone asks an AI (once per stall); a
+            // pass that publishes again closes the ask.
+            if report != SyncReport::NoRemote {
+                crate::sync_ai::ask_after_pass(state, &id, path);
+            }
             // Measure after every pass that reached the remote. `UpToDate` matters too: the
             // store's best-effort autocommit push can publish growth between passes, leaving
             // this pass nothing to push.

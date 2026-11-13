@@ -37,6 +37,15 @@ const STALLED: TicketStoreSyncHealth = {
     'Sync continues an unfinished rebase by itself when nothing conflicts; this one needs a decision. Finish the rebase or merge in the store, or run `hotsheet-cli sync --abort-stalled-rebase` to restore the local branch (a backup ref is kept).',
 };
 
+const REPAIR_ASKED: TicketStoreSyncHealth = {
+  ...BASE,
+  state: 'conflict',
+  unpublished_commits: 3,
+  consecutive_failures: 1,
+  next_action: 'Hot Sheet started codex to repair the store (ticket HS2-4KQ7RT); sync publishes once it is repaired.',
+  ai_help: { outcome: 'started', mode: 'start', tool: 'codex', ticket: 'HS2-4KQ7RT', asked_at: '2026-11-13T08:00:00Z' },
+};
+
 const OFFLINE: TicketStoreSyncHealth = {
   ...BASE,
   state: 'offline',
@@ -62,6 +71,13 @@ export function TicketStoreSyncBannerDemo() {
         viewport={{ width: 'full' }}
       >
         {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', STALLED]) })}
+      </CatalogExample>
+      <CatalogExample
+        label="AI Repair Started"
+        note="Sync could not finish alone, so Hot Sheet started the project's default AI tool and links its repair ticket."
+        viewport={{ width: 'full' }}
+      >
+        {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', REPAIR_ASKED]) })}
       </CatalogExample>
       <CatalogExample
         label="Several Stores"

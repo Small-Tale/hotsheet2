@@ -1065,6 +1065,17 @@ const TICKET_STORE_SYNC_STATES = new Set([
   'rebase_in_progress',
   'history_recovery_required',
 ]);
+const TICKET_STORE_AI_HELP_OUTCOMES = new Set(['session_asked', 'started', 'finished', 'failed', 'ticket_only']);
+const ticketStoreAiHelp = shape<NonNullable<TicketStoreSyncHealth['ai_help']>>(
+  'ticket store AI help',
+  {
+    outcome: (field) => typeof field === 'string' && TICKET_STORE_AI_HELP_OUTCOMES.has(field),
+    mode: (field) => field === 'off' || field === 'session' || field === 'start',
+    asked_at: isString,
+  },
+  {},
+  { tool: isString, ticket: isString, finished_at: isString, reason: isString },
+);
 const ticketStoreSyncHealth = shape<TicketStoreSyncHealth>(
   'ticket store sync health',
   {
@@ -1084,6 +1095,7 @@ const ticketStoreSyncHealth = shape<TicketStoreSyncHealth>(
     next_action: isString,
     merge_driver: (field) => field === 'registered' || field === 'repaired' || field === 'missing',
     merge_driver_repaired_at: isString,
+    ai_help: ticketStoreAiHelp.check,
   },
 );
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ). */

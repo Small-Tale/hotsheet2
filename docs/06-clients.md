@@ -4974,7 +4974,10 @@ transition history (HS2-XKXE7V).
   - says why in one sentence, naming an oversized unpublished file and its size;
   - says that tickets are saved on this computer and how many local changes are
     unpublished;
-  - repeats the server's next step, which names the headless `hotsheet-cli` command.
+  - repeats the server's next step, which names the headless `hotsheet-cli` command;
+  - while an AI was asked to repair the stall (`ai_help`, HS2-QR1K8R), says whom Hot Sheet
+    asked and how it went, and links the repair ticket with the shared
+    `open-linked-ticket` action.
 
   It has no dismiss and clears when a sync publishes again. The state contract is
   [02](02-ticket-storage.md) §2.12.2.

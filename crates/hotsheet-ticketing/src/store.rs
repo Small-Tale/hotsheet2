@@ -2303,6 +2303,12 @@ pub(crate) fn lock_history_sync(root: &Path) -> Result<FileLock, StoreError> {
     lock_git_coordination(root, "hotsheet-history-sync.lock")
 }
 
+/// Serialize asks for AI help on one store across processes (HS2-QR1K8R), so one stall
+/// never starts two sessions.
+pub(crate) fn lock_sync_ai(root: &Path) -> Result<FileLock, StoreError> {
+    lock_git_coordination(root, "hotsheet-sync-ai.lock")
+}
+
 fn lock_git_coordination(root: &Path, filename: &str) -> Result<FileLock, StoreError> {
     let out = crate::git::command()
         .arg("-C")

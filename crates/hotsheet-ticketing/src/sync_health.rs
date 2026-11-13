@@ -200,6 +200,10 @@ pub struct SyncHealth {
     /// When a sync cycle last registered the missing driver itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_driver_repaired_at: Option<String>,
+    /// The unresolved ask for AI help with a stall sync cannot finish alone
+    /// (HS2-QR1K8R): how it went, the tool, and the repair ticket.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ai_help: Option<crate::sync_ai::AiHelp>,
 }
 
 /// One linked Git ticket source's sync health.
@@ -266,6 +270,7 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
         next_action: None,
         merge_driver: crate::merge_driver::status(store_path),
         merge_driver_repaired_at: record.merge_driver_repaired_at.clone(),
+        ai_help: None,
     };
     if git_dir(store_path).is_none() {
         health.state = SyncState::NotRepository;
@@ -309,6 +314,27 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
     health.unpublished_commits = ahead;
     health.incoming_commits = behind;
     health.next_action = next_action(&health);
+    // HS2-QR1K8R: while a stall is being repaired, say who was asked and where the
+    // procedure is; say why when no AI could be asked.
+    if matches!(
+        health.state,
+        SyncState::Conflict | SyncState::RebaseInProgress
+    ) && let Some(help) = crate::sync_ai::current_help(store_path)
+    {
+        if let Some(line) = crate::sync_ai::reason_line(&help) {
+            health.reason = Some(match health.reason.take() {
+                Some(reason) => format!("{reason}\n{line}"),
+                None => line,
+            });
+        }
+        // The manual recovery stays available after the AI sentence.
+        let ai = crate::sync_ai::next_action(&help);
+        health.next_action = Some(match health.next_action.take() {
+            Some(manual) => format!("{ai} {manual}"),
+            None => ai,
+        });
+        health.ai_help = Some(help);
+    }
     health
 }
 

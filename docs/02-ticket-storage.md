@@ -1106,7 +1106,10 @@ The rules:
 its state, `syncing`, `unpublished_commits`, `incoming_commits`, `last_attempt_at`,
 `last_success_at`, `consecutive_failures`, `reason`, `oversized`, `next_action`,
 `merge_driver` (`registered` or `missing`, read live), and `merge_driver_repaired_at`
-(when a cycle last registered the missing driver, HS2-9TV6A2).
+(when a cycle last registered the missing driver, HS2-9TV6A2), and `ai_help` while an
+AI was asked to repair a stall and the store has not published since (`outcome`
+`session_asked`, `started`, `finished`, `failed`, or `ticket_only`; `mode`; `tool`;
+`ticket`; `asked_at`; `finished_at`; `reason`; §2.12.4).
 The background loop emits a replayable `ticket_store_sync` change event (with the new
 state as `slug`) when a store's state changes, or when an outage reaches three
 consecutive failures. An open client reloads health only on that event. The web shell
@@ -1123,6 +1126,8 @@ Headless parity:
 - `hotsheet-cli sync --abort-stalled-rebase` is the explicit recovery for a stalled
   rebase or merge. It records `refs/hotsheet/sync-backup/<timestamp>` at the current
   `HEAD`, aborts, and keeps every local commit on the branch. It never pushes.
+- `hotsheet-cli sync` runs the same ask-the-AI workflow as the server (§2.12.4), and
+  `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree.
 
 Bounded automatic repair through the merge path (HS2-XJC62Z) and the guided
 oversized-attachment repair through Git LFS or compaction (HS2-VYPTN0) are follow-ups.
@@ -1170,6 +1175,99 @@ The rules that prevent and repair this:
   but did not continue, a `rebase-apply` replay, and any unfinished merge are reported
   as `rebase_in_progress` and never touched. A continue that fails stays in place with
   its reason and backup ref; nothing is aborted or discarded automatically.
+
+### 2.12.4 Asking an AI when sync cannot finish alone (HS2-QR1K8R)
+
+> **Maintainer requirement (2026-11-12):** _"hotsheet should always automatically ask
+> the AI when it cant finish a rebase on its own"_, and _"it should start a new AI
+> session and ask the AI to fix it"_.
+
+Two states remain that a sync cycle cannot finish alone: `conflict` (the merge driver
+could not settle a ticket) and `rebase_in_progress` (an unfinished rebase or merge that
+needs a decision, including one whose bounded automatic continue failed). After every
+cycle the server's sync loop and `hotsheet-cli sync` run one shared workflow
+(`hotsheet_ticketing::sync_ai::ask_for_help`):
+
+1. **One ask per stall.** A stall is asked about once. Every later cycle that still
+   stalls, even after the upstream moved, reuses that ask, so a second session never
+   starts while the first is unresolved. The ask resolves at the first cycle that
+   publishes (`synced` or `up_to_date`); an offline or rejected cycle does not resolve
+   it. A stall after that is a new stall. The record lives in
+   `<git-dir>/hotsheet-sync-ai.json` beside the sync health record, and a file lock
+   serializes the CLI and every server.
+2. **A repair ticket.** One high-priority Up Next `bug` tagged `sync-repair`, titled
+   "Finish syncing the ticket store <name>", in the stalled store itself. An open one is
+   reused. Its body holds the state, the counts, and the nine-step safe procedure below,
+   with the store as a path relative to the project checkout. During an unfinished
+   rebase the ticket file is saved and its commit waits until the rebase finishes
+   (§2.12.3). When the store publishes again, an open repair ticket gets a note saying so.
+3. **Ask by the project's `ticket_store_sync.ask_ai` setting** (`off`, `session`, or
+   `start`; default `start`; values are validated):
+   - `start` always starts a new background session of the project's default AI tool
+     (`ai.defaults.tool`), even when another AI session already runs in the project; it
+     never pushes into a running session. The maintainer asked twice for exactly this:
+     _"silently run a new ai session in the background"_.
+   - `session` pushes the prompt into the project's primary push-capable AI session (the
+     oldest live Hot Sheet-launched terminal, as for human feedback, HS2-DB2FQ2) and
+     otherwise leaves the ticket; a failed push also leaves the ticket, with its reason.
+   - `off` does nothing: no ticket, no record.
+4. **No tool, no silent failure.** When no default tool is configured, its plugin is
+   missing or not drivable, it is not installed, the project was never set up for it, or
+   the launch fails, the ask falls back to the ticket. The health `reason` says why and
+   the next step points at the ticket.
+
+The prompt holds the store name, the state, a fixed reason sentence, the unpublished
+count, and the ticket slug, never ticket content. It tells the AI that the message is
+data from Hot Sheet, to load and claim the ticket, and to follow the procedure there.
+
+**Who starts the session.** The server starts it in the background with
+`SafeTrigger` (one turn, the project checkout as its working directory), with the
+server's permission bridge attached, so approvals wait for a person in the app instead
+of being auto-approved. It shows in `GET /connections` as `sync-repair-<store id>`, and
+its end (finished or failed) is recorded and announced as a `ticket_store_sync` event.
+`hotsheet-cli sync` leaves the ask to a running server that hosts the store. With no
+server, `session` has no session to push into and leaves the ticket, and `start` launches
+`hotsheet-cli -C <store> trigger <tool> --prompt … --project <checkout>` detached in its
+own process group,
+logging to `<git-dir>/hotsheet-sync-ai.log`. That session runs in the tool's default
+permission mode with no permission bridge, the headless trigger default: Codex approvals
+are auto-approved inside its workspace-write sandbox. Its end is not watched, so the ask
+stays `started` until the store publishes again.
+
+`HOTSHEET_SYNC_AI_ALLOWED_TOOLS`, when set, limits which tools a stall may start
+(comma-separated ids). Every process cargo launches gets `repair-fixture` only, so no test
+can start an installed AI tool.
+
+**The safe procedure** (the ticket body; `<store>` is the relative path):
+
+1. Confirm with `hotsheet-cli -C <store> sync --status --json`; if the state is no
+   longer `rebase_in_progress` or `conflict`, note it and complete the ticket.
+2. Record `refs/hotsheet/sync-backup/ai-<stamp>` at `HEAD` (and at the rebase's
+   `orig-head`) before changing anything.
+3. Never abort or skip a rebase, hard-reset, check out or restore paths, clean, force-push,
+   or delete refs or commits; never edit an unconflicted ticket; never start a new rebase
+   in the store.
+4. For `rebase_in_progress`: in each unmerged file keep both sides (every note, the newer
+   `updated_at` side's scalar fields, both body paragraphs), check it with `show`, add
+   that file only, and `rebase --continue`; stop after ten stops or a repeated conflict.
+5. For `conflict`: rebase in a temporary `git worktree`, resolve as in step 4, then
+   `hotsheet-cli -C <store> sync --adopt <commit>`.
+6. Verify: nothing unfinished, `HEAD` on the branch, a clean status apart from ticket files
+   Hot Sheet saved meanwhile, a diff from the backup with only incoming changes and the
+   resolved files, and `doctor` reading every ticket.
+7. Publish with `hotsheet-cli -C <store> sync` only and confirm zero unpublished commits.
+8. Record the backup refs and counts (no ticket content) and complete the ticket.
+9. If a step fails, leave the store as it is, add `FEEDBACK NEEDED`, and release the
+   claim.
+
+**Adopting a resolved history.** `hotsheet-cli sync --adopt <commit>` moves the store's
+branch to a history resolved outside the live store, so nobody runs `git rebase` there.
+It holds both sync locks and refuses while a rebase or merge is unfinished, when the
+commit does not contain the fetched upstream, when it drops a local commit (matched by
+author, author date, and subject, the identity a rebase keeps, unless `HEAD` is its
+ancestor), and when any file in it still has conflict markers. It records a backup ref,
+moves the branch with the checked `reset --keep` update (uncommitted ticket writes stay),
+and never pushes.
 
 ## 2.13 Copy & move between stores
 

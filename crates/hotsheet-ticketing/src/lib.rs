@@ -55,6 +55,7 @@ pub mod standby;
 pub mod store;
 pub mod store_git;
 pub mod sync;
+pub mod sync_ai;
 pub mod sync_health;
 pub mod sync_replay;
 pub mod terminal_limits;

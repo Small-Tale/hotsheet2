@@ -62,6 +62,7 @@ pub fn prepare_trigger(
             journal_home: Some(hotsheet_plugins::hotsheet_home()),
             persistent_codex_home: None,
             source_codex_home: None,
+            plugin_dirs: None,
         },
     )
 }
@@ -83,6 +84,9 @@ pub struct TriggerOptions {
     pub journal_home: Option<PathBuf>,
     /// Optional source for Codex auth in an isolated home; defaults to the signed-in home.
     pub source_codex_home: Option<PathBuf>,
+    /// Where to find the tool's plugin; defaults to the installed plugin directories. A
+    /// server passes its own (injected in tests) so it starts the plugins it discovered.
+    pub plugin_dirs: Option<Vec<PathBuf>>,
 }
 
 /// One controlled turn's inputs for [`SafeTrigger::run_turn_controlled_with_options`].
@@ -138,9 +142,13 @@ pub fn prepare_trigger_with_home(
         persistent_codex_home,
         journal_home,
         source_codex_home,
+        plugin_dirs,
     } = options;
-    let plugin = hotsheet_plugins::find(tool)
-        .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
+    let plugin = match plugin_dirs {
+        Some(dirs) => hotsheet_plugins::find_in(tool, &dirs),
+        None => hotsheet_plugins::find(tool),
+    }
+    .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
     let cwd = project.unwrap_or_else(|| store_path.to_path_buf());
 
     // `--env K=V` pairs for the launched tool (e.g. an isolated CODEX_HOME).

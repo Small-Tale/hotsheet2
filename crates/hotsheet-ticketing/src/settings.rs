@@ -405,6 +405,14 @@ impl Settings {
         if key == TRASH_CLEANUP_DAYS_SETTING {
             parse_trash_cleanup_days(value.clone())?;
         }
+        if key == crate::sync_ai::ASK_AI_SETTING
+            && crate::sync_ai::AskAiMode::parse(value).is_none()
+        {
+            return Err(invalid_value(
+                key,
+                "expected \"off\", \"session\", or \"start\"",
+            ));
+        }
         if key == crate::commands::COMMAND_GROUPS_KEY {
             serde_json::from_value::<Vec<String>>(value.clone()).map_err(|source| {
                 SettingsError::Invalid {

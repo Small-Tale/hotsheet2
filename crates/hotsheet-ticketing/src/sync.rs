@@ -594,6 +594,146 @@ pub(crate) fn record_backup_ref(
     Ok((head, backup_ref))
 }
 
+/// What [`adopt_resolved_history`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Adopted {
+    /// A ref keeping the commit `HEAD` pointed at before the branch moved.
+    pub backup_ref: String,
+    /// The branch commit now.
+    pub head: String,
+}
+
+/// Why [`adopt_resolved_history`] refused.
+#[derive(Debug, thiserror::Error)]
+pub enum AdoptError {
+    #[error("a rebase or merge is in progress in the store; finish it there instead of adopting")]
+    InProgress,
+    #[error("{0} is not a commit in this store")]
+    NotACommit(String),
+    #[error("the store's branch has no upstream to adopt onto")]
+    NoUpstream,
+    #[error("{0} does not contain the fetched upstream; rebase it onto the upstream first")]
+    NotOnUpstream(String),
+    #[error(
+        "{commit} is missing {missing} of the store's local commits; every local commit must \
+         be replayed (same author, date, and subject) before it can be adopted"
+    )]
+    MissingLocalCommits { commit: String, missing: usize },
+    #[error("{commit} still has conflict markers in: {}", .paths.join(", "))]
+    ConflictMarkers { commit: String, paths: Vec<String> },
+    #[error(
+        "the store has uncommitted changes in files the adopted commit changes; run \
+         `hotsheet-cli sync --adopt` again once Hot Sheet commits them"
+    )]
+    Busy,
+    #[error("could not lock the store: {0}")]
+    Lock(#[from] crate::StoreError),
+    #[error(transparent)]
+    Backup(#[from] StalledIntegrationError),
+}
+
+/// Move the store's branch to `commit`, a history an AI or a person rebased onto the
+/// upstream in a temporary worktree to resolve a `conflict` (HS2-QR1K8R), so nobody runs
+/// `git rebase` in the live store. Refuses unless `commit` contains the fetched upstream
+/// and replays every local commit (matched by author, author date, and subject, the
+/// identity a rebase keeps) or has `HEAD` as an ancestor, and has no conflict markers.
+/// Records a backup ref first and moves the branch with the checked two-tree update, so
+/// uncommitted ticket writes are never discarded. Never pushes.
+pub fn adopt_resolved_history(store_path: &Path, commit: &str) -> Result<Adopted, AdoptError> {
+    let _history = lock_history_sync(store_path)?;
+    let _git = lock_git_transaction(store_path)?;
+    if integration_in_progress(store_path).is_some() {
+        return Err(AdoptError::InProgress);
+    }
+    let resolve = |name: &str| {
+        git_stdout(
+            store_path,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("{name}^{{commit}}"),
+            ],
+        )
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+    };
+    let target = resolve(commit).ok_or_else(|| AdoptError::NotACommit(commit.to_string()))?;
+    let upstream = resolve("@{u}").ok_or(AdoptError::NoUpstream)?;
+    let head = resolve("HEAD").ok_or_else(|| AdoptError::NotACommit("HEAD".to_string()))?;
+    if !git_ok(
+        store_path,
+        &["merge-base", "--is-ancestor", &upstream, &target],
+    ) {
+        return Err(AdoptError::NotOnUpstream(commit.to_string()));
+    }
+    if !git_ok(store_path, &["merge-base", "--is-ancestor", &head, &target]) {
+        let identities = |range: &str, extra: &[&str]| {
+            let mut args = vec![
+                "log",
+                "--no-merges",
+                "--date=raw",
+                "--format=%an%x1f%ae%x1f%ad%x1f%s",
+            ];
+            args.extend_from_slice(extra);
+            args.push(range);
+            git_stdout(store_path, &args)
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        let local = identities(
+            &format!("{upstream}...{head}"),
+            &["--cherry-pick", "--right-only"],
+        );
+        let mut replayed = identities(&format!("{upstream}..{target}"), &[]);
+        let missing = local
+            .iter()
+            .filter(|identity| {
+                replayed
+                    .iter()
+                    .position(|candidate| candidate == *identity)
+                    .map(|at| replayed.swap_remove(at))
+                    .is_none()
+            })
+            .count();
+        if missing > 0 {
+            return Err(AdoptError::MissingLocalCommits {
+                commit: commit.to_string(),
+                missing,
+            });
+        }
+    }
+    let markers = git_stdout(
+        store_path,
+        &["grep", "-l", "-E", "^(<<<<<<<|>>>>>>>)( |$)", &target, "--"],
+    )
+    .unwrap_or_default();
+    let paths: Vec<String> = markers
+        .lines()
+        .map(|line| {
+            line.split_once(':')
+                .map_or(line, |(_, path)| path)
+                .to_string()
+        })
+        .collect();
+    if !paths.is_empty() {
+        return Err(AdoptError::ConflictMarkers {
+            commit: commit.to_string(),
+            paths,
+        });
+    }
+    let (_, backup_ref) = record_backup_ref(store_path)?;
+    if !move_branch_to(store_path, &head, &target) {
+        return Err(AdoptError::Busy);
+    }
+    Ok(Adopted {
+        backup_ref,
+        head: target,
+    })
+}
+
 /// Whether the store's git repo has any remote configured.
 fn has_remote(store_path: &Path) -> bool {
     git_stdout(store_path, &["remote"])
@@ -680,7 +820,7 @@ mod merge_driver_tests;
 mod stall_tests;
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -731,7 +871,7 @@ mod tests {
         assert_eq!(sync_once(dir.path()), SyncReport::Offline);
     }
 
-    pub(super) fn ok(root: &Path, args: &[&str]) {
+    pub(crate) fn ok(root: &Path, args: &[&str]) {
         assert!(
             git_ok(root, args),
             "git {args:?} failed in {}",
@@ -739,14 +879,14 @@ mod tests {
         );
     }
 
-    pub(super) fn identity(root: &Path) {
+    pub(crate) fn identity(root: &Path) {
         ok(root, &["config", "user.name", "Sync Test"]);
         ok(root, &["config", "user.email", "sync@test.invalid"]);
     }
 
     /// A bare remote with one commit, plus two clones of it: `store` (the synced store)
     /// and `peer` (another collaborator).
-    pub(super) fn remote_with_two_clones()
+    pub(crate) fn remote_with_two_clones()
     -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let remote = dir.path().join("remote.git");
@@ -771,17 +911,17 @@ mod tests {
         (dir, store, peer)
     }
 
-    pub(super) fn head(root: &Path) -> String {
+    pub(crate) fn head(root: &Path) -> String {
         git_stdout(root, &["rev-parse", "HEAD"]).unwrap()
     }
 
-    pub(super) fn clean(root: &Path) -> bool {
+    pub(crate) fn clean(root: &Path) -> bool {
         git_stdout(root, &["status", "--porcelain"])
             .unwrap()
             .is_empty()
     }
 
-    pub(super) fn peer_pushes(peer: &Path, file: &str) {
+    pub(crate) fn peer_pushes(peer: &Path, file: &str) {
         std::fs::write(peer.join(file), "from peer\n").unwrap();
         ok(peer, &["add", "-A"]);
         ok(peer, &["commit", "--quiet", "-m", file]);
@@ -957,13 +1097,13 @@ mod tests {
         }
     }
 
-    pub(super) fn commit_file(root: &Path, file: &str, body: &str) {
+    pub(crate) fn commit_file(root: &Path, file: &str, body: &str) {
         std::fs::write(root.join(file), body).unwrap();
         ok(root, &["add", "-A"]);
         ok(root, &["commit", "--quiet", "-m", file]);
     }
 
-    pub(super) fn reflog_len(root: &Path) -> usize {
+    pub(crate) fn reflog_len(root: &Path) -> usize {
         git_stdout(root, &["reflog", "show", "--format=%H", "HEAD"])
             .unwrap_or_default()
             .lines()

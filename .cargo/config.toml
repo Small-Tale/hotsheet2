@@ -45,3 +45,8 @@ HOTSHEET_CLAUDE_USER_CONFIG = { value = "target/test-claude-user-config/.claude.
 # that drive install inject a fake), and the agents directory stays under `target/`.
 HOTSHEET_LAUNCHCTL = { value = "target/test-launchctl-disabled/launchctl", force = true, relative = true }
 HOTSHEET_LAUNCH_AGENTS_DIR = { value = "target/test-launch-agents", force = true, relative = true }
+# HS2-QR1K8R: a sync stall asks an AI and, by default, starts the project's default AI tool.
+# Every process cargo launches may start only the `repair-fixture` test plugin, so no test
+# can start an installed AI tool with real credentials, whatever a shared test home's
+# `ai.defaults` names.
+HOTSHEET_SYNC_AI_ALLOWED_TOOLS = { value = "repair-fixture", force = true }
