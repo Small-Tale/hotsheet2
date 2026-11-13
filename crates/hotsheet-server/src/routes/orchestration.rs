@@ -17,7 +17,9 @@ use std::sync::Arc;
 
 /// The shared runtime with this server as its capacity probe (HS2-J8PRTV) and its
 /// terminal host (HS2-GDJXGZ): sessions live here, so only this process can say what
-/// is running or start another. Call on a blocking thread.
+/// is running or start another. The scheduler's executor (HS2-95SWQ4) is the one
+/// `OrchestrationRuntime::live` attaches: the sessions this runtime owns. Call on a
+/// blocking thread.
 fn runtime(
     state: &AppState,
     handle: tokio::runtime::Handle,
@@ -31,6 +33,7 @@ fn runtime(
         runtime: handle,
     });
     if let Some(runtime) = &state.orchestration_runtime {
+        // HS2-95SWQ4: an injected runtime keeps the executor it was given.
         return Ok(Arc::new(
             OrchestrationRuntime::clone(runtime)
                 .with_capacity_probe(probe)

@@ -493,6 +493,10 @@ mod runs;
 // HS2-GDJXGZ: real PTYs run the fake agent, which is a Unix test double.
 #[path = "remote_servers/scheduler.rs"]
 mod scheduler;
+// HS2-95SWQ4: the scheduler places real PTY sessions of the same fake agent.
+#[cfg(unix)]
+#[path = "remote_servers/session_executor.rs"]
+mod session_executor;
 #[cfg(unix)]
 #[path = "remote_servers/sessions.rs"]
 mod sessions;

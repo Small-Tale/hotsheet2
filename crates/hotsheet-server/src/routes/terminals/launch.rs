@@ -600,6 +600,7 @@ fn register_terminal_connection(
     let events = state.clone();
     let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
+        let mut turn = TurnEnd::default();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let alive = term.is_alive();
@@ -615,20 +616,43 @@ fn register_terminal_connection(
                     }
                     release_session_claims(host, worker).await;
                 }
+                // HS2-95SWQ4: an orchestrator's scheduler learns of the exit.
+                crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
                 break;
             }
+            let busy = matches!(term.activity(), hotsheet_terminals::Activity::Busy);
             {
                 let mut r = registry.lock_or_recover();
                 if !r.is_generation(&conn_id, generation) {
                     break;
                 }
-                match term.activity() {
-                    hotsheet_terminals::Activity::Busy => r.note_activity(&conn_id, now_ms()),
-                    hotsheet_terminals::Activity::Idle => r.set_idle(&conn_id),
+                if busy {
+                    r.note_activity(&conn_id, now_ms());
+                } else {
+                    r.set_idle(&conn_id);
                 }
+            }
+            if turn.ended(busy) {
+                crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
             }
         }
     });
+}
+
+/// HS2-95SWQ4: tells the end of a turn from the busy feed: the first idle observation
+/// after a busy one, and the first observation at all when it is idle (a session that
+/// starts idle is at a safe point from then on).
+#[derive(Debug, Default)]
+struct TurnEnd {
+    last: Option<bool>,
+}
+
+impl TurnEnd {
+    fn ended(&mut self, busy: bool) -> bool {
+        let ended = !busy && self.last != Some(false);
+        self.last = Some(busy);
+        ended
+    }
 }
 
 /// The broker-mode counterpart of [`register_terminal_connection`] (HS2-ERT00F item 5): the
@@ -664,18 +688,26 @@ fn register_broker_terminal_connection(
     let events = state.clone();
     let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
+        let mut turn = TurnEnd::default();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             match broker.info(&conn_id).await {
                 Ok(Some(info)) if info.alive => {
-                    let mut r = registry.lock_or_recover();
-                    if !r.is_generation(&conn_id, generation) {
-                        break;
+                    {
+                        let mut r = registry.lock_or_recover();
+                        if !r.is_generation(&conn_id, generation) {
+                            break;
+                        }
+                        if info.busy {
+                            r.note_activity(&conn_id, now_ms());
+                        } else {
+                            r.set_idle(&conn_id);
+                        }
                     }
-                    if info.busy {
-                        r.note_activity(&conn_id, now_ms());
-                    } else {
-                        r.set_idle(&conn_id);
+                    if turn.ended(info.busy) {
+                        crate::routes::orchestration_sessions::note_session_change(
+                            &events, &conn_id,
+                        );
                     }
                 }
                 // Terminal gone (NotFound / exited) or broker unreachable → stop + unregister.
@@ -691,6 +723,8 @@ fn register_broker_terminal_connection(
                         }
                         release_session_claims(host, worker).await;
                     }
+                    // HS2-95SWQ4: an orchestrator's scheduler learns of the exit.
+                    crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
                     break;
                 }
             }
@@ -1093,5 +1127,31 @@ mod terminal_history_tests {
                 .unwrap()
                 .is_empty()
         )
+    }
+}
+
+#[cfg(test)]
+mod turn_end_tests {
+    use super::TurnEnd;
+
+    /// HS2-95SWQ4: a turn ends once per busy stretch, and a session first seen idle
+    /// counts as having ended one, so a scheduler is woken exactly when a safe point
+    /// may have been reached and never for a session that stays as it was.
+    #[test]
+    fn hs2_95swq4_a_turn_ends_once_per_busy_stretch() {
+        for (feed, expected) in [
+            (&[false][..], &[true][..]),
+            (&[true], &[false]),
+            (&[false, false, false], &[true, false, false]),
+            (&[true, true, false, false], &[false, false, true, false]),
+            (
+                &[true, false, true, false, false, true],
+                &[false, true, false, true, false, false],
+            ),
+        ] {
+            let mut turn = TurnEnd::default();
+            let ended: Vec<bool> = feed.iter().map(|busy| turn.ended(*busy)).collect();
+            assert_eq!(ended, expected, "{feed:?}");
+        }
     }
 }

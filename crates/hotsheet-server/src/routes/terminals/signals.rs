@@ -1150,6 +1150,8 @@ pub(crate) async fn kill_terminal(
                 }
                 forget_terminal_ai_connection(&state, &id);
                 state.terminal_ai_last_reports.lock_or_recover().remove(&id);
+                // HS2-95SWQ4: an orchestrator's scheduler learns its session is gone.
+                crate::routes::orchestration_sessions::note_session_change(&state, &id);
                 Ok(StatusCode::NO_CONTENT)
             }
             other => Err(broker_err(other)),
@@ -1168,6 +1170,8 @@ pub(crate) async fn kill_terminal(
     }
     forget_terminal_ai_connection(&state, &id);
     state.terminal_ai_last_reports.lock_or_recover().remove(&id);
+    // HS2-95SWQ4: an orchestrator's scheduler learns its session is gone.
+    crate::routes::orchestration_sessions::note_session_change(&state, &id);
     Ok(StatusCode::NO_CONTENT)
 }
 

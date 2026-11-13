@@ -94,3 +94,20 @@ impl SessionHost for ServerSessions {
         }
     }
 }
+
+/// HS2-95SWQ4: an AI terminal of this server ended or finished a turn. When an
+/// orchestrator started it, the scheduler following on this machine is woken through
+/// its marker, so it learns of the exit or the safe point from the change itself and
+/// never by asking on a timer. Any other terminal changes nothing.
+pub(crate) fn note_session_change(state: &AppState, terminal_id: &str) {
+    let home = state.machine_home().to_path_buf();
+    let terminal_id = terminal_id.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let hosted = hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&home)
+            .hosts(&terminal_id)
+            .unwrap_or(false);
+        if hosted {
+            hotsheet_cli::orchestration::OrchestrationRuntime::scheduler_wake_at(&home);
+        }
+    });
+}

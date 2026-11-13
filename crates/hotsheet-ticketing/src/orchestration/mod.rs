@@ -15,6 +15,7 @@ mod reconcile;
 mod run_events;
 mod runs;
 mod scheduler;
+mod session_idle;
 mod sessions;
 mod storage;
 mod tool_capacity;
@@ -83,6 +84,7 @@ pub use scheduler::{
     ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
     TickInputs, Unplaced, WorkItem, WorkLevel, plan, refusal_backoff_ms, remember, score,
 };
+pub use session_idle::{SessionIdleStore, observe_idle};
 pub use sessions::{
     HostedRef, HostedSession, HostedSessionRegistry, MAX_HOSTED_SESSIONS, MAX_SESSION_HISTORY,
     MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession, OrchestratedSession,
@@ -283,6 +285,8 @@ mod run_event_tests;
 mod run_tests;
 #[cfg(test)]
 mod scheduler_tests;
+#[cfg(test)]
+mod session_idle_tests;
 #[cfg(test)]
 mod session_tests;
 #[cfg(test)]

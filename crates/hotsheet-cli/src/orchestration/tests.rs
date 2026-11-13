@@ -26,6 +26,7 @@ mod readiness;
 mod recovery;
 mod runs;
 mod scheduler;
+mod session_executor;
 mod sessions;
 mod tickets;
 mod tool_capacity;

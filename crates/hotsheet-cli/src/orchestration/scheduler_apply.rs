@@ -139,7 +139,7 @@ impl OrchestrationRuntime {
             outcome.outcome = format!("executor_{}", gathered.executor);
             return outcome;
         }
-        let answer = self.session_executor.start(&PlacementStart {
+        let request = PlacementStart {
             owner_id: owner_id.into(),
             target_id: placement.target_id.clone(),
             tool: placement.tool.clone(),
@@ -151,7 +151,8 @@ impl OrchestrationRuntime {
             load,
             limits: gathered.policy.machine_limits(&placement.target_id),
             probe: placement.probe,
-        });
+        };
+        let answer = self.session_executor.start(self, &request, tx);
         let succeeded = match answer {
             StartOutcome::Started { session_id } => {
                 outcome.outcome = "started".into();
@@ -281,7 +282,7 @@ impl OrchestrationRuntime {
             outcome.outcome = format!("executor_{}", gathered.executor);
             return outcome;
         }
-        let answer = self.session_executor.wind_down(&WindDownSession {
+        let request = WindDownSession {
             owner_id: owner_id.into(),
             target_id: placement.target_id.clone(),
             session_id,
@@ -290,7 +291,8 @@ impl OrchestrationRuntime {
             operation_id,
             actor_id: actor_id.into(),
             reason: placement.reason.code().into(),
-        });
+        };
+        let answer = self.session_executor.wind_down(self, &request, tx);
         let succeeded = match answer {
             WindDownOutcome::Requested => {
                 outcome.outcome = "wind_down_requested".into();

@@ -1323,7 +1323,7 @@ test('HS2-ECWG50 real scheduler responses match the OpenAPI contract', async () 
       mode: 'dry_run',
       ranking: [{ step_id: stepId }],
       unplaced: [{ step_id: stepId, reason: 'no_tool_available', detail: 'tool_not_installed' }],
-      inputs: { automatic: false, work: 1, confirmed: 1, executor: 'unavailable' },
+      inputs: { automatic: false, work: 1, confirmed: 1, executor: 'available' }, // HS2-95SWQ4
     });
     const explained = await act('explain', { step_id: stepId }, 'SchedulerExplanation');
     expect(explained).toMatchObject({ running: false, standing: 'not_placed', reason: 'no_tool_available', rank: 1 });

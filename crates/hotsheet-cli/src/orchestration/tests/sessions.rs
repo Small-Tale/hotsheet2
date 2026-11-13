@@ -20,13 +20,13 @@ use super::*;
 /// A terminal host the test drives: it launches by remembering, and the test decides
 /// what is busy, what crashed and whether it answers at all.
 #[derive(Default)]
-struct ScriptedHost {
+pub(super) struct ScriptedHost {
     live: Mutex<Vec<HostSessionState>>,
     launches: Mutex<Vec<HostLaunch>>,
     joined: Mutex<Vec<(String, SessionRole)>>,
-    stops: AtomicUsize,
-    down: AtomicBool,
-    refusing: AtomicBool,
+    pub(super) stops: AtomicUsize,
+    pub(super) down: AtomicBool,
+    pub(super) refusing: AtomicBool,
 }
 impl ScriptedHost {
     fn live(&self) -> std::sync::MutexGuard<'_, Vec<HostSessionState>> {
@@ -34,20 +34,20 @@ impl ScriptedHost {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
-    fn launches(&self) -> Vec<HostLaunch> {
+    pub(super) fn launches(&self) -> Vec<HostLaunch> {
         self.launches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
-    fn set_busy(&self, session_id: &str, busy: bool) {
+    pub(super) fn set_busy(&self, session_id: &str, busy: bool) {
         for state in self.live().iter_mut() {
             if state.session_id == session_id {
                 state.busy = busy;
             }
         }
     }
-    fn crash(&self, session_id: &str) {
+    pub(super) fn crash(&self, session_id: &str) {
         self.live().retain(|state| state.session_id != session_id);
     }
 }
@@ -94,9 +94,9 @@ impl SessionHost for ScriptedHost {
 
 /// A probe whose answer the test sets.
 #[derive(Default)]
-struct Probe(Mutex<HostObservation>);
+pub(super) struct Probe(Mutex<HostObservation>);
 impl Probe {
-    fn set(&self, change: impl FnOnce(&mut HostObservation)) {
+    pub(super) fn set(&self, change: impl FnOnce(&mut HostObservation)) {
         change(
             &mut self
                 .0
@@ -113,7 +113,7 @@ impl CapacityProbe for Probe {
             .clone()
     }
 }
-fn roomy() -> HostObservation {
+pub(super) fn roomy() -> HostObservation {
     HostObservation {
         sampled_at_ms: Some(150),
         memory: MemoryCapacity {

@@ -432,12 +432,24 @@ pub struct SessionSyncSummary {
     pub failed: Vec<SessionSyncFailure>,
 }
 
+/// HS2-95SWQ4: how the gate sees a start or a stop the scheduler placed. The
+/// scheduler asked the side-effect-free check under its own operation id, and a
+/// person's approval is for that id, so the act passes the gate under it too.
+pub(super) struct PlacedGate<'a> {
+    pub(super) operation_id: &'a str,
+    /// The sessions the scheduler counted when it decided a start.
+    pub(super) load: Option<&'a SessionLoad>,
+}
+
 fn is_human(actor: Option<&MutationActor>) -> bool {
     actor.is_some_and(|actor| actor.role == ActorRole::Human)
 }
 
 fn git(root: &Path, args: &[&str]) -> Option<String> {
     let output = hotsheet_ticketing::git::launch("git")
+        // HS2-95SWQ4: a scheduler pass reads the checkout while a person or a session
+        // may be committing in it. A read must never hold the index lock they need.
+        .arg("--no-optional-locks")
         .arg("-C")
         .arg(root)
         .args(args)
@@ -1006,8 +1018,15 @@ impl OrchestrationRuntime {
         let before = registry.get(owner_id, session_id)?;
         let actor_id = update.actor_id.clone();
         let after = registry.update(owner_id, session_id, update, tx)?;
+        let changed = after.history.len() != before.history.len()
+            || before.history.last() != after.history.last();
+        if changed && after.run_id.is_none() {
+            // HS2-95SWQ4: a session without a run has no event stream to publish on,
+            // so its start, exit and takeover wake the scheduler through its marker.
+            Self::scheduler_wake_at(&self.home);
+        }
         if let (Some(run_id), Some(entry)) = (&after.run_id, after.history.last()) {
-            if after.history.len() != before.history.len() || before.history.last() != Some(entry) {
+            if changed {
                 self.run_event(
                     owner_id,
                     RunEvent {
@@ -1058,20 +1077,23 @@ impl OrchestrationRuntime {
     }
 
     /// The gate for reading or winding down an existing session: grants and policy
-    /// limits apply, nothing new starts, and it carries no load.
+    /// limits apply, nothing new starts, and it carries no load. It is passed under
+    /// the session's own operation id, or under the scheduler's for a stop it placed.
     fn session_gate(
         &self,
         session: &OrchestratedSession,
         actor: Option<&MutationActor>,
         continuing: bool,
+        placed: Option<&PlacedGate<'_>>,
         tx: &mut Transaction<'_>,
     ) -> Result<(TargetRef, Authorized), OrchestrationError> {
         let target = Self::target_ref(&session.owner_checkout_id, &session.target_id)?;
         let request = ActionRequest {
             session: Some(Self::session_request(session, false, 0)),
             role_session: session.role.is_role_session(),
-            ..ActionRequest::new(TargetAction::SessionsManage)
-                .operation(session.operation_id.clone())
+            ..ActionRequest::new(TargetAction::SessionsManage).operation(
+                placed.map_or(session.operation_id.as_str(), |placed| placed.operation_id),
+            )
         };
         let authorized = self.authorize(
             &target,
@@ -1276,6 +1298,18 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<SessionView, OrchestrationError> {
+        self.session_start_gated(owner_id, request, None, actor, tx)
+    }
+
+    /// [`Self::session_start`], with how the gate sees a start the scheduler placed.
+    pub(super) fn session_start_gated(
+        &self,
+        owner_id: &str,
+        request: StartSession,
+        placed: Option<&PlacedGate<'_>>,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
         identifier(&request.operation_id, "bounded operation id required")?;
         identifier(&request.tool, "bounded tool id required")?;
         let target = Self::target_ref(owner_id, &request.target_id)?;
@@ -1324,6 +1358,17 @@ impl OrchestrationRuntime {
             load.tool_sessions = load.tool_sessions.saturating_sub(1);
             load.account_sessions = load.account_sessions.saturating_sub(1);
         }
+        if let Some(decided) = placed.and_then(|placed| placed.load) {
+            // HS2-95SWQ4: the scheduler decided on a count that includes sessions these
+            // records do not hold (other owners' and people's on the machine), and
+            // the records hold starts made since it counted. Neither is undercut.
+            load.target_sessions = load.target_sessions.max(decided.target_sessions);
+            load.machine_sessions = load.machine_sessions.max(decided.machine_sessions);
+            load.tool_sessions = load.tool_sessions.max(decided.tool_sessions);
+            if load.account == decided.account {
+                load.account_sessions = load.account_sessions.max(decided.account_sessions);
+            }
+        }
         let authorized = self.authorize(
             &target,
             actor,
@@ -1336,8 +1381,9 @@ impl OrchestrationRuntime {
                 }),
                 load: Some(load),
                 role_session: role.is_role_session(),
-                ..ActionRequest::new(TargetAction::SessionsManage)
-                    .operation(request.operation_id.clone())
+                ..ActionRequest::new(TargetAction::SessionsManage).operation(
+                    placed.map_or(request.operation_id.as_str(), |placed| placed.operation_id),
+                )
             },
             tx,
         )?;
@@ -1507,7 +1553,7 @@ impl OrchestrationRuntime {
                 ..SessionView::from(session)
             });
         }
-        let (target, authorized) = self.session_gate(&session, actor, true, tx)?;
+        let (target, authorized) = self.session_gate(&session, actor, true, None, tx)?;
         let outcome = (|| {
             let hosted = self.hosted_listing(
                 Self::destination(&authorized)?,
@@ -1569,6 +1615,19 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<SessionView, OrchestrationError> {
+        self.session_stop_gated(owner_id, session_id, request, None, actor, tx)
+    }
+
+    /// [`Self::session_stop`], with how the gate sees a stop the scheduler placed.
+    pub(super) fn session_stop_gated(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        request: StopSession,
+        placed: Option<&PlacedGate<'_>>,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
         let session = self.session(owner_id, session_id)?;
         if session.state.is_terminal() {
             return Err(OrchestrationError::Session(SessionError::NotActive));
@@ -1591,7 +1650,7 @@ impl OrchestrationRuntime {
         let (destination, authorized) = if human {
             (self.person_destination(&target, tx)?, None)
         } else {
-            let (_, authorized) = self.session_gate(&session, actor, false, tx)?;
+            let (_, authorized) = self.session_gate(&session, actor, false, placed, tx)?;
             (Self::destination(&authorized)?.clone(), Some(authorized))
         };
         let outcome = (|| {

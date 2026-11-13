@@ -1,12 +1,16 @@
 //! HS2-ECWG50: the seam between the scheduler, which decides where sessions run, and
 //! whoever starts and stops them (HS2-GDJXGZ). The scheduler knows a session only
 //! through its own [`ScheduledSession`]; an executor maps its records onto it.
+//! HS2-95SWQ4: every call is handed the runtime it serves and the pass's transaction,
+//! so an executor keeps no state of its own and acts on the pass's clock.
 use std::sync::Mutex;
 
 use hotsheet_ticketing::orchestration::{
-    MachineLimits, ScheduledSession, SessionActivity, SessionLoad,
+    MachineLimits, ScheduledSession, SessionActivity, SessionLoad, Transaction,
 };
 use serde::Serialize;
+
+use super::OrchestrationRuntime;
 
 /// Why the sessions could not be listed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,22 +90,52 @@ pub enum WindDownOutcome {
 pub trait SessionExecutor: Send + Sync {
     /// Every AI session on the owner's targets that the executor knows, including
     /// ones the orchestrator does not own (`owner_id` says whose each is).
-    fn list(&self, owner_id: &str) -> Result<Vec<ScheduledSession>, SessionExecutorError>;
-    fn start(&self, request: &PlacementStart) -> StartOutcome;
+    fn list(
+        &self,
+        runtime: &OrchestrationRuntime,
+        owner_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Vec<ScheduledSession>, SessionExecutorError>;
+    fn start(
+        &self,
+        runtime: &OrchestrationRuntime,
+        request: &PlacementStart,
+        tx: &mut Transaction<'_>,
+    ) -> StartOutcome;
     /// Ask a session to stop at its next safe point. Never interrupts work.
-    fn wind_down(&self, request: &WindDownSession) -> WindDownOutcome;
+    fn wind_down(
+        &self,
+        runtime: &OrchestrationRuntime,
+        request: &WindDownSession,
+        tx: &mut Transaction<'_>,
+    ) -> WindDownOutcome;
 }
 
 /// The default: no executor is wired in, so nothing is listed, started or stopped.
 pub struct ExecutorUnavailable;
 impl SessionExecutor for ExecutorUnavailable {
-    fn list(&self, _: &str) -> Result<Vec<ScheduledSession>, SessionExecutorError> {
+    fn list(
+        &self,
+        _: &OrchestrationRuntime,
+        _: &str,
+        _: &mut Transaction<'_>,
+    ) -> Result<Vec<ScheduledSession>, SessionExecutorError> {
         Err(SessionExecutorError::Unavailable)
     }
-    fn start(&self, _: &PlacementStart) -> StartOutcome {
+    fn start(
+        &self,
+        _: &OrchestrationRuntime,
+        _: &PlacementStart,
+        _: &mut Transaction<'_>,
+    ) -> StartOutcome {
         StartOutcome::Unavailable
     }
-    fn wind_down(&self, _: &WindDownSession) -> WindDownOutcome {
+    fn wind_down(
+        &self,
+        _: &OrchestrationRuntime,
+        _: &WindDownSession,
+        _: &mut Transaction<'_>,
+    ) -> WindDownOutcome {
         WindDownOutcome::Unavailable
     }
 }
@@ -140,13 +174,23 @@ impl RecordingSessions {
 }
 
 impl SessionExecutor for RecordingSessions {
-    fn list(&self, _: &str) -> Result<Vec<ScheduledSession>, SessionExecutorError> {
+    fn list(
+        &self,
+        _: &OrchestrationRuntime,
+        _: &str,
+        _: &mut Transaction<'_>,
+    ) -> Result<Vec<ScheduledSession>, SessionExecutorError> {
         match locked(&self.fail_list).clone() {
             Some(code) => Err(SessionExecutorError::Failed(code)),
             None => Ok(locked(&self.sessions).clone()),
         }
     }
-    fn start(&self, request: &PlacementStart) -> StartOutcome {
+    fn start(
+        &self,
+        _: &OrchestrationRuntime,
+        request: &PlacementStart,
+        _: &mut Transaction<'_>,
+    ) -> StartOutcome {
         locked(&self.calls).push(SessionCall::Start(request.clone()));
         if let Some(reason) = locked(&self.refuse_starts).clone() {
             return StartOutcome::Refused { reason };
@@ -170,7 +214,12 @@ impl SessionExecutor for RecordingSessions {
         });
         StartOutcome::Started { session_id }
     }
-    fn wind_down(&self, request: &WindDownSession) -> WindDownOutcome {
+    fn wind_down(
+        &self,
+        _: &OrchestrationRuntime,
+        request: &WindDownSession,
+        _: &mut Transaction<'_>,
+    ) -> WindDownOutcome {
         locked(&self.calls).push(SessionCall::WindDown(request.clone()));
         let answer = locked(&self.wind_down_answer)
             .clone()

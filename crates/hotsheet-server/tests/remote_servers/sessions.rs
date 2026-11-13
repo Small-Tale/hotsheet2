@@ -13,11 +13,11 @@ const TARGET_A: &str = "01ARZ3NDEKTSV4RRFFQ69G5FG0";
 const TARGET_B: &str = "01ARZ3NDEKTSV4RRFFQ69G5FG1";
 const MIB: u64 = 1024 * 1024;
 /// An idle tool, and one that is in the middle of a turn for as long as it lives.
-const IDLE_TOOL: &str = "fake-idle";
+pub(super) const IDLE_TOOL: &str = "fake-idle";
 const BUSY_TOOL: &str = "fake-busy";
 
 /// A roomy machine with both fake tools installed.
-struct Roomy;
+pub(super) struct Roomy;
 impl hotsheet_server::CapacitySource for Roomy {
     fn machine(&mut self) -> hotsheet_server::MachineReading {
         hotsheet_server::MachineReading {
@@ -47,7 +47,7 @@ fn workspace_binary(name: &str) -> PathBuf {
 }
 
 /// Two plugins that launch the workspace fake agent: one sits idle, one stays busy.
-fn fake_plugins(root: &Path) -> PathBuf {
+pub(super) fn fake_plugins(root: &Path) -> PathBuf {
     let fake_agent = workspace_binary("hs-fake-agent");
     assert!(
         fake_agent.is_file(),
@@ -93,7 +93,7 @@ args = {script}
     plugins
 }
 
-fn git_project(path: &Path) {
+pub(super) fn git_project(path: &Path) {
     std::fs::create_dir(path).unwrap();
     let status = hotsheet_ticketing::git::launch("git")
         .arg("-C")
@@ -115,7 +115,7 @@ fn policy() -> Value {
 }
 
 /// The server's terminal list, which is what its bottom drawer renders.
-async fn drawer(router: &axum::Router) -> Vec<Value> {
+pub(super) async fn drawer(router: &axum::Router) -> Vec<Value> {
     let (status, terminals) = api(router.clone(), "GET", "/terminals", Value::Null, true).await;
     assert_eq!(status, StatusCode::OK);
     terminals.as_array().unwrap().clone()

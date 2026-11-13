@@ -199,7 +199,9 @@ async fn hs2_ecwg50_cli_plans_explains_ticks_and_reads_the_decision_log() {
     assert_eq!(plan["placements"], json!([]));
     assert_eq!(plan["unplaced"][0]["reason"], "machine_refused", "{plan}");
     assert_eq!(plan["unplaced"][0]["detail"], "capacity_unknown");
-    assert_eq!(plan["inputs"]["executor"], "unavailable");
+    // HS2-95SWQ4: a headless process has the executor too; it has nothing to list.
+    assert_eq!(plan["inputs"]["executor"], "available");
+    assert_eq!(plan["inputs"]["sessions"], 0);
     assert_eq!(
         scheduler(&["decisions"])["entries"],
         json!([]),
@@ -578,6 +580,8 @@ async fn hs2_ecwg50_server_routes_event_loop_and_stdio_mcp_share_the_scheduler()
     };
     let plan = call(json!({"action":"scheduler_plan"}));
     assert_eq!(plan["mode"], "applied");
+    // HS2-95SWQ4: the service's scheduler has the executor over its own sessions.
+    assert_eq!(plan["inputs"]["executor"], "available");
     assert_eq!(plan["ranking"].as_array().unwrap().len(), 2);
     let explained = call(json!({"action":"scheduler_explain","target_id":TARGET,
         "connection_id":connection,"native_id":first.id.to_string()}));

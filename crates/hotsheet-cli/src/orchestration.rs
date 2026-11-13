@@ -13,6 +13,7 @@ mod runs;
 mod scheduler;
 mod scheduler_apply;
 mod session_control;
+mod session_executor;
 mod sessions;
 mod tickets;
 mod tool_capacity;
@@ -45,6 +46,7 @@ pub use session_control::{
     ExecutorUnavailable, PlacementStart, RecordingSessions, SessionCall, SessionExecutor,
     SessionExecutorError, StartOutcome, WindDownOutcome, WindDownSession,
 };
+pub use session_executor::{OwnedSessions, UNCONFIRMED_START_MS};
 pub use sessions::{
     HostLaunch, HostSessionState, HostedControlReply, HostedRoles, HostedSessionControl,
     HostedSessionList, HostedSessionStart, HostedSessionStop, HostedSessionView,
@@ -271,6 +273,8 @@ impl OrchestrationRuntime {
                 .with_capacity_probe(Arc::new(LocalServerCapacity::new(home)))
                 // HS2-GDJXGZ: and uses that server's terminals.
                 .with_session_host(Arc::new(LocalServerSessions::new(home)))
+                // HS2-95SWQ4: the scheduler places the sessions this runtime owns.
+                .with_session_executor(Arc::new(OwnedSessions))
         })
     }
 

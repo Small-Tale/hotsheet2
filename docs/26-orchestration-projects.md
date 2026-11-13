@@ -15,8 +15,9 @@
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
 > HS2-GDJXGZ),
 > the throughput scheduler with its plan, explanations, decision log and event-driven
-> loop (§26.17, HS2-ECWG50; it applies decisions through a session executor seam that
-> answers `executor_unavailable` until HS2-95SWQ4 wires HS2-GDJXGZ in),
+> loop (§26.17, HS2-ECWG50), which places orchestrator-owned sessions through its
+> session executor (§26.19, HS2-95SWQ4; nothing is placed until a policy sets
+> `placement.automatic`),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI remains design work under its
@@ -1920,7 +1921,8 @@ frees its place under the caps, and its replacement is an ordinary start that na
 
 A session started for a run publishes each change to that run's event stream (§26.9)
 as kind `session`, with a reason code such as `session_running`, `session_lost` or
-`session_takeover`. `session_work` gives reconciliation (§26.14) the session a run
+`session_takeover`. A session without a run has no stream to publish on; each of its
+changes moves the scheduler's wake marker instead (§26.19). `session_work` gives reconciliation (§26.14) the session a run
 recorded and the one still running for it; wiring it into `run_reconcile` is
 HS2-75Q254.
 
@@ -2141,19 +2143,26 @@ The seam is `SessionExecutor`
 
 ```rust
 pub trait SessionExecutor: Send + Sync {
-    fn list(&self, owner_id: &str) -> Result<Vec<SessionView>, SessionControlError>;
-    fn start(&self, request: &StartSession) -> StartOutcome;
-    fn wind_down(&self, request: &WindDownSession) -> WindDownOutcome;
+    fn list(&self, runtime: &OrchestrationRuntime, owner_id: &str, tx: &mut Transaction<'_>)
+        -> Result<Vec<ScheduledSession>, SessionExecutorError>;
+    fn start(&self, runtime: &OrchestrationRuntime, request: &PlacementStart,
+        tx: &mut Transaction<'_>) -> StartOutcome;
+    fn wind_down(&self, runtime: &OrchestrationRuntime, request: &WindDownSession,
+        tx: &mut Transaction<'_>) -> WindDownOutcome;
 }
 ```
 
+Every call is handed the runtime it serves and the pass's transaction, so an executor
+keeps no state and acts on the pass's clock.
+
 `StartOutcome` is `Started { session_id }`, `Refused { reason }` or `Unavailable`;
 `WindDownOutcome` is `Requested`, `NotAtSafePoint`, `NotFound`, `Refused { reason }`
-or `Unavailable`. The default executor is `ExecutorUnavailable`: nothing is listed,
-and an applied start or wind-down ends as the typed, logged outcome
-`executor_unavailable`. An executor that cannot list its sessions marks the pass
-`failed`, and nothing is started on a guess. Wiring the real executor is HS2-95SWQ4.
-Role sessions (a target's dispatcher or integrator) are HS2-TK9ADC.
+or `Unavailable`. A runtime built without an executor has `ExecutorUnavailable`:
+nothing is listed, and an applied start or wind-down ends as the typed, logged
+outcome `executor_unavailable`. An executor that cannot list its sessions marks the
+pass `failed`, and nothing is started on a guess. The executor the server, the CLI
+and MCP run with is `OwnedSessions` (§26.19). Role sessions (a target's dispatcher or
+integrator) are HS2-TK9ADC.
 
 ### Decision log and memory
 
@@ -2181,13 +2190,15 @@ policy no longer enables it. A step runs a pass:
 - when the owner's run event stream (§26.9) has something new: run, readiness, gate,
   validation, session and reconciliation events. A lease renewal is not a reason;
 - when the scheduler's wake marker changed: a tool limit or recovery was recorded
-  (§26.11), or the policy was replaced;
+  (§26.11), the policy was replaced, or a session without a run started, ended or
+  finished a turn (§26.19);
 - when the time the last pass named in `retry_at_ms` has come.
 
 Otherwise it waits on the journal and the marker themselves. There is no interval.
 A failed pass, such as an executor that cannot list its sessions, backs off from one
 second, doubling to a minute. A pass whose decisions equal the last logged ones logs
-nothing, so an event that changes nothing leaves no record.
+nothing, so an event that changes nothing leaves no record. The session an applied
+start began is part of the decision, so a replacement start is always logged.
 
 Capacity has no event stream yet (HS2-P5GTSW), so a machine that gains room is
 noticed at the end of the refusal backoff or at the next event (HS2-AWB7BX). Each
@@ -2261,3 +2272,133 @@ rebased onto the fix, reopened and never discarded) live in
 `hotsheet_cli::coordination::speculation` as a ledger that is independent of the pool
 schema, so the cross-target form can reuse `SpeculationLedger::apply`, `rebase` and
 `reopen` with its own storage.
+
+## 26.19 Placing sessions (HS2-95SWQ4)
+
+`OwnedSessions` (`crates/hotsheet-cli/src/orchestration/session_executor.rs`) is the
+scheduler's executor (§26.17) over orchestrator-owned sessions (§26.16). The
+scheduler decides; the executor maps each decision onto the session runtime and each
+answer onto a typed outcome. `OrchestrationRuntime::live` attaches it, so the server's
+loop, `hotsheet-cli` and MCP place sessions the same way. It adds no route, command
+or MCP action, and nothing is placed while the policy leaves `placement.automatic`
+off.
+
+### What the scheduler is shown
+
+`list` reads this machine's unfinished session records and brings each in line with
+its host first, with one safe-point request per session (§26.16). A crashed session is
+therefore `lost`, and a session a person took over at the host is theirs, before the
+scheduler decides anything.
+
+| Field            | From                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `owner_id`       | The owning checkout. Only its own records are listed                                          |
+| `run_id`         | The run the session was started for. A placed session has none and is free capacity           |
+| `activity`       | `idle` when the host found it between turns with no claim and no pending handoff; else `busy` |
+| `safe_point`     | The host's safe-point answer. Anything the host could not establish is not safe               |
+| `idle_since_ms`  | When this machine first saw the session idle                                                  |
+| `human_takeover` | A person owns it, whether they took it here or at the host                                    |
+| `winding_down`   | Never set: a stop is immediate at a safe point and refused away from one                      |
+
+- **Who asks.** The hosts are read as the policy's `placement.actor`, through the gate
+  as `sessions_manage` continuing a decision. A policy that names no actor reads no
+  host: each record is listed as it stands, busy and not safe, so a dry run never
+  shows a wind-down it could not verify.
+- **A host that cannot be read.** The record stays as it is and still counts. It reads
+  as busy and not safe, and keeps the idle time already seen. A policy that disabled
+  the target denies the read too, so its sessions are kept for a person to stop
+  (HS2-48H57C).
+- **A start nobody confirmed.** A `requested` record whose host does not have the
+  session is not a session and is not listed. The next start for its work repeats it.
+  One that is five minutes old (`UNCONFIRMED_START_MS`, longer than any one request
+  to a host) and still unknown to its host is ended as `never_started`. Nothing ran,
+  so nothing is interrupted.
+- **Idle time.** A host says whether a session is mid-turn, not since when. This
+  machine keeps the first listing that saw each session idle in
+  `${HOTSHEET_HOME}/orchestration-session-idle.json` (private, version 1). A listing
+  that sees it working forgets the time, one that cannot ask leaves it, and a finished
+  session is dropped. Work that begins and ends between two passes is not seen, so a
+  session may be asked to stop sooner after its last turn than `idle_minutes` says;
+  the host's safe point, not this time, is what protects work. Having the host
+  report the time is HS2-RG91SK.
+- Sessions other owners or people run on a target's machine are not listed. They
+  reach the scheduler through the machine's capacity snapshot (§26.10).
+
+### Starting
+
+The scheduler's operation id (`sched-start-<step id>`) is stable for a piece of work.
+A session's own operation id is one session's for good (§26.16), and a finished
+session never restarts. The executor joins the two:
+
+| The latest session started for the work | The start                                                                                |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| None                                    | A new session under the scheduler's id                                                   |
+| `requested` or `running`                | The same start again: the same session is returned, and nothing launches twice           |
+| `failed`, `stopped` or `lost`           | A new session under `<id>.<n>` (`.2`, `.3`, …) that names the finished one in `replaces` |
+
+So a repeated request never launches a second session, a refused start can be tried
+again after its backoff, and a crashed session is replaced by the next pass that
+still finds its work ready.
+
+**The gate.** The start passes the gate under the scheduler's operation id, so an
+approval a person gave for that id is the one used, and a replacement asks again. The
+load the gate checks is, for the target, the machine, the tool and the account, the
+larger of the scheduler's count and the count from this machine's records. The
+scheduler's count includes sessions the records do not hold (other owners' and
+people's on the machine), and the records include starts made since the scheduler
+counted. Neither undercuts the other.
+
+| Answer of the session runtime                           | Outcome                                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| The session is `running`                                | `started` with its session id                                                                                |
+| The host refused, or could not launch                   | `refused` with the host's own reason (`below_ram_floor`, `session_start_failed`, `session_host_unavailable`) |
+| The gate denied it after the scheduler's own check      | `refused` with the gate's code (`policy_denied`, `approval_required`)                                        |
+| The host had launched it earlier and it has ended since | `refused` with how it ended                                                                                  |
+| Anything else, such as a host that did not answer       | `refused` with the error's code; the start stays `requested`                                                 |
+| The acting actor has no id                              | `executor_unavailable`                                                                                       |
+
+A different tool, model or account for work whose earlier start is still unconfirmed
+is a `conflict` until that start is ended (HS2-7VV79Q).
+
+### Winding down
+
+A wind-down is `session_stop` without force, as the system acting for the actor who
+asked, passed through the gate under the scheduler's `sched-stop-<session id>`. The
+host checks the safe point itself when the stop arrives, so nothing the scheduler
+believes can interrupt work.
+
+| Answer                                                  | Outcome                              |
+| ------------------------------------------------------- | ------------------------------------ |
+| Stopped                                                 | `wind_down_requested`                |
+| `session_not_safe`                                      | `not_at_safe_point`; nothing stopped |
+| No such session, already finished, or lost when asked   | `session_not_found`                  |
+| A person owns it (known here, or learned from the host) | `refused` with `session_human_owned` |
+| The gate or the target refused                          | `refused` with the code              |
+
+A person's session is refused before its host is asked anything. When the policy asks
+a person before a stop, the approval is used up by a stop the host then refuses as not
+safe (HS2-RTX8RJ).
+
+### How the loop learns of a session
+
+A placed session has no run, so it publishes no run event. Nothing asks on a timer:
+
+- Every change this machine records for such a session (started, failed, lost,
+  stopped, taken over) moves the scheduler's wake marker (§26.17).
+- The hosting server moves the same marker when an AI terminal an orchestrator
+  started exits or finishes a turn, including one killed from its drawer. It learns
+  that from the busy feed it already keeps for every AI terminal. The loop then runs
+  a pass and reads the session from its host.
+- A pass that keeps an idle session names the time its idle period ends in
+  `retry_at_ms`, and the loop waits for that time.
+
+The marker is this machine's, so a host on another server does not wake the loop: a
+crash or a new safe point there is learned at the next pass for any other reason
+(HS2-257Q2Z). Removing the last step of a plan publishes no event either
+(HS2-SQS266).
+
+### Not wired
+
+Reconciliation's session source (§26.14) is unchanged. `session_work` would report a
+session that was wound down while its run waits on a gate as missing work
+(HS2-75Q254). Dispatching a run for a placed step is HS2-YC2P7K.

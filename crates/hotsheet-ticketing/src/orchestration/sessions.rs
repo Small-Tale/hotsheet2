@@ -989,6 +989,17 @@ impl HostedSessionRegistry {
             .collect())
     }
 
+    /// HS2-95SWQ4: whether an orchestrator started the terminal with this id, on any
+    /// checkout of this machine. The terminal host asks when one of its AI terminals
+    /// ends or finishes a turn.
+    pub fn hosts(&self, session_id: &str) -> Result<bool, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .sessions
+            .iter()
+            .any(|session| session.session_id == session_id))
+    }
+
     pub fn get(
         &self,
         checkout_id: &str,

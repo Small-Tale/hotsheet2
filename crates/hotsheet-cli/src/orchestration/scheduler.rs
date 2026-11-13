@@ -302,8 +302,12 @@ impl OrchestrationRuntime {
 
     /// The running sessions as the executor lists them, with a session whose run
     /// waits on a gate marked as free capacity.
-    fn scheduler_sessions(&self, owner_id: &str) -> (Vec<ScheduledSession>, &'static str) {
-        let mut sessions = match self.session_executor.list(owner_id) {
+    fn scheduler_sessions(
+        &self,
+        owner_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> (Vec<ScheduledSession>, &'static str) {
+        let mut sessions = match self.session_executor.list(self, owner_id, tx) {
             Ok(sessions) => sessions,
             Err(SessionExecutorError::Unavailable) => return (Vec::new(), "unavailable"),
             Err(SessionExecutorError::Failed(_)) => return (Vec::new(), "failed"),
@@ -347,7 +351,7 @@ impl OrchestrationRuntime {
         let now_ms = tx.clock.now_ms();
         let work = self.scheduler_work(owner_id, tx)?;
         let memory = SchedulerStore::new(&self.home).memory(owner_id)?;
-        let (sessions, executor) = self.scheduler_sessions(owner_id);
+        let (sessions, executor) = self.scheduler_sessions(owner_id, tx);
         // Only a target that could take a session is contacted: confirmed work, a
         // policy that lets sessions run there, and no refusal still being waited out.
         let wanted: BTreeSet<&str> = work
@@ -816,7 +820,10 @@ impl OrchestrationRuntime {
                     placement.reason.code(),
                     &placement.detail,
                     &placement.steps,
-                    outcome_of(placement).map(|outcome| (&outcome.outcome, &outcome.detail)),
+                    // HS2-95SWQ4: two starts that each began a session are two
+                    // decisions, so the session an applied start began is part of it.
+                    outcome_of(placement)
+                        .map(|outcome| (&outcome.outcome, &outcome.detail, &outcome.session_id)),
                 )
                     .hash(&mut hasher);
             }

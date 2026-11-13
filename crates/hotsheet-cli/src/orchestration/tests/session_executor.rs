@@ -1,0 +1,1044 @@
+//! HS2-95SWQ4: the scheduler placing real orchestrator-owned sessions through the
+//! shared runtime, with a scripted terminal host and a clock the test moves. No AI
+//! tool is launched: the host only remembers what it was asked. Synthetic tickets,
+//! tools and identities only.
+use std::cell::Cell;
+
+use hotsheet_model::Ticket;
+use hotsheet_ticketing::orchestration::{
+    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, CreateGrant, MachineLimits,
+    NewSession, OrchestratedSession, PlacementAction, PlacementPolicy, PolicyBody,
+    ScheduledSession, SchedulerStore, SessionActivity, SessionIdleStore, SessionLoad, SessionOwner,
+    SessionRegistry, SessionRole, SessionScope, SessionState, SetPolicy, TargetAction,
+    TargetPolicy, ToolPolicy, ToolScope, WindDown,
+};
+use hotsheet_ticketing::{NewTicket, ops};
+use serde_json::json;
+
+use super::sessions::{Probe, ScriptedHost, roomy};
+use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::*;
+
+const MINUTE: u64 = 60_000;
+const START: u64 = 1_000;
+
+/// A clock the test moves.
+struct At(Cell<u64>);
+impl hotsheet_ticketing::Clock for At {
+    fn now_ms(&self) -> u64 {
+        self.0.get()
+    }
+}
+
+fn scope(tool: &str) -> ToolScope {
+    ToolScope {
+        tool: tool.into(),
+        models: Vec::new(),
+    }
+}
+
+/// Target 1 takes two `codex` sessions. Placement is automatic as `worker-1`, with no
+/// cooldown and the shortest idle time, so a test decides every wait itself.
+fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
+    PolicyBody {
+        machine: MachineLimits {
+            max_sessions: 4,
+            ..MachineLimits::default()
+        },
+        tools: vec![ToolPolicy {
+            tool: "codex".into(),
+            max_sessions: 4,
+            weight: 50,
+            accounts: Vec::new(),
+        }],
+        targets: vec![TargetPolicy {
+            target_id: id(1),
+            enabled: true,
+            actions: vec![
+                TargetAction::TicketsRead,
+                TargetAction::GatesObserve,
+                TargetAction::SessionsManage,
+                TargetAction::WorkStart,
+            ],
+            tools: vec![scope("codex")],
+            max_sessions: 2,
+            machine: None,
+            speculation: None,
+        }],
+        wind_down: WindDown {
+            idle_minutes: 1,
+            keep_warm: 0,
+        },
+        approval: ApprovalPolicy { required_for },
+        placement: PlacementPolicy {
+            automatic: true,
+            actor: Some("worker-1".into()),
+            cooldown_minutes: 0,
+            ..PlacementPolicy::default()
+        },
+        ..PolicyBody::default()
+    }
+}
+
+struct Placed {
+    m: Machine,
+    host: Arc<ScriptedHost>,
+    probe: Arc<Probe>,
+    orchestration: Ticket,
+}
+
+impl Placed {
+    /// One machine that hosts target 1 in a clean git checkout, a roomy probe, a
+    /// scripted terminal host and the real executor. `worker-1` holds a long grant.
+    fn new(required_for: Vec<ApprovalGate>, tx: &mut Transaction<'_>) -> Self {
+        let mut m = machine(10, false, unsupported);
+        let host = Arc::new(ScriptedHost::default());
+        let probe = Arc::new(Probe::default());
+        probe.set(|observation| *observation = roomy());
+        m.runtime = m
+            .runtime
+            .clone()
+            .with_capacity_probe(probe.clone())
+            .with_session_host(host.clone())
+            .with_session_executor(Arc::new(OwnedSessions));
+        bind_and_grant(&m, 1, &[], tx);
+        m.runtime
+            .grant(
+                &m.reference(1),
+                CreateGrant {
+                    grant_id: None,
+                    actor_id: "worker-1".into(),
+                    actions: vec![
+                        TargetAction::TicketsRead,
+                        TargetAction::GatesObserve,
+                        TargetAction::WorkStart,
+                        TargetAction::SessionsManage,
+                    ],
+                    session_scope: Some(SessionScope {
+                        tools: vec![scope("codex")],
+                        max_concurrency: 8,
+                    }),
+                    expires_at_ms: 1_000_000_000,
+                },
+                Some(&human()),
+                tx,
+            )
+            .unwrap();
+        let orchestration = m.orchestration_ticket("Coordinate");
+        let placed = Self {
+            m,
+            host,
+            probe,
+            orchestration,
+        };
+        // Whether work is uncommitted can only be established in a git checkout.
+        placed.git(&["init", "-q"]);
+        placed.set_policy(policy(required_for), tx);
+        placed
+    }
+    fn owner(&self) -> String {
+        self.m.owner.id.clone()
+    }
+    fn git(&self, args: &[&str]) {
+        let status = hotsheet_ticketing::git::launch("git")
+            .arg("-C")
+            .arg(&self.m.target.root)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "{args:?}");
+    }
+    fn set_policy(&self, body: PolicyBody, tx: &mut Transaction<'_>) {
+        let expected_revision = self.m.runtime.policy(&self.owner()).unwrap().revision;
+        self.m
+            .runtime
+            .set_policy(
+                &self.owner(),
+                SetPolicy {
+                    expected_revision,
+                    policy: body,
+                },
+                Some(&human()),
+                tx,
+            )
+            .unwrap();
+    }
+    /// Move the clock, and the probe's reading with it so capacity stays fresh.
+    fn at(&self, clock: &At, now_ms: u64) {
+        clock.0.set(now_ms);
+        self.probe
+            .set(|observation| observation.sampled_at_ms = Some(now_ms));
+    }
+    /// A new target ticket planned as a step with no prerequisite: confirmed work.
+    fn ready(&self, title: &str, tx: &mut Transaction<'_>) -> String {
+        let ticket = ops::create(
+            &self.m.target_store,
+            ulid::Ulid::new(),
+            "TGT",
+            NOW.into(),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        self.m
+            .runtime
+            .readiness_define(
+                &self.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": self.m.owner_connection(),
+                        "native_id": self.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": self.m.target_connection(),
+                    "native_id": ticket.slug, "prerequisites": [],
+                }))
+                .unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+            .readiness
+            .step
+            .step_id
+    }
+    /// The work is withdrawn from the plan.
+    fn gone(&self, step_id: &str, tx: &mut Transaction<'_>) {
+        self.m
+            .runtime
+            .readiness_remove(
+                &self.owner(),
+                &serde_json::from_value(json!({"step_id": step_id})).unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap();
+    }
+    fn tick(&self, tx: &mut Transaction<'_>) -> TickView {
+        self.m
+            .runtime
+            .scheduler_tick(&self.owner(), &TickRequest::default(), Some(&worker()), tx)
+            .unwrap()
+    }
+    fn records(&self) -> Vec<OrchestratedSession> {
+        self.m.runtime.session_list(&self.owner(), false).unwrap()
+    }
+    fn record(&self, operation: &str) -> OrchestratedSession {
+        self.records()
+            .into_iter()
+            .find(|session| session.operation_id == operation)
+            .unwrap_or_else(|| panic!("no session for {operation}"))
+    }
+    fn listed(&self, tx: &mut Transaction<'_>) -> Vec<ScheduledSession> {
+        OwnedSessions
+            .list(&self.m.runtime, &self.owner(), tx)
+            .unwrap()
+    }
+    fn start_request(&self, step_id: &str, load: SessionLoad) -> PlacementStart {
+        PlacementStart {
+            owner_id: self.owner(),
+            target_id: id(1),
+            tool: "codex".into(),
+            account: None,
+            model: None,
+            operation_id: format!("sched-start-{step_id}"),
+            actor_id: "worker-1".into(),
+            steps: vec![step_id.into()],
+            load,
+            limits: MachineLimits::default(),
+            probe: false,
+        }
+    }
+    fn stop_request(&self, session_id: &str) -> WindDownSession {
+        WindDownSession {
+            owner_id: self.owner(),
+            target_id: id(1),
+            session_id: session_id.into(),
+            tool: "codex".into(),
+            model: None,
+            operation_id: format!("sched-stop-{session_id}"),
+            actor_id: "worker-1".into(),
+            reason: "idle".into(),
+        }
+    }
+    fn terminal(&self, session: &OrchestratedSession) -> String {
+        session.hosted.as_ref().unwrap().session_id.clone()
+    }
+    fn wake_token(&self) -> Option<String> {
+        std::fs::read_to_string(self.m.home.join("orchestration-scheduler-wake/token")).ok()
+    }
+    fn audited(&self, action: &str) -> Vec<(AuditOutcome, Option<String>, Option<String>)> {
+        self.m
+            .runtime
+            .audit(&self.owner(), 0, 500)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| entry.record.action == action)
+            .map(|entry| {
+                (
+                    entry.record.outcome,
+                    entry.record.reason,
+                    entry.record.operation_id,
+                )
+            })
+            .collect()
+    }
+}
+
+fn no_load() -> SessionLoad {
+    SessionLoad {
+        target_sessions: 0,
+        machine_sessions: 0,
+        tool_sessions: 0,
+        account: None,
+        account_sessions: 0,
+    }
+}
+
+fn outcomes(view: &TickView) -> Vec<(&str, Option<&str>)> {
+    view.outcomes
+        .iter()
+        .map(|outcome| (outcome.outcome.as_str(), outcome.detail.as_deref()))
+        .collect()
+}
+
+/// `(action, reason)` of the placement that names the session.
+fn placement(view: &TickView, session_id: &str) -> (PlacementAction, &'static str) {
+    let found = view
+        .view
+        .schedule
+        .placements
+        .iter()
+        .find(|placement| placement.session_id.as_deref() == Some(session_id))
+        .unwrap_or_else(|| panic!("no placement for {session_id}"));
+    (found.action, found.reason.code())
+}
+
+macro_rules! clocked {
+    ($clock:ident, $tx:ident) => {
+        let $clock = At(Cell::new(START));
+        let mut rng = Rng(100);
+        let mut $tx = Transaction {
+            clock: &$clock,
+            rng: &mut rng,
+        };
+    };
+}
+
+#[test]
+fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    // Nothing runs yet: the executor answers, with nothing to list.
+    assert!(f.listed(&mut tx).is_empty());
+    let before = f.wake_token();
+
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(tick.view.inputs.executor, "available");
+    let session = f.record(&operation);
+    assert_eq!(
+        tick.outcomes[0].session_id.as_deref(),
+        Some(session.session_id.as_str())
+    );
+    assert_eq!(
+        (
+            session.state,
+            session.role,
+            session.tool.as_str(),
+            &session.run_id
+        ),
+        (SessionState::Running, SessionRole::Worker, "codex", &None)
+    );
+    assert_eq!(f.host.launches().len(), 1);
+    // The gate was passed under the scheduler's operation id, as the system acting
+    // for the policy's actor.
+    assert!(f.audited("sessions_manage").contains(&(
+        AuditOutcome::Allowed,
+        None,
+        Some(operation.clone())
+    )));
+    assert_eq!(
+        f.audited("scheduler_start"),
+        [(
+            AuditOutcome::Succeeded,
+            Some("started".into()),
+            Some(operation.clone())
+        )]
+    );
+    // A session without a run publishes no run event: its start moved the marker.
+    assert_ne!(f.wake_token(), before);
+
+    // Later passes find the session and start nothing more for the step.
+    for _ in 0..3 {
+        let again = f.tick(&mut tx);
+        assert!(again.outcomes.is_empty());
+        assert_eq!(
+            placement(&again, &session.session_id),
+            (PlacementAction::Keep, "refill")
+        );
+    }
+    assert_eq!(f.host.launches().len(), 1);
+    let listed = f.listed(&mut tx);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        (
+            listed[0].session_id.as_str(),
+            &listed[0].run_id,
+            listed[0].owner_id.as_deref(),
+            listed[0].activity,
+            listed[0].safe_point,
+            listed[0].human_takeover,
+            listed[0].winding_down,
+            listed[0].started_at_ms,
+        ),
+        (
+            session.session_id.as_str(),
+            &None,
+            Some(f.owner().as_str()),
+            SessionActivity::Idle,
+            true,
+            false,
+            false,
+            START
+        )
+    );
+    assert!(listed[0].validate().is_ok());
+}
+
+#[test]
+fn hs2_95swq4_a_repeated_operation_id_is_the_same_start() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let request = f.start_request(&step, no_load());
+    let first = OwnedSessions.start(&f.m.runtime, &request, &mut tx);
+    let StartOutcome::Started { session_id } = &first else {
+        panic!("{first:?}");
+    };
+    // Asked again, twice, and after time has passed: the same session, one launch.
+    for now in [START, START + 5, START + 10 * MINUTE] {
+        f.at(&clock, now);
+        assert_eq!(OwnedSessions.start(&f.m.runtime, &request, &mut tx), first);
+    }
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(f.records().len(), 1);
+    assert_eq!(&f.records()[0].session_id, session_id);
+
+    // A start left unconfirmed by a process that died is repeated under its own id.
+    let other = f.ready("Second", &mut tx);
+    let (planted, _) = SessionRegistry::new(&f.m.home)
+        .begin(
+            &f.owner(),
+            NewSession {
+                operation_id: format!("sched-start-{other}"),
+                target_id: id(1),
+                role: SessionRole::Worker,
+                tool: "codex".into(),
+                model: None,
+                effort: None,
+                account: None,
+                run_id: None,
+                replaces: None,
+            },
+            Some("worker-1".into()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(planted.state, SessionState::Requested);
+    // It is not a session yet, so it is not listed.
+    assert_eq!(f.listed(&mut tx).len(), 1);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(
+        tick.outcomes[0].session_id.as_deref(),
+        Some(planted.session_id.as_str())
+    );
+    assert_eq!(f.records().len(), 2);
+    assert_eq!(f.host.launches().len(), 2);
+
+    // An actor that cannot be identified is not acted for.
+    let mut anonymous = f.start_request(&step, no_load());
+    anonymous.actor_id = " ".into();
+    assert_eq!(
+        OwnedSessions.start(&f.m.runtime, &anonymous, &mut tx),
+        StartOutcome::Unavailable
+    );
+}
+
+#[test]
+fn hs2_95swq4_the_gate_sees_the_larger_of_the_decided_and_the_recorded_load() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    // The scheduler counted two sessions on the target that these records do not
+    // hold (a person's, another owner's): the target's cap of two refuses the start.
+    let crowded = SessionLoad {
+        target_sessions: 2,
+        machine_sessions: 2,
+        tool_sessions: 2,
+        account: None,
+        account_sessions: 0,
+    };
+    assert_eq!(
+        OwnedSessions.start(&f.m.runtime, &f.start_request(&step, crowded), &mut tx),
+        StartOutcome::Refused {
+            reason: "policy_denied".into()
+        }
+    );
+    assert!(f.records().is_empty() && f.host.launches().is_empty());
+    assert!(f.audited("sessions_manage").contains(&(
+        AuditOutcome::Denied,
+        Some("policy_target_cap".into()),
+        Some(format!("sched-start-{step}"))
+    )));
+
+    // The records hold two sessions the scheduler did not count: started since its
+    // listing, here directly. Its stale count of none does not undercut them.
+    for operation in ["direct-1", "direct-2"] {
+        f.m.runtime
+            .session_start(
+                &f.owner(),
+                serde_json::from_value(
+                    json!({"target_id": id(1), "operation_id": operation, "tool": "codex"}),
+                )
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        OwnedSessions.start(&f.m.runtime, &f.start_request(&step, no_load()), &mut tx),
+        StartOutcome::Refused {
+            reason: "policy_denied".into()
+        }
+    );
+    assert_eq!(f.host.launches().len(), 2);
+    // And the pass itself, counting from the list, starts nothing for the step: a
+    // free session of the target takes it.
+    assert!(f.tick(&mut tx).outcomes.is_empty());
+    let _ = clock;
+}
+
+#[test]
+fn hs2_95swq4_a_refused_start_is_typed_backed_off_and_then_replaced() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    // The host will not launch the tool.
+    f.host.refusing.store(true, Ordering::SeqCst);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("refused", Some("session_start_failed"))]);
+    let failed = f.record(&operation);
+    assert_eq!(failed.state, SessionState::Failed);
+    assert!(f.listed(&mut tx).is_empty());
+    let memory = SchedulerStore::new(&f.m.home).memory(&f.owner()).unwrap();
+    assert_eq!(
+        (memory[0].refusals, memory[0].refusal_reason.as_deref()),
+        (1, Some("session_start_failed"))
+    );
+    // While the refusal is waited out nothing is asked, however often a pass runs.
+    f.host.refusing.store(false, Ordering::SeqCst);
+    for _ in 0..2 {
+        let waiting = f.tick(&mut tx);
+        assert!(waiting.outcomes.is_empty());
+        assert_eq!(
+            waiting.view.schedule.unplaced[0].reason.code(),
+            "refusal_backoff"
+        );
+    }
+    assert!(f.host.launches().is_empty());
+
+    // After the backoff the work gets a new session that replaces the failed one;
+    // the failed one is never restarted.
+    f.at(&clock, START + 2 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let replacement = f.record(&format!("{operation}.2"));
+    assert_eq!(replacement.state, SessionState::Running);
+    assert_eq!(
+        replacement.replaces.as_deref(),
+        Some(failed.session_id.as_str())
+    );
+    assert_eq!(f.record(&operation).state, SessionState::Failed);
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(
+        f.audited("scheduler_start")
+            .into_iter()
+            .map(|(outcome, reason, _)| (outcome, reason))
+            .collect::<Vec<_>>(),
+        [
+            (AuditOutcome::Failed, Some("refused".into())),
+            (AuditOutcome::Succeeded, Some("started".into()))
+        ]
+    );
+
+    // A terminal host that cannot be reached is a refusal with its own code.
+    let other = f.ready("Second", &mut tx);
+    f.host.down.store(true, Ordering::SeqCst);
+    let outcome = OwnedSessions.start(&f.m.runtime, &f.start_request(&other, no_load()), &mut tx);
+    assert_eq!(
+        outcome,
+        StartOutcome::Refused {
+            reason: "session_host_unavailable".into()
+        }
+    );
+}
+
+#[test]
+fn hs2_95swq4_an_approval_given_for_the_schedulers_operation_lets_the_act_through() {
+    clocked!(clock, tx);
+    let f = Placed::new(
+        vec![ApprovalGate::SessionStart, ApprovalGate::SessionStop],
+        &mut tx,
+    );
+    let owner = f.owner();
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    let approve = |gate: ApprovalGate, tx: &mut Transaction<'_>| {
+        let pending: Vec<_> = f
+            .m
+            .runtime
+            .approvals(&owner, tx)
+            .unwrap()
+            .into_iter()
+            .filter(|approval| approval.gate == gate && approval.state == ApprovalState::Pending)
+            .collect();
+        assert_eq!(pending.len(), 1, "{gate:?}");
+        f.m.runtime
+            .decide_approval(&owner, &pending[0].approval_id, true, Some(&human()), tx)
+            .unwrap();
+        pending[0].operation_id.clone()
+    };
+    // Asked once, however often a pass runs; nothing starts meanwhile.
+    for _ in 0..2 {
+        assert_eq!(
+            outcomes(&f.tick(&mut tx)),
+            [("approval_required", Some("session_start"))]
+        );
+    }
+    assert!(f.records().is_empty() && f.host.launches().is_empty());
+    assert_eq!(approve(ApprovalGate::SessionStart, &mut tx), operation);
+    // The executor's own gate uses the approval the person gave for that id.
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
+    let session = f.record(&operation);
+    let approvals = f.m.runtime.approvals(&owner, &mut tx).unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0].state, ApprovalState::Consumed);
+
+    // The work goes away and the session idles out: the stop asks a person too.
+    f.gone(&step, &mut tx);
+    f.tick(&mut tx);
+    f.at(&clock, START + 2 * MINUTE);
+    for _ in 0..2 {
+        assert_eq!(
+            outcomes(&f.tick(&mut tx)),
+            [("approval_required", Some("session_stop"))]
+        );
+    }
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        approve(ApprovalGate::SessionStop, &mut tx),
+        format!("sched-stop-{}", session.session_id)
+    );
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("wind_down_requested", None)]);
+    assert_eq!(f.record(&operation).state, SessionState::Stopped);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+    // One request per act was ever filed.
+    assert_eq!(f.m.runtime.approvals(&owner, &mut tx).unwrap().len(), 2);
+}
+
+#[test]
+fn hs2_95swq4_an_idle_session_is_wound_down_only_at_a_safe_point() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let session = f.record(&operation);
+    let sid = session.session_id.clone();
+    let terminal = f.terminal(&session);
+
+    // The work is gone. The session was first seen idle now, so its idle time starts.
+    f.gone(&step, &mut tx);
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(
+        placement(&tick, &sid),
+        (PlacementAction::Keep, "idle_grace")
+    );
+    assert_eq!(
+        tick.view.schedule.retry_at_ms,
+        Some(START + MINUTE),
+        "the pass names when the idle time ends"
+    );
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START));
+
+    // Past the idle time, in the middle of a turn: busy, and nothing is asked.
+    f.at(&clock, START + 2 * MINUTE);
+    f.host.set_busy(&terminal, true);
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(placement(&tick, &sid), (PlacementAction::Keep, "busy"));
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, None);
+    // A wind-down that arrives then is refused by the host and stops nothing.
+    assert_eq!(
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&sid), &mut tx),
+        WindDownOutcome::NotAtSafePoint
+    );
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+    assert_eq!(f.record(&operation).state, SessionState::Running);
+
+    // Between turns again: the idle time starts afresh from this sighting.
+    f.host.set_busy(&terminal, false);
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placement(&tick, &sid),
+        (PlacementAction::Keep, "idle_grace")
+    );
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START + 2 * MINUTE));
+
+    // Idle long enough, with uncommitted work in the checkout: it waits.
+    f.at(&clock, START + 4 * MINUTE);
+    std::fs::write(Path::new(&f.m.target.root).join("draft.txt"), "synthetic").unwrap();
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(
+        placement(&tick, &sid),
+        (PlacementAction::Keep, "awaiting_safe_point")
+    );
+    assert_eq!(
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&sid), &mut tx),
+        WindDownOutcome::NotAtSafePoint
+    );
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+
+    // Committed: it is at a safe point and is wound down, once.
+    f.git(&["add", "-A"]);
+    f.git(&[
+        "-c",
+        "user.name=Synthetic",
+        "-c",
+        "user.email=synthetic@example.test",
+        "commit",
+        "-q",
+        "-m",
+        "Synthetic work",
+    ]);
+    let before = f.wake_token();
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    assert_eq!(placement(&tick, &sid), (PlacementAction::WindDown, "idle"));
+    let stopped = f.record(&operation);
+    assert_eq!(stopped.state, SessionState::Stopped);
+    assert_eq!(
+        stopped.history.last().unwrap().reason.as_deref(),
+        Some("wound_down")
+    );
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+    assert_ne!(f.wake_token(), before, "its exit moved the marker");
+    assert!(f.audited("sessions_manage").contains(&(
+        AuditOutcome::Allowed,
+        None,
+        Some(format!("sched-stop-{sid}"))
+    )));
+    // It is gone: nothing is listed, remembered or asked again.
+    assert!(f.listed(&mut tx).is_empty());
+    assert!(
+        SessionIdleStore::new(&f.m.home)
+            .idle_since(&f.owner())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(f.tick(&mut tx).outcomes.is_empty());
+    assert_eq!(
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&sid), &mut tx),
+        WindDownOutcome::NotFound
+    );
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn hs2_95swq4_a_session_a_person_took_over_is_reported_and_never_wound_down() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let owner = f.owner();
+    let first = f.ready("First", &mut tx);
+    let second = f.ready("Second", &mut tx);
+    assert_eq!(f.tick(&mut tx).outcomes.len(), 2);
+    let here = f.record(&format!("sched-start-{first}"));
+    let there = f.record(&format!("sched-start-{second}"));
+
+    // One is taken over on the orchestrating machine, the other at its host.
+    f.m.runtime
+        .session_takeover(
+            &owner,
+            &here.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    f.m.runtime
+        .hosted_session_control(
+            &f.m.target.id,
+            HostedSessionControl {
+                operation_id: there.operation_id.clone(),
+                pause: true,
+                actor: Some(human()),
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let listed = f.listed(&mut tx);
+    assert_eq!(listed.len(), 2);
+    assert!(listed.iter().all(|session| session.human_takeover));
+    // The listing learned the host-side takeover and recorded it.
+    assert_eq!(
+        f.record(&there.operation_id).owner,
+        SessionOwner::Human,
+        "learned from the host"
+    );
+
+    // No work, idle far past the idle time, at a safe point: both are left alone.
+    f.gone(&first, &mut tx);
+    f.gone(&second, &mut tx);
+    f.tick(&mut tx);
+    f.at(&clock, START + 30 * MINUTE);
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty());
+        for session in [&here, &there] {
+            assert_eq!(
+                placement(&tick, &session.session_id),
+                (PlacementAction::Keep, "human_takeover")
+            );
+        }
+    }
+    // Asked directly, the executor refuses without asking the host anything.
+    for session in [&here, &there] {
+        assert_eq!(
+            OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&session.session_id), &mut tx),
+            WindDownOutcome::Refused {
+                reason: "session_human_owned".into()
+            }
+        );
+    }
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+    // They still occupy the target: with its cap of two, new work gets no session.
+    f.ready("Third", &mut tx);
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(f.host.launches().len(), 2);
+}
+
+#[test]
+fn hs2_95swq4_a_crashed_session_is_lost_and_replaced_each_time() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let mut previous = f.record(&operation);
+    // Crash, twice over: each pass learns it from the host and starts a replacement
+    // that names the session it replaces. Nothing is restarted in place.
+    for generation in [2u32, 3] {
+        f.at(&clock, START + u64::from(generation) * MINUTE);
+        f.host.crash(&f.terminal(&previous));
+        let before = f.wake_token();
+        let tick = f.tick(&mut tx);
+        assert_eq!(outcomes(&tick), [("started", None)]);
+        let lost = f.record(&previous.operation_id);
+        assert_eq!(lost.state, SessionState::Lost);
+        assert_eq!(
+            lost.history.last().unwrap().reason.as_deref(),
+            Some("host_lost")
+        );
+        assert_ne!(f.wake_token(), before);
+        let replacement = f.record(&format!("{operation}.{generation}"));
+        assert_eq!(replacement.state, SessionState::Running);
+        assert_eq!(
+            replacement.replaces.as_deref(),
+            Some(previous.session_id.as_str())
+        );
+        assert_ne!(f.terminal(&replacement), f.terminal(&previous));
+        let listed = f.listed(&mut tx);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].session_id, replacement.session_id);
+        previous = replacement;
+    }
+    assert_eq!(f.host.launches().len(), 3);
+    assert_eq!(f.records().len(), 3);
+
+    // A crash with the work gone is only recorded: nothing replaces it.
+    f.gone(&step, &mut tx);
+    f.host.crash(&f.terminal(&previous));
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert!(tick.view.schedule.placements.is_empty());
+    assert_eq!(f.record(&previous.operation_id).state, SessionState::Lost);
+    assert_eq!(f.host.launches().len(), 3);
+    // A wind-down for a session that is gone finds nothing.
+    assert_eq!(
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&previous.session_id), &mut tx),
+        WindDownOutcome::NotFound
+    );
+}
+
+#[test]
+fn hs2_95swq4_an_unreachable_host_concludes_nothing_and_stale_starts_are_ended() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let session = f.record(&operation);
+    f.gone(&step, &mut tx);
+    f.tick(&mut tx);
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START));
+
+    // The terminal host cannot be asked: the session still counts, reads as busy and
+    // unsafe, keeps the idle time already seen, and is not wound down on a guess.
+    f.host.down.store(true, Ordering::SeqCst);
+    f.at(&clock, START + 10 * MINUTE);
+    let listed = f.listed(&mut tx);
+    assert_eq!(
+        (listed[0].activity, listed[0].safe_point),
+        (SessionActivity::Busy, false)
+    );
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(
+        placement(&tick, &session.session_id),
+        (PlacementAction::Keep, "busy")
+    );
+    assert_eq!(f.record(&operation).state, SessionState::Running);
+    assert_eq!(
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&session.session_id), &mut tx),
+        WindDownOutcome::NotAtSafePoint
+    );
+    // Reachable again: the idle time it was first seen with still stands.
+    f.host.down.store(false, Ordering::SeqCst);
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START));
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("wind_down_requested", None)]);
+
+    // A start nobody confirmed and nothing asks for any more: left alone while it
+    // may still be on its way, then ended as never started. It never ran.
+    let begun = clock.0.get();
+    let (orphan, _) = SessionRegistry::new(&f.m.home)
+        .begin(
+            &f.owner(),
+            NewSession {
+                operation_id: "sched-start-orphan".into(),
+                target_id: id(1),
+                role: SessionRole::Worker,
+                tool: "codex".into(),
+                model: None,
+                effort: None,
+                account: None,
+                run_id: None,
+                replaces: None,
+            },
+            Some("worker-1".into()),
+            &mut tx,
+        )
+        .unwrap();
+    f.at(&clock, begun + UNCONFIRMED_START_MS - 1);
+    assert!(f.listed(&mut tx).is_empty());
+    assert_eq!(
+        f.record("sched-start-orphan").state,
+        SessionState::Requested
+    );
+    f.at(&clock, begun + UNCONFIRMED_START_MS);
+    assert!(f.listed(&mut tx).is_empty());
+    let ended = f.record("sched-start-orphan");
+    assert_eq!(ended.session_id, orphan.session_id);
+    assert_eq!(ended.state, SessionState::Stopped);
+    assert_eq!(
+        ended.history.last().unwrap().reason.as_deref(),
+        Some("never_started")
+    );
+    assert_eq!(f.host.launches().len(), 1, "it was never launched");
+}
+
+#[test]
+fn hs2_95swq4_without_a_placement_actor_no_host_is_asked_and_nothing_reads_safe() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    // The policy no longer enables placement and names no actor.
+    let mut manual = policy(Vec::new());
+    manual.placement = PlacementPolicy::default();
+    f.set_policy(manual, &mut tx);
+    f.gone(&step, &mut tx);
+    f.host.crash(&f.terminal(&session));
+    f.at(&clock, START + 30 * MINUTE);
+    let reads = f.audited("sessions_manage").len();
+    let listed = f.listed(&mut tx);
+    // The record is listed as it stands: the crash is not learned, nothing is safe.
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        (
+            listed[0].activity,
+            listed[0].safe_point,
+            listed[0].idle_since_ms
+        ),
+        (SessionActivity::Busy, false, None)
+    );
+    assert_eq!(f.audited("sessions_manage").len(), reads);
+    // Every pass is a dry run, and it starts and stops nothing.
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(f.record(&session.operation_id).state, SessionState::Running);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn hs2_95swq4_a_session_the_policy_no_longer_permits_is_kept_for_a_person_to_stop() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    // The policy disables the target. The policy's gate then denies every act there,
+    // a read of the session's safe point included (HS2-48H57C), so nothing reads as
+    // safe: the session is kept until a person stops it, and is not stopped unseen.
+    let mut disabled = policy(Vec::new());
+    disabled.targets[0].enabled = false;
+    f.set_policy(disabled, &mut tx);
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty());
+    assert_eq!(
+        placement(&tick, &session.session_id),
+        (PlacementAction::Keep, "awaiting_safe_point")
+    );
+    // Asked directly, the stop is a typed refusal of the gate.
+    assert_eq!(
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&session.session_id), &mut tx),
+        WindDownOutcome::Refused {
+            reason: "policy_denied".into()
+        }
+    );
+    assert_eq!(f.record(&session.operation_id).state, SessionState::Running);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+    // A person can still stop it.
+    f.m.runtime
+        .session_stop(
+            &f.owner(),
+            &session.session_id,
+            StopSession { force: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+    let _ = clock;
+}
