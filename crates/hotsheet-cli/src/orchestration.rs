@@ -6,6 +6,7 @@ mod capacity;
 mod gates;
 mod observer;
 mod policy;
+mod provisional;
 mod readiness;
 mod recovery;
 mod request;
@@ -30,6 +31,9 @@ pub use gates::{
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
+pub use provisional::{
+    ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
+};
 pub use readiness::{
     DefinePlanStep, PlanStepRef, PlanView, PrerequisiteRequest, ReadyItem, RefreshReadiness,
     RefreshView, StepView,

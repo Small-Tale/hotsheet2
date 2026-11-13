@@ -10,8 +10,9 @@
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
-> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18, and
-> cross-target provisional dispatch is HS2-JSF985),
+> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
+> provisional work across targets under a policy opt-in, with its ledger, gate-result
+> handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
 > HS2-GDJXGZ),
 > the throughput scheduler with its plan, explanations, decision log and event-driven
@@ -1646,7 +1647,7 @@ and facts give the same answer in any order.
 | Level         | Meaning                                                                                   | Dispatched         |
 | ------------- | ----------------------------------------------------------------------------------------- | ------------------ |
 | `confirmed`   | Every prerequisite is confirmed. The default level for starting work                      | Yes                |
-| `provisional` | Nothing is against it, but a prerequisite rests on an integrated commit not yet confirmed | No (HS2-JSF985)    |
+| `provisional` | Nothing is against it, but a prerequisite rests on an integrated commit not yet confirmed | By policy (§26.22) |
 | `blocked`     | A prerequisite is confirmed not to hold                                                   | Only by override   |
 | `stale`       | Nothing is known against it, but something it rests on could not be confirmed             | Only by override   |
 | `cyclic`      | Its prerequisites lead back to itself                                                     | Only by override   |
@@ -1676,9 +1677,9 @@ stable code, the prerequisite, and for a provisional one the commits it rests on
   passed while the ticket is not yet confirmed finished is the same level
   (`prerequisite_not_finished`). `base_commits` records the commits such a step would
   be built on. This is the provisional level of §26.8: it is a distinct computed
-  answer, listed by `ready` beside confirmed work, and never dispatched here.
-  Dispatching on it by policy is HS2-JSF985 across targets and HS2-2SJPCH within a
-  project.
+  answer, listed by `ready` beside confirmed work. Whether it is dispatched is the
+  policy's decision: §26.22 across targets and HS2-2SJPCH within a project. Without
+  the opt-in it is not.
 - **Validation.** `validation_step_missing`, `validation_not_run`,
   `validation_step_changed`, `validation_failed`, `validation_running`,
   `validation_skipped` and `validation_unavailable` block; other unverified evidence
@@ -1695,7 +1696,8 @@ Each step also lists `unblocks`: the unfinished steps that name its ticket.
 `run dispatch` (§26.9) reads the target ticket, records that read as the step's own
 confirmed state, and refuses a planned ticket whose step is not `confirmed` with
 409 `readiness_blocked`, `readiness_stale`, `readiness_cyclic` or
-`readiness_provisional`. Nothing is claimed and no run is recorded. Repeating a
+`readiness_provisional`. Nothing is claimed and no run is recorded. A provisional
+step is the one level a policy can let through (§26.22). Repeating a
 dispatch that was already admitted is the same run and is not judged again.
 
 A person can let one exact operation through. A dispatch sent with
@@ -2009,7 +2011,7 @@ function of them and the time:
 
 | Input           | Source                                                                                                      |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| Ready work      | `ready_work` (§26.15). Only `confirmed` items are placed; `provisional` ones are ranked and never placed    |
+| Ready work      | `ready_work` (§26.15). `confirmed` items are placed; `provisional` ones only by the policy's opt-in, §26.22 |
 | Policy          | §26.8, with its `placement` section                                                                         |
 | Target capacity | One snapshot per target with confirmed work (§26.10), read through the gate as `gates_observe`              |
 | Sessions        | The executor's list, as the scheduler's own session view                                                    |
@@ -2055,7 +2057,9 @@ Each piece of work gets a score in points, with every term reported:
 | `aging`    | 1000 per `aging_minutes` since the work became ready, without a ceiling                            |
 | risk       | Provisional work keeps `100 - speculation.risk_weight` percent of its sum (0 ranks like confirmed) |
 
-Ties go to the work that has been ready longer, then to the lower step id. Because
+Ties go to the work that has been ready longer, then to the lower step id; under a
+policy that opts in to provisional work, confirmed work goes before provisional work
+of the same score first (§26.22). Because
 aging has no ceiling, low-priority work eventually outranks anything that keeps
 arriving. The repair of a red gate outranks new work of equal priority, and more so
 the more work stands on that gate.
@@ -2064,7 +2068,9 @@ the more work stands on that gate.
 
 Work is placed best first. For each item, in this order:
 
-1. A provisional item is `provisional_not_dispatched` (HS2-JSF985).
+1. A provisional item is `provisional_not_dispatched` unless the policy opts in for
+   its target; then the provisional rule decides, and a refused item is
+   `speculation_refused` with the rule's code (§26.22).
 2. A resource it needs that someone holds, or that better-ranked work took in this
    pass, is `resource_held`. A held resource is unavailable capacity until its claim
    expires. A resource whose claims could not be read is `resource_unknown` unless
@@ -2248,10 +2254,10 @@ HS2-77SRHC.
 dispatch guard. That refusal is unchanged. HS2-2SJPCH built the rule and its
 recovery for one project's dispatcher, integrator and worker loop; the design is
 [05](05-ai-tool-plugins.md) §5.9.1, "Provisional readiness of a prerequisite awaiting
-CI". Nothing in the cross-target runtime calls it yet.
+CI".
 
-HS2-JSF985 builds cross-target provisional dispatch on the same pure rule in
-`hotsheet_ticketing::provisional`:
+Cross-target provisional work (§26.22, HS2-JSF985) is decided by the same pure rule
+in `hotsheet_ticketing::provisional`:
 
 ```rust
 pub fn blocker_readiness(
@@ -2282,8 +2288,8 @@ limit (default 1) and the integration rule, and `OPT_OUT_TAG` is `speculate:neve
 The transitions after a gate result (confirmed, at risk with a note naming the run,
 rebased onto the fix, reopened and never discarded) live in
 `hotsheet_cli::coordination::speculation` as a ledger that is independent of the pool
-schema, so the cross-target form can reuse `SpeculationLedger::apply`, `rebase` and
-`reopen` with its own storage.
+schema, so the cross-target form reuses `SpeculationLedger::record`, `apply`,
+`rebase`, `reopen` and the owed-note bookkeeping with its own storage (§26.22).
 
 ## 26.19 Placing sessions (HS2-95SWQ4)
 
@@ -2667,3 +2673,223 @@ hotsheet-cli ... orchestration summary --project <owner> --ticket <ticket-id> \
 is machine-local. MCP `hotsheet_targets` has the `summary` action with an optional
 `ticket` of `{native_id, connection_id?}`. All three call
 `OrchestrationRuntime::progress_summary`.
+
+## 26.22 Provisional work across targets (HS2-JSF985)
+
+A step at the `provisional` level (§26.15) waits on a gate that is still pending. A
+project can decide that such work starts anyway, so sessions stay productive while
+target CI runs, and that a gate's result then settles what was built on it. It is
+**off unless the orchestration policy opts in**. Without `speculation.allowed`, and
+without a target entry that sets `speculation: true`, the dispatch refusal, the
+schedule and every output are exactly what they were before this section: nothing is
+read, computed or stored for it, and no response gains a member. A test pins that.
+
+### The decision
+
+One pure function, `provisional_standings`
+(`crates/hotsheet-ticketing/src/orchestration/provisional.rs`), answers for every
+provisional step whether it may start now. It does not restate the rule of §26.18: it
+projects the plan onto that rule's input and calls `blocker_readiness`.
+
+| The rule's input (HS2-2SJPCH)                                | What it is across targets                                                              |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| A closed prerequisite ticket                                 | A prerequisite that holds (§26.15)                                                     |
+| A ticket in `final_testing` with a recorded `CI gate commit` | A prerequisite whose standing CI gates name one commit                                 |
+| `blocked_by`                                                 | The prerequisites, not yet holding, of the step that works the ticket                  |
+| The `speculate:never` tag                                    | The policy's `opt_out_tag` on the target ticket, as last read                          |
+| `GateProbe::gate`, `GateProbe::reachable`                    | The rolled-up gate of the commit on this machine (§26.13); only a watched gate attests |
+| `SpeculationPolicy { enabled, max_depth }`                   | Every policy below allows it; the smallest depth limit among them                      |
+
+What the rule cannot know is decided first, and an unknown is a refusal:
+
+- **Both policies.** The orchestration policy must allow speculation for the working
+  target and for each prerequisite's target (`speculation.allowed`, or the target
+  entry's own `speculation`). Each of those target projects must also opt in itself,
+  through its committed `speculation` setting ([05](05-ai-tool-plugins.md) §5.9.1). A
+  target's machine reports that setting in its capacity snapshot (§26.10) as
+  `speculation: { enabled, max_depth }`, and only when the project opts in, so the
+  snapshot of every other project is unchanged. A target that answers without it has
+  not opted in (`target_speculation_disabled`); a target that could not be read is
+  `target_speculation_unknown`.
+- **Depth.** The limit is the smallest of the policy's `speculation.max_depth` and
+  the `max_depth` of every involved target. Unconfirmed gates are counted through
+  the plan, across targets, by the rule's own count.
+- **Opt-out.** Tags are read only while the policy opts in, so a plan defined before
+  the opt-in holds none and its steps are `opt_out_unknown`. A dispatch and a
+  scheduling pass read the named tickets again through the gate first, as
+  `readiness refresh` does.
+- **Not speculated on.** A prerequisite that needs a `deployment` while its CI gate
+  pends (`deployment_gate_pending`, HS2-QBERH6), and standing gates about more than
+  one commit (`gate_commit_ambiguous`).
+
+Refusal codes are the ones above, `policy_speculation_not_allowed`,
+`prerequisite_speculation_not_allowed`, `target_speculation_disabled`, and the rule's
+own (`speculation_opted_out`, `speculation_depth_exceeded`, `gate_red`,
+`gate_superseded`, `gate_cancelled`, `gate_commit_reachability_unknown`). The answer
+is `ProvisionalStanding`: `allowed`, `refusal`, the prerequisite it is about, `depth`,
+`max_depth`, and `bases`, each a prerequisite ticket with its commit, its gate ids
+and its depth.
+
+A prerequisite whose gate already passed while its ticket is not yet confirmed
+closed is allowed with no base: nothing is pending beneath it.
+
+### Dispatch
+
+`run dispatch` (§26.9) on a provisional step asks the policy. Without the opt-in for
+the step's target the answer is `readiness_provisional`, as before. With it:
+
+1. The own setting of each involved target is read fresh, through the gate as
+   `gates_observe`, and the tickets the step names are read again as `tickets_read`,
+   so a prerequisite that moved on since the last read is judged as it stands now.
+2. The rule decides. A refusal is 409 `readiness_provisional_refused`, audited as
+   `provisional_dispatch` with the rule's code; `readiness show` names it under
+   `speculation`.
+3. A policy that lists `provisional_dispatch` under `approval.required_for` asks a
+   person for that exact operation (§26.8): `approval_required` until someone
+   approves it, used once, and a denial is final for that operation.
+4. The work is dispatched and recorded in the ledger with the gates it rests on. The
+   orchestration ticket gets one activity note naming the step, the operation, each
+   gate and commit, and the depth, by identifiers only.
+
+A step that rests on no pending gate is dispatched and not recorded: there is nothing
+a gate result could change.
+
+### Scheduling
+
+Under the opt-in the scheduler (§26.17) reads the rule's answer for every provisional
+item and treats an allowed one like confirmed work: free sessions first, then every
+cap, limit and resource. A start is marked `provisional` with the reason
+`provisional_work`; a refused item is `speculation_refused` with the rule's code.
+
+- **Rank.** Provisional work keeps `100 - speculation.risk_weight` percent of its
+  score, and confirmed work goes before provisional work of the same score. At the
+  default weight of 50 a provisional item ranks with confirmed work two priority
+  bands lower.
+- **Depth.** Only work the rule allowed is placed, so no placement stacks more
+  unconfirmed gates than the smallest limit.
+- **Real sessions.** A start is applied only when the policy also sets
+  `placement.automatic`; otherwise the pass is a dry run that shows the start it
+  would make. An applied start passes the policy with the provisional flag, so
+  `speculation` and a listed `provisional_dispatch` approval apply to it, and the
+  started work is recorded under the start's operation id (`sched-start-<step id>`).
+  A later dispatch of the same step keeps that record.
+- **Targets read.** A target with only provisional work is contacted when the policy
+  opts in for it, and the targets of its prerequisites are asked for their own
+  setting. Nothing more is contacted than that.
+
+### Ledger and gate results
+
+Work started this way is recorded in the ledger of §26.18, `SpeculationLedger`, kept
+per owning checkout in `${HOTSHEET_HOME}/orchestration-provisional.json` (private,
+locked, atomically replaced, version 1, never created by a read) with what the
+ledger does not hold: the step, the targets, and the gate ids. The file also keeps
+each target's own setting as last read, so reads answer without contacting a target.
+
+`provisional_reconcile` brings the ledger in line with this machine's gate records.
+For each gate commit a record still waits on, it reads what §26.15 would read for
+that prerequisite now, the standing CI gates of the latest run on its ticket or of
+the pinned commit, and applies it:
+
+| Gate                                                         | Effect on the work built on it                           | Event         |
+| ------------------------------------------------------------ | -------------------------------------------------------- | ------------- |
+| `passed`                                                     | `confirmed` once every gate it rests on is green         | `confirmed`   |
+| `failed`                                                     | `at_risk`, with the provider run named and one note owed | `at_risk`     |
+| Stands for another commit now (the fix)                      | Rebased onto that commit and its gate; at risk no longer | `rebased`     |
+| `pending` after `unknown`                                    | `provisional` again                                      | `provisional` |
+| `superseded` with nothing in its place, `unknown`, cancelled | Stays `provisional`, listed under `reevaluate`           | `reevaluate`  |
+
+The transitions are the single-project ones. A red gate stays red until a green
+reading or a rebase replaces it; a re-run that is pending, a cancelled run or a lost
+watch never clears the risk. A fix is either a newer commit linked on the same run,
+which supersedes the red gate (§26.13), or the gate of a new run on the prerequisite
+ticket. A replacement that is itself red is repaired first, and the work stays at
+risk on the gate it knows. At-risk work recovers by `rebase_onto_fix`, or by
+`reverify_by_covering_run` when its own run already links a CI gate. Nothing is
+discarded: a record keeps every transition.
+
+Each change is one `provisional` event in the run event stream (§26.9). Like a
+readiness event its `run_id` is the step id; `reason` is the new state and `gate_id`
+the gate behind it. Each at-risk mark is one activity note on the orchestration
+ticket naming the step, the operation, the prerequisite ticket, its commit, the gate
+and the provider run. The ledger's lock is held from finding a note owed to marking
+it written, so a follower and a request reconciling at once write it once.
+
+**Repair urgency.** At-risk work counts as work stacked on the failed gate: each such
+step adds to the `red_gate` score of the work on the prerequisite ticket (§26.17),
+beside the steps that gate blocks. `explain` on that step lists them as
+`provisional_dependents`.
+
+**Reopen.** When the fix invalidates the work, `readiness reopen <step> --reason
+<code>` marks it `reopened` with a reason code. It needs an identified actor, is
+audited as `provisional_reopen`, publishes a `reopened` event and adds a note.
+Confirmed work cannot be reopened, a reopened record is never confirmed by a later
+result, and the step's next provisional start is a new record. The run on the target
+is not touched; cancelling it or handing it off is the run's own control (§26.14).
+
+### When it runs
+
+Nothing here polls. The ledger is reconciled where a gate change is published
+(§26.13), so a result reaches the work in the same step that recorded it; in `run
+reconcile`, for one run or all of an owner's, which is also what a server does on
+start and reconnect (§26.14); and at the start of every scheduling pass. Applying the
+same gate records again changes nothing and publishes nothing, so a result that
+arrived while the orchestrator was down is applied exactly once by whichever of
+these runs first. While a gate pends, the scheduling loop runs no pass, contacts no
+target and rewrites nothing; the `provisional` event of a result is what wakes it.
+
+### Views
+
+- `readiness speculation` lists every record with its state, depth, gates and their
+  results, `repair_first` (each failed prerequisite with the steps stacked on it) and
+  `reevaluate`.
+- `readiness show`, `plan` and `ready` add `speculation` (the rule's answer for a
+  provisional step) and `provisional` (the recorded work of a step).
+- `run status` adds `provisional` for a run whose target ticket has recorded work.
+- `scheduler explain` adds `speculation`, `provisional` and `provisional_dependents`,
+  so it names which work is provisional on which gate from either side.
+
+The workspace view of provisional state is HS2-0D60T8.
+
+### What is not reused from the single-project code
+
+- **The probe.** The single-project `GateProbe` reads Git and the CI watch Jobs of
+  one checkout. A target may be on another machine, so the cross-target probe
+  answers from the gate records of §26.13 instead.
+- **Pool storage.** `Coordinator::speculation_*` reads and writes `speculation.json`
+  under the worker pool's lock. An orchestration owner has no pool; the same ledger
+  type is stored in the orchestration file above.
+- **The integration rule.** `integration_rule` refuses a pool worker's
+  `mark --phase integrating`. Integration of target work stays with the target's own
+  workflow (§26.8), which this machine does not drive, so the rule is recorded and
+  not enforced here (HS2-ERYQDV).
+- **Notes on the target ticket.** The single-project loop notes the dependent and the
+  failing ticket. Across targets the note goes on the orchestration ticket: nothing
+  is written to a target for this.
+
+### Not built
+
+- Nothing acts on at-risk or reopened work: the run is left as it is, and the step
+  is not dispatched again by itself after the fix (HS2-2K0DM8).
+- A target's own setting is learned from a capacity read, so each decision samples
+  the target's machine, a dry-run `scheduler plan` stores what it read, and a change
+  of the setting is noticed at the next read (HS2-FJ6MDW).
+- Records are never retired from the ledger file (HS2-J3SMMT).
+- A `provisional_dispatch` approval is used before the run is recorded, like a
+  readiness override, so a dispatch that then fails to claim asks again (HS2-8NJVXC).
+- Standing gates about several commits are refused rather than built on (HS2-08F1M8).
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration readiness speculation --project <owner>
+hotsheet-cli ... orchestration readiness reopen <step-id> --reason <code> --project <owner>
+hotsheet-cli ... orchestration readiness show <step-id> --project <owner>
+hotsheet-cli ... orchestration scheduler explain <step-id> --project <owner>
+hotsheet-cli ... orchestration run reconcile --project <owner>
+```
+
+No route was added: `speculation` and `reopen` are operations of
+`/checkouts/{owner}/orchestration/readiness/{operation}`, machine-local like the
+plan. MCP `hotsheet_targets` adds `readiness_speculation` and `readiness_reopen`.
+The policy fields are those of §26.8; the target's own setting is set with
+`coordination speculation-policy` in that project.

@@ -26,10 +26,11 @@ use hotsheet_ticketing::orchestration::{
     Blocker, CapacityState, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
     DecisionRecord, GateFilter, GateRegistry, GateState, HeldResource, MAX_SCHEDULE_SESSIONS,
     OfflinePolicy, Placement, PlacementAction, PlacementOutcome, PolicyBody, Prerequisite,
-    ReadinessLevel, ResourceNeed, ResourceStanding, RunEventJournal, RunEventKind, Schedule,
-    ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, SignalSupport,
-    TargetAction, TargetState, TickInputs, ToolCapacityRegistry, Unplaced, UnreadableClaims,
-    UnreadableReason, WorkItem, WorkLevel, plan, resource_standings, state_at, summarize,
+    ProvisionalStanding, ReadinessLevel, ResourceNeed, ResourceStanding, RunEventJournal,
+    RunEventKind, Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts,
+    SessionActivity, SignalSupport, TargetAction, TargetState, TickInputs, ToolCapacityRegistry,
+    Unplaced, UnreadableClaims, UnreadableReason, WorkItem, WorkLevel, WorkSpeculation, plan,
+    resource_standings, state_at, summarize,
 };
 use serde::{Deserialize, Serialize};
 
@@ -151,6 +152,18 @@ pub struct Explanation {
     /// HS2-2FG91X: every resource ready work requires, and how this pass saw it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<RequiredResource>,
+    /// HS2-JSF985: for a provisional step under a policy that opts in, the gates it
+    /// would rest on (`bases`) or why the provisional rule refuses it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<ProvisionalStanding>,
+    /// HS2-JSF985: the work already started on this step ahead of a pending gate,
+    /// with each gate and its result.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provisional: Option<ProvisionalWork>,
+    /// HS2-JSF985: the steps whose provisional work stands on a failed gate of this
+    /// step's ticket. Its work is that gate's repair.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub provisional_dependents: Vec<String>,
     /// `dry_run` when a placement shown here would not be applied by a tick.
     pub mode: DecisionMode,
 }
@@ -201,6 +214,9 @@ pub(super) struct Gathered {
     /// HS2-2FG91X: namespaces whose claims a machine could not read.
     unreadable: Vec<UnreadableClaims>,
     memory: Vec<hotsheet_ticketing::orchestration::PlacementMemory>,
+    /// HS2-JSF985: the provisional rule's answer per provisional step. Empty while
+    /// the policy does not opt in.
+    pub(super) standings: BTreeMap<String, ProvisionalStanding>,
 }
 
 impl Gathered {
@@ -308,6 +324,11 @@ impl OrchestrationRuntime {
                 *stacked.entry(key).or_default() += 1;
             }
         }
+        // HS2-JSF985: provisional work at risk on a failed gate stands on it too. Its
+        // run keeps its step in progress, so it was not counted above.
+        for (key, steps) in self.provisional_stacked(owner_id)? {
+            *stacked.entry(key).or_default() += u32::try_from(steps.len()).unwrap_or(u32::MAX);
+        }
         Ok(self
             .ready_work(owner_id, tx)?
             .into_iter()
@@ -340,6 +361,8 @@ impl OrchestrationRuntime {
                 model: None,
                 // HS2-2FG91X: the step's own; the policy's are added per target.
                 resources: item.resources,
+                // HS2-JSF985: decided once the involved targets were read.
+                speculation: None,
             })
             .collect())
     }
@@ -406,9 +429,15 @@ impl OrchestrationRuntime {
         let (sessions, executor) = self.scheduler_sessions(owner_id, tx);
         // Only a target that could take a session is contacted: confirmed work, a
         // policy that lets sessions run there, and no refusal still being waited out.
+        // HS2-JSF985: provisional work counts where the policy opts in for its target.
+        let speculates = policy.speculates();
+        let places = |item: &WorkItem| {
+            item.level == WorkLevel::Confirmed
+                || (speculates && policy.speculation_allowed(&item.target_id))
+        };
         let wanted: BTreeSet<&str> = work
             .iter()
-            .filter(|item| item.level == WorkLevel::Confirmed)
+            .filter(|item| places(item))
             .map(|item| item.target_id.as_str())
             .filter(|target_id| {
                 policy.target(target_id).is_some_and(|target| {
@@ -429,7 +458,7 @@ impl OrchestrationRuntime {
             // unknown, never assumed free (HS2-2FG91X).
             let mut namespaces: Vec<String> = work
                 .iter()
-                .filter(|item| item.level == WorkLevel::Confirmed && item.target_id == target_id)
+                .filter(|item| places(item) && item.target_id == target_id)
                 .flat_map(|item| item.resources.iter().map(|need| need.namespace.clone()))
                 .collect::<BTreeSet<_>>()
                 .into_iter()
@@ -499,9 +528,83 @@ impl OrchestrationRuntime {
                 }),
             }
         }
+        // HS2-JSF985: what each read target's project says of speculation, then the
+        // rule's answer for every provisional step. Nothing is read, stored or
+        // decided while the policy does not opt in.
+        let mut standings = BTreeMap::new();
+        if speculates {
+            let seen: Vec<_> = targets
+                .iter()
+                .filter_map(|state| {
+                    let snapshot = state.capacity.as_ref()?;
+                    Some((
+                        state.target_id.clone(),
+                        Some(snapshot.speculation.unwrap_or(
+                            hotsheet_ticketing::orchestration::TargetSpeculation::NOT_OPTED_IN,
+                        )),
+                    ))
+                })
+                .collect();
+            if actor.is_some() {
+                let steps = self.readiness_plan(owner_id, tx)?.steps;
+                let others: BTreeSet<String> = steps
+                    .iter()
+                    .filter(|step| {
+                        step.readiness.level == ReadinessLevel::Provisional
+                            && policy.speculation_allowed(&step.readiness.step.target.target_id)
+                    })
+                    .flat_map(|step| Self::provisional_targets_of(&step.readiness.step))
+                    .filter(|id| !seen.iter().any(|(read, _)| read == id))
+                    .collect();
+                self.provisional_targets_seen(owner_id, &seen, now_ms)?;
+                self.provisional_targets_read(owner_id, &others, actor, tx)?;
+            }
+            let read = |runtime: &Self, tx: &mut Transaction<'_>| {
+                runtime.readiness_plan(owner_id, tx).map(|plan| {
+                    plan.steps
+                        .into_iter()
+                        .filter_map(|step| Some((step.readiness.step.step_id, step.speculation?)))
+                        .collect::<BTreeMap<_, _>>()
+                })
+            };
+            standings = read(self, tx)?;
+            // A plan defined before the opt-in never read its tickets' tags. They are
+            // read once, through the gate, and then known.
+            let unread: Vec<String> = standings
+                .iter()
+                .filter(|(_, standing)| standing.refusal.as_deref() == Some("opt_out_unknown"))
+                .map(|(step_id, _)| step_id.clone())
+                .collect();
+            if actor.is_some() && !unread.is_empty() {
+                for step_id in unread {
+                    let _ = self.readiness_refresh(
+                        owner_id,
+                        &RefreshReadiness {
+                            step_id: Some(step_id),
+                        },
+                        actor,
+                        tx,
+                    );
+                }
+                standings = read(self, tx)?;
+            }
+            for item in &mut work {
+                if item.level == WorkLevel::Provisional {
+                    item.speculation =
+                        standings
+                            .get(&item.step_id)
+                            .map(|standing| WorkSpeculation {
+                                allowed: standing.allowed,
+                                refusal: standing.refusal.clone(),
+                                depth: standing.depth,
+                            });
+                }
+            }
+        }
         Ok(Some(Gathered {
             policy,
             revision: view.revision,
+            standings,
             work,
             targets,
             sessions,
@@ -689,11 +792,24 @@ impl OrchestrationRuntime {
             retry_at_ms: None,
             placement: None,
             resources: Vec::new(),
+            speculation: None,
+            provisional: None,
+            provisional_dependents: Vec::new(),
             mode: DecisionMode::DryRun,
         };
         let Some(step) = step else {
             return Ok(answer);
         };
+        // HS2-JSF985: which work is provisional on which gate.
+        answer.speculation = step.speculation.clone();
+        answer.provisional = step.provisional.clone();
+        answer.provisional_dependents = self
+            .provisional_stacked(owner_id)?
+            .remove(&hotsheet_ticketing::orchestration::ticket_key(
+                &step.readiness.step.target,
+            ))
+            .map(|steps| steps.into_iter().collect())
+            .unwrap_or_default();
         let level = step.readiness.level;
         answer.step_id = Some(step.readiness.step.step_id.clone());
         answer.level = Some(level);
@@ -716,6 +832,10 @@ impl OrchestrationRuntime {
             ReadinessLevel::Confirmed | ReadinessLevel::Provisional => {
                 let view = self.scheduler_plan(owner_id, actor, tx)?;
                 answer.mode = view.mode;
+                // HS2-JSF985: the pass may just have read a target's own setting.
+                if let Ok(fresh) = self.readiness(owner_id, &step.readiness.step.step_id, tx) {
+                    answer.speculation = fresh.speculation;
+                }
                 // HS2-2FG91X: what the work must hold, and how this pass saw each.
                 let planned = &step.readiness.step;
                 let of_target: Vec<ResourceNeed> = self
@@ -737,7 +857,13 @@ impl OrchestrationRuntime {
                     &view.schedule.contention,
                     &planned.step_id,
                     &needs,
-                    view.enabled && level == ReadinessLevel::Confirmed,
+                    // HS2-JSF985: provisional work the rule allows is considered too.
+                    view.enabled
+                        && (level == ReadinessLevel::Confirmed
+                            || step
+                                .speculation
+                                .as_ref()
+                                .is_some_and(|standing| standing.allowed)),
                 )
                 .into_iter()
                 .map(|standing| RequiredResource {
@@ -821,6 +947,10 @@ impl OrchestrationRuntime {
     ) -> Result<TickView, OrchestrationError> {
         let now_ms = tx.clock.now_ms();
         let tick_id = hotsheet_ticketing::mint_ulid(tx.clock, tx.rng).to_string();
+        // HS2-JSF985: a gate result that arrived while nothing was running is applied
+        // before anything is decided on it. Without provisional work this reads one
+        // absent file.
+        self.provisional_follow(owner_id, tx);
         let Some(gathered) = self.scheduler_gather(owner_id, actor, tx)? else {
             return Ok(TickView {
                 tick_id,

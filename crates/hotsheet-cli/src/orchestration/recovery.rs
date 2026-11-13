@@ -132,6 +132,9 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<RunView, OrchestrationError> {
         let before = self.run(owner_id, run_id)?;
+        // HS2-JSF985: a gate that resolved while the orchestrator was down decides
+        // what becomes of the work started ahead of it, whatever state this run is in.
+        self.provisional_follow(owner_id, tx);
         if before.state.is_terminal() {
             return Ok(view(before));
         }
@@ -207,6 +210,8 @@ impl OrchestrationRuntime {
             runs: Vec::new(),
             failed: Vec::new(),
         };
+        // HS2-JSF985: also when no run is unfinished.
+        self.provisional_follow(owner_id, tx);
         for run in self.run_list(owner_id, false)? {
             if run.state.is_terminal() {
                 continue;

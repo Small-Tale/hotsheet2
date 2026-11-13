@@ -87,6 +87,7 @@ pub(super) fn work(n: u128, on: u128) -> WorkItem {
         tool: None,
         model: None,
         resources: Vec::new(),
+        speculation: None,
     }
 }
 fn prio(mut item: WorkItem, priority: &str) -> WorkItem {
@@ -137,6 +138,7 @@ pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> Capacity
         claims: None,
         claim_namespaces: Vec::new(),
         claims_offline: None,
+        speculation: None,
     }
 }
 pub(super) fn state(n: u128, capacity: CapacitySnapshot) -> TargetState {

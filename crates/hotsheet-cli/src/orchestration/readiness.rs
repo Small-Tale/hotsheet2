@@ -13,10 +13,11 @@ use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     ApprovalGate, ApprovalRegistry, ApprovalState, AuditOutcome, AuditRecord, DenialReason,
     GateFacts, GateFilter, GateRequirement, MAX_STEP_RESOURCES, NewPlanStep, PlanFacts,
-    PlanRegistry, PlanStep, Prerequisite, ReadinessError, ReadinessLevel, ReadinessReason,
-    ResourceNeed, RunEvent, RunEventJournal, RunEventKind, RunEventSource, RunTarget, RunTicket,
-    RunUnreachable, StepReadiness, TargetAction, TargetOpError, TicketFacts, TicketKey, TicketSeen,
-    TicketUpdate, ValidationRegistry, evaluate_plan, summarize, ticket_key, validate_needs,
+    PlanRegistry, PlanStep, Prerequisite, ProvisionalStanding, ReadinessError, ReadinessLevel,
+    ReadinessReason, ResourceNeed, RunEvent, RunEventJournal, RunEventKind, RunEventSource,
+    RunTarget, RunTicket, RunUnreachable, StepReadiness, TargetAction, TargetOpError, TicketFacts,
+    TicketKey, TicketSeen, TicketUpdate, ValidationRegistry, evaluate_plan, summarize, ticket_key,
+    validate_needs,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -81,6 +82,13 @@ pub struct StepView {
     pub readiness: StepReadiness,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub since_ms: Option<u64>,
+    /// HS2-JSF985: for a provisional step under a policy that opts in, whether the
+    /// provisional rule lets it start now, on which gates, or why not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<ProvisionalStanding>,
+    /// HS2-JSF985: the work that was started on this step ahead of a pending gate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provisional: Option<ProvisionalWork>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -134,6 +142,10 @@ pub struct ReadyItem {
     /// of its whole target.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-JSF985: the provisional rule's answer for a provisional item, when the
+    /// policy opts in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<ProvisionalStanding>,
 }
 
 /// One audit entry of a plan change or an override.
@@ -153,8 +165,21 @@ pub(super) struct GuardedDispatch<'a> {
     pub(super) override_readiness: bool,
 }
 
-fn seen(ticket: &Value, now_ms: u64) -> TicketSeen {
+fn seen(ticket: &Value, now_ms: u64, opt_out_tag: Option<&str>) -> TicketSeen {
     TicketSeen {
+        // HS2-JSF985: read only while the policy opts in to provisional work, so a
+        // plan written without the opt-in is what it always was. A ticket without
+        // tags carries none, so it is not opted out.
+        opted_out: opt_out_tag.map(|opt_out_tag| {
+            ticket
+                .get("tags")
+                .and_then(Value::as_array)
+                .is_some_and(|tags| {
+                    tags.iter()
+                        .filter_map(Value::as_str)
+                        .any(|tag| tag.trim().eq_ignore_ascii_case(opt_out_tag))
+                })
+        }),
         at_ms: now_ms,
         exists: true,
         status: text(ticket, "status").unwrap_or("unknown").into(),
@@ -196,6 +221,14 @@ impl OrchestrationRuntime {
         PlanRegistry::new(&self.home)
     }
 
+    pub(super) fn plan_step(
+        &self,
+        owner_id: &str,
+        step_id: &str,
+    ) -> Result<PlanStep, OrchestrationError> {
+        self.plan().get(owner_id, step_id)
+    }
+
     /// Everything evaluation reads, from this machine's records alone.
     fn plan_facts(
         &self,
@@ -235,6 +268,7 @@ impl OrchestrationRuntime {
                         priority: None,
                         up_next: None,
                         created_at_ms: None,
+                        opted_out: None,
                     }),
                     unreachable: run.unreachable.clone(),
                 });
@@ -294,9 +328,14 @@ impl OrchestrationRuntime {
             return Ok(Vec::new());
         }
         let facts = self.plan_facts(owner_id, &steps, now_ms)?;
-        Ok(evaluate_plan(&steps, &facts)
+        let answers = evaluate_plan(&steps, &facts);
+        // HS2-JSF985: both are empty while the policy does not opt in.
+        let (mut standings, mut work) = self.provisional_annotations(owner_id, &answers, &facts)?;
+        Ok(answers
             .into_iter()
             .map(|readiness| StepView {
+                speculation: standings.remove(&readiness.step.step_id),
+                provisional: work.remove(&readiness.step.step_id),
                 since_ms: records
                     .iter()
                     .find(|record| record.step.step_id == readiness.step.step_id)
@@ -404,6 +443,7 @@ impl OrchestrationRuntime {
             .into_iter()
             .filter(|view| view.readiness.level.is_ready())
             .map(|view| {
+                let speculation = view.speculation;
                 let StepReadiness {
                     step,
                     level,
@@ -429,6 +469,7 @@ impl OrchestrationRuntime {
                     base_commits,
                     unblocks,
                     ready_since_ms: view.since_ms,
+                    speculation,
                 }
             })
             .collect();
@@ -499,6 +540,7 @@ impl OrchestrationRuntime {
             identifier(&target.connection_id, "bounded connection id required")?;
             native(&target.native_id)?;
         }
+        let opt_out_tag = self.opt_out_tag(owner_id);
         // One gate answer per target project, however many of its tickets are named.
         let mut gates: Vec<(TargetRef, Authorized)> = Vec::new();
         let mut read: Vec<(RunTarget, TicketSeen)> = Vec::new();
@@ -531,7 +573,7 @@ impl OrchestrationRuntime {
                             .unwrap_or(&target.native_id)
                             .to_owned(),
                     },
-                    seen(&found, tx.clock.now_ms()),
+                    seen(&found, tx.clock.now_ms(), opt_out_tag.as_deref()),
                 ));
             }
             let mut canonical = read.iter().map(|(target, _)| target.clone());
@@ -679,6 +721,7 @@ impl OrchestrationRuntime {
             }
         }
         let mut unverified = Vec::new();
+        let opt_out_tag = self.opt_out_tag(owner_id);
         for (target_id, tickets) in by_target {
             let reference = Self::target_ref(owner_id, &target_id)?;
             let authorized = self.authorize(
@@ -705,7 +748,9 @@ impl OrchestrationRuntime {
                         }) {
                         Ok(found) => TicketUpdate {
                             observed: Some(match found {
-                                Some(found) => seen(&found, tx.clock.now_ms()),
+                                Some(found) => {
+                                    seen(&found, tx.clock.now_ms(), opt_out_tag.as_deref())
+                                }
                                 None => TicketSeen {
                                     at_ms: tx.clock.now_ms(),
                                     exists: false,
@@ -713,6 +758,7 @@ impl OrchestrationRuntime {
                                     priority: None,
                                     up_next: None,
                                     created_at_ms: None,
+                                    opted_out: None,
                                 },
                             }),
                             unreachable: Some(None),
@@ -785,7 +831,7 @@ impl OrchestrationRuntime {
             owner_id,
             target,
             TicketUpdate {
-                observed: Some(seen(found, now_ms)),
+                observed: Some(seen(found, now_ms, self.opt_out_tag(owner_id).as_deref())),
                 unreachable: Some(None),
             },
         )?;
@@ -795,6 +841,18 @@ impl OrchestrationRuntime {
             return Ok(());
         };
         if !override_readiness {
+            // HS2-JSF985: a provisional step is the policy's decision. Without its
+            // opt-in this answers the refusal it always did.
+            if view.readiness.level == ReadinessLevel::Provisional {
+                return self.provisional_admit(
+                    owner_id,
+                    &step,
+                    operation_id,
+                    authorized,
+                    actor,
+                    tx,
+                );
+            }
             return Err(OrchestrationError::Readiness(refusal));
         }
         let reference = Self::target_ref(owner_id, &target.target_id)?;

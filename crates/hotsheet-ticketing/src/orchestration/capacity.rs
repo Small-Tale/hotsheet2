@@ -91,6 +91,16 @@ pub struct HostObservation {
     pub sessions: Option<Vec<SessionFootprint>>,
 }
 
+/// HS2-JSF985: a target project's own committed opt-in to provisional readiness
+/// (its shared `speculation` setting, HS2-2SJPCH), as its machine reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetSpeculation {
+    pub enabled: bool,
+    /// How many unconfirmed gates the project lets stack beneath one dependent.
+    pub max_depth: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapacitySnapshot {
     pub schema_version: u32,
@@ -110,6 +120,19 @@ pub struct CapacitySnapshot {
     /// what its configuration says to do meanwhile. `claims` is then `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claims_offline: Option<OfflinePolicy>,
+    /// HS2-JSF985: the hosted project's own speculation setting, reported only when
+    /// the project opts in. Absent, the project has not opted in, its machine does
+    /// not say (an older peer) or the setting could not be read: never allowed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<TargetSpeculation>,
+}
+
+impl TargetSpeculation {
+    /// What a target that answered without the setting is taken to say.
+    pub const NOT_OPTED_IN: Self = Self {
+        enabled: false,
+        max_depth: 1,
+    };
 }
 
 impl CapacitySnapshot {
@@ -133,7 +156,15 @@ impl CapacitySnapshot {
             claims,
             claim_namespaces,
             claims_offline: None,
+            speculation: None,
         }
+    }
+
+    /// HS2-JSF985: say what the hosted project's own speculation setting is.
+    #[must_use]
+    pub fn with_speculation(mut self, speculation: Option<TargetSpeculation>) -> Self {
+        self.speculation = speculation;
+        self
     }
 
     /// HS2-2FG91X: the claims could not be read; say what the backend's offline

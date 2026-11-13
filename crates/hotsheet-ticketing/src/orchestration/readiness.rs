@@ -26,7 +26,9 @@ const MAX_PLAN_BYTES: usize = 8 * 1024 * 1024;
 const MAX_NATIVE_ID_BYTES: usize = 256;
 
 /// Which gates of a prerequisite ticket must be green.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GateRequirement {
     /// The ticket being confirmed finished is enough.
@@ -130,6 +132,10 @@ pub struct TicketSeen {
     pub up_next: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at_ms: Option<u64>,
+    /// HS2-JSF985: whether the ticket carried the speculation opt-out tag. Absent
+    /// when the read did not say, which never counts as "not opted out".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opted_out: Option<bool>,
 }
 
 /// The last confirmed state of one target ticket and whether it can still be trusted.
@@ -157,6 +163,7 @@ impl TicketFacts {
                     newer.priority = newer.priority.or(older.priority);
                     newer.up_next = newer.up_next.or(older.up_next);
                     newer.created_at_ms = newer.created_at_ms.or(older.created_at_ms);
+                    newer.opted_out = newer.opted_out.or(older.opted_out);
                 }
                 Some(newer)
             }
@@ -196,6 +203,8 @@ pub struct GateFacts {
     pub deployment: Option<GateState>,
     /// The commits the standing CI gates are about.
     pub commits: Vec<String>,
+    /// HS2-JSF985: the standing CI gates themselves, oldest link first.
+    pub gate_ids: Vec<String>,
 }
 
 impl GateFacts {
@@ -212,6 +221,12 @@ impl From<&GateSummary> for GateFacts {
             ci_reason: summary.ci_reason.clone(),
             deployment: summary.deployment,
             commits: summary.commits.clone(),
+            gate_ids: summary
+                .gates
+                .iter()
+                .filter(|gate| gate.kind == GateKind::Ci)
+                .map(|gate| gate.gate_id.clone())
+                .collect(),
         }
     }
 }
@@ -336,6 +351,11 @@ pub enum ReadinessError {
     Provisional,
     /// A person answered no to the override of this exact operation.
     OverrideDenied,
+    /// HS2-JSF985: the policies allow provisional work, and the provisional rule
+    /// refuses this step. `readiness show` names the reason.
+    ProvisionalRefused,
+    /// HS2-JSF985: the step has no provisional work that could be reopened.
+    NotProvisional,
 }
 
 impl ReadinessError {
@@ -347,11 +367,13 @@ impl ReadinessError {
             Self::Cyclic => "readiness_cyclic",
             Self::Provisional => "readiness_provisional",
             Self::OverrideDenied => "readiness_override_denied",
+            Self::ProvisionalRefused => "readiness_provisional_refused",
+            Self::NotProvisional => "readiness_not_provisional",
         }
     }
 }
 
-enum Verdict {
+pub(super) enum Verdict {
     Satisfied,
     Provisional(&'static str, Vec<String>),
     Blocked(&'static str),
@@ -427,7 +449,7 @@ fn ticket_verdict(
     }
 }
 
-fn verdict(prerequisite: &Prerequisite, facts: &PlanFacts) -> Verdict {
+pub(super) fn verdict(prerequisite: &Prerequisite, facts: &PlanFacts) -> Verdict {
     match prerequisite {
         Prerequisite::Ticket { gates, commit, .. } => ticket_verdict(
             &prerequisite.ticket_key().unwrap_or_default(),

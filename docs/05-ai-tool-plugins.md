@@ -3227,7 +3227,9 @@ client does not display the records (HS2-N8H97X), a ticket entering `final_testi
 does not start its watch by itself (HS2-X6FB9V), and a batch or ci-staged member is
 not checked against the integration rule (HS2-CK4S3F). The shared playbook wording for
 `final_testing` is proposed in HS2-5BNWVN. The cross-target form is
-HS2-JSF985 ([26](26-orchestration-projects.md) §26.18).
+HS2-JSF985 ([26](26-orchestration-projects.md) §26.22): there this setting is the
+target project's own opt-in, which its machine reports with its capacity, and the
+orchestration policy must allow speculation as well.
 
 ## 5.10 Testability — injected adapters + the fake agent
 

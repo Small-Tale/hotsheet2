@@ -10,6 +10,7 @@ mod gates;
 mod grants;
 mod manifest;
 mod policy;
+mod provisional;
 mod readiness;
 mod reconcile;
 mod resources;
@@ -38,7 +39,7 @@ pub use capacity::{
     AdmissionStore, AdmissionView, CapacityField, CapacitySnapshot, CpuCapacity,
     DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
     MAX_CLAIM_NAMESPACES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, SessionFootprint,
-    ToolAvailability, decide_admission, effective_limits, estimated_footprint,
+    TargetSpeculation, ToolAvailability, decide_admission, effective_limits, estimated_footprint,
 };
 pub use contract::*;
 pub use gates::{
@@ -58,6 +59,10 @@ pub use policy::{
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PlacementPolicy, PolicyBody,
     PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView,
     SessionLoad, SetPolicy, Speculation, TargetPolicy, ToolPolicy, WindDown,
+};
+pub use provisional::{
+    ProvisionalBasis, ProvisionalStanding, ProvisionalStore, SpeculationInputs, gate_observation,
+    provisional_standings,
 };
 pub use readiness::{
     GateFacts, GateRequirement, LevelChange, MAX_PLAN_STEPS, MAX_STEP_PLAN_PREREQUISITES,
@@ -89,7 +94,8 @@ pub use scheduler::{
     PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
     REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, Schedule, ScheduleInput,
     ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
-    TickInputs, Unplaced, WorkItem, WorkLevel, plan, refusal_backoff_ms, remember, score,
+    TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation, plan, refusal_backoff_ms, remember,
+    score,
 };
 pub use session_idle::{SessionIdleStore, observe_idle};
 pub use sessions::{
@@ -287,6 +293,8 @@ mod gate_tests;
 mod grant_tests;
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod provisional_tests;
 #[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]

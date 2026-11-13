@@ -74,6 +74,18 @@ enum ReadinessCmd {
     Refresh { step_id: Option<String> },
     /// Withdraw a step from the plan. Only this machine's record changes.
     Remove { step_id: String },
+    /// HS2-JSF985: which work was started ahead of a pending gate, on which gate,
+    /// and what became of it: provisional, confirmed, at_risk or reopened, with the
+    /// prerequisites to repair first and the gates to re-evaluate. Contacts nothing.
+    Speculation,
+    /// HS2-JSF985: record that the fix of a failed prerequisite invalidated a step's
+    /// provisional work. The record is kept and the run on the target is not touched.
+    Reopen {
+        step_id: String,
+        /// A stable reason code, never free text.
+        #[arg(long)]
+        reason: String,
+    },
 }
 
 fn required_ticket(spec: &str, gates: &str) -> Result<Value> {
@@ -154,6 +166,12 @@ pub(super) fn route(
             "POST",
             format!("{base}/remove"),
             json!({"step_id": step_id}),
+        ),
+        ReadinessCmd::Speculation => ("POST", format!("{base}/speculation"), json!({})),
+        ReadinessCmd::Reopen { step_id, reason } => (
+            "POST",
+            format!("{base}/reopen"),
+            json!({"step_id": step_id, "reason": reason}),
         ),
     })
 }

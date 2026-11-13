@@ -41,6 +41,10 @@ pub enum RunEventKind {
     /// HS2-42TARA: a plan step's readiness level changed. `run_id` holds the step id
     /// (a step may have no run yet) and `reason` the new level.
     Readiness,
+    /// HS2-JSF985: provisional work changed state. `run_id` holds the step id,
+    /// `reason` the new state (`provisional`, `confirmed`, `at_risk`, `rebased`,
+    /// `reopened`, `reevaluate`) and `gate_id` the gate that caused it, when one did.
+    Provisional,
 }
 
 /// Who learned the fact: the orchestrator acting, or a change observed on the target.

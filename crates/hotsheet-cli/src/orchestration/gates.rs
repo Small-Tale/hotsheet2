@@ -338,6 +338,8 @@ impl OrchestrationRuntime {
         }
         // HS2-42TARA: a gate verdict may change what is ready.
         self.readiness_reevaluate(&gate.owner_checkout_id, gate.updated_at_ms);
+        // HS2-JSF985: and what becomes of work started ahead of it.
+        self.provisional_gate_changed(&gate.owner_checkout_id, gate.updated_at_ms);
     }
 
     /// Read the gate's adapter and record what it says. Returns the gate as it now
@@ -368,6 +370,8 @@ impl OrchestrationRuntime {
         let changed = outcome == GateOutcome::Changed;
         if changed {
             self.gate_event(&after, RunEventSource::Target);
+            // HS2-JSF985: the note a red gate owes the work stacked on it.
+            self.provisional_follow(&after.owner_checkout_id, tx);
         }
         Ok((after, changed))
     }

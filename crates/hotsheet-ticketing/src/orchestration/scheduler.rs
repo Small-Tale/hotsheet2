@@ -55,9 +55,23 @@ const MAX_MEMORY_BYTES: usize = 1024 * 1024;
 #[serde(rename_all = "snake_case")]
 pub enum WorkLevel {
     Confirmed,
-    /// Rests on a pending gate. Ranked with the policy's risk weight and never placed
-    /// here (HS2-JSF985).
+    /// Rests on a pending gate. Ranked with the policy's risk weight, and placed only
+    /// when the policy opts in and the provisional rule allows it (HS2-JSF985).
     Provisional,
+}
+
+/// HS2-JSF985: what the provisional rule (§26.22) says of one provisional item. The
+/// scheduler does not decide it; whoever lists the work does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkSpeculation {
+    pub allowed: bool,
+    /// Why not, as the rule's stable code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
+    /// Unconfirmed gates stacked beneath the work.
+    #[serde(default)]
+    pub depth: u32,
 }
 
 /// A resource one piece of work needs exclusively: declared on its plan step or, for
@@ -116,6 +130,10 @@ pub struct WorkItem {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-JSF985: the provisional rule's answer for a provisional item. Absent, the
+    /// item is ranked and never placed, as before the policy could opt in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<WorkSpeculation>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -409,6 +427,9 @@ impl PlacementAction {
 pub enum PlacementReason {
     /// Start: ready work no running session can take.
     ReadyWork,
+    /// HS2-JSF985. Start: provisional work the policy and the rule allow, which no
+    /// running session can take.
+    ProvisionalWork,
     /// Keep: a free session takes ready work instead of a new one starting.
     Refill,
     Busy,
@@ -438,6 +459,7 @@ impl PlacementReason {
     pub fn code(self) -> &'static str {
         match self {
             Self::ReadyWork => "ready_work",
+            Self::ProvisionalWork => "provisional_work",
             Self::Refill => "refill",
             Self::Busy => "busy",
             Self::WaitingOnGate => "waiting_on_gate",
@@ -513,15 +535,21 @@ pub struct Placement {
     pub retry_at_ms: Option<u64>,
     #[serde(default)]
     pub inputs: PlacementInputs,
+    /// HS2-JSF985: the work this session is for rests on a pending gate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub provisional: bool,
 }
 
 /// Why ready work gets no session in this pass. The wire spelling equals `code()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Blocker {
-    /// Provisional work is ranked and never placed here.
+    /// Provisional work is ranked and not placed: the policy does not opt in.
     #[serde(rename = "provisional_not_dispatched")]
     Provisional,
+    /// HS2-JSF985: the policy opts in, and the provisional rule refuses this work;
+    /// `detail` is the rule's code.
+    SpeculationRefused,
     /// The policy does not let a session run on the target; `detail` is its code.
     PolicyDenied,
     /// The target's machine could not be read; `detail` says why.
@@ -547,6 +575,7 @@ impl Blocker {
     pub fn code(self) -> &'static str {
         match self {
             Self::Provisional => "provisional_not_dispatched",
+            Self::SpeculationRefused => "speculation_refused",
             Self::PolicyDenied => "policy_denied",
             Self::TargetUnavailable => "target_unavailable",
             Self::TargetCap => "target_cap",
@@ -703,7 +732,8 @@ enum Fate {
         Option<String>,
         Option<u64>,
     ),
-    Refilled(String, ScoreParts),
+    /// The step a free session takes, its score, and whether it is provisional.
+    Refilled(String, ScoreParts, bool),
 }
 
 fn earliest(retry: &mut Option<u64>, at_ms: u64, now_ms: u64) {
@@ -805,9 +835,17 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         .take(MAX_SCHEDULE_WORK)
         .map(|item| (score(item, policy, now), item))
         .collect();
+    // HS2-JSF985: where the policy opts in, confirmed work goes before provisional
+    // work of the same score. Without the opt-in the order is what it always was.
+    let speculates = policy.speculates();
     ranked.sort_by(|(a, x), (b, y)| {
         b.total
             .cmp(&a.total)
+            .then(if speculates {
+                x.level.cmp(&y.level)
+            } else {
+                std::cmp::Ordering::Equal
+            })
             .then(
                 x.ready_since_ms
                     .unwrap_or(u64::MAX)
@@ -859,9 +897,22 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 score: *parts,
             });
         };
-        if item.level == WorkLevel::Provisional {
-            skip(Blocker::Provisional, None, None);
-            continue;
+        let provisional = item.level == WorkLevel::Provisional;
+        if provisional {
+            // HS2-JSF985: placed only when the policy opts in for the target and the
+            // provisional rule allowed this exact item.
+            match &item.speculation {
+                Some(rule) if policy.speculation_allowed(&item.target_id) => {
+                    if !rule.allowed {
+                        skip(Blocker::SpeculationRefused, rule.refusal.clone(), None);
+                        continue;
+                    }
+                }
+                _ => {
+                    skip(Blocker::Provisional, None, None);
+                    continue;
+                }
+            }
         }
         // HS2-2FG91X: a resource means something only on the machine that hosts the
         // target. Without a reading of that machine nothing is known about it.
@@ -965,7 +1016,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .min_by_key(|(_, session)| (std::cmp::Reverse(session.activity), &session.session_id))
             .map(|(index, _)| index);
         if let Some(index) = free {
-            fates[index] = Fate::Refilled(item.step_id.clone(), *parts);
+            fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
             take!();
             continue;
         }
@@ -1128,8 +1179,13 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             account: candidate.account.clone(),
             model,
             session_id: None,
-            reason: R::ReadyWork,
+            reason: if provisional {
+                R::ProvisionalWork
+            } else {
+                R::ReadyWork
+            },
             detail: None,
+            provisional,
             steps: vec![item.step_id.clone()],
             score: Some(*parts),
             probe: !candidate.verified,
@@ -1215,8 +1271,10 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         .iter()
         .zip(fates)
         .map(|(session, fate)| {
+            let mut provisional = false;
             let (action, reason, detail, steps, score, retry) = match fate {
-                Fate::Refilled(step, parts) => {
+                Fate::Refilled(step, parts, rests_on_gate) => {
+                    provisional = rests_on_gate;
                     (A::Keep, R::Refill, None, vec![step], Some(parts), None)
                 }
                 Fate::Decided(action, reason, detail, retry) => {
@@ -1237,6 +1295,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 steps,
                 score,
                 probe: false,
+                provisional,
                 retry_at_ms: retry,
                 inputs: PlacementInputs {
                     target_sessions: on_target

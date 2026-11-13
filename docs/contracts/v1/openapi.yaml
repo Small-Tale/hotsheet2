@@ -2403,9 +2403,12 @@ paths:
     post:
       operationId: orchestrateReadiness
       description:
-        '`define` plans or changes a step and `refresh` reads the named tickets again; both pass the grant and policy
+        "`define` plans or changes a step and `refresh` reads the named tickets again; both pass the grant and policy
         gate as `tickets_read`. `show`, `plan` and `ready` answer from the records of this machine and contact nothing.
-        `remove` withdraws a step. An unknown step is 404 `readiness_step_not_found`.'
+        `remove` withdraws a step. An unknown step is 404 `readiness_step_not_found`. `speculation` lists the work
+        that was started ahead of a pending gate, with each gate and its result, and `reopen` records that the fix of
+        a failed prerequisite invalidated a step's provisional work (HS2-JSF985); a step without such work is 409
+        `readiness_not_provisional`."
       requestBody:
         required: true
         content:
@@ -2416,7 +2419,8 @@ paths:
         '200':
           description:
             The step's readiness (`define`, `show`), the plan (`plan`, `refresh`), the work that could start now
-            (`ready`), or the removed step (`remove`).
+            (`ready`), the removed step (`remove`), the provisional work of the owner (`speculation`) or the reopened
+            work (`reopen`).
           content:
             application/json:
               schema:
@@ -2425,6 +2429,8 @@ paths:
                   - $ref: '#/components/schemas/StepReadiness'
                   - $ref: '#/components/schemas/ReadinessPlan'
                   - $ref: '#/components/schemas/PlanStep'
+                  - $ref: '#/components/schemas/ProvisionalStatus'
+                  - $ref: '#/components/schemas/ProvisionalWork'
                   - type: array
                     items:
                       $ref: '#/components/schemas/ReadyItem'
@@ -18649,6 +18655,8 @@ components:
         last_confirmed_at_ms:
           type: integer
           minimum: 0
+        provisional:
+          $ref: '#/components/schemas/ProvisionalWork'
       additionalProperties: false
     OrchestrationRunEventPage:
       type: object
@@ -18697,6 +18705,7 @@ components:
                   - handoff
                   - corrected
                   - readiness
+                  - provisional
               source:
                 enum:
                   - orchestrator
@@ -19261,6 +19270,22 @@ components:
           enum:
             - fail_closed
             - provisional
+        speculation:
+          description:
+            The hosted project's own committed opt-in to provisional readiness (HS2-JSF985, HS2-2SJPCH), present only
+            when the project opts in. Absent, an orchestrator never reads it as allowed.
+          type: object
+          required:
+            - enabled
+            - max_depth
+          properties:
+            enabled:
+              type: boolean
+            max_depth:
+              type: integer
+              minimum: 1
+              maximum: 8
+          additionalProperties: false
     HostedTargetAdmissionRequest:
       type: object
       required:
@@ -20128,8 +20153,8 @@ components:
     ReadinessOperation:
       description:
         Body of a readiness operation (HS2-42TARA). `define` takes `ticket`, `target_id`, `connection_id`, `native_id`
-        and `prerequisites`; `show` and `remove` take `step_id`; `refresh` takes an optional `step_id`; `plan` and
-        `ready` take nothing.
+        and `prerequisites`; `show` and `remove` take `step_id`; `refresh` takes an optional `step_id`; `plan`, `ready`
+        and `speculation` take nothing; `reopen` takes `step_id` and `reason` (HS2-JSF985).
       type: object
       properties:
         actor:
@@ -20164,6 +20189,11 @@ components:
             - string
             - 'null'
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        reason:
+          description: '`reopen` only (HS2-JSF985). A short lowercase reason code, never free text.'
+          type: string
+          maxLength: 64
+          pattern: ^[a-z0-9_-]+$
       additionalProperties: false
     PlanPrerequisite:
       description:
@@ -20333,6 +20363,10 @@ components:
           description: When the current level was first published as a `readiness` run event.
           type: integer
           minimum: 0
+        speculation:
+          $ref: '#/components/schemas/ProvisionalStanding'
+        provisional:
+          $ref: '#/components/schemas/ProvisionalWork'
       additionalProperties: false
     ReadinessPlan:
       type: object
@@ -20432,6 +20466,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
+        speculation:
+          $ref: '#/components/schemas/ProvisionalStanding'
       additionalProperties: false
     OrchestrationSessionRole:
       description: The part a started session plays in its target's existing role model (HS2-GDJXGZ).
@@ -20988,6 +21024,7 @@ components:
         reason:
           enum:
             - ready_work
+            - provisional_work
             - refill
             - busy
             - waiting_on_gate
@@ -21019,6 +21056,9 @@ components:
           minimum: 0
         inputs:
           $ref: '#/components/schemas/SchedulerPlacementInputs'
+        provisional:
+          description: Present and true when the work this session is for rests on a pending gate (HS2-JSF985).
+          type: boolean
       additionalProperties: false
     SchedulerUnplaced:
       description: Ready work that gets no session in this pass, with why (HS2-ECWG50).
@@ -21036,6 +21076,7 @@ components:
         reason:
           enum:
             - provisional_not_dispatched
+            - speculation_refused
             - policy_denied
             - target_unavailable
             - target_cap
@@ -21300,6 +21341,17 @@ components:
                   - step
                   - target
             additionalProperties: false
+        speculation:
+          $ref: '#/components/schemas/ProvisionalStanding'
+        provisional:
+          $ref: '#/components/schemas/ProvisionalWork'
+        provisional_dependents:
+          description:
+            The steps whose provisional work stands on a failed gate of this step's ticket (HS2-JSF985). Its work is
+            that gate's repair.
+          type: array
+          items:
+            type: string
         mode:
           enum:
             - dry_run
@@ -22005,6 +22057,215 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrchestrationRunProgress'
+    ProvisionalStanding:
+      description:
+        The provisional rule's answer for one step at the `provisional` level, present only while the orchestration
+        policy opts in (HS2-JSF985). `bases` names the pending gates the step would rest on.
+      type: object
+      required:
+        - allowed
+        - depth
+        - max_depth
+      properties:
+        allowed:
+          type: boolean
+        refusal:
+          description: Why not, as a stable code such as `target_speculation_disabled`, `target_speculation_unknown`,
+            `prerequisite_speculation_not_allowed`, `speculation_opted_out` or `speculation_depth_exceeded`.
+          type: string
+        refused_prerequisite:
+          $ref: '#/components/schemas/PlanPrerequisite'
+        depth:
+          description: The deepest stack of unconfirmed gates beneath the step.
+          type: integer
+          minimum: 0
+        max_depth:
+          description: The smallest depth limit among the policies involved.
+          type: integer
+          minimum: 0
+        bases:
+          type: array
+          items:
+            type: object
+            required:
+              - target_id
+              - connection_id
+              - native_id
+              - commit
+              - gate_ids
+              - gate
+              - depth
+            properties:
+              target_id:
+                type: string
+              connection_id:
+                type: string
+              native_id:
+                type: string
+              commit:
+                type: string
+              gate_ids:
+                type: array
+                items:
+                  type: string
+              gate:
+                $ref: '#/components/schemas/ProvisionalGateResult'
+              depth:
+                type: integer
+                minimum: 1
+              pinned:
+                type: boolean
+            additionalProperties: false
+      additionalProperties: false
+    ProvisionalGateResult:
+      description: The result of a gate as provisional work reads it (HS2-2SJPCH).
+      enum:
+        - pending
+        - green
+        - red
+        - superseded
+        - cancelled
+        - unknown
+    ProvisionalGate:
+      description: One gate provisional work rests on (HS2-JSF985). Identifiers and codes only.
+      type: object
+      required:
+        - target_id
+        - connection_id
+        - native_id
+        - commit
+        - gate_ids
+        - result
+      properties:
+        target_id:
+          type: string
+        connection_id:
+          type: string
+        native_id:
+          description: The prerequisite ticket the gate belongs to.
+          type: string
+        commit:
+          type: string
+        gate_ids:
+          type: array
+          items:
+            type: string
+        result:
+          $ref: '#/components/schemas/ProvisionalGateResult'
+        run:
+          description: The gate, or the provider run of a verdict as `<run>.<attempt>`.
+          type: string
+      additionalProperties: false
+    ProvisionalWork:
+      description: One piece of work that was started ahead of a pending gate, and what became of it (HS2-JSF985).
+      type: object
+      required:
+        - assignment
+        - step_id
+        - ticket
+        - target
+        - operation_id
+        - state
+        - depth
+        - explain
+        - gates
+        - recorded_at_ms
+      properties:
+        assignment:
+          type: string
+        step_id:
+          type: string
+        ticket:
+          $ref: '#/components/schemas/OrchestrationTicketRef'
+        target:
+          type: object
+          required:
+            - target_id
+            - connection_id
+            - native_id
+          properties:
+            target_id:
+              type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+          additionalProperties: false
+        operation_id:
+          type: string
+        state:
+          enum:
+            - provisional
+            - confirmed
+            - at_risk
+            - reopened
+        depth:
+          type: integer
+          minimum: 1
+        explain:
+          description: '`provisional on <ticket> CI <gate>` for each undecided gate, or the state.'
+          type: string
+        gates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisionalGate'
+        recovery:
+          description: How at-risk work recovers once the failing prerequisite is repaired.
+          enum:
+            - rebase_onto_fix
+            - reverify_by_covering_run
+        reopen_reason:
+          type: string
+        recorded_at_ms:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    ProvisionalStatus:
+      description: Which work is provisional on which gate, from the records of this machine (HS2-JSF985).
+      type: object
+      required:
+        - enabled
+        - work
+        - repair_first
+        - reevaluate
+      properties:
+        enabled:
+          description: False while the orchestration policy does not opt in.
+          type: boolean
+        work:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisionalWork'
+        repair_first:
+          description: Prerequisites whose gate failed under provisional work, with the steps stacked on each.
+          type: array
+          items:
+            type: object
+            required:
+              - target_id
+              - connection_id
+              - native_id
+              - commit
+              - stacked
+            properties:
+              target_id:
+                type: string
+              connection_id:
+                type: string
+              native_id:
+                type: string
+              commit:
+                type: string
+              stacked:
+                type: array
+                items:
+                  type: string
+            additionalProperties: false
+        reevaluate:
+          description: Gates that were superseded, cancelled or lost under provisional work.
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisionalGate'
       additionalProperties: false
     RemoteIdentity:
       type: object

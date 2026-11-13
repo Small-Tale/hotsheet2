@@ -39,6 +39,7 @@ impl OrchestrationRuntime {
             session: request.session,
             operation_id: request.operation_id,
             load: request.load,
+            provisional: request.provisional,
             ..ActionRequest::new(request.action)
         };
         match self.authorize(target, actor, action, tx) {
@@ -74,6 +75,53 @@ impl OrchestrationRuntime {
                 reason: Some(outcome.outcome.clone()),
                 grant_id: None,
             },
+        );
+    }
+
+    /// HS2-JSF985: a session was started for provisional work. The approval a policy
+    /// asked for is used by this one start, and the work is recorded with the gates
+    /// it rests on, so their results reach it. Best effort: the session runs either
+    /// way, and a dispatch of the same step records it if this could not.
+    #[allow(clippy::too_many_arguments)] // HS2-JSF985: one start with the pass's context
+    fn scheduler_started_provisional(
+        &self,
+        owner_id: &str,
+        target: &TargetRef,
+        outcome: &DecisionOutcome,
+        standing: &hotsheet_ticketing::orchestration::ProvisionalStanding,
+        actor_id: &str,
+        gathered: &Gathered,
+        tx: &mut Transaction<'_>,
+    ) {
+        use hotsheet_ticketing::orchestration::{ApprovalGate, ApprovalRegistry};
+        if gathered
+            .policy
+            .approval
+            .required_for
+            .contains(&ApprovalGate::ProvisionalDispatch)
+        {
+            let _ = ApprovalRegistry::new(&self.home).consume_or_request(
+                target,
+                actor_id,
+                ApprovalGate::ProvisionalDispatch,
+                &outcome.operation_id,
+                tx,
+            );
+        }
+        let Some(step) = outcome
+            .step_id
+            .as_deref()
+            .and_then(|step_id| self.plan_step(owner_id, step_id).ok())
+        else {
+            return;
+        };
+        let _ = self.provisional_record(
+            owner_id,
+            &step,
+            standing,
+            &outcome.operation_id,
+            actor_id,
+            tx.clock.now_ms(),
         );
     }
 
@@ -125,7 +173,9 @@ impl OrchestrationRuntime {
                 }),
                 operation_id: Some(operation_id.clone()),
                 load: Some(load.clone()),
-                provisional: false,
+                // HS2-JSF985: the policy's speculation switch and, when it lists
+                // one, its `provisional_dispatch` approval apply to this start.
+                provisional: placement.provisional,
                 role_session: false,
             },
             tx,
@@ -139,6 +189,21 @@ impl OrchestrationRuntime {
             outcome.outcome = format!("executor_{}", gathered.executor);
             return outcome;
         }
+        // HS2-JSF985: the rule's answer the placement was decided on. Without one the
+        // work is not started ahead of anything.
+        let provisional = match (placement.provisional, outcome.step_id.as_deref()) {
+            (false, _) => None,
+            (true, step_id) => match step_id
+                .and_then(|step_id| gathered.standings.get(step_id))
+                .filter(|standing| standing.allowed)
+            {
+                Some(standing) => Some(standing.clone()),
+                None => {
+                    outcome.outcome = "speculation_refused".into();
+                    return outcome;
+                }
+            },
+        };
         let request = PlacementStart {
             owner_id: owner_id.into(),
             target_id: placement.target_id.clone(),
@@ -159,6 +224,11 @@ impl OrchestrationRuntime {
                 outcome.outcome = "started".into();
                 outcome.session_id = Some(session_id);
                 applied.push((placement.target_id.clone(), PlacementOutcome::Started));
+                if let Some(standing) = &provisional {
+                    self.scheduler_started_provisional(
+                        owner_id, &target, &outcome, standing, actor_id, gathered, tx,
+                    );
+                }
                 true
             }
             StartOutcome::Refused { reason } => {

@@ -9,7 +9,7 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AdmissionDecision, AdmissionRequest, AdmissionStore, CapacitySnapshot, HeldClaim,
     HostObservation, MAX_CLAIM_NAMESPACES, OfflinePolicy, SessionRequest, TargetAction,
-    decide_admission,
+    TargetSpeculation, decide_admission,
 };
 use serde::Deserialize;
 
@@ -163,7 +163,21 @@ impl OrchestrationRuntime {
             namespaces.to_vec(),
             claims,
         )
-        .with_claims_offline(offline))
+        .with_claims_offline(offline)
+        // HS2-JSF985: the hosted project's own committed opt-in. It is reported only
+        // when the project opts in, so the answer of every project that does not is
+        // what it always was; an orchestrator reads its absence as not allowed.
+        .with_speculation(
+            hotsheet_ticketing::provisional::SpeculationPolicy::read(
+                &hotsheet_ticketing::Settings::for_project(&checkout.root),
+            )
+            .ok()
+            .filter(|policy| policy.enabled)
+            .map(|policy| TargetSpeculation {
+                enabled: policy.enabled,
+                max_depth: policy.max_depth,
+            }),
+        ))
     }
 
     /// This machine's own answer: its snapshot, its admission file, the limits the

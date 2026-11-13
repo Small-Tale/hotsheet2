@@ -75,6 +75,7 @@ fn seen(status: &str, at_ms: u64) -> TicketSeen {
         priority: None,
         up_next: None,
         created_at_ms: None,
+        opted_out: None,
     }
 }
 fn down(since_ms: u64) -> RunUnreachable {
@@ -93,6 +94,7 @@ fn gate(ci: GateState, reason: Option<&str>, deployment: Option<GateState>) -> G
         } else {
             vec![sha('a')]
         },
+        gate_ids: Vec::new(),
     }
 }
 #[derive(Default)]
@@ -387,6 +389,7 @@ fn hs2_42tara_named_commit_is_judged_by_that_commits_gates() {
             ci_reason: None,
             deployment: None,
             commits: vec![sha('c')],
+            gate_ids: Vec::new(),
         },
     );
     let answers = evaluate_plan(&[step(2, &b, vec![pinned('c')])], &world.0);

@@ -417,6 +417,17 @@ impl PolicyBody {
             .unwrap_or(self.machine)
     }
 
+    /// HS2-JSF985: whether the policy opts in to provisional work anywhere. While it
+    /// does not, nothing about readiness, dispatch or scheduling differs from a
+    /// policy without a `speculation` section.
+    pub fn speculates(&self) -> bool {
+        self.speculation.allowed
+            || self
+                .targets
+                .iter()
+                .any(|target| target.speculation == Some(true))
+    }
+
     pub fn speculation_allowed(&self, target_id: &str) -> bool {
         self.target(target_id)
             .and_then(|target| target.speculation)

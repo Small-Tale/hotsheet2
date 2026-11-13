@@ -1203,6 +1203,206 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
   }
 });
 
+test('HS2-JSF985 real provisional work responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  // The readiness route answers one of several shapes; each is also held to its own.
+  const shaped = (schema: string, value: unknown) => {
+    const validate = ajv.compile({ $ref: `#/components/schemas/${schema}`, components: openapi.components });
+    expect(validate(value), `${schema}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  // The target project opts in to provisional readiness itself, in its committed settings.
+  const server = await realTicketServer({
+    seed: async ({ root }) => {
+      await mkdir(join(root, '.hotsheet2'), { recursive: true });
+      await writeFile(
+        join(root, '.hotsheet2', 'settings.json'),
+        JSON.stringify({ $hotsheetSchema: 1, speculation: { enabled: true, max_depth: 1 } }),
+      );
+    },
+  });
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const target = '01ARZ3NDEKTSV4RRFFQ69G5FJ3';
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const readiness = '/checkouts/{owner}/orchestration/readiness/{operation}';
+    const runs = '/checkouts/{owner}/orchestration/runs';
+    const person = { role: 'human', id: 'maintainer' };
+    const scheduler = { role: 'ai', id: 'scheduler-1' };
+
+    const added = await send('POST', `${base}/targets`, { target_id: target, label: 'Self', expected_revision: null });
+    expect(added.status).toBe(200);
+    const candidate = await send('POST', `${base}/inspect`, {
+      destination: { kind: 'local', checkout_id: server.checkoutId },
+    });
+    const bound = await send('PUT', `${base}/targets/${target}/binding`, {
+      target: { owner_checkout_id: server.checkoutId, target_id: target },
+      expected_manifest_revision: added.body.revision,
+      expected_binding_revision: 0,
+      previous_destination: null,
+      destination: candidate.body.destination,
+    });
+    expect(bound.status).toBe(200);
+    const granted = await send('POST', `${base}/targets/${target}/grants`, {
+      actor_id: 'scheduler-1',
+      actions: ['tickets_read', 'work_start', 'gates_observe'],
+      expires_at_ms: Date.now() + 3_600_000,
+      actor: person,
+    });
+    expect(granted.status).toBe(200);
+    const orchestration = await server.request<{ id: string }>('/tickets', 'POST', { title: 'Coordinate the plan' });
+    const first = await server.request<{ id: string; connection_id: string }>('/tickets', 'POST', {
+      title: 'Synthetic prerequisite',
+    });
+    const second = await server.request<{ id: string }>('/tickets', 'POST', { title: 'Synthetic dependent work' });
+    const dispatch = (native: string, operation: string) =>
+      send('POST', `${base}/runs`, {
+        ticket: { native_id: orchestration.id },
+        target_id: target,
+        connection_id: first.connection_id,
+        native_id: native,
+        operation_id: operation,
+        worker_id: `worker-${operation}`,
+        actor: scheduler,
+      });
+    const act = async (name: string, body: Record<string, unknown>) => {
+      const answer = await send('POST', `${base}/readiness/${name}`, { ...body, actor: scheduler });
+      matches(readiness, 'post', answer.status === 200 ? '200' : 'default', answer.body);
+      return answer;
+    };
+
+    // The prerequisite is dispatched and integrated; its CI gate pends.
+    const running = await dispatch(first.id, 'op-contract-prerequisite');
+    expect(running.status, JSON.stringify(running.body)).toBe(200);
+    const commit = 'a'.repeat(40);
+    const linked = await send('POST', `${base}/runs/${String(running.body.run_id)}/gates`, {
+      commit,
+      repository: 'example/widgets',
+      actor: scheduler,
+    });
+    expect(linked.status, JSON.stringify(linked.body)).toBe(200);
+    const gateId = (linked.body.gate as { gate_id: string }).gate_id;
+    const defined = await act('define', {
+      ticket: { native_id: orchestration.id },
+      target_id: target,
+      connection_id: first.connection_id,
+      native_id: second.id,
+      prerequisites: [
+        { kind: 'ticket', target_id: target, connection_id: first.connection_id, native_id: first.id, gates: 'ci' },
+      ],
+    });
+    expect(defined.body.level).toBe('provisional');
+    expect(defined.body.speculation).toBeUndefined();
+    const stepId = (defined.body.step as { step_id: string }).step_id;
+
+    // Without the orchestration policy's opt-in the refusal is the one it always was.
+    const refused = await dispatch(second.id, 'op-contract-provisional');
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('readiness_provisional');
+    matches(runs, 'post', 'default', refused.body);
+    const idle = await act('speculation', {});
+    shaped('ProvisionalStatus', idle.body);
+    expect(idle.body).toEqual({ enabled: false, work: [], repair_first: [], reevaluate: [] });
+
+    const policy = await send('PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        targets: [{ target_id: target, actions: ['tickets_read', 'work_start', 'gates_observe'] }],
+        speculation: { allowed: true },
+      },
+      actor: person,
+    });
+    expect(policy.status, JSON.stringify(policy.body)).toBe(200);
+    // Nothing was read from the target yet, so its own setting is unknown: refused, with the reason.
+    const unknown = await act('show', { step_id: stepId });
+    shaped('StepReadiness', unknown.body);
+    expect(unknown.body.speculation).toEqual({
+      allowed: false,
+      refusal: 'target_speculation_unknown',
+      depth: 0,
+      max_depth: 1,
+    });
+
+    const admitted = await dispatch(second.id, 'op-contract-provisional');
+    expect(admitted.status, JSON.stringify(admitted.body)).toBe(200);
+    matches(runs, 'post', '200', admitted.body);
+    // The target's machine reports its project's own setting with its capacity.
+    const snapshot = await send('GET', `/checkouts/${server.checkoutId}/target-capacity`);
+    expect(snapshot.status).toBe(200);
+    matches('/checkouts/{checkout}/target-capacity', 'get', '200', snapshot.body);
+    expect(snapshot.body.speculation).toEqual({ enabled: true, max_depth: 1 });
+    const listed = await act('speculation', {});
+    shaped('ProvisionalStatus', listed.body);
+    expect(listed.body).toMatchObject({
+      enabled: true,
+      work: [
+        {
+          step_id: stepId,
+          operation_id: 'op-contract-provisional',
+          state: 'provisional',
+          depth: 1,
+          gates: [{ target_id: target, native_id: first.id, commit, gate_ids: [gateId], result: 'pending' }],
+        },
+      ],
+      repair_first: [],
+      reevaluate: [],
+    });
+    const shown = await act('show', { step_id: stepId });
+    shaped('StepReadiness', shown.body);
+    expect(shown.body).toMatchObject({ level: 'in_progress', provisional: { state: 'provisional' } });
+    const status = await send('GET', `${base}/runs/${String(admitted.body.run_id)}/status`);
+    matches('/checkouts/{owner}/orchestration/runs/{run}/{operation}', 'get', '200', status.body);
+    expect(status.body.provisional).toEqual((listed.body.work as unknown[])[0]);
+    const explained = await send('POST', `${base}/scheduler/explain`, { step_id: stepId, actor: scheduler });
+    expect(explained.status, JSON.stringify(explained.body)).toBe(200);
+    shaped('SchedulerExplanation', explained.body);
+    expect(explained.body).toMatchObject({ standing: 'running', provisional: { step_id: stepId } });
+    const events = await send('GET', `${base}/run-events?after=0&run=${stepId}`);
+    matches('/checkouts/{owner}/orchestration/run-events', 'get', '200', events.body);
+    expect(
+      (events.body.entries as { kind: string; reason: string; gate_id?: string }[])
+        .filter((entry) => entry.kind === 'provisional')
+        .map((entry) => [entry.reason, entry.gate_id]),
+    ).toEqual([['provisional', gateId]]);
+
+    // A person's or a worker's reopen keeps the record; errors are typed.
+    const reopened = await act('reopen', { step_id: stepId, reason: 'fix_changed_contract' });
+    expect(reopened.status, JSON.stringify(reopened.body)).toBe(200);
+    shaped('ProvisionalWork', reopened.body);
+    expect(reopened.body).toMatchObject({ state: 'reopened', reopen_reason: 'fix_changed_contract' });
+    const missing = await act('reopen', { step_id: target, reason: 'fix_changed_contract' });
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('readiness_step_not_found');
+    const invalid = await act('reopen', { step_id: stepId });
+    expect(invalid.status).toBe(400);
+  } finally {
+    await server.stop();
+  }
+});
+
 test('HS2-ECWG50 real scheduler responses match the OpenAPI contract', async () => {
   test.setTimeout(90_000);
   const openapi = YAML.parse(

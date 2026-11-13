@@ -2102,6 +2102,7 @@ on the visible right edge and captures the resulting scrolled terminal.
 | orchestration-session-executor | docs/26-orchestration-projects.md | The scheduler placing orchestrator-owned sessions (§26.19): each record synced with its host and mapped onto the scheduler's view; a start that is the same start while its session is unfinished and a replacement once it is finished; the gate passed under the scheduler's operation id with the larger of the decided and the recorded load; wind-down only at a safe point and never of a person's session; every refusal a typed outcome; idle time remembered from the first sighting; the loop woken by the wake marker when a session without a run starts, ends or finishes a turn | `crates/hotsheet-ticketing/src/orchestration/session_idle_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/session_executor.rs` | `crates/hotsheet-server/tests/remote_servers/session_executor.rs`; `crates/hotsheet-server/tests/remote_servers/scheduler.rs` | HS2-257Q2Z # wake from a remote host; HS2-RG91SK # idle time from the host; HS2-SQS266 # last step removed; HS2-RTX8RJ # stop approval; HS2-7VV79Q # changed tool; HS2-48H57C # disabled target | double-covered |
 | orchestration-resources | docs/26-orchestration-projects.md | Resource requirements declared on a plan step and per target in the policy, validated against the claim service's names; held claims read per machine that hosts the target and treated as unavailable capacity; `resource_held` with the claim's expiry as the retry time, `resource_unknown` under a fail-closed backend and an `unverified` start under a provisional one; a release waking the loop through the claim service's wait primitive; contention in `plan` and per-resource standing in `explain`; the scheduler never claiming; CLI/HTTP/MCP parity (HS2-2FG91X) | `crates/hotsheet-ticketing/src/orchestration/resource_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs # hs2_2fg91x`; `crates/hotsheet-cli/src/orchestration/tests/scheduler/resources.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_2fg91x` | `crates/hotsheet-server/tests/remote_servers/resources.rs`; `clients/web/tests/contracts.spec.ts` | HS2-7YSKXE # a session acquiring its declared resources; HS2-G1PKK2 # release wake across machines; HS2-KCEHVR # a configured offline policy; HS2-5GRXFN # workspace | double-covered |
 | orchestration-progress-summary | docs/26-orchestration-projects.md; docs/14-metrics-interface.md | Read-only progress and cost summary of an owning checkout's runs across targets: lead time, queue wait, blocked time as a union of paused, intervened and unreachable intervals, retries, CI and deployment outcomes and known AI cost from the usage records; every measure known or unknown with a reason code, never zero; one work item per target ticket counted once across redispatches and targets under the `work_item_earliest_run` rule; identifiers and metrics only; CLI/HTTP/MCP parity (HS2-S13719) | `crates/hotsheet-ticketing/src/orchestration/summary_tests.rs`; `crates/hotsheet-ticketing/src/metrics.rs # hs2_s13719`; `crates/hotsheet-cli/src/orchestration/tests/summary.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_s13719` | `crates/hotsheet-server/tests/remote_servers/summary.rs`; `clients/web/tests/contracts.spec.ts` | HS2-XJEH08 # workspace view; HS2-XK7TJS # throughput and utilization measures; HS2-9FXASE # external-wait measures; HS2-B6236S # cost of remote targets | double-covered |
+| orchestration-provisional-work | docs/26-orchestration-projects.md | Provisional work across targets, off unless the orchestration policy opts in (default dispatch refusal, schedule and every output unchanged); the decision projected onto the HS2-2SJPCH rule with the orchestration policy and each involved target's own setting, opt-out, and the smallest depth limit; dispatch with an optional `provisional_dispatch` approval; scheduler placement below confirmed work of the same score, weighted by `risk_weight`, applied only under `placement.automatic`; the ledger with green confirming, red marking at risk with a note naming the run, a fix rebasing, superseded or lost gates listed for re-evaluation, and reopen; repair urgency from stacked at-risk work; reconciliation after a restart applied once; no reading while a gate pends; `readiness speculation` and `reopen`, `run status` and `explain`; CLI/HTTP/MCP parity (HS2-JSF985) | `crates/hotsheet-ticketing/src/orchestration/provisional_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/provisional.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_jsf985`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/provisional.rs`; `clients/web/tests/contracts.spec.ts` | HS2-0D60T8 # workspace; HS2-2K0DM8 # acting on at-risk and reopened work; HS2-ERYQDV # parked integration rule; HS2-FJ6MDW # target setting read and follow | double-covered |
 | orchestration-readiness | docs/26-orchestration-projects.md | Prerequisites between orchestration steps and qualified target tickets without touching provider dependency fields; readiness levels (confirmed, provisional with base commits, blocked, stale, cyclic, in progress, finished) computed from confirmed target reads, CI and deployment gates and validation evidence; cross-target cycles; the dispatch guard with typed refusals and a person's audited override per operation; level changes published once as run events on run, gate and validation changes without a timer; `ready_work` for the scheduler; CLI/HTTP/MCP parity (HS2-42TARA) | `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/readiness.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_42tara`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/readiness.rs`; `clients/web/tests/contracts.spec.ts` | HS2-JSF985 # provisional dispatch; HS2-TMA4YA # prerequisite tickets without a run; HS2-J7N3PQ # time-only changes; HS2-15G5T4 # workspace | double-covered |
 | orchestration-sessions | docs/26-orchestration-projects.md | Starting an AI session on a target's own server through the ordinary AI terminal launch with tool, model and effort; the drawer label naming the orchestration project and run; worker, dispatcher and integrator roles with one active role session per target; duplicate start suppression by operation id on both machines; grants, policy caps and approvals at the gate and the host's own admission; safe-point wind-down that refuses mid-turn, a held claim, uncommitted changes, a pending handoff and anything unknown; a crashed session found lost and replaced; a person's stop, pause and takeover with ownership that never returns; CLI/HTTP/MCP parity (HS2-GDJXGZ) | `crates/hotsheet-ticketing/src/orchestration/session_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/sessions.rs`; `crates/hotsheet-cli/src/dispatch/orchestration_sessions.rs # hs2_gdjxgz`; `crates/hotsheet-mcp/src/orchestration_tools.rs # hs2_gdjxgz`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/sessions.rs`; `clients/web/tests/contracts.spec.ts` | HS2-KTHJN2 # drawer label in a browser; HS2-2DPGDY # role joining confirmed; HS2-TRP2MJ # worktree attribution; HS2-6MNMVB # host-side takeover; HS2-75Q254 # reconciliation source | double-covered |
 | orchestration-tool-capacity | docs/26-orchestration-projects.md | Plugin `[capacity]` declarations; limit, recovery and usage signals; the full capacity transition table with bounded backoff, reported reset times, unconfirmed recovery, unknown plugins, idempotent and out-of-order signals, account isolation and daily budgets; failover selection under tool and account caps; registry capacity and corrupt data; usage-limit halts and resumes recorded by the server; CLI/HTTP/MCP parity (HS2-AHG7HW) | `crates/hotsheet-ticketing/src/orchestration/tool_capacity_tests.rs`; `crates/hotsheet-plugins/src/tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/tool_capacity.rs`; `crates/hotsheet-server/src/tool_capacity_signals.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/tool_capacity.rs`; `crates/hotsheet-server/tests/live_state.rs`; `clients/web/tests/contracts.spec.ts` | HS2-XFMKHQ # automatic usage feed; HS2-PFHRS9 # account attribution; HS2-HSMH2Q # workspace | double-covered |
@@ -3017,10 +3018,60 @@ production persistence defect.
   refused and an admitted dispatch through the stdio MCP tool.
 - `contracts.spec.ts # HS2-42TARA` validates the real server's plan, readiness,
   ready-work, refusal, approval and event responses against the contract.
-- Not verified: dispatch at the provisional level, which is not built (HS2-JSF985,
-  HS2-2SJPCH); a prerequisite ticket changing with no run and no refresh
+- Not verified here: dispatch at the provisional level, which is the next section
+  (HS2-JSF985); a prerequisite ticket changing with no run and no refresh
   (HS2-TMA4YA); a deployment gate from a real adapter, since none ships
   (HS2-G3VAK4).
+
+### Orchestration provisional work across targets (HS2-JSF985)
+
+- `provisional_tests.rs` (core) is a table over who allows speculation: the allowed
+  case with its base, and one change at a time for the orchestration policy, each
+  target override, each target's own setting (off and unknown), the opt-out tag on
+  either ticket (set and never read), a deployment requirement and gates about two
+  commits. It walks gate state by ticket state to show that only the provisional
+  level gets an answer, counts depth through a three-project chain while each limit
+  is raised and lowered and the deepest gate goes green and red again, ends a cycle
+  without confirming it, and checks the same plan in another order. For the
+  scheduler it pins the schedule without the opt-in against the same input with the
+  rule's answer present, the wire shape without new members and the old tie order;
+  then confirmed before provisional on a tie, the risk weight at 0, 50 and 100,
+  caps counting a provisional start, a refill, and refused or undecided items never
+  placed. The document store is created only by a change, keeps owners apart, is
+  private, and never overwrites damaged or newer data.
+- `tests/provisional.rs` (runtime) uses two bound targets with separate projects and
+  ticket stores, a scripted CI adapter, a counting capacity probe and the
+  `RecordingSessions` executor. Target 2's ticket B requires target 1's ticket A
+  with CI. It covers: no policy and a policy without the opt-in giving the old
+  refusal, schedule, outputs and no file; pending then green with the record, the
+  events, the note, `run status`, `show` and `explain`, and a repeated dispatch;
+  red with one note naming the run, the repair's urgency score and
+  `provisional_dependents`, then a fix as a new run and as a newer commit on the
+  same run, a fix that fails once, and work already integrated; a target that
+  disallows speculation in six ways with nothing dispatched, started or recorded,
+  and its later opt-in; a plan defined before the opt-in, whose tags are read by
+  the first dispatch or scheduling pass; the depth limit over two and three layers
+  with limits raised; a result written to the gate registry while nothing ran, applied once by
+  reconciliation and once by a scheduling pass, an older result arriving late, and
+  an owed note written once; scheduler starts only under `placement.automatic`,
+  with confirmed work first under a cap of one; the `provisional_dispatch` approval
+  for a dispatch and for a start, with a denial; an idle follower that runs no pass,
+  contacts no target and rewrites nothing while the gate pends; reopen with its
+  errors, audit and a later green result; a lost, re-watched and superseded gate;
+  and the routes.
+- `remote_servers/provisional.rs` serves two targets from a real server: the old
+  refusal with no policy, the typed refusal while the projects have not opted in,
+  the dispatch once they have, a red watch Job awaited on the event stream by
+  cursor with exactly one note, the stdio MCP tool reading the ledger, `run status`
+  and `explain` and reopening, and the owned CLI process reading and repeating it.
+- `contracts.spec.ts # HS2-JSF985` validates the real server's speculation status,
+  step readiness, run status, explanation, capacity snapshot, event page and reopen
+  responses against the contract.
+- Not verified: a session of a real AI tool started for provisional work (tests use
+  the recording executor); a target on another machine reporting its own setting
+  over the remote transport, which shares the capacity read covered by HS2-J8PRTV;
+  acting on at-risk or reopened work, which is not built (HS2-2K0DM8); the workspace
+  view (HS2-0D60T8).
 
 ### Orchestration run recovery (HS2-WBREDM)
 

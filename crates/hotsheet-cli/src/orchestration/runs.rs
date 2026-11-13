@@ -73,6 +73,10 @@ pub struct RunStatus {
     pub stale: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_confirmed_at_ms: Option<u64>,
+    /// HS2-JSF985: the run's work was started ahead of a pending gate: which gates,
+    /// and what became of them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provisional: Option<ProvisionalWork>,
 }
 
 /// A run with what could not be confirmed against the target just now.
@@ -411,6 +415,7 @@ impl OrchestrationRuntime {
             },
             stale: run.unreachable.is_some() || run.observed.is_none(),
             last_confirmed_at_ms: run.observed.as_ref().map(|observed| observed.at_ms),
+            provisional: self.provisional_on_target(owner_id, &run.target),
             run,
         })
     }
