@@ -2540,6 +2540,8 @@ mod terminal_permission_route_tests {
             connect: None,
             model: None,
             effort: None,
+            session_role: None,
+            initial_prompt: None,
         }
     }
 

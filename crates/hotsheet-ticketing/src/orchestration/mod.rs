@@ -14,6 +14,7 @@ mod provisional;
 mod readiness;
 mod reconcile;
 mod resources;
+mod role_delivery;
 mod run_events;
 mod runs;
 mod scheduler;
@@ -79,6 +80,9 @@ pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
     ResourceState, TargetResources, UnreadableClaims, UnreadableReason, resource_standings,
     validate_needs,
+};
+pub use role_delivery::{
+    MAX_ROLE_ATTEMPTS, PushAttempt, ROLE_PROMPT_WINDOW_MS, RoleDelivery, RolePrompt,
 };
 pub use run_events::{
     RunEvent, RunEventEntry, RunEventJournal, RunEventKind, RunEventPage, RunEventSource,
@@ -301,6 +305,8 @@ mod readiness_tests;
 mod reconcile_tests;
 #[cfg(test)]
 mod resource_tests;
+#[cfg(test)]
+mod role_delivery_tests;
 #[cfg(test)]
 mod run_event_tests;
 #[cfg(test)]

@@ -9,13 +9,13 @@ use crate::AppState;
 use crate::routes::terminals::{OpenTerminalReq, try_live_terminal_infos};
 use axum::Json;
 use axum::extract::{Path, State};
-use hotsheet_aitools::session_push::PushMessage;
+use hotsheet_aitools::session_push::{PushError, PushMessage};
 use hotsheet_cli::orchestration::{
-    HostLaunch, HostSessionState, RolePrompt, SessionHost, SessionHostError, ToolSetup,
-    role_prompt_text, target_tool_setup,
+    HostLaunch, HostSessionState, Launched, PushAttempt, SessionHost, SessionHostError, ToolSetup,
+    plugin_role_paths, target_tool_setup,
 };
+use hotsheet_sync::LockExt;
 use hotsheet_ticketing::checkouts::Checkout;
-use hotsheet_ticketing::orchestration::SessionRole;
 
 /// The host the shared orchestration runtime asks from inside this server. It is
 /// called on a blocking thread, so it may wait for the terminal host's answer.
@@ -38,7 +38,13 @@ impl SessionHost for ServerSessions {
         Ok(setup)
     }
 
-    fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
+    fn start(
+        &self,
+        checkout: &Checkout,
+        launch: &HostLaunch,
+    ) -> Result<Launched, SessionHostError> {
+        let prompt_at_launch = plugin_role_paths(&launch.tool, &self.state.plugin_dirs)
+            .is_some_and(|(at_launch, _)| at_launch);
         let request = OpenTerminalReq {
             command: None,
             shell_command: None,
@@ -48,6 +54,8 @@ impl SessionHost for ServerSessions {
             connect: Some(launch.tool.clone()),
             model: launch.model.clone(),
             effort: launch.effort.clone(),
+            session_role: Some(launch.role.code().to_owned()),
+            initial_prompt: Some(launch.role_prompt.clone()),
         };
         self.runtime
             .block_on(crate::open_terminal(
@@ -64,7 +72,7 @@ impl SessionHost for ServerSessions {
                 Json(name),
             ));
         }
-        Ok(())
+        Ok(Launched { prompt_at_launch })
     }
 
     fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
@@ -94,17 +102,34 @@ impl SessionHost for ServerSessions {
             .map_err(|_| SessionHostError::Refused)
     }
 
-    fn join_role(&self, _: &Checkout, session_id: &str, role: SessionRole) -> RolePrompt {
+    fn join_role(&self, _: &Checkout, session_id: &str, text: &str) -> PushAttempt {
         let Some(adapter) = crate::routes::session_messages::adapter(&self.state, session_id)
         else {
-            return RolePrompt::Unsupported;
+            // No address yet. A tool that can take messages registers one when it is
+            // ready (a SessionStart hook reports it); one that cannot never will.
+            let tool = self
+                .state
+                .drive_registry
+                .lock_or_recover()
+                .get(session_id)
+                .map(|connection| connection.tool.clone());
+            let pushes = tool
+                .and_then(|tool| plugin_role_paths(&tool, &self.state.plugin_dirs))
+                .is_some_and(|(_, pushes)| pushes);
+            return if pushes {
+                PushAttempt::NotReady
+            } else {
+                PushAttempt::Unsupported
+            };
         };
         match adapter.message(&PushMessage::Prompt {
-            text: role_prompt_text(role),
+            text: text.to_owned(),
             banner: None,
         }) {
-            Ok(_) => RolePrompt::Delivered,
-            Err(_) => RolePrompt::Failed,
+            Ok(_) => PushAttempt::Delivered,
+            Err(PushError::Unreachable(_)) => PushAttempt::NotReady,
+            Err(PushError::Unsupported(_)) => PushAttempt::Unsupported,
+            Err(PushError::Invalid(_) | PushError::Rejected { .. }) => PushAttempt::Rejected,
         }
     }
 }
@@ -114,6 +139,8 @@ impl SessionHost for ServerSessions {
 /// its marker, so it learns of the exit or the safe point from the change itself and
 /// never by asking on a timer. Any other terminal changes nothing.
 pub(crate) fn note_session_change(state: &AppState, terminal_id: &str) {
+    // HS2-2DPGDY: a finished turn is a sign the tool is ready for its role.
+    retry_role(state, terminal_id);
     let home = state.machine_home().to_path_buf();
     let terminal_id = terminal_id.to_owned();
     tokio::task::spawn_blocking(move || {
@@ -122,6 +149,38 @@ pub(crate) fn note_session_change(state: &AppState, terminal_id: &str) {
             .unwrap_or(false);
         if hosted {
             hotsheet_cli::orchestration::OrchestrationRuntime::scheduler_wake_at(&home);
+        }
+    });
+}
+
+/// HS2-2DPGDY: an AI terminal of this server may just have become ready for a message:
+/// its push address was registered, or it finished a turn. A role prompt an
+/// orchestrator's start left pending is tried again, bounded in number and time.
+/// Any other terminal changes nothing. Never called on a timer.
+pub(crate) fn retry_role(state: &AppState, terminal_id: &str) {
+    let hosted =
+        hotsheet_ticketing::orchestration::HostedSessionRegistry::new(state.machine_home())
+            .by_session(terminal_id)
+            .ok()
+            .flatten()
+            .is_some_and(|session| {
+                session
+                    .role_delivery
+                    .prompt
+                    .is_some_and(|prompt| !prompt.is_settled())
+            });
+    if !hosted {
+        return;
+    }
+    let state = state.clone();
+    let terminal_id = terminal_id.to_owned();
+    let handle = tokio::runtime::Handle::current();
+    tokio::task::spawn_blocking(move || {
+        let Ok(runtime) = crate::routes::orchestration::server_runtime(&state, handle) else {
+            return;
+        };
+        if let Err(error) = runtime.hosted_role_retry_now(&terminal_id) {
+            tracing::warn!(code = error.code(), "role prompt retry failed");
         }
     });
 }

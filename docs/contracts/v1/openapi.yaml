@@ -20483,9 +20483,13 @@ components:
         - orchestrator
         - human
     OrchestrationSessionRolePrompt:
-      description: Whether the new session was asked to run its role skill.
+      description:
+        How the session was asked to run its role skill (HS2-2DPGDY). pending is tried again on the tool's readiness
+        events and reads as failed once its tries or its window are spent.
       enum:
         - delivered
+        - at_launch
+        - pending
         - unsupported
         - failed
     OrchestrationSessionSafePoint:
@@ -20667,6 +20671,12 @@ components:
               description: The worker id the session's claims and assignments carry.
               type: string
           additionalProperties: false
+        joined_at_ms:
+          description:
+            When this machine first learned that the session registered in the target's coordination pool in its role
+            (HS2-2DPGDY).
+          type: integer
+          minimum: 0
         created_at_ms:
           type: integer
           minimum: 0
@@ -20838,6 +20848,8 @@ components:
             end_reason:
               description: A stable code for how it ended.
               type: string
+            role_delivery:
+              $ref: '#/components/schemas/OrchestrationRoleDelivery'
           additionalProperties: false
         server_id:
           type: string
@@ -20856,6 +20868,15 @@ components:
             - 'null'
         safe_point:
           $ref: '#/components/schemas/OrchestrationSessionSafePoint'
+        role_prompt:
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        joined:
+          description:
+            The target's coordination pool shows the session registered in its role (HS2-2DPGDY); null when the pool
+            could not be read.
+          type:
+            - boolean
+            - 'null'
       additionalProperties: false
     HostedTargetSessionList:
       type: object
@@ -22281,6 +22302,19 @@ components:
       properties:
         wrote:
           description: How many files the setup wrote in or for the checkout.
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    OrchestrationRoleDelivery:
+      description: How a hosted session was asked to take up its role, and how many tries it took (HS2-2DPGDY).
+      type: object
+      properties:
+        prompt:
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        attempts:
+          type: integer
+          minimum: 0
+        delivered_at_ms:
           type: integer
           minimum: 0
       additionalProperties: false
@@ -28163,6 +28197,19 @@ components:
             - type: string
             - type: 'null'
         effort:
+          anyOf:
+            - type: string
+            - type: 'null'
+        session_role:
+          description: An orchestrator-started session's role, named in its environment (HS2-2DPGDY).
+          anyOf:
+            - enum:
+                - worker
+                - dispatcher
+                - integrator
+            - type: 'null'
+        initial_prompt:
+          description: The tool's first prompt, used only when its plugin declares launch prompt_args (HS2-2DPGDY).
           anyOf:
             - type: string
             - type: 'null'

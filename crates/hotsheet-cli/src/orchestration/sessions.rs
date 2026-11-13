@@ -16,6 +16,7 @@ use hotsheet_ticketing::orchestration::{
     SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate, StopRequest,
     TargetAction, TargetDestination, TargetOpError, decide_safe_point, decide_stop,
 };
+pub use hotsheet_ticketing::orchestration::{PushAttempt, RolePrompt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -33,6 +34,31 @@ pub struct HostLaunch {
     pub effort: Option<String>,
     /// The drawer label: the orchestration project and its run or role.
     pub label: String,
+    /// HS2-2DPGDY: the role the session takes up. The host names it in the session's
+    /// environment (`HOTSHEET_SESSION_ROLE`, `HOTSHEET_ROLE_SKILL`).
+    pub role: SessionRole,
+    /// HS2-2DPGDY: the role prompt. A tool whose plugin declares `[launch]
+    /// prompt_args` receives it as its first prompt at launch.
+    pub role_prompt: String,
+}
+
+/// HS2-2DPGDY: what a launch did beyond starting the tool.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Launched {
+    /// The role prompt went with the launch as the tool's first prompt.
+    pub prompt_at_launch: bool,
+}
+
+/// HS2-2DPGDY: whether a plugin takes a first prompt at launch, and whether it can
+/// take a message from its host at all. `None` when the plugin is unknown.
+pub fn plugin_role_paths(tool: &str, plugin_dirs: &[PathBuf]) -> Option<(bool, bool)> {
+    let plugin = hotsheet_plugins::find_in(tool, plugin_dirs)?;
+    let at_launch = plugin
+        .manifest
+        .launch
+        .as_ref()
+        .is_some_and(|launch| !launch.prompt_args.is_empty());
+    Some((at_launch, plugin.manifest.session_push.is_some()))
 }
 
 /// One live AI session as its host sees it.
@@ -48,16 +74,6 @@ pub enum SessionHostError {
     Unavailable,
     /// The host answered and would not launch or stop it.
     Refused,
-}
-
-/// Whether the new session was asked to take up its role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RolePrompt {
-    Delivered,
-    /// The tool has no way to receive a message from its host.
-    Unsupported,
-    Failed,
 }
 
 /// HS2-WEFJV8: what the target project's own AI-tool setup did before a launch.
@@ -115,7 +131,8 @@ pub trait SessionHost: Send + Sync {
 
     /// Launch the tool in the checkout through the ordinary AI terminal path. Launching
     /// an id that already runs attaches to it and starts nothing.
-    fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError>;
+    fn start(&self, checkout: &Checkout, launch: &HostLaunch)
+    -> Result<Launched, SessionHostError>;
 
     /// Every live AI session of this host. `None` when the host could not be asked, so
     /// a failed listing never reads as "nothing is running".
@@ -123,8 +140,10 @@ pub trait SessionHost: Send + Sync {
 
     fn stop(&self, checkout: &Checkout, session_id: &str) -> Result<(), SessionHostError>;
 
-    /// Ask the session to run its role skill.
-    fn join_role(&self, checkout: &Checkout, session_id: &str, role: SessionRole) -> RolePrompt;
+    /// Push the role prompt into the running session once. HS2-2DPGDY: a tool that
+    /// is not ready yet answers `NotReady`, and the host tries again on its next
+    /// readiness event.
+    fn join_role(&self, checkout: &Checkout, session_id: &str, text: &str) -> PushAttempt;
 }
 
 /// No terminal host is reachable from this process.
@@ -133,7 +152,7 @@ impl SessionHost for NoSessionHost {
     fn prepare(&self, _: &Checkout, _: &str) -> Result<ToolSetup, SessionHostError> {
         Err(SessionHostError::Unavailable)
     }
-    fn start(&self, _: &Checkout, _: &HostLaunch) -> Result<(), SessionHostError> {
+    fn start(&self, _: &Checkout, _: &HostLaunch) -> Result<Launched, SessionHostError> {
         Err(SessionHostError::Unavailable)
     }
     fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
@@ -142,8 +161,8 @@ impl SessionHost for NoSessionHost {
     fn stop(&self, _: &Checkout, _: &str) -> Result<(), SessionHostError> {
         Err(SessionHostError::Unavailable)
     }
-    fn join_role(&self, _: &Checkout, _: &str, _: SessionRole) -> RolePrompt {
-        RolePrompt::Failed
+    fn join_role(&self, _: &Checkout, _: &str, _: &str) -> PushAttempt {
+        PushAttempt::NotReady
     }
 }
 
@@ -152,13 +171,39 @@ impl SessionHost for NoSessionHost {
 pub const TOOL_SETUP_FAILED: &str = "tool_setup_failed";
 
 /// The message that asks a started session to take up its role. It names the skill;
-/// the skill itself is the workflow.
-pub fn role_prompt_text(role: SessionRole) -> String {
-    format!(
-        "Hot Sheet orchestration started this session as a {} for this project. Run the `{}` skill and follow its workflow.",
+/// the skill itself is the workflow. HS2-2DPGDY: it names the worker id to register
+/// in the target's coordination pool with, which is how joining is confirmed, and the
+/// exact ticket to request when the session was started for one.
+pub fn role_prompt_text(role: SessionRole, worker_id: &str, request: Option<&str>) -> String {
+    let mut text = format!(
+        "Hot Sheet orchestration started this session as a {} for this project. Run the `{}` skill and follow its workflow, registering in the coordination pool with the id `{worker_id}`.",
         role.code(),
         role.skill()
-    )
+    );
+    if let Some(ticket) = request {
+        text.push_str(&format!(
+            " Request the ticket `{ticket}` from the dispatcher as your argument to the skill."
+        ));
+    }
+    text
+}
+
+/// HS2-2DPGDY: whether the target's pool shows the session registered, unexpired, in
+/// the role it was started for. `now_s` is in seconds, as the pool counts.
+pub fn pool_joined(
+    state: &crate::coordination::State,
+    role: SessionRole,
+    worker_id: &str,
+    now_s: i64,
+) -> bool {
+    let live = |session: &crate::coordination::Session| {
+        session.id == worker_id && session.expires_at > now_s
+    };
+    match role {
+        SessionRole::Worker => state.workers.get(worker_id).is_some_and(live),
+        SessionRole::Dispatcher => state.dispatcher.as_ref().is_some_and(live),
+        SessionRole::Integrator => state.integrator.as_ref().is_some_and(live),
+    }
 }
 
 /// A headless process hosts no terminals, so it uses the ordinary terminal routes of
@@ -217,8 +262,14 @@ impl SessionHost for LocalServerSessions {
             &hotsheet_plugins::default_dirs(),
         )
     }
-    fn start(&self, checkout: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
+    fn start(
+        &self,
+        checkout: &Checkout,
+        launch: &HostLaunch,
+    ) -> Result<Launched, SessionHostError> {
         let mut answered = false;
+        let prompt_at_launch = plugin_role_paths(&launch.tool, &hotsheet_plugins::default_dirs())
+            .is_some_and(|(at_launch, _)| at_launch);
         for server in self.servers() {
             let body = serde_json::json!({
                 "connect": launch.tool,
@@ -226,6 +277,8 @@ impl SessionHost for LocalServerSessions {
                 "cwd": checkout.root,
                 "model": launch.model,
                 "effort": launch.effort,
+                "session_role": launch.role.code(),
+                "initial_prompt": launch.role_prompt,
             });
             match Self::call(&server, "POST", "/terminals", Some(body)) {
                 Ok(_) => {
@@ -236,7 +289,7 @@ impl SessionHost for LocalServerSessions {
                         &format!("/terminals/{}/name", launch.session_id),
                         Some(serde_json::json!({"name": launch.label})),
                     );
-                    return Ok(());
+                    return Ok(Launched { prompt_at_launch });
                 }
                 Err(Some(_)) => answered = true,
                 Err(None) => {}
@@ -291,17 +344,40 @@ impl SessionHost for LocalServerSessions {
         })
     }
 
-    fn join_role(&self, _: &Checkout, session_id: &str, role: SessionRole) -> RolePrompt {
-        let mut outcome = RolePrompt::Failed;
+    fn join_role(&self, _: &Checkout, session_id: &str, text: &str) -> PushAttempt {
+        let mut outcome = PushAttempt::NotReady;
         for server in self.servers() {
             match Self::call(
                 &server,
                 "POST",
                 &format!("/connections/{session_id}/message"),
-                Some(serde_json::json!({"text": role_prompt_text(role)})),
+                Some(serde_json::json!({"text": text})),
             ) {
-                Ok(_) => return RolePrompt::Delivered,
-                Err(Some(422)) => outcome = RolePrompt::Unsupported,
+                Ok(_) => return PushAttempt::Delivered,
+                // The server has no address for it: one is coming when its tool can
+                // take messages at all, and never otherwise.
+                Err(Some(422)) => {
+                    let pushes = Self::call(&server, "GET", "/terminals", None)
+                        .ok()
+                        .and_then(|terminals| {
+                            terminals.as_array()?.iter().find_map(|terminal| {
+                                (terminal["id"] == session_id)
+                                    .then(|| terminal["tool"].as_str().map(str::to_owned))
+                                    .flatten()
+                            })
+                        })
+                        .and_then(|tool| {
+                            plugin_role_paths(&tool, &hotsheet_plugins::default_dirs())
+                        })
+                        .is_some_and(|(_, pushes)| pushes);
+                    outcome = if pushes {
+                        PushAttempt::NotReady
+                    } else {
+                        PushAttempt::Unsupported
+                    };
+                }
+                Err(Some(400)) => outcome = PushAttempt::Rejected,
+                // Not listening yet, or not registered yet: maybe later.
                 Err(_) => {}
             }
         }
@@ -340,6 +416,13 @@ pub struct HostedSessionView {
     /// Present when the caller asked for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_point: Option<SafePoint>,
+    /// HS2-2DPGDY: how the session was asked to take up its role, as of now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role_prompt: Option<RolePrompt>,
+    /// HS2-2DPGDY: the target's coordination pool shows the session registered in
+    /// its role. `null` when the pool could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joined: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -706,9 +789,23 @@ impl OrchestrationRuntime {
                 }
             })
         });
+        let now_ms = tx.clock.now_ms();
+        let joined = match coordination_state(Path::new(&checkout.root)) {
+            _ if !session.started => None,
+            Ok(Some(state)) => Some(pool_joined(
+                &state,
+                session.role,
+                &worker_id,
+                i64::try_from(now_ms / 1000).unwrap_or(i64::MAX),
+            )),
+            Ok(None) => Some(false),
+            Err(()) => None,
+        };
         HostedSessionView {
             label: session.label(),
             server_id: self.server_id.clone(),
+            role_prompt: session.role_delivery.at(session.created_at_ms, now_ms),
+            joined,
             worker_id,
             alive,
             busy,
@@ -882,7 +979,8 @@ impl OrchestrationRuntime {
             }
             Err(SessionHostError::Refused) => return refuse(TOOL_SETUP_FAILED),
         };
-        match self.sessions.start(
+        let role_text = Self::role_text(&checkout, &reserved);
+        let launched = match self.sessions.start(
             &checkout,
             &HostLaunch {
                 session_id: reserved.session_id.clone(),
@@ -890,28 +988,80 @@ impl OrchestrationRuntime {
                 model: reserved.model.clone(),
                 effort: reserved.effort.clone(),
                 label: reserved.label(),
+                role: reserved.role,
+                role_prompt: role_text.clone(),
             },
         ) {
-            Ok(()) => {}
+            Ok(launched) => launched,
             Err(SessionHostError::Unavailable) => {
                 return refuse(SessionError::HostUnavailable.code());
             }
             Err(SessionHostError::Refused) => return refuse(SessionError::StartFailed.code()),
-        }
+        };
+        registry.mark_started(&checkout.id, &reserved.operation_id)?;
+        // HS2-2DPGDY: the prompt went with the launch, or it is pushed now; a tool
+        // that is not ready yet is tried again on its readiness events.
+        let attempt = (!launched.prompt_at_launch).then(|| {
+            self.sessions
+                .join_role(&checkout, &reserved.session_id, &role_text)
+        });
         let started = registry
-            .mark_started(&checkout.id, &reserved.operation_id)?
+            .role_attempt(
+                &checkout.id,
+                &reserved.operation_id,
+                attempt,
+                tx.clock.now_ms(),
+            )?
             .unwrap_or(reserved);
-        let role_prompt = self
-            .sessions
-            .join_role(&checkout, &started.session_id, started.role);
+        let role_prompt = started
+            .role_delivery
+            .at(started.created_at_ms, tx.clock.now_ms());
         let live = self.sessions.sessions(&checkout);
         Ok(HostedStartReply {
             outcome: HostedStartOutcome::Started,
             reason: None,
             session: Some(self.hosted_view(&checkout, started, live.as_deref(), false, tx)),
-            role_prompt: Some(role_prompt),
+            role_prompt,
             tool_setup: Some(tool_setup),
         })
+    }
+
+    /// HS2-2DPGDY: the prompt that asks this hosted session to take up its role.
+    fn role_text(_checkout: &Checkout, session: &HostedSession) -> String {
+        let worker = hotsheet_aitools::session_worker_id(&session.tool, &session.session_id);
+        role_prompt_text(session.role, &worker, None)
+    }
+
+    /// HS2-2DPGDY: the host learned something that may have made the session's tool
+    /// ready (its push address was registered, or it finished a turn). A role prompt
+    /// still pending is tried once more; anything else, or a terminal no orchestrator
+    /// started, changes nothing. Never called on a timer.
+    pub fn hosted_role_retry(
+        &self,
+        terminal_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Option<RolePrompt>, OrchestrationError> {
+        let registry = self.hosted_sessions_registry();
+        let Some(session) = registry.by_session(terminal_id)? else {
+            return Ok(None);
+        };
+        let now_ms = tx.clock.now_ms();
+        if session.ended_at_ms.is_some()
+            || !session
+                .role_delivery
+                .should_retry(session.created_at_ms, now_ms)
+        {
+            return Ok(session.role_delivery.at(session.created_at_ms, now_ms));
+        }
+        let checkout = self.owner(&session.checkout_id)?;
+        let attempt = self.sessions.join_role(
+            &checkout,
+            &session.session_id,
+            &Self::role_text(&checkout, &session),
+        );
+        Ok(registry
+            .role_attempt(&checkout.id, &session.operation_id, Some(attempt), now_ms)?
+            .and_then(|session| session.role_delivery.at(session.created_at_ms, now_ms)))
     }
 
     /// Stop a hosted session. This machine checks the safe point itself: the
@@ -1111,6 +1261,12 @@ impl OrchestrationRuntime {
         let after = registry.update(owner_id, session_id, update, tx)?;
         let changed = after.history.len() != before.history.len()
             || before.history.last() != after.history.last();
+        // HS2-2DPGDY: joining and a new role answer are news without a state change.
+        let joined = before.joined_at_ms.is_none() && after.joined_at_ms.is_some();
+        let prompted = before.role_prompt != after.role_prompt && after.role_prompt.is_some();
+        if (joined || prompted) && after.run_id.is_none() {
+            Self::scheduler_wake_at(&self.home);
+        }
         if changed && after.run_id.is_none() {
             // HS2-95SWQ4: a session without a run has no event stream to publish on,
             // so its start, exit and takeover wake the scheduler through its marker.
@@ -1138,13 +1294,43 @@ impl OrchestrationRuntime {
                             }
                             _ => format!("session_{}", entry.to.code()),
                         }),
-                        actor_id,
+                        actor_id: actor_id.clone(),
                         dedupe: Some(format!(
                             "session-{}-{}-{}",
                             after.session_id,
                             after.history.len(),
                             after.updated_at_ms
                         )),
+                        gate_id: None,
+                        gate_state: None,
+                    },
+                );
+            }
+        }
+        if let Some(run_id) = &after.run_id {
+            let news = [
+                joined.then(|| "session_joined".to_owned()),
+                after
+                    .role_prompt
+                    .filter(|_| prompted)
+                    .map(|prompt| format!("session_role_{}", prompt.code())),
+            ];
+            for reason in news.into_iter().flatten() {
+                self.run_event(
+                    owner_id,
+                    RunEvent {
+                        at_ms: after.updated_at_ms,
+                        run_id: run_id.clone(),
+                        kind: RunEventKind::Session,
+                        source: if from_target {
+                            RunEventSource::Target
+                        } else {
+                            RunEventSource::Orchestrator
+                        },
+                        state: None,
+                        dedupe: Some(format!("{}-{reason}", after.session_id)),
+                        reason: Some(reason),
+                        actor_id: actor_id.clone(),
                         gate_id: None,
                         gate_state: None,
                     },
@@ -1300,6 +1486,10 @@ impl OrchestrationRuntime {
                     session_id: hosted.session.session_id.clone(),
                     worker_id: hosted.worker_id.clone(),
                 });
+                // HS2-2DPGDY: the role as its host answers now, and joining as the
+                // target's pool shows it.
+                update.role_prompt = hosted.role_prompt;
+                update.joined_at_ms = (hosted.joined == Some(true)).then(|| tx.clock.now_ms());
                 if hosted.session.owner == SessionOwner::Human {
                     // Learned from the host: a person took it over there.
                     update.owner = Some(SessionOwner::Human);
@@ -1589,6 +1779,7 @@ impl OrchestrationRuntime {
                         session_id: hosted.session.session_id.clone(),
                         worker_id: hosted.worker_id.clone(),
                     }),
+                    role_prompt: reply.role_prompt,
                     ..SessionUpdate::default()
                 },
                 false,

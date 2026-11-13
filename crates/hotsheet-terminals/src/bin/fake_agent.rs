@@ -20,17 +20,39 @@
 //!   --probe AGENTS.md     # note whether this file exists in the working directory
 //!   --report /tmp/seen    # write what the agent saw at this point, as JSON (HS2-WEFJV8)
 //!   --report-dir /tmp/r   # the same, to <dir>/<HOTSHEET_TERMINAL_ID>.json
+//!   --serve-opencode 1500 # after this many ms, answer as an OpenCode session API (HS2-2DPGDY)
+//!   --prompt "text"       # a first prompt given at launch, recorded like a pushed one
 //! ```
+//!
+//! `--serve-opencode` makes the agent push-capable the way the `opencode-http` mechanism
+//! expects: it listens on the `--port` its host appends, behind HTTP Basic auth with
+//! `OPENCODE_SERVER_PASSWORD`, then ends a turn (busy, then idle) so its host knows it
+//! is ready. Each prompt it receives is appended to
+//! `<report-dir>/<HOTSHEET_TERMINAL_ID>.prompts`, one JSON line each.
 
 use std::io::Write;
 use std::time::Duration;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let out = std::io::stdout();
-    let mut w = out.lock();
+    // Not held locked: a `--serve-opencode` thread writes to the terminal too.
+    let mut w = std::io::stdout();
     let mut exit_code = 0;
     let mut probes: Vec<String> = Vec::new();
+    // Flags its host appends after the script are read up front.
+    let flag_value = |name: &str| {
+        args.iter()
+            .position(|arg| arg == name)
+            .and_then(|index| args.get(index + 1).cloned())
+    };
+    let prompts = flag_value("--report-dir").map(|dir| {
+        let id = std::env::var("HOTSHEET_TERMINAL_ID").unwrap_or_default();
+        std::path::PathBuf::from(dir).join(format!("{id}.prompts"))
+    });
+    // HS2-2DPGDY: a first prompt its host put on the command line.
+    if let (Some(text), Some(path)) = (flag_value("--prompt"), &prompts) {
+        record_prompt(path, &text);
+    }
 
     let mut i = 0;
     while i < args.len() {
@@ -101,6 +123,19 @@ fn main() {
                 }
                 i += 1;
             }
+            "--port" | "--prompt" => i += 1,
+            "--serve-opencode" => {
+                let delay = val(i).parse::<u64>().unwrap_or(0);
+                let port = flag_value("--port").and_then(|port| port.parse::<u16>().ok());
+                let prompts = prompts.clone();
+                match port {
+                    Some(port) => {
+                        std::thread::spawn(move || serve_opencode(port, delay, prompts));
+                    }
+                    None => eprintln!("hs-fake-agent: --serve-opencode needs --port"),
+                }
+                i += 1;
+            }
             "--exit" => {
                 exit_code = val(i).parse::<i32>().unwrap_or(0);
                 i += 1;
@@ -137,6 +172,107 @@ fn report(probes: &[String]) -> String {
         .map(|probe| (probe.clone(), cwd.join(probe).is_file().into()))
         .collect();
     serde_json::json!({ "cwd": cwd, "env": env, "files": files }).to_string()
+}
+
+/// Append one received prompt as a JSON line.
+fn record_prompt(path: &std::path::Path, text: &str) {
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(file, "{}", serde_json::json!({ "text": text }));
+    }
+}
+
+/// HS2-2DPGDY: the part of OpenCode's session API the `opencode-http` push adapter
+/// uses, enough for a host to deliver prompts into this agent.
+fn serve_opencode(port: u16, delay_ms: u64, prompts: Option<std::path::PathBuf>) {
+    use std::io::{BufRead, BufReader, Read};
+    std::thread::sleep(Duration::from_millis(delay_ms));
+    let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) else {
+        eprintln!("hs-fake-agent: cannot listen on {port}");
+        return;
+    };
+    let password = std::env::var("OPENCODE_SERVER_PASSWORD").unwrap_or_default();
+    let expected = {
+        use base64::Engine as _;
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(format!("opencode:{password}"))
+        )
+    };
+    {
+        // Ready: one turn ends, which is how the host learns of it.
+        let mut out = std::io::stdout().lock();
+        let _ = write!(out, "\x1b]133;D\x07");
+        let _ = writeln!(out, "listening");
+        let _ = out.flush();
+    }
+    for stream in listener.incoming() {
+        let Ok(mut stream) = stream else { continue };
+        let mut reader = BufReader::new(match stream.try_clone() {
+            Ok(clone) => clone,
+            Err(_) => continue,
+        });
+        let mut request_line = String::new();
+        if reader.read_line(&mut request_line).is_err() {
+            continue;
+        }
+        let mut length = 0usize;
+        let mut authorization = String::new();
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+                break;
+            }
+            let (name, value) = line.split_once(':').unwrap_or((&line, ""));
+            match name.trim().to_ascii_lowercase().as_str() {
+                "content-length" => length = value.trim().parse().unwrap_or(0),
+                "authorization" => authorization = value.trim().to_string(),
+                _ => {}
+            }
+        }
+        let mut body = vec![0; length];
+        let _ = reader.read_exact(&mut body);
+        let mut parts = request_line.split_whitespace();
+        let method = parts.next().unwrap_or_default().to_string();
+        let path = parts
+            .next()
+            .unwrap_or_default()
+            .split('?')
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        let (status, reply) = if authorization != expected {
+            ("401 Unauthorized", String::new())
+        } else {
+            match (method.as_str(), path.as_str()) {
+                ("GET", "/session") => ("200 OK", "[]".to_string()),
+                ("POST", "/session") => ("200 OK", r#"{"id":"ses_fake"}"#.to_string()),
+                ("POST", "/tui/select-session" | "/tui/show-toast") => {
+                    ("200 OK", "true".to_string())
+                }
+                ("POST", "/session/ses_fake/prompt_async") => {
+                    if let Some(path) = &prompts {
+                        let text = serde_json::from_slice::<serde_json::Value>(&body)
+                            .ok()
+                            .and_then(|value| value["parts"][0]["text"].as_str().map(str::to_owned))
+                            .unwrap_or_default();
+                        record_prompt(path, &text);
+                    }
+                    ("204 No Content", String::new())
+                }
+                _ => ("404 Not Found", String::new()),
+            }
+        };
+        let _ = write!(
+            stream,
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+            reply.len()
+        );
+        let _ = stream.flush();
+    }
 }
 
 fn ask_permission(tool: &str, action: &str) -> Result<String, Box<dyn std::error::Error>> {

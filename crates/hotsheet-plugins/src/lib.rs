@@ -210,6 +210,11 @@ pub struct LaunchSpec {
     pub model_args: Vec<String>,
     #[serde(default)]
     pub effort_args: Vec<String>,
+    /// HS2-2DPGDY: how the interactive launch takes a first prompt, with `{prompt}`
+    /// substituted (for example `["{prompt}"]`). Empty when it takes none; an
+    /// orchestrator-started session then receives its role prompt by session push.
+    #[serde(default)]
+    pub prompt_args: Vec<String>,
 }
 
 /// A tool's activity-capability declaration (`docs/15` §15.3). Declarative — the behavioral
@@ -724,6 +729,19 @@ impl Plugin {
             );
         }
         Some(args)
+    }
+
+    /// HS2-2DPGDY: the arguments that hand the tool `prompt` as its first prompt, or
+    /// `None` when its launch takes no prompt.
+    pub fn prompt_args(&self, prompt: &str) -> Option<Vec<String>> {
+        let launch = self.manifest.launch.as_ref()?;
+        (!launch.prompt_args.is_empty()).then(|| {
+            launch
+                .prompt_args
+                .iter()
+                .map(|arg| arg.replace("{prompt}", prompt))
+                .collect()
+        })
     }
 
     /// The MCP `args` with the manifest's path placeholder substituted.

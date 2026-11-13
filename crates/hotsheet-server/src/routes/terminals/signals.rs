@@ -807,6 +807,8 @@ pub(crate) async fn connect_terminal_ai(
     );
     // Make the session reachable by `POST /connections/{id}/message` (HS2-FKM97G).
     crate::routes::session_messages::register_reported(&state, &id, agent.as_deref(), &reported);
+    // HS2-2DPGDY: the tool can take messages now; a pending role prompt is retried.
+    crate::routes::orchestration_sessions::retry_role(&state, &id);
     state.emit(ChangeEvent {
         live: None,
         cursor: None,

@@ -268,9 +268,37 @@ fn terminal_launch(
             .map(|(key, value)| (key.to_string(), value)),
     );
     env.push((hotsheet_aitools::WORKER_ID_ENV.to_string(), worker_id));
+    // HS2-2DPGDY: an orchestrator-started session's role is in its environment for
+    // any tool, whether or not it can take a message from its host.
+    if let Some(role) = req.session_role.as_deref() {
+        let role = match role {
+            "worker" | "dispatcher" | "integrator" => role,
+            _ => {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "session_role must be worker, dispatcher or integrator",
+                ));
+            }
+        };
+        env.push(("HOTSHEET_SESSION_ROLE".to_string(), role.to_string()));
+        env.push((
+            "HOTSHEET_ROLE_SKILL".to_string(),
+            format!("hotsheet-{role}"),
+        ));
+    }
     let mut args = plugin
         .launch_args(req.model.as_deref(), req.effort.as_deref())
         .unwrap_or_default();
+    // HS2-2DPGDY: a first prompt goes on the command line only for a plugin that
+    // declares how its launch takes one.
+    if let Some(prompt) = req
+        .initial_prompt
+        .as_deref()
+        .filter(|prompt| !prompt.trim().is_empty())
+        && let Some(prompt_args) = plugin.prompt_args(prompt)
+    {
+        args.extend(prompt_args);
+    }
     // A push-capable tool is launched reachable: its declared port/password wiring is
     // appended so `POST /connections/{id}/message` can deliver into it (HS2-PEJ962).
     let directory = req

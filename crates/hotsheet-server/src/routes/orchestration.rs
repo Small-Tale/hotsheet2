@@ -20,6 +20,14 @@ use std::sync::Arc;
 /// is running or start another. The scheduler's executor (HS2-95SWQ4) is the one
 /// `OrchestrationRuntime::live` attaches: the sessions this runtime owns. Call on a
 /// blocking thread.
+/// HS2-2DPGDY: the runtime as this server composes it, for its own event hooks.
+pub(crate) fn server_runtime(
+    state: &AppState,
+    handle: tokio::runtime::Handle,
+) -> Result<Arc<OrchestrationRuntime>, OrchestrationError> {
+    runtime(state, handle)
+}
+
 fn runtime(
     state: &AppState,
     handle: tokio::runtime::Handle,

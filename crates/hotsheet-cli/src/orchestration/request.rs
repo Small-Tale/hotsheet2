@@ -339,6 +339,22 @@ impl OrchestrationRuntime {
         )
     }
 
+    /// HS2-2DPGDY: try a pending role prompt again on the real clock, for the host's
+    /// readiness events.
+    pub fn hosted_role_retry_now(
+        &self,
+        terminal_id: &str,
+    ) -> Result<Option<super::RolePrompt>, OrchestrationError> {
+        let mut rng = Rng;
+        self.hosted_role_retry(
+            terminal_id,
+            &mut Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            },
+        )
+    }
+
     /// HS2-ECWG50: one scheduling step on the real clock, for a host's follower.
     pub fn scheduler_follow_step_now(
         &self,

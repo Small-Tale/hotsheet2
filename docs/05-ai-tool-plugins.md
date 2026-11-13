@@ -1111,6 +1111,14 @@ or a tool UI command through that mechanism's adapter. OpenCode declares `openco
 with no section (Antigravity) reports the capability as unsupported. Details and the OpenCode
 protocol are in [13](13-drive-transport-interface.md) §13.12.
 
+`[launch] prompt_args` (HS2-2DPGDY) says how the interactive launch takes a first
+prompt, with `{prompt}` substituted, for example `["{prompt}"]`. The host uses it
+only for an orchestrator-started session's role prompt, so a tool without session
+push still receives its role; `POST /terminals` carries the prompt as
+`initial_prompt` and the role as `session_role`, which also puts
+`HOTSHEET_SESSION_ROLE` and `HOTSHEET_ROLE_SKILL` in the tool's environment. No
+built-in plugin declares it yet ([26](26-orchestration-projects.md) §26.16).
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and

@@ -1165,3 +1165,21 @@ that has never been opened in a client.
 4. In the session's drawer tab, ask the tool to list its Hot Sheet MCP tools and to
    show the Up Next queue. Confirm it answers from the project's own store.
 5. Stop the session with `--force` as a person. Remove the temporary directories.
+
+## Role prompt and joining with a real tool (HS2-2DPGDY)
+
+Automated tests deliver the role prompt to the fake agent's OpenCode-style API and
+register the worker in the pool themselves. With real tools, use a throwaway
+`HOTSHEET_HOME` and a target project that has a coordination pool (run
+`hotsheet-cli coordination --project <target> setup` once).
+
+1. Start a session for each of `claude`, `codex` and `opencode` as in the
+   HS2-WEFJV8 steps above. Note each answer's `role_prompt`: `pending` or
+   `delivered`.
+2. Wait for each tool to finish starting. Run `hotsheet-cli orchestration session
+sync <session-id> --project <owner>` and confirm `role_prompt` is `delivered`, and
+   that the tool shows the prompt naming `hotsheet-worker` and its worker id.
+3. Confirm each tool runs the worker skill and that
+   `hotsheet-cli coordination --project <target> status` lists its worker id. Sync
+   again and confirm `joined_at_ms` is set.
+4. Stop each session as a person with `--force`. Remove the temporary directories.

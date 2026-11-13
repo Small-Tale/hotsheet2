@@ -430,6 +430,14 @@ pub struct OrchestratedSession {
     pub paused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hosted: Option<HostedRef>,
+    /// HS2-2DPGDY: how the session was last known to have been asked to take up its
+    /// role, as its host answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role_prompt: Option<RolePrompt>,
+    /// HS2-2DPGDY: when this machine first learned that the session registered in the
+    /// target's coordination pool in its role.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joined_at_ms: Option<u64>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub history: Vec<SessionTransition>,
@@ -460,6 +468,10 @@ pub struct SessionUpdate {
     pub owner: Option<SessionOwner>,
     pub paused: Option<bool>,
     pub hosted: Option<HostedRef>,
+    /// HS2-2DPGDY: the role prompt as its host now answers.
+    pub role_prompt: Option<RolePrompt>,
+    /// HS2-2DPGDY: the session was seen in the pool; only the first time is kept.
+    pub joined_at_ms: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -667,6 +679,12 @@ impl SessionRegistry {
         if let Some(hosted) = update.hosted {
             session.hosted = Some(hosted);
         }
+        if let Some(prompt) = update.role_prompt {
+            session.role_prompt = Some(prompt);
+        }
+        if session.joined_at_ms.is_none() {
+            session.joined_at_ms = update.joined_at_ms;
+        }
         // A control act that changed ownership or the pause without changing the state
         // is still its own history entry.
         if entry.is_none()
@@ -722,6 +740,8 @@ fn candidate(
         owner: SessionOwner::Orchestrator,
         paused: false,
         hosted: None,
+        role_prompt: None,
+        joined_at_ms: None,
         created_at_ms: now_ms,
         updated_at_ms: now_ms,
         history: vec![SessionTransition {
@@ -887,6 +907,9 @@ pub struct HostedSession {
     /// A stable code for how it ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_reason: Option<String>,
+    /// HS2-2DPGDY: how the session was asked to take up its role.
+    #[serde(default, skip_serializing_if = "RoleDelivery::is_unasked")]
+    pub role_delivery: RoleDelivery,
 }
 
 impl HostedSession {
@@ -1064,6 +1087,7 @@ impl HostedSessionRegistry {
             created_at_ms: tx.clock.now_ms(),
             ended_at_ms: None,
             end_reason: None,
+            role_delivery: RoleDelivery::default(),
         };
         validate_hosted(&session)?;
         file.sessions.push(session.clone());
@@ -1142,6 +1166,44 @@ impl HostedSessionRegistry {
                 session.ended_at_ms = Some(now_ms);
                 session.end_reason = Some(reason.into());
             }
+        })
+    }
+
+    /// HS2-2DPGDY: the started session with this terminal id, on any checkout of this
+    /// machine, for the host's readiness events.
+    pub fn by_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .sessions
+            .into_iter()
+            .find(|session| session.session_id == session_id && session.started))
+    }
+
+    /// HS2-2DPGDY: fold one try at delivering the role into the record. A settled
+    /// delivery, or one of an ended session, does not change.
+    pub fn role_attempt(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        attempt: Option<PushAttempt>,
+        now_ms: u64,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_some() {
+                return;
+            }
+            session.role_delivery = match attempt {
+                Some(attempt) => {
+                    session
+                        .role_delivery
+                        .after(attempt, session.created_at_ms, now_ms)
+                }
+                None if session.role_delivery.is_unasked() => RoleDelivery::at_launch(now_ms),
+                None => session.role_delivery,
+            };
         })
     }
 

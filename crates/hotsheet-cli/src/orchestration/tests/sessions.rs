@@ -23,7 +23,11 @@ use super::*;
 pub(super) struct ScriptedHost {
     live: Mutex<Vec<HostSessionState>>,
     launches: Mutex<Vec<HostLaunch>>,
-    joined: Mutex<Vec<(String, SessionRole)>>,
+    joined: Mutex<Vec<(String, String)>>,
+    /// HS2-2DPGDY: what each push answers in turn; `Delivered` once these run out.
+    pub(super) push_answers: Mutex<std::collections::VecDeque<PushAttempt>>,
+    /// HS2-2DPGDY: the tool takes its first prompt at launch.
+    pub(super) prompt_at_launch: AtomicBool,
     pub(super) stops: AtomicUsize,
     pub(super) down: AtomicBool,
     pub(super) refusing: AtomicBool,
@@ -75,7 +79,7 @@ impl SessionHost for ScriptedHost {
             .push(self.launches().len());
         Ok(ToolSetup { wrote: 2 })
     }
-    fn start(&self, _: &Checkout, launch: &HostLaunch) -> Result<(), SessionHostError> {
+    fn start(&self, _: &Checkout, launch: &HostLaunch) -> Result<Launched, SessionHostError> {
         if self.down.load(Ordering::SeqCst) {
             return Err(SessionHostError::Unavailable);
         }
@@ -93,7 +97,9 @@ impl SessionHost for ScriptedHost {
                 busy: false,
             });
         }
-        Ok(())
+        Ok(Launched {
+            prompt_at_launch: self.prompt_at_launch.load(Ordering::SeqCst),
+        })
     }
     fn sessions(&self, _: &Checkout) -> Option<Vec<HostSessionState>> {
         (!self.down.load(Ordering::SeqCst)).then(|| self.live().clone())
@@ -106,12 +112,16 @@ impl SessionHost for ScriptedHost {
         self.crash(session_id);
         Ok(())
     }
-    fn join_role(&self, _: &Checkout, session_id: &str, role: SessionRole) -> RolePrompt {
+    fn join_role(&self, _: &Checkout, session_id: &str, text: &str) -> PushAttempt {
         self.joined
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push((session_id.into(), role));
-        RolePrompt::Delivered
+            .push((session_id.into(), text.into()));
+        self.push_answers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pop_front()
+            .unwrap_or(PushAttempt::Delivered)
     }
 }
 
@@ -456,12 +466,20 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
             model: Some("model-a".into()),
             effort: Some("high".into()),
             label,
+            role: SessionRole::Worker,
+            role_prompt: role_prompt_text(SessionRole::Worker, &hosted.worker_id, None),
         }
     );
     assert_eq!(
         *f.host.joined.lock().unwrap(),
-        [(hosted.session_id.clone(), SessionRole::Worker)]
+        [(
+            hosted.session_id.clone(),
+            role_prompt_text(SessionRole::Worker, &hosted.worker_id, None)
+        )]
     );
+    // HS2-2DPGDY: the record keeps the answer; the role prompt names the worker id.
+    assert_eq!(session.role_prompt, Some(RolePrompt::Delivered));
+    assert!(launches[0].role_prompt.contains(&hosted.worker_id));
     assert_eq!(
         f.m.last_audit(),
         ("sessions_manage".into(), AuditOutcome::Succeeded, None)
@@ -521,11 +539,12 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
         .iter()
         .filter(|entry| entry.record.kind == RunEventKind::Session)
         .collect();
-    assert_eq!(session_events.len(), 1);
-    assert_eq!(
-        session_events[0].record.reason.as_deref(),
-        Some("session_running")
-    );
+    // HS2-2DPGDY: the running session, then how it was asked to take up its role.
+    let reasons: Vec<_> = session_events
+        .iter()
+        .map(|entry| entry.record.reason.as_deref().unwrap())
+        .collect();
+    assert_eq!(reasons, ["session_running", "session_role_delivered"]);
     // What reconciliation will read (HS2-75Q254).
     assert_eq!(
         f.m.runtime.session_work(&owner, &run.run_id),
@@ -660,9 +679,15 @@ fn hs2_gdjxgz_grants_policy_caps_and_approvals_govern_a_start() {
         .start("op-i", 2, "claude", integrator.clone(), &mut tx)
         .unwrap();
     assert_eq!(started.session.role, SessionRole::Integrator);
-    assert_eq!(
-        f.host.joined.lock().unwrap().last().unwrap().1,
-        SessionRole::Integrator
+    assert!(
+        f.host
+            .joined
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .contains("`hotsheet-integrator`")
     );
     // A worker on the same target needs no approval.
     f.started("op-w", 2, "claude", &mut tx);
@@ -1572,4 +1597,243 @@ fn hs2_wefjv8_target_setup_writes_the_tools_files_into_the_checkout() {
         Err(SessionHostError::Refused)
     );
     assert!(!bare.join("CLAUDE.md").exists());
+}
+
+fn live_session(id: &str, expires_at: i64) -> crate::coordination::Session {
+    serde_json::from_value(
+        json!({"id": id, "generation": "g1", "expires_at": expires_at,
+        "return_route": {"kind": "human_relay"}}),
+    )
+    .unwrap()
+}
+
+/// HS2-2DPGDY: a role prompt the tool was not ready for is tried again only when the
+/// host learns of readiness, a bounded number of times, and is then settled.
+#[test]
+fn hs2_2dpgdy_a_role_prompt_is_retried_on_readiness_and_then_settles() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(Vec::new(), &mut tx);
+    let owner = f.m.owner.id.clone();
+    // Not ready at launch, nor at the first readiness event; ready at the second.
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::NotReady, PushAttempt::NotReady]);
+    let view = f.started("op-1", 1, "codex", &mut tx);
+    assert_eq!(view.role_prompt, Some(RolePrompt::Pending));
+    assert_eq!(view.session.role_prompt, Some(RolePrompt::Pending));
+    let terminal = view.session.hosted.as_ref().unwrap().session_id.clone();
+    let tries = || f.host.joined.lock().unwrap().len();
+    assert_eq!(tries(), 1);
+    // A terminal no orchestrator started changes nothing and asks nothing.
+    assert_eq!(
+        f.m.runtime
+            .hosted_role_retry("not-a-session", &mut tx)
+            .unwrap(),
+        None
+    );
+    assert_eq!(tries(), 1);
+    assert_eq!(
+        f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap(),
+        Some(RolePrompt::Pending)
+    );
+    assert_eq!(
+        f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap(),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(tries(), 3);
+    // Settled: later readiness events push nothing more.
+    for _ in 0..3 {
+        assert_eq!(
+            f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap(),
+            Some(RolePrompt::Delivered)
+        );
+    }
+    assert_eq!(tries(), 3);
+    // The orchestrator learns the answer on its next read, once.
+    let synced =
+        f.m.runtime
+            .session_sync(&owner, &view.session.session_id, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(synced.session.role_prompt, Some(RolePrompt::Delivered));
+
+    // A tool that is never ready: four tries in all, then failed for good.
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::NotReady; 8]);
+    let never = f.started("op-2", 1, "codex", &mut tx);
+    let terminal = never.session.hosted.as_ref().unwrap().session_id.clone();
+    let mut last = never.role_prompt;
+    for _ in 0..6 {
+        last = f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    }
+    assert_eq!(last, Some(RolePrompt::Failed));
+    assert_eq!(
+        tries(),
+        3 + hotsheet_ticketing::orchestration::MAX_ROLE_ATTEMPTS as usize
+    );
+}
+
+#[test]
+fn hs2_2dpgdy_a_prompt_at_launch_or_an_unsupported_tool_asks_nothing_more() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(Vec::new(), &mut tx);
+    // The plugin takes the prompt on its command line: nothing is pushed.
+    f.host.prompt_at_launch.store(true, Ordering::SeqCst);
+    let at_launch = f.started("op-1", 1, "codex", &mut tx);
+    assert_eq!(at_launch.role_prompt, Some(RolePrompt::AtLaunch));
+    assert!(f.host.joined.lock().unwrap().is_empty());
+    assert!(
+        f.host.launches()[0]
+            .role_prompt
+            .contains("`hotsheet-worker`")
+    );
+    let terminal = at_launch
+        .session
+        .hosted
+        .as_ref()
+        .unwrap()
+        .session_id
+        .clone();
+    assert_eq!(
+        f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap(),
+        Some(RolePrompt::AtLaunch)
+    );
+    assert!(f.host.joined.lock().unwrap().is_empty());
+    // A tool that cannot take messages: unsupported, never retried.
+    f.host.prompt_at_launch.store(false, Ordering::SeqCst);
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .push_back(PushAttempt::Unsupported);
+    let unsupported = f.started("op-2", 2, "claude", &mut tx);
+    assert_eq!(unsupported.role_prompt, Some(RolePrompt::Unsupported));
+    let terminal = unsupported
+        .session
+        .hosted
+        .as_ref()
+        .unwrap()
+        .session_id
+        .clone();
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(f.host.joined.lock().unwrap().len(), 1);
+    // A rejected message fails the delivery.
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .push_back(PushAttempt::Rejected);
+    assert_eq!(
+        f.started("op-3", 1, "codex", &mut tx).role_prompt,
+        Some(RolePrompt::Failed)
+    );
+}
+
+/// HS2-2DPGDY: joining is what the target's pool shows for the session's worker id
+/// in its role, learned once.
+#[test]
+fn hs2_2dpgdy_joining_is_confirmed_from_the_targets_pool() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(Vec::new(), &mut tx);
+    let owner = f.m.owner.id.clone();
+    let view = f.started("op-1", 1, "codex", &mut tx);
+    let session_id = view.session.session_id.clone();
+    let worker_id = view.session.hosted.as_ref().unwrap().worker_id.clone();
+    let sync = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .session_sync(&owner, &session_id, Some(&worker()), tx)
+            .unwrap()
+            .session
+    };
+    let listing = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .hosted_sessions(&f.m.target.id, Some("op-1"), false, tx)
+            .unwrap()
+            .sessions[0]
+            .joined
+    };
+    // Not a git checkout: the pool cannot be read, so nothing is concluded.
+    assert_eq!(listing(&mut tx), None);
+    assert_eq!(sync(&mut tx).joined_at_ms, None);
+    // A pool without the session; then someone else; then it, expired.
+    f.git(&["init", "-q"]);
+    assert_eq!(listing(&mut tx), Some(false));
+    f.pool(|state| {
+        state
+            .workers
+            .insert("someone".into(), live_session("someone", 10_000));
+    });
+    assert_eq!(listing(&mut tx), Some(false));
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), live_session(&worker_id, 0));
+    });
+    assert_eq!(listing(&mut tx), Some(false));
+    assert_eq!(sync(&mut tx).joined_at_ms, None);
+    // Registered and live: joined, learned once, with one event.
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), live_session(&worker_id, 10_000));
+    });
+    assert_eq!(listing(&mut tx), Some(true));
+    let joined = sync(&mut tx);
+    assert_eq!(joined.joined_at_ms, Some(200));
+    assert_eq!(sync(&mut tx), joined);
+    // Leaving the pool later does not unlearn it.
+    f.pool(|_| {});
+    assert_eq!(listing(&mut tx), Some(false));
+    assert_eq!(sync(&mut tx).joined_at_ms, Some(200));
+}
+
+#[test]
+fn hs2_2dpgdy_pool_joined_matches_the_role_slot_and_the_lease() {
+    let worker = "codex-T1";
+    let mut state = crate::coordination::State::new("p".into(), "s".into());
+    for role in SessionRole::ALL {
+        assert!(!pool_joined(&state, role, worker, 5));
+    }
+    state
+        .workers
+        .insert(worker.into(), live_session(worker, 10));
+    state.dispatcher = Some(live_session("other", 10));
+    state.integrator = Some(live_session(worker, 4));
+    // (role, now, joined)
+    for (role, now, expected) in [
+        (SessionRole::Worker, 5, true),
+        (SessionRole::Worker, 10, false),
+        (SessionRole::Dispatcher, 5, false),
+        (SessionRole::Integrator, 3, true),
+        (SessionRole::Integrator, 5, false),
+    ] {
+        assert_eq!(
+            pool_joined(&state, role, worker, now),
+            expected,
+            "{role:?} {now}"
+        );
+    }
+    state.dispatcher = Some(live_session(worker, 10));
+    assert!(pool_joined(&state, SessionRole::Dispatcher, worker, 5));
+    // A worker entry keyed by the id but naming another session is not it.
+    state
+        .workers
+        .insert(worker.into(), live_session("other", 10));
+    assert!(!pool_joined(&state, SessionRole::Worker, worker, 5));
 }

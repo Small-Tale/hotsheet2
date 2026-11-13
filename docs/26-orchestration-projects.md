@@ -14,7 +14,8 @@
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
-> HS2-GDJXGZ) that start with the target checkout set up for their tool (HS2-WEFJV8),
+> HS2-GDJXGZ) that start with the target checkout set up for their tool (HS2-WEFJV8)
+> and take up their role with a readiness-aware prompt confirmed by the pool (HS2-2DPGDY),
 > the throughput scheduler with its plan, explanations, decision log and event-driven
 > loop (§26.17, HS2-ECWG50), which places orchestrator-owned sessions through its
 > session executor (§26.19, HS2-95SWQ4; nothing is placed until a policy sets
@@ -1883,14 +1884,52 @@ test of the real drawer is HS2-KTHJN2; the link from the orchestration workspace
 HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model
-([05](05-ai-tool-plugins.md) §5.9.1). After the launch the host pushes one prompt
-that names the role skill (`hotsheet-worker`, `hotsheet-dispatcher` or
-`hotsheet-integrator`) and reports `role_prompt` as `delivered`, `unsupported` (the
-tool cannot receive a message from its host) or `failed`. The host also refuses a
-`dispatcher` or `integrator` start while the target's coordination pool shows a live
-session in that role, whoever started it. Confirming that the session registered with
-the pool, and retrying a prompt sent before the tool was ready, is HS2-2DPGDY. The
-target's dispatcher still assigns each exact ticket.
+([05](05-ai-tool-plugins.md) §5.9.1). The host refuses a `dispatcher` or
+`integrator` start while the target's coordination pool shows a live session in that
+role, whoever started it. The target's dispatcher still assigns each exact ticket.
+
+**Taking up the role (HS2-2DPGDY).** The host asks the new session to run its role
+skill (`hotsheet-worker`, `hotsheet-dispatcher` or `hotsheet-integrator`) with a
+prompt that also names the worker id to register in the pool with. Every
+orchestrator session's environment carries `HOTSHEET_SESSION_ROLE` and
+`HOTSHEET_ROLE_SKILL` as well, whatever happens to the prompt. The prompt reaches
+the tool one of two ways:
+
+- **At launch.** A plugin that declares `[launch] prompt_args` (for example
+  `["{prompt}"]`) receives it as its first prompt on the command line. Nothing has to
+  be ready, and the answer is `at_launch`. No built-in plugin declares it yet
+  (Antigravity is HS2-KK3CCE).
+- **By session push** ([13](13-drive-transport-interface.md) §13.12). A tool is rarely
+  ready the instant its terminal starts: Claude and Codex have no push address until
+  their SessionStart hook reports one, and OpenCode's server may not listen yet. A
+  push that finds the tool not ready leaves the prompt `pending`.
+
+| `role_prompt` | Meaning                                                                     |
+| ------------- | --------------------------------------------------------------------------- |
+| `delivered`   | Pushed into the running session                                             |
+| `at_launch`   | Passed as the tool's first prompt at launch                                 |
+| `pending`     | Not delivered yet; tried again when the tool may have become ready          |
+| `unsupported` | The tool cannot take a message from its host; only the environment names it |
+| `failed`      | The tool refused it, every try found it not ready, or its window passed     |
+
+A pending prompt is tried again only when the hosting server learns something that
+may have made the tool ready: its push address was registered, or it finished a turn
+(the busy feed's edge that also wakes the scheduler, §26.19). There is no timer. It
+is tried at most four times in all, within ten minutes of the start; a pending prompt
+past either bound reads as `failed` without anything having to notice. The state is
+kept with the hosted session in `orchestration-hosted-sessions.json`
+(`role_delivery`), so a session a headless process started is retried by the server
+that runs it. The decision is a pure function (`RoleDelivery::after`, `at`).
+
+**Joining.** Only the target's coordination pool confirms that a session took up
+its role: its worker id registered, unexpired, in its role's slot (a worker entry,
+the dispatcher or the integrator). The hosted listing reports `joined` (`null` when
+the pool cannot be read), and this machine's record keeps `role_prompt` and
+`joined_at_ms`, the first time it learned of the join, from each sync. A changed
+`role_prompt` and the join are published to the session's run as `session_role_<code>`
+and `session_joined`, or move the scheduler's wake marker for a session without a
+run. Nothing yet acts on a session that never joins (HS2-NPTKS8). Whether an early
+bootstrap paste reaches a Codex TUI that is not ready is HS2-N1GZFE.
 
 ### Safe points and winding down
 

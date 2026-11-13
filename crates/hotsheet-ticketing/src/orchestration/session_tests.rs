@@ -979,3 +979,125 @@ fn hs2_gdjxgz_a_host_refuses_malformed_starts_and_damaged_records() {
         Err(OrchestrationError::Corrupt)
     ));
 }
+
+#[test]
+fn hs2_2dpgdy_the_host_records_role_tries_and_finds_a_started_session_by_terminal() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    let clock = Clock(std::cell::Cell::new(10));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let (reserved, _) = registry
+        .reserve(HOSTED, &hosted("op-1", "codex"), &mut tx)
+        .unwrap();
+    // A reservation that never launched is not found by its terminal.
+    assert_eq!(registry.by_session(&reserved.session_id).unwrap(), None);
+    registry.mark_started(HOSTED, "op-1").unwrap();
+    let found = registry.by_session(&reserved.session_id).unwrap().unwrap();
+    assert_eq!(found.operation_id, "op-1");
+    assert!(found.role_delivery.is_unasked());
+    // Unasked is left out of the stored record.
+    let stored =
+        std::fs::read_to_string(home.path().join("orchestration-hosted-sessions.json")).unwrap();
+    assert!(!stored.contains("role_delivery"), "{stored}");
+
+    // Not ready, not ready again, then delivered: every try counted.
+    let at = |attempt, now| {
+        registry
+            .role_attempt(HOSTED, "op-1", Some(attempt), now)
+            .unwrap()
+            .unwrap()
+            .role_delivery
+    };
+    assert_eq!(
+        at(PushAttempt::NotReady, 20).prompt,
+        Some(RolePrompt::Pending)
+    );
+    assert_eq!(at(PushAttempt::NotReady, 30).attempts, 2);
+    let delivered = at(PushAttempt::Delivered, 40);
+    assert_eq!(delivered.prompt, Some(RolePrompt::Delivered));
+    assert_eq!(delivered.delivered_at_ms, Some(40));
+    // A late try changes nothing.
+    assert_eq!(at(PushAttempt::Rejected, 50), delivered);
+
+    // At launch: recorded once, never over an earlier answer.
+    registry
+        .reserve(HOSTED, &hosted("op-2", "codex"), &mut tx)
+        .unwrap();
+    registry.mark_started(HOSTED, "op-2").unwrap();
+    let launched = registry
+        .role_attempt(HOSTED, "op-2", None, 60)
+        .unwrap()
+        .unwrap();
+    assert_eq!(launched.role_delivery, RoleDelivery::at_launch(60));
+    let again = registry
+        .role_attempt(HOSTED, "op-2", None, 70)
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.role_delivery, RoleDelivery::at_launch(60));
+    // An ended session's delivery is left as it was; an unknown operation is none.
+    registry.end(HOSTED, "op-2", "wound_down", 80).unwrap();
+    let ended = registry
+        .role_attempt(HOSTED, "op-2", Some(PushAttempt::Rejected), 90)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ended.role_delivery, RoleDelivery::at_launch(60));
+    assert_eq!(
+        registry
+            .role_attempt(HOSTED, "op-x", Some(PushAttempt::Delivered), 90)
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn hs2_2dpgdy_a_session_keeps_its_latest_role_answer_and_its_first_join() {
+    with_registry(|registry, clock, rng, _| {
+        let mut tx = Transaction { clock, rng };
+        let (session, _) = registry
+            .begin(OWNER, new("op-1", "codex"), None, &mut tx)
+            .unwrap();
+        let update = |prompt, joined| SessionUpdate {
+            role_prompt: prompt,
+            joined_at_ms: joined,
+            ..SessionUpdate::default()
+        };
+        let mut tx = Transaction { clock, rng };
+        let after = registry
+            .update(
+                OWNER,
+                &session.session_id,
+                update(Some(RolePrompt::Pending), None),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(after.role_prompt, Some(RolePrompt::Pending));
+        assert_eq!(after.history.len(), 1, "not a state change");
+        clock.0.set(2_000);
+        let joined = registry
+            .update(
+                OWNER,
+                &session.session_id,
+                update(Some(RolePrompt::Delivered), Some(2_000)),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(joined.role_prompt, Some(RolePrompt::Delivered));
+        assert_eq!(joined.joined_at_ms, Some(2_000));
+        // A later sighting keeps the first time; an unchanged update writes nothing.
+        clock.0.set(3_000);
+        let later = registry
+            .update(
+                OWNER,
+                &session.session_id,
+                update(None, Some(3_000)),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(later, joined);
+        assert_eq!(later.updated_at_ms, 2_000);
+    });
+}

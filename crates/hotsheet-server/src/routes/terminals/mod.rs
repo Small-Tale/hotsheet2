@@ -63,6 +63,14 @@ pub(crate) struct OpenTerminalReq {
     pub(crate) model: Option<String>,
     #[serde(default)]
     pub(crate) effort: Option<String>,
+    /// HS2-2DPGDY: an orchestrator-started session's role (`worker`, `dispatcher`,
+    /// `integrator`), named in the tool's environment.
+    #[serde(default)]
+    pub(crate) session_role: Option<String>,
+    /// HS2-2DPGDY: the tool's first prompt, passed only when its plugin declares
+    /// `[launch] prompt_args`.
+    #[serde(default)]
+    pub(crate) initial_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

@@ -58,10 +58,10 @@ pub use session_executor::{OwnedSessions, UNCONFIRMED_START_MS};
 pub use sessions::{
     HostLaunch, HostSessionState, HostedControlReply, HostedRoles, HostedSessionControl,
     HostedSessionList, HostedSessionStart, HostedSessionStop, HostedSessionView,
-    HostedStartOutcome, HostedStartReply, HostedStopReply, LocalServerSessions, NoSessionHost,
-    RolePrompt, SessionHost, SessionHostError, SessionSyncFailure, SessionSyncSummary, SessionView,
-    StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession, ToolSetup, role_prompt_text,
-    setup_store, target_tool_setup,
+    HostedStartOutcome, HostedStartReply, HostedStopReply, Launched, LocalServerSessions,
+    NoSessionHost, PushAttempt, RolePrompt, SessionHost, SessionHostError, SessionSyncFailure,
+    SessionSyncSummary, SessionView, StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession,
+    ToolSetup, plugin_role_paths, pool_joined, role_prompt_text, setup_store, target_tool_setup,
 };
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
