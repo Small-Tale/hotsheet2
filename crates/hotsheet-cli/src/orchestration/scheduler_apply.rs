@@ -435,7 +435,14 @@ impl OrchestrationRuntime {
         let succeeded = match answer {
             WindDownOutcome::Requested => {
                 outcome.outcome = "wind_down_requested".into();
-                applied.push((placement.target_id.clone(), PlacementOutcome::WoundDown));
+                // HS2-NPTKS8: a session that never joined is replaced, not a change of
+                // direction, so it starts no cooldown on the target.
+                if !matches!(
+                    placement.reason,
+                    PlacementReason::NeverJoined | PlacementReason::RolePromptFailed
+                ) {
+                    applied.push((placement.target_id.clone(), PlacementOutcome::WoundDown));
+                }
                 true
             }
             WindDownOutcome::NotAtSafePoint => {

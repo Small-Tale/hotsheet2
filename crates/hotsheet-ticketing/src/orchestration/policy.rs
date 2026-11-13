@@ -258,6 +258,20 @@ pub struct PlacementPolicy {
         skip_serializing_if = "is_default_dispatcher_wait"
     )]
     pub dispatcher_wait_minutes: u32,
+    /// HS2-NPTKS8: how long a session the scheduler started has to join its role in
+    /// the target's pool before it is wound down at its safe point and its step is
+    /// placed again. Written only when it differs from the default.
+    #[serde(
+        default = "default_join_minutes",
+        skip_serializing_if = "is_default_join"
+    )]
+    pub join_minutes: u32,
+}
+fn default_join_minutes() -> u32 {
+    super::DEFAULT_JOIN_MINUTES
+}
+fn is_default_join(minutes: &u32) -> bool {
+    *minutes == default_join_minutes()
 }
 fn default_dispatcher_wait_minutes() -> u32 {
     super::DEFAULT_DISPATCHER_WAIT_MINUTES
@@ -280,6 +294,7 @@ impl Default for PlacementPolicy {
             cooldown_minutes: default_cooldown_minutes(),
             resources: Vec::new(),
             dispatcher_wait_minutes: default_dispatcher_wait_minutes(),
+            join_minutes: default_join_minutes(),
         }
     }
 }
@@ -644,6 +659,13 @@ impl PolicyBody {
             report(
                 "invalid_cooldown_minutes",
                 "cooldown minutes must be 0 to 1440",
+                None,
+            );
+        }
+        if !(1..=24 * 60).contains(&placement.join_minutes) {
+            report(
+                "invalid_join_minutes",
+                "join minutes must be 1 to 1440",
                 None,
             );
         }

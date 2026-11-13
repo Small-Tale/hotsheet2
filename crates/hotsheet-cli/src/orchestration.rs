@@ -6,6 +6,7 @@ mod assignment;
 mod capacity;
 mod gates;
 mod job_monitor;
+mod joining;
 mod observer;
 mod policy;
 mod provisional;
@@ -35,6 +36,7 @@ pub use gates::{
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
+pub use joining::REPLACEMENTS_EXHAUSTED;
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,

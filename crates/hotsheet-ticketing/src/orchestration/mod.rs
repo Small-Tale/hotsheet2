@@ -9,6 +9,7 @@ mod capacity;
 pub(crate) mod contract;
 mod gates;
 mod grants;
+mod joining;
 mod manifest;
 mod policy;
 mod provisional;
@@ -59,6 +60,9 @@ pub use grants::{
     GrantView, MAX_GRANT_CONCURRENCY, MAX_GRANT_LIFETIME_MS, MAX_GRANT_MODELS, MAX_GRANT_TOOLS,
     MAX_GRANTS, MAX_GRANTS_PER_TARGET, SessionRequest, SessionScope, TargetAction, ToolScope,
     destination_key,
+};
+pub use joining::{
+    DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
 };
 pub use manifest::ManifestStore;
 pub use policy::{
@@ -311,6 +315,8 @@ mod capacity_tests;
 mod gate_tests;
 #[cfg(test)]
 mod grant_tests;
+#[cfg(test)]
+mod joining_tests;
 #[cfg(test)]
 mod policy_tests;
 #[cfg(test)]

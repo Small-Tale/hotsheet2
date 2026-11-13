@@ -30,7 +30,8 @@
 > cost is read for targets on this machine only),
 > one live session per run, adopted rather than doubled (§26.24, HS2-DG0YPA),
 > a placed run no target dispatcher will assign reported and, after a bounded wait,
-> claimed for its session (§26.24, HS2-T16SK0),
+> claimed for its session (§26.24, HS2-T16SK0), a placed session that never joins
+> its role wound down and replaced a bounded number of times (§26.24, HS2-NPTKS8),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -2122,7 +2123,8 @@ the pool cannot be read), and this machine's record keeps `role_prompt` and
 `joined_at_ms`, the first time it learned of the join, from each sync. A changed
 `role_prompt` and the join are published to the session's run as `session_role_<code>`
 and `session_joined`, or move the scheduler's wake marker for a session without a
-run. Nothing yet acts on a session that never joins (HS2-NPTKS8). Whether an early
+run. A session the scheduler placed that does not join in time, or whose prompt
+failed, is wound down and replaced (HS2-NPTKS8, §26.24). Whether an early
 bootstrap paste reaches a Codex TUI that is not ready is HS2-N1GZFE.
 
 ### Safe points and winding down
@@ -2307,11 +2309,13 @@ defaults, so a policy written earlier is unchanged.
 | `aging_minutes`           | 60      | Waiting this long raises work by one priority band (1 to 10080)                                           |
 | `cooldown_minutes`        | 5       | A target's session count does not reverse direction within this time (0 to 1440)                          |
 | `dispatcher_wait_minutes` | 2       | How long a placed run waits for a live target dispatcher before its session claims it (0 to 1440, §26.24) |
+| `join_minutes`            | 10      | How long a placed session has to join its role before it is wound down and replaced (1 to 1440, §26.24)   |
 
 Validation adds `automatic_without_actor`, `invalid_placement_actor`,
-`invalid_aging_minutes`, `invalid_cooldown_minutes` and
-`invalid_dispatcher_wait_minutes`. `dispatcher_wait_minutes` is written only when it
-differs from its default.
+`invalid_aging_minutes`, `invalid_cooldown_minutes`,
+`invalid_dispatcher_wait_minutes` and `invalid_join_minutes`.
+`dispatcher_wait_minutes` and `join_minutes` are written only when they differ from
+their defaults.
 
 ### Scoring
 
@@ -2374,17 +2378,19 @@ in progress from then on and is no longer ready work.
 
 Sessions that nothing was found for:
 
-| Decision    | Reason                        | When                                                                    |
-| ----------- | ----------------------------- | ----------------------------------------------------------------------- |
-| `keep`      | `busy`, `waiting_on_gate`     | It works a run, or waits on a gate with nothing ready                   |
-| `keep`      | `keep_warm`, `idle_grace`     | One of the `keep_warm` most recently idle, or idle under `idle_minutes` |
-| `keep`      | `cooldown`                    | The target started a session within the cooldown                        |
-| `keep`      | `awaiting_safe_point`         | It should stop and is not at a safe point                               |
-| `keep`      | `human_takeover`, `not_owned` | A person took it over, or this owner's orchestrator did not start it    |
-| `keep`      | `winding_down`                | A wind-down was already asked for                                       |
-| `wind_down` | `idle`                        | Idle past `idle_minutes`, beyond `keep_warm`, at a safe point           |
-| `wind_down` | `over_cap`                    | The target's cap was lowered below what runs; the freest go first       |
-| `wind_down` | `policy_not_permitted`        | The policy no longer permits the target, tool or model                  |
+| Decision    | Reason                               | When                                                                          |
+| ----------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| `keep`      | `busy`, `waiting_on_gate`            | It works a run, or waits on a gate with nothing ready                         |
+| `keep`      | `keep_warm`, `idle_grace`            | One of the `keep_warm` most recently idle, or idle under `idle_minutes`       |
+| `keep`      | `cooldown`                           | The target started a session within the cooldown                              |
+| `keep`      | `awaiting_safe_point`                | It should stop and is not at a safe point                                     |
+| `keep`      | `human_takeover`, `not_owned`        | A person took it over, or this owner's orchestrator did not start it          |
+| `keep`      | `winding_down`                       | A wind-down was already asked for                                             |
+| `wind_down` | `idle`                               | Idle past `idle_minutes`, beyond `keep_warm`, at a safe point                 |
+| `wind_down` | `over_cap`                           | The target's cap was lowered below what runs; the freest go first             |
+| `wind_down` | `policy_not_permitted`               | The policy no longer permits the target, tool or model                        |
+| `wind_down` | `never_joined`, `role_prompt_failed` | A placed session did not join its role in time, or its prompt failed (§26.24) |
+| `keep`      | `never_joined`                       | The same, after its run's replacements; detail `replacements_exhausted`       |
 
 A session the scheduler does not own counts as load and is never refilled or wound
 down. A busy session is never interrupted.
@@ -3359,7 +3365,7 @@ The wait is `placement.dispatcher_wait_minutes` (default 2, §26.17), counted fr
 when the run was queued. A claim is only given to a session that joined the pool in
 its role (§26.16, "Joining"); one that has not is reported with `joined: false` and
 no time, and its joining, published as `session_joined`, wakes the loop. A session
-that never joins is HS2-NPTKS8's. A pass decides from what it reads then: a dispatcher that
+that never joins is replaced (below). A pass decides from what it reads then: a dispatcher that
 comes up during the wait is left to assign, and one that leaves (its lease lapses)
 brings the claim back. The decision has no memory of its own, so a restarted server
 names the same time from the run's records.
@@ -3392,3 +3398,44 @@ request prompt of HS2-R7QH35.
 
 No route, command or MCP action was added: `plan`, `tick`, `explain` and
 `decisions` carry the new members on every surface.
+
+### A session that never joins its role (HS2-NPTKS8)
+
+A session confirms it took up its role only by registering in the target's pool
+(§26.16, "Joining"). One whose role prompt failed, or that never registers, would
+otherwise count as busy capacity for its step for good. The scheduler acts on it.
+
+**Which sessions.** Running worker sessions the scheduler placed (operation id
+`sched-start-*`), owned by the orchestrator and linked to a run. A person's session,
+and one started by hand with `session start`, are never acted on.
+
+**The decision** is the pure `decide_join`
+(`crates/hotsheet-ticketing/src/orchestration/joining.rs`), from this machine's
+records as the pass's listing brought them in line with the host:
+
+| The session                                                 | What a pass does                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Joined (`joined_at_ms`), whenever that was                  | Nothing, ever                                                              |
+| Not joined, within `join_minutes` of running                | Kept; the end of that time is a retry time of the schedule                 |
+| Its role prompt `failed`                                    | `wind_down`, reason `role_prompt_failed`, at once                          |
+| Not joined when `join_minutes` is up                        | `wind_down`, reason `never_joined`                                         |
+| Either, after two sessions of its run were stopped unjoined | `keep`, reason `never_joined`, detail `replacements_exhausted`: a person's |
+
+`placement.join_minutes` defaults to 10, the role prompt's own delivery window, so a
+prompt still pending then has failed anyway (1 to 1440).
+
+**Winding down and replacing.** The decision replaces the session's own placement in
+the computed schedule before anything is applied, so `plan`, `tick`, the decision
+log and the audit show it like any wind-down. It is applied by the ordinary
+wind-down (§26.19): through the gate under `sched-stop-<session>`, stopped only at a
+safe point its host confirms, and never forced; a session not at one is kept and
+tried again on the next event. Such a wind-down starts no cooldown on the target,
+because it is a replacement, not a change of direction. The stop is published on the
+run's stream, and the next pass finds the run with no live session and places it
+again (§26.19, "Repeats and replacements"): a new session under
+`sched-start-<step>.<n>` that names the old one in `replaces`, on the same run.
+
+**Bounded.** Replacements are counted from the records: sessions of the same run
+that stopped without ever joining. After two, the next session is kept and reported,
+so a tool that cannot take up its role is not restarted for ever. Nothing runs on a
+timer.

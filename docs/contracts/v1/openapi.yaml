@@ -17883,6 +17883,14 @@ components:
               minimum: 0
               maximum: 1440
               default: 5
+            join_minutes:
+              description:
+                How long a session the scheduler placed has to join its role in the target's pool before it is wound
+                down at its safe point and its step placed again (HS2-NPTKS8).
+              type: integer
+              minimum: 1
+              maximum: 1440
+              default: 10
             dispatcher_wait_minutes:
               description:
                 How long a placed step's run waits for a live target dispatcher or legacy integrator before its session
@@ -21100,6 +21108,8 @@ components:
             - idle
             - policy_not_permitted
             - over_cap
+            - never_joined
+            - role_prompt_failed
         detail:
           description: A stable code behind the reason, such as the policy rule a session breaks.
           type: string

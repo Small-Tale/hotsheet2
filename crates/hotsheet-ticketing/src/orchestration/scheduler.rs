@@ -453,6 +453,12 @@ pub enum PlacementReason {
     PolicyNotPermitted,
     /// Wind down: the target runs more sessions than its cap now allows.
     OverCap,
+    /// HS2-NPTKS8. Wind down: it did not join its role in the target's pool in time,
+    /// so its step's run is placed again. Keep, with detail `replacements_exhausted`:
+    /// the run had its replacements and the session is left for a person.
+    NeverJoined,
+    /// HS2-NPTKS8. Wind down: its role prompt failed, so it will not join.
+    RolePromptFailed,
 }
 
 impl PlacementReason {
@@ -473,6 +479,8 @@ impl PlacementReason {
             Self::Idle => "idle",
             Self::PolicyNotPermitted => "policy_not_permitted",
             Self::OverCap => "over_cap",
+            Self::NeverJoined => "never_joined",
+            Self::RolePromptFailed => "role_prompt_failed",
         }
     }
 }

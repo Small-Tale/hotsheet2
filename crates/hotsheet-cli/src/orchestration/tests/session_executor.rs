@@ -478,6 +478,11 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
 fn hs2_95swq4_a_repeated_operation_id_is_the_same_start() {
     clocked!(clock, tx);
     let f = Placed::new(Vec::new(), &mut tx);
+    // HS2-NPTKS8: the session never joins its role; it is given longer than this
+    // test runs, so it is not replaced.
+    let mut patient = policy(Vec::new());
+    patient.placement.join_minutes = 60;
+    f.set_policy(patient, &mut tx);
     let step = f.ready("First", &mut tx);
     let request = f.start_request(&step, no_load());
     let first = OwnedSessions.start(&f.m.runtime, &request, &mut tx);
@@ -1763,4 +1768,168 @@ fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_a
             .iter()
             .all(|entry| entry.refusals == 0)
     );
+}
+
+/// `(action, reason, detail)` of the placement that names the session.
+fn placed(view: &TickView, session_id: &str) -> (PlacementAction, &'static str, Option<String>) {
+    let found = view
+        .view
+        .schedule
+        .placements
+        .iter()
+        .find(|placement| placement.session_id.as_deref() == Some(session_id))
+        .unwrap_or_else(|| panic!("no placement for {session_id}"));
+    (found.action, found.reason.code(), found.detail.clone())
+}
+
+/// HS2-NPTKS8: a session that never joins its role is wound down when its time is up
+/// and its step's run is placed again; a replacement whose role prompt fails is wound
+/// down at once; after two replacements the next is kept and reported; a session that
+/// joins is never acted on.
+#[test]
+fn hs2_nptks8_a_session_that_never_joins_is_replaced_a_bounded_number_of_times() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let first = f.record(&operation);
+    let run = f.run_of(&step);
+    let deadline = START + 10 * MINUTE;
+    // Waiting: kept busy, and the loop wakes when its time is up.
+    f.at(&clock, START + 5 * MINUTE);
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty());
+        assert_eq!(
+            placed(&tick, &first.session_id),
+            (PlacementAction::Keep, "busy", None)
+        );
+        assert_eq!(tick.view.schedule.retry_at_ms, Some(deadline));
+    }
+    // Its time is up: wound down at its safe point, without a cooldown.
+    f.at(&clock, deadline);
+    // The replacement's role prompt will be refused by its tool.
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::Rejected]);
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &first.session_id),
+        (PlacementAction::WindDown, "never_joined", None)
+    );
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    assert_eq!(f.record(&operation).state, SessionState::Stopped);
+    assert!(
+        SchedulerStore::new(&f.m.home)
+            .memory(&f.owner())
+            .unwrap()
+            .iter()
+            .all(|entry| entry.last_wound_down_at_ms.is_none())
+    );
+    // The next pass places the run again, through the ordinary start.
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let second = f.record(&format!("{operation}.2"));
+    assert_eq!(
+        (second.replaces.as_deref(), second.run_id.as_deref()),
+        (Some(first.session_id.as_str()), Some(run.run_id.as_str()))
+    );
+    // Its prompt failed: it is learned on the next read and acted on at once.
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &second.session_id),
+        (PlacementAction::WindDown, "role_prompt_failed", None)
+    );
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let third = f.record(&format!("{operation}.3"));
+    // The third never joins either: its run had its replacements, so it is kept.
+    f.at(&clock, deadline + 10 * MINUTE);
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+        assert_eq!(
+            placed(&tick, &third.session_id),
+            (
+                PlacementAction::Keep,
+                "never_joined",
+                Some("replacements_exhausted".into())
+            )
+        );
+    }
+    let log =
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries;
+    assert!(log.iter().any(|entry| {
+        entry.record.reason.as_deref() == Some("never_joined")
+            && entry.record.outcome.as_deref() == Some("wind_down_requested")
+    }));
+    // It joins late: never acted on again.
+    let worker_id = third.hosted.as_ref().unwrap().worker_id.clone();
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, 4_000_000_000));
+    });
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &third.session_id),
+        (PlacementAction::Keep, "busy", None)
+    );
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 3);
+}
+
+/// HS2-NPTKS8: a person's session and a session started by hand are never acted on,
+/// and a dry run only shows the wind-down.
+#[test]
+fn hs2_nptks8_a_persons_session_is_left_and_a_dry_run_only_shows_it() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let first = f.ready("First", &mut tx);
+    let second = f.ready("Second", &mut tx);
+    f.tick(&mut tx);
+    let mine = f.record(&format!("sched-start-{first}"));
+    let theirs = f.record(&format!("sched-start-{second}"));
+    f.m.runtime
+        .session_takeover(
+            &f.owner(),
+            &theirs.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let mut manual_policy = policy(Vec::new());
+    manual_policy.placement.automatic = false;
+    manual_policy.targets[0].max_sessions = 3;
+    f.set_policy(manual_policy, &mut tx);
+    let manual =
+        f.m.runtime
+            .session_start(
+                &f.owner(),
+                serde_json::from_value(
+                    json!({"target_id": id(1), "operation_id": "manual-1", "tool": "codex"}),
+                )
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .session;
+    f.at(&clock, START + 10 * MINUTE);
+    let dry = f.tick(&mut tx);
+    assert!(dry.outcomes.is_empty());
+    assert_eq!(
+        placed(&dry, &mine.session_id),
+        (PlacementAction::WindDown, "never_joined", None)
+    );
+    assert_eq!(placed(&dry, &theirs.session_id).1, "human_takeover");
+    assert_ne!(placed(&dry, &manual.session_id).1, "never_joined");
+    assert_eq!(f.record(&mine.operation_id).state, SessionState::Running);
 }

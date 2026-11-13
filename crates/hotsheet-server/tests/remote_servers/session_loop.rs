@@ -272,3 +272,97 @@ fn ops_ticket(world: &World, ticket: &hotsheet_model::Ticket) -> hotsheet_model:
         .read_ticket(&ticket.id)
         .unwrap()
 }
+
+/// HS2-NPTKS8: on a real server, a placed session that never joins its role is wound
+/// down by the loop's own retry when its time is up, its step's run gets a new
+/// session that replaces it, and the replacement that joins is kept.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_nptks8_the_loop_replaces_a_session_that_never_joins_and_keeps_one_that_does() {
+    let world = World::new(&LOOP_ACTIONS, "", "").await;
+    let orchestration = world.ticket("Coordinate the synthetic work");
+    let work = world.ticket("Synthetic work for a silent session");
+    let step_id = plan_step(&world, &orchestration, &work).await;
+    super::session_work::commit_all(&world.project);
+    world
+        .allow(
+            &LOOP_ACTIONS,
+            json!({"wind_down":{"idle_minutes":60,"keep_warm":0},
+                "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":5,
+                    "join_minutes":1,"dispatcher_wait_minutes":60}}),
+        )
+        .await;
+    let minute = std::time::Duration::from_secs(60);
+    let (start, _) = decided(
+        &world,
+        "started session",
+        |entry| entry["kind"] == "start" && entry["outcome"] == "started",
+        minute,
+    )
+    .await;
+    // The tool setup the start ran is committed, as a person does, so nothing but
+    // the session itself holds its safe point.
+    super::session_work::commit_all(&world.project);
+    let (stop, _) = decided(
+        &world,
+        "wind-down of the silent session",
+        |entry| entry["kind"] == "wind_down" && entry["reason"] == "never_joined",
+        2 * minute,
+    )
+    .await;
+    assert_eq!(stop["session_id"], start["session_id"], "{stop}");
+    assert_eq!(stop["outcome"], "wind_down_requested", "{stop}");
+    assert_eq!(stop["trigger"], "retry", "{stop}");
+    // The run is placed again at once: a wind-down for this reason is no change of
+    // direction, so the five-minute cooldown does not hold the replacement.
+    let (restart, _) = decided(
+        &world,
+        "replacement session",
+        |entry| {
+            entry["kind"] == "start"
+                && entry["outcome"] == "started"
+                && entry["session_id"] != start["session_id"]
+        },
+        minute,
+    )
+    .await;
+    assert_eq!(restart["run_id"], start["run_id"], "{restart}");
+    assert_eq!(restart["step_id"], step_id.as_str());
+    let (_, sessions) = world.call("GET", "/sessions", Value::Null).await;
+    let records = sessions.as_array().unwrap();
+    assert_eq!(records.len(), 2, "{sessions}");
+    assert_eq!(records[0]["state"], "stopped", "{sessions}");
+    assert_eq!(
+        records[1]["replaces"], records[0]["session_id"],
+        "{sessions}"
+    );
+    // The replacement takes up its role: a pass keeps it working its run.
+    let worker = records[1]["hosted"]["worker_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    super::session_work::join_pool(&world, &worker);
+    let (status, plan) = world
+        .call(
+            "POST",
+            "/scheduler/plan",
+            json!({"actor":{"role":"ai","id":"scheduler-1"}}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    let kept = plan["placements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|placement| placement["session_id"] == records[1]["session_id"])
+        .unwrap_or_else(|| panic!("{plan}"));
+    assert_eq!(kept["action"], "keep", "{plan}");
+    assert_eq!(kept["reason"], "busy", "{plan}");
+    let (_, joined) = world
+        .call(
+            "GET",
+            &format!("/sessions/{}", records[1]["session_id"].as_str().unwrap()),
+            Value::Null,
+        )
+        .await;
+    assert!(joined["joined_at_ms"].is_u64(), "{joined}");
+}

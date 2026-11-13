@@ -790,6 +790,8 @@ impl OrchestrationRuntime {
             return Ok(Self::scheduler_empty(now_ms));
         };
         let (mut schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
+        // HS2-NPTKS8: sessions that did not join their role.
+        self.scheduler_joining(owner_id, &gathered.policy, &mut schedule, now_ms);
         let assignments =
             self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
         Self::assignment_retry(&mut schedule, &assignments);
@@ -1054,6 +1056,9 @@ impl OrchestrationRuntime {
             (false, _) => DecisionMode::DryRun,
         };
         let (mut schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
+        // HS2-NPTKS8: sessions that did not join their role are wound down and placed
+        // again, before anything is applied.
+        self.scheduler_joining(owner_id, &gathered.policy, &mut schedule, now_ms);
 
         let mut outcomes = Vec::new();
         let mut applied: Vec<(String, PlacementOutcome)> = Vec::new();
