@@ -2740,7 +2740,9 @@ it, under the scheduler's actor:
 later passes start nothing for it. A step whose scheduler run is unfinished and that
 no unfinished session works (its session start was refused, or its session was
 lost) is placeable work again: the next start for it, after any refusal backoff, is
-linked to the same run. A pass lists the sessions, and so learns of a lost one,
+linked to the same run. A run that waits on a gate, its ticket in `final_testing` or a
+validation attempt needs no session, so it is not placed again until it needs work
+(HS2-3REXQ7, §26.24). A pass lists the sessions, and so learns of a lost one,
 before it reads the work.
 
 **Refill.** A free session given ready work (`keep`, `refill`) gets that work's run
@@ -3287,6 +3289,8 @@ One scenario is quarantined on the gap it found (see
 replaced although reconciliation finds no lost work (HS2-3REXQ7). A remote session
 freed without any run event is now wound down from the session change the peer's
 feed carries (HS2-257Q2Z, §26.9). Defects these
+event is never re-read (HS2-257Q2Z). A session lost while its run waits on CI is no
+longer replaced (HS2-3REXQ7, §26.24). Defects these
 scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9CTG
 (§26.17). A cancel the gate denies is answered as the denial (HS2-WC3W2G). Open
 findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q428Z (concurrent passes each log a start). A shown reconciliation no
@@ -3480,3 +3484,22 @@ the push answered. Surfaces: `POST .../orchestration/sessions/{session}/request`
 `hotsheet-cli ... orchestration session request <session-id>`, MCP
 `hotsheet_targets` `session_request`; each answers the session with
 `request_prompt`.
+
+### A run that waits needs no session (HS2-3REXQ7)
+
+The scheduler's orphaned-run rule (§26.19) and reconciliation's session source
+(§26.14, HS2-75Q254) now share one reading, `run_waits(owner, run, now)`: an
+unfinished run waits, and needs no live session, while a CI or deployment gate of it
+waits on a provider or a person, while its target ticket is in `final_testing`, or
+while a validation attempt of it runs (`waiting_on_gate`, `waiting_on_validation`).
+`session_need` answers `Waiting` for a dispatched run in that case, and the
+scheduler does not treat such a run as orphaned work when its session is lost, so no
+replacement starts while it waits. When the gate fails, the ticket leaves
+`final_testing` or the attempt ends, the run needs work again and the next pass
+places it on the same run.
+
+A session is never refilled with the run it already holds: `assign` answers
+`refused` with `session_holds_run` and links nothing. A session's record that a
+concurrent reader (the loop, a follower) finished between a read and its update is
+answered as that reader left it rather than as an error, so reconciliation does not
+report a session it could not read in that race.

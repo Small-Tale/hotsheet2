@@ -401,6 +401,12 @@ impl OrchestrationRuntime {
             {
                 continue;
             }
+            // HS2-3REXQ7: a run that waits on a gate, `final_testing` or a validation
+            // attempt needs no live session, as reconciliation judges it; its step is
+            // placeable again only when the run needs work.
+            if self.run_waits(owner_id, run, tx.clock.now_ms()).is_some() {
+                continue;
+            }
             work.push(WorkItem {
                 step_id: step.step_id,
                 target_id: step.target.target_id,

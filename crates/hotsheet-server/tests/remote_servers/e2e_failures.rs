@@ -848,7 +848,6 @@ async fn policy_automatic(fleet: &mut Fleet, mut policy: Value) {
 /// session dies with it. Reconciliation finds no work lost (`waiting_on_gate`); the
 /// loop should agree and start no replacement while the gate waits.
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
-#[ignore = "quarantine HS2-3REXQ7: a run waiting on its gate is replaced as orphaned work"]
 async fn hs2_2ey9dp_a_session_lost_while_its_run_waits_on_ci_is_not_replaced() {
     let mut fleet = Fleet::new().await;
     let orchestration = fleet.orchestration_ticket("Coordinate a change waiting on CI");

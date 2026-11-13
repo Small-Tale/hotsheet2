@@ -32,6 +32,9 @@ use super::*;
 /// than any one request to a host, so a start still on its way is never ended.
 pub const UNCONFIRMED_START_MS: u64 = 5 * 60 * 1000;
 
+/// HS2-3REXQ7: an assignment refused because the session already holds that run.
+pub const SESSION_HOLDS_RUN: &str = "session_holds_run";
+
 /// Orchestrator-owned sessions as the scheduler's executor.
 pub struct OwnedSessions;
 
@@ -465,6 +468,12 @@ impl OrchestrationRuntime {
             Ok(run) => run,
             Err(error) => return refused(&error),
         };
+        // HS2-3REXQ7: a session is never refilled with the run it already holds.
+        if session.run_id.as_deref() == Some(run.run_id.as_str()) {
+            return AssignOutcome::Refused {
+                reason: SESSION_HOLDS_RUN.into(),
+            };
+        }
         match self.session_link(
             &request.owner_id,
             &session.session_id,

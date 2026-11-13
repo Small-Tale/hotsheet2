@@ -318,6 +318,18 @@ impl OrchestrationRuntime {
         if run.state != RunState::Dispatched {
             return SessionNeed::Idle;
         }
+        match self.run_waits(owner_id, run, now_ms) {
+            Some(note) => SessionNeed::Waiting(note),
+            None => SessionNeed::Working,
+        }
+    }
+
+    /// HS2-3REXQ7: what an unfinished run waits on, whatever its state: a CI or
+    /// deployment gate waiting on a provider or a person, its target ticket in
+    /// `final_testing` (`waiting_on_gate`), or a running validation attempt
+    /// (`waiting_on_validation`). `session_need` and the scheduler's orphaned-run
+    /// rule share it, so the two never disagree about a run that needs no session.
+    pub fn run_waits(&self, owner_id: &str, run: &Run, now_ms: u64) -> Option<&'static str> {
         let gates = self
             .gate_registry()
             .list(
@@ -338,7 +350,7 @@ impl OrchestrationRuntime {
                 .and_then(|observed| observed.started_phase.as_deref())
                 == Some("final_testing");
         if gated {
-            return SessionNeed::Waiting(NOTE_WAITING_ON_GATE);
+            return Some(NOTE_WAITING_ON_GATE);
         }
         let validating = self
             .validations()
@@ -350,10 +362,7 @@ impl OrchestrationRuntime {
                 result.run_id.as_deref() == Some(run.run_id.as_str())
                     && result.state == ValidationState::Running
             });
-        if validating {
-            return SessionNeed::Waiting(NOTE_WAITING_ON_VALIDATION);
-        }
-        SessionNeed::Working
+        validating.then_some(NOTE_WAITING_ON_VALIDATION)
     }
 
     /// HS2-75Q254: the session that still holds a run's work, from this machine's

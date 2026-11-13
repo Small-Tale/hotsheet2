@@ -1676,6 +1676,28 @@ impl OrchestrationRuntime {
         hosted: Option<&HostedSessionView>,
         tx: &mut Transaction<'_>,
     ) -> Result<OrchestratedSession, OrchestrationError> {
+        match self.session_observe_once(session, hosted, tx) {
+            // HS2-3REXQ7: a concurrent reader (the scheduler's loop, a follower) ended
+            // the session between this read of the record and its update. That reader
+            // saw the same host; its record is the answer.
+            Err(OrchestrationError::Session(SessionError::NotActive)) => {
+                let current = self.session(&session.owner_checkout_id, &session.session_id)?;
+                if current.state.is_terminal() {
+                    Ok(current)
+                } else {
+                    Err(OrchestrationError::Session(SessionError::NotActive))
+                }
+            }
+            other => other,
+        }
+    }
+
+    fn session_observe_once(
+        &self,
+        session: &OrchestratedSession,
+        hosted: Option<&HostedSessionView>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<OrchestratedSession, OrchestrationError> {
         if session.state.is_terminal() {
             return Ok(session.clone());
         }

@@ -2072,3 +2072,114 @@ fn hs2_r7qh35_a_session_given_a_claim_is_told_to_work_it() {
     assert!(told[0].contains("claimed for you"), "{told:?}");
     assert!(told[0].contains(&worker_id), "{told:?}");
 }
+
+impl Placed {
+    /// HS2-3REXQ7: the target ticket of a step, as its session's worker works it:
+    /// claimed under `worker` in `phase`, and the run synced from the target.
+    fn worked(
+        &self,
+        step_id: &str,
+        holder: &str,
+        phase: hotsheet_model::StartedPhase,
+        tx: &mut Transaction<'_>,
+    ) -> hotsheet_ticketing::orchestration::Run {
+        let run = self.run_of(step_id);
+        let ticket = ops::resolve(&self.m.target_store, &run.target.native_id)
+            .unwrap()
+            .unwrap();
+        if ticket.claimed_by.as_deref() != Some(holder) {
+            ops::claim_with_eta(
+                &self.m.target_store,
+                &ticket.id,
+                &hotsheet_model::Timestamp::from(NOW),
+                hotsheet_model::Timestamp::from("2030-01-01T00:00:00Z"),
+                holder,
+                None,
+                None,
+            )
+            .unwrap();
+        }
+        ops::update(
+            &self.m.target_store,
+            &ticket.id,
+            NOW.into(),
+            hotsheet_ticketing::TicketPatch {
+                started_phase: Some(Some(phase)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        self.m
+            .runtime
+            .run_sync(&self.owner(), &run.run_id, Some(&worker()), tx)
+            .unwrap()
+            .run
+    }
+}
+
+/// HS2-3REXQ7: a session lost while its run waits (its ticket in `final_testing`)
+/// is not replaced, as reconciliation finds no lost work, however often a pass runs;
+/// once the run needs work again the next pass replaces it on the same run. A session
+/// is never refilled with the run it holds.
+#[test]
+fn hs2_3rexq7_a_run_that_waits_needs_no_session_and_no_refill_with_itself() {
+    use hotsheet_model::StartedPhase;
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let session = f.record(&operation);
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    let run = f.worked(&step, &worker_id, StartedPhase::FinalTesting, &mut tx);
+    assert_eq!(run.state, RunState::Dispatched);
+    // Refilling it with the run it holds is refused, and links nothing new.
+    assert_eq!(
+        OwnedSessions.assign(
+            &f.m.runtime,
+            &PlacementAssign {
+                owner_id: f.owner(),
+                target_id: id(1),
+                session_id: session.session_id.clone(),
+                step_id: step.clone(),
+                actor_id: "worker-1".into(),
+            },
+            &mut tx,
+        ),
+        AssignOutcome::Refused {
+            reason: "session_holds_run".into()
+        }
+    );
+    // The session dies while the run waits.
+    f.host.crash(&f.terminal(&session));
+    for minutes in [1, 2, 3] {
+        f.at(&clock, START + minutes * MINUTE);
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+        assert!(tick.view.schedule.unplaced.is_empty());
+    }
+    assert_eq!(f.record(&operation).state, SessionState::Lost);
+    assert_eq!(f.host.launches().len(), 1);
+    // Reconciliation agrees: no work was lost.
+    let view =
+        f.m.runtime
+            .run_reconcile(&f.owner(), &run.run_id, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(
+        super::recovery::finding(
+            &view,
+            hotsheet_ticketing::orchestration::ExternalSource::Session
+        ),
+        (
+            hotsheet_ticketing::orchestration::Verification::Verified,
+            Some("waiting_on_gate".into())
+        )
+    );
+    // The run needs work again: the next pass replaces the session on the same run.
+    f.worked(&step, &worker_id, StartedPhase::Working, &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let replacement = f.record(&format!("{operation}.2"));
+    assert_eq!(replacement.run_id.as_deref(), Some(run.run_id.as_str()));
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+}
