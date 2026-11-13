@@ -343,9 +343,18 @@ impl OrchestrationRuntime {
         for (key, steps) in self.provisional_stacked(owner_id)? {
             *stacked.entry(key).or_default() += u32::try_from(steps.len()).unwrap_or(u32::MAX);
         }
+        // HS2-HV9ED3: a step whose run a person cancelled is held, not placed again.
+        let all_runs = self.run_list(owner_id, false)?;
+        let held: BTreeSet<String> = plan
+            .steps
+            .iter()
+            .filter(|view| super::cancel_hold::held_by(&view.readiness.step, &all_runs).is_some())
+            .map(|view| view.readiness.step.step_id.clone())
+            .collect();
         let mut work: Vec<WorkItem> = self
             .ready_work(owner_id, tx)?
             .into_iter()
+            .filter(|item| !held.contains(&item.step_id))
             .map(|item| WorkItem {
                 red_gate_stack: stacked
                     .get(&(
@@ -798,6 +807,8 @@ impl OrchestrationRuntime {
         let (mut schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
         // HS2-NPTKS8: sessions that did not join their role.
         self.scheduler_joining(owner_id, &gathered.policy, &mut schedule, now_ms);
+        // HS2-HV9ED3: sessions whose run a person cancelled are wound down.
+        self.scheduler_cancelled(owner_id, &mut schedule);
         let assignments =
             self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
         Self::assignment_retry(&mut schedule, &assignments);
@@ -919,6 +930,17 @@ impl OrchestrationRuntime {
             ReadinessLevel::Finished => answer.standing = "finished".into(),
             ReadinessLevel::Blocked | ReadinessLevel::Stale | ReadinessLevel::Cyclic => {
                 answer.standing = "not_ready".into();
+            }
+            // HS2-HV9ED3: a person cancelled the step's run; it waits for them.
+            ReadinessLevel::Confirmed | ReadinessLevel::Provisional
+                if super::cancel_hold::held_by(
+                    &step.readiness.step,
+                    &self.run_list(owner_id, false)?,
+                )
+                .is_some() =>
+            {
+                answer.standing = "not_placed".into();
+                answer.reason = super::cancel_hold::CANCELLED_BY_PERSON.into();
             }
             ReadinessLevel::Confirmed | ReadinessLevel::Provisional => {
                 let view = self.scheduler_plan(owner_id, actor, tx)?;
@@ -1068,11 +1090,15 @@ impl OrchestrationRuntime {
         // HS2-NPTKS8: sessions that did not join their role are wound down and placed
         // again, before anything is applied.
         self.scheduler_joining(owner_id, &gathered.policy, &mut schedule, now_ms);
+        // HS2-HV9ED3: sessions whose run a person cancelled are wound down.
+        self.scheduler_cancelled(owner_id, &mut schedule);
 
         let mut outcomes = Vec::new();
         let mut applied: Vec<(String, PlacementOutcome)> = Vec::new();
         let mut assignments;
         if let (DecisionMode::Applied, Some(actor_id)) = (mode, &actor_id) {
+            // HS2-HV9ED3: told why before it is asked to stop.
+            self.tell_cancelled(owner_id, &schedule, actor, tx);
             for placement in &schedule.placements {
                 let outcome = match placement.action {
                     // HS2-YC2P7K: a free session given ready work gets that work's run.

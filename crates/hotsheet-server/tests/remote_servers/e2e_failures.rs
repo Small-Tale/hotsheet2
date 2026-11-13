@@ -332,9 +332,10 @@ async fn hs2_2ey9dp_lost_access_mid_run_stops_the_orchestrator_acting_on_the_tar
 
 /// HS2-2EY9DP priority 3: a person cancels the run its remote session works. The
 /// pooled worker's claim is not the orchestrator's to release, and because the step is
-/// still planned the loop dispatches it again under the next operation id (§26.19);
-/// HS2-HV9ED3 asks whether a person's cancel should hold the step instead. Removing
-/// the step and cancelling the new run withdraws its Up Next mark on the peer.
+/// still planned, but a person's cancel holds it (HS2-HV9ED3): nothing is dispatched
+/// again, `explain` says `cancelled_by_person` and the session is wound down at its
+/// next safe point. A run dispatched again by hand ends the hold; removing the step
+/// and cancelling that run withdraws its Up Next mark on the peer.
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
 async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers_claim() {
     let mut fleet = Fleet::new().await;
@@ -356,17 +357,60 @@ async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers
     };
     assert_eq!(peer_ticket().claimed_by.as_deref(), Some(b.worker.as_str()));
 
-    // The planned step is dispatched again; its session still holds the claim, so the
-    // new run waits queued for the target's dispatcher.
-    let again = format!("sched-run-{step}.2");
-    // A dispatch records its run as `requested` before the target answers; wait for
-    // the answer (HS2-257Q2Z: the remote session's changes now wake the loop sooner).
+    // HS2-HV9ED3: a person's cancel holds the step. The loop dispatches nothing for it
+    // and winds its session down at the next safe point, which the worker's claim
+    // keeps from coming yet.
+    let held = fleet
+        .decided(
+            "wind-down of the cancelled run's session",
+            |entry| entry["kind"] == "wind_down" && entry["reason"] == "run_cancelled",
+            Duration::from_secs(60),
+        )
+        .await;
+    assert_eq!(held["session_id"], b.session_id.as_str(), "{held}");
+    assert_eq!(held["outcome"], "not_at_safe_point", "{held}");
+    let tick = fleet
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    assert_eq!(tick["mode"], "applied", "{tick}");
+    assert_eq!(fleet.runs().await.len(), 1);
+    let explained = fleet
+        .ok(
+            "POST",
+            "/scheduler/explain",
+            json!({"step_id":step,"actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(explained["reason"], "cancelled_by_person", "{explained}");
+    assert_eq!(peer_ticket().claimed_by.as_deref(), Some(b.worker.as_str()));
+    // The session's worker lets go, as it was told to.
+    let (status, released) = super::orchestration::api(
+        fleet.side_router(Side::Peer),
+        "POST",
+        &format!("/tickets/{}/release", ticket.id),
+        json!({"worker": b.worker}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{released}");
+    assert_eq!(peer_ticket().claimed_by, None);
+
+    // The work is dispatched again by hand, which ends the hold. Nobody holds the
+    // ticket, so the new run waits queued for the target's dispatcher.
+    let orchestration = fleet
+        .ok("GET", &format!("/runs/{}", b.run_id), Value::Null)
+        .await["ticket"]["native_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let redispatched = fleet
-        .until_runs(|runs| {
-            runs.iter()
-                .find(|run| run["operation_id"] == again.as_str() && run["state"] != "requested")
-                .cloned()
-        })
+        .ok(
+            "POST",
+            "/runs",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration},
+                "target_id":TARGET_B,"connection_id":fleet.connection(Side::Peer),
+                "native_id":ticket.slug,"operation_id":"manual-again","mode":"dispatcher"}),
+        )
         .await;
     assert_eq!(redispatched["state"], "queued", "{redispatched}");
     assert!(peer_ticket().up_next);
@@ -394,9 +438,21 @@ async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers
     assert_eq!(still["state"], "queued", "{still}");
     assert_eq!(still["cancel_requested"], false, "{still}");
     assert!(peer_ticket().up_next);
-    // The run's own actor cancels it.
+    // The run's own actor cancels it, unless the loop already carried out the
+    // pending cancel with its own authority.
+    let (status, answer) = fleet
+        .call("POST", &cancel, json!({"actor":Fleet::ai()}))
+        .await;
+    assert!(
+        status == StatusCode::OK || answer["code"] == "run_not_active",
+        "{status} {answer}"
+    );
     let withdrawn = fleet
-        .ok("POST", &cancel, json!({"actor":Fleet::ai()}))
+        .ok(
+            "GET",
+            &format!("/runs/{}", redispatched["run_id"].as_str().unwrap()),
+            Value::Null,
+        )
         .await;
     assert_eq!(withdrawn["state"], "cancelled", "{withdrawn}");
     assert!(!peer_ticket().up_next);
@@ -411,11 +467,10 @@ async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers
         "{runs:#?}"
     );
 
-    // The session is told nothing (HS2-HV9ED3): it keeps working the ticket and its
-    // claim. Winding it down once its worker lets go is the next scenario.
-    let session = fleet.session(&b.session_id).await;
-    assert_eq!(session["state"], "running", "{session}");
-    assert_eq!(peer_ticket().claimed_by.as_deref(), Some(b.worker.as_str()));
+    // The orchestrator released no claim: the worker let go itself. Its session is
+    // wound down by the next pass that reads its host at a safe point (a remote
+    // host's turn end does not wake this loop yet, HS2-257Q2Z).
+    assert_eq!(peer_ticket().claimed_by, None);
     assert_eq!(fleet.sessions().await.len(), 1);
     fleet.shut_down().await;
 }

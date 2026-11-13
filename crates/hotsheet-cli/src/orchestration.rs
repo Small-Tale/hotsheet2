@@ -3,6 +3,7 @@
 //! provider account probe, implicit source creation or credential copying.
 mod access;
 mod assignment;
+mod cancel_hold;
 mod capacity;
 mod gates;
 mod job_monitor;
@@ -28,6 +29,7 @@ mod validation;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
+pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
     CapacityProbe, LocalServerCapacity, ReadCapacity, TargetAdmission, UnknownCapacity,
 };

@@ -21191,6 +21191,7 @@ components:
             - over_cap
             - never_joined
             - role_prompt_failed
+            - run_cancelled
         detail:
           description: A stable code behind the reason, such as the policy rule a session breaks.
           type: string
@@ -22514,10 +22515,12 @@ components:
     OrchestrationSessionRequestKind:
       description:
         Why a running session is told about one exact ticket (HS2-R7QH35). `assigned` - it was given the ticket's run;
-        `claimed` - no dispatcher is live, so the ticket is claimed under its worker id.
+        `claimed` - no dispatcher is live, so the ticket is claimed under its worker id; `cancelled` - a person
+        cancelled the ticket's run (HS2-HV9ED3).
       enum:
         - assigned
         - claimed
+        - cancelled
     RemoteIdentity:
       type: object
       required:

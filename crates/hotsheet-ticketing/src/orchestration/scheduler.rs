@@ -459,6 +459,8 @@ pub enum PlacementReason {
     NeverJoined,
     /// HS2-NPTKS8. Wind down: its role prompt failed, so it will not join.
     RolePromptFailed,
+    /// HS2-HV9ED3. Wind down: a person cancelled the run it works.
+    RunCancelled,
 }
 
 impl PlacementReason {
@@ -481,6 +483,7 @@ impl PlacementReason {
             Self::OverCap => "over_cap",
             Self::NeverJoined => "never_joined",
             Self::RolePromptFailed => "role_prompt_failed",
+            Self::RunCancelled => "run_cancelled",
         }
     }
 }

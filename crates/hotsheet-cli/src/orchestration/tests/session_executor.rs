@@ -2243,3 +2243,129 @@ fn hs2_7q428z_concurrent_passes_start_and_log_one_session_once() {
     assert_eq!(f.host.launches().len(), 1);
     assert_eq!(f.m.runtime.run_list(&owner, false).unwrap().len(), 1);
 }
+
+/// HS2-HV9ED3: a person's cancel of a scheduler run holds its step: passes dispatch
+/// nothing for it and `explain` says `cancelled_by_person`; the session working it
+/// is told once and wound down at its next safe point; removing and planning the
+/// step again releases the hold. An AI actor's cancel is dispatched again.
+#[test]
+fn hs2_hv9ed3_a_persons_cancel_holds_the_step_and_winds_its_session_down() {
+    use hotsheet_model::StartedPhase;
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    let terminal = f.terminal(&session);
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    let run = f.worked(&step, &worker_id, StartedPhase::Working, &mut tx);
+    let slug = f.slug(&run);
+    // A person cancels the run.
+    let cancelled =
+        f.m.runtime
+            .run_cancel(&f.owner(), &run.run_id, Some(&human()), &mut tx)
+            .unwrap()
+            .run;
+    assert_eq!(
+        (
+            cancelled.state,
+            cancelled.history.last().unwrap().reason.as_deref()
+        ),
+        (RunState::Cancelled, Some("cancelled_by_person"))
+    );
+    // The session still holds its claim: told, and kept until its safe point.
+    for _ in 0..3 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(
+            placed(&tick, &session.session_id),
+            (PlacementAction::WindDown, "run_cancelled", None)
+        );
+        assert_eq!(outcomes(&tick), [("not_at_safe_point", None)]);
+    }
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    let told = f.requests(&terminal);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].contains(&format!("`{slug}`")) && told[0].contains("cancelled"),
+        "{told:?}"
+    );
+    let explained = f.explain(&step, &mut tx);
+    assert_eq!(
+        (explained.standing.as_str(), explained.reason.as_str()),
+        ("not_placed", "cancelled_by_person")
+    );
+    // Its worker lets go: the next pass winds it down; still nothing is dispatched.
+    let ticket = ops::resolve(&f.m.target_store, &run.target.native_id)
+        .unwrap()
+        .unwrap();
+    ops::release(
+        &f.m.target_store,
+        &ticket.id,
+        hotsheet_model::Timestamp::from(NOW),
+        &worker_id,
+        false,
+    )
+    .unwrap();
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    assert_eq!(f.record(&session.operation_id).state, SessionState::Stopped);
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+    }
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+
+    // A person plans the work again: the hold is gone and a new step is placed.
+    f.m.runtime
+        .readiness_remove(
+            &f.owner(),
+            &serde_json::from_value(json!({"step_id": step})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let again =
+        f.m.runtime
+            .readiness_define(
+                &f.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": f.m.owner_connection(),
+                        "native_id": f.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": f.m.target_connection(),
+                    "native_id": slug, "prerequisites": [],
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .readiness
+            .step
+            .step_id;
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let second = f.run_of(&again);
+    // An AI actor's cancel is not a hold: the step is dispatched again.
+    let ai =
+        f.m.runtime
+            .run_cancel(&f.owner(), &second.run_id, Some(&worker()), &mut tx)
+            .unwrap()
+            .run;
+    assert_eq!(
+        ai.history.last().unwrap().reason.as_deref(),
+        Some("cancelled")
+    );
+    let tick = f.tick(&mut tx);
+    assert!(
+        tick.outcomes.iter().any(|outcome| outcome.run_id.as_deref()
+            != Some(second.run_id.as_str())
+            && outcome.run_id.is_some()),
+        "{:?}",
+        tick.outcomes
+    );
+    assert_eq!(
+        f.run_of(&again).operation_id,
+        format!("sched-run-{again}.2")
+    );
+}

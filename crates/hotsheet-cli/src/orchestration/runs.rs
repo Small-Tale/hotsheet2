@@ -777,13 +777,21 @@ impl OrchestrationRuntime {
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));
         }
+        // HS2-HV9ED3: a person's cancel is recorded as theirs; the scheduler respects it.
+        let reason = if actor
+            .is_some_and(|actor| actor.role == hotsheet_ticketing::actor::ActorRole::Human)
+        {
+            super::cancel_hold::CANCELLED_BY_PERSON
+        } else {
+            "cancelled"
+        };
         let cancelled = |tx: &mut Transaction<'_>| {
             self.run_apply(
                 owner_id,
                 run_id,
                 RunUpdate {
                     to: Some(RunState::Cancelled),
-                    reason: Some("cancelled".into()),
+                    reason: Some(reason.into()),
                     actor_id: actor.and_then(|actor| actor.id.clone()),
                     ..RunUpdate::default()
                 },

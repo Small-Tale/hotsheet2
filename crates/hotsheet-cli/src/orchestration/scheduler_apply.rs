@@ -439,7 +439,9 @@ impl OrchestrationRuntime {
                 // direction, so it starts no cooldown on the target.
                 if !matches!(
                     placement.reason,
-                    PlacementReason::NeverJoined | PlacementReason::RolePromptFailed
+                    PlacementReason::NeverJoined
+                        | PlacementReason::RolePromptFailed
+                        | PlacementReason::RunCancelled
                 ) {
                     applied.push((placement.target_id.clone(), PlacementOutcome::WoundDown));
                 }

@@ -970,6 +970,8 @@ pub enum RequestKind {
     Assigned,
     /// No dispatcher is live, so the ticket is claimed under its worker id: work it.
     Claimed,
+    /// HS2-HV9ED3: a person cancelled the ticket's run: stop working it and let go.
+    Cancelled,
 }
 
 impl RequestKind {
@@ -977,6 +979,7 @@ impl RequestKind {
         match self {
             Self::Assigned => "assigned",
             Self::Claimed => "claimed",
+            Self::Cancelled => "cancelled",
         }
     }
 }

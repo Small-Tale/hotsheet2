@@ -570,24 +570,6 @@ impl Fleet {
         }
     }
 
-    /// The first run `wanted` picks from this machine's run records, woken by the
-    /// owner's run event stream.
-    pub(super) async fn until_runs(&self, wanted: impl Fn(&[Value]) -> Option<Value>) -> Value {
-        let deadline = std::time::Instant::now() + Duration::from_secs(90);
-        let mut cursor = 0;
-        loop {
-            let runs = self.runs().await;
-            if let Some(found) = wanted(&runs) {
-                return found;
-            }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "no such run: {runs:#?}"
-            );
-            cursor = self.next_event(None, cursor).await;
-        }
-    }
-
     /// The step's readiness once it reaches `level`, woken by its readiness events.
     pub(super) async fn step_until(&self, step: &str, level: &str) -> Value {
         let deadline = std::time::Instant::now() + Duration::from_secs(90);
@@ -660,7 +642,7 @@ impl Fleet {
     // ----- Playing the agent: exactly what the worker skill does, through the
     // ----- hosting server's own routes, so its change feed carries each write.
 
-    fn side_router(&self, side: Side) -> axum::Router {
+    pub(super) fn side_router(&self, side: Side) -> axum::Router {
         match side {
             Side::Controller => self.router.clone(),
             Side::Peer => self.peer_api.clone(),

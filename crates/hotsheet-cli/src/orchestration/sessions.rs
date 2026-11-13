@@ -198,6 +198,9 @@ pub fn request_prompt_text(kind: RequestKind, worker_id: &str, ticket: &str) -> 
         RequestKind::Claimed => format!(
             "Hot Sheet orchestration found no live dispatcher for this project, so the ticket `{ticket}` is claimed for you under your worker id `{worker_id}`. Work it with the `hotsheet-worker` skill, renewing that claim, without waiting for a dispatcher."
         ),
+        RequestKind::Cancelled => format!(
+            "A person cancelled the orchestration run for the ticket `{ticket}`. Stop working it: commit or set aside what you have, release your claim on it as the worker `{worker_id}`, and finish your turn. Hot Sheet will wind this session down."
+        ),
     }
 }
 
@@ -2072,6 +2075,19 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<SessionView, OrchestrationError> {
+        self.session_tell(owner_id, session_id, None, actor, tx)
+    }
+
+    /// [`Self::session_tell_ticket`], or with `RequestKind::Cancelled` the message
+    /// that a person cancelled the session's run (HS2-HV9ED3), which is finished.
+    pub(super) fn session_tell(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        cancelled: Option<RequestKind>,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
         let session = self.session(owner_id, session_id)?;
         if session.state != SessionState::Running {
             return Err(OrchestrationError::Session(SessionError::NotActive));
@@ -2084,7 +2100,9 @@ impl OrchestrationRuntime {
             .clone()
             .ok_or(OrchestrationError::Invalid("the session works no run"))?;
         let run = self.run(owner_id, &run_id)?;
-        if run.state.is_terminal() {
+        let told_cancel = cancelled == Some(RequestKind::Cancelled)
+            && run.state == hotsheet_ticketing::orchestration::RunState::Cancelled;
+        if run.state.is_terminal() && !told_cancel {
             return Err(OrchestrationError::Run(
                 hotsheet_ticketing::orchestration::RunError::NotActive,
             ));
@@ -2093,7 +2111,9 @@ impl OrchestrationRuntime {
             .hosted
             .as_ref()
             .map(|hosted| hosted.worker_id.as_str());
-        let kind = if run.state == hotsheet_ticketing::orchestration::RunState::Dispatched
+        let kind = if told_cancel {
+            RequestKind::Cancelled
+        } else if run.state == hotsheet_ticketing::orchestration::RunState::Dispatched
             && run.worker_id.as_deref() == worker
         {
             RequestKind::Claimed

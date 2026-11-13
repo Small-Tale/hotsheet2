@@ -2523,7 +2523,8 @@ hotsheet-cli ... orchestration scheduler tick [--dry-run] --project <owner>
 
 `plan` computes the schedule and changes and logs nothing. `explain` answers
 `running`, `finished`, `not_planned`, `not_ready` (with the readiness reasons),
-`start`, `keep` or `not_placed` with the reason, its detail, the rank and score,
+`start`, `keep` or `not_placed` with the reason (`cancelled_by_person` for a step a
+person's cancel holds, §26.24), its detail, the rank and score,
 when to expect a change, and each resource the work requires (§26.20). A running
 step whose run waits for a target dispatcher that is not there answers reason
 `no_live_dispatcher` (or `pool_unknown`) with `assignment` and the claim time
@@ -2735,7 +2736,8 @@ it, under the scheduler's actor:
 | ------------------------------------ | ------------------------------------------------ |
 | None                                 | A new run under `sched-run-<step id>`            |
 | Unfinished                           | The same run: nothing is dispatched twice        |
-| Failed or cancelled                  | A new run under `<id>.<n>` (`.2`, `.3`, …)       |
+| Failed, or cancelled by an AI actor  | A new run under `<id>.<n>` (`.2`, `.3`, …)       |
+| Cancelled by a person                | None: the step is held (HS2-HV9ED3, §26.24)      |
 | Completed                            | None: the step is finished and is not ready work |
 
 **Repeats and replacements.** From the dispatch on, the step is `in_progress`, so
@@ -3281,26 +3283,20 @@ hosting server's own ticket routes.
 | a restarted controller resumes the plan                 | Restarts while A's gate waits and while B's remote session works: the gate is observed again, the remote session is adopted, nothing starts twice                                                                                   |
 | a partial target outage                                 | The peer drops off the network: B's run reads `unreachable` and stale, A's work completes meanwhile, nothing replaces B's session, and B completes from the replayed feed when the peer returns                                     |
 | lost access mid-run                                     | A revoked and then an expired grant: typed denials in the answers and the audit journal, nothing started or stopped, and a new grant lets the run finish                                                                            |
-| cancelling a remote run                                 | The pooled worker's claim is kept, the planned step is dispatched again (§26.19), and removing the step and cancelling withdraws the Up Next mark on the peer                                                                       |
+| cancelling a remote run                                 | A person's cancel holds the step (§26.24): nothing is dispatched for it, its session is told and wound down once its worker lets go, and a person's new dispatch ends the hold                                                      |
 | duplicate requests                                      | Concurrent passes over HTTP and the stdio MCP tool and replayed scheduler operation ids give one run, one session and one terminal                                                                                                  |
 | out-of-order and replayed events                        | A worker hands the ticket over and it is finished while the controller cannot see the peer; the run settles once from the latest state, and repeated syncs and reconciliations record nothing                                       |
 | a refusing peer and a limited tool                      | A rate-limited tool fails over to the other allowed tool; the peer owner's admission (set by the CLI) refuses the start; after the backoff the replacement start lands on the peer                                                  |
 
-One scenario is quarantined on the gap it found (see
-[test-quarantine.md](test-quarantine.md)): a session lost while its run waits on CI is
-replaced although reconciliation finds no lost work (HS2-3REXQ7). A remote session
-freed without any run event is now wound down from the session change the peer's
-feed carries (HS2-257Q2Z, §26.9). Defects these
-event is never re-read (HS2-257Q2Z). A session lost while its run waits on CI is no
-longer replaced (HS2-3REXQ7, §26.24). Defects these
-scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9CTG
-(§26.17). A cancel the gate denies is answered as the denial (HS2-WC3W2G). Open
-findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q428Z (concurrent passes each log a start). A shown reconciliation no
-longer outlives a later state change (HS2-68DWAM). External-provider targets and a contended resource are HS2-30XYPY.
-(§26.17), and HS2-7Q428Z (concurrent passes each logged a start, §26.24). Open
-findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-WC3W2G
-(a cancel denied by the gate reads as an unverified target), HS2-68DWAM (a stale shown
-reconciliation). External-provider targets and a contended resource are HS2-30XYPY.
+No scenario is quarantined. The scenarios found nine defects. Fixed: HS2-YZBCX5
+(§26.7), HS2-2C5N1W (§26.9), HS2-KM9CTG (§26.17), HS2-257Q2Z (a remote session freed
+without a run event is wound down from the session change the peer's feed carries,
+§26.9), HS2-WC3W2G (a cancel the gate denies is answered as the denial), HS2-68DWAM (a
+shown reconciliation no longer outlives a later state change), HS2-3REXQ7 (a session
+lost while its run waits on CI is no longer replaced, §26.24), HS2-7Q428Z (concurrent
+passes each logged a start, §26.24) and HS2-HV9ED3 (a person's cancel of a scheduler
+run is respected, §26.24). Open: HS2-HJ64ZX (a race in the out-of-order scenario's
+event snapshot). External-provider targets and a contended resource are HS2-30XYPY.
 Checks that need a real AI tool, a real GitHub repository or Windows and Linux hosts
 are in [the manual test plan](manual-test-plan.md#orchestration-end-to-end-with-real-tools-and-hosts-hs2-2ey9dp).
 
@@ -3524,3 +3520,30 @@ what it did: the session is running and busy with the run, so it starts and logs
 nothing more. The lock is a file lock, so processes over the same home serialize too.
 `plan` and `explain` change nothing and take no lock. The pure helper is
 `scheduler_pass_lock(home, owner)`.
+
+### A person's cancel is respected (HS2-HV9ED3)
+
+**Decision.** A person who cancels a run the scheduler dispatched means it: the loop
+does not dispatch that step again until a person dispatches its ticket again or
+redefines the step, and the session working the run is told and wound down. Before
+this, the next pass dispatched the step again as `sched-run-<step>.<n>` and the
+session was told nothing, which undid the cancel. An AI actor's cancel keeps that
+behaviour: the step is dispatched again.
+
+- **Recorded.** `run_cancel` by a person records the run's reason as
+  `cancelled_by_person` (an AI actor's stays `cancelled`).
+- **Held.** A step is held while its latest scheduler run ended
+  `cancelled_by_person`, no run of the same target ticket was dispatched after that,
+  and the step was not changed (`updated_at_ms`) since. A held step is left out of
+  the scheduler's work; `scheduler explain` answers `not_placed` with reason
+  `cancelled_by_person`. Dispatching the ticket again (any `run dispatch`), changing
+  the step's definition, or removing and planning it again ends the hold.
+- **The session.** An orchestrator-owned session linked to the cancelled run stays
+  listed as busy with it, so it is never refilled. Its placement becomes a
+  `wind_down` with reason `run_cancelled`; before the wind-down an applied pass tells
+  it through the same request path as HS2-R7QH35, with kind `cancelled` (stop, set
+  your work aside, release your claim), pushed once. The wind-down is the ordinary
+  one, at a safe point its host confirms: the claim its worker still holds keeps it
+  until the worker lets go, and the session's turn end wakes the loop. Such a
+  wind-down starts no cooldown. A person's session is left alone.
+- The Up Next mark a dispatched dispatcher-mode run set is not withdrawn by this.
