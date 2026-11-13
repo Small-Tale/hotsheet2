@@ -642,7 +642,8 @@ fn hs2_5jbypv_authorize_reads_again_after_losing_a_race_to_a_concurrent_resolve(
         Err(OrchestrationError::Conflict)
     ));
     // The gate reads again, once or as often as it is allowed to.
-    for rounds in [1, 3] {
+    let allowed = super::super::access::RESOLVE_ATTEMPTS;
+    for rounds in [1, allowed] {
         race(&f, rounds);
         let authorized = f
             .runtime
@@ -656,7 +657,7 @@ fn hs2_5jbypv_authorize_reads_again_after_losing_a_race_to_a_concurrent_resolve(
         assert!(authorized.resolution.usable);
     }
     // A race that never ends is still a denial, never an allowance.
-    race(&f, 4);
+    race(&f, allowed + 1);
     assert_eq!(
         denied(f.runtime.authorize(
             &reference(&f),

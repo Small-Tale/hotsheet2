@@ -49,6 +49,8 @@ fn hs2_ebhdsb_every_state_edge_is_allowed_or_refused_exactly() {
     let allowed = [
         (Requested, Queued),
         (Requested, Dispatched),
+        // HS2-WBREDM: the target ticket was finished before the dispatch was recorded.
+        (Requested, Completed),
         (Requested, Failed),
         (Requested, Cancelled),
         (Queued, Dispatched),
@@ -62,6 +64,8 @@ fn hs2_ebhdsb_every_state_edge_is_allowed_or_refused_exactly() {
         (Dispatched, Intervened),
         (Intervened, Dispatched),
         (Intervened, Completed),
+        // HS2-WBREDM: the ticket of a taken-over run disappeared from the target.
+        (Intervened, Failed),
         (Intervened, Cancelled),
     ];
     for from in RunState::ALL {

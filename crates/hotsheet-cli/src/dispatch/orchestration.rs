@@ -281,6 +281,48 @@ enum RunCmd {
     Status {
         run_id: String,
     },
+    /// Reconcile one run, or every unfinished run without a run id, with its target
+    /// after an interruption. Starts nothing; names what could not be verified.
+    Reconcile {
+        run_id: Option<String>,
+    },
+    /// Stop renewing and repeating a run until it is resumed. The target is not told.
+    Pause {
+        run_id: String,
+        /// A stable reason code, such as maintenance.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Resume a paused run and reconcile it at once.
+    Resume {
+        run_id: String,
+    },
+    /// Hand a run to another worker, or without --to-worker to a person: the run lets
+    /// go of its claim and keeps following the ticket.
+    Handoff {
+        run_id: String,
+        #[arg(long)]
+        to_worker: Option<String>,
+        #[arg(long)]
+        worker_label: Option<String>,
+        /// Lease length for the new worker's claim, 5 to 240 (default 30).
+        #[arg(long)]
+        lease_minutes: Option<u32>,
+    },
+    /// Correct a run's record by hand (a person's action; pass --actor-role human).
+    /// Only this machine's record changes.
+    Correct {
+        run_id: String,
+        /// requested, queued, dispatched, intervened, completed, failed or cancelled.
+        #[arg(long)]
+        state: String,
+        /// A stable reason code.
+        #[arg(long)]
+        reason: String,
+        /// The worker that really holds the work, when that was wrong too.
+        #[arg(long)]
+        worker: Option<String>,
+    },
     /// Events after a cursor, oldest first. With --wait-seconds an empty answer waits
     /// for the next event instead of the caller polling.
     Events {
@@ -331,6 +373,42 @@ fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
         RunCmd::Cancel { run_id } => ("POST", format!("{base}/{run_id}/cancel"), json!({})),
         RunCmd::Sync { run_id } => ("POST", format!("{base}/{run_id}/sync"), json!({})),
         RunCmd::Status { run_id } => ("GET", format!("{base}/{run_id}/status"), Value::Null),
+        // HS2-WBREDM
+        RunCmd::Reconcile { run_id: None } => (
+            "POST",
+            format!("/checkouts/{project}/orchestration/run-reconcile"),
+            json!({}),
+        ),
+        RunCmd::Reconcile {
+            run_id: Some(run_id),
+        } => ("POST", format!("{base}/{run_id}/reconcile"), json!({})),
+        RunCmd::Pause { run_id, reason } => (
+            "POST",
+            format!("{base}/{run_id}/pause"),
+            json!({"reason":reason}),
+        ),
+        RunCmd::Resume { run_id } => ("POST", format!("{base}/{run_id}/resume"), json!({})),
+        RunCmd::Handoff {
+            run_id,
+            to_worker,
+            worker_label,
+            lease_minutes,
+        } => (
+            "POST",
+            format!("{base}/{run_id}/handoff"),
+            json!({"to_worker":to_worker,"worker_label":worker_label,
+                "lease_minutes":lease_minutes}),
+        ),
+        RunCmd::Correct {
+            run_id,
+            state,
+            reason,
+            worker,
+        } => (
+            "POST",
+            format!("{base}/{run_id}/correct"),
+            json!({"state":state,"reason":reason,"worker_id":worker}),
+        ),
         RunCmd::Events {
             after,
             limit,

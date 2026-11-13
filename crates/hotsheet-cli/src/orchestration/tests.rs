@@ -22,6 +22,7 @@ mod access;
 mod capacity;
 mod gates;
 mod policy;
+mod recovery;
 mod runs;
 mod tickets;
 mod tool_capacity;

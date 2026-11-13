@@ -34,6 +34,8 @@ pub fn is_path(path: &str) -> bool {
             // `runs/{run}/{gates,gate-sync,deployments}` above.
             | ["checkouts", _, "orchestration", "gates"]
             | ["checkouts", _, "orchestration", "gates", _]
+            // HS2-WBREDM: reconcile every unfinished run of the owner.
+            | ["checkouts", _, "orchestration", "run-reconcile"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -94,6 +96,8 @@ pub fn is_machine_path(path: &str) -> bool {
             // HS2-5JBYPV: gate records are this machine's.
             | ["checkouts", _, "orchestration", "gates"]
             | ["checkouts", _, "orchestration", "gates", _]
+            // HS2-WBREDM
+            | ["checkouts", _, "orchestration", "run-reconcile"]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -659,6 +663,18 @@ impl OrchestrationRuntime {
                     "deployments" => {
                         value(self.gate_deploy(owner, run, decode(body)?, actor.as_ref(), tx)?)
                     }
+                    // HS2-WBREDM: recovery and the control actions.
+                    "reconcile" => value(self.run_reconcile(owner, run, actor.as_ref(), tx)?),
+                    "pause" => {
+                        value(self.run_pause(owner, run, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "resume" => value(self.run_resume(owner, run, actor.as_ref(), tx)?),
+                    "handoff" => {
+                        value(self.run_handoff(owner, run, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "correct" => {
+                        value(self.run_correct(owner, run, decode(body)?, actor.as_ref(), tx)?)
+                    }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }
@@ -677,6 +693,9 @@ impl OrchestrationRuntime {
             }
             ("GET", ["checkouts", owner, "orchestration", "gates", gate]) => {
                 value(self.gate(owner, gate)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "run-reconcile"]) => {
+                value(self.runs_reconcile(owner, actor(body)?.as_ref(), tx)?)
             }
             // HS2-AZ15GA orchestrating half.
             ("POST", ["checkouts", owner, "orchestration", "tickets", operation]) => {

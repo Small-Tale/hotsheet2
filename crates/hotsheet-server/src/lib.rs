@@ -2124,6 +2124,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{checkout}/target-events",
             get(routes::orchestration::read),
         )
+        // HS2-WBREDM: reconcile every unfinished run of the owner (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/run-reconcile",
+            post(routes::orchestration::write),
+        )
         // HS2-AHG7HW: observed AI tool capacity (machine-local).
         .route(
             "/checkouts/{owner}/orchestration/tool-capacity",

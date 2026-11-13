@@ -8,9 +8,9 @@ use hotsheet_model::{NoteKind, OrchestrationLink, OrchestrationRelation, Timesta
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::DenialReason;
 use hotsheet_ticketing::orchestration::{
-    DispatchMode, NewRun, Run, RunError, RunEvent, RunEventJournal, RunEventKind, RunEventPage,
-    RunEventSource, RunObservation, RunRegistry, RunState, RunTarget, RunTicket, RunUnreachable,
-    RunUpdate, TargetAction, TargetOpError,
+    DispatchMode, NewRun, Run, RunControl, RunError, RunEvent, RunEventJournal, RunEventKind,
+    RunEventPage, RunEventSource, RunObservation, RunRegistry, RunState, RunTarget, RunTicket,
+    RunUnreachable, RunUpdate, TargetAction, TargetFacts, TargetOpError, align,
 };
 use hotsheet_ticketing::{ApiTicket, FsStore, OpError, ops};
 use serde::{Deserialize, Serialize};
@@ -120,13 +120,13 @@ fn after(now: &Timestamp, minutes: u32) -> Timestamp {
 }
 
 /// Milliseconds of an RFC 3339 field of a wire ticket, when present and parseable.
-fn field_ms(ticket: &Value, key: &str) -> Option<u64> {
+pub(super) fn field_ms(ticket: &Value, key: &str) -> Option<u64> {
     let text = ticket.get(key)?.as_str()?;
     let at = Timestamp::new(text).instant()?;
     u64::try_from(at.unix_timestamp_nanos() / 1_000_000).ok()
 }
 
-fn text<'a>(ticket: &'a Value, key: &str) -> Option<&'a str> {
+pub(super) fn text<'a>(ticket: &'a Value, key: &str) -> Option<&'a str> {
     ticket.get(key).and_then(Value::as_str)
 }
 
@@ -228,7 +228,7 @@ impl OrchestrationRuntime {
 
     // ---- Orchestrating half ----
 
-    fn runs(&self) -> RunRegistry {
+    pub(super) fn runs(&self) -> RunRegistry {
         RunRegistry::new(&self.home)
     }
 
@@ -242,7 +242,7 @@ impl OrchestrationRuntime {
 
     /// Apply a change to a run and publish what actually changed as events. Every run
     /// update goes through here, so the stream and the record cannot drift apart.
-    fn run_apply(
+    pub(super) fn run_apply(
         &self,
         owner_id: &str,
         run_id: &str,
@@ -270,13 +270,24 @@ impl OrchestrationRuntime {
             gate_state: None,
         };
         let now_ms = after.updated_at_ms;
-        if after.history.len() != before.history.len() {
+        // A full history drops an old entry for each new one, so its length alone does
+        // not show a transition (HS2-WBREDM).
+        if after.history.len() != before.history.len()
+            || after.history.last() != before.history.last()
+        {
             // Keyed by position in the run's history: reported once however many
             // callers observed the same transition.
             self.run_event(
                 owner_id,
                 event(
-                    RunEventKind::State,
+                    // HS2-WBREDM: a control action is published as what it was.
+                    match after.history.last().and_then(|entry| entry.control) {
+                        None => RunEventKind::State,
+                        Some(RunControl::Pause) => RunEventKind::Paused,
+                        Some(RunControl::Resume) => RunEventKind::Resumed,
+                        Some(RunControl::Handoff) => RunEventKind::Handoff,
+                        Some(RunControl::Correct) => RunEventKind::Corrected,
+                    },
                     Some(after.state),
                     after.history.last().and_then(|entry| entry.reason.clone()),
                     now_ms,
@@ -349,6 +360,31 @@ impl OrchestrationRuntime {
             ),
             _ => {}
         }
+        // HS2-WBREDM: a reconciliation that reached a new outcome is news; re-checking
+        // an unchanged world stored nothing and reports nothing.
+        if let Some(found) = after
+            .reconciliation
+            .as_ref()
+            .filter(|found| before.reconciliation.as_ref() != Some(*found))
+        {
+            self.run_event(
+                owner_id,
+                RunEvent {
+                    at_ms: found.at_ms,
+                    run_id: run_id.into(),
+                    kind: RunEventKind::Reconciled,
+                    source: RunEventSource::Orchestrator,
+                    // The run's state did not change by being reconciled; a state
+                    // change it led to is its own `state` event.
+                    state: None,
+                    reason: Some(found.disposition.code().into()),
+                    actor_id: actor_id.clone(),
+                    dedupe: None,
+                    gate_id: None,
+                    gate_state: None,
+                },
+            );
+        }
         Ok(after)
     }
 
@@ -409,7 +445,7 @@ impl OrchestrationRuntime {
         self.runs().list(owner_id, active)
     }
 
-    fn run_target(run: &Run) -> TargetTicket {
+    pub(super) fn run_target(run: &Run) -> TargetTicket {
         TargetTicket {
             target_id: run.target.target_id.clone(),
             connection_id: run.target.connection_id.clone(),
@@ -419,7 +455,13 @@ impl OrchestrationRuntime {
 
     /// An identifiers-only activity note on the orchestration ticket. Best effort: a
     /// run is never failed because its note could not be written.
-    fn run_note(&self, owner_id: &str, run: &Run, event: &str, tx: &mut Transaction<'_>) {
+    pub(super) fn run_note(
+        &self,
+        owner_id: &str,
+        run: &Run,
+        event: &str,
+        tx: &mut Transaction<'_>,
+    ) {
         let ticket = OrchestrationTicket {
             connection_id: run.ticket.connection_id.clone(),
             native_id: run.ticket.native_id.clone(),
@@ -526,6 +568,10 @@ impl OrchestrationRuntime {
             // A duplicate of a dispatch that already went past `requested`.
             if !created && run.state != RunState::Requested {
                 return Ok(RunView::from(run));
+            }
+            // HS2-WBREDM: a paused run asks nothing of its target.
+            if run.paused.is_some() {
+                return Err(OrchestrationError::Run(RunError::Paused));
             }
             let dispatched = match mode {
                 DispatchMode::Direct => {
@@ -640,6 +686,10 @@ impl OrchestrationRuntime {
         let run = self.run(owner_id, run_id)?;
         if run.mode != DispatchMode::Direct || run.state != RunState::Dispatched {
             return Err(OrchestrationError::Run(RunError::NotActive));
+        }
+        // HS2-WBREDM: a paused run's lease is not extended on the orchestrator's say-so.
+        if run.paused.is_some() {
+            return Err(OrchestrationError::Run(RunError::Paused));
         }
         let target = Self::target_ref(owner_id, &run.target.target_id)?;
         let authorized = self.authorize(
@@ -846,7 +896,9 @@ impl OrchestrationRuntime {
                             run_id,
                             RunUpdate {
                                 to: Some(RunState::Failed),
-                                reason: Some(TargetOpError::NotFound.code().into()),
+                                reason: align(&run, &TargetFacts::missing(), tx.clock.now_ms())
+                                    .reason
+                                    .map(Into::into),
                                 actor_id: actor_id.clone(),
                                 from_target: true,
                                 ..RunUpdate::default()
@@ -862,47 +914,25 @@ impl OrchestrationRuntime {
             };
             let holder = text(&ticket, "claimed_by");
             let lease = field_ms(&ticket, "claim_lease_expires_at");
-            // A lapsed lease is not a live claim, whoever's name is still on it.
-            let live = holder.filter(|_| lease.is_some_and(|at| at > tx.clock.now_ms()));
-            let ours = live.is_some() && live == run.worker_id.as_deref();
             let status = text(&ticket, "status").unwrap_or_default();
-            let step = |to, reason: &str| RunUpdate {
-                to: Some(to),
-                reason: Some(reason.into()),
-                ..RunUpdate::default()
-            };
-            let update = match (status, run.state) {
-                ("completed" | "verified" | "archive", _) => {
-                    step(RunState::Completed, "target_completed")
-                }
-                ("deleted", _) => step(RunState::Failed, "target_deleted"),
-                (_, RunState::Queued) => live.map_or_else(RunUpdate::default, |worker| RunUpdate {
-                    worker_id: Some(worker.into()),
-                    lease_expires_at_ms: Some(lease),
-                    ..step(RunState::Dispatched, "assigned_by_dispatcher")
-                }),
-                // A claim taken before the answer was recorded is the run's own.
-                (_, RunState::Requested | RunState::Intervened)
-                    if ours && run.mode == DispatchMode::Direct =>
-                {
-                    RunUpdate {
-                        lease_expires_at_ms: Some(lease),
-                        ..step(RunState::Dispatched, "claim_confirmed")
-                    }
-                }
-                (_, RunState::Dispatched) if ours => RunUpdate {
-                    lease_expires_at_ms: Some(lease),
-                    ..RunUpdate::default()
+            // HS2-WBREDM: the alignment rules live in the pure core, shared with
+            // reconciliation.
+            let aligned = align(
+                &run,
+                &TargetFacts {
+                    exists: true,
+                    status: status.into(),
+                    claimed_by: holder.map(Into::into),
+                    lease_expires_at_ms: lease,
                 },
-                (_, RunState::Dispatched) => step(
-                    RunState::Intervened,
-                    if live.is_some() {
-                        "claim_taken"
-                    } else {
-                        "claim_released"
-                    },
-                ),
-                _ => RunUpdate::default(),
+                tx.clock.now_ms(),
+            );
+            let update = RunUpdate {
+                to: aligned.to,
+                reason: aligned.reason.map(Into::into),
+                worker_id: aligned.worker_id,
+                lease_expires_at_ms: aligned.lease_expires_at_ms,
+                ..RunUpdate::default()
             };
             let finished = update.to.is_some_and(RunState::is_terminal);
             let updated = self.run_apply(

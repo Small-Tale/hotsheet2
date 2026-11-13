@@ -8,6 +8,7 @@
 > capacity states with tool selection (§26.11, HS2-AHG7HW), extra validation steps
 > with immutable result references (§26.12, HS2-WN0MXZ), CI and deployment gates of
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed),
+> recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI and the scheduler remain design
@@ -607,15 +608,15 @@ actor id; repeated and reversed transitions are all kept.
 
 | State                              | Meaning                                                | May become                                                     |
 | ---------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------- |
-| `requested`                        | Recorded before the target was asked                   | `queued`, `dispatched`, `failed`, `cancelled`                  |
+| `requested`                        | Recorded before the target was asked                   | `queued`, `dispatched`, `completed`, `failed`, `cancelled`     |
 | `queued`                           | Marked Up Next for the target's dispatcher             | `dispatched`, `completed`, `failed`, `cancelled`, `intervened` |
 | `dispatched`                       | The target ticket is claimed for the run's worker      | `completed`, `failed`, `cancelled`, `intervened`               |
-| `intervened`                       | A person or another worker holds or released the claim | `dispatched`, `completed`, `cancelled`                         |
+| `intervened`                       | A person or another worker holds or released the claim | `dispatched`, `completed`, `failed`, `cancelled`               |
 | `completed`, `failed`, `cancelled` | Final                                                  | nothing                                                        |
 
 Every other edge is refused with `run_invalid_transition`, and a finished run
 refuses any change with `run_not_active`. A renewed lease is an update, not a
-transition.
+transition. A person's correction is the one exception to the edges (§26.14).
 
 ### Rules
 
@@ -672,7 +673,7 @@ hotsheet-cli ... orchestration run show|renew|cancel|sync <run-id> --project <ow
 The hosted claim route is ordinary authenticated project data under the caller's
 device role, like the hosted ticket route. MCP `hotsheet_targets` adds
 `run_dispatch`, `run_list`, `run_show`, `run_renew`, `run_cancel` and `run_sync`.
-Reconciliation after a restart is HS2-WBREDM, and starting the sessions that do the
+Reconciliation after a restart is §26.14, and starting the sessions that do the
 work is HS2-GDJXGZ.
 
 ### Status, events and following targets (HS2-7QHWHJ)
@@ -691,8 +692,9 @@ can be trusted.
 journal per owning checkout, `${HOTSHEET_HOME}/orchestration-run-events/`, with the
 same sequence cursor, rotation and gap reporting as the audit journal. Event kinds
 are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable`,
-`cancel_requested`, `validation` (§26.12) and `gate` (§26.13), with `session` reserved for
-the tickets that add them. Each event says whether the orchestrator did it or it was learned
+`cancel_requested`, `validation` (§26.12), `gate` (§26.13) and the recovery kinds of
+§26.14 (`reconciled`, `paused`, `resumed`, `handoff`, `corrected`), with `session`
+reserved for the ticket that adds it. Each event says whether the orchestrator did it or it was learned
 from the target, and carries identifiers, states and codes only.
 
 - **Ordering.** Events are recorded in arrival order and keep the time the fact was
@@ -718,8 +720,9 @@ It confirms its authority through the gate when it connects, after any failure a
 every ten minutes, acting as whoever dispatched the run. A target with no unfinished
 run is not contacted at all, and a run a person took over is still followed.
 
-A follower starts when a run is dispatched through the server or when someone reads
-the event stream, and ends with the last unfinished run of its target. The hosted
+A follower starts when the server starts with unfinished runs (§26.14), when a run
+is dispatched through the server or when someone reads the event stream, and ends
+with the last unfinished run of its target. The hosted
 feed comes from the hosting server's own change stream; a process without one, such
 as the bare CLI, answers `target_peer_unsupported`, and `run sync` remains the
 headless way to bring a run up to date. This view covers explicitly dispatched runs
@@ -1421,3 +1424,145 @@ The runtime reads other tickets call are
 `OrchestrationRuntime::run_gate_state(owner_id, run_id)` and
 `commit_gate_state(owner_id, target_id, commit)`. Both return the rolled-up
 `GateSummary` from this machine's records.
+
+## 26.14 Recovery and reconciliation (HS2-WBREDM)
+
+A run outlives the process that dispatched it. When that process stops, the target
+keeps moving: a claim is released, a dispatcher assigns the ticket, the ticket is
+finished. **Reconciliation** brings each unfinished run back in line with the world
+before anything is resumed, and says exactly what it could not check. It reads; it
+never starts work.
+
+### Sources and findings
+
+Reconciliation is a pure function over typed observations
+(`crates/hotsheet-ticketing/src/orchestration/reconcile.rs`). Each external
+**source** is observed as verified facts or as unverifiable with a reason code, and
+yields one **finding**: `verified`, `mismatched` or `unverifiable`.
+
+| Source                | What is compared                                            | Reported today                                  |
+| --------------------- | ----------------------------------------------------------- | ----------------------------------------------- |
+| `target_reachability` | Whether the target answered at all                          | Yes                                             |
+| `target_ticket`       | The target ticket's existence and status                    | Yes                                             |
+| `target_claim`        | Who holds a live claim, against the run's state and worker  | Yes                                             |
+| `run_lease`           | The lease the run recorded, against the lease on the ticket | Yes                                             |
+| `ci_run`              | CI runs gating the run                                      | `unverifiable`, `source_not_wired` (HS2-7QNK7Y) |
+| `deployment`          | Deployments started for the run                             | `unverifiable`, `source_not_wired` (HS2-BYEB60) |
+| `session`             | Orchestrator-owned sessions working the run                 | `unverifiable`, `source_not_wired` (HS2-75Q254) |
+
+When the target cannot be confirmed, all four target sources are `unverifiable` with
+the reason the read failed for, such as `target_unavailable`. The last three sources
+take the same typed input (what the run recorded it started, and what is live) and
+already classify it: the same work is `verified`, live work the run never recorded is
+`unrecorded_live_work`, recorded work that is gone is `recorded_work_missing`. No
+ticket reports them yet, so they are passed as `source_not_wired`. That reason does
+not hold a run back, because the run records no such work; any other unverifiable
+reason does.
+
+**Never a duplicate.** New work of a kind may be started for a run only when that
+source was read and shows none going on (`Assessment::may_start`). A source that
+could not be verified never allows a start, and a live claim or live session is
+adopted rather than replaced. Repeating a dispatch with its operation id returns the
+same run (§26.9), and a target ticket is created at most once per operation id
+(§26.3).
+
+### Alignment and disposition
+
+The rules by which a run follows its target ticket live in the same module
+(`align`), and `run sync` applies them. They are the rules of §26.9, plus two an
+interruption needs:
+
+- A `requested` dispatcher run whose ticket already shows a live claim becomes
+  `dispatched` for that worker: the Up Next mark was set and the answer lost, and the
+  ticket is not queued twice.
+- A ticket finished before its dispatch was recorded completes the run
+  (`requested` to `completed`), and a taken-over run whose ticket disappeared fails
+  (`intervened` to `failed`). Without these edges such a run could never settle.
+
+After alignment the run gets a **disposition**:
+
+| Disposition           | Meaning                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `continue`            | The run's worker holds the target ticket                                             |
+| `wait_for_dispatcher` | Queued; the target's dispatcher has not assigned it                                  |
+| `retry_dispatch`      | Nothing is held in the target; the same dispatch may be repeated                     |
+| `retry_cancel`        | A cancel never reached the target; reconciliation repeats it when the target answers |
+| `needs_attention`     | Record and world disagree in a way only a person can settle                          |
+| `hold_unverified`     | Something the run depends on could not be verified; nothing is resumed               |
+| `paused`              | A person paused it; it outranks everything else                                      |
+| `finished`            | The run is over                                                                      |
+
+The outcome (disposition and findings) is stored on the run as `reconciliation` and
+shown by `run status`. The answer's `unverified` lists exactly the sources that are
+`unverifiable`. An unchanged outcome is not rewritten and produces no event; a new
+one is a `reconciled` event whose reason is the disposition. A finished run keeps no
+outcome. A target that cannot be confirmed is part of the answer, not an error.
+
+### When it runs
+
+- **Server start.** The server starts a follower (§26.9) for every target with an
+  unfinished run. With none, nothing starts and no target is contacted.
+- **Connect and reconnect.** A follower's first successful step reconciles every run
+  of its target, and so does the first step after any failure, a feed overflow or a
+  cursor reset. In between, only runs whose ticket changed are synced.
+- **On request**, for one run or all of an owner's. The bare CLI has no follower, so
+  this is its path.
+
+Nothing is driven by a timer: the triggers are the server starting, the follower's
+own connection events and explicit requests.
+
+A follower and a request can resolve the same target at the same moment, and every
+resolution rewrites the binding's observation, so the later writer conflicts. The
+gate resolves again (up to eight times) instead of reporting the target as
+unavailable: contention on this machine says nothing about the target.
+
+### Control actions
+
+Each action is its own entry in the run's history (`control` names it) and its own
+run event (`paused`, `resumed`, `handoff`, `corrected`), however often it is repeated
+or reversed. An action that changes nothing writes nothing.
+
+- **Pause** stops the orchestrator acting on the target for that run: a renewal, a
+  repeated dispatch and a handoff are refused with `run_paused`, and reconciliation
+  does not repeat a pending cancel. The target is not told and its claim is left
+  alone. The run is still read, so its record stays true.
+- **Resume** ends the pause and reconciles at once.
+- **Handoff** moves the run to another worker. Naming a worker that already holds
+  the ticket adopts that claim. Otherwise a direct run releases its own claim and
+  claims the ticket for the new worker. A claim someone else holds is never forced
+  away (`target_conflict`), a worker that already holds a direct run on the target
+  takes no second one, and a dispatcher run can only adopt. Without a worker the run
+  lets go of its claim and becomes `intervened`.
+- **Correct** rewrites the record by hand: any unfinished run may be moved to any
+  other state, backwards included, with a reason code. A finished run stays finished,
+  because reopening it could put two active runs on one target ticket. Only this
+  machine's record changes, and the next successful read of the target still wins.
+
+Reconciliation and handoff pass the gate (§26.7) as `tickets_read` and a continuing
+`work_start`. Pause, resume and correct change only this machine's record and must
+work while the target is unreachable, so they do not need a fresh target resolution:
+they require an identified actor, are written to the audit journal as `run_pause`,
+`run_resume` and `run_correct`, and a correction is refused for an AI actor. Whether
+they should also need a grant is HS2-BJE1C1.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration run reconcile [<run-id>] --project <owner>
+hotsheet-cli ... orchestration run pause <run-id> --project <owner> [--reason <code>]
+hotsheet-cli ... orchestration run resume <run-id> --project <owner>
+hotsheet-cli ... orchestration run handoff <run-id> --project <owner> [--to-worker <id>] \
+  [--worker-label ...] [--lease-minutes 30]
+hotsheet-cli --actor-role human ... orchestration run correct <run-id> --project <owner> \
+  --state <state> --reason <code> [--worker <id>]
+```
+
+| Route                                                                                  | Methods and purpose                                |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/run-reconcile`                                       | POST reconcile every unfinished run; machine-local |
+| `/checkouts/{owner}/orchestration/runs/{run}/{reconcile,pause,resume,handoff,correct}` | POST reconcile or control one run; machine-local   |
+
+MCP `hotsheet_targets` adds `run_reconcile` (all runs without `run_id`), `run_pause`,
+`run_resume`, `run_handoff` and `run_correct`. Acting on a disposition is the
+scheduler's (HS2-AH8CRS), validation steps join reconciliation in HS2-G5H9FQ, and
+the workspace view is HS2-XM692S.

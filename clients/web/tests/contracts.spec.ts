@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(289); // HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(290); // HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(289); // HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(290); // HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -811,6 +811,146 @@ test('HS2-WN0MXZ real hosted validation responses match the OpenAPI contract', a
     const tooLong = await send('GET', `${hosted}?execution_id=${execution}&wait_ms=8001`);
     expect(tooLong.status).toBe(400);
     matches(validations, 'get', 'default', tooLong.body);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-WBREDM real run reconciliation and control responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const target = '01ARZ3NDEKTSV4RRFFQ69G5FE2';
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const operation = '/checkouts/{owner}/orchestration/runs/{run}/{operation}';
+    const person = { role: 'human', id: 'maintainer' };
+    const scheduler = { role: 'ai', id: 'scheduler-1' };
+
+    // This checkout is its own target: declare it, review it, bind it and grant the scheduler.
+    const added = await send('POST', `${base}/targets`, { target_id: target, label: 'Self', expected_revision: null });
+    expect(added.status).toBe(200);
+    const candidate = await send('POST', `${base}/inspect`, {
+      destination: { kind: 'local', checkout_id: server.checkoutId },
+    });
+    expect(candidate.status).toBe(200);
+    const bound = await send('PUT', `${base}/targets/${target}/binding`, {
+      target: { owner_checkout_id: server.checkoutId, target_id: target },
+      expected_manifest_revision: added.body.revision,
+      expected_binding_revision: 0,
+      previous_destination: null,
+      destination: candidate.body.destination,
+    });
+    expect(bound.status).toBe(200);
+    const granted = await send('POST', `${base}/targets/${target}/grants`, {
+      actor_id: 'scheduler-1',
+      actions: ['tickets_read', 'work_start'],
+      expires_at_ms: Date.now() + 3_600_000,
+      actor: person,
+    });
+    expect(granted.status).toBe(200);
+    const orchestration = await server.request<{ id: string }>('/tickets', 'POST', { title: 'Coordinate recovery' });
+    const work = await server.request<{ id: string; connection_id: string }>('/tickets', 'POST', {
+      title: 'Synthetic work',
+    });
+
+    // Nothing unfinished: an empty summary.
+    const empty = await send('POST', `${base}/run-reconcile`, { actor: scheduler });
+    expect(empty.status).toBe(200);
+    matches('/checkouts/{owner}/orchestration/run-reconcile', 'post', '200', empty.body);
+    expect(empty.body).toEqual({ runs: [] });
+
+    const dispatched = await send('POST', `${base}/runs`, {
+      ticket: { native_id: orchestration.id },
+      target_id: target,
+      connection_id: work.connection_id,
+      native_id: work.id,
+      operation_id: 'op-contract-recovery',
+      worker_id: 'contract-worker',
+      actor: scheduler,
+    });
+    expect(dispatched.status, JSON.stringify(dispatched.body)).toBe(200);
+    const run = `${base}/runs/${String(dispatched.body.run_id)}`;
+    const act = async (name: string, body: Record<string, unknown>, actor: object = scheduler) => {
+      const answer = await send('POST', `${run}/${name}`, { ...body, actor });
+      matches(operation, 'post', answer.status === 200 ? '200' : 'default', answer.body);
+      return answer;
+    };
+
+    // Reconcile: the stored outcome names each source, and exactly the unverified ones.
+    const reconciled = await act('reconcile', {});
+    expect(reconciled.status).toBe(200);
+    expect(reconciled.body.unverified).toEqual(['ci_run', 'deployment', 'session']);
+    expect(reconciled.body.reconciliation).toMatchObject({ disposition: 'continue' });
+    const findings = (reconciled.body.reconciliation as { findings: { source: string; verification: string }[] })
+      .findings;
+    expect(findings.map((found) => found.source)).toEqual([
+      'target_reachability',
+      'target_ticket',
+      'target_claim',
+      'run_lease',
+      'ci_run',
+      'deployment',
+      'session',
+    ]);
+    expect(findings.slice(0, 4).every((found) => found.verification === 'verified')).toBe(true);
+
+    // Pause, a refused renewal, resume, handoff and a person's correction.
+    const paused = await act('pause', { reason: 'maintenance' });
+    expect(paused.body.paused).toMatchObject({ reason: 'maintenance', actor_id: 'scheduler-1' });
+    const refused = await act('renew', {});
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('run_paused');
+    const resumed = await act('resume', {});
+    expect(resumed.body.paused).toBeUndefined();
+    const handed = await act('handoff', { to_worker: 'contract-worker-2', lease_minutes: 30 });
+    expect(handed.body.worker_id).toBe('contract-worker-2');
+    const forbidden = await act('correct', { state: 'intervened', reason: 'operator_fix' });
+    expect(forbidden.status).toBe(403);
+    const corrected = await act('correct', { state: 'intervened', reason: 'operator_fix' }, person);
+    expect(corrected.body.state).toBe('intervened');
+    const history = corrected.body.history as { control?: string }[];
+    expect(history.map((entry) => entry.control ?? '-')).toEqual(['-', '-', 'pause', 'resume', 'handoff', 'correct']);
+
+    // Every unfinished run at once, the status view and the event stream.
+    const all = await send('POST', `${base}/run-reconcile`, {});
+    expect(all.status).toBe(200);
+    matches('/checkouts/{owner}/orchestration/run-reconcile', 'post', '200', all.body);
+    expect((all.body.runs as { state: string }[]).map((entry) => entry.state)).toEqual(['dispatched']);
+    const status = await send('GET', `${run}/status`);
+    matches(operation, 'get', '200', status.body);
+    expect(status.body.reconciliation).toMatchObject({ disposition: 'continue' });
+    const events = await send('GET', `${base}/run-events?after=0&run=${String(dispatched.body.run_id)}`);
+    matches('/checkouts/{owner}/orchestration/run-events', 'get', '200', events.body);
+    const kinds = (events.body.entries as { kind: string }[]).map((entry) => entry.kind);
+    for (const kind of ['reconciled', 'paused', 'resumed', 'handoff', 'corrected']) expect(kinds).toContain(kind);
+
+    const invalid = await act('correct', { state: 'paused', reason: 'x' }, person);
+    expect(invalid.status).toBe(400);
   } finally {
     await server.stop();
   }

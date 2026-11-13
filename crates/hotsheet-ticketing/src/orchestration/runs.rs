@@ -9,6 +9,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::contract::{valid_identifier, valid_token};
+use super::reconcile::RunReconciliation;
 use super::storage::{Storage, decode};
 use super::*;
 
@@ -58,16 +59,62 @@ impl RunState {
         use RunState::{Cancelled, Completed, Dispatched, Failed, Intervened, Queued, Requested};
         matches!(
             (self, next),
-            (Requested, Queued | Dispatched | Failed | Cancelled)
+            // HS2-WBREDM: a ticket someone finished before the dispatch was recorded
+            // completes the run; there is nothing left to dispatch.
+            (Requested, Queued | Dispatched | Completed | Failed | Cancelled)
                 | (
                     Queued,
                     Dispatched | Completed | Failed | Cancelled | Intervened
                 )
                 | (Dispatched, Completed | Failed | Cancelled | Intervened)
-                // A run a person took over can be handed back, finish, or be dropped.
-                | (Intervened, Dispatched | Completed | Cancelled)
+                // A run a person took over can be handed back, finish, or be dropped;
+                // its ticket can also disappear from the target (HS2-WBREDM).
+                | (Intervened, Dispatched | Completed | Failed | Cancelled)
         )
     }
+
+    /// HS2-WBREDM: a person's correction may move an unfinished run to any other
+    /// state, including backwards. A finished run stays finished: reopening it could
+    /// put two active runs on one target ticket.
+    pub fn may_be_corrected_to(self, next: Self) -> bool {
+        !self.is_terminal() && self != next
+    }
+}
+
+/// HS2-WBREDM: a deliberate control action recorded in a run's history. Each one is
+/// its own entry, however often it is repeated or reversed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunControl {
+    Pause,
+    Resume,
+    Handoff,
+    Correct,
+}
+
+impl RunControl {
+    pub const ALL: [Self; 4] = [Self::Pause, Self::Resume, Self::Handoff, Self::Correct];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Pause => "pause",
+            Self::Resume => "resume",
+            Self::Handoff => "handoff",
+            Self::Correct => "correct",
+        }
+    }
+}
+
+/// HS2-WBREDM: the orchestrator does not act on the target for a paused run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunPause {
+    pub since_ms: u64,
+    /// A stable code, never free text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +154,10 @@ pub struct RunTransition {
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor_id: Option<String>,
+    /// HS2-WBREDM: set when a control action made this entry. `from` then equals `to`
+    /// unless the action also changed the state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<RunControl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,6 +185,12 @@ pub struct Run {
     /// Set while the target cannot be confirmed; `observed` is then stale.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unreachable: Option<RunUnreachable>,
+    /// HS2-WBREDM: set while the run is paused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused: Option<RunPause>,
+    /// HS2-WBREDM: the outcome of the last reconciliation that found something new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconciliation: Option<RunReconciliation>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub history: Vec<RunTransition>,
@@ -196,6 +253,14 @@ pub struct RunUpdate {
     pub observed: Option<RunObservation>,
     /// `Some(None)` records that the target answered again.
     pub unreachable: Option<Option<RunUnreachable>>,
+    /// HS2-WBREDM: the control action this update is. With [`RunControl::Correct`] a
+    /// state change follows [`RunState::may_be_corrected_to`] instead of the edges.
+    pub control: Option<RunControl>,
+    /// `Some(None)` resumes. Pausing a paused run keeps when it was first paused.
+    pub paused: Option<Option<RunPause>>,
+    /// A reconciliation outcome. One with the same facts as the stored outcome is
+    /// ignored, so re-checking an unchanged world writes nothing.
+    pub reconciliation: Option<RunReconciliation>,
     /// The change was learned from the target rather than done by the orchestrator.
     /// The registry ignores it; the event stream records it as the source.
     pub from_target: bool,
@@ -212,6 +277,8 @@ pub enum RunError {
     NotActive,
     InvalidTransition,
     NotFound,
+    /// HS2-WBREDM: the run is paused; resume it before acting on its target.
+    Paused,
 }
 
 impl RunError {
@@ -222,6 +289,7 @@ impl RunError {
             Self::NotActive => "run_not_active",
             Self::InvalidTransition => "run_invalid_transition",
             Self::NotFound => "run_not_found",
+            Self::Paused => "run_paused",
         }
     }
 }
@@ -290,6 +358,19 @@ impl RunRegistry {
             .collect())
     }
 
+    /// HS2-WBREDM: every owning checkout that has an unfinished run, so a restarted
+    /// host knows which runs to reconcile without being asked about each owner.
+    pub fn unfinished_owners(&self) -> Result<Vec<String>, OrchestrationError> {
+        let owners: std::collections::BTreeSet<String> = self
+            .read_file()?
+            .runs
+            .into_iter()
+            .filter(|run| !run.state.is_terminal())
+            .map(|run| run.owner_checkout_id)
+            .collect();
+        Ok(owners.into_iter().collect())
+    }
+
     /// Start a run in `requested`, or return the run an earlier request with the same
     /// operation id started (`false`). The same operation id for a different target,
     /// ticket, mode or worker conflicts. A target ticket has at most one active run.
@@ -315,6 +396,8 @@ impl RunRegistry {
             cancel_requested: false,
             observed: None,
             unreachable: None,
+            paused: None,
+            reconciliation: None,
             created_at_ms: now_ms,
             updated_at_ms: now_ms,
             history: vec![RunTransition {
@@ -323,6 +406,7 @@ impl RunRegistry {
                 to: RunState::Requested,
                 reason: None,
                 actor_id,
+                control: None,
             }],
         };
         match (run.mode, &run.worker_id) {
@@ -411,27 +495,33 @@ impl RunRegistry {
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));
         }
+        let mut entry = None;
         if let Some(to) = update.to.filter(|to| *to != run.state) {
-            if !run.state.may_become(to) {
+            let allowed = if update.control == Some(RunControl::Correct) {
+                run.state.may_be_corrected_to(to)
+            } else {
+                run.state.may_become(to)
+            };
+            if !allowed {
                 return Err(OrchestrationError::Run(RunError::InvalidTransition));
             }
-            run.history.push(RunTransition {
+            entry = Some(RunTransition {
                 at_ms: now_ms,
                 from: Some(run.state),
                 to,
-                reason: update.reason,
-                actor_id: update.actor_id,
+                reason: update.reason.clone(),
+                actor_id: update.actor_id.clone(),
+                control: update.control,
             });
-            // Keep the first entry (how the run began) and the most recent ones.
-            if run.history.len() > MAX_RUN_HISTORY {
-                run.history.remove(1);
-            }
             run.state = to;
             if !matches!(to, RunState::Dispatched) {
                 run.lease_expires_at_ms = None;
             }
             if to.is_terminal() {
                 run.cancel_requested = false;
+                run.paused = None;
+                // A finished run depends on nothing any more.
+                run.reconciliation = None;
             }
         }
         if let Some(lease) = update.lease_expires_at_ms {
@@ -458,6 +548,45 @@ impl RunRegistry {
                 (Some(_), Some(since)) => Some(since),
                 (next, _) => next,
             };
+        }
+        if let Some(paused) = update.paused.filter(|_| !run.state.is_terminal()) {
+            // Keep when the pause began; pausing again does not restart it.
+            run.paused = match (paused, run.paused.take()) {
+                (Some(_), Some(since)) => Some(since),
+                (next, _) => next,
+            };
+        }
+        if let Some(found) = update.reconciliation {
+            if run
+                .reconciliation
+                .as_ref()
+                .is_none_or(|current| !current.same_facts(&found))
+            {
+                run.reconciliation = Some(found);
+            }
+        }
+        // HS2-WBREDM: a control action that changed the worker or the pause without
+        // changing the state is still its own history entry.
+        if entry.is_none()
+            && update.control.is_some()
+            && (run.worker_id != before.worker_id
+                || run.paused.is_some() != before.paused.is_some())
+        {
+            entry = Some(RunTransition {
+                at_ms: now_ms,
+                from: Some(run.state),
+                to: run.state,
+                reason: update.reason,
+                actor_id: update.actor_id,
+                control: update.control,
+            });
+        }
+        if let Some(entry) = entry {
+            run.history.push(entry);
+            // Keep the first entry (how the run began) and the most recent ones.
+            if run.history.len() > MAX_RUN_HISTORY {
+                run.history.remove(1);
+            }
         }
         if *run == before {
             return Ok(before);
@@ -533,6 +662,14 @@ fn validate_fields(run: &Run) -> Result<(), OrchestrationError> {
     }
     if let Some(unreachable) = &run.unreachable {
         valid_identifier(&unreachable.reason)?;
+    }
+    if let Some(paused) = &run.paused {
+        for value in [&paused.reason, &paused.actor_id].into_iter().flatten() {
+            valid_identifier(value)?;
+        }
+    }
+    if let Some(found) = &run.reconciliation {
+        found.validate()?;
     }
     Ok(())
 }

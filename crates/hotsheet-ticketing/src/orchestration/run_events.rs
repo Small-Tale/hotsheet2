@@ -31,6 +31,13 @@ pub enum RunEventKind {
     Validation,
     /// An orchestrator-owned session of the run changed (HS2-GDJXGZ).
     Session,
+    /// HS2-WBREDM: a reconciliation reached a new outcome (`reason` is its disposition).
+    Reconciled,
+    /// HS2-WBREDM: the run was paused, resumed, handed off or corrected by hand.
+    Paused,
+    Resumed,
+    Handoff,
+    Corrected,
 }
 
 /// Who learned the fact: the orchestrator acting, or a change observed on the target.

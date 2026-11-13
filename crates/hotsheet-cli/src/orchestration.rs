@@ -6,6 +6,7 @@ mod capacity;
 mod gates;
 mod observer;
 mod policy;
+mod recovery;
 mod request;
 mod runs;
 mod tickets;
@@ -21,6 +22,7 @@ pub use gates::{
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
+pub use recovery::{CorrectRun, HandoffRun, PauseRun, ReconcileFailure, ReconcileSummary};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
 pub use runs::{
     DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,

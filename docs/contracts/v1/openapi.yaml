@@ -1407,7 +1407,13 @@ paths:
         no provider, and with `wait_ms` waits for the adapter's records to change. `deployments` asks for a deployment
         of the commit the run's CI gate passed through the target's checked-in `script`; it passes the gate as
         `deployments_run` under `operation_id`, is refused `gate_not_passed` without a passed covering CI gate, and
-        a `production` request always waits for a person's approval."
+        a `production` request always waits for a person's approval.
+        HS2-WBREDM adds `reconcile` (bring the run in line with its target
+        after an interruption and record, per external source, what was verified, mismatched or unverifiable; an
+        unreachable target is reported in the answer, not as an error), `pause` and `resume` (a paused run is not
+        renewed or dispatched again; resume reconciles at once), `handoff` (move the run to `to_worker`, or to a person
+        when absent; another holder's claim is never forced away) and `correct` (rewrite this machine's record by hand;
+        refused for an AI actor)."
       requestBody:
         required: true
         content:
@@ -1418,7 +1424,7 @@ paths:
                 actor:
                   $ref: '#/components/schemas/OrchestrationActor'
                 lease_minutes:
-                  description: '`renew` only.'
+                  description: '`renew` and `handoff` only.'
                   type:
                     - integer
                     - 'null'
@@ -1473,6 +1479,36 @@ paths:
                   oneOf:
                     - $ref: '#/components/schemas/OrchestrationGateArtifact'
                     - type: 'null'
+                reason:
+                  description: '`pause` (optional) and `correct` (required). A stable code, never free text.'
+                  type:
+                    - string
+                    - 'null'
+                to_worker:
+                  description: '`handoff` only. Absent hands the run to a person.'
+                  type:
+                    - string
+                    - 'null'
+                worker_label:
+                  description: '`handoff` only.'
+                  type:
+                    - string
+                    - 'null'
+                state:
+                  description: '`correct` only. The state the run is really in.'
+                  enum:
+                    - requested
+                    - queued
+                    - dispatched
+                    - completed
+                    - failed
+                    - cancelled
+                    - intervened
+                worker_id:
+                  description: '`correct` only. The worker that really holds the work.'
+                  type:
+                    - string
+                    - 'null'
               additionalProperties: false
       responses:
         '200':
@@ -1522,6 +1558,11 @@ paths:
             - gate-sync
             - deployments
             - status
+            - reconcile
+            - pause
+            - resume
+            - handoff
+            - correct
   /checkouts/{owner}/orchestration/tool-capacity:
     description: Observed capacity of the AI tool accounts an orchestration project's policy configures (HS2-AHG7HW);
       machine-local. Identifiers, states and metrics only.
@@ -2305,6 +2346,53 @@ paths:
         schema:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/run-reconcile:
+    description: Reconcile every unfinished dispatch run of the owner with its target (HS2-WBREDM); machine-local.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: reconcileOrchestrationRuns
+      description:
+        Reads each unfinished run's target ticket, brings the run in line with it, repeats a cancel the target was never
+        told about, and records per external source what was verified, mismatched or unverifiable. Starts no work. A
+        target that cannot be confirmed is named in that run's `unverified`, not returned as an error. Without an actor
+        each run is reconciled as whoever dispatched it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: Every unfinished run after reconciliation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRunReconcileSummary'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -17813,12 +17901,40 @@ components:
                 type: string
               actor_id:
                 type: string
+              control:
+                description:
+                  Set when a control action made this entry (HS2-WBREDM). `from` then equals `to` unless the action also
+                  changed the state.
+                enum:
+                  - pause
+                  - resume
+                  - handoff
+                  - correct
             additionalProperties: false
         unverified:
-          description: External state this answer could not verify, such as `target_claim`.
+          description:
+            External state this answer could not verify, such as `target_claim`. After a reconciliation, the code of
+            every source in `reconciliation.findings` that is `unverifiable`.
           type: array
           items:
             type: string
+        paused:
+          description: Present while the run is paused (HS2-WBREDM); the orchestrator then asks nothing of its target.
+          type: object
+          required:
+            - since_ms
+          properties:
+            since_ms:
+              type: integer
+              minimum: 0
+            reason:
+              description: A stable code, never free text.
+              type: string
+            actor_id:
+              type: string
+          additionalProperties: false
+        reconciliation:
+          $ref: '#/components/schemas/OrchestrationRunReconciliation'
         observed:
           description: The target ticket as last confirmed by a successful read (HS2-7QHWHJ).
           type: object
@@ -17906,6 +18022,11 @@ components:
                   - gate
                   - validation
                   - session
+                  - reconciled
+                  - paused
+                  - resumed
+                  - handoff
+                  - corrected
               source:
                 enum:
                   - orchestrator
@@ -19231,6 +19352,87 @@ components:
           items:
             type: string
             pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      additionalProperties: false
+    OrchestrationRunReconciliation:
+      description:
+        The outcome of the last reconciliation of an unfinished run that found something new (HS2-WBREDM). A finished
+        run keeps none.
+      type: object
+      required:
+        - at_ms
+        - disposition
+        - findings
+      properties:
+        at_ms:
+          description: When this outcome was first reached; re-checking an unchanged world keeps it.
+          type: integer
+          minimum: 0
+        disposition:
+          description: What may happen to the run next.
+          enum:
+            - finished
+            - paused
+            - hold_unverified
+            - retry_cancel
+            - retry_dispatch
+            - wait_for_dispatcher
+            - continue
+            - needs_attention
+        findings:
+          description: One finding per external source.
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required:
+              - source
+              - verification
+            properties:
+              source:
+                enum:
+                  - target_reachability
+                  - target_ticket
+                  - target_claim
+                  - run_lease
+                  - ci_run
+                  - deployment
+                  - session
+              verification:
+                enum:
+                  - verified
+                  - mismatched
+                  - unverifiable
+              reason:
+                description:
+                  Why the source is mismatched or unverifiable. A stable code, never free text; `source_not_wired`
+                  marks a source nothing reports yet.
+                type: string
+            additionalProperties: false
+      additionalProperties: false
+    OrchestrationRunReconcileSummary:
+      type: object
+      required:
+        - runs
+      properties:
+        runs:
+          type: array
+          maxItems: 1024
+          items:
+            $ref: '#/components/schemas/OrchestrationRun'
+        failed:
+          description: Runs that could not be examined at all, each with a stable code.
+          type: array
+          items:
+            type: object
+            required:
+              - run_id
+              - code
+            properties:
+              run_id:
+                type: string
+              code:
+                type: string
+            additionalProperties: false
       additionalProperties: false
     RemoteIdentity:
       type: object

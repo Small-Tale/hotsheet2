@@ -525,6 +525,9 @@ async fn main() -> Result<()> {
     state.prewarm_ai_catalog();
     // Sample this host's health on a server-local cadence (HS2-DTAVQA).
     state.spawn_host_health_sampler();
+    // Follow and reconcile orchestration runs left unfinished by the last run of this
+    // server (HS2-WBREDM). Idle when there are none.
+    state.spawn_run_recovery();
 
     // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or
     // a quiescent restart) stops accepting and tells long waits to finish; open connections

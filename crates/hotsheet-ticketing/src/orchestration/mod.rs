@@ -10,6 +10,7 @@ mod gates;
 mod grants;
 mod manifest;
 mod policy;
+mod reconcile;
 mod run_events;
 mod runs;
 mod storage;
@@ -52,12 +53,18 @@ pub use policy::{
     PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SetPolicy,
     Speculation, TargetPolicy, ToolPolicy, WindDown,
 };
+pub use reconcile::{
+    Alignment, Assessment, Disposition, ExternalSource, ExternalWork, MAX_FINDINGS, Observations,
+    Observed, RunReconciliation, SOURCE_NOT_WIRED, SourceFinding, TargetFacts, Verification, align,
+    assess,
+};
 pub use run_events::{
     RunEvent, RunEventEntry, RunEventJournal, RunEventKind, RunEventPage, RunEventSource,
 };
 pub use runs::{
-    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunError, RunObservation, RunRegistry,
-    RunState, RunTarget, RunTicket, RunTransition, RunUnreachable, RunUpdate,
+    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunControl, RunError, RunObservation,
+    RunPause, RunRegistry, RunState, RunTarget, RunTicket, RunTransition, RunUnreachable,
+    RunUpdate,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,
@@ -234,6 +241,8 @@ mod gate_tests;
 mod grant_tests;
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod reconcile_tests;
 #[cfg(test)]
 mod run_event_tests;
 #[cfg(test)]

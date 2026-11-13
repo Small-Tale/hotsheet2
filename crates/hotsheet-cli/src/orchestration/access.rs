@@ -10,8 +10,9 @@ use hotsheet_ticketing::orchestration::{
 
 use super::*;
 
-/// How often `authorize` reads again after losing a race to a concurrent resolve.
-const RESOLVE_RETRIES: usize = 3;
+/// How often `authorize` resolves again after losing a race with another resolution
+/// of the same target.
+pub(super) const RESOLVE_ATTEMPTS: usize = 8;
 
 /// Proof that one actor may perform one action now. Later steps report their result
 /// with [`OrchestrationRuntime::record_outcome`] under the same operation id.
@@ -256,10 +257,12 @@ impl OrchestrationRuntime {
         // An unknown owner, tombstoned target or failed probe is a denial, not an error
         // the caller could mistake for "try the action anyway".
         let mut resolution = self.resolve(target, tx);
-        // HS2-5JBYPV: followers confirm their authority beside ordinary requests. A
-        // resolve that lost that race to another resolve has nothing wrong with its
-        // target: read again, a bounded number of times, instead of denying.
-        for _ in 0..RESOLVE_RETRIES {
+        // HS2-WBREDM: every resolution rewrites the binding's observation, so two of
+        // the same target at once (a follower and a request, or the CLI beside the
+        // server) leave the later writer with a conflict. That is contention on this
+        // machine and says nothing about the target: resolve again, a bounded number
+        // of times, rather than deny.
+        for _ in 0..RESOLVE_ATTEMPTS {
             if !matches!(resolution, Err(OrchestrationError::Conflict)) {
                 break;
             }

@@ -270,6 +270,31 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
     });
 }
 
+impl AppState {
+    /// HS2-WBREDM: at server start, follow every target that still has an unfinished
+    /// run. A follower's first step reconciles each of those runs with its target, so
+    /// nothing is resumed on a record that went stale while this server was down. With
+    /// no unfinished run nothing is started and no target is contacted. Call once,
+    /// after the runtime is up and this process is the serving instance.
+    pub fn spawn_run_recovery(&self) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            let _ = tokio::task::spawn_blocking(move || {
+                let Ok(handle) = tokio::runtime::Handle::try_current() else {
+                    return;
+                };
+                let Ok(shared) = runtime(&state, handle) else {
+                    return;
+                };
+                for owner in shared.run_owners().unwrap_or_default() {
+                    ensure_watchers_blocking(&state, &owner);
+                }
+            })
+            .await;
+        });
+    }
+}
+
 /// The owning checkout of a path that should have its targets followed: a dispatch,
 /// a gate link or deployment request, or someone waiting on the run event stream.
 fn watched_owner(method: &Method, path: &str) -> Option<String> {
@@ -289,6 +314,20 @@ fn watched_owner(method: &Method, path: &str) -> Option<String> {
             ],
         )
         | ("GET", ["checkouts", owner, "orchestration", "run-events"]) => Some((*owner).to_owned()),
+        // HS2-WBREDM: a run that was resumed, handed off or corrected back to life, or
+        // an explicit reconciliation, is followed from then on.
+        ("POST", ["checkouts", owner, "orchestration", "run-reconcile"])
+        | (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "runs",
+                _,
+                "reconcile" | "resume" | "handoff" | "correct",
+            ],
+        ) => Some((*owner).to_owned()),
         _ => None,
     }
 }

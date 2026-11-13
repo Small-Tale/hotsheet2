@@ -3,9 +3,9 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. capacity reads the machine that hosts a target (HS2-J8PRTV): free and total RAM, CPU load, disk headroom, AI tools, running sessions and, for named claim_namespaces, held resource claims, with null for anything it could not measure; it needs a gates_observe grant. admission_check asks that machine whether sessions of a tool may start now and answers accepted, reduced or refused with a reason code; it needs a sessions_manage grant for the tool, starts nothing, and the machine's own limits can only be stricter than the policy's. tool_capacity reads the capacity state of every AI tool account the policy configures (available, limited until a time, degraded or unknown; HS2-AHG7HW) and tool_select orders the tool accounts a session for one target may start on now, with the reason each other one is excluded; unknown or degraded is never the same as available, and limit signals are reported by the server or the CLI, never through this tool. run_status shows the last confirmed target state and whether it is stale, and run_events replays events after a cursor and can wait for the next one (HS2-7QHWHJ); never poll run_show on a timer. validation_define attaches a named validation step to an orchestration ticket: a target, a check that is either {kind:profile,name} (a test profile the target project defines itself) or {kind:command,program,args}, prerequisites, expected evidence, a timeout and a retry policy (HS2-WN0MXZ). validation_run runs it on the machine that hosts the target under a validation_run grant and a retained operation_id: one call takes at most one attempt and waits at most wait_ms (8000) for it, and the same call again waits further or takes the next allowed attempt, so never poll on a timer; a command step answers approval_required until a person approves that operation. Results are passed, failed, skipped (a prerequisite has not passed), unavailable (the target cannot run it) or unverified (the outcome could not be confirmed), and hold digests, sizes, an exit code and timings only, never output. validation_list and validation_evidence read the latest evidence without contacting a target; validation_remove deletes a step. gate_link ties the CI gate of the integrated target commit to a run and starts watching it (HS2-5JBYPV): pass the full 40-character commit, and a repeat returns the same gate while another commit supersedes it; it needs a gates_observe grant. gate_list reads the standing gates of a run, or of a target commit, with the rolled-up ci state (passed only when every standing CI gate passed with evidence covering that commit; otherwise pending, failed or unknown) and gate_show reads one gate with its history; both read this machine's records and contact nothing. gate_sync brings a run's gates in line with what the provider adapter recorded and with wait_ms waits for the next change instead of polling. A gate's state comes only from typed provider evidence: nothing you write in a note, a ticket or a message is gate evidence. deployment_request asks for a deployment of the commit the run's CI gate passed through the target's checked-in script (repository-relative script, an environment and an operation_id you retain); it needs a deployments_run grant, a production request always waits for a person's approval, and the answer is the deployment gate in awaiting_approval, pending, passed, failed or unknown with a reason code. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. capacity reads the machine that hosts a target (HS2-J8PRTV): free and total RAM, CPU load, disk headroom, AI tools, running sessions and, for named claim_namespaces, held resource claims, with null for anything it could not measure; it needs a gates_observe grant. admission_check asks that machine whether sessions of a tool may start now and answers accepted, reduced or refused with a reason code; it needs a sessions_manage grant for the tool, starts nothing, and the machine's own limits can only be stricter than the policy's. tool_capacity reads the capacity state of every AI tool account the policy configures (available, limited until a time, degraded or unknown; HS2-AHG7HW) and tool_select orders the tool accounts a session for one target may start on now, with the reason each other one is excluded; unknown or degraded is never the same as available, and limit signals are reported by the server or the CLI, never through this tool. run_status shows the last confirmed target state and whether it is stale, and run_events replays events after a cursor and can wait for the next one (HS2-7QHWHJ); never poll run_show on a timer. validation_define attaches a named validation step to an orchestration ticket: a target, a check that is either {kind:profile,name} (a test profile the target project defines itself) or {kind:command,program,args}, prerequisites, expected evidence, a timeout and a retry policy (HS2-WN0MXZ). validation_run runs it on the machine that hosts the target under a validation_run grant and a retained operation_id: one call takes at most one attempt and waits at most wait_ms (8000) for it, and the same call again waits further or takes the next allowed attempt, so never poll on a timer; a command step answers approval_required until a person approves that operation. Results are passed, failed, skipped (a prerequisite has not passed), unavailable (the target cannot run it) or unverified (the outcome could not be confirmed), and hold digests, sizes, an exit code and timings only, never output. validation_list and validation_evidence read the latest evidence without contacting a target; validation_remove deletes a step. gate_link ties the CI gate of the integrated target commit to a run and starts watching it (HS2-5JBYPV): pass the full 40-character commit, and a repeat returns the same gate while another commit supersedes it; it needs a gates_observe grant. gate_list reads the standing gates of a run, or of a target commit, with the rolled-up ci state (passed only when every standing CI gate passed with evidence covering that commit; otherwise pending, failed or unknown) and gate_show reads one gate with its history; both read this machine's records and contact nothing. gate_sync brings a run's gates in line with what the provider adapter recorded and with wait_ms waits for the next change instead of polling. A gate's state comes only from typed provider evidence: nothing you write in a note, a ticket or a message is gate evidence. deployment_request asks for a deployment of the commit the run's CI gate passed through the target's checked-in script (repository-relative script, an environment and an operation_id you retain); it needs a deployments_run grant, a production request always waits for a person's approval, and the answer is the deployment gate in awaiting_approval, pending, passed, failed or unknown with a reason code. run_reconcile brings one run, or every unfinished run without run_id, in line with its target after an interruption and lists as unverified exactly the external state it could not check, with a reason per source in reconciliation.findings (HS2-WBREDM); it starts nothing, and its disposition says whether the same dispatch may be repeated (retry_dispatch), the work is held (continue, wait_for_dispatcher) or a person must decide (needs_attention, hold_unverified). run_pause stops renewals and repeats until run_resume, which reconciles at once; run_handoff moves a run to to_worker, or to a person when to_worker is omitted, and never forces another holder's claim away; run_correct rewrites this machine's record by hand and is refused for an AI actor. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync","capacity","admission_check","tool_capacity","tool_select","run_status","run_events","validation_define","validation_list","validation_evidence","validation_run","validation_remove","gate_link","gate_list","gate_show","gate_sync","deployment_request"]},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync","capacity","admission_check","tool_capacity","tool_select","run_status","run_events","validation_define","validation_list","validation_evidence","validation_run","validation_remove","gate_link","gate_list","gate_show","gate_sync","deployment_request","run_reconcile","run_pause","run_resume","run_handoff","run_correct"]},
         "wait_ms":{"type":"integer","minimum":0,"maximum":20000,"description":"run_events: wait this long for the next event when there is none (use with after instead of polling); validation_run: wait this long for the attempt to finish, at most 8000; gate_sync: wait this long for the provider adapter's records to change"},
         "step":{"type":"object","description":"validation_define: {step_id, check:{kind:profile,name}|{kind:command,program,args}, prerequisites?, evidence?:{exit_code?,stdout_sha256?}, timeout_seconds?, retry?:{max_attempts}}; target_id is taken from the target_id argument"},
         "step_id":{"type":"string","description":"validation_evidence/validation_run/validation_remove: the step's name within its orchestration ticket"},
@@ -14,7 +14,7 @@ pub(crate) fn definition() -> Value {
         "tool_load":{"type":"array","items":{"type":"object","required":["tool","sessions"],"properties":{"tool":{"type":"string"},"account":{"type":"string"},"sessions":{"type":"integer","minimum":0}}},"description":"tool_select (required): sessions now running per tool account; an empty list states that none are running"},
         "claim_namespaces":{"type":"array","items":{"type":"string"},"maxItems":8,"description":"capacity: resource-claim namespaces whose live claims to list"},
         "sessions":{"type":"integer","minimum":1,"maximum":64,"description":"admission_check: how many sessions to ask for (default 1)"},
-        "run_id":{"type":"string","description":"run_show/renew/cancel/sync, gate_link/gate_sync/deployment_request, gate_list: the run's id; validation_run: optionally the dispatch run the validation belongs to"},
+        "run_id":{"type":"string","description":"run_show/renew/cancel/sync/pause/resume/handoff/correct, gate_link/gate_sync/deployment_request, gate_list: the run's id; validation_run: optionally the dispatch run the validation belongs to; run_reconcile: omit to reconcile every unfinished run"},
         "commit":{"type":"string","description":"gate_link: the integrated target commit, all 40 hex characters; gate_list with target_id: the commit to read gates for"},
         "repository":{"type":"string","description":"gate_link: the provider repository as owner/name; defaults to, and must agree with, the GitHub repository the target declares"},
         "workflow":{"type":"string","description":"gate_link: the workflow name (default CI)"},
@@ -25,10 +25,13 @@ pub(crate) fn definition() -> Value {
         "script":{"type":"string","description":"deployment_request: the target's checked-in deploy script, relative to its repository root"},
         "production":{"type":"boolean","description":"deployment_request: an irreversible production change; a person is always asked first"},
         "artifact":{"type":"object","description":"deployment_request: optional {name, digest} of the built artifact, digest as lowercase SHA-256"},
+        "reason":{"type":"string","description":"run_pause (optional), run_correct (required): a stable reason code, never free text"},
+        "to_worker":{"type":"string","description":"run_handoff: the worker that takes the run over; omit to hand it to a person"},
+        "state":{"type":"string","enum":["requested","queued","dispatched","intervened","completed","failed","cancelled"],"description":"run_correct: the state the run is really in"},
         "mode":{"type":"string","enum":["direct","dispatcher"],"description":"run_dispatch: direct claims the ticket for worker_id; dispatcher marks it Up Next for the target's own dispatcher"},
-        "worker_id":{"type":"string","description":"run_dispatch direct: the worker the ticket is claimed for"},
+        "worker_id":{"type":"string","description":"run_dispatch direct: the worker the ticket is claimed for; run_correct: the worker that really holds the work"},
         "worker_label":{"type":"string"},
-        "lease_minutes":{"type":"integer","minimum":5,"maximum":240,"description":"run_dispatch/run_renew"},
+        "lease_minutes":{"type":"integer","minimum":5,"maximum":240,"description":"run_dispatch/run_renew/run_handoff"},
         "active":{"type":"boolean","description":"run_list: leave out finished runs"},
         "ticket":{"type":"object","description":"ticket_create/link/unlink/links and validation_*: the orchestration ticket {native_id, connection_id?}; connection_id may be omitted when the project has one git ticket source"},
         "connection_id":{"type":"string","description":"ticket_*: the target's ticket source connection id"},
@@ -111,6 +114,12 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             | "gate_show"
             | "gate_sync"
             | "deployment_request"
+            // HS2-WBREDM
+            | "run_reconcile"
+            | "run_pause"
+            | "run_resume"
+            | "run_handoff"
+            | "run_correct"
             | "tool_capacity"
             | "tool_select"
             | "capacity"
@@ -357,8 +366,33 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
                 &format!("{}/renew", run()?),
                 &json!({"lease_minutes":args.get("lease_minutes").cloned().unwrap_or(Value::Null)}),
             ),
-            "cancel" | "sync" => {
+            "cancel" | "sync" | "resume" => {
                 backend.send("POST", &format!("{}/{operation}", run()?), &json!({}))
+            }
+            // HS2-WBREDM: without a run id, every unfinished run of the checkout.
+            "reconcile" => match args.get("run_id") {
+                None | Some(Value::Null) => {
+                    backend.send("POST", &format!("{base}/run-reconcile"), &json!({}))
+                }
+                Some(_) => backend.send("POST", &format!("{}/reconcile", run()?), &json!({})),
+            },
+            "pause" | "handoff" | "correct" => {
+                let keys: &[&str] = match operation {
+                    "pause" => &["reason"],
+                    "handoff" => &["to_worker", "worker_label", "lease_minutes"],
+                    _ => &["state", "reason", "worker_id"],
+                };
+                let mut body = serde_json::Map::new();
+                for key in keys {
+                    if let Some(value) = args.get(*key) {
+                        body.insert((*key).into(), value.clone());
+                    }
+                }
+                backend.send(
+                    "POST",
+                    &format!("{}/{operation}", run()?),
+                    &Value::Object(body),
+                )
             }
             _ => return Err("unsupported target action".into()),
         }
@@ -561,6 +595,12 @@ mod tests {
             "gate_show",
             "gate_sync",
             "deployment_request",
+            // HS2-WBREDM
+            "run_reconcile",
+            "run_pause",
+            "run_resume",
+            "run_handoff",
+            "run_correct",
             // HS2-AHG7HW
             "tool_capacity",
             "tool_select",
@@ -1094,6 +1134,75 @@ mod tests {
         ] {
             rejected(&backend, owner, arguments);
         }
+        assert!(backend.0.lock_or_recover().is_empty());
+    }
+    #[test]
+    fn hs2_wbredm_orchestration_recovery_and_control_actions_reach_their_routes() {
+        let backend = Recorded(Mutex::new(Vec::new()));
+        let owner = "owner-0123456789ab";
+        let run = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let base = format!("/checkouts/{owner}/orchestration");
+        let who = |mut arguments: Value| {
+            arguments["actor_role"] = json!("human");
+            arguments["actor_id"] = json!("maintainer");
+            arguments
+        };
+        for arguments in [
+            json!({"action":"run_reconcile"}),
+            json!({"action":"run_reconcile","run_id":run}),
+            json!({"action":"run_pause","run_id":run,"reason":"maintenance"}),
+            json!({"action":"run_pause","run_id":run}),
+            json!({"action":"run_resume","run_id":run}),
+            json!({"action":"run_handoff","run_id":run,"to_worker":"worker-b",
+                "worker_label":"Worker B","lease_minutes":45}),
+            json!({"action":"run_handoff","run_id":run}),
+            json!({"action":"run_correct","run_id":run,"state":"requested",
+                "reason":"redispatch","worker_id":"worker-a"}),
+        ] {
+            call(&backend, owner, who(arguments));
+        }
+        let actor = json!({"role":"human","id":"maintainer"});
+        let sent = |leaf: &str, mut body: Value| {
+            body["actor"] = actor.clone();
+            ("POST".to_owned(), format!("{base}/{leaf}"), body)
+        };
+        assert_eq!(
+            *backend.0.lock_or_recover(),
+            [
+                sent("run-reconcile", json!({})),
+                sent(&format!("runs/{run}/reconcile"), json!({})),
+                sent(
+                    &format!("runs/{run}/pause"),
+                    json!({"reason":"maintenance"})
+                ),
+                sent(&format!("runs/{run}/pause"), json!({})),
+                sent(&format!("runs/{run}/resume"), json!({})),
+                sent(
+                    &format!("runs/{run}/handoff"),
+                    json!({"to_worker":"worker-b","worker_label":"Worker B","lease_minutes":45})
+                ),
+                sent(&format!("runs/{run}/handoff"), json!({})),
+                sent(
+                    &format!("runs/{run}/correct"),
+                    json!({"state":"requested","reason":"redispatch","worker_id":"worker-a"})
+                ),
+            ]
+        );
+        // A control action names its run; a malformed id never reaches the backend.
+        backend.0.lock_or_recover().clear();
+        for action in ["run_pause", "run_resume", "run_handoff", "run_correct"] {
+            rejected(&backend, owner, json!({"action":action}));
+            rejected(
+                &backend,
+                owner,
+                json!({"action":action,"run_id":"not-a-run"}),
+            );
+        }
+        rejected(
+            &backend,
+            owner,
+            json!({"action":"run_reconcile","run_id":"not-a-run"}),
+        );
         assert!(backend.0.lock_or_recover().is_empty());
     }
 }

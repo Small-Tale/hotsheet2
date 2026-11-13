@@ -406,6 +406,13 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id/deployments",
             "/checkouts/owner/orchestration/gates",
             "/checkouts/owner/orchestration/gates/id",
+            // HS2-WBREDM: reconciliation and run control act on this machine's records.
+            "/checkouts/owner/orchestration/run-reconcile",
+            "/checkouts/owner/orchestration/runs/id/reconcile",
+            "/checkouts/owner/orchestration/runs/id/pause",
+            "/checkouts/owner/orchestration/runs/id/resume",
+            "/checkouts/owner/orchestration/runs/id/handoff",
+            "/checkouts/owner/orchestration/runs/id/correct",
             // HS2-AHG7HW: observed tool capacity is this machine's.
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",

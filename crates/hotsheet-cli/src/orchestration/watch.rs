@@ -6,7 +6,7 @@
 //! tickets changed. No target is contacted while it has no active run.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::checkouts::Checkout;
-use hotsheet_ticketing::orchestration::{Run, TargetAction, TargetOpError};
+use hotsheet_ticketing::orchestration::{ExternalSource, Run, TargetAction, TargetOpError};
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -55,6 +55,8 @@ pub trait TargetEvents: Send + Sync {
 pub struct WatchState {
     cursor: Option<u64>,
     authorized: Option<(Authorized, u64)>,
+    /// HS2-WBREDM: the last step failed, so the next one that succeeds is a reconnect.
+    reconnecting: bool,
 }
 
 impl WatchState {
@@ -76,7 +78,7 @@ pub struct WatchStep {
 }
 
 /// The actor a run's supervision acts as: whoever dispatched it.
-fn supervisor(run: &Run) -> Option<MutationActor> {
+pub(super) fn supervisor(run: &Run) -> Option<MutationActor> {
     let id = run.history.first()?.actor_id.clone()?;
     MutationActor::parse("system", Some(id)).ok()
 }
@@ -135,6 +137,23 @@ impl OrchestrationRuntime {
                 }
             }
         };
+        // HS2-WBREDM: whenever the follower (re)connects, or cannot tell what it missed,
+        // every run is reconciled rather than only read: nothing is resumed on a
+        // record that went stale while the target was out of sight.
+        let reconcile = |runs: &[&Run], step: &mut WatchStep, tx: &mut Transaction<'_>| {
+            for run in runs {
+                let confirmed = self
+                    .run_reconcile(owner_id, &run.run_id, supervisor(run).as_ref(), tx)
+                    .is_ok_and(|view| {
+                        !view
+                            .unverified
+                            .contains(&ExternalSource::TargetReachability.code())
+                    });
+                if confirmed {
+                    step.synced.push(run.run_id.clone());
+                }
+            }
+        };
         let all: Vec<&Run> = runs.iter().collect();
         let now_ms = tx.clock.now_ms();
         let stale = state
@@ -154,7 +173,8 @@ impl OrchestrationRuntime {
                 Ok(authorized) => state.authorized = Some((authorized, now_ms)),
                 Err(_) => {
                     state.authorized = None;
-                    sync(&all, &mut step, tx);
+                    state.reconnecting = true;
+                    reconcile(&all, &mut step, tx);
                     step.failed = true;
                     return step;
                 }
@@ -184,7 +204,8 @@ impl OrchestrationRuntime {
             Err(_) => {
                 // Keep the cursor: the next successful request replays what was missed.
                 state.authorized = None;
-                sync(&all, &mut step, tx);
+                state.reconnecting = true;
+                reconcile(&all, &mut step, tx);
                 step.failed = true;
                 return step;
             }
@@ -193,9 +214,10 @@ impl OrchestrationRuntime {
         // A cursor that goes backwards means the host restarted its stream.
         let reset = state.cursor.is_some_and(|cursor| page.cursor < cursor);
         state.cursor = Some(page.cursor);
-        if first || reset || page.overflow {
+        let reconnected = std::mem::take(&mut state.reconnecting);
+        if first || reset || page.overflow || reconnected {
             // Nothing is known about what happened before: catch every run up.
-            sync(&all, &mut step, tx);
+            reconcile(&all, &mut step, tx);
         } else {
             let changed: Vec<&Run> = runs
                 .iter()

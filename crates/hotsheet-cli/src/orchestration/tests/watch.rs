@@ -244,6 +244,13 @@ fn hs2_7qhwhj_a_watch_is_idle_without_runs_and_syncs_only_changed_tickets() {
                 Some("claimed".into())
             ),
             (Observed, Target, None, Some("started".into())),
+            // HS2-WBREDM: connecting reconciles the run once; its outcome is one event.
+            (
+                RunEventKind::Reconciled,
+                Orchestrator,
+                None,
+                Some("continue".into())
+            ),
             (
                 State,
                 Target,
@@ -412,13 +419,17 @@ fn hs2_7qhwhj_an_outage_marks_runs_stale_once_and_reconnect_replays_from_the_cur
     assert_eq!(done.run.state, RunState::Completed);
     assert_eq!(done.reachability, "reachable");
     let stream: Vec<_> = kinds(&m, &run_id).into_iter().map(|e| e.0).collect();
-    use RunEventKind::{Observed, State, TargetReachable, TargetUnreachable};
+    use RunEventKind::{Observed, Reconciled, State, TargetReachable, TargetUnreachable};
+    // HS2-WBREDM: each new reconciliation outcome is one event: confirmed on connect,
+    // held while the target could not be verified. The finished run keeps none.
     assert_eq!(
         stream,
         [
             State,
             Observed,
+            Reconciled,
             TargetUnreachable,
+            Reconciled,
             State,
             Observed,
             TargetReachable
@@ -749,4 +760,83 @@ fn hs2_7qhwhj_a_remote_target_is_followed_through_the_reviewed_transport() {
         Some("peer-human")
     );
     assert_eq!(state.cursor(), Some(1));
+}
+
+#[test]
+fn hs2_wbredm_the_follower_reconciles_every_run_on_connect_and_on_reconnect() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let first = target_ticket(&m, "First");
+    let second = target_ticket(&m, "Second");
+    let run_one = dispatch(&m, &orchestration, &first, "op-1", "worker-a");
+    let run_two = dispatch(&m, &orchestration, &second, "op-22", "worker-b");
+    let outcome = |run_id: &str| {
+        m.runtime
+            .run(&m.owner.id, run_id)
+            .unwrap()
+            .reconciliation
+            .map(|found| found.disposition.code())
+    };
+    assert_eq!(outcome(&run_one), None);
+    // A restarted host starts a follower, and its first step reconciles every run.
+    let mut state = WatchState::default();
+    let connected = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(connected.synced, [run_one.clone(), run_two.clone()]);
+    assert_eq!(outcome(&run_one), Some("continue"));
+    assert_eq!(outcome(&run_two), Some("continue"));
+    // A quiet step reconciles nothing and reports nothing.
+    let before = kinds(&m, &run_two).len();
+    let quiet = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(quiet.synced.is_empty() && !quiet.failed);
+    assert_eq!(kinds(&m, &run_two).len(), before);
+    // The change stream drops, and while it is down a claim is released without the
+    // feed ever naming that ticket.
+    feed.failing.store(true, Ordering::SeqCst);
+    let down = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(down.failed);
+    ops::release(&m.target_store, &second.id, NOW.into(), "worker-b", false).unwrap();
+    feed.failing.store(false, Ordering::SeqCst);
+    // Reconnecting reconciles every run, not only the tickets the feed replays.
+    let back = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(!back.failed);
+    assert_eq!(back.synced, [run_one.clone(), run_two.clone()]);
+    let taken = m.runtime.run(&m.owner.id, &run_two).unwrap();
+    assert_eq!(taken.state, RunState::Intervened);
+    assert_eq!(outcome(&run_two), Some("needs_attention"));
+    assert_eq!(outcome(&run_one), Some("continue"));
+    // Reconnecting is one reconciliation: the following quiet step does nothing.
+    let before = kinds(&m, &run_two).len();
+    let quiet = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(quiet.synced.is_empty());
+    assert_eq!(kinds(&m, &run_two).len(), before);
+    assert_eq!(
+        kinds(&m, &run_two)
+            .into_iter()
+            .filter(|event| event.0 == RunEventKind::Reconciled)
+            .map(|event| event.3.unwrap())
+            .collect::<Vec<_>>(),
+        ["continue", "needs_attention"]
+    );
 }
