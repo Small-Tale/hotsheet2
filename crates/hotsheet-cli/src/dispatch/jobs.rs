@@ -304,7 +304,8 @@ fn watch_start(home: &Path, args: MonitorArgs) -> Result<()> {
 /// Two starts can race: both spawn, one monitor claims the slot and the other exits.
 fn ensure_monitor(home: &Path, args: MonitorArgs) -> Result<(MonitorInfo, bool)> {
     let spawn = || {
-        let mut command = Command::new(std::env::current_exe()?);
+        // HS2-J79CZF: launched without inherited repository or build-pin variables.
+        let mut command = hotsheet_ticketing::git::launch(std::env::current_exe()?);
         command
             .args(["job", "monitor"])
             .args(args.flags())
