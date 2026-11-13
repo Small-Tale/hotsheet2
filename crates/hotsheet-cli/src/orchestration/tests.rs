@@ -22,6 +22,7 @@ mod access;
 mod policy;
 mod runs;
 mod tickets;
+mod tool_capacity;
 mod watch;
 
 fn id(n: u128) -> String {

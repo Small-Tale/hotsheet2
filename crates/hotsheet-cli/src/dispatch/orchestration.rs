@@ -1,7 +1,7 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
 //! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
-//! HS2-EBHDSB dispatch runs.
+//! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -30,6 +30,8 @@ enum OrchestrationCmd {
     Policy(PolicyArgs),
     /// List and answer decisions the policy will not take without a person.
     Approval(ApprovalArgs),
+    /// Show observed AI tool capacity, report a limit signal, and select a tool.
+    ToolCapacity(ToolCapacityArgs),
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -453,6 +455,118 @@ enum ApprovalCmd {
     /// Refuse one pending request.
     Deny { approval_id: String },
 }
+#[derive(Args)]
+struct ToolCapacityArgs {
+    /// Registered owning checkout id.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: ToolCapacityCmd,
+}
+#[derive(Subcommand)]
+enum ToolCapacityCmd {
+    /// The capacity state of every tool account the policy configures: available,
+    /// limited until a time, degraded or unknown. Unknown is never assumed available.
+    Show,
+    /// Report one observed signal for a configured tool. Re-running the same report
+    /// changes nothing. `recovered` clears a limit; an AI actor is refused for it.
+    Signal {
+        #[arg(long)]
+        tool: String,
+        /// The policy account; omitted, the signal is recorded as unattributed.
+        #[arg(long)]
+        account: Option<String>,
+        /// rate_limit, usage_limit, recovered or usage.
+        #[arg(long)]
+        kind: String,
+        /// When it was observed, in Unix milliseconds (default: now).
+        #[arg(long)]
+        at_ms: Option<u64>,
+        /// rate_limit/usage_limit: when the provider says the limit resets.
+        #[arg(long)]
+        resets_at_ms: Option<u64>,
+        /// usage: the turn's cost in cents; omitted, the cost is unknown.
+        #[arg(long)]
+        cost_cents: Option<u64>,
+        /// An opaque session id that keeps two sessions' equal signals apart.
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// The ordered tool accounts a session for one target may start on now, and why
+    /// each other one is excluded. Reads only.
+    Select {
+        /// The declared target's id.
+        #[arg(long)]
+        target: String,
+        /// The preferred tool; omitted, any tool the target allows.
+        #[arg(long)]
+        tool: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        /// Sessions now running, as `tool=N` or `tool/account=N`; repeat per tool
+        /// account. Omit when none are running.
+        #[arg(long = "load")]
+        load: Vec<String>,
+    },
+}
+/// `tool=N` or `tool/account=N` as one observed session count.
+fn session_count(value: &str) -> Result<Value> {
+    let invalid = || anyhow::anyhow!("--load must be tool=N or tool/account=N");
+    let (name, sessions) = value.split_once('=').ok_or_else(invalid)?;
+    let sessions: u32 = sessions.parse().map_err(|_| invalid())?;
+    let (tool, account) = match name.split_once('/') {
+        Some((tool, account)) => (tool, Some(account)),
+        None => (name, None),
+    };
+    if tool.is_empty() || account.is_some_and(str::is_empty) {
+        return Err(invalid());
+    }
+    Ok(json!({"tool":tool,"account":account,"sessions":sessions}))
+}
+fn tool_capacity_route(
+    project: &str,
+    command: ToolCapacityCmd,
+) -> Result<(&'static str, String, Value)> {
+    let base = format!("/checkouts/{project}/orchestration/tool-capacity");
+    Ok(match command {
+        ToolCapacityCmd::Show => ("GET", base, Value::Null),
+        ToolCapacityCmd::Signal {
+            tool,
+            account,
+            kind,
+            at_ms,
+            resets_at_ms,
+            cost_cents,
+            session,
+        } => {
+            let at_ms = match at_ms {
+                Some(at_ms) => at_ms,
+                None => u64::try_from(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis(),
+                )?,
+            };
+            (
+                "POST",
+                format!("{base}/signals"),
+                json!({"tool":tool,"account":account,"kind":kind,"at_ms":at_ms,
+                    "resets_at_ms":resets_at_ms,"cost_cents":cost_cents,"session":session}),
+            )
+        }
+        ToolCapacityCmd::Select {
+            target,
+            tool,
+            model,
+            load,
+        } => (
+            "POST",
+            format!("{base}/select"),
+            json!({"target_id":target,"tool":tool,"model":model,
+                "load":load.iter().map(|value| session_count(value)).collect::<Result<Vec<_>>>()?}),
+        ),
+    })
+}
 /// A policy body from a file, or stdin for `-`.
 fn policy_file(path: &str) -> Result<Value> {
     let text = if path == "-" {
@@ -831,6 +945,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Run(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = run_route(&owner_id, arguments.command);
+            (owner_id, request)
+        }
+        OrchestrationCmd::ToolCapacity(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = tool_capacity_route(&owner_id, arguments.command)?;
             (owner_id, request)
         }
         OrchestrationCmd::Policy(arguments) => {

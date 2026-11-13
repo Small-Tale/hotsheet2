@@ -484,3 +484,5 @@ mod policy;
 mod runs;
 #[path = "remote_servers/target_tickets.rs"]
 mod target_tickets;
+#[path = "remote_servers/tool_capacity.rs"]
+mod tool_capacity;

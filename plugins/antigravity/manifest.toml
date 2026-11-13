@@ -60,3 +60,12 @@ session_options = ["model", "effort"]
 [launch]
 program = "agy"
 args = []
+
+[capacity]
+# Limit signals the host observes from Antigravity (docs/05 §5.3, docs/26 §26.11,
+# HS2-AHG7HW): none yet. Unknown is never read as "no limit".
+rate_limit_errors = "unknown"
+usage_limit_errors = "unknown"
+reset_times = "unknown"
+usage_events = "unknown"
+cost = "unknown"

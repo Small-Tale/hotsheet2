@@ -56,6 +56,9 @@ pub enum PluginError {
     Toml(#[from] toml::de::Error),
     #[error("plugin '{id}' references missing file '{file}'")]
     MissingFile { id: String, file: String },
+    /// HS2-AHG7HW: a `[capacity]` declaration that contradicts itself.
+    #[error("plugin '{id}' has an invalid capacity declaration: {reason}")]
+    InvalidCapacity { id: String, reason: &'static str },
     #[error("reading plugin dir {path}: {source}")]
     Io {
         path: String,
@@ -118,6 +121,66 @@ pub struct Manifest {
     /// sessions cannot be messaged, and the host reports that capability as unsupported.
     #[serde(default)]
     pub session_push: Option<SessionPushSpec>,
+    /// Optional: which **limit signals** the host can observe from this tool (HS2-AHG7HW,
+    /// `docs/05` §5.3). Absent = every signal is unknown; unknown is never read as "no
+    /// limit".
+    #[serde(default)]
+    pub capacity: Option<CapacitySpec>,
+}
+
+/// Whether the host can observe one kind of signal from a tool (HS2-AHG7HW). There is no
+/// "never happens" value: a signal the host cannot observe is unknown, not absent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalReport {
+    Reported,
+    #[default]
+    Unknown,
+}
+
+impl SignalReport {
+    pub fn is_reported(self) -> bool {
+        self == Self::Reported
+    }
+}
+
+/// A tool's capacity-signal declaration (`docs/05` §5.3, `docs/26` §26.11). Data only:
+/// it states what the host's existing detection observes, and selects no parser.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapacitySpec {
+    /// A turn that failed on a request-rate limit is reported as such.
+    #[serde(default)]
+    pub rate_limit_errors: SignalReport,
+    /// A turn that failed on a plan or quota usage limit is reported as such.
+    #[serde(default)]
+    pub usage_limit_errors: SignalReport,
+    /// A limit error can state when the limit resets.
+    #[serde(default)]
+    pub reset_times: SignalReport,
+    /// Completed turns are reported as usage events.
+    #[serde(default)]
+    pub usage_events: SignalReport,
+    /// Usage events can carry a cost.
+    #[serde(default)]
+    pub cost: SignalReport,
+}
+
+impl CapacitySpec {
+    /// Whether any limit error is observable; without one, "no limit seen" proves nothing.
+    pub fn reports_limits(self) -> bool {
+        self.rate_limit_errors.is_reported() || self.usage_limit_errors.is_reported()
+    }
+
+    fn problem(self) -> Option<&'static str> {
+        if self.reset_times.is_reported() && !self.reports_limits() {
+            return Some("reset_times needs a reported limit error");
+        }
+        if self.cost.is_reported() && !self.usage_events.is_reported() {
+            return Some("cost needs reported usage_events");
+        }
+        None
+    }
 }
 
 /// A tool's session-push declaration (`docs/13` §13.12). Declarative — the behavioral host
@@ -473,6 +536,12 @@ impl Plugin {
             files,
         };
         plugin.require(&plugin.manifest.instructions.section)?;
+        if let Some(reason) = plugin.manifest.capacity.and_then(CapacitySpec::problem) {
+            return Err(PluginError::InvalidCapacity {
+                id: plugin.manifest.id.clone(),
+                reason,
+            });
+        }
         if let Some(skills) = &plugin.manifest.skills {
             plugin.require(&skills.source)?;
             for additional in &skills.additional {
@@ -551,6 +620,12 @@ impl Plugin {
     /// Whether this plugin is a bundled first-party one.
     pub fn is_builtin(&self) -> bool {
         self.source == PluginSource::BuiltIn
+    }
+
+    /// The limit signals the host can observe from this tool (HS2-AHG7HW). A plugin
+    /// without a `[capacity]` section reports nothing.
+    pub fn capacity(&self) -> CapacitySpec {
+        self.manifest.capacity.unwrap_or_default()
     }
 
     /// A bundled file's contents by name.
@@ -902,6 +977,14 @@ pub fn find_in(id: &str, search_dirs: &[PathBuf]) -> Option<Plugin> {
 /// Find a plugin by id across built-ins + the default machine search path.
 pub fn find(id: &str) -> Option<Plugin> {
     find_in(id, &default_dirs())
+}
+
+/// The capacity-signal declaration of tool `id`, all unknown when no such plugin is
+/// loaded (HS2-AHG7HW).
+pub fn capacity_signals(id: &str, search_dirs: &[PathBuf]) -> CapacitySpec {
+    find_in(id, search_dirs)
+        .map(|plugin| plugin.capacity())
+        .unwrap_or_default()
 }
 
 /// Detected plugins that declare a drive, in stable plugin-registry order.

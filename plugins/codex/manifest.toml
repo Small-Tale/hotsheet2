@@ -97,6 +97,16 @@ mechanism = "codex-queue"
 # UsageEvent (docs/14, HS2-8PSAFE). `source` selects the `codex_turn_usage` parser.
 source = "codex-usage"
 
+[capacity]
+# Limit signals the host observes from Codex (docs/05 §5.3, docs/26 §26.11, HS2-AHG7HW).
+# A rollout's failed turn reports `usage_limit_exceeded`, and its message can state the
+# reset time. No request-rate limit is detected, so that stays unknown.
+rate_limit_errors = "unknown"
+usage_limit_errors = "reported"
+reset_times = "reported"
+usage_events = "reported"
+cost = "reported"
+
 [hooks]
 # Interactive Codex emits PermissionRequest only when its native permission policy would
 # show a prompt. The project-local hooks file participates in Codex's hash-based `/hooks`

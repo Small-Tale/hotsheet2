@@ -7,6 +7,7 @@ mod policy;
 mod request;
 mod runs;
 mod tickets;
+mod tool_capacity;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
@@ -19,6 +20,9 @@ pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
     LinkTargetTicket, LinkView, ListLinks, OrchestrationTicket, ReadTargetTicket, TargetTicket,
     TargetTicketFields, TargetTicketResult, UnlinkTargetTicket, UpdateTargetTicket,
+};
+pub use tool_capacity::{
+    SelectTool, SignalResult, ToolCapacityRow, ToolCapacityView, ToolSelection,
 };
 pub use watch::{
     MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetTicketEvent, WatchState,

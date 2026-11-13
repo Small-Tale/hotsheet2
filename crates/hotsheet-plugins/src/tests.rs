@@ -1667,3 +1667,108 @@ fn hs2_aebjyn_role_skills_preserve_returned_findings_and_require_the_semantic_fe
         assert!(text.contains("exact findings note id"));
     }
 }
+
+/// HS2-AHG7HW: each bundled tool declares exactly the limit signals the host observes
+/// today. A new detection changes the manifest and this table together.
+#[test]
+fn hs2_ahg7hw_bundled_plugins_declare_only_observed_capacity_signals() {
+    use SignalReport::{Reported as R, Unknown as U};
+    // rate_limit_errors, usage_limit_errors, reset_times, usage_events, cost
+    let declared = [
+        ("claude", [R, R, R, R, R]),
+        ("codex", [U, R, R, R, R]),
+        ("opencode", [U, U, U, R, U]),
+        ("antigravity", [U, U, U, U, U]),
+    ];
+    assert_eq!(builtin_plugins().len(), declared.len());
+    for (id, [rate, usage, reset, events, cost]) in declared {
+        let plugin = find_in(id, &[]).unwrap();
+        assert!(plugin.manifest.capacity.is_some(), "{id} declares capacity");
+        assert_eq!(
+            plugin.capacity(),
+            CapacitySpec {
+                rate_limit_errors: rate,
+                usage_limit_errors: usage,
+                reset_times: reset,
+                usage_events: events,
+                cost,
+            },
+            "{id}"
+        );
+        assert_eq!(capacity_signals(id, &[]), plugin.capacity());
+        assert_eq!(plugin.capacity().reports_limits(), rate == R || usage == R);
+    }
+}
+
+#[test]
+fn hs2_ahg7hw_an_undeclared_or_unloaded_tool_reports_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_plugin(tmp.path(), "acme", "Acme Agent");
+    let plugin = Plugin::from_fs_dir(&tmp.path().join("acme")).unwrap();
+    assert!(plugin.manifest.capacity.is_none());
+    assert_eq!(plugin.capacity(), CapacitySpec::default());
+    assert!(!plugin.capacity().reports_limits());
+    assert!(!SignalReport::default().is_reported());
+    assert_eq!(
+        capacity_signals("no-such-tool", &[]),
+        CapacitySpec::default()
+    );
+    assert_eq!(
+        serde_json::to_value(CapacitySpec::default()).unwrap(),
+        serde_json::json!({"rate_limit_errors":"unknown","usage_limit_errors":"unknown",
+            "reset_times":"unknown","usage_events":"unknown","cost":"unknown"})
+    );
+}
+
+#[test]
+fn hs2_ahg7hw_a_capacity_section_is_strictly_validated() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_plugin(tmp.path(), "acme", "Acme Agent");
+    let dir = tmp.path().join("acme");
+    let base = std::fs::read_to_string(dir.join("manifest.toml")).unwrap();
+    let load = |capacity: &str| {
+        std::fs::write(dir.join("manifest.toml"), format!("{base}\n{capacity}")).unwrap();
+        Plugin::from_fs_dir(&dir)
+    };
+    // A partial section leaves the rest unknown.
+    let partial = load("[capacity]\nusage_limit_errors = \"reported\"\n").unwrap();
+    assert_eq!(
+        partial.capacity(),
+        CapacitySpec {
+            usage_limit_errors: SignalReport::Reported,
+            ..CapacitySpec::default()
+        }
+    );
+    // Unknown keys and values are refused rather than ignored.
+    assert!(matches!(
+        load("[capacity]\nlimits = \"reported\"\n"),
+        Err(PluginError::Toml(_))
+    ));
+    for value in ["\"available\"", "\"none\"", "true", "\"Reported\""] {
+        assert!(
+            matches!(
+                load(&format!("[capacity]\nrate_limit_errors = {value}\n")),
+                Err(PluginError::Toml(_))
+            ),
+            "{value}"
+        );
+    }
+    // A reset time needs a limit error to arrive with; a cost needs a usage event.
+    for (section, reason) in [
+        (
+            "[capacity]\nreset_times = \"reported\"\n",
+            "reset_times needs a reported limit error",
+        ),
+        (
+            "[capacity]\ncost = \"reported\"\n",
+            "cost needs reported usage_events",
+        ),
+    ] {
+        match load(section) {
+            Err(PluginError::InvalidCapacity { id, reason: found }) => {
+                assert_eq!((id.as_str(), found), ("acme", reason));
+            }
+            other => panic!("expected an invalid capacity declaration, got {other:?}"),
+        }
+    }
+}

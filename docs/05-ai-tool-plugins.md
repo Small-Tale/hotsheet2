@@ -1105,6 +1105,17 @@ or a tool UI command through that mechanism's adapter. OpenCode declares `openco
 with no section (Antigravity) reports the capability as unsupported. Details and the OpenCode
 protocol are in [13](13-drive-transport-interface.md) §13.12.
 
+A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
+from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
+`usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and
+an omitted key or section is `unknown`. No value means that a limit never happens, so a tool that
+cannot report a limit is never assumed to be available. The loader refuses an unknown key or value,
+`reset_times` without a reported limit error, and `cost` without reported `usage_events`. Claude
+declares all five; Codex all but `rate_limit_errors`; OpenCode only `usage_events`; Antigravity
+none. Orchestration reads the declaration when it judges tool capacity
+([26](26-orchestration-projects.md) §26.11). A plugin changes its declaration in the same change
+that adds or removes the detection it describes.
+
 Use `hotsheet-cli terminal message <terminal-id> --text "Your message"` against the local
 server to message a capable session (HS2-NN6EXP). It uses the authenticated
 `POST /connections/{id}/message` operation and reports unavailable or unreachable sessions.

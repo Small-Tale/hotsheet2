@@ -1300,3 +1300,131 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
     assert_eq!(after["ci"]["status"], "failure");
     assert_eq!(after["ci"]["checkout"], worktree_id.as_str());
 }
+
+/// HS2-AHG7HW E2E: a usage-limit halt reported through the real halt route is also a
+/// capacity signal for its tool, and the session's resume clears it. A halt that is not a
+/// limit, a halt without a known tool, and a user's dismissal record nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_ahg7hw_usage_limit_halts_and_resumes_record_tool_capacity_signals() {
+    use hotsheet_ticketing::orchestration::{CapacityEntry, SignalKind, ToolCapacityRegistry};
+    let h = harness();
+    let router = app(h.state.clone());
+    let registry = ToolCapacityRegistry::new(h.state.machine_home());
+    let entry = |tool: &str| -> Option<CapacityEntry> {
+        registry
+            .entries()
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.tool == tool)
+    };
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/terminals",
+        Some(json!({"command":"cat","id":"cap"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let halt = |error_type: &'static str, message: &'static str, agent: Option<&'static str>| {
+        let router = router.clone();
+        async move {
+            let (status, _) = call(
+                &router,
+                "POST",
+                "/terminals/cap/halt",
+                Some(json!({"error_type":error_type,"message":message,"agent":agent})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+        }
+    };
+    // Not a limit, and a limit from an unidentified tool: nothing is recorded.
+    halt(
+        "overloaded",
+        "Selected model is at capacity.",
+        Some("claude"),
+    )
+    .await;
+    halt("rate_limit", "Usage limit reached.", None).await;
+    assert!(registry.entries().unwrap().is_empty());
+
+    // Claude's rate limit with a stated reset time.
+    halt(
+        "rate_limit",
+        "Usage limit reached. Resets in 2h 15m.",
+        Some("claude"),
+    )
+    .await;
+    let claude = entry("claude").unwrap();
+    let limit = claude.limit.clone().unwrap();
+    assert_eq!(limit.kind, SignalKind::RateLimit);
+    assert!(limit.reset_reported);
+    assert!((limit.until_ms - limit.since_ms).abs_diff(135 * 60_000) < 5_000);
+    assert_eq!(
+        (claude.account.as_deref(), claude.consecutive_limits),
+        (None, 1)
+    );
+    // The stored record holds no message text.
+    let stored = std::fs::read_to_string(
+        h.state
+            .machine_home()
+            .join("orchestration-tool-capacity.json"),
+    )
+    .unwrap();
+    assert!(!stored.contains("Usage limit") && !stored.contains("Resets"));
+    // The identical report again is one episode, not a second signal.
+    halt(
+        "rate_limit",
+        "Usage limit reached. Resets in 2h 15m.",
+        Some("claude"),
+    )
+    .await;
+    assert_eq!(entry("claude").unwrap().recent.len(), 1);
+
+    // The user dismissing the stopped state proves nothing about the limit.
+    let (_, terminal) = call(&router, "GET", "/terminals/cap", None).await;
+    let at = terminal["halt"]["at"].as_str().unwrap().to_owned();
+    let dismissed = format!("/terminals/cap/halt?at={}", at.replace('+', "%2B"));
+    call(&router, "DELETE", &dismissed, None).await;
+    assert!(entry("claude").unwrap().limit.is_some());
+
+    // Codex's usage limit without a reset time backs off; its resume clears it.
+    halt(
+        "usage_limit_exceeded",
+        "You've hit your usage limit.",
+        Some("codex"),
+    )
+    .await;
+    let codex = entry("codex").unwrap();
+    let limit = codex.limit.clone().unwrap();
+    assert_eq!(
+        (limit.kind, limit.reset_reported),
+        (SignalKind::UsageLimit, false)
+    );
+    assert_eq!(limit.until_ms - limit.since_ms, 5 * 60_000);
+    call(&router, "DELETE", "/terminals/cap/halt", None).await;
+    let codex = entry("codex").unwrap();
+    assert_eq!((codex.limit, codex.consecutive_limits), (None, 0));
+    assert!(codex.last_ok_at_ms.is_some());
+    assert_eq!(
+        codex
+            .recent
+            .iter()
+            .map(|signal| signal.kind)
+            .collect::<Vec<_>>(),
+        [SignalKind::UsageLimit, SignalKind::Recovered]
+    );
+    // One tool's recovery leaves the other tool's limit alone.
+    assert!(entry("claude").unwrap().limit.is_some());
+    // A resume with no halt, and the resume of a halt that was not a limit, add nothing.
+    call(&router, "DELETE", "/terminals/cap/halt", None).await;
+    halt(
+        "overloaded",
+        "Selected model is at capacity.",
+        Some("codex"),
+    )
+    .await;
+    call(&router, "DELETE", "/terminals/cap/halt", None).await;
+    assert_eq!(entry("codex").unwrap().recent.len(), 2);
+    call(&router, "DELETE", "/terminals/cap", None).await;
+}

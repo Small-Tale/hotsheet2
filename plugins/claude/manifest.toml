@@ -97,6 +97,16 @@ mechanism = "claude-inbox"
 # UsageEvent (docs/14, HS2-TJ8FGR). `source` selects the `claude_result_usage` parser.
 source = "claude-usage"
 
+[capacity]
+# Limit signals the host observes from Claude (docs/05 §5.3, docs/26 §26.11, HS2-AHG7HW).
+# The StopFailure hook reports both rate and usage limits as `rate_limit`, and the message
+# can state the reset time. Usage events come from the metrics source above, with a cost.
+rate_limit_errors = "reported"
+usage_limit_errors = "reported"
+reset_times = "reported"
+usage_events = "reported"
+cost = "reported"
+
 [hooks]
 # Claude permission hooks (docs/05 §5.7, HS2-YMR9HE/HS2-N4R6F3) ask the running Hot
 # Sheet server for an allow/deny and emit no decision when the native flow should continue.

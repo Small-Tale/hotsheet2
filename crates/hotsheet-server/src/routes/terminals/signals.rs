@@ -538,14 +538,41 @@ pub(crate) fn record_terminal_halt(
         !same
     };
     if changed {
+        // HS2-AHG7HW: a usage or rate limit is also a capacity signal for its tool.
+        crate::tool_capacity_signals::record(
+            state,
+            halt.agent.as_deref().and_then(|tool| {
+                crate::tool_capacity_signals::halt_signal(
+                    tool,
+                    &halt.error_type,
+                    &halt.message,
+                    OffsetDateTime::now_utc(),
+                )
+            }),
+        );
         emit_terminal_halted(state, id, Some(halt.message));
     }
 }
 
 /// Clear terminal `id`'s halt because its Codex session started a new turn (HS2-CYHAWB).
 pub(crate) fn clear_terminal_halt_on_resume(state: &AppState, id: &str) {
-    if forget_terminal_halt(state, id) {
+    if let Some(halt) = take_terminal_halt_if(state, id, None) {
+        note_capacity_recovered(state, &halt);
         emit_terminal_halted(state, id, None);
+    }
+}
+
+/// HS2-AHG7HW: a session halted on a usage or rate limit took a new turn, so its tool is
+/// no longer known to be limited. Ending or dismissing a halted session proves nothing
+/// and records nothing.
+fn note_capacity_recovered(state: &AppState, halt: &TerminalHalt) {
+    if crate::stuck_causes::is_usage_limit(&halt.error_type) {
+        crate::tool_capacity_signals::record(
+            state,
+            halt.agent.as_deref().and_then(|tool| {
+                crate::tool_capacity_signals::recovered_signal(tool, OffsetDateTime::now_utc())
+            }),
+        );
     }
 }
 
@@ -565,22 +592,27 @@ pub(crate) async fn clear_terminal_halt(
     if forget_terminal_question(&state, &id, None) {
         emit_terminal_question(&state, &id);
     }
-    if forget_terminal_halt_if(&state, &id, query.at.as_deref()) {
+    if let Some(halt) = take_terminal_halt_if(&state, &id, query.at.as_deref()) {
+        // A hook's clear (no `at`) is the session resuming; a dated clear is the user
+        // dismissing the stopped state, which says nothing about the tool's limit.
+        if query.at.is_none() {
+            note_capacity_recovered(&state, &halt);
+        }
         emit_terminal_halted(&state, &id, None);
     }
     StatusCode::NO_CONTENT
 }
 
 fn forget_terminal_halt(state: &AppState, id: &str) -> bool {
-    forget_terminal_halt_if(state, id, None)
+    take_terminal_halt_if(state, id, None).is_some()
 }
 
-fn forget_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> bool {
+fn take_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> Option<TerminalHalt> {
     let mut halts = state.terminal_halts.lock_or_recover();
     if at.is_some_and(|expected| halts.get(id).is_none_or(|halt| halt.at != expected)) {
-        return false;
+        return None;
     }
-    halts.remove(id).is_some()
+    halts.remove(id)
 }
 
 /// Body for `POST /terminals/{id}/ai-connection`, sent by the AI tool's `SessionStart` hook and

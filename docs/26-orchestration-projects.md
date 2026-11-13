@@ -4,7 +4,8 @@
 > reviewed machine bindings, delegated grants with their audit journal (§26.7), the
 > throughput policy with approvals (§26.8), structured ticket links with target
 > ticket operations (§26.3, HS2-AZ15GA), dispatch runs with status and events (§26.9,
-> HS2-EBHDSB, HS2-7QHWHJ), and the
+> HS2-EBHDSB, HS2-7QHWHJ), AI tool capacity states with tool selection (§26.11,
+> HS2-AHG7HW), and the
 > headless CLI, authenticated HTTP and MCP adapters are implemented and covered by
 > automated tests; the OpenAPI contract describes them. Workspace UI and the scheduler
 > remain design work under their separate implementation tickets.
@@ -731,3 +732,167 @@ hotsheet-cli ... orchestration run events --project <owner> [--after <seq>] [--r
 | `/checkouts/{checkout}/target-events`                | Hosted: GET ticket changes after `since` with an optional `wait_ms`; no `since` is a handshake |
 
 MCP `hotsheet_targets` adds `run_status` and `run_events`.
+
+## 26.11 AI tool capacity (HS2-AHG7HW)
+
+The policy (§26.8) configures how many sessions each tool and account may run and,
+optionally, what an account may spend per day. Tool capacity adds what was observed:
+whether a tool account is usable now, and if not, until when. The scheduler
+(HS2-ECWG50) reads it to choose a tool and to move work to another allowed tool when
+one is limited. This section starts and stops no session.
+
+### What a plugin can report
+
+Each plugin manifest declares in `[capacity]` which signals this machine can observe
+from the tool ([05](05-ai-tool-plugins.md) §5.3). Each value is `reported` or
+`unknown`; there is no value that means a limit never happens. The bundled plugins
+declare exactly what the existing detection observes:
+
+| Tool        | Rate-limit errors | Usage-limit errors | Reset times | Usage events | Cost     |
+| ----------- | ----------------- | ------------------ | ----------- | ------------ | -------- |
+| Claude      | reported          | reported           | reported    | reported     | reported |
+| Codex       | unknown           | reported           | reported    | reported     | reported |
+| OpenCode    | unknown           | unknown            | unknown     | reported     | unknown  |
+| Antigravity | unknown           | unknown            | unknown     | unknown      | unknown  |
+
+Detecting the signals that are still unknown is HS2-2BAVAM.
+
+### Signals
+
+A signal is one observation about a tool account: `rate_limit`, `usage_limit`,
+`recovered`, or `usage`. It carries the tool id, an optional account id, the time, an
+optional reset time (limits), an optional cost in cents (usage) and an optional opaque
+session id. It has no message or other free-text member, and an unknown member is
+refused, so provider text and customer content cannot enter a signal, the registry or
+the audit journal.
+
+The server records signals from the detection it already has, without reading a
+provider message a second way:
+
+- A terminal halt whose error type `stuck_causes::is_usage_limit` accepts becomes a
+  limit signal for the halt's tool. Its reset time is what `stuck_causes::reported_reset`
+  reads from the message, or absent. This covers Claude's `StopFailure` hook and the
+  Codex rollout watch, which share one halt path.
+- When a session halted on a limit takes a new turn (the tool's resume hook, or a new
+  Codex turn), a `recovered` signal is recorded. Ending the session, closing its
+  terminal, or a person dismissing the stopped state proves nothing and records
+  nothing.
+- A halt that is not a limit, and a halt whose tool is not known, record nothing.
+
+A failed record is logged by code and never fails the halt or resume that carried
+it. `tool_capacity_signals::usage_signal` maps a usage event to a `usage` signal;
+feeding usage events automatically is HS2-XFMKHQ. Sessions do not carry an account
+identity yet, so detected signals are unattributed (HS2-PFHRS9).
+
+### States
+
+Each `(tool, account)` has one state at any instant:
+
+| State               | Meaning                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| `available`         | A turn was observed to succeed and nothing restricts the account.        |
+| `limited` + `until` | A limit is in force, or the day's budget is spent, until the given time. |
+| `degraded`          | Usable only as a probe: recovery is unconfirmed or the signals disagree. |
+| `unknown`           | The plugin cannot report limits, or nothing has been observed.           |
+
+`unknown` and `degraded` are never treated as `available`. Each state other than
+`available` carries a reason code: `rate_limit`, `usage_limit`, `budget_exceeded`,
+`recovery_unconfirmed`, `inconsistent_signals`, `unattributed_limit`, `not_reported`,
+`not_observed` or `budget_unknown`.
+
+The transitions are a pure function of the record and one signal, and the state is a
+pure function of the record, the plugin's declaration, the account's budget and the
+time:
+
+- A limit with a reported reset time limits the account until that time. After it
+  passes, the account is `available` again on the provider's word.
+- A limit without a reset time backs off for 5 minutes, doubling with each limit
+  since the last confirmed recovery, up to 4 hours. When a backoff ends, the account
+  is `degraded` until a completed turn (`usage`) or a `recovered` signal confirms it.
+  A limit hit by that probe continues the sequence with the next longer backoff.
+- Further limit reports while a limit is in force belong to the same episode and do
+  not lengthen it; a reset time learned during the episode replaces the guess.
+- A turn that completes during a guessed backoff contradicts it: the account becomes
+  `degraded` and the next completed turn makes it `available`. A turn that completes
+  before a reported reset time does not outrank the provider.
+- `recovered` ends a limit at once and resets the backoff sequence.
+- A plugin that reports no limit errors stays `unknown` whatever else is observed. A
+  limit that was nevertheless reported for it is still shown as `limited`.
+
+Applying a signal is idempotent and order-safe. The identical signal answers
+`duplicate`. A limit or recovery older than the newest state change, and a limit older
+than a later completed turn, answer `stale`. The record keeps its last 16 signals;
+a signal older than a full window is also `stale`, because it cannot be told from a
+repeat. None of these changes anything or writes the file.
+
+### Accounts and budgets
+
+Records are keyed by tool and account, and a signal changes only its own record, so
+one account being limited never limits another. An unattributed limit on a tool with
+configured accounts makes each account that is not itself limited `degraded` with
+`unattributed_limit` until that limit ends: the limit is real, but which account it
+belongs to is not known.
+
+`budget_cents_per_day` is compared with the cost observed during the current UTC day.
+At or over the budget, the account is `limited` with `budget_exceeded` until the next
+UTC day. When the plugin does not report costs, or any turn that day arrived without a
+cost, the day's total is unknown and the account is `unknown` with `budget_unknown`;
+it is never called available on the strength of a budget that cannot be checked.
+Observed cost that already reaches the budget limits the account even when more is
+unknown.
+
+### Selection
+
+Selection answers, for one target and an optional preferred tool and model, the
+ordered tool accounts a session may start on, and every excluded one with its reason.
+It is pure: its inputs are the policy, the capacity records, the plugin declarations,
+the caller's observed session counts per tool account, and the time.
+
+- A target the policy does not list, a disabled target, or one without
+  `sessions_manage` answers `denied` with the policy's own denial code.
+- A tool account is excluded as `limited`, `tool_cap`, `account_cap`,
+  `model_not_permitted`, `tool_not_configured` or, for a requested tool the target does
+  not list, `tool_not_permitted`.
+- The remaining candidates are ordered by state (`available`, then `degraded`, then
+  `unknown`), then the requested tool, then the policy weight, then free sessions.
+  Each carries `verified`, which is true only for `available`.
+
+So a limited tool fails over to the next allowed tool or account, and a tool that
+cannot be verified is offered last and marked. The session counts are required: an
+omitted list is refused, and an empty list states that nothing is running. Target and
+machine caps stay with the policy gate (§26.8) and machine admission (HS2-J8PRTV).
+
+### Storage
+
+`${HOTSHEET_HOME}/orchestration-tool-capacity.json` is a private, locked,
+atomically replaced file at version 1, holding at most 256 records. It belongs to the
+machine, not to one project, because a tool account's limit is the same for every
+project that uses it. A read never creates it. Corrupt or newer-version data is an
+error on every route and is never overwritten. At capacity, the longest-quiet record
+with no limit, no unconfirmed recovery and no spend for the current day is forgotten;
+when every record still holds something in force, a new tool account is refused with
+`capacity_reached`.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration tool-capacity show --project <owner>
+hotsheet-cli ... orchestration tool-capacity signal --project <owner> --tool <tool> \
+  [--account <account>] --kind rate_limit|usage_limit|recovered|usage \
+  [--at-ms <unix-ms>] [--resets-at-ms <unix-ms>] [--cost-cents <n>] [--session <id>]
+hotsheet-cli ... orchestration tool-capacity select --project <owner> --target <target-id> \
+  [--tool <tool>] [--model <model>] [--load <tool>[/<account>]=<sessions>]...
+```
+
+| Route                                                    | Methods and purpose                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/tool-capacity`         | GET states of the policy's tool accounts; machine-local      |
+| `/checkouts/{owner}/orchestration/tool-capacity/signals` | POST one signal for a configured tool; machine-local         |
+| `/checkouts/{owner}/orchestration/tool-capacity/select`  | POST the selection for one target; reads only; machine-local |
+
+A signal through the route must name a tool, and an account when given, that the
+owner's policy configures. An AI actor may report a limit or usage but is refused
+`recovered` with `forbidden`: the session a limit holds back must not lift it. A
+route signal that changes the state is recorded in the audit journal (§26.7) as
+`tool_capacity_<kind>` with the new state code. MCP `hotsheet_targets` adds the
+read-only `tool_capacity` and `tool_select`; it reports no signals.

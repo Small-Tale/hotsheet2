@@ -400,6 +400,10 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id",
             "/checkouts/owner/orchestration/runs/id/sync",
             "/checkouts/owner/orchestration/run-events",
+            // HS2-AHG7HW: observed tool capacity is this machine's.
+            "/checkouts/owner/orchestration/tool-capacity",
+            "/checkouts/owner/orchestration/tool-capacity/signals",
+            "/checkouts/owner/orchestration/tool-capacity/select",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

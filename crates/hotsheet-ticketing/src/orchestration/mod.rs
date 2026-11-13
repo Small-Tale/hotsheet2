@@ -11,6 +11,7 @@ mod policy;
 mod run_events;
 mod runs;
 mod storage;
+mod tool_capacity;
 mod workflow;
 
 pub use approvals::{
@@ -42,6 +43,14 @@ pub use run_events::{
 pub use runs::{
     DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunError, RunObservation, RunRegistry,
     RunState, RunTarget, RunTicket, RunTransition, RunUnreachable, RunUpdate,
+};
+pub use tool_capacity::{
+    ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,
+    CapacityEntry, CapacityReason, CapacityState, CapacityStatus, DaySpend, Excluded,
+    ExclusionReason, LimitSignal, MAX_CAPACITY_ENTRIES, MAX_RECENT_SIGNALS, MAX_RESET_AHEAD_MS,
+    MAX_SIGNAL_COST_CENTS, MAX_SIGNAL_SKEW_MS, Selection, SelectionRequest, SessionCount,
+    SignalKind, SignalOutcome, SignalSupport, ToolCapacityRegistry, apply_signal, backoff_ms,
+    known_spend_cents, select, state_at, status_for,
 };
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 
@@ -195,3 +204,5 @@ mod run_event_tests;
 mod run_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tool_capacity_tests;

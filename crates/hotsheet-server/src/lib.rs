@@ -53,6 +53,7 @@ pub mod terminal_broker;
 pub mod terminal_broker;
 mod terminal_names;
 pub mod tls;
+pub mod tool_capacity_signals;
 pub mod tts;
 pub mod turn_stream;
 mod watcher;
@@ -2108,6 +2109,19 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{checkout}/target-events",
             get(routes::orchestration::read),
+        )
+        // HS2-AHG7HW: observed AI tool capacity (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/tool-capacity",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/tool-capacity/signals",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/tool-capacity/select",
+            post(routes::orchestration::write),
         )
         .route(
             "/checkouts/{checkout}/target-claims",

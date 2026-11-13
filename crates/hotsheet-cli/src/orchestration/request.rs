@@ -32,6 +32,15 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "run-events"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
+            // HS2-AHG7HW: tool capacity states, signals and selection.
+            | ["checkouts", _, "orchestration", "tool-capacity"]
+            | [
+                "checkouts",
+                _,
+                "orchestration",
+                "tool-capacity",
+                "signals" | "select"
+            ]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -70,6 +79,15 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "runs", _]
             | ["checkouts", _, "orchestration", "runs", _, _]
             | ["checkouts", _, "orchestration", "run-events"]
+            // HS2-AHG7HW: observed tool capacity is this machine's.
+            | ["checkouts", _, "orchestration", "tool-capacity"]
+            | [
+                "checkouts",
+                _,
+                "orchestration",
+                "tool-capacity",
+                "signals" | "select"
+            ]
     )
 }
 
@@ -495,6 +513,33 @@ impl OrchestrationRuntime {
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }
+            // HS2-AHG7HW
+            ("GET", ["checkouts", owner, "orchestration", "tool-capacity"]) => {
+                value(self.tool_capacity(owner, tx)?)
+            }
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "tool-capacity",
+                    "signals",
+                ],
+            ) => {
+                let actor = actor(body)?;
+                value(self.tool_capacity_signal(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "tool-capacity",
+                    "select",
+                ],
+            ) => value(self.tool_select(owner, decode(body)?, tx)?),
             ("GET", ["checkouts", owner, "orchestration", "policy"]) => value(self.policy(owner)?),
             ("PUT", ["checkouts", owner, "orchestration", "policy"]) => {
                 let actor = actor(body)?;

@@ -1460,6 +1460,129 @@ paths:
             - cancel
             - sync
             - status
+  /checkouts/{owner}/orchestration/tool-capacity:
+    description: Observed capacity of the AI tool accounts an orchestration project's policy configures (HS2-AHG7HW);
+      machine-local. Identifiers, states and metrics only.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationToolCapacity
+      description:
+        One row per configured tool account. `unknown` and `degraded` are never the same as `available`. Reads write
+        nothing; a project without a policy answers `enabled` false and no rows.
+      responses:
+        '200':
+          description: The capacity state of every configured tool account at `now_ms`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationToolCapacity'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/tool-capacity/signals:
+    description: Report one observed limit, recovery or usage signal for a configured tool (HS2-AHG7HW); machine-local.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: reportOrchestrationToolSignal
+      description:
+        Idempotent - the identical signal answers `duplicate`, and a signal older than the state it would change answers
+        `stale`; neither changes anything. The tool, and the account when given, must be configured in the policy (400
+        otherwise). `recovered` from an `ai` actor is refused with 403 `forbidden`. Corrupt or newer stored data fails
+        closed and is left untouched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestrationToolSignal'
+      responses:
+        '200':
+          description: What the signal did and the signalled tool account's capacity afterwards.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationToolSignalResult'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/tool-capacity/select:
+    description:
+      The ordered tool accounts a session for one target may start on now (HS2-AHG7HW); machine-local. Reads only and
+      authorizes nothing.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: selectOrchestrationTool
+      description:
+        Verified availability ranks first, then a `degraded` probe, then an unverified `unknown`; inside a rank the
+        requested tool, then the policy weight, then free sessions. A limited or full account is listed under `excluded`
+        with its reason, so a limited tool fails over to another allowed tool.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectOrchestrationTool'
+      responses:
+        '200':
+          description: The candidates, best first, and every excluded tool account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationToolSelection'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-claims:
     description: The exact claim and lease of one ticket on a git source of a hosted checkout, for a local or remote
       orchestration project (HS2-EBHDSB). Ordinary authenticated project data under the caller's device role; another
@@ -17318,6 +17441,336 @@ components:
         overflow:
           description: The host no longer retains everything after `since`; treat every ticket as possibly changed.
           type: boolean
+      additionalProperties: false
+    OrchestrationToolCapacityState:
+      description:
+        One tool account's capacity (HS2-AHG7HW). `degraded` is usable only as a probe; `unknown` means the plugin
+        cannot report limits or nothing has been observed, and is never assumed available.
+      enum:
+        - available
+        - limited
+        - degraded
+        - unknown
+    OrchestrationToolCapacityReason:
+      description: Why a tool account is not plainly `available`. Stable codes, never provider text.
+      enum:
+        - rate_limit
+        - usage_limit
+        - budget_exceeded
+        - recovery_unconfirmed
+        - inconsistent_signals
+        - unattributed_limit
+        - not_reported
+        - not_observed
+        - budget_unknown
+    OrchestrationToolSignalSupport:
+      description: What the tool's plugin manifest declares this machine can observe; false means unknown.
+      type: object
+      required:
+        - limits
+        - reset_times
+        - usage
+        - cost
+      properties:
+        limits:
+          type: boolean
+        reset_times:
+          type: boolean
+        usage:
+          type: boolean
+        cost:
+          type: boolean
+      additionalProperties: false
+    OrchestrationToolCapacityRow:
+      type: object
+      required:
+        - tool
+        - state
+        - verified
+        - signals
+        - max_sessions
+        - weight
+        - consecutive_limits
+      properties:
+        tool:
+          type: string
+          maxLength: 160
+        account:
+          type: string
+          maxLength: 160
+        state:
+          $ref: '#/components/schemas/OrchestrationToolCapacityState'
+        until_ms:
+          description: Present exactly when `state` is `limited`.
+          type: integer
+          minimum: 0
+        reason:
+          $ref: '#/components/schemas/OrchestrationToolCapacityReason'
+        verified:
+          description: True only for `available`.
+          type: boolean
+        signals:
+          $ref: '#/components/schemas/OrchestrationToolSignalSupport'
+        max_sessions:
+          description: The account's cap, or the tool's when it has no accounts.
+          type: integer
+          minimum: 1
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 100
+        budget_cents_per_day:
+          type: integer
+          minimum: 0
+        spent_cents_today:
+          description: Observed cost for the current UTC day; absent when it is not fully known.
+          type: integer
+          minimum: 0
+        consecutive_limits:
+          description: Limits since the last confirmed recovery; it sets the next backoff.
+          type: integer
+          minimum: 0
+        last_signal_at_ms:
+          type: integer
+          minimum: 0
+        last_ok_at_ms:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    OrchestrationToolCapacity:
+      type: object
+      required:
+        - enabled
+        - now_ms
+        - tools
+      properties:
+        enabled:
+          description: False when the project has no policy.
+          type: boolean
+        now_ms:
+          type: integer
+          minimum: 0
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationToolCapacityRow'
+      additionalProperties: false
+    OrchestrationToolSignal:
+      description:
+        One observation about a tool account (HS2-AHG7HW). Identifiers and metrics only; it has no message or other
+        free-text member.
+      type: object
+      required:
+        - tool
+        - kind
+        - at_ms
+      properties:
+        tool:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        account:
+          description: Omitted or null records the signal as unattributed.
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        kind:
+          enum:
+            - rate_limit
+            - usage_limit
+            - recovered
+            - usage
+        at_ms:
+          description: When it was observed; at most five minutes ahead of the server clock.
+          type: integer
+          minimum: 1
+        resets_at_ms:
+          description: Limit kinds only - when the provider says the limit ends, at most eight days after `at_ms`.
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        cost_cents:
+          description: '`usage` only. Omitted or null means the cost is unknown, never zero.'
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 100000000
+        session:
+          description: An opaque session id that keeps two sessions' otherwise equal signals apart.
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+      additionalProperties: false
+    OrchestrationToolSignalResult:
+      type: object
+      required:
+        - applied
+        - tool
+        - state
+      properties:
+        applied:
+          enum:
+            - applied
+            - duplicate
+            - stale
+        tool:
+          type: string
+        account:
+          type: string
+        state:
+          $ref: '#/components/schemas/OrchestrationToolCapacityState'
+        until_ms:
+          description: Present exactly when `state` is `limited`.
+          type: integer
+          minimum: 0
+        reason:
+          $ref: '#/components/schemas/OrchestrationToolCapacityReason'
+      additionalProperties: false
+    OrchestrationToolSessionCount:
+      description: Sessions the caller just observed running under one tool account.
+      type: object
+      required:
+        - tool
+        - sessions
+      properties:
+        tool:
+          type: string
+          maxLength: 160
+        account:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        sessions:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    SelectOrchestrationTool:
+      type: object
+      required:
+        - target_id
+        - load
+      properties:
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        tool:
+          description: The preferred tool; omitted or null asks for any tool the target allows.
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        model:
+          description: The model the session would use, checked against the target's model list.
+          type:
+            - string
+            - 'null'
+          maxLength: 128
+        load:
+          description: Required, because caps cannot be judged without it; an empty list states that none are running.
+          type: array
+          maxItems: 4096
+          items:
+            $ref: '#/components/schemas/OrchestrationToolSessionCount'
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+      additionalProperties: false
+    OrchestrationToolCandidate:
+      type: object
+      required:
+        - tool
+        - state
+        - verified
+        - requested
+        - weight
+        - free_sessions
+      properties:
+        tool:
+          type: string
+        account:
+          type: string
+        state:
+          $ref: '#/components/schemas/OrchestrationToolCapacityState'
+        until_ms:
+          description: Present exactly when `state` is `limited`.
+          type: integer
+          minimum: 0
+        reason:
+          $ref: '#/components/schemas/OrchestrationToolCapacityReason'
+        verified:
+          description: False for `degraded` and `unknown` - the scheduler may probe it, not rely on it.
+          type: boolean
+        requested:
+          type: boolean
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 100
+        free_sessions:
+          description: Sessions still allowed by the tool cap and the account cap.
+          type: integer
+          minimum: 1
+      additionalProperties: false
+    OrchestrationToolExclusion:
+      type: object
+      required:
+        - tool
+        - excluded
+      properties:
+        tool:
+          type: string
+        account:
+          type: string
+        excluded:
+          enum:
+            - tool_not_permitted
+            - tool_not_configured
+            - model_not_permitted
+            - limited
+            - tool_cap
+            - account_cap
+        state:
+          $ref: '#/components/schemas/OrchestrationToolCapacityState'
+        until_ms:
+          description: Present exactly when `state` is `limited`.
+          type: integer
+          minimum: 0
+        reason:
+          $ref: '#/components/schemas/OrchestrationToolCapacityReason'
+      additionalProperties: false
+    OrchestrationToolSelection:
+      type: object
+      required:
+        - now_ms
+        - candidates
+        - excluded
+      properties:
+        now_ms:
+          type: integer
+          minimum: 0
+        denied:
+          description: Why the target takes no session at all, as a policy denial code.
+          enum:
+            - policy_target_not_permitted
+            - policy_target_disabled
+            - policy_action_not_permitted
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationToolCandidate'
+        excluded:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationToolExclusion'
       additionalProperties: false
     RemoteIdentity:
       type: object
