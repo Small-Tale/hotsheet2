@@ -31,7 +31,8 @@ export function rustConsumersFromMetadata(metadata, crate) {
   const members = new Set(metadata.workspace_members);
   const packages = metadata.packages.filter((item) => members.has(item.id));
   const names = new Set(packages.map((item) => item.name));
-  if (!names.has(crate) || names.size !== 14) return null;
+  // 16 workspace crates since hotsheet-resource-claims (HS2-H3WPPY) and hotsheet-jobs (HS2-GCHX8V).
+  if (!names.has(crate) || names.size !== 16) return null;
   const reverse = new Map([...names].map((name) => [name, new Set()]));
   for (const pkg of packages) {
     for (const dep of pkg.dependencies) {
