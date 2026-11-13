@@ -1047,6 +1047,11 @@ enum GuidanceCmd {
 fn main() -> Result<()> {
     // `| head` closing our stdout is a normal end of output, not a panic (HS2-4BT3VF).
     hotsheet_cli::broken_pipe::install_broken_pipe_exit();
+    // HS2-9TV6A2: this executable implements `merge-driver`; stores it syncs, creates, or
+    // links register it as their semantic ticket merge driver.
+    if let Ok(program) = std::env::current_exe() {
+        hotsheet_ticketing::merge_driver::set_program(program);
+    }
     if std::env::args_os()
         .skip(1)
         .eq([std::ffi::OsString::from("--test-fixture-capabilities")])

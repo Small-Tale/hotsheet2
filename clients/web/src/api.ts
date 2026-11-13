@@ -606,6 +606,9 @@ export interface TicketStoreSyncHealth {
   reason?: string;
   oversized?: TicketStoreOversizedObject[];
   next_action?: string;
+  /** Whether ticket merges go through the semantic merge driver in this checkout (HS2-9TV6A2). */
+  merge_driver?: 'registered' | 'repaired' | 'missing';
+  merge_driver_repaired_at?: string;
 }
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ): every linked Git ticket store. */
 export interface TicketStoreSyncReport {

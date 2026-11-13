@@ -607,6 +607,14 @@ describe('HS2-ADHFKZ ticket-store sync health parser matches the Rust SyncHealth
     expect(parseTicketStoreSyncReport({ checkout_id: 'x', stores: [] }).stores).toEqual([]);
   });
 
+  it('reads the HS2-9TV6A2 merge driver status and rejects an unknown one', () => {
+    const repaired = { ...minimal, merge_driver: 'registered', merge_driver_repaired_at: '2026-11-12T08:00:00Z' };
+    const health = parseTicketStoreSyncReport(wire(repaired)).stores[0]?.health;
+    expect(health.merge_driver).toBe('registered');
+    expect(health.merge_driver_repaired_at).toBe('2026-11-12T08:00:00Z');
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, merge_driver: 'maybe' }))).toThrow();
+  });
+
   it('rejects an unknown state, a null skipped field, and a malformed oversized entry', () => {
     expect(() => parseTicketStoreSyncReport(wire({ ...minimal, state: 'broken' }))).toThrow(ServerResponseShapeError);
     expect(() => parseTicketStoreSyncReport(wire({ ...minimal, reason: null }))).toThrow(ServerResponseShapeError);

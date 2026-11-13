@@ -167,6 +167,10 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
         let Ok(_lock) = lock_git_transaction(store_path) else {
             return failed(SyncReport::Offline, "could not lock the store for sync");
         };
+        // HS2-9TV6A2: every replay and continue below goes through the semantic merge
+        // driver, whatever the merged trees' `.gitattributes` say.
+        let driver = crate::merge_driver::ensure_registered(store_path, None);
+        crate::sync_health::record_merge_driver(store_path, driver);
         // HS2-ADHFKZ: never commit into, or stack a replay on top of, an unfinished
         // rebase or merge. HS2-QR1K8R: one that needs no judgment is continued first.
         match integration_in_progress(store_path) {
@@ -670,6 +674,8 @@ pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(test)]
+mod merge_driver_tests;
 #[cfg(test)]
 mod stall_tests;
 

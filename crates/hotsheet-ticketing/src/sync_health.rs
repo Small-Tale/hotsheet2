@@ -157,6 +157,9 @@ pub struct SyncRecord {
     /// (HS2-QR1K8R), so one replay is continued a bounded number of times.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continue_attempts: Option<(String, u32)>,
+    /// When a cycle last registered the missing semantic merge driver (HS2-9TV6A2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_driver_repaired_at: Option<String>,
 }
 
 /// What a finished cycle reports into the record beyond its [`SyncReport`].
@@ -191,6 +194,12 @@ pub struct SyncHealth {
     /// One plain-language next step, naming the headless command when one applies.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_action: Option<String>,
+    /// Whether ticket merges in this checkout go through the semantic merge driver
+    /// (HS2-9TV6A2): `registered` or `missing`, read live.
+    pub merge_driver: crate::merge_driver::MergeDriverStatus,
+    /// When a sync cycle last registered the missing driver itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_driver_repaired_at: Option<String>,
 }
 
 /// One linked Git ticket source's sync health.
@@ -255,6 +264,8 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
         reason: None,
         oversized: Vec::new(),
         next_action: None,
+        merge_driver: crate::merge_driver::status(store_path),
+        merge_driver_repaired_at: record.merge_driver_repaired_at.clone(),
     };
     if git_dir(store_path).is_none() {
         health.state = SyncState::NotRepository;
@@ -328,6 +339,12 @@ fn next_action(health: &SyncHealth) -> Option<String> {
              `hotsheet-cli sync`."
                 .to_string()
         }
+        SyncState::Conflict if !health.merge_driver.applies() => {
+            "The semantic ticket merge driver is not registered in this checkout, so ticket \
+             files were merged as plain text. Run `hotsheet-cli doctor` to register it, then \
+             run `hotsheet-cli sync`."
+                .to_string()
+        }
         SyncState::Conflict => {
             "Resolve the conflicting ticket body in the store with Git, commit, then run \
              `hotsheet-cli sync`."
@@ -382,6 +399,19 @@ fn apply_outcome(record: &mut SyncRecord, report: SyncReport, detail: CycleDetai
     record.reason = detail.reason.map(|reason| sanitize_reason(&reason));
     record.oversized = detail.oversized;
     record.conflict_heads = detail.conflict_heads;
+}
+
+/// Remember that a cycle registered the missing merge driver (HS2-9TV6A2).
+pub(crate) fn record_merge_driver(
+    store_path: &Path,
+    status: crate::merge_driver::MergeDriverStatus,
+) {
+    if status != crate::merge_driver::MergeDriverStatus::Repaired {
+        return;
+    }
+    let mut record = read_record(store_path).unwrap_or_default();
+    record.merge_driver_repaired_at = Some(now_string());
+    let _ = write_record(store_path, &record);
 }
 
 /// Count one more automatic continue of the unfinished rebase that started at

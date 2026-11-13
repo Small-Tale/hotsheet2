@@ -530,6 +530,15 @@ pub(crate) fn render_sync_health(health: &hotsheet_ticketing::SyncHealth) -> Str
             format_bytes(object.limit_bytes)
         ));
     }
+    out.push_str(&format!(
+        "Merge driver: {}{}\n",
+        health.merge_driver.as_str(),
+        health
+            .merge_driver_repaired_at
+            .as_deref()
+            .map(|at| format!(" (registered by sync at {at})"))
+            .unwrap_or_default()
+    ));
     if let Some(action) = &health.next_action {
         out.push_str(&format!("Next step: {action}\n"));
     }
@@ -698,13 +707,20 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
 
     // The semantic merge driver must be registered, or git would text-merge ticket files
     // and could dump conflict markers over structured data (HS2-18, docs/02 §2.7).
+    // HS2-9TV6A2: a missing local registration is repaired rather than only reported.
     if !hotsheet_cli::merge_driver_registered(path) {
-        println!(
-            "  ! semantic merge driver not registered (missing .gitattributes \
-             `merge=hotsheet-ticket` or its git config) — re-run `hotsheet-cli init` here to \
-             register it, or git may text-merge ticket files"
-        );
-        issues += 1;
+        match hotsheet_cli::register_merge_driver(path) {
+            hotsheet_ticketing::merge_driver::MergeDriverStatus::Missing => {
+                println!(
+                    "  ! semantic merge driver not registered and could not be registered \
+                     here (no runnable `hotsheet-cli` found) — git may text-merge ticket files"
+                );
+                issues += 1;
+            }
+            _ => println!(
+                "  - registered the semantic merge driver in this checkout (it was missing)"
+            ),
+        }
     }
 
     // Every ticket store is a Git repository or a tracked designated root within one

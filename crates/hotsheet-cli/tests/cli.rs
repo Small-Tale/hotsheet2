@@ -10147,6 +10147,119 @@ fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
     assert_eq!(status_json(a.path())["state"], "up_to_date");
 }
 
+/// HS2-9TV6A2: a store whose shared history never had `.gitattributes`, cloned by plain Git
+/// and never set up with `init`, still merges ticket files through the real semantic
+/// driver: two frontmatter-only edits of one ticket on two machines publish cleanly,
+/// because `sync` registers the driver in the checkout's local Git state first.
+#[test]
+fn hs2_9tv6a2_sync_registers_the_driver_and_publishes_concurrent_frontmatter_edits() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    // Remove every trace of the driver from the shared history and from this checkout.
+    let _ = std::fs::remove_file(a.join(".gitattributes"));
+    git(a, &["add", "-A"]);
+    git(a, &["commit", "--quiet", "-m", "no attributes"]);
+    assert!(!git(a, &["cat-file", "-e", "HEAD:.gitattributes"]));
+    git(a, &["config", "--unset", "merge.hotsheet-ticket.driver"]);
+    let _ = std::fs::remove_file(a.join(".git/info/attributes"));
+    git(a, &["remote", "add", "origin", bare_url]);
+    let slug = new_ticket(a, "shared ticket");
+    hs(a).arg("sync").assert().success();
+
+    let b_dir = tempfile::tempdir().unwrap();
+    let b = b_dir.path().join("b");
+    assert!(git(
+        b_dir.path(),
+        &["clone", "--quiet", bare_url, b.to_str().unwrap()]
+    ));
+    git(&b, &["config", "user.email", "b@example.com"]);
+    git(&b, &["config", "user.name", "B"]);
+    assert!(!b.join(".gitattributes").exists());
+    assert!(!hotsheet_cli::merge_driver_registered(&b));
+
+    // Two machines edit different frontmatter fields of the same ticket.
+    hs(a)
+        .args(["edit", &slug, "--tag", "alpha"])
+        .assert()
+        .success();
+    hs(a).arg("sync").assert().success();
+    hs(&b)
+        .args(["edit", &slug, "--priority", "high"])
+        .assert()
+        .success();
+    hs(&b).arg("sync").assert().success();
+
+    assert!(hotsheet_cli::merge_driver_registered(&b));
+    assert!(
+        std::fs::read_to_string(b.join(".git/info/attributes"))
+            .unwrap()
+            .contains("tickets/**/*.md merge=hotsheet-ticket")
+    );
+    assert!(
+        !b.join(".gitattributes").exists(),
+        "nothing was committed for it"
+    );
+    let status = hs(&b)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert_eq!(status["state"], "synced");
+    assert_eq!(status["merge_driver"], "registered");
+    assert!(status["merge_driver_repaired_at"].is_string());
+    hs(a).arg("sync").assert().success();
+    for dir in [a, b.as_path()] {
+        hs(dir)
+            .args(["show", &slug])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("alpha"))
+            .stdout(predicate::str::contains("priority: high"))
+            .stdout(predicate::str::contains("<<<<<<<").not());
+    }
+}
+
+/// HS2-9TV6A2: `doctor` repairs a missing local driver registration instead of only
+/// warning about it.
+#[test]
+fn hs2_9tv6a2_doctor_repairs_a_missing_driver_registration() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    hotsheet_ticketing::git::command()
+        .current_dir(p)
+        .args(["config", "--unset", "merge.hotsheet-ticket.driver"])
+        .status()
+        .unwrap();
+    let _ = std::fs::remove_file(p.join(".git/info/attributes"));
+    assert!(!hotsheet_cli::merge_driver_registered(p));
+    hs(p)
+        .args(["doctor", "--project", p.to_str().unwrap()])
+        .assert()
+        .stdout(predicate::str::contains(
+            "registered the semantic merge driver",
+        ))
+        .stdout(predicate::str::contains("semantic merge driver not registered").not());
+    assert!(hotsheet_cli::merge_driver_registered(p));
+}
+
 /// HS2-QR1K8R: when both sides added the same ticket file (Git passes an empty base), the
 /// driver takes the older version as the ancestor: the newer fields win, notes union, and
 /// no conflict markers are written, whichever side is "ours".

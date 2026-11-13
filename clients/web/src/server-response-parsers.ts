@@ -1082,6 +1082,8 @@ const ticketStoreSyncHealth = shape<TicketStoreSyncHealth>(
     reason: isString,
     oversized: listOf(shape('oversized object', { path: isString, bytes: isNumber, limit_bytes: isNumber }).check),
     next_action: isString,
+    merge_driver: (field) => field === 'registered' || field === 'repaired' || field === 'missing',
+    merge_driver_repaired_at: isString,
   },
 );
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ). */

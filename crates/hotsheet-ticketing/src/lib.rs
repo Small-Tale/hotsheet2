@@ -32,6 +32,7 @@ pub mod identity;
 pub mod image_crop;
 pub mod live_history;
 pub mod merge;
+pub mod merge_driver;
 pub mod metrics;
 pub mod ops;
 pub mod orchestration;

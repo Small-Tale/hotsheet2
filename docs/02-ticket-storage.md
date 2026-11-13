@@ -695,6 +695,22 @@ a custom merge driver, registered via `.gitattributes`:
 tickets/**/*.md merge=hotsheet-ticket
 ```
 
+**Registration is local to each checkout (HS2-9TV6A2).** The committed
+`.gitattributes` line is not enough on its own. A rebase or a `git merge-tree` replay
+reads attributes from the trees it merges, so an upstream without `.gitattributes`
+leaves every replayed ticket to Git's text merge. And Git never copies the driver
+command in `.git/config` with a clone. So each checkout also carries the attribute in
+`<git-dir>/info/attributes` (with the store's prefix for a designated root), which Git
+always reads, and `merge.hotsheet-ticket.driver` pointing at the installed
+`hotsheet-cli`. Neither is committed, so every machine that shares the remote registers
+them for itself. A sync cycle registers them before it replays or continues anything
+and records that in its health (`merge_driver_repaired_at`). `init`, linking a store,
+creating a standalone store, importing, and the server hosting a store register them
+too. `hotsheet-cli doctor` repairs a missing or stale registration (for example a
+driver command naming a removed install) instead of only reporting it. When no
+runnable `hotsheet-cli` can be found, health reports `merge_driver: missing` and a
+conflict's next step names the registration.
+
 The driver is a **`hotsheet merge-driver` CLI subcommand** (so the merge logic is
 the same core code, tested once — [04-core-server-cli.md](04-core-server-cli.md)
 §4.4). Git invokes it with the base/ours/theirs versions; it performs a
@@ -1088,7 +1104,9 @@ The rules:
 
 `GET /checkouts/{id}/repository/sync` returns every linked Git source's health, with
 its state, `syncing`, `unpublished_commits`, `incoming_commits`, `last_attempt_at`,
-`last_success_at`, `consecutive_failures`, `reason`, `oversized`, and `next_action`.
+`last_success_at`, `consecutive_failures`, `reason`, `oversized`, `next_action`,
+`merge_driver` (`registered` or `missing`, read live), and `merge_driver_repaired_at`
+(when a cycle last registered the missing driver, HS2-9TV6A2).
 The background loop emits a replayable `ticket_store_sync` change event (with the new
 state as `slug`) when a store's state changes, or when an outage reaches three
 consecutive failures. An open client reloads health only on that event. The web shell

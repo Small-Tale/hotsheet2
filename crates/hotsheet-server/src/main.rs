@@ -157,6 +157,11 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    // HS2-9TV6A2: hosted stores register the installed `hotsheet-cli merge-driver` as their
+    // semantic ticket merge driver before any sync integrates.
+    if let Ok(program) = hotsheet_aitools::launch_safety::hotsheet_cli() {
+        hotsheet_ticketing::merge_driver::set_program(program);
+    }
     let isolated_vault = hotsheet_aitools::test_permission_vault_available();
     if cli.test_fixture_capabilities {
         println!(
