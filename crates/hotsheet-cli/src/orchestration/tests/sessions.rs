@@ -57,6 +57,13 @@ impl ScriptedHost {
             }
         }
     }
+    /// HS2-R7QH35: every message pushed into a session, as (terminal, text), in order.
+    pub(super) fn pushes(&self) -> Vec<(String, String)> {
+        self.joined
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
     pub(super) fn crash(&self, session_id: &str) {
         self.live().retain(|state| state.session_id != session_id);
     }

@@ -64,6 +64,9 @@ enum SessionCmd {
     Sync { session_id: Option<String> },
     /// Whether the session may be wound down now, as its host established it.
     SafePoint { session_id: String },
+    /// Tell a running session which exact ticket its run is for, through its host's
+    /// session push (HS2-R7QH35). A tool that is not ready gets it when it becomes so.
+    Request { session_id: String },
     /// Stop a session. An orchestrator stops only its own sessions at a safe point;
     /// --force is a person's request (pass --actor-role human).
     Stop {
@@ -128,6 +131,9 @@ pub(super) fn route(arguments: SessionArgs) -> Result<(String, (&'static str, St
         SessionCmd::SafePoint { session_id } => {
             ("POST", format!("{base}/{session_id}/safe-point"), json!({}))
         }
+        SessionCmd::Request { session_id } => {
+            ("POST", format!("{base}/{session_id}/request"), json!({}))
+        }
         SessionCmd::Stop { session_id, force } => (
             "POST",
             format!("{base}/{session_id}/stop"),
@@ -167,7 +173,7 @@ mod tests {
     #[test]
     fn hs2_gdjxgz_every_session_command_is_one_request_to_the_shared_runtime() {
         let base = "/checkouts/owner-1/orchestration";
-        let cases: [(&[&str], &str, String, Value); 10] = [
+        let cases: [(&[&str], &str, String, Value); 11] = [
             (
                 &[
                     "start",
@@ -220,6 +226,13 @@ mod tests {
                 &["safe-point", SESSION],
                 "POST",
                 format!("{base}/sessions/{SESSION}/safe-point"),
+                json!({}),
+            ),
+            // HS2-R7QH35
+            (
+                &["request", SESSION],
+                "POST",
+                format!("{base}/sessions/{SESSION}/request"),
                 json!({}),
             ),
             (

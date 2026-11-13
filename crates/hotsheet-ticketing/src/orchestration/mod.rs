@@ -121,11 +121,12 @@ pub use scheduler::{
 };
 pub use session_idle::{SessionIdleStore, observe_idle};
 pub use sessions::{
-    HostedRef, HostedSession, HostedSessionRegistry, MAX_HOSTED_SESSIONS, MAX_SESSION_HISTORY,
-    MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession, OrchestratedSession,
-    SafePoint, SafePointBlocker, SafePointFacts, SessionControl, SessionError, SessionOrigin,
-    SessionOwner, SessionRegistry, SessionRole, SessionState, SessionTransition, SessionUpdate,
-    StopRequest, decide_safe_point, decide_stop, run_holder, session_label,
+    HostedRef, HostedRequest, HostedSession, HostedSessionRegistry, MAX_HOSTED_SESSIONS,
+    MAX_SESSION_HISTORY, MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession,
+    OrchestratedSession, RequestKind, SafePoint, SafePointBlocker, SafePointFacts, SessionControl,
+    SessionError, SessionOrigin, SessionOwner, SessionRegistry, SessionRole, SessionState,
+    SessionTransition, SessionUpdate, StopRequest, decide_safe_point, decide_stop, run_holder,
+    session_label,
 };
 pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,

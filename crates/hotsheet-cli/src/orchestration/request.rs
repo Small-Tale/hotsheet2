@@ -576,6 +576,10 @@ impl OrchestrationRuntime {
             ("PATCH", ["checkouts", checkout, "target-sessions"]) => {
                 value(self.hosted_session_control(checkout, hosted(body)?, tx)?)
             }
+            // HS2-R7QH35: tell a running hosted session its exact ticket.
+            ("PUT", ["checkouts", checkout, "target-sessions"]) => {
+                value(self.hosted_session_request(checkout, hosted(body)?, tx)?)
+            }
             // HS2-GDJXGZ orchestrating half.
             ("GET", ["checkouts", owner, "orchestration", "sessions"]) => {
                 value(self.session_list(
@@ -604,6 +608,10 @@ impl OrchestrationRuntime {
                 let actor = actor(body)?;
                 match *operation {
                     "sync" => value(self.session_sync(owner, session, actor.as_ref(), tx)?),
+                    // HS2-R7QH35
+                    "request" => {
+                        value(self.session_tell_ticket(owner, session, actor.as_ref(), tx)?)
+                    }
                     "safe-point" => {
                         value(self.session_safe_point(owner, session, actor.as_ref(), tx)?)
                     }

@@ -32,6 +32,8 @@
 > a placed run no target dispatcher will assign reported and, after a bounded wait,
 > claimed for its session (§26.24, HS2-T16SK0), a placed session that never joins
 > its role wound down and replaced a bounded number of times (§26.24, HS2-NPTKS8),
+> and a refilled session told its exact ticket through its host's session push
+> (§26.24, HS2-R7QH35),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -2234,6 +2236,7 @@ hotsheet-cli ... orchestration session list --project <owner> [--active]
 hotsheet-cli ... orchestration session show|safe-point <session-id> --project <owner>
 hotsheet-cli ... orchestration session sync [<session-id>] --project <owner>
 hotsheet-cli ... orchestration session stop <session-id> --project <owner>
+hotsheet-cli ... orchestration session request <session-id> --project <owner>
 hotsheet-cli --actor-role human ... orchestration session stop <session-id> --project <owner> --force
 hotsheet-cli --actor-role human ... orchestration session takeover|pause <session-id> --project <owner>
 hotsheet-cli ... orchestration session list --checkout <checkout-id> [--safe-point] # this machine
@@ -2246,6 +2249,7 @@ hotsheet-cli ... orchestration session list --checkout <checkout-id> [--safe-poi
 | `/checkouts/{owner}/orchestration/sessions/{session}/{sync,safe-point,stop,takeover}` | POST supervise; machine-local                                                                         |
 | `/checkouts/{owner}/orchestration/session-sync`                                       | POST sync every unfinished session; machine-local                                                     |
 | `/checkouts/{checkout}/target-sessions`                                               | Hosted half: GET list (`?operation_id=`, `?safe_point=true`), POST start, DELETE stop, PATCH takeover |
+| `/checkouts/{checkout}/target-sessions` (PUT)                                         | Hosted half: tell a running session its exact ticket (HS2-R7QH35)                                     |
 
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. A read-only device can list and cannot start,
@@ -2254,8 +2258,9 @@ admission limits (§26.10); whether hosting should need an explicit opt-in is an
 decision (HS2-CRBR8X). Hosted refusals are answers with a reason code, not HTTP
 errors, so the code survives the reviewed transport. A peer that predates the route answers
 `target_peer_unsupported`. MCP `hotsheet_targets` adds `session_start`,
-`session_list`, `session_show`, `session_sync`, `session_safe_point` and
-`session_stop`; its role argument is `session_role`.
+`session_list`, `session_show`, `session_sync`, `session_safe_point`,
+`session_request` (HS2-R7QH35) and `session_stop`; its role argument is
+`session_role`.
 
 A headless process owns no terminals. `hotsheet-cli` and the MCP core backend use the
 ordinary terminal routes of the Hot Sheet server running on the same machine, so a
@@ -2742,8 +2747,9 @@ before it reads the work.
 the same way: the executor's `assign` dispatches it and links it to the session,
 published as `session_assigned` on the run, and the decision log records `assigned`
 with the run. A session with an unfinished run reads as busy, so it is never refilled;
-one whose run finished is free again. The refilled session is not told the new
-ticket directly (HS2-R7QH35); the target's dispatcher assigns it.
+one whose run finished is free again. The refilled session is then told the new
+ticket through its host's session push (HS2-R7QH35, §26.24); the target's dispatcher
+still assigns it.
 
 **Following the run.** After a pass, the server makes sure the run's target is
 followed (§26.9): a claim, a release or a completion of the target ticket syncs the
@@ -3393,8 +3399,8 @@ reports and never claims.
   `pool_unknown`, `retry_at_ms`, and the `assignment`.
 
 The session's role prompt asked it to request its ticket from the dispatcher. After
-the claim the ticket is held under its worker id; telling the session so is the
-request prompt of HS2-R7QH35.
+the claim the ticket is held under its worker id, and the session is told so by a
+`claimed` request (HS2-R7QH35, below).
 
 No route, command or MCP action was added: `plan`, `tick`, `explain` and
 `decisions` carry the new members on every surface.
@@ -3439,3 +3445,38 @@ again (§26.19, "Repeats and replacements"): a new session under
 that stopped without ever joining. After two, the next session is kept and reported,
 so a tool that cannot take up its role is not restarted for ever. Nothing runs on a
 timer.
+
+### Telling a refilled session its ticket (HS2-R7QH35)
+
+A session started for a run is asked for that run's exact ticket by its role prompt
+(§26.16). A session given a run later, by a refill (§26.19) or by a claim made for it
+because no dispatcher is live (above), is told the ticket by a **request**, through
+its hosting server's session push with the same readiness-aware delivery as the role
+prompt.
+
+| `kind`     | When                                                                   | The message asks the session to                                     |
+| ---------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `assigned` | Its run is waiting for the target's dispatcher (a refill)              | Request the named ticket from the dispatcher with `hotsheet-worker` |
+| `claimed`  | Its run is `dispatched` to its own worker id (the claim of HS2-T16SK0) | Work the named ticket, which is claimed for it, renewing the claim  |
+
+**Hosted half.** `PUT /checkouts/{checkout}/target-sessions` takes
+`{operation_id, ticket, kind}`. The host records the request on the hosted session
+(`request`: the ticket's canonical id, the kind, when it was asked and its delivery)
+and pushes it once, naming the ticket by its slug where the host can read it. A tool
+that is not ready leaves it `pending`; the same events that retry a pending role
+prompt (its push address registered, a turn ended) retry the request, after the
+role, at most four times within ten minutes of the request; past either bound it
+reads `failed`. There is no timer. The same ticket and kind again keep the request as
+it is, so nothing is pushed twice; another ticket or kind replaces it. A person's
+session is refused `session_human_owned`, an ended one `session_not_active`. The
+hosted listing reports `request_prompt`.
+
+**Orchestrating half.** `session_tell_ticket(owner, session_id, actor, tx)` sends the
+request for the session's current, unfinished run, through the gate as
+`sessions_manage` continuing, and publishes `session_request_<code>` on the run's
+stream. The executor calls it after a refill links the run, and the assignment
+fallback after its claim; both are best effort, so the assignment stands whatever
+the push answered. Surfaces: `POST .../orchestration/sessions/{session}/request`,
+`hotsheet-cli ... orchestration session request <session-id>`, MCP
+`hotsheet_targets` `session_request`; each answers the session with
+`request_prompt`.

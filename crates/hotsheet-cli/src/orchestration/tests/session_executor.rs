@@ -1933,3 +1933,142 @@ fn hs2_nptks8_a_persons_session_is_left_and_a_dry_run_only_shows_it() {
     assert_ne!(placed(&dry, &manual.session_id).1, "never_joined");
     assert_eq!(f.record(&mine.operation_id).state, SessionState::Running);
 }
+
+impl Placed {
+    /// HS2-R7QH35: the texts pushed into one terminal that name a request.
+    fn requests(&self, terminal: &str) -> Vec<String> {
+        self.host
+            .pushes()
+            .into_iter()
+            .filter(|(id, text)| id == terminal && !text.contains("started this session"))
+            .map(|(_, text)| text)
+            .collect()
+    }
+    fn slug(&self, run: &hotsheet_ticketing::orchestration::Run) -> String {
+        ops::resolve(&self.m.target_store, &run.target.native_id)
+            .unwrap()
+            .unwrap()
+            .slug
+    }
+}
+
+/// HS2-R7QH35: a refilled session is told its new ticket through its host's session
+/// push; a tool that is not ready gets it on its next readiness event, after its
+/// role, and only once; the same request again is not pushed twice; a person's
+/// session is never sent one.
+#[test]
+fn hs2_r7qh35_a_refilled_session_is_told_its_ticket_once_when_its_tool_is_ready() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let first = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{first}"));
+    let terminal = f.terminal(&session);
+    f.finish(&first, &mut tx);
+    assert!(
+        f.requests(&terminal).is_empty(),
+        "a start's role prompt names it"
+    );
+    // The tool is busy elsewhere when the refill comes: the push is not ready.
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::NotReady]);
+    let second = f.ready("Second", &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("assigned", None)]);
+    let run = f.run_of(&second);
+    let slug = f.slug(&run);
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    let tried = f.requests(&terminal);
+    assert_eq!(tried.len(), 1);
+    assert!(tried[0].contains(&format!("`{slug}`")), "{tried:?}");
+    assert!(tried[0].contains("from the dispatcher"), "{tried:?}");
+    assert!(tried[0].contains(&worker_id), "{tried:?}");
+    let listing =
+        f.m.runtime
+            .hosted_sessions(&f.m.target.id, Some(&session.operation_id), false, &mut tx)
+            .unwrap();
+    assert_eq!(
+        listing.sessions[0].request_prompt,
+        Some(RolePrompt::Pending)
+    );
+    assert!(
+        f.m.runtime
+            .run_events(&f.owner(), 0, 500, Some(&run.run_id), 0)
+            .unwrap()
+            .entries
+            .iter()
+            .any(|entry| entry.record.reason.as_deref() == Some("session_request_pending"))
+    );
+    // The tool becomes ready: the readiness event delivers it, once; the role prompt,
+    // delivered long ago, is not pushed again.
+    let before = f.host.pushes().len();
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(f.host.pushes().len(), before + 1);
+    assert_eq!(f.requests(&terminal).len(), 2);
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(f.host.pushes().len(), before + 1);
+    let listing =
+        f.m.runtime
+            .hosted_sessions(&f.m.target.id, Some(&session.operation_id), false, &mut tx)
+            .unwrap();
+    assert_eq!(
+        listing.sessions[0].request_prompt,
+        Some(RolePrompt::Delivered)
+    );
+    // Telling it again changes nothing at the host.
+    let told =
+        f.m.runtime
+            .session_tell_ticket(&f.owner(), &session.session_id, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(told.request_prompt, Some(RolePrompt::Delivered));
+    assert_eq!(f.requests(&terminal).len(), 2);
+    // A person takes it over: nothing is sent to their session.
+    f.m.runtime
+        .session_takeover(
+            &f.owner(),
+            &session.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        f.m.runtime
+            .session_tell_ticket(&f.owner(), &session.session_id, Some(&worker()), &mut tx)
+            .unwrap_err()
+            .code(),
+        "session_human_owned"
+    );
+    assert_eq!(f.requests(&terminal).len(), 2);
+}
+
+/// HS2-R7QH35: after HS2-T16SK0 claims a ticket for a session because no dispatcher
+/// is live, the session is told the ticket is its own.
+#[test]
+fn hs2_r7qh35_a_session_given_a_claim_is_told_to_work_it() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let mut at_once = policy(Vec::new());
+    at_once.placement.dispatcher_wait_minutes = 0;
+    f.set_policy(at_once, &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, 4_000_000_000));
+    });
+    let tick = f.tick(&mut tx);
+    assert_eq!(tick.view.assignments[0].outcome.as_deref(), Some("claimed"));
+    let run = f.run_of(&step);
+    let told = f.requests(&f.terminal(&session));
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains(&format!("`{}`", f.slug(&run))), "{told:?}");
+    assert!(told[0].contains("claimed for you"), "{told:?}");
+    assert!(told[0].contains(&worker_id), "{told:?}");
+}

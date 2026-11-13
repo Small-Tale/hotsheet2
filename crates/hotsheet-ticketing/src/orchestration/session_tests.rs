@@ -1350,3 +1350,102 @@ fn hs2_dg0ypa_one_live_session_per_run_across_repeats_losses_and_refills() {
         );
     });
 }
+
+/// HS2-R7QH35: a hosted session's request naming one ticket: recorded once per ticket
+/// and kind, replaced by another, delivered within the role prompt's bounds counted
+/// from the request, and left alone once the session ended.
+#[test]
+fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bounds() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    let clock = Clock(std::cell::Cell::new(10));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    registry
+        .reserve(HOSTED, &hosted("op-1", "codex"), &mut tx)
+        .unwrap();
+    registry.mark_started(HOSTED, "op-1").unwrap();
+    let request = |ticket: &str, kind, now| {
+        registry
+            .request(HOSTED, "op-1", ticket, kind, now)
+            .unwrap()
+            .unwrap()
+            .request
+            .unwrap()
+    };
+    let attempt = |answer, now| {
+        registry
+            .request_attempt(HOSTED, "op-1", answer, now)
+            .unwrap()
+            .unwrap()
+            .request
+            .unwrap()
+    };
+    // No request yet: an attempt records nothing.
+    assert_eq!(
+        registry
+            .request_attempt(HOSTED, "op-1", PushAttempt::Delivered, 15)
+            .unwrap()
+            .unwrap()
+            .request,
+        None
+    );
+    let first = request(&id(700), RequestKind::Assigned, 20);
+    assert_eq!((first.requested_at_ms, first.at(20)), (20, None));
+    // Not ready, then the same request again: kept, not reset.
+    assert_eq!(
+        attempt(PushAttempt::NotReady, 30).at(30),
+        Some(RolePrompt::Pending)
+    );
+    let repeated = request(&id(700), RequestKind::Assigned, 40);
+    assert_eq!(
+        (repeated.requested_at_ms, repeated.delivery.attempts),
+        (20, 1)
+    );
+    // Delivered; a late try changes nothing.
+    let delivered = attempt(PushAttempt::Delivered, 50);
+    assert_eq!(delivered.at(50), Some(RolePrompt::Delivered));
+    assert_eq!(attempt(PushAttempt::Rejected, 60), delivered);
+    // The same ticket claimed for it is a new request; so is another ticket.
+    let claimed = request(&id(700), RequestKind::Claimed, 70);
+    assert_eq!(
+        (claimed.kind, claimed.requested_at_ms, claimed.at(70)),
+        (RequestKind::Claimed, 70, None)
+    );
+    let next = request(&id(701), RequestKind::Assigned, 80);
+    assert_eq!((next.ticket.clone(), next.requested_at_ms), (id(701), 80));
+    // Pending past its window, counted from the request, reads failed.
+    attempt(PushAttempt::NotReady, 90);
+    let pending = attempt(PushAttempt::NotReady, 100);
+    assert_eq!(pending.at(100), Some(RolePrompt::Pending));
+    assert_eq!(
+        pending.at(80 + ROLE_PROMPT_WINDOW_MS),
+        Some(RolePrompt::Failed)
+    );
+    // An ended session keeps what it had; a bad ticket id is refused; an unknown
+    // operation is none.
+    registry.end(HOSTED, "op-1", "wound_down", 110).unwrap();
+    let ended = registry
+        .request(HOSTED, "op-1", &id(702), RequestKind::Assigned, 120)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ended.request.unwrap().ticket, id(701));
+    assert!(
+        registry
+            .request(HOSTED, "op-1", "not a ticket", RequestKind::Assigned, 120)
+            .is_err()
+    );
+    assert_eq!(
+        registry
+            .request(HOSTED, "op-x", &id(700), RequestKind::Assigned, 120)
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        serde_json::to_value(RequestKind::Claimed).unwrap(),
+        "claimed"
+    );
+}

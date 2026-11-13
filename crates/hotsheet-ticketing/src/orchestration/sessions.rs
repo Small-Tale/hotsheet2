@@ -956,6 +956,50 @@ pub struct HostedSession {
     /// HS2-2DPGDY: how the session was asked to take up its role.
     #[serde(default, skip_serializing_if = "RoleDelivery::is_unasked")]
     pub role_delivery: RoleDelivery,
+    /// HS2-R7QH35: the latest request naming one exact ticket, pushed into the
+    /// running session after it was given that ticket's run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<HostedRequest>,
+}
+
+/// HS2-R7QH35: why a running session is told about one exact ticket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RequestKind {
+    /// It was given the ticket's run: request that ticket from the dispatcher.
+    Assigned,
+    /// No dispatcher is live, so the ticket is claimed under its worker id: work it.
+    Claimed,
+}
+
+impl RequestKind {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Assigned => "assigned",
+            Self::Claimed => "claimed",
+        }
+    }
+}
+
+/// HS2-R7QH35: one request recorded on a hosted session, delivered like its role
+/// prompt: once now, then on the tool's readiness events, within the same bounds,
+/// counted from `requested_at_ms`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedRequest {
+    /// The ticket's canonical id.
+    pub ticket: String,
+    pub kind: RequestKind,
+    pub requested_at_ms: u64,
+    #[serde(default, skip_serializing_if = "RoleDelivery::is_unasked")]
+    pub delivery: RoleDelivery,
+}
+
+impl HostedRequest {
+    /// How the request stands at `now_ms`; a pending one past its bounds is failed.
+    pub fn at(&self, now_ms: u64) -> Option<RolePrompt> {
+        self.delivery.at(self.requested_at_ms, now_ms)
+    }
 }
 
 impl HostedSession {
@@ -1137,6 +1181,7 @@ impl HostedSessionRegistry {
             ended_at_ms: None,
             end_reason: None,
             role_delivery: RoleDelivery::default(),
+            request: None,
         };
         validate_hosted(&session)?;
         file.sessions.push(session.clone());
@@ -1256,6 +1301,59 @@ impl HostedSessionRegistry {
         })
     }
 
+    /// HS2-R7QH35: record a request naming `ticket`. The same ticket and kind again
+    /// keep the request as it is, so a repeat is never pushed twice; another ticket or
+    /// kind replaces it. `Ok(None)` when no session has the operation id; an ended
+    /// session keeps what it had.
+    pub fn request(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        ticket: &str,
+        kind: RequestKind,
+        now_ms: u64,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        valid_identifier(ticket)?;
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_some() {
+                return;
+            }
+            let same = session
+                .request
+                .as_ref()
+                .is_some_and(|request| request.ticket == ticket && request.kind == kind);
+            if !same {
+                session.request = Some(HostedRequest {
+                    ticket: ticket.into(),
+                    kind,
+                    requested_at_ms: now_ms,
+                    delivery: RoleDelivery::default(),
+                });
+            }
+        })
+    }
+
+    /// HS2-R7QH35: fold one try at delivering the request into the record. A settled
+    /// delivery, an ended session or one without a request does not change.
+    pub fn request_attempt(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        attempt: PushAttempt,
+        now_ms: u64,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_some() {
+                return;
+            }
+            if let Some(request) = session.request.as_mut() {
+                request.delivery = request
+                    .delivery
+                    .after(attempt, request.requested_at_ms, now_ms);
+            }
+        })
+    }
+
     /// A person took the session over, optionally pausing it. Never undone.
     pub fn take_over(
         &self,
@@ -1286,6 +1384,9 @@ fn validate_hosted(session: &HostedSession) -> Result<(), OrchestrationError> {
     .validate()?;
     if let Some(reason) = &session.end_reason {
         valid_identifier(reason)?;
+    }
+    if let Some(request) = &session.request {
+        valid_identifier(&request.ticket)?;
     }
     if session.paused && session.owner != SessionOwner::Human {
         return Err(OrchestrationError::Invalid(

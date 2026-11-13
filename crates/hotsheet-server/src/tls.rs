@@ -444,6 +444,8 @@ mod tests {
             "/checkouts/owner/orchestration/sessions/id/safe-point",
             "/checkouts/owner/orchestration/sessions/id/stop",
             "/checkouts/owner/orchestration/sessions/id/takeover",
+            // HS2-R7QH35: telling a session its ticket passes this machine's grants.
+            "/checkouts/owner/orchestration/sessions/id/request",
             "/checkouts/owner/orchestration/session-sync",
             // HS2-ECWG50: scheduling reads and acts on this machine's records.
             "/checkouts/owner/orchestration/scheduler/plan",

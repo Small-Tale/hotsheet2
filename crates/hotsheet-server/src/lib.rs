@@ -2220,6 +2220,7 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{checkout}/target-sessions",
             get(routes::orchestration::read)
                 .post(routes::orchestration::write)
+                .put(routes::orchestration::write)
                 .patch(routes::orchestration::write)
                 .delete(routes::orchestration::write),
         )

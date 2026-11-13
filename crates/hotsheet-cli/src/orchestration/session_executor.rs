@@ -472,7 +472,17 @@ impl OrchestrationRuntime {
             &actor,
             tx,
         ) {
-            Ok(_) => AssignOutcome::Assigned { run_id: run.run_id },
+            Ok(_) => {
+                // HS2-R7QH35: the running session is told its new ticket. Best effort:
+                // the assignment stands whatever the push answered.
+                let _ = self.session_tell_ticket(
+                    &request.owner_id,
+                    &session.session_id,
+                    Some(&actor),
+                    tx,
+                );
+                AssignOutcome::Assigned { run_id: run.run_id }
+            }
             Err(error) => refused(&error),
         }
     }

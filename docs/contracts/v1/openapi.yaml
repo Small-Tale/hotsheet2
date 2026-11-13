@@ -2580,7 +2580,9 @@ paths:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/sessions/{session}/{operation}:
-    description: Sync, check, stop or take over one orchestrator-started session (HS2-GDJXGZ); machine-local.
+    description:
+      Sync, check, stop, take over or tell one orchestrator-started session its ticket (HS2-GDJXGZ, HS2-R7QH35);
+      machine-local.
     x-hotsheet-machine-local: true
     post:
       operationId: superviseOrchestrationSession
@@ -2592,7 +2594,8 @@ paths:
         (`session_force_not_permitted` for any other actor). `takeover` hands the session to a person, with `pause` to
         also pause it; it is a person's act, changes this machine's record first, and lists `target_session` in
         `unverified` when the host could not be told. A session a person owns is never stopped by the orchestrator
-        (`session_human_owned`)."
+        (`session_human_owned`). `request` tells a running session which exact ticket its run is for through its host's
+        session push (HS2-R7QH35) and answers `request_prompt`."
       requestBody:
         required: true
         content:
@@ -2790,6 +2793,61 @@ paths:
                     $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
                   tool_setup:
                     $ref: '#/components/schemas/OrchestrationSessionToolSetup'
+                additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    put:
+      operationId: requestHostedTargetSession
+      description:
+        Tell a running session this machine hosts which exact ticket it now works (HS2-R7QH35). `assigned` asks it to
+        request the ticket from the target's dispatcher; `claimed` says the ticket is claimed under its own worker id.
+        The request is recorded and pushed once through the session push; a tool that is not ready gets it on its
+        readiness events, like its role prompt, and the same request again is not pushed twice. A person's session is
+        refused `session_human_owned`, an ended one `session_not_active`, an unknown operation `session_not_found`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - operation_id
+                - ticket
+                - kind
+              properties:
+                operation_id:
+                  type: string
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
+                ticket:
+                  type: string
+                  maxLength: 160
+                kind:
+                  $ref: '#/components/schemas/OrchestrationSessionRequestKind'
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: How the request stands, or why it was refused.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_prompt:
+                    $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+                  reason:
+                    type: string
                 additionalProperties: false
         default:
           description:
@@ -20757,6 +20815,9 @@ components:
           type: string
         role_prompt:
           $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        request_prompt:
+          description: How the request naming the session's ticket stands, when this answer sent one (HS2-R7QH35).
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
         tool_setup:
           $ref: '#/components/schemas/OrchestrationSessionToolSetup'
         safe_point:
@@ -20895,6 +20956,24 @@ components:
               type: string
             role_delivery:
               $ref: '#/components/schemas/OrchestrationRoleDelivery'
+            request:
+              description: The latest request naming one exact ticket, pushed into the running session (HS2-R7QH35).
+              type: object
+              required:
+                - ticket
+                - kind
+                - requested_at_ms
+              properties:
+                ticket:
+                  type: string
+                kind:
+                  $ref: '#/components/schemas/OrchestrationSessionRequestKind'
+                requested_at_ms:
+                  type: integer
+                  minimum: 0
+                delivery:
+                  $ref: '#/components/schemas/OrchestrationRoleDelivery'
+              additionalProperties: false
           additionalProperties: false
         server_id:
           type: string
@@ -20914,6 +20993,8 @@ components:
         safe_point:
           $ref: '#/components/schemas/OrchestrationSessionSafePoint'
         role_prompt:
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        request_prompt:
           $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
         joined:
           description:
@@ -22430,6 +22511,13 @@ components:
         outcome_detail:
           type: string
       additionalProperties: false
+    OrchestrationSessionRequestKind:
+      description:
+        Why a running session is told about one exact ticket (HS2-R7QH35). `assigned` - it was given the ticket's run;
+        `claimed` - no dispatcher is live, so the ticket is claimed under its worker id.
+      enum:
+        - assigned
+        - claimed
     RemoteIdentity:
       type: object
       required:

@@ -366,3 +366,101 @@ async fn hs2_nptks8_the_loop_replaces_a_session_that_never_joins_and_keeps_one_t
         .await;
     assert!(joined["joined_at_ms"].is_u64(), "{joined}");
 }
+
+/// HS2-R7QH35: on a real server, a session the loop refills with the next step's run
+/// is told that exact ticket through its tool's session push (the push-capable fake
+/// agent records every prompt it receives).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_r7qh35_a_refilled_session_receives_the_exact_ticket_of_its_new_run() {
+    use super::session_work::{PUSH_AGENT, PUSH_PLUGIN, received_prompt};
+    let world = World::new(&LOOP_ACTIONS, PUSH_AGENT, PUSH_PLUGIN).await;
+    let orchestration = world.ticket("Coordinate the synthetic work");
+    let first = world.ticket("Synthetic first work");
+    plan_step(&world, &orchestration, &first).await;
+    world
+        .allow(
+            &LOOP_ACTIONS,
+            json!({"wind_down":{"idle_minutes":60,"keep_warm":0},
+                "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":0,
+                    "dispatcher_wait_minutes":60,"join_minutes":60}}),
+        )
+        .await;
+    let minute = std::time::Duration::from_secs(60);
+    let (start, _) = decided(
+        &world,
+        "started session",
+        |entry| entry["kind"] == "start" && entry["outcome"] == "started",
+        minute,
+    )
+    .await;
+    let run_id = start["run_id"].as_str().unwrap().to_owned();
+    let (_, sessions) = world.call("GET", "/sessions", Value::Null).await;
+    let terminal = sessions[0]["hosted"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Its role prompt arrives once the tool is up, naming its first ticket.
+    received_prompt(&world.reports, &terminal, &format!("`{}`", first.slug));
+
+    // The first work is finished in the target and the run learns it.
+    hotsheet_ticketing::ops::update(
+        &FsStore::open(&world.project_store).unwrap(),
+        &first.id,
+        "2026-10-15T00:00:00Z".into(),
+        hotsheet_ticketing::TicketPatch {
+            status: Some(hotsheet_model::Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let actor = json!({"role":"ai","id":"scheduler-1"});
+    let (_, synced) = world
+        .call(
+            "POST",
+            &format!("/runs/{run_id}/sync"),
+            json!({"actor":actor}),
+        )
+        .await;
+    assert_eq!(synced["state"], "completed", "{synced}");
+    // New work: the free session is refilled with its run and told its ticket.
+    let second = world.ticket("Synthetic second work");
+    plan_step(&world, &orchestration, &second).await;
+    let (assigned, _) = decided(
+        &world,
+        "refill",
+        |entry| entry["kind"] == "keep" && entry["outcome"] == "assigned",
+        minute,
+    )
+    .await;
+    assert_eq!(assigned["session_id"], start["session_id"], "{assigned}");
+    let told = received_prompt(&world.reports, &terminal, &format!("`{}`", second.slug));
+    assert!(told.contains("from the dispatcher"), "{told}");
+    // Once: the request was delivered and the host reports it so.
+    let (status, listing) = api(
+        world.router.clone(),
+        "GET",
+        &format!(
+            "/checkouts/{}/target-sessions?operation_id={}",
+            world.checkout.id,
+            sessions[0]["operation_id"].as_str().unwrap()
+        ),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{listing}");
+    assert_eq!(
+        listing["sessions"][0]["request_prompt"], "delivered",
+        "{listing}"
+    );
+    let prompts =
+        std::fs::read_to_string(world.reports.join(format!("{terminal}.prompts"))).unwrap();
+    assert_eq!(
+        prompts
+            .lines()
+            .filter(|line| line.contains(&second.slug))
+            .count(),
+        1,
+        "{prompts}"
+    );
+}

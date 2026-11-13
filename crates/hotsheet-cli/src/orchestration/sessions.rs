@@ -16,7 +16,7 @@ use hotsheet_ticketing::orchestration::{
     SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate, StopRequest,
     TargetAction, TargetDestination, TargetOpError, decide_safe_point, decide_stop,
 };
-pub use hotsheet_ticketing::orchestration::{PushAttempt, RolePrompt};
+pub use hotsheet_ticketing::orchestration::{PushAttempt, RequestKind, RolePrompt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -186,6 +186,19 @@ pub fn role_prompt_text(role: SessionRole, worker_id: &str, request: Option<&str
         ));
     }
     text
+}
+
+/// HS2-R7QH35: the message that tells a running session which exact ticket its new
+/// run is for. `ticket` is the slug where the host can read it.
+pub fn request_prompt_text(kind: RequestKind, worker_id: &str, ticket: &str) -> String {
+    match kind {
+        RequestKind::Assigned => format!(
+            "Hot Sheet orchestration gave this session new work: the ticket `{ticket}`. Request it from the dispatcher with the `hotsheet-worker` skill, as the worker `{worker_id}`."
+        ),
+        RequestKind::Claimed => format!(
+            "Hot Sheet orchestration found no live dispatcher for this project, so the ticket `{ticket}` is claimed for you under your worker id `{worker_id}`. Work it with the `hotsheet-worker` skill, renewing that claim, without waiting for a dispatcher."
+        ),
+    }
 }
 
 /// HS2-2DPGDY: whether the target's pool shows the session registered, unexpired, in
@@ -423,6 +436,31 @@ pub struct HostedSessionView {
     /// its role. `null` when the pool could not be read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub joined: Option<bool>,
+    /// HS2-R7QH35: how the latest request naming one ticket stands, as of now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_prompt: Option<RolePrompt>,
+}
+
+/// HS2-R7QH35: tell a running hosted session which exact ticket it now works.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedSessionRequest {
+    pub operation_id: String,
+    /// The ticket's canonical id in the target checkout.
+    pub ticket: String,
+    pub kind: RequestKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<MutationActor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostedRequestReply {
+    /// How the request stands; absent when it was refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_prompt: Option<RolePrompt>,
+    /// Why not, as a session code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -556,6 +594,10 @@ pub struct SessionView {
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role_prompt: Option<RolePrompt>,
+    /// HS2-R7QH35: how the request naming the session's ticket stands, when this
+    /// answer sent one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_prompt: Option<RolePrompt>,
     /// HS2-WEFJV8: what the target checkout's tool setup wrote before the launch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_setup: Option<ToolSetup>,
@@ -572,6 +614,7 @@ impl From<OrchestratedSession> for SessionView {
             session,
             label: None,
             role_prompt: None,
+            request_prompt: None,
             tool_setup: None,
             safe_point: None,
             unverified: Vec::new(),
@@ -805,6 +848,10 @@ impl OrchestrationRuntime {
             label: session.label(),
             server_id: self.server_id.clone(),
             role_prompt: session.role_delivery.at(session.created_at_ms, now_ms),
+            request_prompt: session
+                .request
+                .as_ref()
+                .and_then(|request| request.at(now_ms)),
             joined,
             worker_id,
             alive,
@@ -1065,22 +1112,126 @@ impl OrchestrationRuntime {
             return Ok(None);
         };
         let now_ms = tx.clock.now_ms();
-        if session.ended_at_ms.is_some()
-            || !session
-                .role_delivery
-                .should_retry(session.created_at_ms, now_ms)
-        {
+        if session.ended_at_ms.is_some() {
+            return Ok(session.role_delivery.at(session.created_at_ms, now_ms));
+        }
+        let role_due = session
+            .role_delivery
+            .should_retry(session.created_at_ms, now_ms);
+        // HS2-R7QH35: a pending request is tried on the same events, after the role.
+        let request_due = session.request.as_ref().is_some_and(|request| {
+            request
+                .delivery
+                .should_retry(request.requested_at_ms, now_ms)
+        });
+        if !role_due && !request_due {
             return Ok(session.role_delivery.at(session.created_at_ms, now_ms));
         }
         let checkout = self.owner(&session.checkout_id)?;
+        let mut current = session.clone();
+        if role_due {
+            let attempt = self.sessions.join_role(
+                &checkout,
+                &session.session_id,
+                &Self::role_text(&checkout, &session),
+            );
+            if let Some(after) =
+                registry.role_attempt(&checkout.id, &session.operation_id, Some(attempt), now_ms)?
+            {
+                current = after;
+            }
+        }
+        if request_due {
+            self.hosted_request_push(&checkout, &current, tx)?;
+        }
+        Ok(current.role_delivery.at(current.created_at_ms, now_ms))
+    }
+
+    /// HS2-R7QH35: push a hosted session's recorded request once and fold the answer
+    /// into the record.
+    fn hosted_request_push(
+        &self,
+        checkout: &Checkout,
+        session: &HostedSession,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Option<RolePrompt>, OrchestrationError> {
+        let Some(request) = &session.request else {
+            return Ok(None);
+        };
+        let now_ms = tx.clock.now_ms();
+        let worker = hotsheet_aitools::session_worker_id(&session.tool, &session.session_id);
+        let label =
+            Self::ticket_label(checkout, &request.ticket).unwrap_or_else(|| request.ticket.clone());
         let attempt = self.sessions.join_role(
-            &checkout,
+            checkout,
             &session.session_id,
-            &Self::role_text(&checkout, &session),
+            &request_prompt_text(request.kind, &worker, &label),
         );
-        Ok(registry
-            .role_attempt(&checkout.id, &session.operation_id, Some(attempt), now_ms)?
-            .and_then(|session| session.role_delivery.at(session.created_at_ms, now_ms)))
+        Ok(self
+            .hosted_sessions_registry()
+            .request_attempt(&checkout.id, &session.operation_id, attempt, now_ms)?
+            .and_then(|after| {
+                after
+                    .request
+                    .as_ref()
+                    .and_then(|request| request.at(now_ms))
+            }))
+    }
+
+    /// HS2-R7QH35: tell a running session this machine hosts which exact ticket it now
+    /// works. The request is recorded and pushed once; a tool that is not ready gets
+    /// it on its readiness events, like its role prompt. The same request again is
+    /// not pushed twice. A person's session, or one that ended, is refused.
+    pub fn hosted_session_request(
+        &self,
+        checkout_id: &str,
+        request: HostedSessionRequest,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedRequestReply, OrchestrationError> {
+        identifier(&request.operation_id, "bounded operation id required")?;
+        identifier(&request.ticket, "bounded ticket id required")?;
+        let checkout = self.owner(checkout_id)?;
+        let registry = self.hosted_sessions_registry();
+        let refused = |error: SessionError| HostedRequestReply {
+            request_prompt: None,
+            reason: Some(error.code().into()),
+        };
+        let Some(session) = registry.get(&checkout.id, &request.operation_id)? else {
+            return Ok(refused(SessionError::NotFound));
+        };
+        if session.owner == SessionOwner::Human {
+            return Ok(refused(SessionError::HumanOwned));
+        }
+        if !session.started || session.ended_at_ms.is_some() {
+            return Ok(refused(SessionError::NotActive));
+        }
+        let now_ms = tx.clock.now_ms();
+        let Some(recorded) = registry.request(
+            &checkout.id,
+            &request.operation_id,
+            &request.ticket,
+            request.kind,
+            now_ms,
+        )?
+        else {
+            return Ok(refused(SessionError::NotFound));
+        };
+        let unasked = recorded
+            .request
+            .as_ref()
+            .is_some_and(|request| request.delivery.is_unasked());
+        let request_prompt = if unasked {
+            self.hosted_request_push(&checkout, &recorded, tx)?
+        } else {
+            recorded
+                .request
+                .as_ref()
+                .and_then(|request| request.at(now_ms))
+        };
+        Ok(HostedRequestReply {
+            request_prompt,
+            reason: None,
+        })
     }
 
     /// Stop a hosted session. This machine checks the safe point itself: the
@@ -1884,6 +2035,98 @@ impl OrchestrationRuntime {
         }) {
             let _ = self.session_sync(owner_id, &session.session_id, actor, tx);
         }
+    }
+
+    /// HS2-R7QH35: tell a running session which exact ticket its run is for, through
+    /// its hosting server's session push with the same readiness-aware delivery as its
+    /// role prompt. `claimed` when its run's ticket is claimed under its own worker id
+    /// (HS2-T16SK0), otherwise `assigned`: request it from the dispatcher. Passes the
+    /// gate as `sessions_manage` continuing, and publishes `session_request_<code>` on
+    /// the run's stream. A person's session is never sent anything.
+    pub fn session_tell_ticket(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        let session = self.session(owner_id, session_id)?;
+        if session.state != SessionState::Running {
+            return Err(OrchestrationError::Session(SessionError::NotActive));
+        }
+        if session.owner == SessionOwner::Human {
+            return Err(OrchestrationError::Session(SessionError::HumanOwned));
+        }
+        let run_id = session
+            .run_id
+            .clone()
+            .ok_or(OrchestrationError::Invalid("the session works no run"))?;
+        let run = self.run(owner_id, &run_id)?;
+        if run.state.is_terminal() {
+            return Err(OrchestrationError::Run(
+                hotsheet_ticketing::orchestration::RunError::NotActive,
+            ));
+        }
+        let worker = session
+            .hosted
+            .as_ref()
+            .map(|hosted| hosted.worker_id.as_str());
+        let kind = if run.state == hotsheet_ticketing::orchestration::RunState::Dispatched
+            && run.worker_id.as_deref() == worker
+        {
+            RequestKind::Claimed
+        } else {
+            RequestKind::Assigned
+        };
+        let (target, authorized) = self.session_gate(&session, actor, true, None, tx)?;
+        let outcome = (|| {
+            let body = serde_json::to_value(HostedSessionRequest {
+                operation_id: session.operation_id.clone(),
+                ticket: run.target.native_id.clone(),
+                kind,
+                actor: actor.cloned(),
+            })
+            .map_err(|_| OrchestrationError::Corrupt)?;
+            let reply: HostedRequestReply = serde_json::from_value(self.hosted_call_at(
+                Self::destination(&authorized)?,
+                "/target-sessions",
+                "PUT",
+                "",
+                Some(&body),
+                tx,
+            )?)
+            .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
+            if let Some(reason) = reply.reason {
+                return Err(SessionError::from_code(&reason).map_or(
+                    OrchestrationError::Observation(TargetFailure::InvalidResponse),
+                    OrchestrationError::Session,
+                ));
+            }
+            if let Some(prompt) = reply.request_prompt {
+                let reason = format!("session_request_{}", prompt.code());
+                self.run_event(
+                    owner_id,
+                    RunEvent {
+                        at_ms: tx.clock.now_ms(),
+                        run_id: run_id.clone(),
+                        kind: RunEventKind::Session,
+                        source: RunEventSource::Orchestrator,
+                        state: None,
+                        dedupe: Some(format!("{session_id}-{run_id}-{}-{reason}", kind.code())),
+                        reason: Some(reason),
+                        actor_id: actor.and_then(|actor| actor.id.clone()),
+                        gate_id: None,
+                        gate_state: None,
+                    },
+                );
+            }
+            Ok(SessionView {
+                request_prompt: reply.request_prompt,
+                ..SessionView::from(session.clone())
+            })
+        })();
+        self.finish(&target, &authorized, &outcome, tx)?;
+        outcome
     }
 
     /// Read the session from its host and bring the record up to date: a session the

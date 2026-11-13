@@ -220,7 +220,12 @@ impl OrchestrationRuntime {
         };
         for assignment in assignments.iter_mut().filter(|found| found.claim) {
             match self.assignment_claim(owner_id, assignment, actor, tx) {
-                Ok(_) => assignment.outcome = Some("claimed".into()),
+                Ok(_) => {
+                    assignment.outcome = Some("claimed".into());
+                    // HS2-R7QH35: the session is told the ticket is now its own.
+                    let _ =
+                        self.session_tell_ticket(owner_id, &assignment.session_id, Some(actor), tx);
+                }
                 Err(error) => {
                     assignment.outcome = Some("refused".into());
                     assignment.outcome_detail = Some(error.code().into());
