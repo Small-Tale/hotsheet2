@@ -682,3 +682,170 @@ fn hs2_7qhwhj_observation_keeps_the_newest_read_and_when_an_outage_began() {
         Err(OrchestrationError::Invalid(_))
     ));
 }
+
+/// HS2-68DWAM: a stored reconciliation describes the state it was assessed on. Every
+/// transition, not only a final one, supersedes it; an update that carries a new
+/// outcome stores it for the new state; an update that changes no state keeps it; and
+/// an unchanged outcome is not rewritten. Walked over every allowed edge from a
+/// reconciled run, and as a repeated and empty-then-refilled sequence.
+#[test]
+fn hs2_68dwam_a_transition_supersedes_the_stored_reconciliation() {
+    use RunState::{Cancelled, Completed, Dispatched, Failed, Intervened, Queued, Requested};
+    let outcome = |at_ms, disposition| RunReconciliation {
+        at_ms,
+        disposition,
+        findings: Vec::new(),
+    };
+    let reconciled = |disposition| RunUpdate {
+        reconciliation: Some(outcome(150, disposition)),
+        ..RunUpdate::default()
+    };
+    // Each edge from a state the run can be reconciled in, with the path to reach it.
+    let edges: [(&[RunState], RunState); 9] = [
+        (&[], Queued),
+        (&[], Dispatched),
+        (&[], Failed),
+        (&[Queued], Dispatched),
+        (&[Queued], Intervened),
+        (&[Queued], Cancelled),
+        (&[Dispatched], Intervened),
+        (&[Dispatched], Completed),
+        (&[Dispatched, Intervened], Dispatched),
+    ];
+    for (n, (path, next)) in edges.iter().enumerate() {
+        let home = tempfile::tempdir().unwrap();
+        let registry = RunRegistry::new(home.path());
+        let clock = Clock(100.into());
+        let mut rng = Rng(1);
+        let mut tx = Transaction {
+            clock: &clock,
+            rng: &mut rng,
+        };
+        let (run, _) = registry
+            .begin(
+                OWNER,
+                new(&format!("op-{n}"), "t1", DispatchMode::Dispatcher, None),
+                None,
+                &mut tx,
+            )
+            .unwrap();
+        let mut from = Requested;
+        for state in *path {
+            registry
+                .update(OWNER, &run.run_id, to(*state, "step"), &mut tx)
+                .unwrap();
+            from = *state;
+        }
+        let stored = registry
+            .update(
+                OWNER,
+                &run.run_id,
+                reconciled(Disposition::WaitForDispatcher),
+                &mut tx,
+            )
+            .unwrap();
+        assert!(stored.reconciliation.is_some(), "{from:?}");
+        // A non-state update keeps it.
+        let kept = registry
+            .update(
+                OWNER,
+                &run.run_id,
+                RunUpdate {
+                    cancel_requested: Some(false),
+                    ..RunUpdate::default()
+                },
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(kept.reconciliation, stored.reconciliation, "{from:?}");
+        let moved = registry
+            .update(OWNER, &run.run_id, to(*next, "synced"), &mut tx)
+            .unwrap();
+        assert_eq!(moved.state, *next);
+        assert_eq!(moved.reconciliation, None, "{from:?} -> {next:?}");
+    }
+
+    // One run: reconciled, moved on, reconciled again, repeated, then a transition
+    // that carries its own outcome.
+    let home = tempfile::tempdir().unwrap();
+    let registry = RunRegistry::new(home.path());
+    let clock = Clock(100.into());
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let (run, _) = registry
+        .begin(
+            OWNER,
+            new("op-seq", "t1", DispatchMode::Dispatcher, None),
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    registry
+        .update(OWNER, &run.run_id, to(Queued, "queued"), &mut tx)
+        .unwrap();
+    registry
+        .update(
+            OWNER,
+            &run.run_id,
+            reconciled(Disposition::WaitForDispatcher),
+            &mut tx,
+        )
+        .unwrap();
+    let dispatched = registry
+        .update(OWNER, &run.run_id, to(Dispatched, "assigned"), &mut tx)
+        .unwrap();
+    assert_eq!(dispatched.reconciliation, None);
+    // Refilled for the new state; the same outcome reached later keeps its first time
+    // and rewrites nothing.
+    clock.0.set(200);
+    let refilled = registry
+        .update(
+            OWNER,
+            &run.run_id,
+            reconciled(Disposition::Continue),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        refilled.reconciliation,
+        Some(outcome(150, Disposition::Continue))
+    );
+    let bytes = std::fs::read(home.path().join("orchestration-runs.json")).unwrap();
+    let again = registry
+        .update(
+            OWNER,
+            &run.run_id,
+            RunUpdate {
+                reconciliation: Some(outcome(300, Disposition::Continue)),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(again.reconciliation, refilled.reconciliation);
+    assert_eq!(
+        std::fs::read(home.path().join("orchestration-runs.json")).unwrap(),
+        bytes
+    );
+    // A transition carrying an outcome stores that outcome, for the new state.
+    let intervened = registry
+        .update(
+            OWNER,
+            &run.run_id,
+            RunUpdate {
+                to: Some(Intervened),
+                reason: Some("released".into()),
+                reconciliation: Some(outcome(400, Disposition::NeedsAttention)),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        intervened.reconciliation,
+        Some(outcome(400, Disposition::NeedsAttention))
+    );
+}

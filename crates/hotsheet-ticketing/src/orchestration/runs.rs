@@ -517,11 +517,13 @@ impl RunRegistry {
             if !matches!(to, RunState::Dispatched) {
                 run.lease_expires_at_ms = None;
             }
+            // HS2-68DWAM: the stored outcome was assessed on the earlier state, so a
+            // transition supersedes it; a finished run depends on nothing any more.
+            // An outcome this update carries is stored below, for the new state.
+            run.reconciliation = None;
             if to.is_terminal() {
                 run.cancel_requested = false;
                 run.paused = None;
-                // A finished run depends on nothing any more.
-                run.reconciliation = None;
             }
         }
         if let Some(lease) = update.lease_expires_at_ms {

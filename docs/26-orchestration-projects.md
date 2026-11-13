@@ -1705,7 +1705,11 @@ The outcome (disposition and findings) is stored on the run as `reconciliation` 
 shown by `run status`. The answer's `unverified` lists exactly the sources that are
 `unverifiable`. An unchanged outcome is not rewritten and produces no event; a new
 one is a `reconciled` event whose reason is the disposition. A finished run keeps no
-outcome. A target that cannot be confirmed is part of the answer, not an error.
+outcome, and neither does a run whose state changed since (a sync that moved it
+from `queued` to `dispatched`, for example): the outcome was assessed on the earlier
+state, so `run status` shows none until the next reconciliation stores the one for
+the new state (HS2-68DWAM). A target that cannot be confirmed is part of the answer,
+not an error.
 
 ### When it runs
 
@@ -3257,7 +3261,7 @@ freed without any run event is now wound down from the session change the peer's
 feed carries (HS2-257Q2Z, §26.9). Defects these
 scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9CTG
 (§26.17). A cancel the gate denies is answered as the denial (HS2-WC3W2G). Open
-findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q428Z (concurrent passes each log a start), HS2-68DWAM (a stale shown
-reconciliation). External-provider targets and a contended resource are HS2-30XYPY.
+findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q428Z (concurrent passes each log a start). A shown reconciliation no
+longer outlives a later state change (HS2-68DWAM). External-provider targets and a contended resource are HS2-30XYPY.
 Checks that need a real AI tool, a real GitHub repository or Windows and Linux hosts
 are in [the manual test plan](manual-test-plan.md#orchestration-end-to-end-with-real-tools-and-hosts-hs2-2ey9dp).

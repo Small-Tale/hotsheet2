@@ -1058,3 +1058,89 @@ fn hs2_wc3w2g_a_denied_cancel_answers_the_denial_and_records_nothing() {
     assert!(cancelled.unverified.is_empty());
     assert!(!m.target_store.read_ticket(&ticket.id).unwrap().up_next);
 }
+
+/// HS2-68DWAM: `run status` never shows an outcome assessed on an earlier state. A
+/// queued dispatcher-mode run is reconciled (`wait_for_dispatcher`); a sync then
+/// moves it to `dispatched` for the worker that claimed it, and the status shows no
+/// outcome until the next reconciliation stores the one for `dispatched`.
+#[test]
+fn hs2_68dwam_a_sync_that_moves_the_run_on_drops_the_shown_reconciliation() {
+    use hotsheet_ticketing::orchestration::Disposition;
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[
+            TargetAction::TicketsRead,
+            TargetAction::TicketsWrite,
+            TargetAction::WorkStart,
+        ],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Queued then claimed");
+    let queued = m
+        .runtime
+        .run_dispatch(
+            &m.owner.id,
+            dispatch(
+                &m,
+                &orchestration,
+                &ticket.id.to_string(),
+                "op-1",
+                json!({"mode":"dispatcher"}),
+            ),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .run;
+    let waiting = m
+        .runtime
+        .run_reconcile(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(
+        waiting.run.reconciliation.as_ref().unwrap().disposition,
+        Disposition::WaitForDispatcher
+    );
+    ops::claim_with_eta(
+        &m.target_store,
+        &ticket.id,
+        &NOW.into(),
+        "2030-01-01T00:00:00Z".into(),
+        "pool-worker-3",
+        None,
+        None,
+    )
+    .unwrap();
+    let synced = m
+        .runtime
+        .run_sync(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(synced.run.state, RunState::Dispatched);
+    let status = m.runtime.run_status(&m.owner.id, &queued.run_id).unwrap();
+    assert_eq!(status.run.state, RunState::Dispatched);
+    assert_eq!(status.run.reconciliation, None);
+    // The next reconciliation stores the outcome for the state it found.
+    let again = m
+        .runtime
+        .run_reconcile(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(
+        again.run.reconciliation.as_ref().unwrap().disposition,
+        Disposition::Continue
+    );
+    assert_eq!(
+        m.runtime
+            .run_status(&m.owner.id, &queued.run_id)
+            .unwrap()
+            .run
+            .reconciliation,
+        again.run.reconciliation
+    );
+}
