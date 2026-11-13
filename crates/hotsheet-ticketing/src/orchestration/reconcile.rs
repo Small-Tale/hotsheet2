@@ -137,10 +137,13 @@ pub(super) fn ticket_finished(status: &str) -> bool {
 /// deployment, a session. Identifiers only.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ExternalWork {
-    /// What the run recorded it started.
+    /// What the run's records say is still going on.
     pub recorded: Option<String>,
     /// What actually exists and is still going.
     pub live: Option<String>,
+    /// HS2-7QNK7Y: a stable code that qualifies a verified finding, such as `no_gate`
+    /// or `watch_adopted`, carried as the finding's reason. Never free text.
+    pub note: Option<String>,
 }
 
 /// Everything a reconciliation knows about the world. Each field is one source.
@@ -403,6 +406,12 @@ fn lease_verdict(run: &Run, facts: &TargetFacts, now_ms: u64) -> Result<(), &'st
 fn work_finding(source: ExternalSource, observed: &Observed<ExternalWork>) -> SourceFinding {
     match observed {
         Observed::Unverifiable(reason) => unverifiable(source, reason),
+        // HS2-7QNK7Y: what the verified answer rests on, when the source says.
+        Observed::Verified(work) if work.recorded == work.live => SourceFinding {
+            source,
+            verification: Verification::Verified,
+            reason: work.note.clone(),
+        },
         Observed::Verified(work) => finding(
             source,
             match (&work.recorded, &work.live) {

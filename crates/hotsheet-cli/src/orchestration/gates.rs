@@ -352,11 +352,15 @@ impl OrchestrationRuntime {
         self.gate_registry().waiting_owners().unwrap_or_default()
     }
 
-    fn gate_registry(&self) -> GateRegistry {
+    pub(super) fn gate_registry(&self) -> GateRegistry {
         GateRegistry::new(&self.home)
     }
 
-    fn gate_provider(&self, provider: &str, kind: GateKind) -> Option<&Arc<dyn GateProvider>> {
+    pub(super) fn gate_provider(
+        &self,
+        provider: &str,
+        kind: GateKind,
+    ) -> Option<&Arc<dyn GateProvider>> {
         self.gate_providers
             .iter()
             .find(|other| other.provider() == provider && other.kind() == kind)

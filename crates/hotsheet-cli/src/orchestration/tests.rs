@@ -25,6 +25,7 @@ mod job_monitor;
 mod policy;
 mod provisional;
 mod readiness;
+mod reconcile_sources;
 mod recovery;
 mod runs;
 mod scheduler;

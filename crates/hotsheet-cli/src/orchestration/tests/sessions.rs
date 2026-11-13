@@ -552,6 +552,7 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
         Observed::Verified(ExternalWork {
             recorded: Some(session.session_id.clone()),
             live: Some(session.session_id.clone()),
+            note: None,
         })
     );
     assert_eq!(

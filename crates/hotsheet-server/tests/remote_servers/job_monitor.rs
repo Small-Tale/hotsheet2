@@ -249,6 +249,27 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
     assert_eq!(linked["watching"], true, "{linked}");
     assert!(matches!(slot.state().unwrap(), SlotState::Held(_)));
     let gate_a = linked["gate"]["gate_id"].as_str().unwrap().to_owned();
+    // HS2-7QNK7Y: reconciliation over HTTP finds the run's CI run in flight and the
+    // same watch live: verified, and nothing names it as unverified.
+    let (status, reconciled) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/runs/{run_id}/reconcile"),
+        json!({"actor":ai}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reconciled}");
+    assert_eq!(
+        reconciled["reconciliation"]["findings"][4],
+        json!({"source":"ci_run","verification":"verified"})
+    );
+    assert!(
+        !reconciled["unverified"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("ci_run"))
+    );
     // The provider finishes the run green. Nobody runs a CLI command; the monitor
     // observes it and the server's follower records the verdict.
     provider.run(9, &a, Some("success"));

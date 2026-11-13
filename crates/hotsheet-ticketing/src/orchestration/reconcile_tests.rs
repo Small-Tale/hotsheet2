@@ -391,6 +391,7 @@ fn hs2_wbredm_every_source_is_verified_mismatched_or_unverifiable_with_its_reaso
         Observed::Verified(ExternalWork {
             recorded: recorded.map(Into::into),
             live: live.map(Into::into),
+            note: None,
         })
     };
     for (recorded, live, verification, reason, may_start, disposition) in [

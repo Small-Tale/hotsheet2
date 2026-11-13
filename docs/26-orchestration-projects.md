@@ -9,7 +9,8 @@
 > with immutable result references (§26.12, HS2-WN0MXZ), CI and deployment gates of
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed;
 > the Job monitor is started by whoever links or follows a gate, HS2-VVHVF0),
-> recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
+> recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM;
+> reconciliation reads the CI runs gating a run, HS2-7QNK7Y),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
@@ -1491,7 +1492,7 @@ yields one **finding**: `verified`, `mismatched` or `unverifiable`.
 | `target_ticket`       | The target ticket's existence and status                    | Yes                                             |
 | `target_claim`        | Who holds a live claim, against the run's state and worker  | Yes                                             |
 | `run_lease`           | The lease the run recorded, against the lease on the ticket | Yes                                             |
-| `ci_run`              | CI runs gating the run                                      | `unverifiable`, `source_not_wired` (HS2-7QNK7Y) |
+| `ci_run`              | CI runs gating the run                                      | Yes (HS2-7QNK7Y)                                |
 | `deployment`          | Deployments started for the run                             | `unverifiable`, `source_not_wired` (HS2-BYEB60) |
 | `session`             | Orchestrator-owned sessions working the run                 | `unverifiable`, `source_not_wired` (HS2-75Q254) |
 
@@ -1499,10 +1500,36 @@ When the target cannot be confirmed, all four target sources are `unverifiable` 
 the reason the read failed for, such as `target_unavailable`. The last three sources
 take the same typed input (what the run recorded it started, and what is live) and
 already classify it: the same work is `verified`, live work the run never recorded is
-`unrecorded_live_work`, recorded work that is gone is `recorded_work_missing`. No
-ticket reports them yet, so they are passed as `source_not_wired`. That reason does
-not hold a run back, because the run records no such work; any other unverifiable
-reason does.
+`unrecorded_live_work`, recorded work that is gone is `recorded_work_missing`. A source
+nobody reports yet is passed as `source_not_wired`. That reason does not hold a run
+back, because the run records no such work; any other unverifiable reason does. A
+verified finding may carry a reason too: a code that says what the verified answer
+rests on, such as `no_gate`.
+
+### CI runs (HS2-7QNK7Y)
+
+The CI source compares the run's standing CI gates (§26.13) with what the CI
+adapter's own records say about each, for GitHub Actions the watch Jobs. It reads
+this machine's records only and contacts no provider, so it is answered whether or not
+the target is reachable.
+
+| A standing CI gate                                  | The adapter shows                                             | Finding                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| None linked                                         | -                                                             | `verified`, reason `no_gate`                                               |
+| `passed`                                            | Not read                                                      | `verified`                                                                 |
+| Waiting (`pending`, or `unknown` with `watch_lost`) | The same watch, still going                                   | `verified`                                                                 |
+| Any                                                 | Another live watch, or one the record did not name            | `verified`, reason `watch_adopted`                                         |
+| Waiting                                             | A verdict, or a watch stopped on purpose                      | `verified`: the work ended in the open                                     |
+| Waiting                                             | No watch at all                                               | `mismatched`, `recorded_work_missing`                                      |
+| Waiting                                             | A watch whose observer was lost                               | `unverifiable`, `watch_lost`                                               |
+| Any but `passed`                                    | Its records cannot be read, or no adapter serves the provider | `unverifiable`, `gate_provider_unavailable` or `gate_provider_unsupported` |
+
+Several gates are combined: any unverifiable gate makes the source unverifiable, then
+a missing watch outranks a live one. Reconciliation records nothing about the gate
+itself; the gate follower or the next `gate sync` brings the gate in line with the
+same reading. A live watch makes `may_start(ci_run)` false, and `gate link` never
+starts a second watch while one is live: the watch is found or reattached by its
+target, and only a finished one is watched again.
 
 **Never a duplicate.** New work of a kind may be started for a run only when that
 source was read and shows none going on (`Assessment::may_start`). A source that

@@ -9,7 +9,7 @@ use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
 const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FE1";
 const NOW: &str = "2026-10-15T00:00:00Z";
 const LEASE: &str = "2100-01-01T00:00:00Z";
-const NOT_WIRED: [&str; 3] = ["ci_run", "deployment", "session"];
+const NOT_WIRED: [&str; 2] = ["deployment", "session"];
 
 fn ticket(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
     ops::create(

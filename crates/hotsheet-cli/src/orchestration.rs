@@ -9,6 +9,7 @@ mod observer;
 mod policy;
 mod provisional;
 mod readiness;
+mod reconcile_sources;
 mod recovery;
 mod request;
 mod resources;

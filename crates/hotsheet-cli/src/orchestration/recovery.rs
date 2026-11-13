@@ -6,9 +6,8 @@
 //! external source what agrees, what does not and what could not be verified.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, AuditRecord, DispatchMode, Observations, Observed, Run, RunControl, RunError,
-    RunPause, RunReconciliation, RunState, RunUpdate, TargetAction, TargetFacts, TargetOpError,
-    assess,
+    AuditOutcome, AuditRecord, DispatchMode, Observed, Run, RunControl, RunError, RunPause,
+    RunReconciliation, RunState, RunUpdate, TargetAction, TargetFacts, TargetOpError, assess,
 };
 use serde::{Deserialize, Serialize};
 
@@ -182,10 +181,8 @@ impl OrchestrationRuntime {
         if run.state.is_terminal() {
             return Ok(view(run));
         }
-        let found = RunReconciliation::new(
-            now_ms,
-            assess(&run, &Observations::target_only(target), now_ms),
-        );
+        let observations = self.run_observations(owner_id, &run, target);
+        let found = RunReconciliation::new(now_ms, assess(&run, &observations, now_ms));
         self.run_apply(
             owner_id,
             run_id,

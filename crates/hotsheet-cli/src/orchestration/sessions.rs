@@ -1258,6 +1258,7 @@ impl OrchestrationRuntime {
                     live: of_run()
                         .rfind(|session| session.state == SessionState::Running)
                         .map(|session| session.session_id.clone()),
+                    note: None,
                 })
             }
             Err(_) => Observed::Unverifiable("session_records_unreadable".into()),

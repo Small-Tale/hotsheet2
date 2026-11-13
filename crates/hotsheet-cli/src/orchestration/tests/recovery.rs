@@ -13,7 +13,9 @@ use super::tickets::{Machine, NOW, bind_and_grant, human, machine, op, unsupport
 use super::*;
 
 const LEASE: &str = "2030-01-01T00:00:00Z";
-const NOT_WIRED: [&str; 3] = ["ci_run", "deployment", "session"];
+/// The sources nobody reports yet. HS2-7QNK7Y wired `ci_run`: a run without a gate
+/// has it verified as `no_gate`.
+const NOT_WIRED: [&str; 2] = ["deployment", "session"];
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
     ops::create(
@@ -134,10 +136,10 @@ fn kinds(m: &Machine, run: &Run) -> Vec<(RunEventKind, Option<String>)> {
         .map(|entry| (entry.record.kind, entry.record.reason))
         .collect()
 }
-fn disposition(view: &RunView) -> Disposition {
+pub(super) fn disposition(view: &RunView) -> Disposition {
     view.run.reconciliation.as_ref().unwrap().disposition
 }
-fn finding(view: &RunView, source: ExternalSource) -> (Verification, Option<String>) {
+pub(super) fn finding(view: &RunView, source: ExternalSource) -> (Verification, Option<String>) {
     let found = view
         .run
         .reconciliation
@@ -238,16 +240,16 @@ fn hs2_wbredm_a_restart_reconciles_each_interrupted_dispatch_without_a_duplicate
     assert_eq!(disposition(&view), Disposition::Continue);
     // Exactly the sources nobody reports yet are named, with the reason.
     assert_eq!(view.unverified, NOT_WIRED);
-    for source in [
-        ExternalSource::CiRun,
-        ExternalSource::Deployment,
-        ExternalSource::Session,
-    ] {
+    for source in [ExternalSource::Deployment, ExternalSource::Session] {
         assert_eq!(
             finding(&view, source),
             (Verification::Unverifiable, Some(SOURCE_NOT_WIRED.into()))
         );
     }
+    assert_eq!(
+        finding(&view, ExternalSource::CiRun),
+        (Verification::Verified, Some("no_gate".into()))
+    );
     for source in ExternalSource::ALL.into_iter().filter(|s| s.is_target()) {
         assert_eq!(finding(&view, source), (Verification::Verified, None));
     }
@@ -457,10 +459,15 @@ fn hs2_wbredm_an_unreachable_target_is_named_unverified_and_a_pending_cancel_wai
         .unwrap();
     assert_eq!(dark.run.state, RunState::Dispatched);
     assert_eq!(disposition(&dark), Disposition::HoldUnverified);
-    assert_eq!(
-        dark.unverified,
-        ExternalSource::ALL.map(ExternalSource::code)
-    );
+    // HS2-7QNK7Y: the CI source is this machine's own records, so an unreachable
+    // target leaves it verified.
+    let expected: Vec<&str> = ExternalSource::ALL
+        .into_iter()
+        .filter(|source| source.is_target())
+        .map(ExternalSource::code)
+        .chain(NOT_WIRED)
+        .collect();
+    assert_eq!(dark.unverified, expected);
     for source in ExternalSource::ALL.into_iter().filter(|s| s.is_target()) {
         assert_eq!(
             finding(&dark, source),

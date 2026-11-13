@@ -13,6 +13,7 @@ mod policy;
 mod provisional;
 mod readiness;
 mod reconcile;
+mod reconcile_sources;
 mod resources;
 mod role_delivery;
 mod run_events;
@@ -76,6 +77,7 @@ pub use reconcile::{
     Observed, RunReconciliation, SOURCE_NOT_WIRED, SourceFinding, TargetFacts, Verification, align,
     assess,
 };
+pub use reconcile_sources::{GateObservation, NOTE_NO_GATE, NOTE_WATCH_ADOPTED, ci_work};
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
     ResourceState, TargetResources, UnreadableClaims, UnreadableReason, resource_standings,
@@ -301,6 +303,8 @@ mod policy_tests;
 mod provisional_tests;
 #[cfg(test)]
 mod readiness_tests;
+#[cfg(test)]
+mod reconcile_source_tests;
 #[cfg(test)]
 mod reconcile_tests;
 #[cfg(test)]
