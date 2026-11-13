@@ -10,6 +10,8 @@ import { AppLoadingIndicator } from '../components/app-loading-indicator';
 import type { DemoModule } from './demo-module';
 
 export const appLoadingDemoProgress = signal<BulkUpdateProgress | undefined>(undefined);
+/** A background AI request's label, as Add to Group › Automatic shows it (HS2-4C32A0). */
+export const appLoadingDemoTask = signal<string | undefined>(undefined);
 
 export function AppLoadingIndicatorDemo() {
   return (
@@ -30,8 +32,11 @@ export function AppLoadingIndicatorDemo() {
         <Button type="button" rootAttributes={{ 'data-app-loading-demo': 'complete' }}>
           Update Complete
         </Button>
+        <Button type="button" rootAttributes={{ 'data-app-loading-demo': 'ai-task' }}>
+          AI Request
+        </Button>
       </Row>
-      <AppLoadingIndicator progress={appLoadingDemoProgress.value} />
+      <AppLoadingIndicator progress={appLoadingDemoProgress.value} task={appLoadingDemoTask.value} />
     </CatalogExample>
   );
 }
@@ -43,6 +48,7 @@ function wireAppLoadingIndicatorDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', '[data-app-loading-demo]', (_event, target) => {
       const state = (target as HTMLElement).dataset.appLoadingDemo;
+      appLoadingDemoTask.value = state === 'ai-task' ? 'Asking Claude to choose a group…' : undefined;
       appLoadingDemoProgress.value =
         state === 'start'
           ? { completed: 0, total: 2 }
@@ -66,6 +72,7 @@ export const demoModule: DemoModule = {
       Demo: AppLoadingIndicatorDemo,
       reset: () => {
         appLoadingDemoProgress.value = undefined;
+        appLoadingDemoTask.value = undefined;
       },
     },
   },

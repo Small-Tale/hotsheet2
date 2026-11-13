@@ -123,6 +123,7 @@ import { flushDraftInputs } from '../draft-input-coalescing';
 import { type PendingDrawerTab } from '../drawer-tab-order';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createAnnouncerController } from '../features/announcer-controller';
+import { createAutomaticTicketGrouping } from '../features/automatic-ticket-grouping';
 import { createBoardColumnPaging } from '../features/board-column-paging';
 import { createClaimClockController } from '../features/claim-clock';
 import { createCommandsController } from '../features/commands';
@@ -812,6 +813,8 @@ export async function startHotSheetWebClient() {
     searchHelpOpen = signal(false),
     searchMatchKeys = signal<Set<string> | undefined>(undefined),
     workspaceSorts = signal(storedWorkspacePreferences.sorts);
+  // The running Add to Group › Automatic request's corner-status label (HS2-4C32A0).
+  const automaticGroupBusy = signal<string | undefined>(undefined);
   const bulkUpdateActivities = createBulkUpdateProgress((progress) => {
     bulkUpdateProgress.value = progress;
   });
@@ -4406,6 +4409,7 @@ export async function startHotSheetWebClient() {
     refreshClientNotifications: clientNotifications.refresh,
     removeClientNotifications: clientNotifications.removeProject,
     onActivity: announcerController.onActivity,
+    claimTurnEvent: (envelope) => automaticTicketGrouping.claimTurnEvent(envelope),
     loadRepositorySize,
     loadTicketStoreSync: ticketStoreSync.load,
     liveStates,
@@ -5440,6 +5444,7 @@ export async function startHotSheetWebClient() {
     ticketGroups: () => ticketGroups.groups(),
     ticketGroupName: (group) => ticketGroups.displayName(group),
     ticketGroupMergeable: (group) => ticketGroups.hasDuplicates(group),
+    automaticGroupBusy: () => automaticGroupBusy.value !== undefined,
   });
   const terminalOperationsSurface = createTerminalOperationsSurface({
     partialSourcesByProject,
@@ -5568,6 +5573,25 @@ export async function startHotSheetWebClient() {
     executeBulkTicketAction,
     refreshProject: (options) => refreshProject(options),
     showToast,
+  });
+  // Add to Group › Automatic asks the project's default AI tool (ai.defaults) in a private one-shot
+  // drive connection; the corner status shows it running and the result is an ordinary group write
+  // (HS2-4C32A0).
+  const automaticTicketGrouping = createAutomaticTicketGrouping({
+    project,
+    driveClient: (current) => new Api(current.apiPath),
+    selection: () => {
+      const chosen = normalizedAiSelection();
+      return aiTools.value.some((tool) => tool.id === chosen.tool) ? chosen : undefined;
+    },
+    toolLabel: aiToolLabel,
+    groups: () => ticketGroups.groups(),
+    rowsFor: (slugs) => tickets.value.filter((ticket) => slugs.includes(ticket.slug)),
+    disabledReason: (slugs) => ticketGroups.disabledReason(slugs),
+    assignExisting: (slugs, group) => ticketGroups.setGroup(slugs, group),
+    assignNew: (name, slugs) => ticketGroups.createAndAssignGroup(name, slugs),
+    showToast,
+    busy: automaticGroupBusy,
   });
   // Load the project's group summaries on project load, and again when loaded tickets store a
   // group id they do not name; this follows ticket changes and never polls (HS2-9KZSD4). The read
@@ -5810,6 +5834,7 @@ export async function startHotSheetWebClient() {
     attachmentMenuSurfaceProps,
     bulkTicketDialog,
     bulkUpdateProgress,
+    aiTaskStatus: automaticGroupBusy,
     canStageNewTicketAttachments,
     changeEvidenceSurface,
     commandDialogSurface,
@@ -6104,6 +6129,9 @@ export async function startHotSheetWebClient() {
 
   const interactionBindingsPort: InteractionBindingsPort = {
     ticketGroups,
+    runAutomaticTicketGroup: (slugs) => {
+      void automaticTicketGrouping.run(slugs);
+    },
     openProjectPicker,
     chooseLocalProject,
     chooseDesktopRemoteProject,

@@ -1,7 +1,14 @@
 import type { Signal } from 'kerfjs';
 
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
-import { type ActivityEvent, Api, CHANGE_STREAM_CLIENT_ID, type ChangeEvent, type PollResponse } from '../api';
+import {
+  type ActivityEvent,
+  Api,
+  CHANGE_STREAM_CLIENT_ID,
+  type ChangeEvent,
+  type PollResponse,
+  type TurnStreamEnvelope,
+} from '../api';
 import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
 import { createHandshakeGapReconciler, ticketReadCursors } from '../change-read-gap';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
@@ -61,6 +68,11 @@ export interface ProjectChangeStreamsDependencies {
   refreshClientNotifications?: (target: Project, announcedIds?: readonly string[]) => Promise<unknown>;
   removeClientNotifications?: (projectId: string) => void;
   onActivity?: (project: Project, storeId: string, activity: ActivityEvent) => void;
+  /**
+   * Take a turn event that belongs to a private one-shot connection, such as Add to Group ›
+   * Automatic (HS2-4C32A0); a claimed event never reaches a conversation.
+   */
+  claimTurnEvent?: (envelope: TurnStreamEnvelope) => boolean;
   /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
   loadRepositorySize: (target: Project) => Promise<unknown>;
   /** Reload a project's ticket-store sync health after a `ticket_store_sync` event (HS2-ADHFKZ). */
@@ -249,6 +261,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshClientNotifications,
     removeClientNotifications,
     onActivity,
+    claimTurnEvent,
     loadRepositorySize,
     loadTicketStoreSync,
     liveStates,
@@ -412,7 +425,12 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
                   key = `${current.id}:${event.id}`;
                 serverResolvedPermission(key, resolution);
               }
-              if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn)) {
+              if (
+                event.kind === 'turn_event' &&
+                event.turn &&
+                acceptedTurns.has(event.turn) &&
+                claimTurnEvent?.(event.turn) !== true
+              ) {
                 // Each stamped event also samples the server's clock for remote clients (HS2-GA5ASE).
                 clocks.observe(current.id, event.turn.at_ms);
                 updateConversation(

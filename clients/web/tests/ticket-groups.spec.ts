@@ -336,12 +336,12 @@ test('HS2-TX17CM adds tickets to a new or existing group and removes them', asyn
     await rowOf(view, keyboard.slug).click({ modifiers: ['ControlOrMeta'] });
     await rowOf(view, keyboard.slug).click({ button: 'right' });
     await openGroupSubmenu();
-    // New Group… comes first, then the existing groups.
+    // New Group… and Automatic (HS2-4C32A0) come first, then the existing groups.
     const choices = await menu
       .locator('[data-context-group]')
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.contextGroup));
     // Each existing group is offered by its id, labeled with its name (HS2-9KZSD4).
-    expect(choices).toEqual(['', await groupIdOf(server, BOARD), await groupIdOf(server, SEARCH)]);
+    expect(choices).toEqual(['', ' automatic', await groupIdOf(server, BOARD), await groupIdOf(server, SEARCH)]);
     await expect(menu.locator('[data-context-group]').filter({ hasText: BOARD })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Remove from Group' })).toHaveCount(0);
     await capture(page, 'context-add-to-group-light-1440');

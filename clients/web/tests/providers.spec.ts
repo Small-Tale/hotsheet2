@@ -1753,6 +1753,12 @@ const full = {
   ],
   attachments: [{ id: 'A1', filename: 'proof.png', created_at: '2026-08-30T00:40:00Z' }],
 };
+/**
+ * The fake AI's Add to Group › Automatic turns (HS2-4C32A0): the prompts it received, and a gate a
+ * test holds closed to observe the busy state before the answer streams.
+ */
+const automaticGroupPrompts: string[] = [];
+let automaticGroupGate: Promise<void> = Promise.resolve();
 const aiToolCatalog = [
   {
     id: 'codex',
@@ -2514,6 +2520,38 @@ async function mockProject(
           ...(body.permission_mode ? { permission_mode: body.permission_mode } : {}),
         };
       toolConnections = toolConnections.map((item) => (item.id === id ? running : item));
+      if (typeof body.content === 'string' && body.content.startsWith('Choose one Hot Sheet ticket group')) {
+        // Add to Group › Automatic (HS2-4C32A0): the fake AI reads the prompt's JSON context and
+        // answers like a real tool, or fails, depending on the synthetic ticket titles.
+        const prompt = body.content as string,
+          context = JSON.parse(prompt.slice(prompt.indexOf('\n\n') + 2)) as {
+            tickets: { title: string }[];
+            groups: { id: string; name: string }[];
+          },
+          titles = context.tickets.map((ticket) => ticket.title).join(' '),
+          board = titles.includes('board polish')
+            ? context.groups.find((group) => group.name === 'Synthetic board')
+            : undefined,
+          events: Record<string, unknown>[] = titles.includes('Synthetic failing')
+            ? [{ type: 'done', reason: 'failed', message: 'Selected model is at capacity.' }]
+            : [
+                {
+                  type: 'output',
+                  content: titles.includes('Synthetic unparseable')
+                    ? 'These belong together in the release work.'
+                    : JSON.stringify(board ? { group_id: board.id } : { new_group: 'Synthetic release' }),
+                  truncated: false,
+                },
+                { type: 'done', reason: 'completed' },
+              ];
+        automaticGroupPrompts.push(prompt);
+        const idle = { ...running, busy: false };
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        void automaticGroupGate.then(() => {
+          for (const event of events) turnEvent(idle, event, body.turn_id);
+        });
+        return route.fulfill({ status: 202, json: { ...running, turn_id: body.turn_id } });
+      }
       if (typeof body.content === 'string' && body.content.startsWith('Use the note-repair skill')) {
         const prompt = body.content as string;
         const context = JSON.parse(prompt.slice(prompt.indexOf('\n\n') + 2)) as { note: { id: string } };
@@ -39006,6 +39044,180 @@ test('counts AI chat replies that settle while the page is hidden and reads them
   await setPageVisibility('visible');
   await expect(badge).toHaveCount(0);
   await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+});
+
+test('HS2-4C32A0 groups tickets automatically through a private AI turn and the real server', async ({ page }) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  automaticGroupPrompts.length = 0;
+  try {
+    const checkout = `/checkouts/${server.checkoutId}`,
+      create = (title: string, group?: string) =>
+        server.request<FullTicket>(`${checkout}/tickets`, 'POST', { title, category: 'task', tags: [], group }),
+      seed = await create('Synthetic board seed', 'Synthetic board'),
+      polishA = await create('Synthetic board polish A'),
+      polishB = await create('Synthetic board polish B'),
+      release = await create('Synthetic release notes'),
+      failing = await create('Synthetic failing work'),
+      unparseable = await create('Synthetic unparseable work'),
+      groupsOf = () =>
+        server
+          .request<{ groups: { id: string; name: string; count: number }[] }>(`${checkout}/groups`)
+          .then((result) => result.groups),
+      groupNameOf = async (id: string) => {
+        const ticket = await server.request<FullTicket>(`/tickets/${id}`);
+        return ticket.group ? ((await groupsOf()).find((item) => item.id === ticket.group)?.name ?? null) : null;
+      },
+      boardId = (await groupsOf()).find((item) => item.name === 'Synthetic board')!.id;
+    expect(seed.group).toBe(boardId);
+    await mockProject(page);
+    for (const pattern of ['**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**']) {
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace(
+            '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+            `/checkouts/${server.checkoutId}`,
+          );
+        const response = await route.fetch({
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      });
+    }
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const rowFor = (ticket: FullTicket) => page.locator(`[data-ticket-slug="${ticket.slug}"]`).first(),
+      menu = page.locator('[data-context-menu="ticket"]'),
+      toast = page.locator('.app-toast'),
+      corner = page.locator('#app-loading-indicator'),
+      automatic = menu.getByRole('menuitem', { name: 'Automatic' });
+    /** Wait until finite layout animations, such as a rail collapsing after a resize, have finished. */
+    const layoutSettled = () =>
+      expect
+        .poll(() =>
+          page.evaluate(async () => {
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+              ).length;
+          }),
+        )
+        .toBe(0);
+    const openAutomatic = async (ticket: FullTicket) => {
+      await rowFor(ticket).click({ button: 'right' });
+      await menu.getByRole('menuitem', { name: 'Add to Group' }).hover();
+      await expect(automatic).toBeVisible();
+    };
+    await expect(rowFor(polishA)).toBeVisible();
+
+    // An existing group fits: the AI names its id, the tickets join it, and Undo reverses it.
+    let release_gate: () => void = () => undefined;
+    automaticGroupGate = new Promise<void>((resolve) => {
+      release_gate = resolve;
+    });
+    await rowFor(polishA).click();
+    await rowFor(polishB).click({ modifiers: ['ControlOrMeta'] });
+    await openAutomatic(polishB);
+    const items = await menu
+      .locator('[data-context-group]')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).dataset.contextGroup));
+    expect(items).toEqual(['', ' automatic', boardId]);
+    await expect(automatic).toBeInViewport();
+    await page.screenshot({ path: 'target/visual-captures/hs2-4c32a0-automatic-menu-1440.png' });
+    // Narrow, then wide again: the submenu opens inside the viewport after the layout settles.
+    await page.keyboard.press('Escape');
+    for (const width of [760, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await layoutSettled();
+      await openAutomatic(polishB);
+      await expect(automatic).toBeInViewport();
+      if (width === 760) await page.screenshot({ path: 'target/visual-captures/hs2-4c32a0-automatic-menu-760.png' });
+      else await expect(menu.locator('[data-context-group]')).toHaveCount(3);
+      if (width === 760) await page.keyboard.press('Escape');
+    }
+    await automatic.click();
+    await expect(corner).toContainText('Asking Codex to choose a group…');
+    await page.screenshot({ path: 'target/visual-captures/hs2-4c32a0-automatic-busy-1440.png' });
+    // While it runs, a second request waits.
+    await openAutomatic(polishB);
+    await expect(automatic).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('Escape');
+    release_gate();
+    await expect(toast).toContainText('Added 2 tickets to “Synthetic board”.');
+    await expect(corner).toHaveCount(0);
+    await expect.poll(() => groupNameOf(polishA.id)).toBe('Synthetic board');
+    await expect.poll(() => groupNameOf(polishB.id)).toBe('Synthetic board');
+    await page.screenshot({ path: 'target/visual-captures/hs2-4c32a0-automatic-applied-1440.png' });
+    const prompt = automaticGroupPrompts.at(-1)!;
+    expect(prompt).toContain('Synthetic board polish A');
+    expect(prompt).toContain(`"id":"${boardId}","name":"Synthetic board"`);
+    expect(prompt).not.toContain('Synthetic release notes');
+    // The private connection never opens a conversation.
+    await expect(page.locator('[data-dialog-component="ai-conversation"]')).toHaveCount(0);
+    await rowFor(polishB).focus();
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect.poll(() => groupNameOf(polishA.id)).toBeNull();
+    await expect.poll(() => groupNameOf(polishB.id)).toBeNull();
+
+    // No group fits: the AI names a new one, which is created and assigned.
+    automaticGroupGate = Promise.resolve();
+    await rowFor(release).click();
+    await openAutomatic(release);
+    await automatic.click();
+    await expect(toast).toContainText('Created “Synthetic release” and added 1 ticket.');
+    await expect.poll(() => groupNameOf(release.id)).toBe('Synthetic release');
+
+    // A failed turn and an unusable answer each say so and change nothing.
+    await rowFor(failing).click();
+    await openAutomatic(failing);
+    await automatic.click();
+    await expect(toast).toContainText(
+      'Automatic grouping failed: Selected model is at capacity. No group was changed.',
+    );
+    await page.setViewportSize({ width: 760, height: 900 });
+    await layoutSettled();
+    await expect(toast).toBeInViewport();
+    await page.screenshot({ path: 'target/visual-captures/hs2-4c32a0-automatic-failed-760.png' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await layoutSettled();
+    await rowFor(unparseable).click();
+    await openAutomatic(unparseable);
+    await automatic.click();
+    await expect(toast).toContainText('could not use Codex’s answer: The AI’s answer was not the expected JSON.');
+    expect(await groupNameOf(failing.id)).toBeNull();
+    expect(await groupNameOf(unparseable.id)).toBeNull();
+
+    // With no AI tool available, nothing is asked and nothing changes.
+    const asked = automaticGroupPrompts.length;
+    await page.route('**/ai-tools*', (route) => route.fulfill({ json: [] }));
+    // The reloaded app restores the open project and rediscovers no tools.
+    await page.reload();
+    await expect(rowFor(failing)).toBeVisible();
+    await rowFor(failing).click();
+    await openAutomatic(failing);
+    await automatic.click();
+    await expect(toast).toContainText('Automatic grouping needs an AI tool.');
+    expect(automaticGroupPrompts).toHaveLength(asked);
+    expect(await groupNameOf(failing.id)).toBeNull();
+  } finally {
+    automaticGroupGate = Promise.resolve();
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
 });
 
 test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real server', async ({ page }) => {

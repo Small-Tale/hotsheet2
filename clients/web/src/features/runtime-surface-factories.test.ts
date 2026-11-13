@@ -44,6 +44,7 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
       ticketGroups: () => [],
       ticketGroupName: (group) => group,
       ticketGroupMergeable: () => false,
+      automaticGroupBusy: () => false,
       tickets: signal([]),
     });
     expect(
@@ -77,6 +78,7 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
       ticketGroups: () => [],
       ticketGroupName: (group) => group,
       ticketGroupMergeable: () => false,
+      automaticGroupBusy: () => false,
       tickets: signal(
         [row('EXTERNAL', 'started'), row('GIT', 'started')].map((item) =>
           item.slug === 'EXTERNAL' ? { ...item, connection_id: 'jira' } : item,
@@ -86,5 +88,30 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
     expect(String(surface.ticketContextMenuSurface())).not.toContain('data-context-action="Create follow-up"');
     menu.value = { x: 0, y: 0, ticketSlug: 'GIT' };
     expect(String(surface.ticketContextMenuSurface())).toContain('data-context-action="Create follow-up"');
+  });
+
+  it('HS2-4C32A0 disables Add to Group › Automatic while a request runs', () => {
+    let busy = false;
+    const surface = createTicketViewSurface({
+      canStageNewTicketAttachments: () => false,
+      capabilitiesFor: () => ({ update: true, groups: true }) as Capabilities,
+      isGitSource: () => true,
+      customViewFor: () => undefined,
+      priority: (value) => (value ?? 'default') as TicketPriority,
+      selectedTicketSlugs: signal([]),
+      status: (value) => (value ?? 'not_started') as TicketStatus,
+      ticketCloseDialog: signal(undefined),
+      ticketContextMenu: signal({ x: 0, y: 0, ticketSlug: 'GIT' }),
+      ticketGroups: () => [],
+      ticketGroupName: (group) => group,
+      ticketGroupMergeable: () => false,
+      automaticGroupBusy: () => busy,
+      tickets: signal([row('GIT', 'started')]),
+    });
+    const automatic = () =>
+      /<button data-context-group=" automatic"[^>]*>/.exec(String(surface.ticketContextMenuSurface()))?.[0] ?? '';
+    expect(automatic()).not.toContain('aria-disabled="true"');
+    busy = true;
+    expect(automatic()).toContain('aria-disabled="true"');
   });
 });

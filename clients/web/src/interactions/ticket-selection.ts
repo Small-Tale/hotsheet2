@@ -8,7 +8,11 @@ import { PENDING_ATTACHMENT_PICKER } from '../components/pending-attachment-pick
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { wireTicketCollection } from '../components/ticket-collection-interactions';
 import { wireTicketGroups } from '../components/ticket-group-interactions';
-import { NEW_TICKET_GROUP_CHOICE, REMOVE_FROM_GROUP_CONTEXT_ACTION } from '../components/ticket-row-context-menu';
+import {
+  AUTOMATIC_TICKET_GROUP_CHOICE,
+  NEW_TICKET_GROUP_CHOICE,
+  REMOVE_FROM_GROUP_CONTEXT_ACTION,
+} from '../components/ticket-row-context-menu';
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
@@ -86,6 +90,8 @@ export interface TicketSelectionInteractionsDependencies {
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
   /** Ticket group membership, collapse, rename, and ungroup (HS2-3XNTSD). */
   readonly ticketGroups: TicketGroupsController;
+  /** Add to Group › Automatic: ask the default AI tool to choose or name a group (HS2-4C32A0). */
+  readonly runAutomaticTicketGroup: (slugs: string[]) => void;
   readonly appleShortcutPlatform: boolean;
 }
 
@@ -140,6 +146,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     keyboardShortcutOverrides,
     appleShortcutPlatform,
     ticketGroups,
+    runAutomaticTicketGroup,
   } = dependencies;
   const closeTargetSearchInput = createCoalescedInput<string>((query) => {
       searchTicketCloseTargets(query);
@@ -241,6 +248,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       },
       onContextGroup: (group, slugs) => {
         if (group === NEW_TICKET_GROUP_CHOICE) ticketGroups.openNewGroup(slugs);
+        else if (group === AUTOMATIC_TICKET_GROUP_CHOICE) runAutomaticTicketGroup(slugs);
         else void ticketGroups.setGroup(slugs, group);
       },
       onContextAction: (action, slugs, menuSlug) => {

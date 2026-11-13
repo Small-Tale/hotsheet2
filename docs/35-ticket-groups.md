@@ -130,6 +130,31 @@ once more when loaded tickets name an id it has no name for; it never polls.
   inline error and disables Create Group. Submitting creates the group in the registry
   (`POST /checkouts/{reference}/groups`) and then assigns its id to every selected ticket
   in one bulk update.
+- **Automatic** (HS2-4C32A0, Lucide `sparkles`) follows New Group… in the submenu. It asks
+  the project's default AI tool (`ai.defaults`, see
+  [05-ai-tool-plugins.md](05-ai-tool-plugins.md)) to choose a group for the selected tickets.
+  - **Request.** The client opens a private one-shot drive connection
+    (`POST /drive/connections` with a `hotsheet-automatic-group-` id). It sends one turn carrying
+    the loaded tickets' slugs, titles, and categories and the project's groups as JSON, and asks
+    for JSON only: `{"group_id": "<id>"}` or `{"new_group": "<name>"}`. Nothing opens. The turn's
+    events never join a conversation, and the client closes the connection afterwards.
+  - **Busy state.** While the AI works, the app's corner status reads "Asking <tool> to choose a
+    group…", and Automatic is disabled until the request ends.
+  - **Result.** The reply is validated:
+    - an id must name a listed group;
+    - a new name must be a valid group name;
+    - a new name that matches an existing group joins that group.
+
+    The choice is applied like a menu choice, through the ordinary bulk update (after creating the
+    group in the registry for a new name). It is therefore optimistic and undoable, and a toast names
+    the group.
+
+  - **Failures.** Each of these shows a toast saying no group was changed, and nothing is written:
+    no available AI tool, a failed or interrupted turn, no answer within three minutes (the turn is
+    interrupted), and an answer that is not the expected JSON.
+  - **Headless path.** No separate command is needed: an agent reads `hotsheet-cli groups --json`
+    and runs `hotsheet-cli edit <slug> --group <name>`, which creates the group when the name is new
+    (§35.2).
 - **Remove from Group** appears when the selection contains a grouped ticket.
 - **Drag and drop.** Dragging tickets over a group outlines the whole group; there
   is no insertion line because order follows the sort. Dropping sets the group. In

@@ -35,6 +35,8 @@ export interface TicketViewSurfaceDependencies {
   /** A stored group value's display name, and whether same-named duplicates can merge into it. */
   ticketGroupName: (group: string) => string;
   ticketGroupMergeable: (group: string) => boolean;
+  /** An Add to Group › Automatic request is running (HS2-4C32A0). */
+  automaticGroupBusy: () => boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
     ticketGroups,
     ticketGroupName,
     ticketGroupMergeable,
+    automaticGroupBusy,
   } = dependencies;
   function ticketViewTitle(view: TicketScope) {
     if (view === ALL_TICKETS_SCOPE) return 'All Tickets';
@@ -81,6 +84,8 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
         ? { kind: 'new-ticket', attachmentsEnabled: canStageNewTicketAttachments(), label, size }
         : undefined;
   }
+  const withAutomaticBusy = (model: ReturnType<typeof ticketGroupMenuModel>) =>
+    model && automaticGroupBusy() ? { ...model, automaticBusy: true } : model;
   function ticketContextMenuSurface() {
     const menu = ticketContextMenu.value;
     let props: TicketContextMenuSurfaceProps['menu'];
@@ -135,7 +140,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
         allInBacklog: selected.length > 0 && selected.every((item) => item.status === 'backlog'),
         allInArchive: selected.length > 0 && selected.every(isArchivedTicket),
         allInTrash: selected.length > 0 && selected.every(isTrashedTicket),
-        group: ticketGroupMenuModel(selected, ticketGroups(), capabilitiesFor),
+        group: withAutomaticBusy(ticketGroupMenuModel(selected, ticketGroups(), capabilitiesFor)),
       };
     }
     return <TicketContextMenuSurface menu={props} closeDialog={ticketCloseDialog.value} />;
