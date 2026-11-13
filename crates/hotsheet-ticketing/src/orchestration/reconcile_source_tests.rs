@@ -336,6 +336,7 @@ fn finding_of_source(
     match source {
         ExternalSource::CiRun => observations.ci = observed.clone(),
         ExternalSource::Deployment => observations.deployment = observed.clone(),
+        ExternalSource::Validation => observations.validation = observed.clone(),
         ExternalSource::Session => observations.session = observed.clone(),
         _ => panic!("not a work source"),
     }
@@ -583,4 +584,277 @@ fn hs2_byeb60_deployments_combine_and_ci_gates_are_not_deployments() {
             Observed::Unverifiable("deployment_executor_unavailable".into())
         );
     }
+}
+
+fn attempt(state: ValidationState, reason: Option<&str>, host_started: bool) -> ValidationResult {
+    ValidationResult {
+        result_id: id(77),
+        operation_id: "validate-1".into(),
+        attempt: 1,
+        step_revision: 1,
+        state,
+        reason: reason.map(Into::into),
+        actor_id: Some("worker-1".into()),
+        run_id: Some(id(900)),
+        host_started,
+        created_at_ms: 1,
+        deadline_ms: (state == ValidationState::Running).then_some(1_000),
+        finished_at_ms: None,
+        outcome: None,
+    }
+}
+
+#[test]
+fn hs2_g5h9fq_every_attempt_state_against_every_host_answer() {
+    use AttemptAnswer::{Finished, Running, Unknown, Unreachable};
+    use ValidationState as V;
+    use Verification::{Unverifiable, Verified};
+    let unreachable = || Unreachable("target_unavailable".into());
+    type Row = (
+        ValidationState,
+        Option<&'static str>,
+        bool,
+        u64,
+        Option<AttemptAnswer>,
+        AttemptRecord,
+        Verification,
+        Option<&'static str>,
+        bool,
+    );
+    // (state, reason, host confirmed, now, answer, what is recorded, finding, may start)
+    let rows: Vec<Row> = vec![
+        // A running attempt: only its host can say.
+        (
+            V::Running,
+            None,
+            true,
+            500,
+            Some(Running),
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            false,
+        ),
+        (
+            V::Running,
+            None,
+            true,
+            500,
+            Some(Finished),
+            AttemptRecord::Outcome,
+            Verified,
+            None,
+            true,
+        ),
+        (
+            V::Running,
+            None,
+            true,
+            500,
+            Some(Unknown),
+            AttemptRecord::Unverified("execution_lost"),
+            Verified,
+            Some("execution_lost"),
+            true,
+        ),
+        // Past its deadline the host's answer still decides while it knows it.
+        (
+            V::Running,
+            None,
+            true,
+            5_000,
+            Some(Running),
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            false,
+        ),
+        (
+            V::Running,
+            None,
+            true,
+            5_000,
+            Some(Unknown),
+            AttemptRecord::Unverified("execution_lost"),
+            Verified,
+            Some("execution_lost"),
+            true,
+        ),
+        // Never confirmed by its host.
+        (
+            V::Running,
+            None,
+            false,
+            500,
+            Some(Unknown),
+            AttemptRecord::Keep,
+            Unverifiable,
+            Some("execution_unconfirmed"),
+            false,
+        ),
+        (
+            V::Running,
+            None,
+            false,
+            5_000,
+            Some(Unknown),
+            AttemptRecord::Unverified("deadline_passed"),
+            Verified,
+            Some("deadline_passed"),
+            true,
+        ),
+        (
+            V::Running,
+            None,
+            false,
+            500,
+            Some(Running),
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            false,
+        ),
+        // The host cannot be asked: nothing is concluded.
+        (
+            V::Running,
+            None,
+            true,
+            500,
+            Some(unreachable()),
+            AttemptRecord::Keep,
+            Unverifiable,
+            Some("target_unavailable"),
+            false,
+        ),
+        (
+            V::Running,
+            None,
+            false,
+            5_000,
+            Some(unreachable()),
+            AttemptRecord::Keep,
+            Unverifiable,
+            Some("target_unavailable"),
+            false,
+        ),
+        (
+            V::Running,
+            None,
+            true,
+            500,
+            None,
+            AttemptRecord::Keep,
+            Unverifiable,
+            Some("execution_unconfirmed"),
+            false,
+        ),
+        // A finished attempt is settled whatever the host says; an unverified one keeps
+        // its reason, so the answer is the same on every reconciliation.
+        (
+            V::Passed,
+            None,
+            true,
+            500,
+            None,
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            true,
+        ),
+        (
+            V::Failed,
+            Some("exit_code_mismatch"),
+            true,
+            500,
+            None,
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            true,
+        ),
+        (
+            V::Skipped,
+            Some("prerequisite_not_passed"),
+            false,
+            500,
+            None,
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            true,
+        ),
+        (
+            V::Unavailable,
+            Some("capacity_reached"),
+            false,
+            500,
+            Some(Running),
+            AttemptRecord::Keep,
+            Verified,
+            None,
+            true,
+        ),
+        (
+            V::Unverified,
+            Some("execution_lost"),
+            true,
+            500,
+            Some(unreachable()),
+            AttemptRecord::Keep,
+            Verified,
+            Some("execution_lost"),
+            true,
+        ),
+    ];
+    for (state, reason, started, now, answer, record, verification, note, may_start) in rows {
+        let result = attempt(state, reason, started);
+        let (work, recorded) = validation_attempt(&result, answer.as_ref(), now);
+        assert_eq!(recorded, record, "{state:?} {started} {now} {answer:?}");
+        let observed = validation_work(vec![work]);
+        assert_eq!(
+            finding_of_source(&observed, ExternalSource::Validation),
+            (verification, note.map(Into::into), may_start),
+            "{state:?} {started} {now} {answer:?}"
+        );
+    }
+}
+
+#[test]
+fn hs2_g5h9fq_attempts_combine_and_an_empty_run_says_so() {
+    let live = |n: u128| SourceWork::Live {
+        reference: id(n),
+        adopted: false,
+    };
+    let lost = || SourceWork::Settled(Some("execution_lost".into()));
+    let dark = || SourceWork::Unverifiable("target_unavailable".into());
+    assert_eq!(
+        validation_work(Vec::new()),
+        work(None, None, Some("no_validation"))
+    );
+    assert_eq!(
+        validation_work(vec![live(1)]),
+        work(Some(&id(1)), Some(&id(1)), None)
+    );
+    assert_eq!(
+        validation_work(Vec::new()),
+        work(None, None, Some("no_validation"))
+    );
+    // In either order: one unreachable host holds the source, and a lost attempt next
+    // to a live one leaves the live one in flight.
+    for works in [vec![live(1), dark()], vec![dark(), live(1)]] {
+        assert_eq!(
+            validation_work(works),
+            Observed::Unverifiable("target_unavailable".into())
+        );
+    }
+    for works in [vec![live(1), lost()], vec![lost(), live(1)]] {
+        assert_eq!(
+            validation_work(works),
+            work(Some(&id(1)), Some(&id(1)), None)
+        );
+    }
+    assert_eq!(
+        validation_work(vec![SourceWork::Settled(None), lost()]),
+        work(None, None, Some("execution_lost"))
+    );
 }

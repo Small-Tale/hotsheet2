@@ -280,3 +280,207 @@ fn hs2_byeb60_reconciliation_reads_deployments_by_their_operation_id() {
         )
     );
 }
+
+/// HS2-G5H9FQ: real hosted executions in the target checkout, and attempts whose host
+/// lost or never confirmed them. Unix only, like the validation runtime tests.
+#[cfg(unix)]
+#[test]
+fn hs2_g5h9fq_reconciliation_reads_the_validation_attempts_of_a_run() {
+    use hotsheet_ticketing::orchestration::{
+        NewResult, ResultUpdate, ValidationRegistry, ValidationState,
+    };
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (m, run) = with_run(&[TargetAction::ValidationRun], &mut tx);
+    let owner = m.owner.id.clone();
+    let key = m.runtime.run(&owner, &run).unwrap().ticket;
+    // The target project's own profiles: one that takes a moment, one that passes.
+    let directory = std::path::Path::new(&m.target.root).join(".hotsheet2");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("validation-profiles.json"),
+        json!({"schema_version": 1, "profiles": [
+            {"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 1; printf ok"]},
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+    for step in ["slow", "lost", "unconfirmed"] {
+        m.runtime
+            .validation_define(
+                &owner,
+                serde_json::from_value(json!({"ticket": {"native_id": key.native_id},
+                    "step": {"step_id": step, "target_id": id(1),
+                        "check": {"kind": "profile", "name": "slow"}, "timeout_seconds": 20}}))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    }
+    let reconcile = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_reconcile(&owner, &run, Some(&worker()), tx)
+            .unwrap()
+    };
+    let validation = |view: &RunView| finding(view, ExternalSource::Validation);
+    // No attempt names the run.
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        validation(&view),
+        (Verification::Verified, Some("no_validation".into()))
+    );
+    // A real attempt for the run, still running on its host: the same execution.
+    let started = m
+        .runtime
+        .validation_run(
+            &owner,
+            serde_json::from_value(json!({"ticket": {"native_id": key.native_id},
+                "step_id": "slow", "operation_id": "validate-slow", "wait_ms": 0,
+                "run_id": run}))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(started.result.state, ValidationState::Running);
+    let view = reconcile(&mut tx);
+    assert_eq!(validation(&view), (Verification::Verified, None));
+    assert_eq!(disposition(&view), Disposition::Continue);
+    // It ends on its host; the next reconciliation records the outcome once, as a
+    // continuing request would, and never runs it again.
+    m.runtime
+        .hosted_validation(&m.target.id, &started.result.result_id, 8_000)
+        .unwrap();
+    let view = reconcile(&mut tx);
+    assert_eq!(validation(&view), (Verification::Verified, None));
+    let registry = ValidationRegistry::new(&m.home);
+    let evidence = registry.evidence(&owner, &key, "slow", 200).unwrap();
+    assert_eq!(evidence.latest.unwrap().state, ValidationState::Passed);
+    assert_eq!(evidence.history.len(), 1);
+    // An attempt the host confirmed and no longer knows, as after a host restart: it
+    // is recorded `unverified` with `execution_lost`, and the record now says so.
+    let begin = |step: &str, operation: &str, tx: &mut Transaction<'_>| {
+        registry
+            .begin(
+                &owner,
+                &key,
+                step,
+                NewResult {
+                    operation_id: operation.into(),
+                    state: ValidationState::Running,
+                    reason: None,
+                    actor_id: Some("worker-1".into()),
+                    run_id: Some(run.clone()),
+                },
+                tx,
+            )
+            .unwrap()
+            .0
+    };
+    let lost = begin("lost", "validate-lost", &mut tx);
+    registry
+        .finish(
+            &owner,
+            &key,
+            "lost",
+            &lost.result_id,
+            ResultUpdate {
+                host_started: Some(true),
+                ..ResultUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    for _ in 0..2 {
+        let view = reconcile(&mut tx);
+        assert_eq!(
+            validation(&view),
+            (Verification::Verified, Some("execution_lost".into()))
+        );
+        assert_eq!(disposition(&view), Disposition::Continue);
+    }
+    let recorded = registry.evidence(&owner, &key, "lost", 200).unwrap();
+    let latest = recorded.latest.unwrap();
+    assert_eq!(
+        (latest.state, latest.reason.as_deref()),
+        (ValidationState::Unverified, Some("execution_lost"))
+    );
+    assert_eq!(recorded.history.len(), 1, "never run a second time");
+    // An attempt its host never confirmed: nothing can be concluded, and the run is
+    // held until the same request repeats it or its deadline passes.
+    let unconfirmed = begin("unconfirmed", "validate-unconfirmed", &mut tx);
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        validation(&view),
+        (
+            Verification::Unverifiable,
+            Some("execution_unconfirmed".into())
+        )
+    );
+    assert_eq!(disposition(&view), Disposition::HoldUnverified);
+    // The target is unreachable: the attempt stays running and the reason is named.
+    let rebind = super::recovery::lose_target(&m, &mut tx);
+    let view = reconcile(&mut tx);
+    let (verification, reason) = validation(&view);
+    assert_eq!(verification, Verification::Unverifiable);
+    assert_ne!(reason.as_deref(), Some("execution_unconfirmed"));
+    assert_eq!(
+        registry
+            .evidence(&owner, &key, "unconfirmed", 200)
+            .unwrap()
+            .latest
+            .unwrap()
+            .state,
+        ValidationState::Running
+    );
+    m.runtime.bind(rebind, &mut tx).unwrap();
+    // Past its deadline and still unknown to its host: recorded `deadline_passed`. The
+    // host is still asked, so the grant must outlive the deadline.
+    let deadline = unconfirmed.deadline_ms.unwrap();
+    m.runtime
+        .grant(
+            &m.reference(1),
+            hotsheet_ticketing::orchestration::CreateGrant {
+                grant_id: None,
+                actor_id: "worker-1".into(),
+                actions: vec![TargetAction::ValidationRun],
+                session_scope: None,
+                expires_at_ms: deadline + 60_000,
+            },
+            Some(&super::tickets::human()),
+            &mut tx,
+        )
+        .unwrap();
+    let late = super::job_monitor::At(std::sync::atomic::AtomicU64::new(deadline));
+    let mut later = Transaction {
+        clock: &late,
+        rng: &mut Rng(500),
+    };
+    let lapsed = m
+        .runtime
+        .run_validation_work(&owner, &run, Some(&worker()), &mut later);
+    assert_eq!(
+        lapsed,
+        hotsheet_ticketing::orchestration::Observed::Verified(
+            hotsheet_ticketing::orchestration::ExternalWork {
+                recorded: None,
+                live: None,
+                note: Some("execution_lost".into()),
+            }
+        ),
+        "the first settled note, from the earlier lost attempt, qualifies the answer"
+    );
+    let latest = registry
+        .evidence(&owner, &key, "unconfirmed", 200)
+        .unwrap()
+        .latest
+        .unwrap();
+    assert_eq!(
+        (latest.state, latest.reason.as_deref()),
+        (ValidationState::Unverified, Some("deadline_passed"))
+    );
+}

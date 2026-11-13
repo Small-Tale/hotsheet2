@@ -20106,6 +20106,7 @@ components:
                   - run_lease
                   - ci_run
                   - deployment
+                  - validation
                   - session
               verification:
                 enum:
@@ -20113,9 +20114,9 @@ components:
                   - mismatched
                   - unverifiable
               reason:
-                description:
-                  Why the source is mismatched or unverifiable. A stable code, never free text; `source_not_wired`
-                  marks a source nothing reports yet.
+                description: Why the source is mismatched or unverifiable, or what a verified answer rests on (such as
+                  `no_gate`, `deployment_not_executed`, `execution_lost`). A stable code, never free text;
+                  `source_not_wired` marks a source nothing reports yet.
                 type: string
             additionalProperties: false
       additionalProperties: false

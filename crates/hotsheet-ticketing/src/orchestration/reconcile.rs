@@ -32,18 +32,22 @@ pub enum ExternalSource {
     CiRun,
     /// Deployments started for the run (HS2-5JBYPV).
     Deployment,
+    /// HS2-G5H9FQ: validation attempts started for the run, on the machine that hosts
+    /// the step's target (HS2-WN0MXZ).
+    Validation,
     /// Orchestrator-owned AI sessions working the run (HS2-GDJXGZ).
     Session,
 }
 
 impl ExternalSource {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::TargetReachability,
         Self::TargetTicket,
         Self::TargetClaim,
         Self::RunLease,
         Self::CiRun,
         Self::Deployment,
+        Self::Validation,
         Self::Session,
     ];
 
@@ -55,6 +59,7 @@ impl ExternalSource {
             Self::RunLease => "run_lease",
             Self::CiRun => "ci_run",
             Self::Deployment => "deployment",
+            Self::Validation => "validation",
             Self::Session => "session",
         }
     }
@@ -152,6 +157,8 @@ pub struct Observations {
     pub target: Observed<TargetFacts>,
     pub ci: Observed<ExternalWork>,
     pub deployment: Observed<ExternalWork>,
+    /// HS2-G5H9FQ.
+    pub validation: Observed<ExternalWork>,
     pub session: Observed<ExternalWork>,
 }
 
@@ -162,6 +169,7 @@ impl Observations {
             target,
             ci: Observed::not_wired(),
             deployment: Observed::not_wired(),
+            validation: Observed::not_wired(),
             session: Observed::not_wired(),
         }
     }
@@ -466,6 +474,7 @@ pub fn assess(run: &Run, observed: &Observations, now_ms: u64) -> Assessment {
     for (source, work) in [
         (ExternalSource::CiRun, &observed.ci),
         (ExternalSource::Deployment, &observed.deployment),
+        (ExternalSource::Validation, &observed.validation),
         (ExternalSource::Session, &observed.session),
     ] {
         if matches!(work, Observed::Verified(work) if work.live.is_some()) {

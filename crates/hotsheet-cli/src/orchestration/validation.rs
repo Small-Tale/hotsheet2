@@ -492,7 +492,7 @@ pub struct ValidationRunView {
 }
 
 impl OrchestrationRuntime {
-    fn validations(&self) -> ValidationRegistry {
+    pub(super) fn validations(&self) -> ValidationRegistry {
         ValidationRegistry::new(&self.home)
     }
 
@@ -671,7 +671,7 @@ impl OrchestrationRuntime {
 
     /// Tell the orchestration ticket and, when the validation belongs to a run, that
     /// run's event stream. Identifiers and codes only; best effort.
-    fn validation_report(
+    pub(super) fn validation_report(
         &self,
         owner_id: &str,
         ticket: &RunTicket,

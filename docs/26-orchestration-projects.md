@@ -10,8 +10,8 @@
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed;
 > the Job monitor is started by whoever links or follows a gate, HS2-VVHVF0),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM;
-> reconciliation reads the CI runs gating a run, HS2-7QNK7Y, and its deployments,
-> HS2-BYEB60),
+> reconciliation reads the CI runs gating a run, HS2-7QNK7Y, its deployments,
+> HS2-BYEB60, and its validation attempts, HS2-G5H9FQ),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
@@ -1495,6 +1495,7 @@ yields one **finding**: `verified`, `mismatched` or `unverifiable`.
 | `run_lease`           | The lease the run recorded, against the lease on the ticket | Yes                                             |
 | `ci_run`              | CI runs gating the run                                      | Yes (HS2-7QNK7Y)                                |
 | `deployment`          | Deployments started for the run                             | Yes (HS2-BYEB60)                                |
+| `validation`          | Validation attempts of the run on the hosts of their steps  | Yes (HS2-G5H9FQ)                                |
 | `session`             | Orchestrator-owned sessions working the run                 | `unverifiable`, `source_not_wired` (HS2-75Q254) |
 
 When the target cannot be confirmed, all four target sources are `unverifiable` with
@@ -1565,6 +1566,36 @@ became of it. Its own records are read by the gate, never the provider:
 A retry after an interruption never starts a duplicate: `gate deploy` with the same
 operation id returns the existing gate and starts nothing once it left
 `awaiting_approval`, and a live execution is adopted, not replaced.
+
+### Validation attempts (HS2-G5H9FQ)
+
+An interrupted validation step is a source of its own, `validation`, rather than part
+of the run record: its attempt runs on the machine that hosts the step's target
+(§26.12), and only that machine can say whether the execution still exists. The run
+record only names the run; the attempts that name it live in
+`orchestration-validation.json`.
+
+Reconciliation reads every retained attempt that names the run. A finished attempt is
+settled. For each attempt still `running` it asks the hosting machine about that
+execution id, with no wait, under a continuing `validation_run` gate as the run's
+supervisor, so nobody is asked again. It never asks the host to start anything.
+
+| The host answers                                   | Recorded                                        | Finding                                   |
+| -------------------------------------------------- | ----------------------------------------------- | ----------------------------------------- |
+| No attempt names the run                           | -                                               | `verified`, reason `no_validation`        |
+| The execution is still running                     | Nothing; it stays `running`                     | `verified`; `may_start(validation)` false |
+| It finished                                        | Its outcome, as a continuing request would      | `verified`                                |
+| It does not know an execution it had confirmed     | `unverified`, `execution_lost`; never run again | `verified`, reason `execution_lost`       |
+| It does not know one it never confirmed            | Nothing; it stays `running`                     | `unverifiable`, `execution_unconfirmed`   |
+| The same, after the attempt's deadline             | `unverified`, `deadline_passed`                 | `verified`, reason `deadline_passed`      |
+| It cannot be reached, or the gate refuses the read | Nothing; it stays `running`                     | `unverifiable` with the code              |
+
+A lost execution is `verified` because the record now says what happened: the attempt
+is `unverified`, its evidence counts as unverified for readiness (§26.15), and a new
+operation id runs the step again. An `unverified` attempt keeps its reason as the
+finding's reason on every later reconciliation. A repeated step request with the same
+operation id still returns or continues the same attempt (§26.12); reconciliation
+never creates one.
 
 **Never a duplicate.** New work of a kind may be started for a run only when that
 source was read and shows none going on (`Assessment::may_start`). A source that
@@ -1671,8 +1702,7 @@ hotsheet-cli --actor-role human ... orchestration run correct <run-id> --project
 
 MCP `hotsheet_targets` adds `run_reconcile` (all runs without `run_id`), `run_pause`,
 `run_resume`, `run_handoff` and `run_correct`. Acting on a disposition is the
-scheduler's (HS2-AH8CRS), validation steps join reconciliation in HS2-G5H9FQ, and
-the workspace view is HS2-XM692S.
+scheduler's (HS2-AH8CRS), and the workspace view is HS2-XM692S.
 
 ## 26.15 Prerequisites and readiness (HS2-42TARA)
 

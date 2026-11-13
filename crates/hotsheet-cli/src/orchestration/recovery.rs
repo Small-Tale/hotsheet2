@@ -181,7 +181,7 @@ impl OrchestrationRuntime {
         if run.state.is_terminal() {
             return Ok(view(run));
         }
-        let observations = self.run_observations(owner_id, &run, target);
+        let observations = self.run_observations(owner_id, &run, target, lead.as_ref(), tx);
         let found = RunReconciliation::new(now_ms, assess(&run, &observations, now_ms));
         self.run_apply(
             owner_id,

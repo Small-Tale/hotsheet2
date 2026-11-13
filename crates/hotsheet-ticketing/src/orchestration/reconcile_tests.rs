@@ -332,6 +332,7 @@ fn hs2_wbredm_a_renewed_lease_is_adopted_and_a_lapsed_one_is_named() {
 fn hs2_wbredm_every_source_is_verified_mismatched_or_unverifiable_with_its_reason() {
     use ExternalSource::{
         CiRun, Deployment, RunLease, Session, TargetClaim, TargetReachability, TargetTicket,
+        Validation,
     };
     use Verification::{Mismatched, Unverifiable, Verified};
     let mut bench = Bench::new();
@@ -348,11 +349,15 @@ fn hs2_wbredm_every_source_is_verified_mismatched_or_unverifiable_with_its_reaso
             (RunLease, Verified, None),
             (CiRun, Unverifiable, Some(SOURCE_NOT_WIRED)),
             (Deployment, Unverifiable, Some(SOURCE_NOT_WIRED)),
+            (Validation, Unverifiable, Some(SOURCE_NOT_WIRED)),
             (Session, Unverifiable, Some(SOURCE_NOT_WIRED)),
         ]
     );
     assert_eq!(healthy.disposition, Disposition::Continue);
-    assert_eq!(healthy.unverified(), [CiRun, Deployment, Session]);
+    assert_eq!(
+        healthy.unverified(),
+        [CiRun, Deployment, Validation, Session]
+    );
     assert_eq!(
         healthy
             .findings
@@ -363,7 +368,7 @@ fn hs2_wbredm_every_source_is_verified_mismatched_or_unverifiable_with_its_reaso
     );
     // New work is never started for a source that could not be verified, nor where
     // work is already going on.
-    for source in [CiRun, Deployment, Session, TargetClaim] {
+    for source in [CiRun, Deployment, Validation, Session, TargetClaim] {
         assert!(!healthy.may_start(source), "{source:?}");
     }
     assert!(healthy.may_start(TargetTicket));
@@ -430,11 +435,12 @@ fn hs2_wbredm_every_source_is_verified_mismatched_or_unverifiable_with_its_reaso
             Disposition::NeedsAttention,
         ),
     ] {
-        for source in [CiRun, Deployment, Session] {
+        for source in [CiRun, Deployment, Validation, Session] {
             let mut observed = target(facts("started", Claim::Ours));
             match source {
                 CiRun => observed.ci = work(recorded, live),
                 Deployment => observed.deployment = work(recorded, live),
+                Validation => observed.validation = work(recorded, live),
                 _ => observed.session = work(recorded, live),
             }
             let found = assess(&run, &observed, NOW);
@@ -863,7 +869,10 @@ fn hs2_wbredm_an_unchanged_outcome_is_not_rewritten_and_a_finished_run_keeps_non
     let stored = first.reconciliation.clone().unwrap();
     assert_eq!(stored.at_ms, NOW + 1);
     assert_eq!(stored.disposition, Disposition::Continue);
-    assert_eq!(stored.unverified(), ["ci_run", "deployment", "session"]);
+    assert_eq!(
+        stored.unverified(),
+        ["ci_run", "deployment", "validation", "session"]
+    );
     assert_eq!(first.history.len(), run.history.len());
     // The same outcome later: nothing is written at all.
     bench.clock.0.set(NOW + 2);

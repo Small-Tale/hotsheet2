@@ -47,7 +47,7 @@ impl JobMonitor for Recording {
     }
 }
 
-struct At(AtomicU64);
+pub(super) struct At(pub(super) AtomicU64);
 impl hotsheet_ticketing::Clock for At {
     fn now_ms(&self) -> u64 {
         self.0.load(Ordering::SeqCst)

@@ -13,9 +13,9 @@ use super::tickets::{Machine, NOW, bind_and_grant, human, machine, op, unsupport
 use super::*;
 
 const LEASE: &str = "2030-01-01T00:00:00Z";
-/// The sources nobody reports yet. HS2-7QNK7Y and HS2-BYEB60 wired `ci_run` and
-/// `deployment`: a run without gates has them verified as `no_gate` and
-/// `no_deployment`.
+/// The sources nobody reports yet. HS2-7QNK7Y, HS2-BYEB60 and HS2-G5H9FQ wired
+/// `ci_run`, `deployment` and `validation`: a run without gates or attempts has them
+/// verified as `no_gate`, `no_deployment` and `no_validation`.
 const NOT_WIRED: [&str; 1] = ["session"];
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
@@ -153,7 +153,7 @@ pub(super) fn finding(view: &RunView, source: ExternalSource) -> (Verification, 
     (found.verification, found.reason.clone())
 }
 /// Lose the target the way this fixture can: unbind it. Returns what binds it again.
-fn lose_target(m: &Machine, tx: &mut Transaction<'_>) -> BindTarget {
+pub(super) fn lose_target(m: &Machine, tx: &mut Transaction<'_>) -> BindTarget {
     let binding = m.runtime.resolve(&m.reference(1), tx).unwrap().binding;
     m.runtime
         .request(
@@ -252,6 +252,10 @@ fn hs2_wbredm_a_restart_reconciles_each_interrupted_dispatch_without_a_duplicate
     assert_eq!(
         finding(&view, ExternalSource::Deployment),
         (Verification::Verified, Some("no_deployment".into()))
+    );
+    assert_eq!(
+        finding(&view, ExternalSource::Validation),
+        (Verification::Verified, Some("no_validation".into()))
     );
     for source in ExternalSource::ALL.into_iter().filter(|s| s.is_target()) {
         assert_eq!(finding(&view, source), (Verification::Verified, None));
@@ -1064,7 +1068,7 @@ fn hs2_wbredm_recovery_routes_reach_the_same_runtime() {
         json!({"source":"target_reachability","verification":"verified"})
     );
     assert_eq!(
-        reconciled["reconciliation"]["findings"][6],
+        reconciled["reconciliation"]["findings"][7],
         json!({"source":"session","verification":"unverifiable","reason":"source_not_wired"})
     );
     let paused = post("pause", json!({"reason":"maintenance"}), &ai).unwrap();

@@ -78,9 +78,10 @@ pub use reconcile::{
     assess,
 };
 pub use reconcile_sources::{
-    EXECUTION_NOT_FOUND, GateObservation, NOTE_AWAITING_APPROVAL, NOTE_DEPLOYMENT_NOT_EXECUTED,
-    NOTE_NO_DEPLOYMENT, NOTE_NO_GATE, NOTE_WATCH_ADOPTED, SourceWork, ci_work, combine_work,
-    deployment_work,
+    AttemptAnswer, AttemptRecord, DEADLINE_PASSED, EXECUTION_LOST, EXECUTION_NOT_FOUND,
+    EXECUTION_UNCONFIRMED, GateObservation, NOTE_AWAITING_APPROVAL, NOTE_DEPLOYMENT_NOT_EXECUTED,
+    NOTE_NO_DEPLOYMENT, NOTE_NO_GATE, NOTE_NO_VALIDATION, NOTE_WATCH_ADOPTED, SourceWork, ci_work,
+    combine_work, deployment_work, validation_attempt, validation_work,
 };
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,

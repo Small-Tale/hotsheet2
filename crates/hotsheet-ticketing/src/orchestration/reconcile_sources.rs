@@ -11,7 +11,7 @@
 //! started a second time.
 
 use super::reconcile::{ExternalWork, Observed};
-use super::{Gate, GateKind, GateReading, GateState};
+use super::{Gate, GateKind, GateReading, GateState, ValidationResult, ValidationState};
 
 /// A verified source's note: no CI gate is linked to the run.
 pub const NOTE_NO_GATE: &str = "no_gate";
@@ -221,4 +221,93 @@ pub fn deployment_work(gates: &[GateObservation]) -> Observed<ExternalWork> {
             .collect(),
         Some(NOTE_NO_DEPLOYMENT),
     )
+}
+
+/// HS2-G5H9FQ: no validation attempt names the run.
+pub const NOTE_NO_VALIDATION: &str = "no_validation";
+/// HS2-G5H9FQ: the host accepted an attempt and no longer knows it.
+pub const EXECUTION_LOST: &str = "execution_lost";
+/// HS2-G5H9FQ: the host never confirmed an attempt's start and does not know it.
+pub const EXECUTION_UNCONFIRMED: &str = "execution_unconfirmed";
+/// HS2-G5H9FQ: a running attempt outlived its deadline (see `effective`).
+pub const DEADLINE_PASSED: &str = "deadline_passed";
+
+/// What the machine hosting a step answered about one running attempt, with no wait.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttemptAnswer {
+    /// The execution is still going on there.
+    Running,
+    /// It ended there; the caller records the outcome the host observed.
+    Finished,
+    /// The host has no such execution.
+    Unknown,
+    /// The host could not be asked, or refused the read; the code says why.
+    Unreachable(String),
+}
+
+/// What reconciliation records for one running attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttemptRecord {
+    /// Leave the attempt `running`.
+    Keep,
+    /// Record the outcome the host observed, as a continuing request would.
+    Outcome,
+    /// End the attempt `unverified` with this reason. It is never run a second time.
+    Unverified(&'static str),
+}
+
+/// HS2-G5H9FQ: one validation attempt that names a run, against what its host said.
+/// A finished attempt needs no answer: it is settled, and an `unverified` one keeps
+/// its reason as the note, so the answer is the same on every reconciliation.
+pub fn validation_attempt(
+    result: &ValidationResult,
+    answer: Option<&AttemptAnswer>,
+    now_ms: u64,
+) -> (SourceWork, AttemptRecord) {
+    if result.state != ValidationState::Running {
+        let note = (result.state == ValidationState::Unverified)
+            .then(|| result.reason.clone())
+            .flatten();
+        return (SourceWork::Settled(note), AttemptRecord::Keep);
+    }
+    let lapsed = result
+        .deadline_ms
+        .is_some_and(|deadline| now_ms >= deadline);
+    match answer {
+        None => (
+            SourceWork::Unverifiable(EXECUTION_UNCONFIRMED.into()),
+            AttemptRecord::Keep,
+        ),
+        Some(AttemptAnswer::Running) => (
+            SourceWork::Live {
+                reference: result.result_id.clone(),
+                adopted: false,
+            },
+            AttemptRecord::Keep,
+        ),
+        Some(AttemptAnswer::Finished) => (SourceWork::Settled(None), AttemptRecord::Outcome),
+        // The host accepted it and lost it: whatever happened cannot be confirmed.
+        Some(AttemptAnswer::Unknown) if result.host_started => (
+            SourceWork::Settled(Some(EXECUTION_LOST.into())),
+            AttemptRecord::Unverified(EXECUTION_LOST),
+        ),
+        // Never confirmed, and its time is up: nothing more can be learned.
+        Some(AttemptAnswer::Unknown) if lapsed => (
+            SourceWork::Settled(Some(DEADLINE_PASSED.into())),
+            AttemptRecord::Unverified(DEADLINE_PASSED),
+        ),
+        // Never confirmed: the same request may still start it under the same id.
+        Some(AttemptAnswer::Unknown) => (
+            SourceWork::Unverifiable(EXECUTION_UNCONFIRMED.into()),
+            AttemptRecord::Keep,
+        ),
+        Some(AttemptAnswer::Unreachable(code)) => {
+            (SourceWork::Unverifiable(code.clone()), AttemptRecord::Keep)
+        }
+    }
+}
+
+/// HS2-G5H9FQ: the validation attempts of a run, combined.
+pub fn validation_work(attempts: Vec<SourceWork>) -> Observed<ExternalWork> {
+    combine_work(attempts, Some(NOTE_NO_VALIDATION))
 }
