@@ -5727,6 +5727,72 @@
       }
     },
     {
+      "key": "hotsheet-web:registered-projects-settings",
+      "package": "hotsheet-web",
+      "id": "registered-projects-settings",
+      "name": "RegisteredProjectsSettings",
+      "kind": "component",
+      "purpose": "App Settings → Projects: every project registered with Hot Sheet on this computer, with a Folder Missing badge for a deleted or unmounted folder and Remove from Hot Sheet in each row's menu, which unregisters the project without deleting files (HS2-R806FZ).",
+      "publicExports": [
+        {
+          "name": "RegisteredProjectsSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/registered-projects-settings.tsx",
+        "src/components/registered-projects-settings-interactions.ts",
+        "src/features/registered-projects.ts"
+      ],
+      "source": "src/components/registered-projects-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/registered-projects-settings.tsx",
+        "composition": "src/components/registered-projects-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:remote-auth-screen",
       "package": "hotsheet-web",
       "id": "remote-auth-screen",

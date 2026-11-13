@@ -1892,6 +1892,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "registered-projects-settings",
+      "name": "RegisteredProjectsSettings",
+      "kind": "component",
+      "purpose": "App Settings → Projects: every project registered with Hot Sheet on this computer, with a Folder Missing badge for a deleted or unmounted folder and Remove from Hot Sheet in each row's menu, which unregisters the project without deleting files (HS2-R806FZ).",
+      "useWhen": [
+        "Hot Sheet needs App Settings for reviewing and removing the projects registered on this computer."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific RegisteredProjectsSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/registered-projects-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "remote-auth-screen",
       "name": "RemoteAuthScreen",
       "kind": "component",

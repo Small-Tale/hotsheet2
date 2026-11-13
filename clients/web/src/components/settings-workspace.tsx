@@ -26,6 +26,7 @@ import { HostDiskSettings, type HostDiskSettingsProps } from './host-disk-settin
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
+import { RegisteredProjectsSettings, type RegisteredProjectsSettingsProps } from './registered-projects-settings';
 import { RemoteDevicesSettings, type RemoteDevicesSettingsProps } from './remote-devices-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import { StandbySettings, type StandbySettingsProps } from './standby-settings';
@@ -54,6 +55,8 @@ export interface SettingsWorkspaceProps {
   notifications?: NotificationSettingsProps;
   /** App Settings → Devices (HS2-DXM0YN). */
   devices?: RemoteDevicesSettingsProps;
+  /** App Settings → Projects (HS2-R806FZ). */
+  projects?: RegisteredProjectsSettingsProps;
   permissions: {
     automation: PermissionAutomation;
     delays: readonly number[];
@@ -94,6 +97,7 @@ export function SettingsWorkspace({
   terminalMemory = {},
   notifications = {},
   devices = {},
+  projects = {},
   permissions,
   columns,
   developmentStrategy = {},
@@ -116,6 +120,7 @@ export function SettingsWorkspace({
           {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
           {category === 'notifications' && <NotificationSettings {...notifications} />}
           {category === 'devices' && <RemoteDevicesSettings {...devices} />}
+          {category === 'projects' && <RegisteredProjectsSettings {...projects} />}
           {category === 'ai' && (
             <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
           )}

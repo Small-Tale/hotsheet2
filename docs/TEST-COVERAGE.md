@@ -864,6 +864,15 @@ app poll and verifies both readers see the done event. It advances the installed
 virtual clock through the transport's bounded reconnect window before asserting
 the interrupted state, so a frozen test clock cannot strand a pending retry.
 
+HS2-R806FZ covers App Settings → Projects: `registered-projects-model.test.ts` (parse,
+names, sort), `features/registered-projects.test.ts` (load, reload on reopen, removal and
+refusal, failure then recovery, stale load after close, busy guard, reset),
+`components/registered-projects-settings.test.ts` (rows, Folder Missing, loading, empty,
+failed, busy), the live-server `checkouts-server-integration.test.ts` case (missing folder
+kept here and hidden from the picker, removal, idempotent repeat), route grants in
+`remote-auth-bridge.test.ts`, and `tests/registered-projects-settings.spec.ts` through the
+shipped settings parent with wide, 820 px, and 390 px captures. Manual: none.
+
 HS2-HM0Y6X covers abandoned temporary checkouts: `checkout_removal::tests` walks gone,
 generated-skeleton, skeleton-plus-file, live, missing-non-temporary, and external-source
 checkouts through dry run, removal, and an idempotent rerun, and skips a temporary

@@ -365,6 +365,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('notification-channel-dialog'),
       cataloged('notification-rule-dialog'),
       cataloged('remote-devices-settings', ['list-action-row']),
+      cataloged('registered-projects-settings', ['list-action-row']),
       cataloged('permission-rules-settings'),
     ],
   },

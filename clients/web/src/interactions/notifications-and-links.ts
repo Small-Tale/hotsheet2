@@ -15,8 +15,10 @@ import {
   toggleRememberedPermissionSuggestion,
 } from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
+import { wireRegisteredProjectsSettings } from '../components/registered-projects-settings-interactions';
 import { wireRemoteDevicesSettings } from '../components/remote-devices-settings-interactions';
 import type { NotificationSettings } from '../features/notification-settings';
+import type { RegisteredProjects } from '../features/registered-projects';
 import type { RemoteDevices } from '../features/remote-devices';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -124,6 +126,7 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly notificationSettings?: NotificationSettings;
   /** App Settings → Devices (HS2-DXM0YN); absent in compositions without it. */
   readonly remoteDevices?: RemoteDevices;
+  readonly registeredProjects?: RegisteredProjects;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -179,6 +182,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     cancelTicketLinkChoice,
     notificationSettings,
     remoteDevices,
+    registeredProjects,
     clientNotifications,
   } = dependencies;
   const permissionRuleEditorFocus = createPermissionRuleEditorFocus(document, () => selectedProjectId.value);
@@ -897,6 +901,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   if (notificationSettings) lifetime.add(wireNotificationSettings(document.body, notificationSettings));
   // App Settings → Devices (HS2-DXM0YN): the same handlers the catalog demo installs.
   if (remoteDevices) lifetime.add(wireRemoteDevicesSettings(document.body, remoteDevices));
+  // App Settings → Projects (HS2-R806FZ): the same handlers the catalog demo installs.
+  if (registeredProjects) lifetime.add(wireRegisteredProjectsSettings(document.body, registeredProjects));
   return () => {
     lifetime.dispose();
   };

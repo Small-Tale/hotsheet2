@@ -995,7 +995,7 @@ preview/download, server directory browser) are separate design work.
   terminals and AI chats confirmation, Keep Running and Stop & Close choices, and teardown
   (HS2-C7GMQN). It is there for phones, whose project picker has no tab close button; it
   shows at every width. It closes the project in this window only. Forgetting a registered
-  project (`DELETE /checkouts/{reference}`, `hotsheet-cli checkout remove`) stays headless.
+  project is App Settings → Projects below, or headless `hotsheet-cli checkout remove`.
   Ticket sources, Commands, Lifecycle, Permissions, Column view, and Development strategy each render as a
   separate workspace so unrelated controls do not become one long settings page.
   Ticket sources are never global (HS2-SM9PM8, see
@@ -1095,6 +1095,7 @@ preview/download, server directory browser) are separate design work.
   | App     | Terminal memory      | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                        | every project, machine  |
   | App     | Notifications        | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1) | every project, machine  |
   | App     | Devices              | `/remote-auth/owner` (the server's remote-auth catalog, docs/04 §4.6.1)                                  | this host, machine      |
+  | App     | Projects             | `/checkouts` (the machine checkout registry, `HOTSHEET_HOME/checkouts.json`; docs/04 §4.4)               | this host, machine      |
   | App     | Keyboard             | `localStorage hotsheet.keyboard-shortcuts`                                                               | every project, browser  |
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
@@ -1179,6 +1180,20 @@ preview/download, server directory browser) are separate design work.
   server re-check them on every request. The pairing screen proposes a device name from the
   user agent and low-entropy client hints (`device-name.ts`), such as "Safari on iPhone" or
   "Chrome on macOS"; the person may edit it.
+
+- **Registered projects (App Settings → Projects, HS2-R806FZ).** The category lists every
+  project registered with Hot Sheet on this computer, sorted by name, each with its folder
+  path (`components/registered-projects-settings.tsx`). A folder that is deleted or on a
+  volume that is not mounted shows a Folder Missing badge and a folder-x icon; the remote
+  project picker hides such projects instead (HS2-HFP3HM). Each row's "…" menu, also opened
+  by the row and by right-click, holds Remove from Hot Sheet. That unregisters the project
+  through the server's `DELETE /checkouts/{id}` workflow (docs/04 §4.4, HS2-X4RZ73) and never
+  deletes its files or ticket store. A project open in a window is refused, and the server's
+  reason is shown above the list. `features/registered-projects.ts` loads the list from the
+  host-only bridge route `GET /__hotsheet/registered-projects` each time the category opens
+  and after each removal (`DELETE /__hotsheet/registered-projects/{id}`); nothing polls. Both
+  routes need the local grant on a remote-mode host. The headless equivalents are
+  `hotsheet-cli checkout list`, `checkout remove`, and `checkout prune` (HS2-HM0Y6X).
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global

@@ -1,3 +1,3 @@
 /** Paths handled by the Hono development bridge instead of Vite's HTML/static middleware. */
 export const devServerRouteExclude =
-  /^(?!\/(?:ux-demo|__hotsheet\/(?:checkouts|conversation-exports|dev\/latency|folders|projects|project-api|remote-auth|remotes|server))(?:[/?]|$)).*/;
+  /^(?!\/(?:ux-demo|__hotsheet\/(?:checkouts|conversation-exports|dev\/latency|folders|projects|project-api|registered-projects|remote-auth|remotes|server))(?:[/?]|$)).*/;

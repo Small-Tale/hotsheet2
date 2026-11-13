@@ -209,6 +209,7 @@ describe('UX demo catalog', () => {
       'notification-channel-dialog',
       'notification-rule-dialog',
       'remote-devices-settings',
+      'registered-projects-settings',
       'permission-rules-settings',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');

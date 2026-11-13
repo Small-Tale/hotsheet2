@@ -14,6 +14,7 @@ import {
   CircleUserRound,
   Columns3,
   Database,
+  Folders,
   GitBranch,
   Keyboard,
   MemoryStick,
@@ -42,6 +43,7 @@ export type SettingsCategory =
   | 'notifications'
   | 'terminal-memory'
   | 'devices'
+  | 'projects'
   | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
@@ -67,6 +69,8 @@ const appCategories = [
   { id: 'terminal-memory', label: 'Terminal memory', icon: MemoryStick, iconName: 'memory-stick' },
   // This host's paired and pending browser devices (HS2-DXM0YN).
   { id: 'devices', label: 'Devices', icon: MonitorSmartphone, iconName: 'monitor-smartphone' },
+  // Projects registered on this computer, with removal (HS2-R806FZ).
+  { id: 'projects', label: 'Projects', icon: Folders, iconName: 'folders' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
 ] as const;
 
@@ -122,6 +126,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   ],
   'terminal-memory': [{ control: 'History, replay buffer, and warm terminals', server: '/terminal-limits' }],
   devices: [{ control: 'Pairing requests, paired devices, and their access', server: '/remote-auth/owner' }],
+  projects: [{ control: 'Registered projects and removal', server: '/checkouts' }],
   keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
 };
 
