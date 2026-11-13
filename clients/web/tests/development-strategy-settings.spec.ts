@@ -82,14 +82,17 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
     await expect(settings.locator('[data-cadence-source]')).toContainText('Last green main promotion');
     await page.screenshot({ path: test.info().outputPath('development-strategy-light-wide.png') });
     await page.setViewportSize({ width: 390, height: 760 });
-    const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' }),
-      hideInspector = page.getByRole('button', { name: 'Hide Ticket Inspector' });
-    if (await hideSettings.isVisible()) await hideSettings.click();
-    if (await hideInspector.isVisible()) await hideInspector.click();
-    await page.mouse.move(190, 520);
-    await page.mouse.wheel(0, 4000);
-    await page.waitForTimeout(250);
-    await expect(settings.locator('[data-cadence-source]')).toBeInViewport();
+    // HS2-WDWPBP: at phone width the inspector can sit over the settings sidebar, so the
+    // inspector is hidden first and each hide is confirmed before the next step; the
+    // cadence is then scrolled to rather than wheeled at a fixed point after a fixed delay.
+    for (const name of ['Hide Ticket Inspector', 'Hide Settings Sidebar']) {
+      const hide = page.getByRole('button', { name });
+      if (await hide.isVisible()) await hide.click();
+      await expect(hide).toBeHidden();
+    }
+    const cadence = settings.locator('[data-cadence-source]');
+    await cadence.scrollIntoViewIfNeeded();
+    await expect(cadence).toBeInViewport();
     await page.screenshot({ path: test.info().outputPath('development-strategy-light-phone-cadence.png') });
     await page.setViewportSize({ width: 1440, height: 900 });
 
