@@ -111,6 +111,7 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const rows = page.locator('[data-action="select-ticket-row"]');
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });

@@ -27,6 +27,18 @@ import { openExternal } from '../open-external';
 import type { PermissionAutomation } from '../permission-notifications';
 import { openedProjectYieldsToSelection } from '../project-activation';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
+import {
+  desktopRemoteBeginPair,
+  desktopRemoteDiscover,
+  type DesktopRemoteDiscovery,
+  desktopRemoteFinishPair,
+  desktopRemoteOpen,
+  type DesktopRemotePairing,
+  desktopRemoteRemove,
+  type DesktopRemoteServer,
+  desktopRemoteServers as listDesktopRemoteServers,
+} from '../remote-projects/client';
+import { parseRemoteProjectId } from '../remote-projects/identity';
 import { insertTabByRank, replaceTabInPlace } from '../tab-order';
 import { normalizeTicketPrefix, ticketPrefixSavedMessage } from '../ticket-prefix';
 import { customTicketViewKey, type TicketView } from '../ticket-views';
@@ -94,6 +106,15 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     remoteProjectCheckouts = signal<Checkout[]>([]),
     remoteProjectLoading = signal(false),
     remoteProjectError = signal(''),
+    projectSourceChoiceOpen = signal(false),
+    desktopRemoteDialogOpen = signal(false),
+    desktopRemoteFormOpen = signal(false),
+    desktopRemoteServers = signal<DesktopRemoteServer[]>([]),
+    desktopRemoteEditing = signal<DesktopRemoteServer | undefined>(undefined),
+    desktopRemoteDiscovery = signal<DesktopRemoteDiscovery | undefined>(undefined),
+    desktopRemotePairing = signal<DesktopRemotePairing | undefined>(undefined),
+    desktopRemoteBusy = signal(false),
+    desktopRemoteError = signal(''),
     unhealthyServerRecovery = signal<UnhealthyServerRecovery | undefined>(undefined),
     unhealthyServerRecoveryBusy = signal(false),
     hs1MigrationProject = signal<Project | undefined>(undefined),
@@ -1225,12 +1246,156 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
-  function openProjectPicker() {
+  /** How Local Project continues: the project-tab `+` keeps its native folder chooser and the empty-state
+   * Open Project keeps its folder form, so the Local or Remote Project choice adds one step to each
+   * existing local flow without replacing it (HS2-BT4KN6). */
+  let localProjectFlow: 'form' | 'native' = 'form';
+
+  function openProjectPicker(localFlow: 'form' | 'native' = 'form') {
     error.value = '';
     projectDialogError.value = '';
     unhealthyServerRecovery.value = undefined;
+    localProjectFlow = localFlow;
     if (opensProjectsRemotely()) void openRemoteProjectDialog();
+    else projectSourceChoiceOpen.value = true;
+  }
+
+  function chooseLocalProject() {
+    projectSourceChoiceOpen.value = false;
+    if (localProjectFlow === 'native') void chooseAndOpenProject();
     else projectDialogOpen.value = true;
+  }
+
+  async function chooseDesktopRemoteProject() {
+    projectSourceChoiceOpen.value = false;
+    desktopRemoteDialogOpen.value = true;
+    desktopRemoteError.value = '';
+    desktopRemoteBusy.value = true;
+    try {
+      desktopRemoteServers.value = await listDesktopRemoteServers();
+      desktopRemoteFormOpen.value = desktopRemoteServers.value.every((server) => server.revoked);
+    } catch (reason) {
+      desktopRemoteError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      desktopRemoteBusy.value = false;
+    }
+  }
+
+  async function beginDesktopRemotePair(form: HTMLFormElement) {
+    if (desktopRemoteBusy.value) return;
+    const address = (form.elements.namedItem('remote-address') as HTMLInputElement | null)?.value ?? '';
+    const label = (form.elements.namedItem('remote-label') as HTMLInputElement | null)?.value ?? '';
+    const tls = {
+      caFile: (form.elements.namedItem('remote-ca-file') as HTMLInputElement | null)?.value || undefined,
+      certificateFile: (form.elements.namedItem('remote-cert-file') as HTMLInputElement | null)?.value || undefined,
+      keyFile: (form.elements.namedItem('remote-key-file') as HTMLInputElement | null)?.value || undefined,
+    };
+    desktopRemoteBusy.value = true;
+    desktopRemoteError.value = '';
+    try {
+      desktopRemotePairing.value = await desktopRemoteBeginPair(address, label, tls, desktopRemoteEditing.value?.id);
+    } catch (reason) {
+      desktopRemoteError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      desktopRemoteBusy.value = false;
+    }
+  }
+
+  async function finishDesktopRemotePair() {
+    const pending = desktopRemotePairing.value;
+    if (!pending || desktopRemoteBusy.value) return;
+    desktopRemoteBusy.value = true;
+    desktopRemoteError.value = '';
+    try {
+      desktopRemoteDiscovery.value = await desktopRemoteFinishPair(pending.handle);
+      desktopRemoteServers.value = await listDesktopRemoteServers();
+      desktopRemotePairing.value = undefined;
+      desktopRemoteEditing.value = undefined;
+      desktopRemoteFormOpen.value = false;
+    } catch (reason) {
+      desktopRemoteError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      desktopRemoteBusy.value = false;
+    }
+  }
+
+  async function discoverDesktopRemoteServer(id: string) {
+    if (desktopRemoteBusy.value) return;
+    desktopRemoteBusy.value = true;
+    desktopRemoteError.value = '';
+    try {
+      desktopRemoteDiscovery.value = await desktopRemoteDiscover(id);
+    } catch (reason) {
+      desktopRemoteError.value = reason instanceof Error ? reason.message : String(reason);
+      desktopRemoteServers.value = await listDesktopRemoteServers().catch(() => desktopRemoteServers.value);
+    } finally {
+      desktopRemoteBusy.value = false;
+    }
+  }
+
+  function editDesktopRemoteServer(id: string) {
+    desktopRemoteEditing.value = desktopRemoteServers.value.find((server) => server.id === id);
+    desktopRemoteFormOpen.value = true;
+    desktopRemotePairing.value = undefined;
+    desktopRemoteError.value = '';
+  }
+
+  function showDesktopRemoteForm() {
+    desktopRemoteEditing.value = undefined;
+    desktopRemoteFormOpen.value = true;
+    desktopRemoteError.value = '';
+  }
+
+  function cancelDesktopRemoteForm() {
+    desktopRemoteFormOpen.value = false;
+    desktopRemoteEditing.value = undefined;
+    desktopRemotePairing.value = undefined;
+    desktopRemoteError.value = '';
+  }
+
+  async function openDesktopRemoteCheckout(checkoutId: string) {
+    const binding = desktopRemoteDiscovery.value?.remote;
+    if (!binding || desktopRemoteBusy.value) return;
+    desktopRemoteBusy.value = true;
+    desktopRemoteError.value = '';
+    try {
+      const remote = await desktopRemoteOpen(binding.id, checkoutId);
+      const opened: Extract<ProjectOpenResult, { ok: true }> = {
+        ok: true,
+        project: remote,
+        providers: await new Api(remote.apiPath).providers().catch(() => []),
+      };
+      await wireOpenedProject(remote.root, opened);
+      await activateOpenedProject(remote);
+      desktopRemoteDialogOpen.value = false;
+      dependencies.startPermissionUpdates();
+      dependencies.syncProjectChangeStreams();
+    } catch (reason) {
+      desktopRemoteError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      desktopRemoteBusy.value = false;
+    }
+  }
+
+  async function removeDesktopRemoteServer(id: string, revision: number) {
+    if (desktopRemoteBusy.value) return;
+    desktopRemoteBusy.value = true;
+    desktopRemoteError.value = '';
+    try {
+      await desktopRemoteRemove(id, revision);
+      const removed = projects.value.filter((project) => parseRemoteProjectId(project.id)?.bindingId === id);
+      projects.value = projects.value.filter((project) => parseRemoteProjectId(project.id)?.bindingId !== id);
+      if (removed.some((project) => project.id === selectedProjectId.value)) {
+        selectedProjectId.value = '';
+        if (projects.value[0]) await activateOpenedProject(projects.value[0]);
+      }
+      desktopRemoteServers.value = await listDesktopRemoteServers();
+      if (desktopRemoteDiscovery.value?.remote.id === id) desktopRemoteDiscovery.value = undefined;
+    } catch (reason) {
+      desktopRemoteError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      desktopRemoteBusy.value = false;
+    }
   }
 
   async function openRemoteProjectDialog() {
@@ -1260,6 +1425,15 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     remoteProjectCheckouts,
     remoteProjectLoading,
     remoteProjectError,
+    projectSourceChoiceOpen,
+    desktopRemoteDialogOpen,
+    desktopRemoteFormOpen,
+    desktopRemoteServers,
+    desktopRemoteEditing,
+    desktopRemoteDiscovery,
+    desktopRemotePairing,
+    desktopRemoteBusy,
+    desktopRemoteError,
     unhealthyServerRecovery,
     unhealthyServerRecoveryBusy,
     hs1MigrationProject,
@@ -1334,6 +1508,16 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     chooseProjectPath,
     chooseAndOpenProject,
     openProjectPicker,
+    chooseLocalProject,
+    chooseDesktopRemoteProject,
+    beginDesktopRemotePair,
+    finishDesktopRemotePair,
+    discoverDesktopRemoteServer,
+    editDesktopRemoteServer,
+    showDesktopRemoteForm,
+    cancelDesktopRemoteForm,
+    openDesktopRemoteCheckout,
+    removeDesktopRemoteServer,
     openRemoteProjectDialog,
     openRemoteCheckout,
   };

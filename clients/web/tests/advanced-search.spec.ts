@@ -208,6 +208,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
@@ -581,6 +582,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
   await page.setViewportSize({ width: 680, height: 720 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' });

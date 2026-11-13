@@ -140,15 +140,21 @@ pub(crate) fn cmd_groups(path: &Path, json: bool) -> Result<()> {
     let store = FsStore::open(path)?;
     let registry = registry_for(&store);
     let summaries = groups::list_groups(&GroupDirectory::scan(&store)?, registry.as_ref())?;
+    // HS2-9EGWC4: how the project's registry was last committed and published.
+    let sync = registry.as_ref().and_then(GroupRegistry::sync_status);
     if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "registry": registry.is_some(),
-                "groups": summaries,
-            }))?
-        );
+        let mut body = serde_json::json!({
+            "registry": registry.is_some(),
+            "groups": summaries,
+        });
+        if let Some(sync) = &sync {
+            body["registry_sync"] = serde_json::to_value(sync)?;
+        }
+        println!("{}", serde_json::to_string_pretty(&body)?);
         return Ok(());
+    }
+    if let Some(sync) = sync.filter(|sync| sync.state.needs_attention()) {
+        eprintln!("Group registry not published: {}", sync.detail);
     }
     if summaries.is_empty() {
         println!("(no groups)");

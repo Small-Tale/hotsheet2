@@ -1442,9 +1442,13 @@ pub(crate) const OPEN_LOCK_SUFFIX: &str = "-open.lock";
 /// recreates an index file. SQLite's own locking cannot cover these steps: switching a
 /// fresh file to WAL can fail with an immediate `SQLITE_BUSY`, and a reader can see
 /// another creator's half-written header as "not a database". The kernel releases the
-/// lock if the holder dies. Other platforms rely on SQLite's locking alone.
+/// lock if the holder dies. Windows takes the same lock with `LockFileEx` (HS2-AMAQSV):
+/// without it, concurrent first opens failed there with an immediate `database is locked`.
 struct OpenLock {
+    #[cfg(not(windows))]
     _file: std::fs::File,
+    #[cfg(windows)]
+    _lock: hotsheet_ticketing::FileLock,
 }
 
 impl OpenLock {
@@ -1468,6 +1472,11 @@ impl OpenLock {
                 }
             }
         }
+        #[cfg(windows)]
+        return Ok(Self {
+            _lock: hotsheet_ticketing::FileLock::acquire(file)?,
+        });
+        #[cfg(not(windows))]
         Ok(Self { _file: file })
     }
 }

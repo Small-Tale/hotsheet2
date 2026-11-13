@@ -45,6 +45,28 @@ impl RemoteRuntime {
         self.registry.list()
     }
 
+    /// For the same-machine desktop bridge only. Never return this through a browser route.
+    pub fn bridge_connection(
+        &self,
+        id: &str,
+    ) -> Result<(RemoteView, RemoteCredentials), RemoteError> {
+        self.registry.bridge_connection(id, self.secrets.as_ref())
+    }
+
+    pub fn selected_projects(
+        &self,
+    ) -> Result<Vec<hotsheet_ticketing::remote_servers::RemoteSelectedProject>, RemoteError> {
+        self.registry.selected_projects()
+    }
+
+    pub fn select_project(&self, id: &str, checkout: &str) -> Result<(), RemoteError> {
+        self.registry.select_project(id, checkout)
+    }
+
+    pub fn unselect_project(&self, id: &str, checkout: &str) -> Result<(), RemoteError> {
+        self.registry.unselect_project(id, checkout)
+    }
+
     pub fn register(&self, mut request: RegisterRemote) -> Result<RemoteDiscovery, RemoteError> {
         request.origin = normalize_remote_origin(&request.origin)?;
         self.registry.register(

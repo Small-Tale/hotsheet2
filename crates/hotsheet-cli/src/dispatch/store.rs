@@ -81,7 +81,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             status,
             json,
             abort_stalled_rebase,
-        } => cmd_sync(path, status, json, abort_stalled_rebase),
+            adopt,
+        } => cmd_sync(path, status, json, abort_stalled_rebase, adopt.as_deref()),
         Cmd::Doctor { project } => cmd_doctor(path, &project),
         Cmd::Reindex { index } => cmd_reindex(path, index),
         Cmd::Worklist => cmd_worklist(path, &ctx.cwd),
@@ -530,6 +531,30 @@ pub(crate) fn render_sync_health(health: &hotsheet_ticketing::SyncHealth) -> Str
             format_bytes(object.limit_bytes)
         ));
     }
+    if let Some(help) = &health.ai_help {
+        out.push_str(&format!(
+            "AI asked: {} ({}{}{})\n",
+            help.outcome.as_str(),
+            help.mode.as_str(),
+            help.tool
+                .as_deref()
+                .map(|tool| format!(", {tool}"))
+                .unwrap_or_default(),
+            help.ticket
+                .as_deref()
+                .map(|slug| format!(", ticket {slug}"))
+                .unwrap_or_default()
+        ));
+    }
+    out.push_str(&format!(
+        "Merge driver: {}{}\n",
+        health.merge_driver.as_str(),
+        health
+            .merge_driver_repaired_at
+            .as_deref()
+            .map(|at| format!(" (registered by sync at {at})"))
+            .unwrap_or_default()
+    ));
     if let Some(action) = &health.next_action {
         out.push_str(&format!("Next step: {action}\n"));
     }
@@ -541,6 +566,7 @@ pub(crate) fn cmd_sync(
     status: bool,
     json: bool,
     abort_stalled_rebase: bool,
+    adopt: Option<&str>,
 ) -> Result<()> {
     use hotsheet_ticketing::SyncReport;
     use hotsheet_ticketing::repository_size::{self, SizeLevel};
@@ -570,12 +596,56 @@ pub(crate) fn cmd_sync(
         println!("Run `hotsheet-cli sync` to integrate and publish.");
         return Ok(());
     }
+    if let Some(commit) = adopt {
+        FsStore::open_without_maintenance(path)?;
+        let adopted = hotsheet_ticketing::sync::adopt_resolved_history(path, commit)?;
+        println!(
+            "Adopted {commit}; the branch is at {}. Backup of the previous HEAD: {}",
+            adopted.head, adopted.backup_ref
+        );
+        println!("Run `hotsheet-cli sync` to publish.");
+        return Ok(());
+    }
     FsStore::open(path)?; // validate it's a store before touching git
     // The level before the sync, so a sync that carries the store over a GitHub limit says
     // so once (HS2-P1GYWH). One `git count-objects`, no attachment walk.
     let before = repository_size::git_object_size(path)
         .map_or(SizeLevel::Ok, |size| SizeLevel::for_bytes(size.total_bytes));
-    match hotsheet_ticketing::sync_once(path) {
+    let report = hotsheet_ticketing::sync_once(path);
+    // HS2-QR1K8R: the same ask-the-AI workflow as the server's sync loop; a stall asks
+    // once, and a publishing cycle closes the ask.
+    if report != SyncReport::NoRemote {
+        let program = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("hotsheet-cli"));
+        match hotsheet_cli::sync_ai::ask_after_cli_sync(
+            path,
+            &hotsheet_plugins::hotsheet_home(),
+            &program,
+        ) {
+            hotsheet_cli::sync_ai::CliAsk::LeftToServer
+                if matches!(report, SyncReport::Conflict | SyncReport::RebaseInProgress) =>
+            {
+                eprintln!(
+                    "A running Hot Sheet server hosts this store; it asks an AI to repair it."
+                );
+            }
+            hotsheet_cli::sync_ai::CliAsk::Ran(hotsheet_ticketing::sync_ai::AskOutcome::Asked(
+                record,
+            )) => eprintln!(
+                "{}",
+                hotsheet_ticketing::sync_ai::next_action(&hotsheet_ticketing::sync_ai::AiHelp {
+                    outcome: record.outcome,
+                    mode: record.mode,
+                    tool: record.tool,
+                    ticket: record.ticket,
+                    asked_at: record.asked_at,
+                    finished_at: None,
+                    reason: record.reason,
+                })
+            ),
+            _ => {}
+        }
+    }
+    match report {
         SyncReport::NoRemote => println!("Local-only store — no remote to sync."),
         SyncReport::UpToDate => println!("Already up to date."),
         SyncReport::Synced { pulled, pushed } => {
@@ -698,13 +768,20 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
 
     // The semantic merge driver must be registered, or git would text-merge ticket files
     // and could dump conflict markers over structured data (HS2-18, docs/02 §2.7).
+    // HS2-9TV6A2: a missing local registration is repaired rather than only reported.
     if !hotsheet_cli::merge_driver_registered(path) {
-        println!(
-            "  ! semantic merge driver not registered (missing .gitattributes \
-             `merge=hotsheet-ticket` or its git config) — re-run `hotsheet-cli init` here to \
-             register it, or git may text-merge ticket files"
-        );
-        issues += 1;
+        match hotsheet_cli::register_merge_driver(path) {
+            hotsheet_ticketing::merge_driver::MergeDriverStatus::Missing => {
+                println!(
+                    "  ! semantic merge driver not registered and could not be registered \
+                     here (no runnable `hotsheet-cli` found) — git may text-merge ticket files"
+                );
+                issues += 1;
+            }
+            _ => println!(
+                "  - registered the semantic merge driver in this checkout (it was missing)"
+            ),
+        }
     }
 
     // Every ticket store is a Git repository or a tracked designated root within one
@@ -845,6 +922,17 @@ pub(crate) fn cmd_merge_driver(base: &Path, ours: &Path, theirs: &Path) -> Resul
         parse_file(&theirs_txt),
     ) {
         (Ok(b), Ok(o), Ok(t)) => (b, o, t),
+        // HS2-QR1K8R: both sides added the same ticket (Git passes an empty base), for
+        // example a ticket rewritten while a replay had its file out of the tree. The
+        // older version is the ancestor, so the newer one's fields win and notes union.
+        (Err(_), Ok(o), Ok(t)) if base_txt.is_empty() && o.id == t.id => {
+            let older = if o.updated_at.as_str() <= t.updated_at.as_str() {
+                o.clone()
+            } else {
+                t.clone()
+            };
+            (older, o, t)
+        }
         _ => {
             // Unparseable input → git's plain text 3-way merge (never silent data loss).
             let (merged, clean) = git_merge_file(&ours_txt, &base_txt, &theirs_txt)?;

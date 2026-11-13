@@ -16,6 +16,12 @@ pub(crate) const MAX_REGISTRY_BYTES: usize = 16 * 1024 * 1024;
 #[serde(deny_unknown_fields)]
 pub struct RemoteCredentials {
     pub bearer_secret: String,
+    /// The origin approved during pairing. Kept beside the token in the private secret store.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_origin: Option<String>,
+    /// Write and WebSocket proof for that paired origin; never stored in the registry JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_csrf: Option<String>,
     #[serde(default)]
     pub ca_pem: Option<String>,
     #[serde(default)]
@@ -56,6 +62,18 @@ impl RemoteCredentials {
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
         }) {
             return Err(RemoteError::Invalid("invalid paired session token"));
+        }
+        match (&self.session_origin, &self.session_csrf) {
+            (None, None) => {}
+            (Some(bound_origin), Some(csrf))
+                if self.session_token().is_some()
+                    && normalize_remote_origin(bound_origin).ok().as_deref()
+                        == Some(bound_origin.as_str())
+                    && csrf.len() == 43
+                    && csrf.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
+                    }) => {}
+            _ => return Err(RemoteError::Invalid("invalid paired session write proof")),
         }
         if origin.starts_with("http://") {
             if self.ca_pem.is_some()
@@ -304,6 +322,13 @@ pub struct RemoteDiscovery {
     pub remote: RemoteView,
     /// None for revoked, inaccessible, unsupported or changed identities, even with cached data.
     pub checkouts: Option<Vec<RemoteCheckout>>,
+}
+
+/// A desktop project selection. The registry persists only these non-secret identifiers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteSelectedProject {
+    pub binding_id: String,
+    pub checkout_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

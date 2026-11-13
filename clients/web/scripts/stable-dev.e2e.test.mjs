@@ -401,6 +401,13 @@ it.concurrent(
  * on a loaded CI runner when two servers started at once; the readiness line is the real signal, and
  * the caller's hook timeout bounds the wait instead of a guessed deadline.
  */
+// eslint-disable-next-line no-control-regex -- matching the ANSI escape introducer is the point (HS2-3NM43R)
+const ansiPattern = /\u001b\[[0-9;]*m/g;
+
+function stripAnsi(text) {
+  return text.replace(ansiPattern, '');
+}
+
 function waitForListening(child, output, port) {
   const listening = new RegExp(`Local:\\s+http://127\\.0\\.0\\.1:${port}/`);
   return new Promise((resolveReady, reject) => {
@@ -410,7 +417,9 @@ function waitForListening(child, output, port) {
       child.off('exit', exited);
     };
     function check() {
-      if (!listening.test(output())) return;
+      // Vite bolds the port in this line, and picocolors enables color whenever `CI` is set, so CI
+      // output carries escape codes inside the URL (HS2-3NM43R). Match the uncolored text.
+      if (!listening.test(stripAnsi(output()))) return;
       cleanup();
       resolveReady();
     }

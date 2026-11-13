@@ -504,6 +504,20 @@ missing CSRF, server restart, and a browser restart. Verify the local trusted
 client and headless CLI continue without browser prompts. Do not use customer
 data or capture a cookie/challenge in screenshots.
 
+### Device grants and App Settings → Devices (HS2-85W6BE, HS2-DXM0YN)
+
+With the same disposable remote-mode host behind Tailscale Serve, pair a browser
+opened at `http://127.0.0.1:<port>` and one opened through the Serve URL. Approve
+the first with `--admin --local` and the second plainly. The loopback browser
+must show the native folder chooser from Open Project and open a project by path;
+the Serve browser keeps the registered-project picker. Grant the Serve browser
+admin from the first browser's Settings → Devices, reload it, and confirm it lists
+devices but cannot change Host Access. A plain session sees "Administrator
+access required." Approve, reject and revoke from the Devices page and confirm
+another open Devices page updates without reload. Confirm a request still
+redeems after 14 minutes and the proposed device name matches the browser and
+platform on an iPhone, an iPad, and a Mac.
+
 ### Direct remote listener modes (HS2-W4JJJE)
 
 Using only a disposable synthetic store, start the server off-loopback without a
@@ -519,6 +533,24 @@ client certificate but verifies the server certificate, while mTLS still checks
 the device certificate and ACL. Verify no HTTPS client silently switches to HTTP.
 Treat an HTTP session cookie as visible to network observers and avoid using a
 production account or customer content in this check.
+
+### Desktop local and remote projects (HS2-BT4KN6)
+
+With two disposable synthetic hosts advertising the same checkout id, open a
+local project and then use desktop `+` → Remote project. Enter each explicit
+HTTP or HTTPS address and port, confirm the shown protocol and durable server
+identity, approve once from that host's trusted CLI, and open both remote
+checkouts. Verify three independent tabs, server labels, ticket mutations and
+change events on only the matching host. Restart one host and retry discovery;
+replace its identity or revoke its session and verify that host fails closed
+while the other two tabs remain usable. Review a changed binding with fresh
+approval, then remove it and confirm its active stream closes and its selected
+project no longer restores. Repeat after restarting the desktop to check the
+machine-local selected pairs and private credential store. On a phone browser
+connected to one host, confirm `+` still offers only that host's checkout list.
+Inspect the rebuilt app at wide, medium and phone widths and after returning
+to wide; verify the source choice, address form, project list and tab states
+without clipping. Remote terminals are outside this ticket's data-only scope.
 
 ### Real-device mTLS enrollment
 

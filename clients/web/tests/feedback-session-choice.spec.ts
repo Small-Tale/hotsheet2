@@ -64,6 +64,7 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     await page.setViewportSize({ width: 1280, height: 850 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${created.slug}"]`).click();
     const inspector = page.locator('#app-right-rail');

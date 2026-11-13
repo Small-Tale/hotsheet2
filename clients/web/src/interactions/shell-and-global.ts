@@ -27,7 +27,12 @@ import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { type OvernightWindow } from '../overnight-timeline';
-import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
+import {
+  acceptsProjectTabFileDrag,
+  clearProjectTabDropTarget,
+  markProjectTabDropTarget,
+  projectTabDroppedFiles,
+} from '../project-tab-file-drop';
 import { cycleTabId } from '../tab-cycle';
 import { terminalClearKeyTarget } from '../terminal-clear';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
@@ -417,19 +422,30 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   window.addEventListener('pointercancel', finishAppRegionResize, { signal: lifetime.signal });
   // Kerf ListItem rows show their drag-target state through Kerf's own `data-state`; other targets
   // (project tabs, the composer) keep the app attribute only.
+  // A project tab renders its state from `projectTabDropTarget` through Kerf's `dropTarget` prop: the
+  // shell's next render morphs away attributes set on the tab's node mid-drag (HS2-6KNWYT).
   function markDragTarget(target: HTMLElement) {
+    const tabProject = data(target).ticketDropProject;
+    if (tabProject) {
+      markProjectTabDropTarget(tabProject, 'ticket');
+      return;
+    }
     target.dataset.draggingTicket = 'true';
     if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
-    if (target.matches('.kui-tab-bar-item')) target.dataset.dropTarget = 'true';
   }
   function clearDragTarget(target: HTMLElement) {
+    const tabProject = data(target).ticketDropProject;
+    if (tabProject) {
+      clearProjectTabDropTarget(tabProject, 'ticket');
+      return;
+    }
     delete target.dataset.draggingTicket;
     if (target.dataset.state === 'drag-target') delete target.dataset.state;
-    delete target.dataset.dropTarget;
   }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;
     ticketGroupDropTarget.value = undefined;
+    clearProjectTabDropTarget(undefined, 'ticket');
     document.querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]').forEach((target) => {
       clearDragTarget(target);
     });
@@ -459,8 +475,9 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         const destinationProject = data(target).ticketDropProject;
         if (destinationProject === drag.source.id) return;
         event.preventDefault();
-        // Over a group inside a column, the group alone shows as the target (HS2-PRXD39).
-        if (groupDropElement(event, target)) {
+        // Over a group inside a column, the group alone shows as the target (HS2-PRXD39), but only
+        // for tickets already in that column; from another column the whole column is the target.
+        if (columnGroupDropElement(event, target)) {
           clearDragTarget(target as HTMLElement);
           return;
         }
@@ -495,8 +512,28 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     return drag && groups && project()?.id === drag.source.id && !groups.disabledReason(drag.slugs) ? drag : undefined;
   };
   const draggedRows = (slugs: readonly string[]) => tickets.value.filter((ticket) => slugs.includes(ticket.slug));
+  /**
+   * HS2-K2QA1J: a drag from another board column is a status change, so a group in a column takes
+   * the drop only when every dragged ticket is already in that column. A list group always does.
+   */
+  function acceptsGroupDrop(group: Element) {
+    const drag = groupableDrag();
+    if (!drag) return false;
+    const column = group.closest<HTMLElement>('[data-component="ticket-board-column"]');
+    if (!column) return true;
+    const status = data(column).ticketDropStatus;
+    return draggedRows(drag.slugs).every((ticket) => ticket.status === status);
+  }
+  /** The group under the pointer inside the board column `column`, when it accepts this drag. */
+  function columnGroupDropElement(event: Event, column: Element) {
+    const group = groupDropElement(event, column);
+    return group && acceptsGroupDrop(group) ? group : undefined;
+  }
   function overTicketGroup(event: Event, target: Element) {
-    if (!groupableDrag()) return;
+    if (!acceptsGroupDrop(target)) {
+      if (ticketGroupDropTarget.value) ticketGroupDropTarget.value = undefined;
+      return;
+    }
     event.preventDefault();
     const { ticketGroup = '', ticketGroupScope = '' } = data(target),
       key = ticketGroupKey(ticketGroup),
@@ -561,17 +598,18 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       if (!drag || project()?.id !== drag.source.id) return;
       event.preventDefault();
       event.stopPropagation();
-      const dropGroup = groupDropElement(event, target)?.dataset.ticketGroup;
-      if (dropGroup && groupableDrag()) {
-        // The column's status change and the group assignment go out as one update.
+      const dropGroup = columnGroupDropElement(event, target)?.dataset.ticketGroup;
+      if (dropGroup) {
+        // Only tickets already in this column reach here, so the drop changes just the group.
         clearTicketDrag();
         void ticketGroups.setGroup(drag.slugs, dropGroup, data(target).ticketDropStatus);
         return;
       }
       // Dropped in its own board column outside every group, a grouped ticket leaves its group;
-      // a drop in another column changes only the status and keeps the group.
+      // a drop in another column, even over one of its groups, changes only the status and keeps
+      // the group (HS2-K2QA1J).
       const leaving =
-        target.matches('[data-component="ticket-board-column"]') && groupableDrag()
+        target.matches('[data-component="ticket-board-column"]') && groupableDrag() && !groupDropElement(event, target)
           ? draggedRows(drag.slugs)
               .filter((ticket) => ticket.status === data(target).ticketDropStatus && ticketGroupValue(ticket))
               .map((ticket) => ticket.slug)
@@ -629,16 +667,13 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       )
         return;
       event.preventDefault();
-      (target as HTMLElement).dataset.dropTarget = 'true';
-      (target as HTMLElement).dataset.draggingFile = 'true';
+      markProjectTabDropTarget(data(target).ticketDropProject!, 'file');
       if (transfer) transfer.dropEffect = 'copy';
     }),
   );
   lifetime.add(
     delegate(document.body, 'dragleave', '[data-ticket-drop-project]', (_event, target) => {
-      if (!data(target).draggingFile) return;
-      delete (target as HTMLElement).dataset.dropTarget;
-      delete (target as HTMLElement).dataset.draggingFile;
+      clearProjectTabDropTarget(data(target).ticketDropProject, 'file');
     }),
   );
   lifetime.add(
@@ -652,8 +687,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       if (!files.length || !destination) return;
       event.preventDefault();
       event.stopPropagation();
-      delete (target as HTMLElement).dataset.dropTarget;
-      delete (target as HTMLElement).dataset.draggingFile;
+      clearProjectTabDropTarget(destination.id, 'file');
       selectProjectTab(destination.id);
       void addNewTicketFiles(files);
     }),

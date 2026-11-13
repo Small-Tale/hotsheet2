@@ -42,6 +42,7 @@ test('searches recorded AI ticket creators through a bounded real checkout (HS2-
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Search tickets' }).click();
     const search = page.getByRole('searchbox', { name: 'Search tickets' });

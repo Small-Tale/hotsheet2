@@ -137,6 +137,7 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-BASE1"]')).toBeVisible();
 

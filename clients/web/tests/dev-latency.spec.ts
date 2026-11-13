@@ -86,6 +86,7 @@ for (const viewport of [
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto('/');
       await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Local Project' }).click();
       await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
       const row = page.locator('[data-action="select-ticket-row"]').filter({ hasText: 'Slow to open' });
       await expect(row).toBeVisible({ timeout: 30_000 });

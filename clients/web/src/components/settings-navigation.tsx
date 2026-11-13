@@ -17,6 +17,7 @@ import {
   GitBranch,
   Keyboard,
   MemoryStick,
+  MonitorSmartphone,
   ShieldCheck,
   SlidersHorizontal,
   TerminalSquare,
@@ -40,6 +41,7 @@ export type SettingsCategory =
   | 'accounts'
   | 'notifications'
   | 'terminal-memory'
+  | 'devices'
   | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
@@ -63,6 +65,8 @@ const appCategories = [
   { id: 'notifications', label: 'Notifications', icon: Bell, iconName: 'bell' },
   // Machine-wide terminal history, replay, and warm-terminal limits (HS2-Y5DYC0).
   { id: 'terminal-memory', label: 'Terminal memory', icon: MemoryStick, iconName: 'memory-stick' },
+  // This host's paired and pending browser devices (HS2-DXM0YN).
+  { id: 'devices', label: 'Devices', icon: MonitorSmartphone, iconName: 'monitor-smartphone' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
 ] as const;
 
@@ -117,6 +121,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
     { control: 'Recent deliveries', server: '/notification-deliveries' },
   ],
   'terminal-memory': [{ control: 'History, replay buffer, and warm terminals', server: '/terminal-limits' }],
+  devices: [{ control: 'Pairing requests, paired devices, and their access', server: '/remote-auth/owner' }],
   keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
 };
 

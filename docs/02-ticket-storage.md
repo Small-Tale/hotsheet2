@@ -695,6 +695,22 @@ a custom merge driver, registered via `.gitattributes`:
 tickets/**/*.md merge=hotsheet-ticket
 ```
 
+**Registration is local to each checkout (HS2-9TV6A2).** The committed
+`.gitattributes` line is not enough on its own. A rebase or a `git merge-tree` replay
+reads attributes from the trees it merges, so an upstream without `.gitattributes`
+leaves every replayed ticket to Git's text merge. And Git never copies the driver
+command in `.git/config` with a clone. So each checkout also carries the attribute in
+`<git-dir>/info/attributes` (with the store's prefix for a designated root), which Git
+always reads, and `merge.hotsheet-ticket.driver` pointing at the installed
+`hotsheet-cli`. Neither is committed, so every machine that shares the remote registers
+them for itself. A sync cycle registers them before it replays or continues anything
+and records that in its health (`merge_driver_repaired_at`). `init`, linking a store,
+creating a standalone store, importing, and the server hosting a store register them
+too. `hotsheet-cli doctor` repairs a missing or stale registration (for example a
+driver command naming a removed install) instead of only reporting it. When no
+runnable `hotsheet-cli` can be found, health reports `merge_driver: missing` and a
+conflict's next step names the registration.
+
 The driver is a **`hotsheet merge-driver` CLI subcommand** (so the merge logic is
 the same core code, tested once — [04-core-server-cli.md](04-core-server-cli.md)
 §4.4). Git invokes it with the base/ours/theirs versions; it performs a
@@ -748,6 +764,12 @@ data — a conflict is surfaced, never a silent overwrite. `hotsheet doctor` fla
 any store missing the `.gitattributes` registration so the automatic path can't be
 silently bypassed.
 
+**Both sides added the same ticket (HS2-QR1K8R).** When Git passes an empty base and
+both versions are the same ticket (same id), the driver uses the version with the older
+`updated_at` as the ancestor. The newer version's fields then win and notes union,
+instead of the whole file conflicting. This is the merge a continued replay needs when a
+ticket was rewritten while `git rebase` had its file out of the tree (§2.12.3).
+
 ### 2.7.1 Ticket groups (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4)
 
 A ticket may name one **group** in its optional `group` frontmatter field
@@ -763,7 +785,8 @@ tombstone is never a member. The full behavior is in
   keeps one committed file per group, `<checkout>/.hotsheet2/groups/<id>.json` holding
   `{ "name": … }`. One file per group means two clones that each create a group merge
   without a conflict. The checkout's `.gitignore` must allow `/.hotsheet2/groups/` when it
-  ignores the rest of `.hotsheet2/`. A machine-local `.hotsheet2/groups.lock` serializes a
+  ignores the rest of `.hotsheet2/`; the managed block Hot Sheet writes does
+  ([04](04-core-server-cli.md) §4.7.0, HS2-61ZMVA). A machine-local `.hotsheet2/groups.lock` serializes a
   find-or-create by name. A registry entry with no members is not a visible group, and no
   entry or leftover value is ever deleted automatically.
 - **Names are unique without regard to case or spacing.** Setting a group by name resolves
@@ -837,7 +860,7 @@ that references the store path (`.mcp.json`, the hooks command) is per-machine.
 
 **Finding the store without `-C`** (HS2-5CXKZ0/HS2-77YTS1): a code repo can point at its
 standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
-`.hotsheet2/store` file holding the store's absolute path. Any later `hotsheet-cli`
+`.hotsheet2/store` file (managed `.gitignore` block, [04](04-core-server-cli.md) §4.7.0) holding the store's absolute path. Any later `hotsheet-cli`
 run inside that repo resolves the store automatically: an explicit `-C` wins, else
 `$HOTSHEET_STORE`, else the nearest `.hotsheet2/store` walking up from the cwd, with
 read-only fallback to the legacy `.hotsheet/store` location. A
@@ -955,10 +978,11 @@ engine** so the user effectively never runs git by hand:
   another writer's stage and no-op check. The lock releases before retry backoff and
   automatically on process exit. Retrying rechecks for an already-committed no-op and
   preserves path-scoped commits. The sync cycle holds the same lock for its local Git
-  steps — the stray-change commit and the rebase (re-committing any write that landed
+  steps — the stray-change commit and the replay (re-committing any write that landed
   during fetch first) — while fetch and push run unlocked, so a sync pass never
   collides with a concurrent autocommit on `index.lock` and a slow remote never blocks
-  local writes (HS2-V454FB).
+  local writes (HS2-V454FB). The replay itself never runs in the working tree, and an
+  autocommit never commits while a rebase or merge is unfinished (§2.12.3, HS2-QR1K8R).
   Hot Sheet never deletes another process's Git lock. Exhausted contention or any
   other Git failure warns while preserving the successful ticket write; network
   publication remains asynchronous (HS2-C71XN1).
@@ -1054,7 +1078,7 @@ Each cycle ends in one state:
 | `offline`                   | Fetch or push could not reach the remote, authentication failed, or another pusher won a race | exponential backoff                  |
 | `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit)   | exponential backoff; needs a repair  |
 | `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it                 | not replayed for the same divergence |
-| `rebase_in_progress`        | A rebase or merge is in progress or was abandoned in the store                                | none until finished or aborted       |
+| `rebase_in_progress`        | An unfinished rebase or merge in the store needs a decision (§2.12.3)                         | none until finished or aborted       |
 | `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                          | none until recovered                 |
 
 The rules:
@@ -1066,19 +1090,26 @@ The rules:
   blob over the remote's file limit (GitHub's 100 MiB) by path and size. Local commits
   are kept.
 - **Never stack replays.** A cycle first checks for `rebase-merge`, `rebase-apply`, or
-  `MERGE_HEAD` in the store's Git directory. If one exists, the cycle stops before
-  committing or fetching. A conflicting rebase records its `(HEAD, upstream)` pair. The
-  next pass reports the same conflict without replaying thousands of local commits
+  `MERGE_HEAD` in the store's Git directory. If one exists and needs a decision, the
+  cycle stops before committing or fetching; a rebase with nothing to decide is
+  continued first (§2.12.3). A conflicting replay records its `(HEAD, upstream)` pair.
+  The next pass reports the same conflict without replaying thousands of local commits
   again, until either side moves.
 - **Durable failure counter.** Every failure state increments
   `consecutive_failures`; a publication resets it and sets `last_success_at`.
 - **Live conditions win.** The health read checks the remote, the recovery guard, and
-  an unfinished rebase live, without contacting the remote. Unpublished and incoming
-  commit counts compare `HEAD` with the last fetched upstream.
+  an unfinished rebase live, without contacting the remote. Its `reason` is the one the
+  last cycle recorded for that stall (for example a failed continue and its backup ref).
+  Unpublished and incoming commit counts compare `HEAD` with the last fetched upstream.
 
 `GET /checkouts/{id}/repository/sync` returns every linked Git source's health, with
 its state, `syncing`, `unpublished_commits`, `incoming_commits`, `last_attempt_at`,
-`last_success_at`, `consecutive_failures`, `reason`, `oversized`, and `next_action`.
+`last_success_at`, `consecutive_failures`, `reason`, `oversized`, `next_action`,
+`merge_driver` (`registered` or `missing`, read live), and `merge_driver_repaired_at`
+(when a cycle last registered the missing driver, HS2-9TV6A2), and `ai_help` while an
+AI was asked to repair a stall and the store has not published since (`outcome`
+`session_asked`, `started`, `finished`, `failed`, or `ticket_only`; `mode`; `tool`;
+`ticket`; `asked_at`; `finished_at`; `reason`; §2.12.4).
 The background loop emits a replayable `ticket_store_sync` change event (with the new
 state as `slug`) when a store's state changes, or when an outage reaches three
 consecutive failures. An open client reloads health only on that event. The web shell
@@ -1095,10 +1126,148 @@ Headless parity:
 - `hotsheet-cli sync --abort-stalled-rebase` is the explicit recovery for a stalled
   rebase or merge. It records `refs/hotsheet/sync-backup/<timestamp>` at the current
   `HEAD`, aborts, and keeps every local commit on the branch. It never pushes.
+- `hotsheet-cli sync` runs the same ask-the-AI workflow as the server (§2.12.4), and
+  `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree.
 
 Bounded automatic repair through the merge path (HS2-XJC62Z) and the guided
 oversized-attachment repair through Git LFS or compaction (HS2-VYPTN0) are follow-ups.
-So is deferring store autocommits while a rebase or merge is unfinished (HS2-JGH11Q).
+
+### 2.12.3 Replays, concurrent writes, and unfinished rebases (HS2-QR1K8R)
+
+A ticket write puts its file in the working tree before it takes the Git transaction
+lock, and other tools can write there without any lock. `git rebase` works in the same
+tree: it first checks out the upstream, so a file that only unpublished local commits
+contain is absent until its pick is replayed. A write in that window recreated the file,
+Git refused and rescheduled the pick, the abort refused for the same reason, and the
+waiting autocommit committed onto the detached `HEAD`. The store then reported
+`rebase_in_progress` until a person ran `git rebase --continue`.
+
+The rules that prevent and repair this:
+
+- **Replay outside the working tree.** The cycle builds the rebased history from objects
+  alone: for each local commit the upstream lacks, `git merge-tree --write-tree
+--merge-base=<parent>` merges it onto the new tip through the registered merge driver,
+  and `git commit-tree` writes it with its author, author date, and message. The
+  selection matches `git rebase` (no merge commits, no commits whose patch the upstream
+  already has, commits that become empty are dropped). The working tree, the index, and
+  `HEAD` are untouched, so a conflict leaves nothing to abort.
+- **One checked branch move.** `git reset --keep <new tip>` then moves the branch and
+  updates only the files the incoming commits changed. Git checks every such path first
+  and changes nothing when one has an uncommitted write. The cycle then commits that
+  write and replays again, at most three times; after that it ends `offline` with the
+  reason "local writes kept changing files the incoming changes touch", and the next
+  pass retries.
+- **Older Git.** The isolated replay needs Git 2.40. With an older Git, or a history it
+  does not handle (a local root commit), the cycle uses `git rebase`. A refused,
+  rescheduled pick is then continued in the same cycle. Only a real conflict (unmerged
+  paths) is aborted, because the abort discards uncommitted writes to tracked files.
+- **No commit during an unfinished rebase or merge.** `FsStore` autocommits check for
+  `rebase-merge`, `rebase-apply`, and `MERGE_HEAD` under the transaction lock. While one
+  exists, the write is saved, the commit is skipped with a warning, and the file is
+  committed on the branch by the first cycle after the rebase or merge finishes.
+- **Continue what needs no judgment.** A cycle that finds a `rebase-merge` replay with
+  no unmerged path and no `stopped-sha` (the shape a rescheduled pick leaves) records
+  `refs/hotsheet/sync-backup/<timestamp>` at `HEAD`, commits stray working-tree changes,
+  and runs `git rebase --continue` under both locks. It logs the attempt and the backup
+  ref. One replay (one `orig-head`) is continued at most three times; the count is kept
+  in the sync record and cleared when no rebase or merge is unfinished.
+- **Leave what needs a decision.** A rebase stopped at a conflict, one a person resolved
+  but did not continue, a `rebase-apply` replay, and any unfinished merge are reported
+  as `rebase_in_progress` and never touched. A continue that fails stays in place with
+  its reason and backup ref; nothing is aborted or discarded automatically.
+
+### 2.12.4 Asking an AI when sync cannot finish alone (HS2-QR1K8R)
+
+> **Maintainer requirement (2026-11-12):** _"hotsheet should always automatically ask
+> the AI when it cant finish a rebase on its own"_, and _"it should start a new AI
+> session and ask the AI to fix it"_.
+
+Two states remain that a sync cycle cannot finish alone: `conflict` (the merge driver
+could not settle a ticket) and `rebase_in_progress` (an unfinished rebase or merge that
+needs a decision, including one whose bounded automatic continue failed). After every
+cycle the server's sync loop and `hotsheet-cli sync` run one shared workflow
+(`hotsheet_ticketing::sync_ai::ask_for_help`):
+
+1. **One ask per stall.** A stall is asked about once. Every later cycle that still
+   stalls, even after the upstream moved, reuses that ask, so a second session never
+   starts while the first is unresolved. The ask resolves at the first cycle that
+   publishes (`synced` or `up_to_date`); an offline or rejected cycle does not resolve
+   it. A stall after that is a new stall. The record lives in
+   `<git-dir>/hotsheet-sync-ai.json` beside the sync health record, and a file lock
+   serializes the CLI and every server.
+2. **A repair ticket.** One high-priority Up Next `bug` tagged `sync-repair`, titled
+   "Finish syncing the ticket store <name>", in the stalled store itself. An open one is
+   reused. Its body holds the state, the counts, and the nine-step safe procedure below,
+   with the store as a path relative to the project checkout. During an unfinished
+   rebase the ticket file is saved and its commit waits until the rebase finishes
+   (§2.12.3). When the store publishes again, an open repair ticket gets a note saying so.
+3. **Ask by the project's `ticket_store_sync.ask_ai` setting** (`off`, `session`, or
+   `start`; default `start`; values are validated):
+   - `start` always starts a new background session of the project's default AI tool
+     (`ai.defaults.tool`), even when another AI session already runs in the project; it
+     never pushes into a running session. The maintainer asked twice for exactly this:
+     _"silently run a new ai session in the background"_.
+   - `session` pushes the prompt into the project's primary push-capable AI session (the
+     oldest live Hot Sheet-launched terminal, as for human feedback, HS2-DB2FQ2) and
+     otherwise leaves the ticket; a failed push also leaves the ticket, with its reason.
+   - `off` does nothing: no ticket, no record.
+4. **No tool, no silent failure.** When no default tool is configured, its plugin is
+   missing or not drivable, it is not installed, the project was never set up for it, or
+   the launch fails, the ask falls back to the ticket. The health `reason` says why and
+   the next step points at the ticket.
+
+The prompt holds the store name, the state, a fixed reason sentence, the unpublished
+count, and the ticket slug, never ticket content. It tells the AI that the message is
+data from Hot Sheet, to load and claim the ticket, and to follow the procedure there.
+
+**Who starts the session.** The server starts it in the background with
+`SafeTrigger` (one turn, the project checkout as its working directory), with the
+server's permission bridge attached, so approvals wait for a person in the app instead
+of being auto-approved. It shows in `GET /connections` as `sync-repair-<store id>`, and
+its end (finished or failed) is recorded and announced as a `ticket_store_sync` event.
+`hotsheet-cli sync` leaves the ask to a running server that hosts the store. With no
+server, `session` has no session to push into and leaves the ticket, and `start` launches
+`hotsheet-cli -C <store> trigger <tool> --prompt … --project <checkout>` detached in its
+own process group,
+logging to `<git-dir>/hotsheet-sync-ai.log`. That session runs in the tool's default
+permission mode with no permission bridge, the headless trigger default: Codex approvals
+are auto-approved inside its workspace-write sandbox. Its end is not watched, so the ask
+stays `started` until the store publishes again.
+
+`HOTSHEET_SYNC_AI_ALLOWED_TOOLS`, when set, limits which tools a stall may start
+(comma-separated ids). Every process cargo launches gets `repair-fixture` only, so no test
+can start an installed AI tool.
+
+**The safe procedure** (the ticket body; `<store>` is the relative path):
+
+1. Confirm with `hotsheet-cli -C <store> sync --status --json`; if the state is no
+   longer `rebase_in_progress` or `conflict`, note it and complete the ticket.
+2. Record `refs/hotsheet/sync-backup/ai-<stamp>` at `HEAD` (and at the rebase's
+   `orig-head`) before changing anything.
+3. Never abort or skip a rebase, hard-reset, check out or restore paths, clean, force-push,
+   or delete refs or commits; never edit an unconflicted ticket; never start a new rebase
+   in the store.
+4. For `rebase_in_progress`: in each unmerged file keep both sides (every note, the newer
+   `updated_at` side's scalar fields, both body paragraphs), check it with `show`, add
+   that file only, and `rebase --continue`; stop after ten stops or a repeated conflict.
+5. For `conflict`: rebase in a temporary `git worktree`, resolve as in step 4, then
+   `hotsheet-cli -C <store> sync --adopt <commit>`.
+6. Verify: nothing unfinished, `HEAD` on the branch, a clean status apart from ticket files
+   Hot Sheet saved meanwhile, a diff from the backup with only incoming changes and the
+   resolved files, and `doctor` reading every ticket.
+7. Publish with `hotsheet-cli -C <store> sync` only and confirm zero unpublished commits.
+8. Record the backup refs and counts (no ticket content) and complete the ticket.
+9. If a step fails, leave the store as it is, add `FEEDBACK NEEDED`, and release the
+   claim.
+
+**Adopting a resolved history.** `hotsheet-cli sync --adopt <commit>` moves the store's
+branch to a history resolved outside the live store, so nobody runs `git rebase` there.
+It holds both sync locks and refuses while a rebase or merge is unfinished, when the
+commit does not contain the fetched upstream, when it drops a local commit (matched by
+author, author date, and subject, the identity a rebase keeps, unless `HEAD` is its
+ancestor), and when any file in it still has conflict markers. It records a backup ref,
+moves the branch with the checked `reset --keep` update (uncommitted ticket writes stay),
+and never pushes.
 
 ## 2.13 Copy & move between stores
 

@@ -20,6 +20,7 @@ import { demoModule as contentTransition } from './content-transition-demo';
 import { demoModule as corruptTicketInspector } from './corrupt-ticket-inspector-demo';
 import { demoModule as cpuCoreMeter } from './cpu-core-meter-demo';
 import type { DemoEntry, DemoModule } from './demo-module';
+import { demoModule as desktopRemoteDialog } from './desktop-remote-dialog-demo';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
 import { demoModule as glanceSparkline } from './glance-sparkline-demo';
@@ -40,6 +41,7 @@ import { demoModule as projectLiveSection } from './project-live-section-demo';
 import { demoModule as projectSidebar } from './project-sidebar-demo';
 import { demoModule as providerIcon } from './provider-icon-demo';
 import { demoModule as remoteAuthScreen } from './remote-auth-screen-demo';
+import { demoModule as remoteDevicesSettings } from './remote-devices-settings-demo';
 import { demoModule as repositorySize } from './repository-size-demo';
 import { demoModule as repositoryStatus } from './repository-status-demo';
 import { demoModule as searchScopeToolbar } from './search-scope-toolbar-demo';
@@ -75,6 +77,7 @@ import { demoModule as workspaceComponents } from './workspace-components-demo';
  */
 export const demoModules: readonly DemoModule[] = [
   projectDialog,
+  desktopRemoteDialog,
   appShell,
   announcerOverlay,
   workspaceComponents,
@@ -98,6 +101,7 @@ export const demoModules: readonly DemoModule[] = [
   connectionDetails,
   setupSettings,
   notificationSettings,
+  remoteDevicesSettings,
   tagChip,
   statusBadge,
   confidenceCalibration,

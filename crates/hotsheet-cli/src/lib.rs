@@ -31,6 +31,7 @@ pub mod setup;
 #[path = "../../hotsheet-server/src/source_revision.rs"]
 #[allow(dead_code)]
 mod source_revision;
+pub mod sync_ai;
 pub mod workloop;
 
 /// Emit the local build/source revision for the bridge's binary selection probe.
@@ -251,25 +252,10 @@ pub fn link_store(store: &Path, project_dir: &Path) -> Result<PathBuf> {
     let hs = project_dir.join(".hotsheet2");
     std::fs::create_dir_all(&hs)?;
     std::fs::write(hs.join("store"), format!("{}\n", abs.display()))?;
-    ensure_gitignored(project_dir, STORE_LINK)?;
+    // HS2-61ZMVA: the managed `.hotsheet2/` block keeps the machine-local link ignored.
+    let report = hotsheet_ticketing::project_gitignore::ensure_project_block(project_dir)?;
+    hotsheet_ticketing::project_gitignore::warn_conflicts(&report);
     Ok(abs)
-}
-
-/// Append `entry` to `<dir>/.gitignore` if not already present.
-fn ensure_gitignored(dir: &Path, entry: &str) -> Result<()> {
-    let gi = dir.join(".gitignore");
-    let existing = std::fs::read_to_string(&gi).unwrap_or_default();
-    if existing.lines().any(|l| l.trim() == entry) {
-        return Ok(());
-    }
-    let mut out = existing;
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str(entry);
-    out.push('\n');
-    std::fs::write(&gi, out)?;
-    Ok(())
 }
 
 /// Read a `hotsheet-export.json` and import it into the store (creating the store on
@@ -491,15 +477,24 @@ pub fn designated_commit_steps(owner: &StoreGitOwner, message: &str) -> Option<V
     ])
 }
 
-/// The `.gitattributes` line + git config value that register the semantic merge driver.
-const MERGE_ATTR_LINE: &str = "tickets/**/*.md merge=hotsheet-ticket";
-const MERGE_DRIVER_NAME: &str = "hotsheet-ticket";
+/// The `.gitattributes` line that routes ticket files through the semantic merge driver.
+const MERGE_ATTR_LINE: &str = hotsheet_ticketing::merge_driver::ATTRIBUTE_LINE;
 
-/// Register the semantic merge driver in a store (HS2-18, docs/02 §2.7): write the
-/// `.gitattributes` line so git routes `tickets/**/*.md` through `merge=hotsheet-ticket`,
-/// and point that driver at this binary's `merge-driver` subcommand via git config.
+/// The `hotsheet-cli` executable that implements `merge-driver`, even when this library
+/// runs inside another Hot Sheet binary.
+fn merge_driver_program() -> Option<PathBuf> {
+    hotsheet_ticketing::merge_driver::program()
+        .or_else(|| hotsheet_aitools::launch_safety::hotsheet_cli().ok())
+}
+
+/// Register the semantic merge driver in a store (HS2-18, HS2-9TV6A2, docs/02 §2.7): the
+/// committed `.gitattributes` line, so every clone routes `tickets/**/*.md` through
+/// `merge=hotsheet-ticket`, plus this checkout's local `info/attributes` line and driver
+/// command, which apply even when a merged tree lacks `.gitattributes`.
 /// Best-effort + idempotent — safe to re-run (e.g. from `init` or a repair).
-pub fn register_merge_driver(store_path: &Path) {
+pub fn register_merge_driver(
+    store_path: &Path,
+) -> hotsheet_ticketing::merge_driver::MergeDriverStatus {
     // .gitattributes — append the line once, preserving any existing rules.
     let ga = store_path.join(".gitattributes");
     let existing = std::fs::read_to_string(&ga).unwrap_or_default();
@@ -515,42 +510,16 @@ pub fn register_merge_driver(store_path: &Path) {
             eprintln!("warning: could not write {}: {e}", ga.display());
         }
     }
-    // git config — the driver command git runs (%O base, %A ours/output, %B theirs).
-    let driver = match std::env::current_exe() {
-        Ok(exe) => format!("\"{}\" merge-driver %O %A %B", exe.display()),
-        Err(_) => "hotsheet-cli merge-driver %O %A %B".to_string(),
-    };
-    run_git(
+    hotsheet_ticketing::merge_driver::ensure_registered(
         store_path,
-        &[
-            "config",
-            &format!("merge.{MERGE_DRIVER_NAME}.name"),
-            "Hot Sheet semantic ticket merge",
-        ],
-    );
-    run_git(
-        store_path,
-        &[
-            "config",
-            &format!("merge.{MERGE_DRIVER_NAME}.driver"),
-            &driver,
-        ],
-    );
+        merge_driver_program().as_deref(),
+    )
 }
 
-/// Whether the semantic merge driver is registered: the `.gitattributes` line is present
-/// **and** git config carries the driver command (`hotsheet doctor` checks this).
+/// Whether ticket merges in this checkout go through the semantic merge driver: the local
+/// attribute and a runnable driver command (`hotsheet doctor` checks this).
 pub fn merge_driver_registered(store_path: &Path) -> bool {
-    let attr_ok = std::fs::read_to_string(store_path.join(".gitattributes"))
-        .map(|s| s.lines().any(|l| l.trim() == MERGE_ATTR_LINE))
-        .unwrap_or(false);
-    let config_ok = hotsheet_ticketing::git::command()
-        .current_dir(store_path)
-        .args(["config", &format!("merge.{MERGE_DRIVER_NAME}.driver")])
-        .output()
-        .map(|o| o.status.success() && !o.stdout.is_empty())
-        .unwrap_or(false);
-    attr_ok && config_ok
+    hotsheet_ticketing::merge_driver::status(store_path).applies()
 }
 
 /// Best-effort commit of everything under the store `path` (warns on failure; files are
@@ -650,8 +619,9 @@ mod store_link_tests {
         let linked = std::fs::read_to_string(code.path().join(STORE_LINK)).unwrap();
         assert_eq!(linked.trim(), abs.display().to_string());
         let gi = std::fs::read_to_string(code.path().join(".gitignore")).unwrap();
+        // HS2-61ZMVA: the managed block, not a per-file line, ignores the link.
         assert!(
-            gi.lines().any(|l| l.trim() == STORE_LINK),
+            gi.lines().any(|l| l.trim() == "/.hotsheet2/*"),
             "link is gitignored"
         );
 

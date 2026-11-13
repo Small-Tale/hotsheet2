@@ -66,6 +66,8 @@ pub(crate) const LONG_WAIT_ROUTES: &[&str] = &[
     // Park until a resource claim is released or lapses (HS2-FMHH9Y).
     "/resource-claims/{namespace}/{resource}/acquire",
     "/resource-claims/{namespace}/{resource}/wait",
+    // Parks until the remote device list changes, up to 25 s (HS2-DXM0YN).
+    "/remote-auth/owner/changes",
 ];
 
 /// Classify a matched route template (for example `/checkouts/{reference}/tickets/{id}`).
@@ -210,6 +212,7 @@ mod tests {
             "/github-auth/device/{session_id}",
             "/resource-claims/{namespace}/{resource}/acquire",
             "/resource-claims/{namespace}/{resource}/wait",
+            "/remote-auth/owner/changes",
         ] {
             assert_eq!(classify(route), RequestClass::LongWait, "{route}");
             assert_eq!(classify(route).budget(), None);

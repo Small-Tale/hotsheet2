@@ -26,6 +26,7 @@ import { HostDiskSettings, type HostDiskSettingsProps } from './host-disk-settin
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
+import { RemoteDevicesSettings, type RemoteDevicesSettingsProps } from './remote-devices-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import { StandbySettings, type StandbySettingsProps } from './standby-settings';
 import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
@@ -51,6 +52,8 @@ export interface SettingsWorkspaceProps {
   terminalMemory?: TerminalMemorySettingsProps;
   /** App Settings → Notifications (HS2-DPBJJA). */
   notifications?: NotificationSettingsProps;
+  /** App Settings → Devices (HS2-DXM0YN). */
+  devices?: RemoteDevicesSettingsProps;
   permissions: {
     automation: PermissionAutomation;
     delays: readonly number[];
@@ -90,6 +93,7 @@ export function SettingsWorkspace({
   terminals,
   terminalMemory = {},
   notifications = {},
+  devices = {},
   permissions,
   columns,
   developmentStrategy = {},
@@ -111,6 +115,7 @@ export function SettingsWorkspace({
           {category === 'accounts' && <AccountsSettings {...accounts} />}
           {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
           {category === 'notifications' && <NotificationSettings {...notifications} />}
+          {category === 'devices' && <RemoteDevicesSettings {...devices} />}
           {category === 'ai' && (
             <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
           )}

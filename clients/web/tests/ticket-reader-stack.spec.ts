@@ -354,10 +354,13 @@ test('vetoes reader dismissal when an asynchronous draft flush fails', async ({ 
 async function openProjects(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Hot Sheet 2' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Deep Work' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Kerf' }).click();
   await page.locator('[data-ticket-slug="KF-ROOT01"]').click();

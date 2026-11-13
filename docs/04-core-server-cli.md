@@ -260,8 +260,13 @@ cumulative flow remains unavailable until status transitions are persisted
 `{checkout_id, stores: [{connection_id, label, locator, health}]}` for every linked Git
 ticket source. It reads local state only and never fetches. `health` is the
 `sync_health::SyncHealth` contract of [02](02-ticket-storage.md) §2.12.2. The CLI twin is
-`hotsheet-cli sync --status [--json]`, which prints one store's `health`. A stalled rebase
-or merge is aborted headlessly with `hotsheet-cli sync --abort-stalled-rebase`.
+`hotsheet-cli sync --status [--json]`, which prints one store's `health`. A cycle continues
+an unfinished rebase that needs no decision by itself ([02](02-ticket-storage.md) §2.12.3,
+HS2-QR1K8R). A stalled rebase or merge is aborted headlessly with
+`hotsheet-cli sync --abort-stalled-rebase`. When sync cannot finish alone it
+asks an AI through the same workflow as the server and reports it in `ai_help`;
+`hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree
+(§2.12.4).
 `hotsheet-cli sync` exits non-zero for `rejected`, `rebase_in_progress`, and
 `history_recovery_required`. The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
@@ -669,6 +674,9 @@ server, and every loser exits. Then **stop** (`hotsheet-server
 --stop` → SIGTERM). `serve` takes the lock, writes the instance file (removed by a
 guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already serves
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
+On native Windows (HS2-AMAQSV), liveness opens the process and polls its exit state, the
+registry mutex is a `LockFileEx` lock, and stop terminates the process, because a
+windowless server has no SIGTERM. The terminated server's instance file then reads as stale.
 
 The web host has a separate discovery record, `${HOTSHEET_HOME:-~/.hotsheet2}/client.json`,
 containing its local `url`, `pid`, and start identity. It points to the browser client, while
@@ -1392,15 +1400,15 @@ write, and an invalid name refuses the request before any write. A store or prov
 route has no registry: it accepts an id and refuses a name with
 `group_registry_required`.
 
-| Route                                                            | Body                                            | Response                                                                           |
-| ---------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `GET /groups` · `/stores/{id}/groups` · `/providers/{id}/groups` |                                                 | `{"registry":false,"groups":[{"id","name","count","named","legacy","duplicate"}]}` |
-| `GET /checkouts/{reference}/groups`                              |                                                 | the same with `registry: true`, merged across the Git sources                      |
-| `POST /checkouts/{reference}/groups`                             | `{"name":"X","actor":{…}}`                      | `{"id","name","created"}` (find or create)                                         |
-| `POST …/groups/rename` (same four prefixes)                      | `{"group":"<id or name>","to":"New"}`           | `{"id","name","updated"}`; a store or connection refuses                           |
-| `POST …/groups/ungroup` (same four prefixes)                     | `{"group":"<id or name>"}`                      | `{"updated":<n>}`                                                                  |
-| `POST …/groups/merge` (same four prefixes)                       | `{"from":"<id or name>","into":"<id or name>"}` | `{"id","name","updated"}`                                                          |
-| `POST /checkouts/{reference}/groups/migrate`                     | optional `{"actor":{…}}`                        | `{"created","reused","updated"}`                                                   |
+| Route                                                            | Body                                            | Response                                                                                                                                                                                                |
+| ---------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /groups` · `/stores/{id}/groups` · `/providers/{id}/groups` |                                                 | `{"registry":false,"groups":[{"id","name","count","named","legacy","duplicate"}]}`                                                                                                                      |
+| `GET /checkouts/{reference}/groups`                              |                                                 | the same with `registry: true`, merged across the Git sources, plus `registry_sync` `{"state","detail","committed","at"}` once the registry was published (HS2-9EGWC4, [35](35-ticket-groups.md) §35.7) |
+| `POST /checkouts/{reference}/groups`                             | `{"name":"X","actor":{…}}`                      | `{"id","name","created"}` (find or create)                                                                                                                                                              |
+| `POST …/groups/rename` (same four prefixes)                      | `{"group":"<id or name>","to":"New"}`           | `{"id","name","updated"}`; a store or connection refuses                                                                                                                                                |
+| `POST …/groups/ungroup` (same four prefixes)                     | `{"group":"<id or name>"}`                      | `{"updated":<n>}`                                                                                                                                                                                       |
+| `POST …/groups/merge` (same four prefixes)                       | `{"from":"<id or name>","into":"<id or name>"}` | `{"id","name","updated"}`                                                                                                                                                                               |
+| `POST /checkouts/{reference}/groups/migrate`                     | optional `{"actor":{…}}`                        | `{"created","reused","updated"}`                                                                                                                                                                        |
 
 The pre-registry body fields `from` (rename) and `name` (ungroup) are still accepted. A
 listed group has `named: false` when its name is the placeholder `Group <id>` (the
@@ -1880,15 +1888,40 @@ production desktop storage bridge is unavailable in remote mode.
 
 A remote browser posts a device label to `/remote-auth/pair`. The response has a
 random 256-bit challenge, a request id, the existing durable machine server id,
-and a five-minute expiry. The challenge stays in page memory; the screen shows
+and a 15-minute expiry (HS2-DXM0YN). The challenge stays in page memory; the screen shows
 the two ids, never the challenge. On the host Mac, `hotsheet-cli remote sessions
 status` lists pending requests and paired devices. The owner verifies the id,
 server id, label, and browser origin, then runs `hotsheet-cli remote sessions
-approve <request-id> --role read_only|read_write`. This approval path requires
-the local server bearer; a remote session cannot approve another device or
-bootstrap itself. `remote sessions revoke <device-id>` and `revoke-all` are
-idempotent. The server checks the same approved role on every protected route;
-read-only sessions cannot mutate projects or hosted stores.
+approve <request-id> --role read_only|read_write [--admin] [--local]`. The
+server checks the same approved role on every protected route; read-only
+sessions cannot mutate projects or hosted stores.
+
+**Device grants (HS2-85W6BE, HS2-DXM0YN).** Besides its read role a session
+carries two independent grants. **Admin** lets it list, approve, reject,
+revoke and change other devices. **Local** marks the browser as the host
+owner's own: on a remote-mode host it may use host-only bridge routes (the
+folder chooser, opening a project by path, ticket-store setup and HS1
+migration) and the client treats it as same-device. Neither grant is derived
+from the URL, peer address, `Host` or forwarded headers: Tailscale Serve reaches
+the browser host through the same loopback port the owner opens locally, so the
+request cannot tell them apart. A plain session keeps the remote route set. The
+grants persist in the catalog; a catalog written before them loads with both
+false.
+
+Device management (`/remote-auth/owner`, `/owner/changes?after=<revision>`,
+`/owner/approve`, `/owner/reject`, `PATCH|DELETE /owner/devices/{id}`) accepts
+the machine secret from the trusted host or an admin session; a session change
+also needs its paired Origin and CSRF token, and the read role does not limit
+it. Only the trusted host or a local session may grant or remove local, so an
+admin cannot make itself host-trusted. `revoke-all` stays with the trusted host.
+The list answer names its change cursor and its caller (`manager.device_id`,
+`manager.local`); `/owner/changes` is a 25-second long poll that answers when
+the cursor moves and re-authorizes after the wait. The headless equivalents are
+`remote sessions reject <request-id>` and `remote sessions update <device-id>
+[--role read_only|read_write] [--admin true|false] [--local true|false]`. A
+remote session without the admin grant cannot approve another device or
+bootstrap itself, and `remote sessions revoke <device-id>` and `revoke-all`
+remain idempotent.
 
 After approval, the browser redeems the challenge once. Five failed attempts
 disable it; the server admits at most ten new requests per minute. Successful
@@ -1912,14 +1945,24 @@ listener. HS2-747RTD adds Serve/direct TLS launch, and HS2-WSGZZY owns final
 cross-transport acceptance. The machine-wide `remote identity` and reviewed
 remote-server registry are separate from these browser device sessions.
 
+The trusted desktop host uses the same headless registry for HS2-BT4KN6:
+`remote list`, `remote checkouts <binding-id>`, `remote select-project
+<binding-id> <checkout-id>`, `remote selected-projects`, and `remote
+unselect-project <binding-id> <checkout-id>`. The selected pairs are nonsecret
+machine-local data; only the Node host calls the hidden `remote
+bridge-connection <binding-id>` command and captures its private credential
+reply. Pairing stores a revocable session plus the approved Origin and CSRF
+proof in the secret store. The browser gets metadata and a temporary pairing
+handle, never that CLI reply.
+
 ## 4.7 Project settings (shared / local / client) — core-owned
 
 > **Built (HS2-94, HS2-34, HS2-REF96F, HS2-48XDJR):** `hotsheet_ticketing::settings::Settings` — a flat
 > `key -> JSON` map per scope: **global** `${HOTSHEET_HOME}/settings.json`
 > (machine-wide and project-independent), **shared**
 > `<project-root>/.hotsheet2/settings.json` (committed with the code project), and
-> **local** `<project-root>/.hotsheet2/settings.local.json` (auto-added to the code
-> project's `.gitignore`). The effective value resolves in precedence **global < shared < local**
+> **local** `<project-root>/.hotsheet2/settings.local.json` (kept out of Git by the
+> managed `.gitignore` block, §4.7.0). The effective value resolves in precedence **global < shared < local**
 > (most specific wins). Driven headless by `hotsheet-cli settings get|set|list
 [--scope global|shared|local]`. Client/device-only settings still never enter core.
 >
@@ -1952,6 +1995,43 @@ a running GUI on one device, it's client-only and the core never sees it. This i
 why `hotsheet settings` (§4.4) can manage the first two scopes with no client at all,
 while a window position stays out of the core entirely.
 
+### 4.7.0 The managed project `.gitignore` block (HS2-61ZMVA)
+
+Hot Sheet changes a code project's `.gitignore` through one function,
+`hotsheet_ticketing::project_gitignore::ensure_project_block`. Local settings writes
+(`settings set --scope local` and the server's checkout settings route) and
+`hotsheet-cli link` / `init --standalone` call it, so the CLI and the server keep the
+file the same way. It owns one delimited block:
+
+```gitignore
+# >>> Hot Sheet 2 (managed; edit outside this block) >>>
+/.hotsheet2/*
+!/.hotsheet2/settings.json
+!/.hotsheet2/groups/
+# <<< Hot Sheet 2 <<<
+```
+
+- Everything under `.hotsheet2/` is machine-local except the shared settings file and the
+  group registry ([02](02-ticket-storage.md) §2.7.1). A new machine-local file
+  needs no new ignore line.
+- Lines outside the block are never changed. The only exception is the exact
+  single-file lines earlier releases appended (`.hotsheet2/settings.local.json`,
+  `.hotsheet2/store`); the block replaces them.
+- An edited, duplicated, or unterminated block is restored to the rules above in place.
+  CRLF files stay CRLF.
+- When no block exists and `git check-ignore` reports that the existing rules already
+  give every Hot Sheet path the expected outcome, the file is left alone.
+- After writing, Git is asked how the shared and machine-local paths resolve. A rule that
+  hides a shared path (a bare `.hotsheet2/` ignores the directory, so no `!` rule can
+  re-include `settings.json`) or re-includes a machine-local one prints a warning naming
+  the rule. Hot Sheet does not edit that rule. Outside a Git work tree the block is
+  written without the check.
+- `setup --diagnose` reports a `.gitignore` write only when this function would write.
+- Group registry writes do not touch `.gitignore`; they change only registry paths
+  (HS2-9EGWC4).
+- AI-tool MCP configs owned wholly by Hot Sheet stay in `.git/info/exclude` (§4.4 setup),
+  and a ticket store's own `.gitignore` is maintained by the store.
+
 Checkout-owned settings remain available when a project has zero ticket sources and have
 one identity when it has several. Older `hotsheet-settings.json` and
 `hotsheet-settings.local.json` files beside linked git stores are deterministic read-through
@@ -1968,6 +2048,11 @@ lock file records the settings path it guards. On Unix, at most once an hour
 exists, plus legacy empty locks, so a lock is not left behind for every temp project ever
 seen (HS2-MZ1TMH). A writer re-checks after locking that its open file is still the one at
 the lock path, and retries if a prune replaced it. Windows does not prune.
+
+`ticket_store_sync.ask_ai` is `off`, `session`, or `start` (the default when unset); the
+settings writer rejects any other value. It chooses how a ticket-store sync that cannot
+finish alone asks an AI ([02](02-ticket-storage.md) §2.12.4, HS2-QR1K8R), together with
+the project's `ai.defaults.tool`.
 
 `trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
 runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings

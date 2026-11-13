@@ -6775,7 +6775,9 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
         store.canonicalize().unwrap().to_str().unwrap()
     );
     let ignore = std::fs::read_to_string(project.join(".gitignore")).unwrap();
-    assert!(ignore.lines().any(|line| line == hotsheet_cli::STORE_LINK));
+    // HS2-61ZMVA: the managed `.hotsheet2/` block ignores the link.
+    assert!(ignore.lines().any(|line| line == "/.hotsheet2/*"));
+    assert!(!ignore.lines().any(|line| line == hotsheet_cli::STORE_LINK));
 
     let origin = Command::from_std(hotsheet_ticketing::git::command())
         .current_dir(&store)
@@ -9477,10 +9479,9 @@ fn settings_shared_and_local_scopes() {
 
     // local file is gitignored; shared file is committed (present, not ignored)
     let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
-    assert!(
-        gi.lines()
-            .any(|line| line == ".hotsheet2/settings.local.json")
-    );
+    // HS2-61ZMVA: one managed block ignores `.hotsheet2/` except the shared files.
+    assert!(gi.lines().any(|line| line == "/.hotsheet2/*"));
+    assert!(gi.lines().any(|line| line == "!/.hotsheet2/settings.json"));
     assert!(p.join(".hotsheet2/settings.json").is_file());
 
     // an unknown key errors
@@ -10144,6 +10145,593 @@ fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
     assert!(git(a.path(), &["reset", "--quiet", "--hard", "@{u}"]));
     hs(a.path()).arg("sync").assert().success();
     assert_eq!(status_json(a.path())["state"], "up_to_date");
+}
+
+/// HS2-QR1K8R stage 2, headless with no server: a real `conflict` makes `hotsheet-cli sync`
+/// start the project's default AI tool once, as a detached `hotsheet-cli trigger` that
+/// outlives the command and receives the repair prompt; a second `sync` starts nothing.
+/// The tool is the `repair-fixture` plugin (a `/bin/sh` spawn drive that records its
+/// prompt) in an isolated machine home; no AI tool runs.
+#[cfg(unix)]
+#[test]
+fn hs2_qr1k8r_headless_sync_starts_one_detached_session_with_the_prompt() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let home = tempfile::tempdir().unwrap();
+    let cli = |dir: &Path| {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.env("HOTSHEET_HOME", home.path())
+            .env_remove("HOTSHEET_ACTOR_ROLE")
+            .env_remove("HOTSHEET_ACTOR_ID")
+            .arg("-C")
+            .arg(dir);
+        cmd
+    };
+    let received = home.path().join("received-prompts.txt");
+    let plugin = home.path().join("plugins").join("repair-fixture");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    let script = format!("printf '%s\\n----\\n' \"$0\" >> '{}'", received.display());
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!(
+            "id = \"repair-fixture\"\ndisplay_name = \"Repair Fixture\"\nproduct_name = \"Repair \
+             Fixture\"\ntier = \"cli-agent\"\n[detection]\nbinaries = [\"sh\"]\n[instructions]\n\
+             target = \"AGENTS.md\"\nsection = \"instructions.md\"\n[mcp]\ntarget = \".mcp.json\"\n\
+             format = \"claude-json\"\nserver_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = \
+             [\"--path\", \"{{store}}\"]\n[drive]\ntransport = \"spawn\"\nprogram = \"/bin/sh\"\nargs = \
+             [\"-c\", {script:?}]\ncontent = \"arg\"\ninterrupt = false\n"
+        ),
+    )
+    .unwrap();
+
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    cli(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    // The store is its own project here: set up for the tool, which is its default.
+    std::fs::write(
+        a.join(".mcp.json"),
+        r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[]}}}"#,
+    )
+    .unwrap();
+    hotsheet_ticketing::Settings::for_project(a)
+        .set(
+            "ai.defaults",
+            serde_json::json!({ "tool": "repair-fixture" }),
+            hotsheet_ticketing::Scope::Shared,
+        )
+        .unwrap();
+    cli(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+    std::fs::write(a.join("notes.txt"), "local\n").unwrap();
+    assert!(git(a, &["add", "notes.txt"]));
+    assert!(git(a, &["commit", "--quiet", "-m", "local notes"]));
+
+    cli(a)
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started repair-fixture"));
+    // The detached session outlives the command and receives the prompt.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while !std::fs::read_to_string(&received).is_ok_and(|text| text.contains("\n----\n")) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the session never ran"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    cli(a)
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started").not());
+    cli(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "AI asked: started (start, repair-fixture",
+        ));
+    let prompts = std::fs::read_to_string(&received).unwrap();
+    assert_eq!(prompts.matches("\n----\n").count(), 1, "{prompts}");
+    assert!(prompts.contains("State: conflict"), "{prompts}");
+    assert!(prompts.contains("hotsheet-cli -C . show"), "{prompts}");
+}
+
+/// HS2-QR1K8R stage 2, headless: a real `conflict` asks for help (here no AI tool is
+/// configured, so the repair ticket waits and the health says why), the history is
+/// resolved in a temporary worktree, and `sync --adopt` refuses histories that drop local
+/// commits or keep conflict markers before adopting the right one; `sync` then publishes.
+#[test]
+fn hs2_qr1k8r_sync_adopt_takes_a_resolved_history_and_refuses_a_lossy_one() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    hs(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+    std::fs::write(a.join("notes.txt"), "local\n").unwrap();
+    assert!(git(a, &["add", "notes.txt"]));
+    assert!(git(a, &["commit", "--quiet", "-m", "local notes"]));
+    let local_ticket = new_ticket(a, "kept through the repair");
+
+    // The conflict asks for help once; with no default AI tool the ticket waits.
+    hs(a)
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Follow the repair procedure"));
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: conflict"))
+        .stdout(predicate::str::contains("AI asked: ticket_only (start"))
+        .stdout(predicate::str::contains("no default AI tool is configured"));
+    let repair_tickets = || {
+        let out = hs(a)
+            .args(["ls", "--tag", "sync-repair"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        String::from_utf8(out)
+            .unwrap()
+            .matches("Finish syncing the ticket store")
+            .count()
+    };
+    assert_eq!(repair_tickets(), 1);
+    hs(a).arg("sync").assert().failure();
+    assert_eq!(repair_tickets(), 1, "asked once");
+
+    let before = git_out(a, &["rev-parse", "HEAD"]);
+    // Refused: the upstream alone drops the local commits.
+    hs(a)
+        .args(["sync", "--adopt", "@{u}"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is missing"))
+        .stderr(predicate::str::contains("local commits"));
+    // Refused: the local branch does not contain the upstream.
+    hs(a)
+        .args(["sync", "--adopt", "HEAD"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "does not contain the fetched upstream",
+        ));
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), before);
+
+    // Resolve in a temporary worktree, as the repair procedure says.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp = temp_dir.path().join("resolve");
+    assert!(git(
+        a,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            temp.to_str().unwrap(),
+            "HEAD"
+        ]
+    ));
+    let upstream = git_out(a, &["rev-parse", "--abbrev-ref", "@{u}"]);
+    assert!(!git(&temp, &["rebase", "--quiet", &upstream]));
+    // Refused: a resolution that keeps conflict markers.
+    assert!(git(&temp, &["add", "--", "notes.txt"]));
+    assert!(git(
+        &temp,
+        &["-c", "core.editor=true", "rebase", "--continue"]
+    ));
+    let marked = git_out(&temp, &["rev-parse", "HEAD"]);
+    hs(a)
+        .args(["sync", "--adopt", &marked])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("conflict markers in: notes.txt"));
+    // The real resolution.
+    std::fs::write(temp.join("notes.txt"), "local\npeer\n").unwrap();
+    assert!(git(
+        &temp,
+        &["commit", "--quiet", "-a", "--amend", "--no-edit"]
+    ));
+    let resolved = git_out(&temp, &["rev-parse", "HEAD"]);
+    assert!(git(
+        a,
+        &["worktree", "remove", "--force", temp.to_str().unwrap()]
+    ));
+    hs(a)
+        .args(["sync", "--adopt", &resolved])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("refs/hotsheet/sync-backup/"));
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), resolved);
+    assert!(git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    hs(a).arg("sync").assert().success();
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: synced"))
+        .stdout(predicate::str::contains("AI asked").not());
+    assert!(git(&peer, &["pull", "--quiet"]));
+    assert_eq!(
+        std::fs::read_to_string(peer.join("notes.txt")).unwrap(),
+        "local\npeer\n"
+    );
+    hs(&peer).args(["show", &local_ticket]).assert().success();
+}
+
+/// HS2-9TV6A2: a store whose shared history never had `.gitattributes`, cloned by plain Git
+/// and never set up with `init`, still merges ticket files through the real semantic
+/// driver: two frontmatter-only edits of one ticket on two machines publish cleanly,
+/// because `sync` registers the driver in the checkout's local Git state first.
+#[test]
+fn hs2_9tv6a2_sync_registers_the_driver_and_publishes_concurrent_frontmatter_edits() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    // Remove every trace of the driver from the shared history and from this checkout.
+    let _ = std::fs::remove_file(a.join(".gitattributes"));
+    git(a, &["add", "-A"]);
+    git(a, &["commit", "--quiet", "-m", "no attributes"]);
+    assert!(!git(a, &["cat-file", "-e", "HEAD:.gitattributes"]));
+    git(a, &["config", "--unset", "merge.hotsheet-ticket.driver"]);
+    let _ = std::fs::remove_file(a.join(".git/info/attributes"));
+    git(a, &["remote", "add", "origin", bare_url]);
+    let slug = new_ticket(a, "shared ticket");
+    hs(a).arg("sync").assert().success();
+
+    let b_dir = tempfile::tempdir().unwrap();
+    let b = b_dir.path().join("b");
+    assert!(git(
+        b_dir.path(),
+        &["clone", "--quiet", bare_url, b.to_str().unwrap()]
+    ));
+    git(&b, &["config", "user.email", "b@example.com"]);
+    git(&b, &["config", "user.name", "B"]);
+    assert!(!b.join(".gitattributes").exists());
+    assert!(!hotsheet_cli::merge_driver_registered(&b));
+
+    // Two machines edit different frontmatter fields of the same ticket.
+    hs(a)
+        .args(["edit", &slug, "--tag", "alpha"])
+        .assert()
+        .success();
+    hs(a).arg("sync").assert().success();
+    hs(&b)
+        .args(["edit", &slug, "--priority", "high"])
+        .assert()
+        .success();
+    hs(&b).arg("sync").assert().success();
+
+    assert!(hotsheet_cli::merge_driver_registered(&b));
+    assert!(
+        std::fs::read_to_string(b.join(".git/info/attributes"))
+            .unwrap()
+            .contains("tickets/**/*.md merge=hotsheet-ticket")
+    );
+    assert!(
+        !b.join(".gitattributes").exists(),
+        "nothing was committed for it"
+    );
+    let status = hs(&b)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert_eq!(status["state"], "synced");
+    assert_eq!(status["merge_driver"], "registered");
+    assert!(status["merge_driver_repaired_at"].is_string());
+    hs(a).arg("sync").assert().success();
+    for dir in [a, b.as_path()] {
+        hs(dir)
+            .args(["show", &slug])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("alpha"))
+            .stdout(predicate::str::contains("priority: high"))
+            .stdout(predicate::str::contains("<<<<<<<").not());
+    }
+}
+
+/// HS2-9TV6A2: `doctor` repairs a missing local driver registration instead of only
+/// warning about it.
+#[test]
+fn hs2_9tv6a2_doctor_repairs_a_missing_driver_registration() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    hotsheet_ticketing::git::command()
+        .current_dir(p)
+        .args(["config", "--unset", "merge.hotsheet-ticket.driver"])
+        .status()
+        .unwrap();
+    let _ = std::fs::remove_file(p.join(".git/info/attributes"));
+    assert!(!hotsheet_cli::merge_driver_registered(p));
+    hs(p)
+        .args(["doctor", "--project", p.to_str().unwrap()])
+        .assert()
+        .stdout(predicate::str::contains(
+            "registered the semantic merge driver",
+        ))
+        .stdout(predicate::str::contains("semantic merge driver not registered").not());
+    assert!(hotsheet_cli::merge_driver_registered(p));
+}
+
+/// HS2-QR1K8R: when both sides added the same ticket file (Git passes an empty base), the
+/// driver takes the older version as the ancestor: the newer fields win, notes union, and
+/// no conflict markers are written, whichever side is "ours".
+#[test]
+fn hs2_qr1k8r_merge_driver_merges_two_additions_of_one_ticket() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    git(p, &["config", "user.email", "t@example.com"]);
+    git(p, &["config", "user.name", "Tester"]);
+    // A base commit without the ticket, whether or not init already committed.
+    git(p, &["add", "-A"]);
+    assert!(git(p, &["commit", "-q", "--allow-empty", "-m", "base"]));
+    let root = String::from_utf8(
+        hotsheet_ticketing::git::command()
+            .current_dir(p)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let root = root.trim().to_string();
+    let slug = new_ticket(p, "added twice");
+    let file = String::from_utf8(
+        hotsheet_ticketing::git::command()
+            .current_dir(p)
+            .args(["show", "--name-only", "--format=", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let file = file
+        .lines()
+        .find(|line| line.starts_with("tickets/") && line.ends_with(".md"))
+        .unwrap()
+        .to_string();
+    let older = std::fs::read_to_string(p.join(&file)).unwrap();
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--title",
+            "added twice, retitled",
+            "--note",
+            "newer note",
+        ])
+        .assert()
+        .success();
+    let newer = std::fs::read_to_string(p.join(&file)).unwrap();
+    assert_ne!(older, newer);
+
+    for (ours, theirs) in [(&older, &newer), (&newer, &older)] {
+        assert!(git(p, &["checkout", "-q", "--detach", &root]));
+        for (branch, body) in [("ours-side", ours), ("theirs-side", theirs)] {
+            assert!(git(p, &["checkout", "-q", "-B", branch, &root]));
+            std::fs::create_dir_all(p.join(&file).parent().unwrap()).unwrap();
+            std::fs::write(p.join(&file), body).unwrap();
+            assert!(git(p, &["add", "--", &file]));
+            assert!(git(p, &["commit", "-q", "-m", branch]));
+        }
+        assert!(git(p, &["checkout", "-q", "ours-side"]));
+        assert!(
+            git(p, &["merge", "-q", "theirs-side", "-m", "merge"]),
+            "two additions of one ticket merge without a conflict"
+        );
+        let merged = std::fs::read_to_string(p.join(&file)).unwrap();
+        assert!(!merged.contains("<<<<<<<"), "{merged}");
+        hs(p)
+            .args(["show", &slug])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("added twice, retitled"))
+            .stdout(predicate::str::contains("newer note"));
+    }
+}
+
+/// HS2-QR1K8R end to end, with real CLI processes and the registered ticket merge driver:
+/// a store left in the incident's state (a ticket rewritten while `git rebase` had its
+/// file out of the tree, so the pick was rescheduled and the abort refused) accepts a new
+/// ticket without committing onto the detached `HEAD`, and the next `sync` continues the
+/// rebase, reattaches the branch, and publishes every change.
+#[cfg(unix)]
+#[test]
+fn hs2_qr1k8r_sync_continues_an_unfinished_rebase_and_defers_commits_meanwhile() {
+    use std::os::unix::fs::PermissionsExt;
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a = tempfile::tempdir().unwrap();
+    let a = a.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    hs(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+
+    // Two unpublished local commits; the second creates the ticket that is rewritten.
+    new_ticket(a, "first local ticket");
+    let slug = new_ticket(a, "second local ticket");
+    let ticket_file = git_out(a, &["show", "--name-only", "--format=", "HEAD"]);
+    assert!(ticket_file.ends_with(".md"), "{ticket_file}");
+    // The rewrite another process lands mid-replay: the same ticket with a new title.
+    hs(a)
+        .env("HOTSHEET_NO_AUTOCOMMIT", "1")
+        .args(["edit", &slug, "--title", "second ticket, retitled"])
+        .assert()
+        .success();
+    let prepared = a.join(".git/hotsheet-test-rewrite");
+    std::fs::copy(a.join(&ticket_file), &prepared).unwrap();
+    assert!(git(a, &["checkout", "--quiet", "--", &ticket_file]));
+    let hook = a.join(".git/hooks/post-commit");
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nif [ -e .git/hotsheet-test-rewrite ]; then\n  mkdir -p \"$(dirname \
+             '{ticket_file}')\"\n  mv .git/hotsheet-test-rewrite '{ticket_file}'\nfi\n"
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(git(a, &["fetch", "--quiet"]));
+    assert!(!git(a, &["rebase", "--quiet", "@{u}"]));
+    assert!(!git(a, &["rebase", "--abort"]));
+    std::fs::remove_file(&hook).unwrap();
+    assert!(a.join(".git/rebase-merge").is_dir());
+    assert!(!git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    let detached = git_out(a, &["rev-parse", "HEAD"]);
+
+    // A ticket created during the stall is saved but not committed onto the detached HEAD.
+    let during = new_ticket(a, "created during the stall");
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), detached);
+    hs(a).args(["show", &during]).assert().success();
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: rebase_in_progress"));
+
+    // The next cycle finishes the rebase on its own and publishes.
+    hs(a).arg("sync").assert().success();
+    assert!(!a.join(".git/rebase-merge").exists());
+    assert!(git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    assert!(git_out(a, &["status", "--porcelain"]).is_empty());
+    assert!(!git_out(a, &["for-each-ref", "refs/hotsheet/sync-backup"]).is_empty());
+    let status = hs(a)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert_eq!(status["state"], "synced");
+    assert_eq!(status["unpublished_commits"], 0);
+    assert!(git(&peer, &["pull", "--quiet"]));
+    hs(&peer)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("second ticket, retitled"));
+    hs(&peer).args(["show", &during]).assert().success();
 }
 
 /// Per-user read tracking via the gitignored local overlay (HS2-21): a fresh ticket lists

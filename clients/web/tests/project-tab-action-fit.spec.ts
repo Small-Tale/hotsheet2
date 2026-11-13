@@ -28,6 +28,7 @@ test('HS2-A2CSNB compacts the strip launcher from the public TabBar fit and rest
     );
     const count = await tabs.count();
     await strip.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(tabs).toHaveCount(count + 1);
   }
   await expect(launcher).toHaveText('New ticket…');

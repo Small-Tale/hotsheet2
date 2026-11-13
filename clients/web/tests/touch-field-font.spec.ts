@@ -195,6 +195,7 @@ async function auditAppInteractions(page: Page, phone: boolean) {
     dismiss = () => page.keyboard.press('Escape');
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('textbox', { name: /^Project Folder/ })).toBeVisible();
   await audit('project dialog');
   await openDemoProject(page);

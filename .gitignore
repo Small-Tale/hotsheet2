@@ -4,10 +4,13 @@
 /.hotsheet/
 /.hs2-recovery/
 # HS2 project metadata is local except for the shared project settings file and the
-# project group registry, one committed file per group (HS2-9KZSD4).
+# project group registry, one committed file per group (HS2-9KZSD4). Hot Sheet owns
+# the block below and restores it when it writes into `.hotsheet2/` (HS2-61ZMVA).
+# >>> Hot Sheet 2 (managed; edit outside this block) >>>
 /.hotsheet2/*
 !/.hotsheet2/settings.json
 !/.hotsheet2/groups/
+# <<< Hot Sheet 2 <<<
 
 # --- Claude Code / AI-tool local + harness files ---
 /.claude/settings.local.json
@@ -66,10 +69,8 @@ Thumbs.db
 *~
 .idea/
 .vscode/
-.hotsheet2/store
 
 /.glassbox/*
 !/.glassbox/settings.json
-.hotsheet2/settings.local.json
 /.rulesync/rules/.curated/
 /scripts/.*

@@ -30,6 +30,7 @@ async function launchedApp(context: Parameters<typeof desktopApp>[0], baseURL: s
 
 async function clickOpenProject(page: Page) {
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 }
 

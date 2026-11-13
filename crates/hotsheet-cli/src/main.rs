@@ -681,8 +681,14 @@ enum Cmd {
         json: bool,
         /// Abort a rebase or merge left in progress in the store, after recording a backup
         /// ref at the current HEAD. Local commits on the branch are kept; nothing is pushed.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "adopt")]
         abort_stalled_rebase: bool,
+        /// Move the store's branch to COMMIT, a history rebased onto the upstream in a
+        /// temporary worktree to resolve a `conflict` (HS2-QR1K8R). Refused unless COMMIT
+        /// contains the upstream and every local commit and has no conflict markers. Keeps
+        /// a backup ref; never pushes.
+        #[arg(long, value_name = "COMMIT", conflicts_with = "status")]
+        adopt: Option<String>,
     },
     /// Check store health and print read-only first-run/setup/migration guidance.
     Doctor {
@@ -1061,6 +1067,11 @@ enum GuidanceCmd {
 fn main() -> Result<()> {
     // `| head` closing our stdout is a normal end of output, not a panic (HS2-4BT3VF).
     hotsheet_cli::broken_pipe::install_broken_pipe_exit();
+    // HS2-9TV6A2: this executable implements `merge-driver`; stores it syncs, creates, or
+    // links register it as their semantic ticket merge driver.
+    if let Ok(program) = std::env::current_exe() {
+        hotsheet_ticketing::merge_driver::set_program(program);
+    }
     if std::env::args_os()
         .skip(1)
         .eq([std::ffi::OsString::from("--test-fixture-capabilities")])

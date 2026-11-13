@@ -1,7 +1,8 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CloudAlert } from 'lucide';
 
-import type { TicketStoreSyncHealth, TicketStoreSyncReport } from '../api';
+import type { TicketStoreAiHelp, TicketStoreSyncHealth, TicketStoreSyncReport } from '../api';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { formatBytes } from './repository-size';
 import { ShellBanner } from './shell-banner';
 
@@ -49,7 +50,7 @@ export function syncFailureSummary(health: TicketStoreSyncHealth): string {
     case 'conflict':
       return 'A ticket changed on both sides and could not be merged automatically.';
     case 'rebase_in_progress':
-      return 'A rebase or merge was left unfinished in the store.';
+      return 'An unfinished rebase or merge in the store needs a decision before sync can continue.';
     case 'history_recovery_required':
       return "The remote's history was rewritten, so this copy must be recovered first.";
     case 'offline':
@@ -59,6 +60,23 @@ export function syncFailureSummary(health: TicketStoreSyncHealth): string {
     case 'up_to_date':
     case 'synced':
       return `The remote could not be reached for ${health.consecutive_failures} sync attempts in a row.`;
+  }
+}
+
+/** Whom Hot Sheet asked to repair the stall and how that went (HS2-QR1K8R); the server's next step says what follows. */
+export function aiHelpSentence(help: TicketStoreAiHelp): string {
+  const tool = help.tool ?? 'an AI session';
+  switch (help.outcome) {
+    case 'session_asked':
+      return 'Hot Sheet asked the running AI session to repair it.';
+    case 'started':
+      return `Hot Sheet started ${tool} to repair it.`;
+    case 'finished':
+      return `The ${tool} session Hot Sheet started has ended.`;
+    case 'failed':
+      return `The ${tool} session Hot Sheet started ended with an error.`;
+    case 'ticket_only':
+      return 'Hot Sheet could not ask an AI to repair it.';
   }
 }
 
@@ -83,8 +101,10 @@ export function TicketStoreSyncBanner({ report }: { report: TicketStoreSyncRepor
     others === 0
       ? `Ticket store ${first.label} is not publishing changes`
       : `${failing.length} ticket stores are not publishing changes`;
+  const help = first.health.ai_help;
   const detail = [
     others === 0 ? syncFailureSummary(first.health) : `${first.label}: ${syncFailureSummary(first.health)}`,
+    help ? aiHelpSentence(help) : undefined,
     unpublishedSentence(first.health.unpublished_commits),
     first.health.next_action,
     others > 0
@@ -100,6 +120,18 @@ export function TicketStoreSyncBanner({ report }: { report: TicketStoreSyncRepor
       title={title}
       detail={detail}
       icon={<LucideIcon icon={CloudAlert} name="cloud-alert" />}
+      action={
+        help?.ticket ? (
+          <a
+            href={`#ticket-${help.ticket}`}
+            {...NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.attrs}
+            data-ticket-slug={help.ticket}
+            title={`Open ${help.ticket}`}
+          >
+            {`Open ${help.ticket}`}
+          </a>
+        ) : undefined
+      }
     />
   );
 }

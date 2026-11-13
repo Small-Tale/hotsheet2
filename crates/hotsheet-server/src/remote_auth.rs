@@ -3,6 +3,12 @@
 //! The file contains only SHA-256 digests of random credentials. Every transition writes
 //! atomically before publishing the new in-memory state, so a crash cannot grant a session
 //! that the next process does not know how to revoke.
+//!
+//! HS2-85W6BE / HS2-DXM0YN: a session carries two grants besides its read role. `admin`
+//! lets the browser manage devices; `local` marks the browser as the host owner's own
+//! (host-trusted: folder chooser, open by path, setup). Neither is derived from the URL,
+//! peer address or forwarded headers, because Tailscale Serve reaches the host over the
+//! same loopback port the owner opens locally.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ulid::Ulid;
 
-const PAIR_TTL: i64 = 5 * 60;
+/// HS2-DXM0YN: long enough to walk to the host and approve.
+pub const PAIR_TTL: i64 = 15 * 60;
 const SESSION_TTL: i64 = 30 * 24 * 60 * 60;
 const IDLE_TTL: i64 = 24 * 60 * 60;
 const MAX_ATTEMPTS: u8 = 5;
@@ -25,6 +32,24 @@ const MAX_REQUESTS_PER_MINUTE: usize = 10;
 pub enum Role {
     ReadOnly,
     ReadWrite,
+}
+
+/// The grants an approval or a later change gives a device besides its read role.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Grants {
+    #[serde(default)]
+    pub admin: bool,
+    #[serde(default)]
+    pub local: bool,
+}
+
+/// A partial change to one paired device; `None` keeps the current value.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeviceChange {
+    pub role: Option<Role>,
+    pub admin: Option<bool>,
+    pub local: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -41,6 +66,8 @@ pub struct Device {
     pub server_id: String,
     pub label: String,
     pub role: Role,
+    pub admin: bool,
+    pub local: bool,
     pub origin: String,
     pub created_at: i64,
     pub last_used_at: i64,
@@ -74,6 +101,8 @@ struct PendingRecord {
     expires_at: i64,
     attempts: u8,
     approved_role: Option<Role>,
+    #[serde(default)]
+    approved_grants: Grants,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -89,6 +118,10 @@ struct DeviceRecord {
     server_id: String,
     label: String,
     role: Role,
+    #[serde(default)]
+    admin: bool,
+    #[serde(default)]
+    local: bool,
     origin: String,
     created_at: i64,
     last_used_at: i64,
@@ -102,6 +135,8 @@ impl From<&DeviceRecord> for Device {
             server_id: value.server_id.clone(),
             label: value.label.clone(),
             role: value.role,
+            admin: value.admin,
+            local: value.local,
             origin: value.origin.clone(),
             created_at: value.created_at,
             last_used_at: value.last_used_at,
@@ -135,6 +170,9 @@ impl Data {
 pub struct RemoteAuth {
     path: PathBuf,
     data: Arc<Mutex<Data>>,
+    /// In-memory change cursor for device-list long polls. It starts from the clock so a
+    /// restarted server never repeats a cursor a client already holds.
+    revision: Arc<tokio::sync::watch::Sender<u64>>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -166,10 +204,27 @@ impl RemoteAuth {
         if fresh {
             write_private_atomic(&path, &serde_json::to_vec(&data)?)?;
         }
+        let start = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |elapsed| {
+                u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+            });
         Ok(Self {
             path,
             data: Arc::new(Mutex::new(data)),
+            revision: Arc::new(tokio::sync::watch::Sender::new(start)),
         })
+    }
+
+    /// The device-list change cursor.
+    pub fn revision(&self) -> u64 {
+        *self.revision.borrow()
+    }
+
+    /// Wait until the device list changes from `after`, or until `limit` passes.
+    pub async fn changed_since(&self, after: u64, limit: std::time::Duration) {
+        let mut receiver = self.revision.subscribe();
+        let _ = tokio::time::timeout(limit, receiver.wait_for(|current| *current != after)).await;
     }
 
     pub fn server_id(&self) -> String {
@@ -180,7 +235,16 @@ impl RemoteAuth {
             .clone()
     }
 
+    /// A change people see in the device list: wakes every waiting long poll.
     fn update<T>(&self, change: impl FnOnce(&mut Data) -> Result<T>) -> Result<T> {
+        let result = self.write(change)?;
+        self.revision
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+        Ok(result)
+    }
+
+    /// A bookkeeping write (idle activity, credential rotation) that no list shows changing.
+    fn write<T>(&self, change: impl FnOnce(&mut Data) -> Result<T>) -> Result<T> {
         let mut guard = self
             .data
             .lock()
@@ -228,6 +292,7 @@ impl RemoteAuth {
                 expires_at: pairing.expires_at,
                 attempts: 0,
                 approved_role: None,
+                approved_grants: Grants::default(),
             });
             Ok(Ok(pairing))
         })
@@ -251,8 +316,15 @@ impl RemoteAuth {
             .collect()
     }
 
-    /// Called only after trusted local owner authentication, never by a remote session.
-    pub fn approve(&self, id: &str, role: Role, now: i64) -> Result<Result<(), AuthFailure>> {
+    /// Called only after the route authorized a trusted host owner or an admin session, and
+    /// granted `local` only for a host-trusted caller.
+    pub fn approve(
+        &self,
+        id: &str,
+        role: Role,
+        grants: Grants,
+        now: i64,
+    ) -> Result<Result<(), AuthFailure>> {
         self.update(|data| {
             let Some(entry) = data.pending.iter_mut().find(|entry| entry.id == id) else {
                 return Ok(Err(AuthFailure::Invalid));
@@ -264,7 +336,36 @@ impl RemoteAuth {
                 return Ok(Err(AuthFailure::RateLimited));
             }
             entry.approved_role = Some(role);
+            entry.approved_grants = grants;
             Ok(Ok(()))
+        })
+    }
+
+    /// Refuse one pending request; its browser's next redeem fails as invalid.
+    pub fn reject(&self, id: &str) -> Result<bool> {
+        self.update(|data| {
+            let before = data.pending.len();
+            data.pending.retain(|entry| entry.id != id);
+            Ok(before != data.pending.len())
+        })
+    }
+
+    /// Change one paired device's role or grants. Returns `None` when no such device exists.
+    pub fn change(&self, id: &str, change: DeviceChange) -> Result<Option<Device>> {
+        self.update(|data| {
+            let Some(entry) = data.sessions.iter_mut().find(|entry| entry.device.id == id) else {
+                return Ok(None);
+            };
+            if let Some(role) = change.role {
+                entry.device.role = role;
+            }
+            if let Some(admin) = change.admin {
+                entry.device.admin = admin;
+            }
+            if let Some(local) = change.local {
+                entry.device.local = local;
+            }
+            Ok(Some(Device::from(&entry.device)))
         })
     }
 
@@ -297,6 +398,7 @@ impl RemoteAuth {
             let Some(role) = entry.approved_role else {
                 return Ok(Err(AuthFailure::Unapproved));
             };
+            let grants = entry.approved_grants;
             let entry = data.pending.remove(position);
             let token = random_token()?;
             let csrf = random_token()?;
@@ -305,6 +407,8 @@ impl RemoteAuth {
                 server_id: data.server_id.clone(),
                 label: entry.label,
                 role,
+                admin: grants.admin,
+                local: grants.local,
                 origin: entry.origin,
                 created_at: now,
                 last_used_at: now,
@@ -351,7 +455,7 @@ impl RemoteAuth {
                 return Ok(result);
             }
         }
-        self.update(|data| {
+        self.write(|data| {
             let Some(entry) = data
                 .sessions
                 .iter_mut()
@@ -404,7 +508,7 @@ impl RemoteAuth {
         now: i64,
     ) -> Result<Result<IssuedSession, AuthFailure>> {
         let hash = digest(token);
-        self.update(|data| {
+        self.write(|data| {
             let Some(entry) = data
                 .sessions
                 .iter_mut()
@@ -527,7 +631,8 @@ mod tests {
                 .unwrap_err(),
             AuthFailure::Invalid
         );
-        auth.approve(&pair.id, Role::ReadOnly, 103)?.unwrap();
+        auth.approve(&pair.id, Role::ReadOnly, Grants::default(), 103)?
+            .unwrap();
         let issued = auth
             .redeem(&pair.id, &pair.challenge, "http://localhost:4175", 104)?
             .unwrap();
@@ -580,40 +685,248 @@ mod tests {
             .request("Synthetic device", "http://localhost:4175", 100)?
             .unwrap();
         assert_eq!(
-            auth.approve(&first.id, Role::ReadWrite, 401)?.unwrap_err(),
+            auth.approve(&first.id, Role::ReadWrite, Grants::default(), 1001)?
+                .unwrap_err(),
             AuthFailure::Expired
         );
         let second = auth
-            .request("Synthetic device", "http://localhost:4175", 402)?
+            .request("Synthetic device", "http://localhost:4175", 1002)?
             .unwrap();
         for _ in 0..10 {
             assert_eq!(
-                auth.redeem(&second.id, &second.challenge, "http://localhost:4175", 403)?
+                auth.redeem(&second.id, &second.challenge, "http://localhost:4175", 1003)?
                     .unwrap_err(),
                 AuthFailure::Unapproved
             );
         }
         for _ in 0..5 {
             assert_eq!(
-                auth.redeem(&second.id, "wrong", "http://localhost:4175", 403)?
+                auth.redeem(&second.id, "wrong", "http://localhost:4175", 1003)?
                     .unwrap_err(),
                 AuthFailure::Invalid
             );
         }
         assert_eq!(
-            auth.redeem(&second.id, &second.challenge, "http://localhost:4175", 403)?
+            auth.redeem(&second.id, &second.challenge, "http://localhost:4175", 1003)?
                 .unwrap_err(),
             AuthFailure::RateLimited
         );
         for _ in 0..9 {
-            auth.request("Synthetic device", "http://localhost:4175", 404)?
+            auth.request("Synthetic device", "http://localhost:4175", 1004)?
                 .unwrap();
         }
         assert_eq!(
-            auth.request("Synthetic device", "http://localhost:4175", 404)?
+            auth.request("Synthetic device", "http://localhost:4175", 1004)?
                 .unwrap_err(),
             AuthFailure::RateLimited
         );
+        Ok(())
+    }
+
+    #[test]
+    fn fifteen_minute_pairing_carries_admin_and_local_grants_through_redeem_and_reopen()
+    -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let auth = RemoteAuth::open(&path, "synthetic-server")?;
+        let origin = "http://127.0.0.1:4175";
+        let pair = auth.request("Synthetic Mac", origin, 100)?.unwrap();
+        assert_eq!(pair.expires_at, 100 + 15 * 60);
+        // Still approvable one second before the fifteen-minute boundary (HS2-DXM0YN).
+        auth.approve(
+            &pair.id,
+            Role::ReadWrite,
+            Grants {
+                admin: true,
+                local: true,
+            },
+            100 + 15 * 60 - 1,
+        )?
+        .unwrap();
+        let issued = auth
+            .redeem(&pair.id, &pair.challenge, origin, 999)?
+            .unwrap();
+        assert!(issued.device.admin && issued.device.local);
+        let plain = auth.request("Synthetic phone", origin, 1001)?.unwrap();
+        auth.approve(&plain.id, Role::ReadOnly, Grants::default(), 1002)?
+            .unwrap();
+        let phone = auth
+            .redeem(&plain.id, &plain.challenge, origin, 1003)?
+            .unwrap();
+        assert!(!phone.device.admin && !phone.device.local);
+
+        let reopened = RemoteAuth::open(&path, "synthetic-server")?;
+        let device = reopened
+            .authorize(&issued.token, None, None, false, 1004)?
+            .unwrap();
+        assert!(device.admin && device.local);
+        let changed = reopened
+            .change(
+                &phone.device.id,
+                DeviceChange {
+                    role: Some(Role::ReadWrite),
+                    admin: Some(true),
+                    local: None,
+                },
+            )?
+            .unwrap();
+        assert_eq!(
+            (changed.role, changed.admin, changed.local),
+            (Role::ReadWrite, true, false)
+        );
+        let demoted = reopened
+            .change(
+                &issued.device.id,
+                DeviceChange {
+                    local: Some(false),
+                    ..DeviceChange::default()
+                },
+            )?
+            .unwrap();
+        assert!(demoted.admin && !demoted.local);
+        assert!(
+            reopened
+                .change("missing", DeviceChange::default())?
+                .is_none()
+        );
+        let again = RemoteAuth::open(&path, "synthetic-server")?;
+        let listed = again.list(1005);
+        let phone_now = listed
+            .iter()
+            .find(|entry| entry.id == phone.device.id)
+            .unwrap();
+        assert!(phone_now.admin && phone_now.role == Role::ReadWrite);
+        Ok(())
+    }
+
+    #[test]
+    fn reject_removes_a_pending_request_and_its_redeem_fails() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let origin = "http://localhost:4175";
+        let pair = auth.request("Synthetic tablet", origin, 100)?.unwrap();
+        assert!(auth.reject(&pair.id)?);
+        assert!(!auth.reject(&pair.id)?);
+        assert!(auth.pending(101).is_empty());
+        assert_eq!(
+            auth.approve(&pair.id, Role::ReadOnly, Grants::default(), 102)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        assert_eq!(
+            auth.redeem(&pair.id, &pair.challenge, origin, 103)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_catalog_written_before_grants_existed_loads_without_them() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let token = "synthetic-token";
+        let legacy = serde_json::json!({
+            "server_id": "synthetic-server",
+            "pending": [{
+                "id": "P1", "label": "Old request", "origin": "http://localhost:4175",
+                "challenge_hash": digest("c"), "created_at": 100, "expires_at": 400,
+                "attempts": 0, "approved_role": "read_write"
+            }],
+            "sessions": [{
+                "device": {
+                    "id": "D1", "server_id": "synthetic-server", "label": "Old device",
+                    "role": "read_write", "origin": "http://localhost:4175",
+                    "created_at": 100, "last_used_at": 100, "expires_at": 100000
+                },
+                "token_hash": digest(token),
+                "csrf_hash": digest("csrf")
+            }]
+        });
+        fs::write(&path, serde_json::to_vec(&legacy)?)?;
+        let auth = RemoteAuth::open(&path, "synthetic-server")?;
+        let device = auth.authorize(token, None, None, false, 101)?.unwrap();
+        assert!(!device.admin && !device.local);
+        let redeemed = auth
+            .redeem("P1", "c", "http://localhost:4175", 102)?
+            .unwrap();
+        assert!(!redeemed.device.admin && !redeemed.device.local);
+        Ok(())
+    }
+
+    #[test]
+    fn visible_changes_advance_the_cursor_and_bookkeeping_does_not() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let origin = "http://localhost:4175";
+        let mut cursor = auth.revision();
+        let mut advanced = |auth: &RemoteAuth| {
+            let next = auth.revision();
+            let moved = next != cursor;
+            cursor = next;
+            moved
+        };
+        let pair = auth.request("Synthetic", origin, 100)?.unwrap();
+        assert!(advanced(&auth));
+        auth.approve(&pair.id, Role::ReadWrite, Grants::default(), 101)?
+            .unwrap();
+        assert!(advanced(&auth));
+        let issued = auth
+            .redeem(&pair.id, &pair.challenge, origin, 102)?
+            .unwrap();
+        assert!(advanced(&auth));
+        // Idle-activity persistence and credential rotation are not list changes.
+        auth.authorize(&issued.token, None, None, false, 500)?
+            .unwrap();
+        let rotated = auth
+            .rotate(&issued.token, &issued.csrf, origin, 501)?
+            .unwrap();
+        assert!(!advanced(&auth));
+        auth.change(
+            &rotated.device.id,
+            DeviceChange {
+                admin: Some(true),
+                ..DeviceChange::default()
+            },
+        )?;
+        assert!(advanced(&auth));
+        let other = auth.request("Synthetic", origin, 600)?.unwrap();
+        assert!(advanced(&auth));
+        auth.reject(&other.id)?;
+        assert!(advanced(&auth));
+        auth.revoke(&rotated.device.id)?;
+        assert!(advanced(&auth));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_long_poll_wakes_on_a_change_and_returns_at_once_for_a_stale_cursor() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let start = auth.revision();
+        // A cursor from before a restart differs, so the wait ends immediately.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            auth.changed_since(start.wrapping_sub(7), std::time::Duration::from_secs(60)),
+        )
+        .await?;
+        let waiter = auth.clone();
+        let waiting = tokio::spawn(async move {
+            waiter
+                .changed_since(start, std::time::Duration::from_secs(60))
+                .await;
+        });
+        tokio::task::yield_now().await;
+        assert!(!waiting.is_finished());
+        auth.request("Synthetic", "http://localhost:4175", 100)?
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), waiting).await??;
+        // An unchanged cursor waits out its limit.
+        let unchanged = auth.revision();
+        let started = std::time::Instant::now();
+        auth.changed_since(unchanged, std::time::Duration::from_millis(50))
+            .await;
+        assert!(started.elapsed() >= std::time::Duration::from_millis(50));
         Ok(())
     }
 }

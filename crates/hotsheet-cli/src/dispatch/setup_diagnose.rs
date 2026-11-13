@@ -213,15 +213,11 @@ fn additional_refresh_changes(store: &Path, project: &Path) -> Result<Vec<Value>
     }
     changes.extend(worklist_refresh_changes(store, project)?);
     let local = project.join(".hotsheet2/settings.local.json");
-    if local.is_file() || !settings.map(Scope::Local)?.is_empty() {
-        let ignore = project.join(".gitignore");
-        let existing = std::fs::read_to_string(&ignore).unwrap_or_default();
-        if !existing
-            .lines()
-            .any(|line| line.trim() == ".hotsheet2/settings.local.json")
-        {
-            changes.push(json!({"path": path_label(project, &ignore), "action": "write"}));
-        }
+    if (local.is_file() || !settings.map(Scope::Local)?.is_empty())
+        && hotsheet_ticketing::project_gitignore::plan_project_block(project)?.is_some()
+    {
+        let ignore = hotsheet_ticketing::project_gitignore::gitignore_path(project);
+        changes.push(json!({"path": path_label(project, &ignore), "action": "write"}));
     }
     Ok(changes)
 }

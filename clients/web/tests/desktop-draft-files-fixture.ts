@@ -232,6 +232,7 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
       });
       await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: root } }));
       await page.getByRole('button', { name: 'Add Project', exact: true }).dispatchEvent('click');
+      await page.getByRole('button', { name: 'Local Project' }).click();
       await expect(page.getByRole('tab', { name: 'other-project', exact: true })).toHaveAttribute(
         'aria-selected',
         'true',
@@ -308,6 +309,7 @@ export const sessionSaved = (page: Page, text: string) =>
 export async function openNewTicket(page: Page, first = false) {
   if (first) {
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   }
   await page.getByRole('button', { name: 'New ticket…' }).click();

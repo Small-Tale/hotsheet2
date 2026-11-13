@@ -140,6 +140,7 @@ async function mock(page: Page, where: 'note' | 'details', prompt = PROMPT) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-GROUPS"]').click();
   return writes;

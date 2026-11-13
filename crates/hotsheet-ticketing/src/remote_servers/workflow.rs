@@ -214,6 +214,7 @@ impl RemoteRegistry {
         }
         // Durable disable precedes cleanup. Moving active -> pending consumes no
         // new obligation, even at capacity; repeated revoke keeps its public revision.
+        file.selected_projects.retain(|item| item.binding_id != id);
         file.servers[index].observation_generation = ulid::Ulid::new().to_string();
         self.write(&file)?;
         self.cleanup_locked(&mut file, secrets)?;

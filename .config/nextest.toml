@@ -1,3 +1,12 @@
+# HS2-TT8E7S: a hung test is terminated and fails after ten minutes instead of holding a
+# CI job until its own timeout (a native-Windows Code Review test once ran for the whole
+# 6 h Platforms job). SLOW is still reported every minute. Healthy tests finish in well
+# under one minute on CI runners; the slowest seen locally under full load (a CLI hook
+# test) took about four minutes, still inside the ten-minute limit. A timed-out
+# test's captured output is printed, so its progress markers show where it stopped.
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 10 }
+
 # HS2-3PX1E4: keep a JUnit report of every run so slow tests are found from data:
 #   node scripts/test-profile.mjs --nextest target/nextest/default/junit.xml
 [profile.default.junit]

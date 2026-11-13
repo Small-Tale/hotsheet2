@@ -22,6 +22,7 @@ import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk
 import { ConfirmationDialog } from '../components/confirmation-dialog';
 import type { ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
+import { DesktopRemoteDialog } from '../components/desktop-remote-dialog';
 import { Hs1MigrationDialog } from '../components/hs1-migration';
 import type { ManualModelDialogState } from '../components/manual-model-dialog';
 import { ManualModelDialog } from '../components/manual-model-dialog';
@@ -29,6 +30,7 @@ import { NoteMetadataDialog, type NoteMetadataDialogState } from '../components/
 import { type NotificationView } from '../components/notification-navigation';
 import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
+import { ProjectSourceChoiceDialog } from '../components/project-source-choice-dialog';
 import type { ProjectStripMode } from '../components/project-strip-actions';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import type { ExternalProviderKind, GithubAuthState } from '../components/provider-setup-form';
@@ -67,6 +69,7 @@ import { syncConversationScroll } from '../conversation-scroll';
 import { draftFiles } from '../draft-file-recovery';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
 import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
+import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
 import type { RenderMetrics } from '../render-metrics';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
 import { ticketGroupDialog } from '../ticket-group-state';
@@ -159,6 +162,15 @@ export interface HotSheetAppDependencies {
   projectCloseDialog: Signal<ProjectCloseDialogState | undefined>;
   projectDialogError: Signal<string>;
   projectDialogOpen: Signal<boolean>;
+  projectSourceChoiceOpen: Signal<boolean>;
+  desktopRemoteDialogOpen: Signal<boolean>;
+  desktopRemoteFormOpen: Signal<boolean>;
+  desktopRemoteServers: Signal<DesktopRemoteServer[]>;
+  desktopRemoteEditing: Signal<DesktopRemoteServer | undefined>;
+  desktopRemoteDiscovery: Signal<DesktopRemoteDiscovery | undefined>;
+  desktopRemotePairing: Signal<DesktopRemotePairing | undefined>;
+  desktopRemoteBusy: Signal<boolean>;
+  desktopRemoteError: Signal<string>;
   providerAccountChoice: Signal<string | undefined>;
   providerAccounts: Signal<ProviderAccount[]>;
   providerConnections: Signal<ProviderConnection[]>;
@@ -292,6 +304,15 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     projectCloseDialog,
     projectDialogError,
     projectDialogOpen,
+    projectSourceChoiceOpen,
+    desktopRemoteDialogOpen,
+    desktopRemoteFormOpen,
+    desktopRemoteServers,
+    desktopRemoteEditing,
+    desktopRemoteDiscovery,
+    desktopRemotePairing,
+    desktopRemoteBusy,
+    desktopRemoteError,
     providerAccountChoice,
     providerAccounts,
     providerConnections,
@@ -437,6 +458,17 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     return (
       <>
         <HotSheetShell />
+        <ProjectSourceChoiceDialog open={projectSourceChoiceOpen.value} />
+        <DesktopRemoteDialog
+          open={desktopRemoteDialogOpen.value}
+          formOpen={desktopRemoteFormOpen.value}
+          servers={desktopRemoteServers.value}
+          editing={desktopRemoteEditing.value}
+          discovery={desktopRemoteDiscovery.value}
+          pairing={desktopRemotePairing.value}
+          busy={desktopRemoteBusy.value}
+          error={desktopRemoteError.value}
+        />
         {aiConversationSurface()}
         <ProjectDialog
           open={projectDialogOpen.value}

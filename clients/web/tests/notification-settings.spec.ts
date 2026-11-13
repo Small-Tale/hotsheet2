@@ -63,6 +63,7 @@ test('manages notifier channels and rules through App Settings → Notifications
     await routeNotifierApi(page, server);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Notifications', exact: true }).click();
@@ -199,6 +200,7 @@ test('chooses saved views, categories, and priorities in the rule dialog', async
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Notifications', exact: true }).click();
@@ -312,6 +314,7 @@ test.describe('quiet hours follow the device', () => {
       await routeNotifierApi(page, server);
       await page.goto('/');
       await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Local Project' }).click();
       await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
       await page.getByLabel('Settings View').click();
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();

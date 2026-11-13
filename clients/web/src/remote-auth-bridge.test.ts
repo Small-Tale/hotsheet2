@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Checkout } from './api';
-import { changePollSessionHeaders, createDevApp } from './dev-server';
+import { changePollSessionHeaders, createDevApp, remoteRouteKind, remoteSessionGrants } from './dev-server';
 import { createLocalHostApp } from './local-host';
 import type { MigrationJobApi } from './migration-job-bridge';
 import { openRegisteredProject, type ProjectSession, UnregisteredRemoteProjectError } from './project-bridge';
@@ -15,7 +15,8 @@ describe('HS2-7DBJMS remote browser boundary', () => {
     expect((await app.request('/__hotsheet/checkouts')).status).toBe(401);
     expect((await app.request('/__hotsheet/project-api/synthetic/tickets')).status).toBe(401);
     expect((await app.request('/__hotsheet/folders/choose', { method: 'POST' })).status).toBe(404);
-    expect((await app.request('/__hotsheet/remote-auth/owner')).status).toBe(403);
+    // Device management needs a session first, then its admin grant (HS2-DXM0YN).
+    expect((await app.request('/__hotsheet/remote-auth/owner')).status).toBe(401);
     expect(
       (
         await app.request('/__hotsheet/project-api/synthetic/tickets', {
@@ -111,7 +112,10 @@ describe('HS2-3HC9HT remote project open', () => {
   it('requires a remote session and keeps the local open route off the remote allowlist', async () => {
     vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
     const openRemote = vi.fn(async () => ({}));
-    const app = bridge(openRemote);
+    // A live session without the local grant (HS2-85W6BE).
+    const app = bridge(openRemote, async () =>
+      Response.json({ origin: 'http://localhost', admin: true, local: false }),
+    );
     expect((await post(app, JSON.stringify({ root: '/synthetic/registered' }))).status).toBe(401);
     const local = await app.request('/__hotsheet/projects/open', {
       method: 'POST',
@@ -302,5 +306,107 @@ describe('HS2-9FWETT remote HS1 migration status', () => {
       (await target.request('/__hotsheet/projects/migration-jobs', { method: 'POST', headers: { cookie } })).status,
     ).toBe(404);
     expect(watch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('HS2-85W6BE / HS2-DXM0YN session grants on a remote-mode bridge', () => {
+  const ORIGIN = 'http://127.0.0.1:4175';
+  const cookie = 'hs2_remote_session=synthetic-session; hs2_remote_csrf=synthetic-csrf';
+  const grants = (device: Record<string, unknown>, ok = true) =>
+    vi.fn<(headers: Headers) => Promise<Response>>(async () =>
+      ok ? Response.json({ origin: ORIGIN, ...device }) : Response.json({ error: 'no' }, { status: 401 }),
+    );
+  function app(check: (headers: Headers) => Promise<Response>) {
+    vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
+    const chooseFolder = vi.fn<() => Promise<string | undefined>>(async () => '/synthetic/chosen');
+    // `chooseFolder` is the third injectable; the nine after it and `openRemote` keep their defaults.
+    const defaults = Array.from({ length: 9 }, () => undefined) as [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    return { chooseFolder, app: createDevApp(true, undefined, chooseFolder, ...defaults, undefined, check) };
+  }
+  const choose = (target: ReturnType<typeof createDevApp>, headers: Record<string, string>) =>
+    target.request(`${ORIGIN}/__hotsheet/folders/choose`, { method: 'POST', headers });
+
+  it('classifies routes by the grant they need', () => {
+    expect(remoteRouteKind('/__hotsheet/remote-auth/owner')).toBe('management');
+    expect(remoteRouteKind('/__hotsheet/remote-auth/owner/changes')).toBe('management');
+    for (const path of [
+      '/__hotsheet/checkouts',
+      '/__hotsheet/remote/projects/open',
+      '/__hotsheet/project-api/synthetic/tickets',
+      '/__hotsheet/remote-auth/me',
+    ])
+      expect(remoteRouteKind(path), path).toBe('session');
+    for (const path of ['/__hotsheet/folders/choose', '/__hotsheet/projects/open', '/__hotsheet/projects/setup-git'])
+      expect(remoteRouteKind(path), path).toBe('host');
+  });
+
+  it('reads only literal true grants from the session answer', () => {
+    expect(remoteSessionGrants({ origin: ORIGIN, admin: true, local: true })).toEqual({
+      origin: ORIGIN,
+      admin: true,
+      local: true,
+    });
+    expect(remoteSessionGrants({ admin: 'true', local: 1 })).toEqual({ admin: false, local: false });
+    expect(remoteSessionGrants(undefined)).toEqual({ admin: false, local: false });
+  });
+
+  it('opens the folder chooser only for a session with the local grant, whatever the hostname', async () => {
+    const headers = { cookie, origin: ORIGIN };
+    for (const [reason, check, status] of [
+      ['no session', grants({ local: true }, false), 404],
+      ['plain session', grants({}), 404],
+      ['admin without local', grants({ admin: true }), 404],
+      ['local grant', grants({ local: true }), 200],
+    ] as const) {
+      const { app: target, chooseFolder } = app(check);
+      const response = await choose(target, headers);
+      expect(response.status, reason).toBe(status);
+      expect(chooseFolder, reason).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+    }
+    // A host-trusted session still proves its paired Origin and CSRF token on every change.
+    for (const [reason, headers] of [
+      ['no origin', { cookie }],
+      ['foreign origin', { cookie, origin: 'https://foreign.example' }],
+      ['no CSRF cookie', { cookie: 'hs2_remote_session=synthetic-session', origin: ORIGIN }],
+    ] as const) {
+      const { app: target, chooseFolder } = app(grants({ local: true }));
+      expect((await choose(target, headers)).status, reason).toBe(403);
+      expect(chooseFolder, reason).not.toHaveBeenCalled();
+    }
+    // Without a cookie, a host route stays hidden and the session check never runs.
+    const check = grants({ local: true });
+    const { app: target } = app(check);
+    expect((await choose(target, { origin: ORIGIN })).status).toBe(404);
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  it('keeps the cross-server desktop registry off a remote-mode host even for a local session', async () => {
+    const { app: target } = app(grants({ local: true, admin: true }));
+    expect((await target.request(`${ORIGIN}/__hotsheet/remotes`, { headers: { cookie } })).status).toBe(404);
+  });
+
+  it('lets only an admin session reach device management', async () => {
+    // An unknown management path passes the grant check and then 404s, without reaching the server.
+    const path = `${ORIGIN}/__hotsheet/remote-auth/owner/unknown`;
+    const plain = await app(grants({ local: true })).app.request(path, { headers: { cookie } });
+    expect(plain.status).toBe(403);
+    expect(await plain.json()).toEqual({ error: 'Administrator access required.' });
+    expect((await app(grants({}, false)).app.request(path, { headers: { cookie } })).status).toBe(401);
+    expect((await app(grants({ admin: true })).app.request(path, { headers: { cookie } })).status).toBe(404);
+    const write = await app(grants({ admin: true })).app.request(path, {
+      method: 'POST',
+      headers: { cookie, origin: 'https://foreign.example' },
+    });
+    expect(write.status).toBe(403);
   });
 });

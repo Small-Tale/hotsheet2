@@ -8491,7 +8491,8 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
         std::fs::read_to_string(checkout.join(".gitignore"))
             .unwrap()
             .lines()
-            .any(|line| line == ".hotsheet2/settings.local.json")
+            .any(|line| line == "/.hotsheet2/*"),
+        "HS2-61ZMVA managed block"
     );
     assert!(!primary.path().join(".hotsheet2/settings.json").exists());
     assert!(!primary.path().join("hotsheet-settings.json").exists());
@@ -14106,6 +14107,9 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
 
 #[tokio::test]
 async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets() {
+    // HS2-TT8E7S: this test hung on native Windows. Nextest prints a timed-out test's
+    // captured stderr, so these markers name the last step that completed.
+    let step = |name: &str| eprintln!("HS2-TT8E7S step: {name}");
     let (store, st) = state();
     hotsheet_ticketing::Settings::new(store.path())
         .set(
@@ -14181,6 +14185,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         &format!("different ticket\n\nFollow-up for {slug}"),
     );
 
+    step("commits created");
     let response = app
         .clone()
         .oneshot(authed(
@@ -14237,6 +14242,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .unwrap();
     assert_eq!(launched_by_qualified.status(), StatusCode::NO_CONTENT);
 
+    step("launched by qualified id");
     let invalid = app
         .clone()
         .oneshot(authed(
@@ -14291,6 +14297,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .await
         .unwrap();
     assert_eq!(launched.status(), StatusCode::NO_CONTENT);
+    step("ticket launches finished");
 
     // HS2-2Z11A5: an explicit creation context writes a qualified source link;
     // an unresolved target stays diagnostic evidence without blocking Code Review.
@@ -14455,6 +14462,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         2
     );
 
+    step("follow-ups checked");
     std::fs::write(checkout.path().join("code.txt"), "working tree\n").unwrap();
     let unstaged = app
         .clone()
@@ -14466,7 +14474,9 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .await
         .unwrap();
     assert_eq!(unstaged.status(), StatusCode::NO_CONTENT);
+    step("unstaged worktree launch returned");
     run(&["add", "code.txt"]);
+    step("worktree change staged");
     let staged = app
         .oneshot(authed(
             "POST",
@@ -14476,6 +14486,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .await
         .unwrap();
     assert_eq!(staged.status(), StatusCode::NO_CONTENT);
+    step("staged worktree launch returned");
 }
 
 #[tokio::test]

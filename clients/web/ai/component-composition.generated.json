@@ -2400,6 +2400,79 @@
       }
     },
     {
+      "key": "hotsheet-web:desktop-remote-dialog",
+      "package": "hotsheet-web",
+      "id": "desktop-remote-dialog",
+      "name": "DesktopRemoteDialog",
+      "kind": "component",
+      "purpose": "Pair, discover, review and remove machine-local remote server bindings (HS2-BT4KN6).",
+      "publicExports": [
+        {
+          "name": "DesktopRemoteDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/desktop-remote-dialog.tsx",
+        "src/components/desktop-remote-dialog.css"
+      ],
+      "source": "src/components/desktop-remote-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "component",
+        "behaviors": [
+          "single-column-card"
+        ]
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Announce pairing and discovery errors; keep server actions reachable on phones."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "desktop-remote-dialog",
+        "publicClasses": [
+          "desktop-remote-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "desktop-remote-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/desktop-remote-dialog.tsx",
+        "composition": "src/components/desktop-remote-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:development-strategy-settings",
       "package": "hotsheet-web",
       "id": "development-strategy-settings",
@@ -5093,6 +5166,78 @@
       }
     },
     {
+      "key": "hotsheet-web:project-source-choice-dialog",
+      "package": "hotsheet-web",
+      "id": "project-source-choice-dialog",
+      "name": "ProjectSourceChoiceDialog",
+      "kind": "component",
+      "purpose": "Ask the trusted desktop whether a project is local or hosted on a reviewed remote server (HS2-BT4KN6).",
+      "publicExports": [
+        {
+          "name": "ProjectSourceChoiceDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-source-choice-dialog.tsx"
+      ],
+      "source": "src/components/project-source-choice-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "component",
+        "behaviors": [
+          "single-column-card"
+        ]
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Keep local and remote choices labeled and keyboard reachable."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "project-source-choice-dialog",
+        "publicClasses": [
+          "project-source-choice-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-source-choice-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-source-choice-dialog.tsx",
+        "composition": "src/components/project-source-choice-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:project-summary",
       "package": "hotsheet-web",
       "id": "project-summary",
@@ -5652,6 +5797,72 @@
       "provenance": {
         "selection": "src/components/remote-auth-screen.tsx",
         "composition": "src/components/remote-auth-screen.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:remote-devices-settings",
+      "package": "hotsheet-web",
+      "id": "remote-devices-settings",
+      "name": "RemoteDevicesSettings",
+      "kind": "component",
+      "purpose": "App Settings → Devices: this host's pairing requests and paired browsers, with approve, reject, revoke, read role, administrator, and host-access commands in each row's menu, and an administrator-required state for other sessions (HS2-DXM0YN, HS2-85W6BE).",
+      "publicExports": [
+        {
+          "name": "RemoteDevicesSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-devices-settings.tsx",
+        "src/components/remote-devices-settings-interactions.ts",
+        "src/features/remote-devices.ts"
+      ],
+      "source": "src/components/remote-devices-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-devices-settings.tsx",
+        "composition": "src/components/remote-devices-settings.tsx"
       }
     },
     {

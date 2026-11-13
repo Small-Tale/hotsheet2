@@ -206,8 +206,21 @@ redeems it into a host-only HttpOnly session cookie. The server and browser
 bridge enforce the device's read-only or read-write role; local-only bridge
 routes, including desktop storage, stay unavailable. The screen is responsive
 from desktop to phone widths. The project picker that follows successful
-authentication retains its existing remote-project limitations until
-HS2-BT4KN6.
+authentication retains its one-host project picker.
+
+**Desktop remote projects (HS2-BT4KN6).** The desktop `+` control asks whether
+to open a local folder or a project already known to another Hot Sheet server.
+The latter never invokes the local folder picker. The user enters an explicit
+HTTP or HTTPS address and port, sees the host's approval request, then chooses
+from freshly discovered checkouts. Optional CA and client certificate/key PEM
+paths are read by the trusted Node host; private session and write proof remain
+in the machine secret store. Selected `(server, checkout)` pairs persist in the
+machine registry, not browser storage. Tabs include the server label and use
+composite ids so identical checkout ids on different hosts remain independent.
+The desktop bridge routes REST and change WebSockets to each tab's reviewed
+server; removing or reviewing one binding closes only its sessions. The phone
+browser continues to list projects from its single connected host. Remote PTY
+display and control remain deferred by [08](08-distributed-and-remote.md) §8.2.
 
 **Remote project open (HS2-3HC9HT).** A remote browser opens projects through
 `POST /__hotsheet/remote/projects/open` rather than the local
@@ -216,8 +229,11 @@ route takes only a root or checkout id. It opens a checkout only when the host
 server already lists it, using that checkout's own linked store, and it skips
 the project setup refresh that writes into the host repository. An unregistered
 root answers 403. The client uses this route, and the open-projects picker in
-place of the folder chooser, whenever the page is stamped with the remote auth
-mode or loaded from a non-loopback origin. The same device reads Hot Sheet 1
+place of the folder chooser, whenever it counts as a remote client: on a page
+stamped with the remote auth mode, unless its paired session carries the
+**local** grant (HS2-85W6BE), whatever hostname reached it; otherwise when
+loaded from a non-loopback origin. A local session opens projects by path and
+uses the folder chooser like the host's own browser. The same device reads Hot Sheet 1
 migration status through `GET /__hotsheet/remote/projects/migration-jobs`, which also
 answers only for registered checkouts (HS2-9FWETT); starting a migration, removing
 HS1 data, and creating a Git ticket store remain host-only.
@@ -227,8 +243,8 @@ native dialog on the machine running the server: the configured `git difftool` (
 commits/Code Review, repository status ranges and worktree files), attachment and
 repository-file Open/Reveal, corrupt-ticket Reveal, and the native folder chooser
 (project path, HS1 ticket store, git ticket-store location, conversation export
-destination and saved-conversation open). A web client loaded from a non-loopback origin
-(or `?device=remote`) refuses these before any request with the explanation "… on the
+destination and saved-conversation open). A remote client (as defined under Remote project
+open above, or `?device=remote`) refuses these before any request with the explanation "… on the
 computer running Hot Sheet, so it isn't available from this device." Code Review shows it
 as a toast because its inline message can sit below a long commit list; other surfaces use
 their existing error display. Open Project keeps its remote checkout picker, and an
@@ -1066,6 +1082,7 @@ preview/download, server directory browser) are separate design work.
   | App     | Accounts             | `/accounts` (credential names from `providers.json` + `keys.json`)                                       | every project, machine  |
   | App     | Terminal memory      | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                        | every project, machine  |
   | App     | Notifications        | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1) | every project, machine  |
+  | App     | Devices              | `/remote-auth/owner` (the server's remote-auth catalog, docs/04 §4.6.1)                                  | this host, machine      |
   | App     | Keyboard             | `localStorage hotsheet.keyboard-shortcuts`                                                               | every project, browser  |
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
@@ -1133,6 +1150,23 @@ preview/download, server directory browser) are separate design work.
   component migration tracked by HS2-VBRC6A: `main.tsx` contains application-state
   derivation and event/effect wiring, while exported PascalCase UI components live under
   `components/` with their ownership tests and catalog accounting.
+
+- **Remote devices (App Settings → Devices, HS2-DXM0YN).** The category lists this host's
+  pairing requests and paired browsers (`components/remote-devices-settings.tsx`). Each row's
+  "…" menu, also opened by the row itself and by right-click, holds its commands: a request
+  offers Approve Read-Write, Approve Read-Only and Reject; a device offers its read role
+  (Make Read-Only or Allow Changes), Administrator, Host Access and Revoke. Host Access is
+  disabled, with the reason, unless the caller is the trusted host or itself has the local
+  grant. The caller's own row is marked This Device. The request row shows the request id so
+  the owner can compare it with the id on the requesting browser. While the category shows,
+  `features/remote-devices.ts` keeps one long poll on `/__hotsheet/remote-auth/owner/changes`
+  (cursor replay, 1 s to 30 s failure backoff, no fixed interval) and stops when it hides. A
+  host in local browser mode is the trusted owner. On a remote-mode host a session without
+  the admin grant sees the category with "Administrator access required." and never loads the
+  list. Grants a page reads at load (`/remote-auth/me`) apply until it reloads; the bridge and
+  server re-check them on every request. The pairing screen proposes a device name from the
+  user agent and low-entropy client hints (`device-name.ts`), such as "Safari on iPhone" or
+  "Chrome on macOS"; the person may edit it.
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global
@@ -4940,7 +4974,10 @@ transition history (HS2-XKXE7V).
   - says why in one sentence, naming an oversized unpublished file and its size;
   - says that tickets are saved on this computer and how many local changes are
     unpublished;
-  - repeats the server's next step, which names the headless `hotsheet-cli` command.
+  - repeats the server's next step, which names the headless `hotsheet-cli` command;
+  - while an AI was asked to repair the stall (`ai_help`, HS2-QR1K8R), says whom Hot Sheet
+    asked and how it went, and links the repair ticket with the shared
+    `open-linked-ticket` action.
 
   It has no dismiss and clears when a sync publishes again. The state contract is
   [02](02-ticket-storage.md) §2.12.2.

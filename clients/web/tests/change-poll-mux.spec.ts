@@ -287,10 +287,12 @@ async function installBridge(
 async function openAllProjects(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.getByRole('tab', { name: projects[0].name })).toBeVisible();
   for (const project of projects.slice(1)) {
     await page.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(page.getByRole('tab', { name: project.name })).toHaveAttribute('aria-selected', 'true');
   }
 }
@@ -373,6 +375,7 @@ test('dense changes reconcile the latest real-server ticket collection within th
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await expect(page.getByText('First live ticket')).toBeVisible();
     await expect.poll(() => bridge.subscriptions.has(target.id)).toBe(true);

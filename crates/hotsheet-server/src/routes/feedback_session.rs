@@ -134,7 +134,7 @@ pub(crate) fn api_note_to_notify(ticket: &ApiTicket, request_human: bool) -> Opt
 /// Live terminals whose reported AI session can receive a pushed message, as registry
 /// connections (HS2-25TP3N). `live_ids` are the terminals currently alive; `None` trusts the
 /// registry, whose lifecycle monitor removes a terminal soon after it exits.
-fn push_capable_terminals(
+pub(crate) fn push_capable_terminals(
     state: &AppState,
     live_ids: Option<&HashSet<String>>,
 ) -> Vec<hotsheet_aitools::Connection> {

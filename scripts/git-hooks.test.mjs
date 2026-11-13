@@ -130,7 +130,11 @@ test('HS2-CD3D2T pre-commit rejects staged whitespace before formatting', () => 
     const log = resolve(f.root, 'format.log');
     executable(resolve(bin, 'zsh'), '#!/bin/sh\nprintf "format\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\n');
     run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
-    const env = { ...withoutGitRepositoryEnv(process.env), PATH: `${bin}:${process.env.PATH}`, HOTSHEET_HOOK_TEST_LOG: log };
+    const env = {
+      ...withoutGitRepositoryEnv(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      HOTSHEET_HOOK_TEST_LOG: log,
+    };
     put(resolve(f.repo, 'bad'), 'bad  \n');
     run('git', ['add', 'bad'], f.repo);
     assert.throws(() => run('git', ['commit', '-m', 'Bad'], f.repo, env));
@@ -139,6 +143,116 @@ test('HS2-CD3D2T pre-commit rejects staged whitespace before formatting', () => 
     run('git', ['add', 'bad'], f.repo);
     run('git', ['commit', '-m', 'Good'], f.repo, env);
     assert.equal(readFileSync(log, 'utf8'), 'format\n');
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-9EGWC4 pre-commit checks only whitespace for a registry-only commit', () => {
+  const f = fixture();
+  try {
+    const bin = resolve(f.root, 'bin');
+    const log = resolve(f.root, 'format.log');
+    executable(resolve(bin, 'zsh'), '#!/bin/sh\nprintf "format\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\n');
+    run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
+    const env = {
+      ...withoutGitRepositoryEnv(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      HOTSHEET_HOOK_TEST_LOG: log,
+    };
+    // Unrelated staged work stays out of Hot Sheet's path-limited commit, which skips the format check.
+    put(resolve(f.repo, 'code.ts'), 'staged\n');
+    run('git', ['add', 'code.ts'], f.repo);
+    put(resolve(f.repo, '.hotsheet2/groups/7K3M9P2QXA.json'), '{\n  "name": "Sprint"\n}\n');
+    run('git', ['add', '.hotsheet2/groups/7K3M9P2QXA.json'], f.repo);
+    run(
+      'git',
+      ['commit', '-q', '--only', '-m', 'Create group Sprint', '--', '.hotsheet2/groups/7K3M9P2QXA.json'],
+      f.repo,
+      env,
+    );
+    assert.equal(existsSync(log), false);
+    assert.equal(run('git', ['diff', '--cached', '--name-only'], f.repo).trim(), 'code.ts');
+    // Whitespace still fails a registry-only commit.
+    put(resolve(f.repo, '.hotsheet2/groups/7K3M9P2QXB.json'), '{"name": "Bad"}  \n');
+    run('git', ['add', '.hotsheet2/groups/7K3M9P2QXB.json'], f.repo);
+    assert.throws(() =>
+      run('git', ['commit', '-q', '--only', '-m', 'Bad', '--', '.hotsheet2/groups/7K3M9P2QXB.json'], f.repo, env),
+    );
+    // Any other path keeps the full gate, even beside registry files.
+    put(resolve(f.repo, '.hotsheet2/groups/7K3M9P2QXB.json'), '{"name": "Good"}\n');
+    run('git', ['add', '.hotsheet2/groups/7K3M9P2QXB.json'], f.repo);
+    run('git', ['commit', '-q', '-m', 'Mixed'], f.repo, env);
+    assert.equal(readFileSync(log, 'utf8'), 'format\n');
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-9EGWC4 pre-push lets only a registry-only fast-forward skip the gate and window', () => {
+  const f = fixture();
+  try {
+    // Without a reservation the main-window verification (run through zsh) refuses.
+    const bin = resolve(f.root, 'bin');
+    executable(resolve(bin, 'zsh'), '#!/bin/sh\nexit 1\n');
+    const log = resolve(f.root, 'gate.log');
+    // Fixture commits bypass the hooks by pointing at an empty hooks directory.
+    const noHooks = resolve(f.root, 'no-hooks');
+    mkdirSync(noHooks);
+    const commit = (args) => run('git', ['-c', `core.hooksPath=${noHooks}`, 'commit', '-q', ...args], f.repo);
+    executable(
+      resolve(f.repo, 'scripts/check.sh'),
+      '#!/bin/sh\nprintf "check\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\nexit 1\n',
+    );
+    run('git', ['add', 'scripts/check.sh'], f.repo);
+    run('git', ['commit', '-q', '-m', 'Failing fixture gate'], f.repo);
+    const remote = resolve(f.root, 'remote.git');
+    run('git', ['init', '-q', '--bare', remote], f.root);
+    run('git', ['remote', 'add', 'origin', remote], f.repo);
+    run('git', ['push', '-q', 'origin', 'main', 'main:refs/heads/feature'], f.repo);
+    run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
+    const env = {
+      ...withoutGitRepositoryEnv(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      HOTSHEET_HOOK_TEST_LOG: log,
+    };
+    const remoteMain = () => run('git', ['rev-parse', 'refs/heads/main'], remote).trim();
+    const entry = (id, name) => {
+      put(resolve(f.repo, `.hotsheet2/groups/${id}.json`), `{\n  "name": "${name}"\n}\n`);
+      run('git', ['add', `.hotsheet2/groups/${id}.json`], f.repo);
+      commit(['-m', `Create group ${name}`]);
+    };
+    // Two registry commits go to main without a reservation and without the gate.
+    entry('7K3M9P2QXA', 'Sprint');
+    entry('7K3M9P2QXB', 'Backlog');
+    run('git', ['push', '-q', 'origin', 'main'], f.repo, env);
+    assert.equal(remoteMain(), run('git', ['rev-parse', 'HEAD'], f.repo).trim());
+    // The same holds for another branch.
+    run('git', ['checkout', '-q', '-b', 'feature', 'origin/feature'], f.repo);
+    entry('7K3M9P2QXC', 'Feature');
+    run('git', ['push', '-q', 'origin', 'feature'], f.repo, env);
+    assert.equal(existsSync(log), false);
+    run('git', ['checkout', '-q', 'main'], f.repo);
+    // A code change in the range keeps the main reservation requirement.
+    const published = remoteMain();
+    put(resolve(f.repo, 'code.ts'), 'code\n');
+    run('git', ['add', 'code.ts'], f.repo);
+    commit(['-m', 'Code']);
+    entry('7K3M9P2QXD', 'After code');
+    assert.throws(() => run('git', ['push', '-q', 'origin', 'main'], f.repo, env));
+    assert.equal(remoteMain(), published);
+    // A new branch has no base to compare, so it takes the gate.
+    run('git', ['checkout', '-q', '-b', 'fresh', published], f.repo);
+    entry('7K3M9P2QXE', 'Fresh');
+    assert.throws(() => run('git', ['push', '-q', 'origin', 'fresh'], f.repo, env));
+    assert.equal(readFileSync(log, 'utf8'), 'check\n');
+    // A forced rewrite is never a registry-only fast-forward.
+    run('git', ['checkout', '-q', 'main'], f.repo);
+    run('git', ['reset', '-q', '--hard', published], f.repo);
+    run('git', ['reset', '-q', '--hard', 'HEAD~1'], f.repo);
+    entry('7K3M9P2QXF', 'Rewritten');
+    assert.throws(() => run('git', ['push', '-q', '--force', 'origin', 'main'], f.repo, env));
+    assert.equal(remoteMain(), published);
   } finally {
     f.dispose();
   }

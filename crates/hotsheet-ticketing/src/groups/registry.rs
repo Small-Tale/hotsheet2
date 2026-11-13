@@ -63,6 +63,11 @@ impl GroupRegistry {
         }
     }
 
+    /// How the registry's Git publication last went (HS2-9EGWC4), when it was attempted.
+    pub fn sync_status(&self) -> Option<super::git_sync::RegistrySyncStatus> {
+        super::git_sync::read_status(&self.root)
+    }
+
     /// The directory holding the entry files.
     pub fn dir(&self) -> PathBuf {
         self.root.join(GROUP_REGISTRY_DIR)
@@ -79,7 +84,9 @@ impl GroupRegistry {
         let dir = self.dir();
         let entries = match fs::read_dir(&dir) {
             Ok(entries) => entries,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(GroupNames::new()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(super::git_sync::overlay_names(&self.root));
+            }
             Err(error) => return Err(io_error(&dir)(error)),
         };
         let mut names = GroupNames::new();
@@ -97,6 +104,9 @@ impl GroupRegistry {
                 names.insert(id.to_string(), name);
             }
         }
+        // HS2-9EGWC4: entries the upstream branch added or renamed and this checkout has not
+        // touched, until the user's next pull brings the files themselves.
+        names.extend(super::git_sync::overlay_names(&self.root));
         Ok(names)
     }
 
@@ -104,6 +114,9 @@ impl GroupRegistry {
     pub fn name(&self, id: &str) -> Result<Option<String>, GroupRegistryError> {
         if !is_group_id(id) {
             return Ok(None);
+        }
+        if let Some(name) = super::git_sync::overlay_names(&self.root).remove(id) {
+            return Ok(Some(name));
         }
         Ok(read_entry_name(&self.entry_path(id)))
     }
@@ -144,7 +157,7 @@ impl GroupRegistry {
     /// Returns the id, the stored display name, and whether an entry was created.
     pub fn find_or_create(&self, name: &str) -> Result<(String, String, bool), GroupRegistryError> {
         let name = normalize_group_name(name)?.ok_or(GroupRegistryError::EmptyName)?;
-        self.locked(|| {
+        let found = self.locked(|| {
             let key = group_key(&name);
             if let Some((id, existing)) = self
                 .names()?
@@ -155,7 +168,17 @@ impl GroupRegistry {
             }
             let id = self.create_entry(&name)?;
             Ok((id, name, true))
-        })
+        })?;
+        if found.2 {
+            self.written(&format!("Create group {}", found.1));
+        }
+        Ok(found)
+    }
+
+    /// Commit (and publish) a registry write in the code checkout (HS2-9EGWC4). Never
+    /// fails the write: Git problems become the registry's sync status.
+    fn written(&self, message: &str) {
+        super::git_sync::registry_written(&self.root, message);
     }
 
     /// Under one lock, give each `key → spelling` an id: the lowest existing id with that
@@ -189,6 +212,14 @@ impl GroupRegistry {
             }
             Ok((assignments, created, reused))
         })
+        .inspect(|(_, created, _)| {
+            if *created > 0 {
+                self.written(&format!(
+                    "Migrate {created} group name{} to the group registry",
+                    if *created == 1 { "" } else { "s" }
+                ));
+            }
+        })
     }
 
     /// Write a new entry for `name` under a fresh id. Callers check uniqueness.
@@ -220,12 +251,14 @@ impl GroupRegistry {
             return Err(GroupRegistryError::InvalidId(id.to_string()));
         }
         let name = normalize_group_name(name)?.ok_or(GroupRegistryError::EmptyName)?;
-        self.locked(|| {
+        let name = self.locked(|| {
             let dir = self.dir();
             fs::create_dir_all(&dir).map_err(io_error(&dir))?;
             self.write_entry(id, &name)?;
             Ok(name)
-        })
+        })?;
+        self.written(&format!("Rename group {id} to {name}"));
+        Ok(name)
     }
 
     fn write_entry(&self, id: &str, name: &str) -> Result<(), GroupRegistryError> {

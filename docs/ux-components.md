@@ -239,6 +239,13 @@ Supporting components:
   shared padding and character-wrapped full paths in a width-constrained scrollable list.
   The interactive demo covers local/recovery/busy and remote populated/loading/empty/error
   transitions, reopening, and keyboard selection (HS2-XX5Y2X).
+- `ProjectSourceChoiceDialog` and `DesktopRemoteDialog` — **demo built**: the trusted desktop's
+  project-tab `+` first asks for a Local Project or Remote Project; the remote dialog pairs a
+  server address through one-time host approval, lists approved servers with retry, edit, and
+  remove, and opens the reviewed server's projects with its effective HTTP or HTTPS protocol.
+  A phone browser keeps the one-host `RemoteProjectDialog`. The interactive demo walks choice,
+  servers, add-server form, awaiting approval, remote projects, and connection error with
+  synthetic hosts only (HS2-BT4KN6).
 - Dialog/page heading compositions and `ValueTable` — **demo built**: direct divider-free
   `Toolbar` rows put an optional icon `ToolbarControlGroup` and extra-large `ToolbarText`
   in the leading zone, with named grouped controls in the trailing zone. Supporting copy

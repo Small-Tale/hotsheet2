@@ -115,6 +115,7 @@ async function openProject(page: Page) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/demo');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('.app-shell__workspace')).toBeVisible();

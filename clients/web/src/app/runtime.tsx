@@ -65,6 +65,7 @@ import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { claimHolderName } from '../claim-holder';
 import { createClientNotifications } from '../client-notifications';
+import { isRemoteClient } from '../client-origin';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -146,6 +147,7 @@ import {
 } from '../features/project-refresh';
 import { createProjectTeardown } from '../features/project-teardown';
 import { createReaderLayersSurface } from '../features/reader-layers-surface';
+import { createRemoteDevices } from '../features/remote-devices';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createSettingsSurface } from '../features/settings-surface';
@@ -214,6 +216,13 @@ import {
 } from '../project-ticket-refresh';
 import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
+import {
+  desktopRemoteForget,
+  desktopRemoteOpen,
+  desktopRemoteSelected,
+  desktopRemoteServers as listDesktopRemoteServers,
+} from '../remote-projects/client';
+import { parseRemoteProjectId } from '../remote-projects/identity';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { parseGuidanceSourceUpdates } from '../server-response-parsers';
@@ -1398,6 +1407,15 @@ export async function startHotSheetWebClient() {
     remoteProjectCheckouts,
     remoteProjectLoading,
     remoteProjectError,
+    projectSourceChoiceOpen,
+    desktopRemoteDialogOpen,
+    desktopRemoteFormOpen,
+    desktopRemoteServers,
+    desktopRemoteEditing,
+    desktopRemoteDiscovery,
+    desktopRemotePairing,
+    desktopRemoteBusy,
+    desktopRemoteError,
     unhealthyServerRecovery,
     unhealthyServerRecoveryBusy,
     hs1MigrationProject,
@@ -1471,6 +1489,16 @@ export async function startHotSheetWebClient() {
     chooseProjectPath,
     chooseAndOpenProject,
     openProjectPicker,
+    chooseLocalProject,
+    chooseDesktopRemoteProject,
+    beginDesktopRemotePair,
+    finishDesktopRemotePair,
+    discoverDesktopRemoteServer,
+    editDesktopRemoteServer,
+    showDesktopRemoteForm,
+    cancelDesktopRemoteForm,
+    openDesktopRemoteCheckout,
+    removeDesktopRemoteServer,
     openRemoteProjectDialog,
     openRemoteCheckout,
   } = projectLifecycleController;
@@ -1629,6 +1657,13 @@ export async function startHotSheetWebClient() {
       return answers.flatMap((answer) => (answer.status === 'fulfilled' ? [answer.value] : []));
     },
   });
+  // App Settings → Devices (HS2-DXM0YN): one long poll follows the host's device list while the category
+  // shows, and stops when it hides.
+  const remoteDevices = createRemoteDevices();
+  effect(() => {
+    if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
+    else remoteDevices.stop();
+  });
   let notificationSettingsShown = false;
   effect(() => {
     const shown = selectedSettingsCategory.value === 'notifications' && Boolean(project());
@@ -1685,7 +1720,9 @@ export async function startHotSheetWebClient() {
         projects.value.map((item) => ({ root: item.root, rank: projectRestoreRank(item.id) })),
         (item) => item.rank,
         pendingRestoreEntries((root) => ({ root, rank: undefined as number | undefined })),
-      ).map((item) => item.root),
+      )
+        .map((item) => item.root)
+        .filter((root) => !parseRemoteProjectId(root)),
       ...projectRestoreFailures.value.map((item) => item.root),
     ]),
   ];
@@ -4679,6 +4716,10 @@ export async function startHotSheetWebClient() {
   });
   // A hoisted entry point: the project-close owner built earlier receives it as its teardown callback.
   function closeProjectIds(ids: readonly string[]) {
+    for (const id of ids) {
+      const remote = parseRemoteProjectId(id);
+      if (remote) void desktopRemoteForget(remote.bindingId, remote.checkoutId);
+    }
     projectTeardown.closeProjectIds(ids);
   }
 
@@ -5008,6 +5049,12 @@ export async function startHotSheetWebClient() {
       channelEditor: notificationSettings.channelEditor.value,
       ruleEditor: notificationSettings.ruleEditor.value,
       viewChoices: notificationSettings.viewChoices.value,
+    }),
+    remoteDevices: () => ({
+      state: remoteDevices.state.value,
+      list: remoteDevices.list.value,
+      message: remoteDevices.message.value,
+      busy: remoteDevices.busy.value,
     }),
     permissionAutomation,
     permissionRules,
@@ -5578,6 +5625,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    desktopRemoteServers,
     announcerTrigger: announcerController.trigger,
     announcerPanel: announcerController.panel,
     searchScope,
@@ -5778,6 +5826,15 @@ export async function startHotSheetWebClient() {
     projectCloseDialog,
     projectDialogError,
     projectDialogOpen,
+    projectSourceChoiceOpen,
+    desktopRemoteDialogOpen,
+    desktopRemoteFormOpen,
+    desktopRemoteServers,
+    desktopRemoteEditing,
+    desktopRemoteDiscovery,
+    desktopRemotePairing,
+    desktopRemoteBusy,
+    desktopRemoteError,
     providerAccountChoice,
     providerAccounts,
     providerConnections,
@@ -6015,6 +6072,18 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     ticketGroups,
     openProjectPicker,
+    chooseLocalProject,
+    chooseDesktopRemoteProject,
+    beginDesktopRemotePair,
+    finishDesktopRemotePair,
+    discoverDesktopRemoteServer,
+    editDesktopRemoteServer,
+    showDesktopRemoteForm,
+    cancelDesktopRemoteForm,
+    openDesktopRemoteCheckout,
+    removeDesktopRemoteServer,
+    projectSourceChoiceOpen,
+    desktopRemoteDialogOpen,
     openRemoteProjectDialog,
     chooseAndOpenProject,
     unhealthyServerRecovery,
@@ -6331,6 +6400,7 @@ export async function startHotSheetWebClient() {
     refreshTerminalSettings,
     terminalLimitsSettings,
     notificationSettings,
+    remoteDevices,
     refreshTrashSettings,
     capturingShortcutId,
     saveAiDefaults,
@@ -6838,6 +6908,25 @@ export async function startHotSheetWebClient() {
           syncProjectChangeStreams();
         },
       });
+      if (!isRemoteClient()) {
+        desktopRemoteServers.value = await listDesktopRemoteServers().catch(() => []);
+        // The reviewed bindings and selected checkouts live in this machine's registry, not
+        // browser storage. Restore each independently so one unavailable host cannot hide another.
+        const rememberedRemote = await desktopRemoteSelected().catch(() => []);
+        for (const selected of rememberedRemote) {
+          try {
+            const remote = await desktopRemoteOpen(selected.binding_id, selected.checkout_id);
+            await wireOpenedProject(remote.root, {
+              ok: true,
+              project: remote,
+              providers: await new Api(remote.apiPath).providers().catch(() => []),
+            });
+            if (!selectedProjectId.value) await activateOpenedProject(remote);
+          } catch {
+            showToast('An approved remote project could not reconnect. Open Remote project to retry.');
+          }
+        }
+      }
       if (startupTicketDeepLink) await openStartupTicketDeepLink(startupTicketDeepLink);
       startPermissionUpdates();
       syncProjectChangeStreams();

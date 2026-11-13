@@ -45,6 +45,7 @@ mod request_timing;
 mod routes;
 pub mod source_revision;
 pub mod stuck_causes;
+pub mod sync_ai;
 pub mod sync_loop;
 #[cfg(unix)]
 pub mod terminal_broker;
@@ -1207,6 +1208,34 @@ impl AppState {
         roots
     }
 
+    /// The root of every checkout linked to a hosted Git store, sorted and without
+    /// duplicates: the code checkouts whose group registries the sync loop publishes and
+    /// refreshes (HS2-9EGWC4).
+    pub fn group_registry_checkout_roots(&self) -> Vec<String> {
+        let canonical = |path: &FsPath| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let hosted: Vec<std::path::PathBuf> = self
+            .hosted_store_roots()
+            .into_iter()
+            .map(|(_, root)| canonical(FsPath::new(&root)))
+            .collect();
+        let mut roots: Vec<String> = self
+            .checkout_registry
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|checkout| {
+                checkout.sources.iter().any(|source| {
+                    source.provider == "git"
+                        && hosted.contains(&canonical(FsPath::new(&source.locator)))
+                })
+            })
+            .map(|checkout| checkout.root)
+            .collect();
+        roots.sort();
+        roots.dedup();
+        roots
+    }
+
     /// Effective automatic Trash retention for a hosted store. A store may be shared by
     /// several checkouts; the longest configured retention wins so one project cannot
     /// permanently remove another project's recoverable tickets early.
@@ -1429,19 +1458,6 @@ impl AppState {
 /// (the WS checks the secret via a query param, since browsers can't set WS headers).
 pub fn app(state: AppState) -> Router {
     let protected = Router::new()
-        .route("/remote-auth/owner", get(routes::remote_auth::owner_list))
-        .route(
-            "/remote-auth/owner/approve",
-            post(routes::remote_auth::approve),
-        )
-        .route(
-            "/remote-auth/owner/devices/{id}",
-            delete(routes::remote_auth::revoke),
-        )
-        .route(
-            "/remote-auth/owner/revoke-all",
-            post(routes::remote_auth::revoke_all),
-        )
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/note-doctor", get(get_ticket_note_doctor))
@@ -2462,6 +2478,29 @@ pub fn app(state: AppState) -> Router {
         .route("/remote-auth/me", get(routes::remote_auth::me))
         .route("/remote-auth/rotate", post(routes::remote_auth::rotate))
         .route("/remote-auth/logout", post(routes::remote_auth::logout))
+        // Device management authorizes itself: the machine secret from the trusted host, or an
+        // admin browser session whatever its read role (HS2-DXM0YN).
+        .route("/remote-auth/owner", get(routes::remote_auth::owner_list))
+        .route(
+            "/remote-auth/owner/changes",
+            get(routes::remote_auth::owner_changes),
+        )
+        .route(
+            "/remote-auth/owner/approve",
+            post(routes::remote_auth::approve),
+        )
+        .route(
+            "/remote-auth/owner/reject",
+            post(routes::remote_auth::reject),
+        )
+        .route(
+            "/remote-auth/owner/devices/{id}",
+            patch(routes::remote_auth::change).delete(routes::remote_auth::revoke),
+        )
+        .route(
+            "/remote-auth/owner/revoke-all",
+            post(routes::remote_auth::revoke_all),
+        )
         // GitHub authenticates with its per-hook HMAC, never the local server bearer.
         .route(
             "/webhooks/github/{connection_id}",

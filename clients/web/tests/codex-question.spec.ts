@@ -41,6 +41,7 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
     expect(report.status).toBe(204);
     const page = await app.launch();
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 
     await appendFile(

@@ -2,7 +2,8 @@ import './remote-auth-screen.css';
 
 import { mount, signal } from 'kerfjs';
 
-import { stampedBrowserAuthMode } from '../client-origin';
+import { setBrowserSessionGrants, stampedBrowserAuthMode } from '../client-origin';
+import { browserSelfDescription, defaultDeviceName } from '../device-name';
 
 type Pairing = { id: string; server_id: string; challenge: string; expires_at: number };
 
@@ -37,8 +38,9 @@ export function RemoteAuthScreen({
               <strong>Server ID</strong> <code>{pairing.server_id}</code>
             </p>
             <p>
-              On the host Mac, run <code>hotsheet-cli remote sessions status</code>, verify both IDs and the device
-              name, then approve the request. This request expires in five minutes.
+              Approve the request from Settings → Devices on the host or on an administrator device, or on the host Mac
+              run <code>hotsheet-cli remote sessions status</code>, verify both IDs and the device name, then approve
+              it. This request expires in 15 minutes.
             </p>
           </div>
         )}
@@ -76,11 +78,15 @@ export async function ensureRemoteBrowserSession(): Promise<boolean> {
   if (!mode) throw new Error('Could not determine browser authentication mode.');
   if (mode === 'local') return false;
   const current = await fetch('/__hotsheet/remote-auth/me', { credentials: 'same-origin' });
-  if (current.ok) return true;
+  if (current.ok) {
+    // HS2-85W6BE: the session's grants, not the URL, decide host-only actions and device management.
+    setBrowserSessionGrants(await current.json().catch(() => undefined));
+    return true;
+  }
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) throw new Error('Hot Sheet application root is missing.');
 
-  const label = signal('This browser');
+  const label = signal(defaultDeviceName(browserSelfDescription()));
   const pairing = signal<Pairing | undefined>(undefined);
   const message = signal('');
   const busy = signal(false);
@@ -132,6 +138,7 @@ export async function ensureRemoteBrowserSession(): Promise<boolean> {
                   ? 'Request expired. Start again.'
                   : 'Access was not granted.',
             );
+          setBrowserSessionGrants(await response.json().catch(() => undefined));
           root.removeEventListener('click', clickEvent);
           root.removeEventListener('input', input);
           unmount();

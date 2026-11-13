@@ -114,6 +114,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await installFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
@@ -162,7 +163,11 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   // Project-tab cycling with two open projects uses shifted chords so browsers retain their
   // unshifted ⌘/Ctrl+⌥+Arrow tab navigation.
   await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  // The Local or Remote Project choice must finish closing and return focus before tab-cycling chords (HS2-BT4KN6).
+  await expect(page.locator('[data-project-source-choice]')).toHaveJSProperty('open', false);
+  await expect(page.locator('[data-project-source-choice] :focus')).toHaveCount(0);
   await page.keyboard.press('ControlOrMeta+Alt+Shift+ArrowLeft');
   await expect(page.getByRole('tab', { name: 'hotsheet2' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ControlOrMeta+Alt+Shift+ArrowRight');
@@ -238,6 +243,7 @@ for (const apple of [true, false]) {
     await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = '/work/hotsheet2';
     });

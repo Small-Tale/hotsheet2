@@ -114,6 +114,12 @@ impl AppState {
             hotsheet_ticketing::store_git::StoreRole::TicketSource,
         )
         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+        // HS2-9TV6A2: a store opened here (cloned elsewhere, linked, or never set up by
+        // `init`) gets the semantic merge driver in this checkout's local Git state.
+        let driver = hotsheet_ticketing::merge_driver::ensure_registered(store.root(), None);
+        if driver == hotsheet_ticketing::merge_driver::MergeDriverStatus::Repaired {
+            tracing::info!(store = %store.root().display(), "registered the semantic ticket merge driver");
+        }
         let index = if self.persist_indexes {
             let path = multistore::index_path_for(&self.machine_home, &store)
                 .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

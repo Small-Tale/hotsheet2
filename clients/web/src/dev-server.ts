@@ -18,6 +18,7 @@ import type { MigrationStart } from './migration-progress';
 import {
   browserAuthRequest,
   chooseLocalFolder,
+  closeRemoteServerSessions,
   connectGitTicketStoreRemote,
   createLocalGitTicketStore,
   gitTicketStoreConnectionId,
@@ -25,6 +26,7 @@ import {
   migrateHs1Project,
   openLocalProject,
   openRegisteredProject,
+  openReviewedRemoteProject,
   proxyProjectRequest,
   recoverUnhealthyServer,
   remoteBrowserAuthRequired,
@@ -35,6 +37,16 @@ import {
   unhealthyServerRecovery,
   UnregisteredRemoteProjectError,
 } from './project-bridge';
+import {
+  beginRemotePairing,
+  discoverRemoteProjects,
+  finishRemotePairing,
+  listRemoteServers,
+  removeRemoteServer,
+  selectedRemoteProjects,
+  selectRemoteProject,
+  unselectRemoteProject,
+} from './remote-projects/host';
 
 /** A remote session's polls ride the browser's own session cookie, as its project-api requests
  * do; the proxy adds the CSRF header from it and never forwards a loopback secret (HS2-ZVSMTZ). */
@@ -43,6 +55,30 @@ export function changePollSessionHeaders(browser: Headers): Headers {
   const cookie = browser.get('cookie');
   if (cookie) headers.set('cookie', cookie);
   return headers;
+}
+
+/** Which grant a remote-mode bridge route needs (HS2-85W6BE, HS2-DXM0YN): any live session
+ * (`session`), the admin grant (`management`), or the local grant (`host`). */
+export function remoteRouteKind(path: string): 'session' | 'management' | 'host' {
+  if (path.startsWith('/__hotsheet/remote-auth/owner')) return 'management';
+  const remote =
+    path === '/__hotsheet/checkouts' ||
+    path === REMOTE_PROJECT_OPEN_PATH ||
+    path === REMOTE_MIGRATION_JOBS_PATH ||
+    path === CHANGE_MUX_PATH ||
+    path.startsWith('/__hotsheet/project-api/') ||
+    ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
+  return remote ? 'session' : 'host';
+}
+
+/** The grants the bridge reads from a `/remote-auth/me` answer; anything missing is not granted. */
+export function remoteSessionGrants(device: unknown): { origin?: string; admin: boolean; local: boolean } {
+  if (!isRecord(device)) return { admin: false, local: false };
+  return {
+    ...(typeof device.origin === 'string' ? { origin: device.origin } : {}),
+    admin: device.admin === true,
+    local: device.local === true,
+  };
 }
 
 export function createDevApp(
@@ -83,26 +119,30 @@ export function createDevApp(
       path === '/__hotsheet/remote-auth/redeem'
     )
       return next();
-    if (path.startsWith('/__hotsheet/remote-auth/owner')) return context.json({ error: 'Trusted host required.' }, 403);
-    const allowed =
-      path === '/__hotsheet/checkouts' ||
-      path === REMOTE_PROJECT_OPEN_PATH ||
-      path === REMOTE_MIGRATION_JOBS_PATH ||
-      path === CHANGE_MUX_PATH ||
-      path.startsWith('/__hotsheet/project-api/') ||
-      ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
-    if (!allowed) return context.notFound();
-    if (!context.req.header('cookie')) return context.json({ error: 'Remote session required.' }, 401);
+    // HS2-85W6BE: trust comes from the session's grants, never from the hostname, peer address,
+    // Host or forwarded headers. Tailscale Serve reaches this host through the same loopback
+    // port the owner opens locally, so the request itself cannot tell the two apart.
+    const route = remoteRouteKind(path);
+    if (!context.req.header('cookie')) {
+      if (route === 'host') return context.notFound();
+      return context.json({ error: 'Remote session required.' }, 401);
+    }
     const checked = await checkRemoteSession(context.req.raw.headers);
-    if (!checked.ok) return context.json({ error: 'Remote session required.' }, 401);
+    if (!checked.ok) {
+      if (route === 'host') return context.notFound();
+      return context.json({ error: 'Remote session required.' }, 401);
+    }
+    const device = remoteSessionGrants(await checked.json().catch(() => undefined));
+    // Device management needs the admin grant (HS2-DXM0YN); the server checks it again.
+    if (route === 'management' && !device.admin) return context.json({ error: 'Administrator access required.' }, 403);
+    // Host-only routes (folder chooser, open by path, setup) need the local grant.
+    if (route === 'host' && !device.local) return context.notFound();
     if (context.req.method !== 'GET' && context.req.method !== 'HEAD') {
       // HS2-CD8YNK: compare with the origin the device paired from, as the server does. A
       // TLS-terminating proxy (Tailscale Serve) hands this host a plain-HTTP request, so the
       // request URL's origin is never the browser's https origin.
-      const device: unknown = await checked.json().catch(() => undefined);
-      const paired = isRecord(device) && typeof device.origin === 'string' ? device.origin : undefined;
       const origin = context.req.header('origin');
-      if (!origin || !paired || origin !== paired || !remoteCsrfCookie(context.req.raw.headers))
+      if (!origin || !device.origin || origin !== device.origin || !remoteCsrfCookie(context.req.raw.headers))
         return context.json({ error: 'Origin and CSRF token required.' }, 403);
     }
     return next();
@@ -111,12 +151,14 @@ export function createDevApp(
   app.all('/__hotsheet/remote-auth/*', async (context) => {
     const path = context.req.path.slice('/__hotsheet'.length);
     if (
-      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|owner(?:\/approve|\/revoke-all|\/devices\/[A-Za-z0-9]+)?)$/.test(
+      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|owner(?:\/approve|\/reject|\/changes|\/revoke-all|\/devices\/[A-Za-z0-9]+)?)$/.test(
         path,
       )
     )
       return context.notFound();
-    return browserAuthRequest(path, context.req.raw, path.startsWith('/remote-auth/owner'));
+    // The device-list long poll carries its cursor in the query (HS2-DXM0YN).
+    const search = new URL(context.req.url).search;
+    return browserAuthRequest(`${path}${search}`, context.req.raw, path.startsWith('/remote-auth/owner'));
   });
   // The development latency monitor's durable log (HS2-ZGBQ5Q): the browser posts each slow
   // interaction/request once (event-driven, never polled); GET reads the recent reports back.
@@ -161,6 +203,91 @@ export function createDevApp(
     } catch (error) {
       if (error instanceof UnregisteredRemoteProjectError) return context.json({ error: error.message }, 403);
       return context.json({ error: error instanceof Error ? error.message : 'Could not open project.' }, 400);
+    }
+  });
+  // A trusted desktop host owns the cross-server registry. In remote browser mode the auth
+  // middleware above denies these routes; another device still sees only its one host's projects.
+  app.get('/__hotsheet/remotes', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      return context.json(await listRemoteServers());
+    } catch {
+      return context.json({ error: 'Could not read approved remote servers.' }, 503);
+    }
+  });
+  app.get('/__hotsheet/remotes/selected-projects', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      return context.json(await selectedRemoteProjects());
+    } catch {
+      return context.json({ error: 'Could not read remembered remote projects.' }, 503);
+    }
+  });
+  app.post('/__hotsheet/remotes/pair', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      const { address, label, tls, reviewId } = await context.req.json<{
+        address: string;
+        label: string;
+        tls?: { caFile?: string; certificateFile?: string; keyFile?: string };
+        reviewId?: string;
+      }>();
+      return context.json(
+        await beginRemotePairing(address, label, new URL(context.req.url).origin, tls, reviewId),
+        201,
+      );
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not start pairing.' }, 400);
+    }
+  });
+  app.post('/__hotsheet/remotes/pair/:handle/redeem', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      const { discovery, revisedId } = await finishRemotePairing(context.req.param('handle'));
+      if (revisedId) closeRemoteServerSessions(revisedId);
+      return context.json(discovery);
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not finish pairing.' }, 409);
+    }
+  });
+  app.get('/__hotsheet/remotes/:id/checkouts', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      return context.json(await discoverRemoteProjects(context.req.param('id')));
+    } catch {
+      return context.json({ error: 'Could not reach or authenticate the approved remote server.' }, 503);
+    }
+  });
+  app.post('/__hotsheet/remotes/:id/projects/:checkout/open', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      const id = context.req.param('id');
+      const checkout = context.req.param('checkout');
+      const project = await openReviewedRemoteProject(id, checkout);
+      await selectRemoteProject(id, checkout);
+      return context.json(project, 201);
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not open remote project.' }, 409);
+    }
+  });
+  app.delete('/__hotsheet/remotes/:id/projects/:checkout', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      return context.json(await unselectRemoteProject(context.req.param('id'), context.req.param('checkout')));
+    } catch {
+      return context.json({ error: 'Could not forget remote project.' }, 409);
+    }
+  });
+  app.delete('/__hotsheet/remotes/:id', async (context) => {
+    if (remoteBrowserAuthRequired()) return context.notFound();
+    try {
+      const revision = Number(context.req.query('revision'));
+      if (!Number.isSafeInteger(revision) || revision <= 0) return context.json({ error: 'Revision required.' }, 400);
+      const removed = await removeRemoteServer(context.req.param('id'), revision);
+      closeRemoteServerSessions(removed.id);
+      return context.json(removed);
+    } catch {
+      return context.json({ error: 'Could not remove approved remote server.' }, 409);
     }
   });
   app.post('/__hotsheet/projects/open', async (context) => {

@@ -157,6 +157,11 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    // HS2-9TV6A2: hosted stores register the installed `hotsheet-cli merge-driver` as their
+    // semantic ticket merge driver before any sync integrates.
+    if let Ok(program) = hotsheet_aitools::launch_safety::hotsheet_cli() {
+        hotsheet_ticketing::merge_driver::set_program(program);
+    }
     let isolated_vault = hotsheet_aitools::test_permission_vault_available();
     if cli.test_fixture_capabilities {
         println!(
@@ -398,6 +403,8 @@ async fn main() -> Result<()> {
     let _notify =
         hotsheet_server::notification_router::spawn_notification_router(state.clone()).await;
 
+    // Commit group registry writes in the background, one commit per burst (HS2-9EGWC4).
+    hotsheet_ticketing::groups::git_sync::enable_background();
     // Aggressively sync each hosted store with its git remote in the background (HS2-19
     // follow-up): interval + kick-on-write + backoff. Held for the run.
     let _sync = hotsheet_server::sync_loop::spawn_sync_loop(
@@ -562,6 +569,8 @@ async fn main() -> Result<()> {
     hotsheet_aitools::probe::stop_probes();
     // Land every queued background autocommit before releasing the store (HS2-0DH8ZS).
     hotsheet_ticketing::flush_background_commits();
+    // And every queued group registry commit (HS2-9EGWC4).
+    hotsheet_ticketing::groups::git_sync::flush_background();
     // A write's worklist refresh runs after its response (HS2-Z99TJN); land the last one.
     state.wait_for_worklists(std::time::Duration::from_secs(2));
     state.release_instances();

@@ -442,6 +442,8 @@ it.concurrent(
       await page.setViewportSize({ width: 1969, height: 1240 });
       await page.goto(origin);
       await page.getByRole('button', { name: 'Open Project' }).first().click();
+      // The trusted desktop first asks where the project is hosted (HS2-BT4KN6).
+      await page.getByRole('button', { name: 'Local Project' }).click();
       await page.getByRole('textbox', { name: 'Project Folder' }).fill(project);
       await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
       await page.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
@@ -457,6 +459,8 @@ it.concurrent(
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
       await phone.goto(origin);
       await phone.getByRole('button', { name: 'Open Project' }).first().click();
+      // The trusted desktop first asks where the project is hosted (HS2-BT4KN6).
+      await phone.getByRole('button', { name: 'Local Project' }).click();
       await phone.getByRole('textbox', { name: 'Project Folder' }).fill(project);
       await phone.getByRole('button', { name: 'Open Project', exact: true }).last().click();
       await phone.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });

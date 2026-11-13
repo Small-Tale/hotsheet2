@@ -15,7 +15,9 @@ import {
   toggleRememberedPermissionSuggestion,
 } from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
+import { wireRemoteDevicesSettings } from '../components/remote-devices-settings-interactions';
 import type { NotificationSettings } from '../features/notification-settings';
+import type { RemoteDevices } from '../features/remote-devices';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
@@ -120,6 +122,8 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly cancelTicketLinkChoice: () => void;
   /** App Settings → Notifications (HS2-DPBJJA); absent in compositions without it. */
   readonly notificationSettings?: NotificationSettings;
+  /** App Settings → Devices (HS2-DXM0YN); absent in compositions without it. */
+  readonly remoteDevices?: RemoteDevices;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -174,6 +178,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openTicketLinkMatch,
     cancelTicketLinkChoice,
     notificationSettings,
+    remoteDevices,
     clientNotifications,
   } = dependencies;
   const permissionRuleEditorFocus = createPermissionRuleEditorFocus(document, () => selectedProjectId.value);
@@ -890,6 +895,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   );
   // App Settings → Notifications (HS2-DPBJJA): the same handlers the catalog demo installs.
   if (notificationSettings) lifetime.add(wireNotificationSettings(document.body, notificationSettings));
+  // App Settings → Devices (HS2-DXM0YN): the same handlers the catalog demo installs.
+  if (remoteDevices) lifetime.add(wireRemoteDevicesSettings(document.body, remoteDevices));
   return () => {
     lifetime.dispose();
   };

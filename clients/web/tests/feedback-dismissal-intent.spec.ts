@@ -68,9 +68,11 @@ async function openFeedbackProjects(
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   if (source !== target) {
     await page.getByRole('button', { name: 'Add Project', exact: true }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(page.getByRole('tab', { name: 'target', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'source', exact: true }).click();
   }

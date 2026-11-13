@@ -8,6 +8,18 @@ import { action } from 'kerfjs/actions';
  */
 export const PROJECT_LIFECYCLE_ACTIONS = {
   addProject: action('add-project'),
+  chooseLocalProject: action('choose-local-project'),
+  chooseDesktopRemoteProject: action('choose-desktop-remote-project'),
+  cancelProjectSourceChoice: action('cancel-project-source-choice'),
+  beginDesktopRemotePair: action('begin-desktop-remote-pair'),
+  finishDesktopRemotePair: action('finish-desktop-remote-pair'),
+  discoverDesktopRemoteServer: action('discover-desktop-remote-server'),
+  editDesktopRemoteServer: action('edit-desktop-remote-server'),
+  showDesktopRemoteForm: action('show-desktop-remote-form'),
+  cancelDesktopRemoteForm: action('cancel-desktop-remote-form'),
+  openDesktopRemoteCheckout: action('open-desktop-remote-checkout'),
+  removeDesktopRemoteServer: action('remove-desktop-remote-server'),
+  cancelDesktopRemoteDialog: action('cancel-desktop-remote-dialog'),
   chooseProject: action('choose-project'),
   cancelOpenProject: action('cancel-open-project'),
   openRemoteCheckout: action('open-remote-checkout'),

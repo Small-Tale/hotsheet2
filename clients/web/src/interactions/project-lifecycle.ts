@@ -1,7 +1,6 @@
 import { delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { opensProjectsRemotely } from '../client-origin';
 import { dismissClientUpdateNotice } from '../client-update-notice';
 import { type ExternalProviderKind } from '../components/provider-setup-form';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
@@ -14,7 +13,19 @@ import { type Control, type Project, type UnhealthyServerRecovery } from './type
 
 /** Live application bindings used by this handler group. */
 export interface ProjectLifecycleInteractionsDependencies {
-  readonly openProjectPicker: () => void;
+  readonly openProjectPicker: (localFlow?: 'form' | 'native') => void;
+  readonly chooseLocalProject: () => void;
+  readonly chooseDesktopRemoteProject: () => Promise<void>;
+  readonly beginDesktopRemotePair: (form: HTMLFormElement) => Promise<void>;
+  readonly finishDesktopRemotePair: () => Promise<void>;
+  readonly discoverDesktopRemoteServer: (id: string) => Promise<void>;
+  readonly editDesktopRemoteServer: (id: string) => void;
+  readonly showDesktopRemoteForm: () => void;
+  readonly cancelDesktopRemoteForm: () => void;
+  readonly openDesktopRemoteCheckout: (checkoutId: string) => Promise<void>;
+  readonly removeDesktopRemoteServer: (id: string, revision: number) => Promise<void>;
+  readonly projectSourceChoiceOpen: Signal<boolean>;
+  readonly desktopRemoteDialogOpen: Signal<boolean>;
   readonly openRemoteProjectDialog: () => Promise<void>;
   readonly chooseAndOpenProject: () => Promise<void>;
   readonly unhealthyServerRecovery: Signal<UnhealthyServerRecovery | undefined>;
@@ -58,8 +69,18 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
   const lifetime = createScope();
   const {
     openProjectPicker,
-    openRemoteProjectDialog,
-    chooseAndOpenProject,
+    chooseLocalProject,
+    chooseDesktopRemoteProject,
+    beginDesktopRemotePair,
+    finishDesktopRemotePair,
+    discoverDesktopRemoteServer,
+    editDesktopRemoteServer,
+    showDesktopRemoteForm,
+    cancelDesktopRemoteForm,
+    openDesktopRemoteCheckout,
+    removeDesktopRemoteServer,
+    projectSourceChoiceOpen,
+    desktopRemoteDialogOpen,
     unhealthyServerRecovery,
     projectDialogOpen,
     openRemoteCheckout,
@@ -99,9 +120,90 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.chooseLocalProject.selector, () => {
+      chooseLocalProject();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.chooseDesktopRemoteProject.selector, () => {
+      void chooseDesktopRemoteProject();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.cancelProjectSourceChoice.selector, () => {
+      projectSourceChoiceOpen.value = false;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'kui-request-close', '[data-project-source-choice]', () => {
+      projectSourceChoiceOpen.value = false;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', PROJECT_LIFECYCLE_ACTIONS.beginDesktopRemotePair.selector, (event, target) => {
+      event.preventDefault();
+      void beginDesktopRemotePair(target as HTMLFormElement);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.finishDesktopRemotePair.selector, () => {
+      void finishDesktopRemotePair();
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      PROJECT_LIFECYCLE_ACTIONS.discoverDesktopRemoteServer.selector,
+      (_event, target) => {
+        const id = target.closest<HTMLElement>('[data-remote-id]')?.dataset.remoteId;
+        if (id) void discoverDesktopRemoteServer(id);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.openDesktopRemoteCheckout.selector, (_event, target) => {
+      const id = target.closest<HTMLElement>('[data-checkout-id]')?.dataset.checkoutId;
+      if (id) void openDesktopRemoteCheckout(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.editDesktopRemoteServer.selector, (_event, target) => {
+      const id = target.closest<HTMLElement>('[data-remote-id]')?.dataset.remoteId;
+      if (id) editDesktopRemoteServer(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.showDesktopRemoteForm.selector, () => {
+      showDesktopRemoteForm();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.cancelDesktopRemoteForm.selector, () => {
+      cancelDesktopRemoteForm();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.removeDesktopRemoteServer.selector, (_event, target) => {
+      const row = target.closest<HTMLElement>('[data-remote-id]');
+      const id = row?.dataset.remoteId;
+      const revision = Number(row?.dataset.revision);
+      if (id && Number.isSafeInteger(revision)) void removeDesktopRemoteServer(id, revision);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.cancelDesktopRemoteDialog.selector, () => {
+      desktopRemoteDialogOpen.value = false;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'kui-request-close', '[data-desktop-remote-dialog]', () => {
+      desktopRemoteDialogOpen.value = false;
+    }),
+  );
+  lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.chooseProject.selector, () => {
-      if (opensProjectsRemotely()) void openRemoteProjectDialog();
-      else void chooseAndOpenProject();
+      openProjectPicker('native');
     }),
   );
   lifetime.add(

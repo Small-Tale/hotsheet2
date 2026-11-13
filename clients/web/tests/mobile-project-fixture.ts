@@ -217,6 +217,7 @@ export async function openDemoProject(
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/demo');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 }

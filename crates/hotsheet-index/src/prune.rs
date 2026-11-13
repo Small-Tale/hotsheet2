@@ -111,16 +111,24 @@ fn probe(path: &Path) -> Probe {
     }
 }
 
-fn remove_with_sidecars(path: &Path) -> std::io::Result<()> {
+/// Remove a stale database file and its sidecars. `Ok(false)` means another process has
+/// the file open on Windows (a sharing violation), so it is kept for a later prune.
+fn remove_with_sidecars(path: &Path) -> std::io::Result<bool> {
     match std::fs::remove_file(path) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) if is_sharing_violation(&error) => return Ok(false),
         Err(error) => return Err(error),
     }
     for suffix in ["-wal", "-shm", "-journal", crate::OPEN_LOCK_SUFFIX] {
         let _ = std::fs::remove_file(sidecar(path, suffix));
     }
-    Ok(())
+    Ok(true)
+}
+
+/// Windows `ERROR_SHARING_VIOLATION`: some process still holds the file open.
+fn is_sharing_violation(error: &std::io::Error) -> bool {
+    cfg!(windows) && error.raw_os_error() == Some(32)
 }
 
 /// Remove index files in `dir` that belong to an older schema generation than this
@@ -153,14 +161,26 @@ pub fn prune_stale_index_files(dir: &Path) -> std::io::Result<PruneReport> {
     for path in stale {
         match probe(&path) {
             Probe::Idle(conn) => {
-                // Unlink while the exclusive lock is still ours, then let go.
-                remove_with_sidecars(&path)?;
+                // Unlink while the exclusive lock is still ours, then let go. Windows
+                // cannot delete a file any handle still has open, including this probe's
+                // (os error 32), so there the probe closes first and a file another opener
+                // took in between is kept as in use (HS2-AMAQSV).
+                #[cfg(windows)]
                 drop(conn);
-                report.removed.push(path);
+                if remove_with_sidecars(&path)? {
+                    report.removed.push(path);
+                } else {
+                    report.in_use.push(path);
+                }
+                #[cfg(not(windows))]
+                drop(conn);
             }
             Probe::Corrupt => {
-                remove_with_sidecars(&path)?;
-                report.removed.push(path);
+                if remove_with_sidecars(&path)? {
+                    report.removed.push(path);
+                } else {
+                    report.in_use.push(path);
+                }
             }
             Probe::InUse => report.in_use.push(path),
         }

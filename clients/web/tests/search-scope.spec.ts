@@ -160,6 +160,7 @@ async function mockSearchProject(page: Page, views: Array<{ id: string; name: st
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-QUEUE1"]').first()).toBeVisible();
   return searches;
