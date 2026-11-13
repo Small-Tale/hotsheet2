@@ -18,6 +18,7 @@ const LEASE: &str = "2030-01-01T00:00:00Z";
 #[derive(Default)]
 struct Feed {
     events: Mutex<Vec<TargetTicketEvent>>,
+    sessions: Mutex<Vec<TargetSessionEvent>>,
     cursor: AtomicUsize,
     calls: Mutex<Vec<(Option<u64>, u64)>>,
     failing: std::sync::atomic::AtomicBool,
@@ -33,6 +34,17 @@ impl Feed {
                 cursor,
                 connection_id: connection.into(),
                 native_id: ticket.id.to_string(),
+            });
+    }
+    /// HS2-257Q2Z: a hosted session ended or finished a turn.
+    fn session(&self, session_id: &str) {
+        let cursor = self.cursor.fetch_add(1, Ordering::SeqCst) as u64 + 1;
+        self.sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(TargetSessionEvent {
+                cursor,
+                session_id: session_id.into(),
             });
     }
     fn calls(&self) -> Vec<(Option<u64>, u64)> {
@@ -61,6 +73,15 @@ impl TargetEvents for Feed {
             cursor,
             events: since.map_or_else(Vec::new, |since| {
                 self.events
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .iter()
+                    .filter(|event| event.cursor > since)
+                    .cloned()
+                    .collect()
+            }),
+            sessions: since.map_or_else(Vec::new, |since| {
+                self.sessions
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .iter()
@@ -839,4 +860,216 @@ fn hs2_wbredm_the_follower_reconciles_every_run_on_connect_and_on_reconnect() {
             .collect::<Vec<_>>(),
         ["continue", "needs_attention"]
     );
+}
+
+/// HS2-257Q2Z: record a running session of the owner on target 1, hosted as
+/// `hosted_id`, started by `worker-1`, optionally for a run.
+fn hosted_session(
+    m: &Machine,
+    hosted_id: &str,
+    run_id: Option<String>,
+    tx: &mut Transaction<'_>,
+) -> String {
+    use hotsheet_ticketing::orchestration::{
+        HostedRef, NewSession, SessionRegistry, SessionRole, SessionState, SessionUpdate,
+    };
+    let registry = SessionRegistry::new(&m.home);
+    let (session, _) = registry
+        .begin(
+            &m.owner.id,
+            NewSession {
+                operation_id: format!("op-{}", &hosted_id[20..]),
+                target_id: id(1),
+                role: SessionRole::Worker,
+                tool: "claude".into(),
+                model: None,
+                effort: None,
+                account: None,
+                run_id,
+                replaces: None,
+            },
+            Some("worker-1".into()),
+            tx,
+        )
+        .unwrap();
+    registry
+        .update(
+            &m.owner.id,
+            &session.session_id,
+            SessionUpdate {
+                to: Some(SessionState::Running),
+                hosted: Some(HostedRef {
+                    server_id: id(900),
+                    session_id: hosted_id.into(),
+                    worker_id: "worker-hosted".into(),
+                }),
+                ..SessionUpdate::default()
+            },
+            tx,
+        )
+        .unwrap();
+    session.session_id
+}
+
+#[test]
+fn hs2_257q2z_a_target_with_only_a_session_is_followed_and_its_changes_wake_the_scheduler() {
+    use hotsheet_ticketing::orchestration::{SessionRegistry, SessionState, SessionUpdate};
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let mut state = WatchState::default();
+    // Neither a run nor a session: nothing is asked.
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx),
+        WatchStep::default()
+    );
+    assert!(feed.calls().is_empty());
+    let session = hosted_session(&m, &id(901), None, &mut tx);
+    // A session alone is followed. The handshake cannot tell what happened before,
+    // so the scheduler is woken once.
+    let first = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(
+        first.active && !first.failed && first.woke_scheduler,
+        "{first:?}"
+    );
+    assert!(first.synced.is_empty());
+    assert_eq!(feed.calls(), [(None, 0)]);
+    // Quiet: nothing to wake for.
+    let quiet = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(quiet.active && !quiet.woke_scheduler);
+    // Another orchestrator's (or a person's) session on the host is not news here.
+    feed.session(&id(902));
+    let other = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(!other.woke_scheduler);
+    // The owner's session finished a turn on its host: wake. Repeated and replayed
+    // changes wake each time they arrive and never sync anything.
+    for _ in 0..2 {
+        feed.session(&id(901));
+        feed.session(&id(901));
+        let turn = m
+            .runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+        assert!(turn.woke_scheduler && turn.synced.is_empty());
+    }
+    // A ticket changed (a claim taken or let go) while the session works no run.
+    let ticket = target_ticket(&m, "Claimed by the session");
+    feed.push(&m.target_connection(), &ticket);
+    let claimed = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(claimed.woke_scheduler);
+    // The session ends: the follower goes idle and stops asking.
+    SessionRegistry::new(&m.home)
+        .update(
+            &m.owner.id,
+            &session,
+            SessionUpdate {
+                to: Some(SessionState::Lost),
+                ..SessionUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let calls = feed.calls().len();
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx),
+        WatchStep::default()
+    );
+    assert_eq!(feed.calls().len(), calls);
+    // Empty, then refilled: a new session is followed from a new handshake.
+    hosted_session(&m, &id(903), None, &mut tx);
+    let refilled = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(refilled.active && refilled.woke_scheduler);
+    assert_eq!(feed.calls().last(), Some(&(None, 0)));
+}
+
+#[test]
+fn hs2_257q2z_a_session_working_an_unfinished_run_learns_ticket_changes_from_the_run() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_grant(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Worked by the session");
+    let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
+    hosted_session(&m, &id(901), Some(run_id.clone()), &mut tx);
+    let mut state = WatchState::default();
+    m.runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    // The run's ticket changed: the run is synced (its event wakes the loop), and the
+    // follower does not wake it a second time.
+    feed.push(&m.target_connection(), &ticket);
+    let synced = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(synced.synced, std::slice::from_ref(&run_id));
+    assert!(!synced.woke_scheduler);
+    // Its turn end has no run event, so it still wakes the loop.
+    feed.session(&id(901));
+    let turn = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(turn.woke_scheduler && turn.synced.is_empty());
+    // The run finishes: the session works no unfinished run, so a ticket change wakes.
+    complete(&m, &ticket);
+    feed.push(&m.target_connection(), &ticket);
+    let finished = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(finished.synced, std::slice::from_ref(&run_id));
+    assert_eq!(
+        m.runtime.run(&m.owner.id, &run_id).unwrap().state,
+        RunState::Completed
+    );
+    let other = target_ticket(&m, "Next");
+    feed.push(&m.target_connection(), &other);
+    let free = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(free.active && free.woke_scheduler && free.synced.is_empty());
+}
+
+#[test]
+fn hs2_257q2z_a_page_without_sessions_reads_as_before() {
+    let page: TargetEventPage =
+        serde_json::from_value(json!({"cursor":3,"events":[],"overflow":false})).unwrap();
+    assert!(page.sessions.is_empty());
+    assert_eq!(
+        serde_json::to_value(&page).unwrap(),
+        json!({"cursor":3,"events":[],"overflow":false})
+    );
+    let with: TargetEventPage = serde_json::from_value(
+        json!({"cursor":4,"events":[],"sessions":[{"cursor":4,"session_id":"t"}],"overflow":false}),
+    )
+    .unwrap();
+    assert_eq!(with.sessions[0].session_id, "t");
 }

@@ -7,8 +7,8 @@ use axum::{
 };
 use hotsheet_cli::orchestration::{
     GateFollowState, MAX_SCHEDULER_WAIT_MS, MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime,
-    SchedulerFollowState, TargetEventPage, TargetEvents, TargetTicketEvent, WatchState,
-    error_status, request_cleanup_now,
+    SchedulerFollowState, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,
+    WatchState, error_status, request_cleanup_now,
 };
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{ProviderConfigRegistry, orchestration::OrchestrationError};
@@ -93,39 +93,59 @@ impl TargetEvents for ServerEvents {
                 "created" | "updated" | "deleted" | "changed" | "claimed" | "released" | "moved"
             ) && sources.contains(event.store.as_str())
         };
-        let to_event = |event: &crate::ChangeEvent| {
-            event.cursor.map(|cursor| TargetTicketEvent {
-                cursor,
-                connection_id: event.store.clone(),
-                native_id: event.id.clone(),
-            })
+        // HS2-257Q2Z: a session an orchestrator started in this checkout ended or
+        // finished a turn.
+        let session_change = |event: &crate::ChangeEvent| {
+            event.kind == crate::routes::orchestration_sessions::SESSION_CHANGE_KIND
+                && event.store == checkout.id
+        };
+        let mut page = TargetEventPage {
+            cursor: 0,
+            events: Vec::new(),
+            sessions: Vec::new(),
+            overflow: false,
+        };
+        // Whether the event was one this checkout's followers want.
+        let take = |page: &mut TargetEventPage, event: &crate::ChangeEvent| {
+            let Some(cursor) = event.cursor else {
+                return false;
+            };
+            if ticket_change(event) {
+                page.events.push(TargetTicketEvent {
+                    cursor,
+                    connection_id: event.store.clone(),
+                    native_id: event.id.clone(),
+                });
+            } else if session_change(event) {
+                page.sessions.push(TargetSessionEvent {
+                    cursor,
+                    session_id: event.id.clone(),
+                });
+            } else {
+                return false;
+            }
+            true
         };
         let Some(since) = since else {
-            return Ok(TargetEventPage {
-                cursor: state.event_cursor(),
-                events: Vec::new(),
-                overflow: false,
-            });
+            page.cursor = state.event_cursor();
+            return Ok(page);
         };
         // Subscribe before reading the log, so a change in between is not missed.
         let mut receiver = state.events.subscribe();
-        let (backlog, mut overflow, mut cursor) = state.event_log.with_lock(|log| {
+        let (backlog, overflow, mut cursor) = state.event_log.with_lock(|log| {
             let (events, overflow) = log.since(since);
             (events, overflow, log.seq)
         });
-        let mut events: Vec<TargetTicketEvent> = backlog
-            .iter()
-            .filter(|event| ticket_change(event))
-            .filter_map(to_event)
-            .collect();
-        if events.is_empty() && !overflow && wait_ms > 0 {
+        page.overflow = overflow;
+        let mut found = false;
+        for event in &backlog {
+            found |= take(&mut page, event);
+        }
+        if !found && !page.overflow && wait_ms > 0 {
             // Wait for the next change of this checkout, woken by the stream itself.
             let Ok(handle) = tokio::runtime::Handle::try_current() else {
-                return Ok(TargetEventPage {
-                    cursor,
-                    events,
-                    overflow,
-                });
+                page.cursor = cursor;
+                return Ok(page);
             };
             let waited = handle.block_on(async {
                 tokio::time::timeout(std::time::Duration::from_millis(wait_ms), async {
@@ -136,8 +156,8 @@ impl TargetEvents for ServerEvents {
                                 if let Some(at) = event.cursor {
                                     cursor = cursor.max(at);
                                 }
-                                if ticket_change(&event) {
-                                    return to_event(&event).map(Ok);
+                                if ticket_change(&event) || session_change(&event) {
+                                    return Some(Ok(event));
                                 }
                             }
                             // The receiver fell behind: the caller must catch up fully.
@@ -151,21 +171,24 @@ impl TargetEvents for ServerEvents {
                 .await
             });
             match waited {
-                Ok(Some(Ok(event))) => events.push(event),
+                Ok(Some(Ok(event))) => {
+                    take(&mut page, &event);
+                }
                 Ok(Some(Err(()))) => {
-                    overflow = true;
+                    page.overflow = true;
                     cursor = state.event_cursor();
                 }
                 Ok(None) | Err(_) => {}
             }
         }
-        Ok(TargetEventPage {
-            cursor: events
-                .last()
-                .map_or(cursor, |event| event.cursor.max(cursor)),
-            events,
-            overflow,
-        })
+        let last = page
+            .events
+            .iter()
+            .map(|event| event.cursor)
+            .chain(page.sessions.iter().map(|event| event.cursor))
+            .max();
+        page.cursor = last.map_or(cursor, |last| last.max(cursor));
+        Ok(page)
     }
 }
 
@@ -174,21 +197,30 @@ impl TargetEvents for ServerEvents {
 static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
     std::sync::OnceLock::new();
 
-/// Start a follower for every target of this owner that has an unfinished run and no
-/// follower yet. A follower holds one bounded request open on its target, syncs the
-/// runs whose tickets changed, backs off after a failure, and ends when the target has
-/// no unfinished run. With no runs, nothing is started and no target is contacted.
+/// Start a follower for every target of this owner that has an unfinished run, or an
+/// unfinished session (HS2-257Q2Z), and no follower yet. A follower holds one bounded
+/// request open on its target, syncs the runs whose tickets changed, wakes the owner's
+/// scheduler for a session change no run event reports, backs off after a failure, and
+/// ends when the target has neither. With none, nothing is started and no target is
+/// contacted.
 fn ensure_watchers(state: &AppState, owner: &str) {
     let Ok(shared) = runtime(state, tokio::runtime::Handle::current()) else {
         return;
     };
-    let targets: std::collections::BTreeSet<String> = shared
+    let mut targets: std::collections::BTreeSet<String> = shared
         .run_list(owner, false)
         .unwrap_or_default()
         .into_iter()
         .filter(|run| !run.state.is_terminal())
         .map(|run| run.target.target_id)
         .collect();
+    targets.extend(
+        shared
+            .session_list(owner, true)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|session| session.target_id),
+    );
     for target in targets {
         let key = format!("{}|{target}", loop_key(state, owner));
         let registry = WATCHERS.get_or_init(Default::default);

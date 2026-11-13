@@ -4,9 +4,16 @@
 //! waiting a bounded time when none did. The orchestrating half holds one such
 //! request open per target that has unfinished runs and syncs exactly the runs whose
 //! tickets changed. No target is contacted while it has no active run.
+//!
+//! HS2-257Q2Z: the same feed carries the hosting server's changes to the sessions an
+//! orchestrator started there (an exit, a finished turn), and a target is followed
+//! while the owner has an unfinished session on it as well. A change the owner's
+//! scheduler cannot learn from a run event wakes its loop from here.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::checkouts::Checkout;
-use hotsheet_ticketing::orchestration::{ExternalSource, Run, TargetAction, TargetOpError};
+use hotsheet_ticketing::orchestration::{
+    ExternalSource, OrchestratedSession, Run, TargetAction, TargetOpError,
+};
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -25,12 +32,24 @@ pub struct TargetTicketEvent {
     pub native_id: String,
 }
 
+/// HS2-257Q2Z: a session an orchestrator started on the host ended or finished a
+/// turn. `session_id` is the host's id for it (its terminal in that server's drawer).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetSessionEvent {
+    pub cursor: u64,
+    pub session_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetEventPage {
     /// Pass as `since` to continue.
     pub cursor: u64,
     pub events: Vec<TargetTicketEvent>,
+    /// HS2-257Q2Z: the host's sessions that ended or finished a turn after `since`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<TargetSessionEvent>,
     /// The host no longer retains everything after `since`; treat every ticket of the
     /// checkout as possibly changed.
     pub overflow: bool,
@@ -75,6 +94,9 @@ pub struct WatchStep {
     /// The target could not be followed this step; the caller backs off, and the
     /// cursor is kept so nothing is missed on reconnect.
     pub failed: bool,
+    /// HS2-257Q2Z: the owner's scheduler was woken, because a session of the owner on
+    /// this target changed in a way no run event reports.
+    pub woke_scheduler: bool,
 }
 
 /// The actor a run's supervision acts as: whoever dispatched it.
@@ -117,8 +139,19 @@ impl OrchestrationRuntime {
             // A run a person took over is still followed: it may be handed back or finish.
             .filter(|run| run.target.target_id == target_id && !run.state.is_terminal())
             .collect();
-        // Idle: no run, no request.
-        let Some(lead) = runs.iter().find_map(supervisor) else {
+        // HS2-257Q2Z: the owner's unfinished sessions on this target, by the host's id.
+        let sessions: Vec<OrchestratedSession> = self
+            .session_list(owner_id, true)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|session| session.target_id == target_id)
+            .collect();
+        // Idle: no run and no session, no request.
+        let Some(lead) = runs
+            .iter()
+            .find_map(supervisor)
+            .or_else(|| sessions.iter().find_map(session_supervisor))
+        else {
             *state = WatchState::default();
             return WatchStep::default();
         };
@@ -215,7 +248,12 @@ impl OrchestrationRuntime {
         let reset = state.cursor.is_some_and(|cursor| page.cursor < cursor);
         state.cursor = Some(page.cursor);
         let reconnected = std::mem::take(&mut state.reconnecting);
-        if first || reset || page.overflow || reconnected {
+        let caught_up = first || reset || page.overflow || reconnected;
+        if wakes_scheduler(&page, &sessions, &runs, caught_up) {
+            self.scheduler_wake(owner_id);
+            step.woke_scheduler = true;
+        }
+        if caught_up {
             // Nothing is known about what happened before: catch every run up.
             reconcile(&all, &mut step, tx);
         } else {
@@ -232,4 +270,47 @@ impl OrchestrationRuntime {
         }
         step
     }
+}
+
+/// HS2-257Q2Z: the actor who started a session follows it, as a run's dispatcher does.
+fn session_supervisor(session: &OrchestratedSession) -> Option<MutationActor> {
+    let id = session.history.first()?.actor_id.clone()?;
+    MutationActor::parse("system", Some(id)).ok()
+}
+
+/// HS2-257Q2Z: whether a page tells the owner's scheduler something no run event
+/// does. A session of the owner ended or finished a turn on its host; or a ticket of
+/// the target changed (a claim taken or let go is what makes a session busy or idle)
+/// while a session of the owner works no unfinished run, so no run sync reports it;
+/// or the follower cannot tell what it missed while it has any session there.
+fn wakes_scheduler(
+    page: &TargetEventPage,
+    sessions: &[OrchestratedSession],
+    runs: &[Run],
+    caught_up: bool,
+) -> bool {
+    if sessions.is_empty() {
+        return false;
+    }
+    if caught_up {
+        return true;
+    }
+    let mine = |hosted_id: &str| {
+        sessions.iter().any(|session| {
+            session
+                .hosted
+                .as_ref()
+                .is_some_and(|hosted| hosted.session_id == hosted_id)
+        })
+    };
+    if page.sessions.iter().any(|event| mine(&event.session_id)) {
+        return true;
+    }
+    let free = sessions.iter().any(|session| {
+        session
+            .run_id
+            .as_deref()
+            .is_none_or(|run_id| runs.iter().all(|run| run.run_id != run_id))
+    });
+    free && !page.events.is_empty()
 }

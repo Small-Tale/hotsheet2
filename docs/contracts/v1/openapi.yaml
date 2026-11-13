@@ -1844,7 +1844,7 @@ paths:
   /checkouts/{checkout}/target-events:
     description:
       Ticket changes of one hosted checkout after a cursor, for a local or remote orchestration project that follows
-      it (HS2-7QHWHJ). Ordinary authenticated project data. A host without a change stream answers
+      it (HS2-7QHWHJ), and changes of the sessions an orchestrator started there (HS2-257Q2Z). Ordinary authenticated project data. A host without a change stream answers
       `target_peer_unsupported`.
     get:
       operationId: readHostedTargetEvents
@@ -18765,6 +18765,23 @@ components:
               connection_id:
                 type: string
               native_id:
+                type: string
+            additionalProperties: false
+        sessions:
+          description:
+            Sessions an orchestrator started in this checkout that ended or finished a turn after `since`, by the
+            host's terminal id (HS2-257Q2Z). Omitted when empty.
+          type: array
+          items:
+            type: object
+            required:
+              - cursor
+              - session_id
+            properties:
+              cursor:
+                type: integer
+                minimum: 0
+              session_id:
                 type: string
             additionalProperties: false
         overflow:

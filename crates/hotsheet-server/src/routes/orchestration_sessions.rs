@@ -144,22 +144,45 @@ impl SessionHost for ServerSessions {
     }
 }
 
+/// HS2-257Q2Z: the change-event kind of a hosted session's exit or finished turn, on
+/// the event stream of its checkout. The hosted target feed carries it to an
+/// orchestrator on another server. Identifiers only.
+pub(crate) const SESSION_CHANGE_KIND: &str = "orchestration_session";
+
 /// HS2-95SWQ4: an AI terminal of this server ended or finished a turn. When an
 /// orchestrator started it, the scheduler following on this machine is woken through
 /// its marker, so it learns of the exit or the safe point from the change itself and
-/// never by asking on a timer. Any other terminal changes nothing.
+/// never by asking on a timer. HS2-257Q2Z: the change is also published on this
+/// server's event stream for the session's checkout, so an orchestrator on another
+/// server following that target learns it the same way. Any other terminal changes
+/// nothing.
 pub(crate) fn note_session_change(state: &AppState, terminal_id: &str) {
     // HS2-2DPGDY: a finished turn is a sign the tool is ready for its role.
     retry_role(state, terminal_id);
-    let home = state.machine_home().to_path_buf();
+    let state = state.clone();
     let terminal_id = terminal_id.to_owned();
     tokio::task::spawn_blocking(move || {
-        let hosted = hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&home)
-            .hosts(&terminal_id)
-            .unwrap_or(false);
-        if hosted {
-            hotsheet_cli::orchestration::OrchestrationRuntime::scheduler_wake_at(&home);
+        let home = state.machine_home().to_path_buf();
+        let registry = hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&home);
+        if !registry.hosts(&terminal_id).unwrap_or(false) {
+            return;
         }
+        hotsheet_cli::orchestration::OrchestrationRuntime::scheduler_wake_at(&home);
+        let Ok(Some(hosted)) = registry.by_session(&terminal_id) else {
+            return;
+        };
+        state.emit(crate::ChangeEvent {
+            live: None,
+            cursor: None,
+            store: hosted.checkout_id,
+            kind: SESSION_CHANGE_KIND.into(),
+            id: terminal_id,
+            slug: String::new(),
+            message: None,
+            activity: None,
+            assignment: None,
+            turn: None,
+        });
     });
 }
 

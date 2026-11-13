@@ -359,10 +359,12 @@ async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers
     // The planned step is dispatched again; its session still holds the claim, so the
     // new run waits queued for the target's dispatcher.
     let again = format!("sched-run-{step}.2");
+    // A dispatch records its run as `requested` before the target answers; wait for
+    // the answer (HS2-257Q2Z: the remote session's changes now wake the loop sooner).
     let redispatched = fleet
         .until_runs(|runs| {
             runs.iter()
-                .find(|run| run["operation_id"] == again.as_str())
+                .find(|run| run["operation_id"] == again.as_str() && run["state"] != "requested")
                 .cloned()
         })
         .await;
@@ -629,10 +631,9 @@ async fn hs2_2ey9dp_out_of_order_and_replayed_events_settle_a_run_once() {
 
 /// HS2-2EY9DP: a remote session whose work ends without any run event (its run was
 /// cancelled and its step removed, then its worker let go) idles and is wound down.
-/// The peer's own turn-end and claim release reach only the peer's machine-local
-/// wake marker, so the controller's loop never runs another pass to see it.
+/// HS2-257Q2Z: the peer's claim release and turn end reach the controller on the
+/// target change feed its follower holds open, which wakes the owner's loop.
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
-#[ignore = "quarantine HS2-257Q2Z: a remote host's session change never wakes the owner's loop"]
 async fn hs2_2ey9dp_a_remote_session_freed_without_a_run_event_is_wound_down() {
     let mut fleet = Fleet::new().await;
     let (step, ticket, b) = one_remote_step(&mut fleet, "Synthetic change let go").await;
@@ -651,6 +652,12 @@ async fn hs2_2ey9dp_a_remote_session_freed_without_a_run_event_is_wound_down() {
         )
         .await;
     assert_eq!(cancelled["state"], "cancelled", "{cancelled}");
+    // HS2-257Q2Z: the peer's hosted feed, read as the controller's follower reads it.
+    let feed = format!("/checkouts/{}/target-events", fleet.b_checkout.id);
+    let (status, handshake) =
+        super::orchestration::api(fleet.peer_api.clone(), "GET", &feed, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{handshake}");
+    let mut cursor = handshake["cursor"].as_u64().unwrap();
     fleet.finish(Side::Peer, &ticket, &b.worker).await;
     let stop = fleet
         .decided(
@@ -664,6 +671,38 @@ async fn hs2_2ey9dp_a_remote_session_freed_without_a_run_event_is_wound_down() {
         )
         .await;
     assert_eq!(stop["reason"], "idle", "{stop}");
+    // The wound-down terminal's exit is published on the peer's feed for its checkout,
+    // naming the host's terminal and nothing else.
+    let deadline = std::time::Instant::now() + MINUTE;
+    let exited = loop {
+        let (status, page) = super::orchestration::api(
+            fleet.peer_api.clone(),
+            "GET",
+            &format!("{feed}?since={cursor}&wait_ms=8000"),
+            Value::Null,
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{page}");
+        cursor = page["cursor"].as_u64().unwrap();
+        let named = page["sessions"].as_array().is_some_and(|sessions| {
+            sessions
+                .iter()
+                .any(|event| event["session_id"] == b.terminal.as_str())
+        });
+        if named {
+            break page;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no session change on the peer's feed"
+        );
+    };
+    for event in exited["sessions"].as_array().unwrap() {
+        let mut keys: Vec<&String> = event.as_object().unwrap().keys().collect();
+        keys.sort();
+        assert_eq!(keys, ["cursor", "session_id"], "{event}");
+    }
     fleet.shut_down().await;
 }
 

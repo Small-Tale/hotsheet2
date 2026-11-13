@@ -22,7 +22,8 @@
 > the throughput scheduler with its plan, explanations, decision log and event-driven
 > loop (§26.17, HS2-ECWG50), which places orchestrator-owned sessions through its
 > session executor (§26.19, HS2-95SWQ4; nothing is placed until a policy sets
-> `placement.automatic`) and dispatches the run of each step it places (HS2-YC2P7K),
+> `placement.automatic`; a session on another server wakes it through the target
+> feed, HS2-257Q2Z) and dispatches the run of each step it places (HS2-YC2P7K),
 > resource requirements of plan steps and targets with scheduling around held
 > resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads),
 > the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
@@ -751,6 +752,18 @@ unreachable once, and retries with bounded backoff from one second up to a minut
 It confirms its authority through the gate when it connects, after any failure and
 every ten minutes, acting as whoever dispatched the run. A target with no unfinished
 run is not contacted at all, and a run a person took over is still followed.
+
+**Session changes on the same feed (HS2-257Q2Z).** When a session an orchestrator
+started exits or finishes a turn, its hosting server publishes that on its change
+stream for the session's checkout, and the hosted feed lists it under `sessions`
+(the cursor and the host's terminal id, nothing else). A target is also followed
+while the owner has an unfinished session on it, acting as whoever started the
+session when no run remains. A follower step wakes the owner's scheduler (§26.17)
+when the page names one of the owner's sessions; when a ticket of the target changed
+while one of those sessions works no unfinished run, since a claim taken or let go
+is what makes a session busy or idle and no run sync reports it; and when it
+(re)connects or the host lost its backlog. A session working an unfinished run
+learns its ticket changes from that run's events instead.
 
 A follower starts when the server starts with unfinished runs (§26.14), when a run
 is dispatched through the server or when someone reads the event stream, and ends
@@ -2450,8 +2463,9 @@ over the same home runs its own loop and followers at once (HS2-KM9CTG). A step 
   validation, session and reconciliation events. A lease renewal is not a reason;
 - when the scheduler's wake marker changed: a tool limit or recovery was recorded
   (§26.11), the policy was replaced, a session without a run started, ended or
-  finished a turn (§26.19), a plan step's definition changed, or a resource the last
-  pass deferred work for was released (§26.20);
+  finished a turn (§26.19), a plan step's definition changed, a resource the last
+  pass deferred work for was released (§26.20), or a target follower learned of a
+  session change on another server (§26.9, HS2-257Q2Z);
 - when the time the last pass named in `retry_at_ms` has come.
 
 Otherwise it waits on the journal and the marker themselves. There is no interval.
@@ -2653,10 +2667,12 @@ the loop. Nothing asks on a timer:
 - A pass that keeps an idle session names the time its idle period ends in
   `retry_at_ms`, and the loop waits for that time.
 
-The marker is this machine's, so a host on another server does not wake the loop: a
-crash or a new safe point there is learned at the next pass for any other reason
-(HS2-257Q2Z). Removing the last step of a plan publishes no event either
-(HS2-SQS266).
+The marker is this machine's. A host on another server publishes the same exit or
+finished turn on its hosted target feed, and the owner's follower of that target
+(§26.9), which keeps following while the owner has an unfinished session there,
+moves the owner's marker; so does a claim taken or let go there while the session
+works no unfinished run (HS2-257Q2Z). Removing the last step of a plan publishes no
+event (HS2-SQS266).
 
 ### Dispatching the step (HS2-YC2P7K)
 
@@ -3228,10 +3244,11 @@ hosting server's own ticket routes.
 | out-of-order and replayed events                        | A worker hands the ticket over and it is finished while the controller cannot see the peer; the run settles once from the latest state, and repeated syncs and reconciliations record nothing                                       |
 | a refusing peer and a limited tool                      | A rate-limited tool fails over to the other allowed tool; the peer owner's admission (set by the CLI) refuses the start; after the backoff the replacement start lands on the peer                                                  |
 
-Two scenarios are quarantined on the gaps they found (see
-[test-quarantine.md](test-quarantine.md)): a remote session freed without any run
-event is never re-read (HS2-257Q2Z), and a session lost while its run waits on CI is
-replaced although reconciliation finds no lost work (HS2-3REXQ7). Defects these
+One scenario is quarantined on the gap it found (see
+[test-quarantine.md](test-quarantine.md)): a session lost while its run waits on CI is
+replaced although reconciliation finds no lost work (HS2-3REXQ7). A remote session
+freed without any run event is now wound down from the session change the peer's
+feed carries (HS2-257Q2Z, §26.9). Defects these
 scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9CTG
 (§26.17). Open findings: HS2-HV9ED3 (what a person's cancel of a scheduler run
 means), HS2-WC3W2G (a cancel denied by the gate reads as an unverified target),

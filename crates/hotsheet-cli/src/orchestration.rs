@@ -81,8 +81,8 @@ pub use validation::{
     ValidationRunView, ValidationStepRef,
 };
 pub use watch::{
-    MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetTicketEvent, WatchState,
-    WatchStep,
+    MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,
+    WatchState, WatchStep,
 };
 #[cfg(test)]
 mod tests;
