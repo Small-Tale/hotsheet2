@@ -519,11 +519,11 @@ pub(crate) async fn put_checkout_trash_settings(
 pub(crate) struct TerminalInfo {
     pub(crate) id: String,
     /// Immutable creation kind; never inferred from terminal output or command names.
-    kind: hotsheet_terminals::TerminalKind,
+    pub(crate) kind: hotsheet_terminals::TerminalKind,
     /// The PTY is still running.
     pub(crate) alive: bool,
     /// Inferred busy (a tool is actively working) vs idle.
-    busy: bool,
+    pub(crate) busy: bool,
     /// The shell's reported working directory (OSC 7), if any (HS2-RCKEJ9).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cwd: Option<String>,
@@ -539,7 +539,7 @@ pub(crate) struct TerminalInfo {
     /// The AI tool an `ai` terminal launched (for example `claude`), from its immutable
     /// `<tool>-<id>` worker id; clients name AI tabs after it (HS2-HZK0NK).
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool: Option<String>,
+    pub(crate) tool: Option<String>,
     /// The user's saved tab name (HS2-89FPV1), absent when the terminal was never renamed;
     /// clients then derive a default name.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -509,6 +509,116 @@ fn platform_core_ticks() -> Option<Vec<(u64, u64)>> {
     None
 }
 
+// ---- Capacity readings (HS2-J8PRTV) ------------------------------------------------------
+// Read on demand for an orchestration capacity snapshot, never on the sampler's cadence.
+
+/// Memory a new process could use without swapping, and the machine's physical memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MemoryAmount {
+    pub(crate) free_bytes: u64,
+    pub(crate) total_bytes: u64,
+}
+
+/// macOS: `vm_stat` pages that are free, speculative or inactive, and the physical memory
+/// `sysconf` reports.
+#[cfg(target_os = "macos")]
+pub(crate) fn system_memory() -> Option<MemoryAmount> {
+    Some(MemoryAmount {
+        free_bytes: run("vm_stat", &[]).and_then(|text| macos::parse_vm_stat(&text))?,
+        total_bytes: hotsheet_terminals::physical_memory_bytes()?,
+    })
+}
+
+/// Linux: `/proc/meminfo` `MemAvailable` and `MemTotal`.
+#[cfg(target_os = "linux")]
+pub(crate) fn system_memory() -> Option<MemoryAmount> {
+    std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|text| linux::parse_meminfo_memory(&text))
+}
+
+/// No free-memory reader on this platform: the value stays unknown.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn system_memory() -> Option<MemoryAmount> {
+    None
+}
+
+/// Whole-machine busy percent between two per-core tick readings `window` apart. `None`
+/// where the platform has no tick reader or a reading failed.
+pub(crate) fn system_cpu_percent(window: std::time::Duration) -> Option<f64> {
+    let before = platform_core_ticks()?;
+    std::thread::sleep(window);
+    let after = platform_core_ticks()?;
+    super::live_cpu::frame_values(&before, &after).map(|(busy, _)| busy)
+}
+
+/// Free and total bytes of the volume holding `path`.
+pub(crate) fn system_disk(path: &std::path::Path) -> Option<DiskReading> {
+    #[cfg(unix)]
+    {
+        statvfs_disk(path)
+    }
+    #[cfg(windows)]
+    {
+        windows::disk(path)
+    }
+    #[cfg(all(not(unix), not(windows)))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// Resident bytes of each process tree rooted at one of `roots`, from one `ps` listing of
+/// ids and sizes only. A root that is not running, or a platform without this `ps`, has no
+/// entry.
+pub(crate) fn system_resident_bytes(roots: &[u32]) -> std::collections::HashMap<u32, u64> {
+    if roots.is_empty() || !cfg!(any(target_os = "macos", target_os = "linux")) {
+        return std::collections::HashMap::new();
+    }
+    run("ps", &["-A", "-o", "pid=,ppid=,rss="])
+        .map(|text| parse_ps_resident(&text, roots))
+        .unwrap_or_default()
+}
+
+/// `ps -A -o pid=,ppid=,rss=`: each root's resident kilobytes summed over the root and
+/// every descendant, in bytes.
+pub(crate) fn parse_ps_resident(text: &str, roots: &[u32]) -> std::collections::HashMap<u32, u64> {
+    let mut rows = std::collections::HashMap::new();
+    let mut children: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
+    for line in text.lines() {
+        let mut fields = line.split_whitespace().map(str::parse::<u64>);
+        let (Some(Ok(pid)), Some(Ok(parent)), Some(Ok(rss_kib))) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        let (Ok(pid), Ok(parent)) = (u32::try_from(pid), u32::try_from(parent)) else {
+            continue;
+        };
+        rows.insert(pid, rss_kib.saturating_mul(1024));
+        children.entry(parent).or_default().push(pid);
+    }
+    let mut resident = std::collections::HashMap::new();
+    for root in roots {
+        if !rows.contains_key(root) {
+            continue;
+        }
+        let (mut total, mut pending) = (0_u64, vec![*root]);
+        let mut seen = std::collections::HashSet::new();
+        while let Some(pid) = pending.pop() {
+            // A pid is counted once even if the listing is inconsistent.
+            if !seen.insert(pid) {
+                continue;
+            }
+            total = total.saturating_add(rows.get(&pid).copied().unwrap_or(0));
+            pending.extend(children.get(&pid).into_iter().flatten());
+        }
+        resident.insert(*root, total);
+    }
+    resident
+}
+
 #[cfg_attr(not(windows), allow(dead_code))] // HS2-MEQ46T: pure Windows parsers run in every host's unit suite.
 pub(crate) mod windows {
     use super::MemoryReading;
@@ -793,6 +903,31 @@ pub(crate) mod macos {
         (value >= 0.0).then_some((value * scale) as u64)
     }
 
+    /// `vm_stat` (HS2-J8PRTV): the bytes a new process could use without swapping, which
+    /// are the free, speculative and inactive pages at the page size the header states.
+    pub(crate) fn parse_vm_stat(text: &str) -> Option<u64> {
+        let header = text.lines().next()?;
+        let page = header
+            .split("page size of ")
+            .nth(1)?
+            .split_whitespace()
+            .next()?
+            .parse::<u64>()
+            .ok()?;
+        let pages = |name: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(name))?
+                .trim()
+                .trim_end_matches('.')
+                .parse::<u64>()
+                .ok()
+        };
+        let available = pages("Pages free:")?
+            .saturating_add(pages("Pages inactive:")?)
+            .saturating_add(pages("Pages speculative:").unwrap_or(0));
+        (page > 0).then(|| available.saturating_mul(page))
+    }
+
     /// `sysctl -n vm.swapusage`: `total = 3072.00M  used = 1334.38M  free = …`.
     pub(crate) fn parse_swapusage(text: &str) -> Option<u64> {
         let rest = &text[text.find("used = ")? + "used = ".len()..];
@@ -953,6 +1088,23 @@ pub(crate) mod linux {
                 .saturating_sub(kib("SwapFree:")?)
                 .saturating_mul(1024),
         )
+    }
+
+    /// Linux `/proc/meminfo` (HS2-J8PRTV): `MemAvailable` and `MemTotal`, in bytes. A kernel
+    /// without `MemAvailable` leaves the reading unknown rather than approximating it.
+    pub(crate) fn parse_meminfo_memory(text: &str) -> Option<super::MemoryAmount> {
+        let kib = |name: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(name))?
+                .split_whitespace()
+                .next()?
+                .parse::<u64>()
+                .ok()
+        };
+        Some(super::MemoryAmount {
+            free_bytes: kib("MemAvailable:")?.saturating_mul(1024),
+            total_bytes: kib("MemTotal:")?.saturating_mul(1024),
+        })
     }
 
     /// Linux `/proc/stat`: the aggregate `cpu` line's busy and total jiffies.

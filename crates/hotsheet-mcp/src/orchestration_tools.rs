@@ -3,13 +3,15 @@ use crate::{Backend, BackendError};
 use serde_json::{Value, json};
 
 pub(crate) fn definition() -> Value {
-    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. tool_capacity reads the capacity state of every AI tool account the policy configures (available, limited until a time, degraded or unknown; HS2-AHG7HW) and tool_select orders the tool accounts a session for one target may start on now, with the reason each other one is excluded; unknown or degraded is never the same as available, and limit signals are reported by the server or the CLI, never through this tool. run_status shows the last confirmed target state and whether it is stale, and run_events replays events after a cursor and can wait for the next one (HS2-7QHWHJ); never poll run_show on a timer. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
+    json!({"name":"hotsheet_targets", "description":"List/add/rename/remove shared project targets; inspect fresh candidates then explicitly bind/unbind/resolve this machine's reviewed target destinations. Lists make no requests. Inspect/bind/unbind/resolve and list with target_id require a machine-local backend. A fresh projection/capability is never a grant. grant_list, access_check and audit read this machine's delegated authority and decision journal (HS2-SBQ3T8); grants are issued and revoked by a person through the CLI, never through this tool. policy_show, policy_validate, policy_dry_run and approval_list read the throughput policy and pending approvals (HS2-YCJDEB); setting the policy and answering an approval are likewise a person's CLI actions. ticket_create/read/update/link/unlink/links act on tickets in a declared target for an orchestration ticket (HS2-AZ15GA): every call passes the grant and policy gate under your actor_id, the target's own source stays authoritative, and ticket_create needs an operation_id you retain so a retry never creates a second ticket. run_dispatch starts work on one exact target ticket and records a run (HS2-EBHDSB): the target ticket's own claim is the only lock, a retained operation_id returns the same run, and run_sync/run_renew/run_cancel supervise it; integration and pushing stay with the target's workflow. capacity reads the machine that hosts a target (HS2-J8PRTV): free and total RAM, CPU load, disk headroom, AI tools, running sessions and, for named claim_namespaces, held resource claims, with null for anything it could not measure; it needs a gates_observe grant. admission_check asks that machine whether sessions of a tool may start now and answers accepted, reduced or refused with a reason code; it needs a sessions_manage grant for the tool, starts nothing, and the machine's own limits can only be stricter than the policy's. tool_capacity reads the capacity state of every AI tool account the policy configures (available, limited until a time, degraded or unknown; HS2-AHG7HW) and tool_select orders the tool accounts a session for one target may start on now, with the reason each other one is excluded; unknown or degraded is never the same as available, and limit signals are reported by the server or the CLI, never through this tool. run_status shows the last confirmed target state and whether it is stale, and run_events replays events after a cursor and can wait for the next one (HS2-7QHWHJ); never poll run_show on a timer. Retain target_id and expected revisions for repeatable setup; stale revisions conflict, including otherwise identical retries.",
     "inputSchema":{"type":"object","required":["action"],"properties":{
-        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync","tool_capacity","tool_select","run_status","run_events"]},
+        "action":{"type":"string","enum":["list","add","rename","remove","bind","unbind","resolve","inspect","grant_list","access_check","audit","policy_show","policy_validate","policy_dry_run","approval_list","ticket_create","ticket_read","ticket_update","ticket_link","ticket_unlink","ticket_links","run_dispatch","run_list","run_show","run_renew","run_cancel","run_sync","capacity","admission_check","tool_capacity","tool_select","run_status","run_events"]},
         "wait_ms":{"type":"integer","minimum":0,"maximum":20000,"description":"run_events: wait this long for the next event when there is none (use with after instead of polling)"},
-        "tool":{"type":"string","description":"tool_select: the preferred tool id; omit for any tool the target allows"},
-        "model":{"type":"string","description":"tool_select: the model the session would use, checked against the target's model list"},
+        "tool":{"type":"string","description":"tool_select: the preferred tool id; omit for any tool the target allows; admission_check: the AI tool a session would run"},
+        "model":{"type":"string","description":"tool_select: the model the session would use, checked against the target's model list; admission_check: optional model"},
         "tool_load":{"type":"array","items":{"type":"object","required":["tool","sessions"],"properties":{"tool":{"type":"string"},"account":{"type":"string"},"sessions":{"type":"integer","minimum":0}}},"description":"tool_select (required): sessions now running per tool account; an empty list states that none are running"},
+        "claim_namespaces":{"type":"array","items":{"type":"string"},"maxItems":8,"description":"capacity: resource-claim namespaces whose live claims to list"},
+        "sessions":{"type":"integer","minimum":1,"maximum":64,"description":"admission_check: how many sessions to ask for (default 1)"},
         "run_id":{"type":"string","description":"run_show/renew/cancel/sync: the run's id"},
         "mode":{"type":"string","enum":["direct","dispatcher"],"description":"run_dispatch: direct claims the ticket for worker_id; dispatcher marks it Up Next for the target's own dispatcher"},
         "worker_id":{"type":"string","description":"run_dispatch direct: the worker the ticket is claimed for"},
@@ -94,6 +96,8 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             | "run_events"
             | "tool_capacity"
             | "tool_select"
+            | "capacity"
+            | "admission_check"
     ) || (action == "list" && id.is_some());
     // Preflight before any backend request; HttpBackend repeats it for actual origin.
     if machine && !backend.machine_local() {
@@ -348,6 +352,12 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
             backend.send(if action == "bind" {"PUT"} else {"DELETE"}, &format!("{prefix}/{id}/binding"), &body)
         }
         "resolve" => backend.get(&format!("{prefix}/{}/resolve", id.ok_or("target_id is required")?), &[]),
+        // HS2-J8PRTV: both are sent with a body so the caller's actor passes the gate.
+        "capacity" => backend.send("POST", &format!("{prefix}/{}/capacity", id.ok_or("target_id is required")?), &json!({
+            "claim_namespaces":args.get("claim_namespaces").cloned().unwrap_or_else(|| json!([]))})),
+        "admission_check" => backend.send("POST", &format!("{prefix}/{}/admission", id.ok_or("target_id is required")?), &json!({
+            "tool":required(args,"tool")?,"model":args.get("model").cloned().unwrap_or(Value::Null),
+            "sessions":args.get("sessions").cloned().unwrap_or(Value::Null)})),
         "grant_list" => backend.get(&format!("{prefix}/{}/grants", id.ok_or("target_id is required")?), &[]),
         "access_check" => backend.send("POST", &format!("{prefix}/{}/access", id.ok_or("target_id is required")?), &json!({
             "actor_id":required(args,"for_actor")?,"action":required(args,"target_action")?,
@@ -421,6 +431,9 @@ mod tests {
             // HS2-AHG7HW
             "tool_capacity",
             "tool_select",
+            // HS2-J8PRTV
+            "capacity",
+            "admission_check",
         ] {
             assert!(
                 dispatch(&json!({"action":action}), &backend)
@@ -765,5 +778,94 @@ mod tests {
             std::fs::read(home.join("server-identity.json")).unwrap(),
             b"corrupt"
         );
+    }
+    /// A machine-local backend that records what the tool sent.
+    struct Recorded(Mutex<Vec<(String, String, Value)>>);
+    impl Backend for Recorded {
+        fn machine_local(&self) -> bool {
+            true
+        }
+        fn get(&self, path: &str, _: &[(String, String)]) -> Result<Value, BackendError> {
+            self.0
+                .lock_or_recover()
+                .push(("GET".into(), path.into(), Value::Null));
+            Ok(Value::Null)
+        }
+        fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            self.0
+                .lock_or_recover()
+                .push((method.into(), path.into(), body.clone()));
+            Ok(json!({"outcome":"accepted"}))
+        }
+    }
+    #[test]
+    fn hs2_j8prtv_orchestration_capacity_and_admission_actions_carry_the_actor_in_a_body() {
+        let backend = Recorded(Mutex::new(Vec::new()));
+        let owner = "owner-0123456789ab";
+        let target = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let prefix = format!("/checkouts/{owner}/orchestration/targets/{target}");
+        call(
+            &backend,
+            owner,
+            json!({"action":"capacity","target_id":target,"claim_namespaces":["builds"],
+                "actor_role":"ai","actor_id":"scheduler-1"}),
+        );
+        call(
+            &backend,
+            owner,
+            json!({"action":"capacity","target_id":target,"actor_role":"ai","actor_id":"scheduler-1"}),
+        );
+        call(
+            &backend,
+            owner,
+            json!({"action":"admission_check","target_id":target,"tool":"codex","model":"model-a",
+                "sessions":2,"actor_role":"ai","actor_id":"scheduler-1"}),
+        );
+        call(
+            &backend,
+            owner,
+            json!({"action":"admission_check","target_id":target,"tool":"codex",
+                "actor_role":"ai","actor_id":"scheduler-1"}),
+        );
+        let actor = json!({"role":"ai","id":"scheduler-1"});
+        assert_eq!(
+            *backend.0.lock_or_recover(),
+            [
+                (
+                    "POST".to_owned(),
+                    format!("{prefix}/capacity"),
+                    json!({"claim_namespaces":["builds"],"actor":actor})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{prefix}/capacity"),
+                    json!({"claim_namespaces":[],"actor":actor})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{prefix}/admission"),
+                    json!({"tool":"codex","model":"model-a","sessions":2,"actor":actor})
+                ),
+                (
+                    "POST".to_owned(),
+                    format!("{prefix}/admission"),
+                    json!({"tool":"codex","model":null,"sessions":null,"actor":actor})
+                ),
+            ]
+        );
+        // A missing target or tool never reaches the backend.
+        backend.0.lock_or_recover().clear();
+        rejected(&backend, owner, json!({"action":"capacity"}));
+        rejected(
+            &backend,
+            owner,
+            json!({"action":"admission_check","tool":"codex"}),
+        );
+        rejected(
+            &backend,
+            owner,
+            json!({"action":"admission_check","target_id":target}),
+        );
+        assert!(backend.0.lock_or_recover().is_empty());
     }
 }

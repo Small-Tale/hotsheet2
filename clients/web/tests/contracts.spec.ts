@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(281); // HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(285); // HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(281); // HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(285); // HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -676,6 +676,76 @@ test('HS2-FMHH9Y real resource-claim responses match the OpenAPI contract', asyn
     const invalid = await send('POST', '/resource-claims/vms/mac-1/acquire', secret, { duration_ms: 0 });
     expect(invalid.status).toBe(400);
     matches(`${target}/acquire`, 'post', 400, invalid.body);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-J8PRTV real target capacity and admission responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const capacity = '/checkouts/{checkout}/target-capacity';
+    const admission = '/checkouts/{checkout}/target-admission';
+    const hosted = `/checkouts/${server.checkoutId}`;
+
+    // The real host's own reading: whatever it cannot measure is null, and the shape holds.
+    const snapshot = await send('GET', `${hosted}/target-capacity?claim_namespaces=vms`);
+    expect(snapshot.status).toBe(200);
+    matches(capacity, 'get', '200', snapshot.body);
+    expect(snapshot.body.checkout_id).toBe(server.checkoutId);
+    expect(snapshot.body.sessions).toEqual([]);
+    expect(snapshot.body.claims).toEqual([]);
+    expect(snapshot.body.claim_namespaces).toEqual(['vms']);
+    // No path of the fixture leaves the server with its capacity.
+    for (const local of [server.root, server.store, server.home])
+      expect(JSON.stringify(snapshot.body)).not.toContain(local);
+
+    const refused = await send('POST', `${hosted}/target-admission`, { tool: 'synthetic-absent-tool', sessions: 2 });
+    expect(refused.status).toBe(200);
+    matches(admission, 'post', '200', refused.body);
+    expect(refused.body.outcome).toBe('refused');
+    expect(refused.body.admitted).toBe(0);
+    expect(refused.body.reason).toBe('tool_not_installed');
+    expect(refused.body.limits).toEqual({
+      max_sessions: 2,
+      min_free_ram_mb: 2048,
+      max_cpu_percent: 90,
+      min_free_disk_mb: 5120,
+    });
+
+    const invalid = await send('POST', `${hosted}/target-admission`, { tool: 'codex', sessions: 0 });
+    expect(invalid.status).toBe(400);
+    matches(admission, 'post', 'default', invalid.body);
+    expect(invalid.body.code).toBe('invalid_request');
+    const badNamespace = await send('GET', `${hosted}/target-capacity?claim_namespaces=Not_Valid`);
+    expect(badNamespace.status).toBe(400);
+    matches(capacity, 'get', 'default', badNamespace.body);
   } finally {
     await server.stop();
   }

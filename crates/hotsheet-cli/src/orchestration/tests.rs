@@ -19,6 +19,7 @@ use hotsheet_ticketing::{ProviderCapabilities, SecretError};
 use super::*;
 
 mod access;
+mod capacity;
 mod policy;
 mod runs;
 mod tickets;

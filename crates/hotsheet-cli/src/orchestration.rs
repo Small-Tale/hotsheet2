@@ -2,6 +2,7 @@
 //! Host injects its actual registry/config/secret owners; no store/path discovery,
 //! provider account probe, implicit source creation or credential copying.
 mod access;
+mod capacity;
 mod observer;
 mod policy;
 mod request;
@@ -10,6 +11,9 @@ mod tickets;
 mod tool_capacity;
 mod watch;
 pub use access::{ActionRequest, Authorized};
+pub use capacity::{
+    CapacityProbe, LocalServerCapacity, ReadCapacity, TargetAdmission, UnknownCapacity,
+};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
 pub use runs::{
@@ -45,6 +49,8 @@ use hotsheet_ticketing::{ProviderConfigRegistry, ProviderConnection, SecretStore
 
 use observer::RuntimeObserver;
 
+/// Cloning shares every port; a host clones to attach its own capacity probe.
+#[derive(Clone)]
 pub struct OrchestrationRuntime {
     home: PathBuf,
     checkouts: CheckoutRegistry,
@@ -57,6 +63,8 @@ pub struct OrchestrationRuntime {
     external: Arc<dyn ExternalProviders>,
     /// HS2-7QHWHJ: the host's live ticket changes, when this process has a change stream.
     target_events: Option<Arc<dyn TargetEvents>>,
+    /// HS2-J8PRTV: the session host's own measurements for the hosted half.
+    capacity: Arc<dyn CapacityProbe>,
 }
 
 impl OrchestrationRuntime {
@@ -85,6 +93,7 @@ impl OrchestrationRuntime {
             remotes: RemoteRegistry::new(home.join("remotes.json")),
             external: Arc::new(tickets::LiveExternalProviders { home: home.clone() }),
             target_events: None,
+            capacity: Arc::new(UnknownCapacity),
             home,
             checkouts,
             providers,
@@ -210,6 +219,8 @@ impl OrchestrationRuntime {
             Arc::new(crate::remote_servers::MtlsRemoteTransport),
             identity.server_id,
         )
+        // HS2-J8PRTV: a headless process asks the server running on this machine.
+        .map(|runtime| runtime.with_capacity_probe(Arc::new(LocalServerCapacity::new(home))))
     }
 
     pub fn inspect(

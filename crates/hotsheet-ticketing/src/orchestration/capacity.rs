@@ -1,0 +1,554 @@
+//! HS2-J8PRTV: what a target machine can take, and whether a session may start there.
+//!
+//! A [`CapacitySnapshot`] is what the server that hosts a target measured just now.
+//! Anything it could not measure is `None`; nothing is ever guessed. A process is
+//! described by its tool name and metrics only: no path, command line or user name
+//! (HS2-SW5ZK3).
+//!
+//! [`decide_admission`] answers "may sessions of this tool start here now" from one
+//! snapshot, the limits the orchestrator's policy sent, and the machine owner's own
+//! [`AdmissionConfig`]. The owner's file can only make the answer stricter. Pure:
+//! the caller supplies the snapshot. Integer units only (megabytes, percent).
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+use super::contract::{bounded_text, valid_identifier};
+use super::policy::{MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MachineLimits};
+use super::storage::{Storage, decode};
+use super::{ORCHESTRATION_VERSION, OrchestrationError};
+
+/// The estimate used for a tool the machine owner configured no footprint for.
+pub const DEFAULT_SESSION_FOOTPRINT_MB: u64 = 1024;
+pub const MAX_SESSION_FOOTPRINT_MB: u64 = 1024 * 1024;
+/// Claim namespaces one snapshot request may name.
+pub const MAX_CLAIM_NAMESPACES: usize = 8;
+const MAX_ADMISSION_BYTES: usize = 64 * 1024;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryCapacity {
+    /// Memory a new process could use without swapping, in megabytes.
+    pub free_mb: Option<u64>,
+    pub total_mb: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CpuCapacity {
+    /// Whole-machine busy share over the sampling window, 0 to 100.
+    pub load_percent: Option<u32>,
+    pub logical_cpus: Option<u32>,
+}
+
+/// The volume that holds the hosted checkout.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiskCapacity {
+    pub free_mb: Option<u64>,
+    pub total_mb: Option<u64>,
+}
+
+/// One drivable AI tool the host knows, by name only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolAvailability {
+    pub tool: String,
+    /// Its program is present on the host.
+    pub installed: bool,
+    /// The hosted checkout has not opted out of it.
+    pub configured: bool,
+}
+
+/// One running AI session: an id, its tool and what it was observed to use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionFootprint {
+    pub session_id: String,
+    /// `None` when the session does not name its tool.
+    pub tool: Option<String>,
+    pub busy: bool,
+    /// Whether it was started in the hosted checkout; `None` when that is unknown.
+    pub on_checkout: Option<bool>,
+    /// Resident memory of the session's process and its descendants, in megabytes.
+    /// `None` when the platform could not report it.
+    pub resident_mb: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeldClaim {
+    pub namespace: String,
+    pub resource: String,
+    pub expires_at_ms: u64,
+}
+
+/// What the host itself measured. The runtime adds identity and held claims.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostObservation {
+    /// `None` when nothing was sampled at all.
+    pub sampled_at_ms: Option<u64>,
+    pub memory: MemoryCapacity,
+    pub cpu: CpuCapacity,
+    pub disk: DiskCapacity,
+    pub tools: Option<Vec<ToolAvailability>>,
+    pub sessions: Option<Vec<SessionFootprint>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapacitySnapshot {
+    pub schema_version: u32,
+    pub server_id: String,
+    pub checkout_id: String,
+    pub sampled_at_ms: Option<u64>,
+    pub memory: MemoryCapacity,
+    pub cpu: CpuCapacity,
+    pub disk: DiskCapacity,
+    pub tools: Option<Vec<ToolAvailability>>,
+    pub sessions: Option<Vec<SessionFootprint>>,
+    /// Live claims in the namespaces the caller named; `None` when it named none or
+    /// they could not be read.
+    pub claims: Option<Vec<HeldClaim>>,
+    pub claim_namespaces: Vec<String>,
+}
+
+impl CapacitySnapshot {
+    pub fn new(
+        server_id: String,
+        checkout_id: String,
+        host: HostObservation,
+        claim_namespaces: Vec<String>,
+        claims: Option<Vec<HeldClaim>>,
+    ) -> Self {
+        Self {
+            schema_version: ORCHESTRATION_VERSION,
+            server_id,
+            checkout_id,
+            sampled_at_ms: host.sampled_at_ms,
+            memory: host.memory,
+            cpu: host.cpu,
+            disk: host.disk,
+            tools: host.tools,
+            sessions: host.sessions,
+            claims,
+            claim_namespaces,
+        }
+    }
+
+    /// The host's own part, as a probe that relays another server's snapshot needs it.
+    pub fn into_host(self) -> HostObservation {
+        HostObservation {
+            sampled_at_ms: self.sampled_at_ms,
+            memory: self.memory,
+            cpu: self.cpu,
+            disk: self.disk,
+            tools: self.tools,
+            sessions: self.sessions,
+        }
+    }
+}
+
+/// Limits the machine's owner sets for sessions an orchestrator asks to start here.
+/// Every field is optional; an unset limit leaves the orchestrator's policy value.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdmissionConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_sessions: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_free_ram_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cpu_percent: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_free_disk_mb: Option<u64>,
+    /// Admit on a measurement the host could not take. Off unless the owner says so.
+    #[serde(default)]
+    pub allow_unknown: bool,
+    /// Estimate for a tool without its own entry; [`DEFAULT_SESSION_FOOTPRINT_MB`] when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_footprint_mb: Option<u64>,
+    /// Estimated resident memory of one session of a tool, in megabytes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tool_footprint_mb: BTreeMap<String, u64>,
+}
+
+impl AdmissionConfig {
+    pub fn validate(&self) -> Result<(), OrchestrationError> {
+        if self.max_sessions.is_some_and(|n| n > MAX_POLICY_SESSIONS) {
+            return Err(OrchestrationError::Invalid(
+                "admission sessions must be 0 to 64",
+            ));
+        }
+        if self
+            .max_cpu_percent
+            .is_some_and(|percent| !(1..=100).contains(&percent))
+        {
+            return Err(OrchestrationError::Invalid("CPU percent must be 1 to 100"));
+        }
+        if self.min_free_ram_mb.is_some_and(|mb| mb > 1024 * 1024)
+            || self
+                .min_free_disk_mb
+                .is_some_and(|mb| mb > 1024 * 1024 * 1024)
+        {
+            return Err(OrchestrationError::Invalid("resource floors are megabytes"));
+        }
+        let footprint = |mb: &u64| (1..=MAX_SESSION_FOOTPRINT_MB).contains(mb);
+        if !self.default_footprint_mb.as_ref().is_none_or(footprint)
+            || !self.tool_footprint_mb.values().all(footprint)
+        {
+            return Err(OrchestrationError::Invalid(
+                "a session footprint is 1 to 1048576 megabytes",
+            ));
+        }
+        if self.tool_footprint_mb.len() > MAX_POLICY_TOOLS {
+            return Err(OrchestrationError::Invalid(
+                "at most 16 tool footprints may be configured",
+            ));
+        }
+        self.tool_footprint_mb
+            .keys()
+            .try_for_each(|tool| valid_identifier(tool))
+    }
+}
+
+/// The limits actually enforced: for each one, the stricter of the orchestrator's
+/// policy and the machine owner's file. The owner can never loosen the policy.
+pub fn effective_limits(policy: &MachineLimits, local: &AdmissionConfig) -> MachineLimits {
+    MachineLimits {
+        max_sessions: local
+            .max_sessions
+            .map_or(policy.max_sessions, |own| own.min(policy.max_sessions)),
+        min_free_ram_mb: local.min_free_ram_mb.map_or(policy.min_free_ram_mb, |own| {
+            own.max(policy.min_free_ram_mb)
+        }),
+        max_cpu_percent: local.max_cpu_percent.map_or(policy.max_cpu_percent, |own| {
+            own.min(policy.max_cpu_percent)
+        }),
+        min_free_disk_mb: local
+            .min_free_disk_mb
+            .map_or(policy.min_free_disk_mb, |own| {
+                own.max(policy.min_free_disk_mb)
+            }),
+    }
+}
+
+/// "May `sessions` sessions of `tool` start on this checkout now?"
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdmissionRequest {
+    pub tool: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default = "one_session")]
+    pub sessions: u32,
+    /// The orchestrator's policy limits for this target's machine. Without them the
+    /// policy defaults stand in, so a bare question is never looser than a policy's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<MachineLimits>,
+}
+fn one_session() -> u32 {
+    1
+}
+
+impl AdmissionRequest {
+    pub fn validate(&self) -> Result<(), OrchestrationError> {
+        valid_identifier(&self.tool)?;
+        if let Some(model) = &self.model
+            && (!bounded_text(model, 128) || model.chars().any(char::is_whitespace))
+        {
+            return Err(OrchestrationError::Invalid("bounded model name required"));
+        }
+        if !(1..=MAX_POLICY_SESSIONS).contains(&self.sessions) {
+            return Err(OrchestrationError::Invalid(
+                "an admission asks for 1 to 64 sessions",
+            ));
+        }
+        match self.limits.as_ref().and_then(MachineLimits::problem) {
+            Some(problem) => Err(OrchestrationError::Invalid(problem)),
+            None => Ok(()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdmissionOutcome {
+    /// Every session asked for may start.
+    Accepted,
+    /// Fewer may start than asked: `admitted` says how many.
+    Reduced,
+    Refused,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdmissionReason {
+    ToolNotInstalled,
+    ToolNotConfigured,
+    SessionCapReached,
+    AboveCpuCeiling,
+    BelowDiskFloor,
+    BelowRamFloor,
+    /// A needed measurement is unknown and the owner did not allow that.
+    CapacityUnknown,
+}
+
+impl AdmissionReason {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::ToolNotInstalled => "tool_not_installed",
+            Self::ToolNotConfigured => "tool_not_configured",
+            Self::SessionCapReached => "session_cap_reached",
+            Self::AboveCpuCeiling => "above_cpu_ceiling",
+            Self::BelowDiskFloor => "below_disk_floor",
+            Self::BelowRamFloor => "below_ram_floor",
+            Self::CapacityUnknown => "capacity_unknown",
+        }
+    }
+}
+
+/// A part of the snapshot a decision needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapacityField {
+    Tools,
+    Sessions,
+    Cpu,
+    Disk,
+    Memory,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FootprintSource {
+    /// [`DEFAULT_SESSION_FOOTPRINT_MB`].
+    Default,
+    /// The machine owner's admission file.
+    Configured,
+    /// A running session of the tool uses more than the estimate.
+    Observed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdmissionDecision {
+    pub outcome: AdmissionOutcome,
+    pub tool: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub requested: u32,
+    /// How many of the requested sessions may start now.
+    pub admitted: u32,
+    /// The limit that refused or reduced the request; `None` when accepted.
+    pub reason: Option<AdmissionReason>,
+    /// Measurements this decision needed and the snapshot did not have.
+    pub unknown: Vec<CapacityField>,
+    /// The limits enforced, after the machine owner's file was applied.
+    pub limits: MachineLimits,
+    pub footprint_mb: u64,
+    pub footprint_source: FootprintSource,
+    pub sampled_at_ms: Option<u64>,
+}
+
+/// One session's estimated resident memory: the owner's estimate, raised to what a
+/// running session of the same tool was actually observed to use.
+pub fn estimated_footprint(
+    config: &AdmissionConfig,
+    sessions: Option<&[SessionFootprint]>,
+    tool: &str,
+) -> (u64, FootprintSource) {
+    let (estimate, source) = match config
+        .tool_footprint_mb
+        .get(tool)
+        .or(config.default_footprint_mb.as_ref())
+    {
+        Some(configured) => (*configured, FootprintSource::Configured),
+        None => (DEFAULT_SESSION_FOOTPRINT_MB, FootprintSource::Default),
+    };
+    let observed = sessions
+        .into_iter()
+        .flatten()
+        .filter(|session| session.tool.as_deref() == Some(tool))
+        .filter_map(|session| session.resident_mb)
+        .max();
+    match observed {
+        Some(observed) if observed > estimate => (observed, FootprintSource::Observed),
+        _ => (estimate.max(1), source),
+    }
+}
+
+/// Decide one admission. A limit a known measurement breaks refuses with that limit's
+/// reason. Otherwise an unknown measurement refuses as `capacity_unknown` unless the
+/// owner allowed unknowns, in which case that check is skipped. What remains is how
+/// many sessions fit under the session cap and above the RAM floor.
+pub fn decide_admission(
+    snapshot: &CapacitySnapshot,
+    config: &AdmissionConfig,
+    request: &AdmissionRequest,
+) -> AdmissionDecision {
+    use AdmissionReason as R;
+    let limits = effective_limits(&request.limits.unwrap_or_default(), config);
+    let (footprint_mb, footprint_source) =
+        estimated_footprint(config, snapshot.sessions.as_deref(), &request.tool);
+    let mut unknown = Vec::new();
+    let mut refusal = None;
+    let mut refuse = |reason| {
+        refusal.get_or_insert(reason);
+    };
+    match &snapshot.tools {
+        None => unknown.push(CapacityField::Tools),
+        Some(tools) => match tools.iter().find(|known| known.tool == request.tool) {
+            Some(known) if !known.installed => refuse(R::ToolNotInstalled),
+            Some(known) if !known.configured => refuse(R::ToolNotConfigured),
+            Some(_) => {}
+            None => refuse(R::ToolNotInstalled),
+        },
+    }
+    // Each `room` is how many more sessions that limit leaves space for.
+    let session_room = match &snapshot.sessions {
+        None => {
+            unknown.push(CapacityField::Sessions);
+            None
+        }
+        Some(sessions) => {
+            let running = u32::try_from(sessions.len()).unwrap_or(u32::MAX);
+            let room = limits.max_sessions.saturating_sub(running);
+            if room == 0 {
+                refuse(R::SessionCapReached);
+            }
+            Some(room)
+        }
+    };
+    match snapshot.cpu.load_percent {
+        None => unknown.push(CapacityField::Cpu),
+        Some(load) if load > limits.max_cpu_percent => refuse(R::AboveCpuCeiling),
+        Some(_) => {}
+    }
+    match snapshot.disk.free_mb {
+        None => unknown.push(CapacityField::Disk),
+        Some(free) if free < limits.min_free_disk_mb => refuse(R::BelowDiskFloor),
+        Some(_) => {}
+    }
+    let ram_room = match snapshot.memory.free_mb {
+        None => {
+            unknown.push(CapacityField::Memory);
+            None
+        }
+        Some(free) => {
+            let room = free.saturating_sub(limits.min_free_ram_mb) / footprint_mb;
+            if room == 0 {
+                refuse(R::BelowRamFloor);
+            }
+            Some(u32::try_from(room).unwrap_or(u32::MAX))
+        }
+    };
+    if !unknown.is_empty() && !config.allow_unknown {
+        refuse(R::CapacityUnknown);
+    }
+    let (outcome, admitted, reason) = match refusal {
+        Some(reason) => (AdmissionOutcome::Refused, 0, Some(reason)),
+        None => {
+            // The tighter room names the reason; the session cap wins a tie.
+            let (room, reason) = match (session_room, ram_room) {
+                (Some(sessions), Some(ram)) if ram < sessions => (ram, R::BelowRamFloor),
+                (Some(sessions), _) => (sessions, R::SessionCapReached),
+                (None, Some(ram)) => (ram, R::BelowRamFloor),
+                (None, None) => (u32::MAX, R::CapacityUnknown),
+            };
+            if room >= request.sessions {
+                (AdmissionOutcome::Accepted, request.sessions, None)
+            } else {
+                (AdmissionOutcome::Reduced, room, Some(reason))
+            }
+        }
+    };
+    AdmissionDecision {
+        outcome,
+        tool: request.tool.clone(),
+        model: request.model.clone(),
+        requested: request.sessions,
+        admitted,
+        reason,
+        unknown,
+        limits,
+        footprint_mb,
+        footprint_source,
+        sampled_at_ms: snapshot.sampled_at_ms,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AdmissionDocument {
+    schema_version: u32,
+    admission: AdmissionConfig,
+}
+
+/// The machine's admission file as a caller sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdmissionView {
+    /// Whether the file exists; an absent file is all defaults.
+    pub configured: bool,
+    pub admission: AdmissionConfig,
+    /// The footprint estimate that applies when none is configured.
+    pub default_footprint_mb: u64,
+}
+
+/// `<HOTSHEET_HOME>/orchestration-admission.json`: private to the machine's owner.
+#[derive(Clone)]
+pub struct AdmissionStore {
+    storage: Storage,
+}
+
+impl AdmissionStore {
+    pub fn new(home: &Path) -> Self {
+        Self {
+            storage: Storage::machine_named(home, "orchestration-admission.json"),
+        }
+    }
+
+    fn document(&self) -> Result<Option<AdmissionConfig>, OrchestrationError> {
+        let Some(bytes) = self.storage.read(MAX_ADMISSION_BYTES)? else {
+            return Ok(None);
+        };
+        let document: AdmissionDocument = decode(&bytes)?;
+        // A stored file that no longer validates must not be enforced as if it did.
+        document
+            .admission
+            .validate()
+            .map_err(|_| OrchestrationError::Corrupt)?;
+        Ok(Some(document.admission))
+    }
+
+    fn view(config: Option<AdmissionConfig>) -> AdmissionView {
+        AdmissionView {
+            configured: config.is_some(),
+            admission: config.unwrap_or_default(),
+            default_footprint_mb: DEFAULT_SESSION_FOOTPRINT_MB,
+        }
+    }
+
+    /// An absent file is the default configuration and is never created by a read.
+    /// A malformed one is an error, so a damaged file can never loosen admission.
+    pub fn read(&self) -> Result<AdmissionView, OrchestrationError> {
+        self.document().map(Self::view)
+    }
+
+    /// Change the configuration under the file's lock. Unchanged content writes
+    /// nothing, so repeating a setup command is a no-op.
+    pub fn update(
+        &self,
+        change: impl FnOnce(&mut AdmissionConfig),
+    ) -> Result<AdmissionView, OrchestrationError> {
+        let _lock = self.storage.lock()?;
+        let previous = self.document()?;
+        let mut next = previous.clone().unwrap_or_default();
+        change(&mut next);
+        next.validate()?;
+        if previous.as_ref() != Some(&next) {
+            let mut bytes = serde_json::to_vec_pretty(&AdmissionDocument {
+                schema_version: ORCHESTRATION_VERSION,
+                admission: next.clone(),
+            })
+            .map_err(|_| OrchestrationError::Corrupt)?;
+            bytes.push(b'\n');
+            self.storage.write(&bytes, MAX_ADMISSION_BYTES)?;
+        }
+        Ok(Self::view(Some(next)))
+    }
+}

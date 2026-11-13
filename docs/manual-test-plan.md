@@ -985,6 +985,20 @@ recover. At 1,000 total issue keys with no eligible v2 key, verify the write
 is refused before PUT. At more than 1,000 keys, reads stop for operator
 recovery. Retain every v1 marker even when expired or released.
 
+## Orchestration target capacity and admission (HS2-J8PRTV)
+
+Use disposable machine homes and synthetic projects only. No rendered interface is
+added by this ticket. The automated CLI/HTTP/MCP flows pass with scripted readings and
+one real-host reading; this checklist needs real machines and has not been run.
+
+1. On a machine running several AI sessions, run `orchestration capacity show
+--checkout <id>` and compare free RAM, CPU and each session's `resident_mb` with
+   the system's own activity monitor.
+2. Set `orchestration admission set --max-sessions 1` on a paired remote machine and
+   confirm `orchestration admission check --target` from the orchestrating machine
+   answers `reduced` or `refused` with `session_cap_reached`.
+3. Run the same checks against a Linux server (HS2-24PQ1R).
+
 ## Orchestration target tickets (HS2-AZ15GA)
 
 Use disposable homes, synthetic projects and the always-safe internal testing

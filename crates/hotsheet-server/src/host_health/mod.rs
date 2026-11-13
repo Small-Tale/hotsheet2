@@ -15,6 +15,7 @@
 //! snapshot with `GET /host-health` on each event and on resync. Every value is a metric or a
 //! code; the only name reported is the busiest process's executable name.
 
+pub(crate) mod capacity;
 pub(crate) mod live_cpu;
 pub(crate) mod routes;
 pub(crate) mod source;

@@ -4,6 +4,7 @@
 mod approvals;
 mod audit;
 mod bindings;
+mod capacity;
 pub(crate) mod contract;
 mod grants;
 mod manifest;
@@ -23,6 +24,13 @@ pub use audit::{
     JournalPage, JournalRecord, MAX_AUDIT_PAGE, MAX_AUDIT_SEGMENT_BYTES,
 };
 pub use bindings::BindingRegistry;
+pub use capacity::{
+    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest,
+    AdmissionStore, AdmissionView, CapacityField, CapacitySnapshot, CpuCapacity,
+    DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
+    MAX_CLAIM_NAMESPACES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, SessionFootprint,
+    ToolAvailability, decide_admission, effective_limits, estimated_footprint,
+};
 pub use contract::*;
 pub use grants::{
     AccessDecision, AccessRequest, CreateGrant, DenialReason, Grant, GrantRegistry, GrantState,
@@ -194,6 +202,8 @@ mod approval_tests;
 mod audit_tests;
 #[cfg(test)]
 mod binding_tests;
+#[cfg(test)]
+mod capacity_tests;
 #[cfg(test)]
 mod grant_tests;
 #[cfg(test)]

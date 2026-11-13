@@ -1,0 +1,370 @@
+//! Orchestration capacity (HS2-J8PRTV, `docs/26-orchestration-projects.md` §26.10): what this
+//! machine can take right now, for the orchestrator's capacity read and this server's own
+//! admission answer.
+//!
+//! Nothing here runs on a timer. A reading is taken when a request asks for one, and kept
+//! for [`CAPACITY_CACHE`] so several callers share it. Callers queue on one lock, so a burst
+//! is one sample. Readings are numbers and tool names: no process path, command line or user
+//! name is read (HS2-SW5ZK3).
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+use hotsheet_cli::orchestration::CapacityProbe;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::checkouts::Checkout;
+use hotsheet_ticketing::orchestration::{
+    CpuCapacity, DiskCapacity, HostObservation, MemoryCapacity, SessionFootprint, ToolAvailability,
+};
+
+use super::source;
+use crate::AppState;
+
+/// How long one reading answers further requests.
+pub(crate) const CAPACITY_CACHE: Duration = Duration::from_secs(3);
+/// The gap between the two CPU tick readings of one sample.
+const CPU_WINDOW: Duration = Duration::from_millis(250);
+const MIB: u64 = 1024 * 1024;
+
+/// Memory and CPU of the whole machine. A value the platform cannot report is `None`.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct MachineReading {
+    /// Memory a new process could use without swapping.
+    pub memory_free_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
+    /// Whole-machine busy share, 0 to 100.
+    pub cpu_percent: Option<f64>,
+}
+
+/// Where capacity readings come from. The server reads the real host; tests script one.
+pub trait CapacitySource: Send {
+    fn machine(&mut self) -> MachineReading;
+
+    /// Free and total bytes of the volume that holds `path`.
+    fn disk(&mut self, path: &Path) -> Option<(u64, u64)>;
+
+    /// Resident bytes of each process tree rooted at one of `pids`. A pid the platform
+    /// cannot report has no entry.
+    fn resident_bytes(&mut self, pids: &[u32]) -> HashMap<u32, u64>;
+
+    /// Every drivable AI tool the plugin registry knows, with whether its program is
+    /// installed. Nothing is executed to find out.
+    fn tools(&mut self, plugin_dirs: &[PathBuf]) -> Option<Vec<(String, bool)>>;
+}
+
+/// The real host.
+struct SystemCapacity;
+
+impl CapacitySource for SystemCapacity {
+    fn machine(&mut self) -> MachineReading {
+        let memory = source::system_memory();
+        MachineReading {
+            memory_free_bytes: memory.map(|memory| memory.free_bytes),
+            memory_total_bytes: memory.map(|memory| memory.total_bytes),
+            cpu_percent: source::system_cpu_percent(CPU_WINDOW),
+        }
+    }
+
+    fn disk(&mut self, path: &Path) -> Option<(u64, u64)> {
+        source::system_disk(path).map(|disk| (disk.free_bytes, disk.total_bytes))
+    }
+
+    fn resident_bytes(&mut self, pids: &[u32]) -> HashMap<u32, u64> {
+        source::system_resident_bytes(pids)
+    }
+
+    fn tools(&mut self, plugin_dirs: &[PathBuf]) -> Option<Vec<(String, bool)>> {
+        let installed: Vec<String> = hotsheet_plugins::detected_drivable_plugins(plugin_dirs)
+            .iter()
+            .map(|plugin| plugin.id().to_string())
+            .collect();
+        Some(
+            hotsheet_plugins::all_plugins(plugin_dirs)
+                .iter()
+                .filter(|plugin| plugin.manifest.drive.is_some())
+                .map(|plugin| {
+                    let id = plugin.id().to_string();
+                    let detected = installed.contains(&id);
+                    (id, detected)
+                })
+                .collect(),
+        )
+    }
+}
+
+/// One live AI session as the server knows it. The launch directory stays here: it decides
+/// `on_checkout` and never leaves the process.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LiveSession {
+    pub(crate) id: String,
+    pub(crate) tool: Option<String>,
+    pub(crate) busy: bool,
+    pub(crate) launch_cwd: Option<String>,
+}
+
+struct Reading {
+    taken: Instant,
+    sampled_at_ms: u64,
+    machine: MachineReading,
+    tools: Option<Vec<(String, bool)>>,
+    sessions: Option<Vec<(LiveSession, Option<u64>)>>,
+    /// Disk readings by checkout root, each taken once per reading.
+    disks: HashMap<PathBuf, Option<(u64, u64)>>,
+}
+
+struct Inner {
+    source: Box<dyn CapacitySource>,
+    reading: Option<Reading>,
+}
+
+/// The server's capacity state: its source and the reading currently being shared.
+pub(crate) struct Capacity {
+    inner: Mutex<Inner>,
+    cache_ms: AtomicU64,
+    samples: AtomicU64,
+}
+
+impl Default for Capacity {
+    fn default() -> Self {
+        Self::with_source(Box::new(SystemCapacity))
+    }
+}
+
+impl std::fmt::Debug for Capacity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Capacity")
+            .field("samples", &self.samples())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Capacity {
+    pub(crate) fn with_source(source: Box<dyn CapacitySource>) -> Self {
+        Self {
+            inner: Mutex::new(Inner {
+                source,
+                reading: None,
+            }),
+            cache_ms: AtomicU64::new(CAPACITY_CACHE.as_millis() as u64),
+            samples: AtomicU64::new(0),
+        }
+    }
+
+    pub(crate) fn set_cache(&self, cache: Duration) {
+        self.cache_ms
+            .store(cache.as_millis() as u64, Ordering::SeqCst);
+    }
+
+    /// How many readings were taken since the server started.
+    pub(crate) fn samples(&self) -> u64 {
+        self.samples.load(Ordering::SeqCst)
+    }
+
+    /// The capacity of this machine for the checkout rooted at `root`. Blocking: call it
+    /// off the async runtime. `sessions` lists the live AI sessions when a reading is due,
+    /// `pids` maps their ids to process ids, and `configured` says whether the checkout
+    /// has a tool enabled.
+    pub(crate) fn observe(
+        &self,
+        root: &Path,
+        plugin_dirs: &[PathBuf],
+        sessions: impl FnOnce() -> Option<Vec<LiveSession>>,
+        pids: impl FnOnce() -> HashMap<String, u32>,
+        configured: impl Fn(&str) -> bool,
+    ) -> HostObservation {
+        let mut inner = self.inner.lock_or_recover();
+        let cache = Duration::from_millis(self.cache_ms.load(Ordering::SeqCst));
+        let fresh = inner
+            .reading
+            .as_ref()
+            .is_some_and(|reading| reading.taken.elapsed() < cache);
+        if !fresh {
+            self.samples.fetch_add(1, Ordering::SeqCst);
+            let machine = inner.source.machine();
+            let tools = inner.source.tools(plugin_dirs);
+            let sessions = sessions().map(|sessions| {
+                let pids = pids();
+                let roots: Vec<u32> = sessions
+                    .iter()
+                    .filter_map(|session| pids.get(&session.id).copied())
+                    .collect();
+                let resident = inner.source.resident_bytes(&roots);
+                sessions
+                    .into_iter()
+                    .map(|session| {
+                        let bytes = pids
+                            .get(&session.id)
+                            .and_then(|pid| resident.get(pid))
+                            .copied();
+                        (session, bytes)
+                    })
+                    .collect()
+            });
+            inner.reading = Some(Reading {
+                taken: Instant::now(),
+                sampled_at_ms: crate::client_drive::now_ms(),
+                machine,
+                tools,
+                sessions,
+                disks: HashMap::new(),
+            });
+        }
+        let Inner { source, reading } = &mut *inner;
+        let Some(reading) = reading.as_mut() else {
+            return HostObservation::default();
+        };
+        let disk = *reading
+            .disks
+            .entry(root.to_path_buf())
+            .or_insert_with(|| source.disk(root));
+        // A session started below the checkout's root belongs to it.
+        let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        HostObservation {
+            sampled_at_ms: Some(reading.sampled_at_ms),
+            memory: MemoryCapacity {
+                free_mb: reading.machine.memory_free_bytes.map(|bytes| bytes / MIB),
+                total_mb: reading.machine.memory_total_bytes.map(|bytes| bytes / MIB),
+            },
+            cpu: CpuCapacity {
+                load_percent: reading
+                    .machine
+                    .cpu_percent
+                    .filter(|percent| percent.is_finite())
+                    .map(|percent| percent.clamp(0.0, 100.0).round() as u32),
+                logical_cpus: std::thread::available_parallelism()
+                    .ok()
+                    .and_then(|count| u32::try_from(count.get()).ok()),
+            },
+            disk: DiskCapacity {
+                free_mb: disk.map(|(free, _)| free / MIB),
+                total_mb: disk.map(|(_, total)| total / MIB),
+            },
+            tools: reading.tools.as_ref().map(|tools| {
+                tools
+                    .iter()
+                    .map(|(tool, installed)| ToolAvailability {
+                        tool: tool.clone(),
+                        installed: *installed,
+                        configured: configured(tool),
+                    })
+                    .collect()
+            }),
+            sessions: reading.sessions.as_ref().map(|sessions| {
+                sessions
+                    .iter()
+                    .map(|(session, resident)| SessionFootprint {
+                        session_id: session.id.clone(),
+                        tool: session.tool.clone(),
+                        busy: session.busy,
+                        on_checkout: session.launch_cwd.as_ref().map(|cwd| {
+                            let cwd = Path::new(cwd);
+                            cwd.canonicalize()
+                                .unwrap_or_else(|_| cwd.to_path_buf())
+                                .starts_with(&canonical)
+                        }),
+                        // Rounded up, so a small live process never reads as zero.
+                        resident_mb: resident.map(|bytes| bytes.div_ceil(MIB)),
+                    })
+                    .collect()
+            }),
+        }
+    }
+}
+
+/// Every live AI session of this server. `None` when the terminal host could not be asked,
+/// so a failed listing never reads as an idle machine.
+async fn live_sessions(state: &AppState) -> Option<Vec<LiveSession>> {
+    let infos = crate::routes::terminals::try_live_terminal_infos(state)
+        .await
+        .ok()?;
+    Some(
+        infos
+            .into_iter()
+            .filter(|info| info.alive && info.kind == hotsheet_terminals::TerminalKind::Ai)
+            .map(|info| LiveSession {
+                id: info.id,
+                tool: info.tool,
+                busy: info.busy,
+                launch_cwd: info.launch_cwd,
+            })
+            .collect(),
+    )
+}
+
+/// The process id of each running AI terminal, from the launch journal Hot Sheet already
+/// keeps (ids and purposes only). The most recent unended launch of a session wins.
+fn session_pids(home: &Path) -> HashMap<String, u32> {
+    hotsheet_process_journal::ProcessJournal::at(home)
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|record| {
+            record.purpose == hotsheet_process_journal::Purpose::TerminalAi
+                && record.ended_ms.is_none()
+        })
+        .filter_map(|record| Some((record.session_id?, record.pid)))
+        .collect()
+}
+
+/// The checkout's `enabled_plugins` setting: unset enables every tool.
+fn enabled_tools(root: &Path) -> Option<std::collections::HashSet<String>> {
+    let value = hotsheet_ticketing::Settings::for_project(root)
+        .get("enabled_plugins", hotsheet_ticketing::Scope::Shared)
+        .ok()
+        .flatten();
+    hotsheet_plugins::enabled_plugins_from_setting(value.as_ref())
+}
+
+/// The probe the shared orchestration runtime asks from inside this server. It is called
+/// on a blocking thread, so it may wait for the terminal host's answer.
+pub(crate) struct ServerCapacity {
+    pub(crate) state: AppState,
+    pub(crate) runtime: tokio::runtime::Handle,
+}
+
+impl CapacityProbe for ServerCapacity {
+    fn observe(&self, checkout: &Checkout) -> HostObservation {
+        let root = Path::new(&checkout.root);
+        let enabled = enabled_tools(root);
+        self.state.capacity.observe(
+            root,
+            &self.state.plugin_dirs,
+            || self.runtime.block_on(live_sessions(&self.state)),
+            || session_pids(self.state.machine_home()),
+            |tool| {
+                enabled
+                    .as_ref()
+                    .is_none_or(|enabled| enabled.contains(tool))
+            },
+        )
+    }
+}
+
+impl AppState {
+    /// Read capacity from `source` instead of the real host (tests, embedders).
+    #[must_use]
+    pub fn with_capacity_source(mut self, source: Box<dyn CapacitySource>) -> Self {
+        self.capacity = std::sync::Arc::new(Capacity::with_source(source));
+        self
+    }
+
+    /// How long one capacity reading answers further requests.
+    #[must_use]
+    pub fn with_capacity_cache(self, cache: Duration) -> Self {
+        self.capacity.set_cache(cache);
+        self
+    }
+
+    /// How many capacity readings this server has taken.
+    pub fn capacity_samples(&self) -> u64 {
+        self.capacity.samples()
+    }
+}
+
+#[cfg(test)]
+#[path = "capacity_tests.rs"]
+mod tests;

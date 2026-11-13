@@ -4,11 +4,11 @@
 > reviewed machine bindings, delegated grants with their audit journal (§26.7), the
 > throughput policy with approvals (§26.8), structured ticket links with target
 > ticket operations (§26.3, HS2-AZ15GA), dispatch runs with status and events (§26.9,
-> HS2-EBHDSB, HS2-7QHWHJ), AI tool capacity states with tool selection (§26.11,
-> HS2-AHG7HW), and the
-> headless CLI, authenticated HTTP and MCP adapters are implemented and covered by
-> automated tests; the OpenAPI contract describes them. Workspace UI and the scheduler
-> remain design work under their separate implementation tickets.
+> HS2-EBHDSB, HS2-7QHWHJ), target capacity and admission (§26.10, HS2-J8PRTV), AI tool
+> capacity states with tool selection (§26.11, HS2-AHG7HW), and the headless CLI,
+> authenticated HTTP and MCP adapters are implemented and covered by automated tests;
+> the OpenAPI contract describes them. Workspace UI and the scheduler remain design
+> work under their separate implementation tickets.
 
 ## 26.1 Boundary and existing foundations
 
@@ -733,6 +733,180 @@ hotsheet-cli ... orchestration run events --project <owner> [--after <seq>] [--r
 
 MCP `hotsheet_targets` adds `run_status` and `run_events`.
 
+## 26.10 Target capacity and admission (HS2-J8PRTV)
+
+The orchestrator plans placement, and each target's own server decides whether a
+session may start on its machine. This section covers what a machine reports about
+itself and how it answers. Starting the session is HS2-GDJXGZ; the scheduler that
+asks is HS2-ECWG50.
+
+### Capacity snapshot
+
+A snapshot is what the server hosting a checkout measured just now. Megabytes and
+percent are integers. A value the host could not measure is `null`; nothing is
+estimated in its place.
+
+| Field                                  | Meaning                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `server_id`, `checkout_id`             | The machine identity and the hosted checkout the snapshot is for                                       |
+| `sampled_at_ms`                        | When the shared reading was taken                                                                      |
+| `memory.free_mb`, `memory.total_mb`    | Memory a new process could use without swapping, and physical memory                                   |
+| `cpu.load_percent`, `cpu.logical_cpus` | Whole-machine busy share over a 250 ms window, and the core count                                      |
+| `disk.free_mb`, `disk.total_mb`        | The volume that holds the checkout                                                                     |
+| `tools[]`                              | Each drivable AI tool by name, whether it is `installed`, and whether the checkout has it `configured` |
+| `sessions[]`                           | Each running AI session: `session_id`, `tool`, `busy`, `on_checkout`, `resident_mb`                    |
+| `claims[]`, `claim_namespaces`         | Live resource claims (namespace, resource, expiry) in the namespaces the caller named                  |
+
+- **Tools** come from the plugin registry. A tool is installed when its program is on
+  the server's `PATH`; nothing is executed to find out, so
+  `HOTSHEET_AI_TOOL_PROBES=off` changes nothing here. A tool is configured unless the
+  checkout's `enabled_plugins` setting leaves it out.
+- **Sessions** are the server's live AI terminals. `resident_mb` is the resident
+  memory of the session's process and its descendants, from the process id in the
+  launch journal and one `ps` listing of ids and sizes. It is `null` when the
+  platform or the journal cannot supply it. `on_checkout` says whether the session was
+  started inside the checkout.
+- **Claims** are reported for the namespaces the caller names with `claim_namespaces`
+  (at most eight). The claims API cannot enumerate namespaces yet (HS2-YDZAFH), so
+  without a name `claims` is `null`, not an empty list.
+- **Privacy** follows HS2-SW5ZK3. A process is a session id, a tool name and numbers.
+  No process path, command line, working directory, user name or claim metadata is in
+  a snapshot, for a local or a remote reader.
+- **Platforms.** macOS and Linux report every value ([host-health](host-health.md)).
+  On Windows free and total memory, CPU load and `resident_mb` are `null` until
+  HS2-4A5AV7; disk, tools and sessions are reported.
+
+### Sampling only on demand
+
+There is no capacity sampler. A reading is taken when a request asks for a snapshot or
+an admission answer, and it is shared for three seconds: callers queue on one lock, so
+a burst is one reading. A server that nobody asks reads nothing. The host health
+sampler ([host-health](host-health.md)) is separate and unchanged.
+
+This ticket ships request-driven snapshots only. A capacity stream on the live channel
+that runs while a subscriber exists is HS2-P5GTSW.
+
+A headless process hosts no sessions. `hotsheet-cli` and the MCP core backend ask the
+Hot Sheet server running on the same machine for its snapshot and report every value
+as unknown when none is running.
+
+### Admission
+
+"May `sessions` sessions of tool T start on checkout C now?" is answered by the
+machine that hosts C, from three inputs:
+
+1. its own snapshot;
+2. the limits the orchestrator sends, which are the policy's `machine` limits for that
+   target (§26.8), or the policy defaults when a caller sends none;
+3. its owner's admission file, `${HOTSHEET_HOME}/orchestration-admission.json`.
+
+The file can only make the answer stricter. For each limit the enforced value is the
+stricter of the two: the smaller `max_sessions` and `max_cpu_percent`, the larger
+`min_free_ram_mb` and `min_free_disk_mb`. A looser value in the file changes nothing.
+
+```json
+{
+  "schema_version": 1,
+  "admission": {
+    "max_sessions": 2,
+    "min_free_ram_mb": 4096,
+    "max_cpu_percent": 80,
+    "min_free_disk_mb": 10240,
+    "allow_unknown": false,
+    "default_footprint_mb": 1024,
+    "tool_footprint_mb": { "codex": 1500 }
+  }
+}
+```
+
+Every key is optional. `max_sessions` is 0 to 64, where 0 refuses every session. The
+footprint of one session is the owner's estimate for the tool, else
+`default_footprint_mb`, else 1024 MB. If a running session of the same tool is
+observed to use more, the observed value is used. The answer names the value and its
+source (`default`, `configured` or `observed`). An absent file is all defaults; a
+damaged or newer one is an error, never a looser default.
+
+The answer is `accepted` (all asked for may start), `reduced` (`admitted` says how
+many) or `refused`, with the limits that were enforced and one reason code:
+
+| Reason                | When                                                                      |
+| --------------------- | ------------------------------------------------------------------------- |
+| `tool_not_installed`  | The host does not know the tool or its program is missing                 |
+| `tool_not_configured` | The checkout opted out of the tool                                        |
+| `session_cap_reached` | Running AI sessions leave no room, or less room than asked, under the cap |
+| `above_cpu_ceiling`   | CPU load is above `max_cpu_percent`                                       |
+| `below_disk_floor`    | Free disk is below `min_free_disk_mb`                                     |
+| `below_ram_floor`     | Free RAM minus the floor fits no session, or fewer than asked             |
+| `capacity_unknown`    | A needed measurement is `null` and the owner did not set `allow_unknown`  |
+
+A limit that a known measurement breaks always refuses with its own reason. Unknown
+measurements are listed in `unknown` and refuse as `capacity_unknown` unless the owner
+set `allow_unknown`, in which case that check is skipped. `reduced` names the tighter
+of the session cap and the RAM room. The decision is a pure function
+(`decide_admission`) of the snapshot, the file and the request.
+
+On the orchestrating side the question passes the gate (§26.7) as `sessions_manage`
+for the tool and model. It starts nothing, so it carries no load and files no
+approval; grant and policy must still permit the tool and model on the target. The
+start itself passes the gate again with its load and any approval (HS2-GDJXGZ).
+Reading capacity passes the gate as `gates_observe`. Both are recorded in the audit
+journal, including a target's failure code.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration tool-capacity show --project <owner>
+hotsheet-cli ... orchestration tool-capacity signal --project <owner> --tool <tool> \
+  [--account <account>] --kind rate_limit|usage_limit|recovered|usage \
+  [--at-ms <unix-ms>] [--resets-at-ms <unix-ms>] [--cost-cents <n>] [--session <id>]
+hotsheet-cli ... orchestration tool-capacity select --project <owner> --target <target-id> \
+  [--tool <tool>] [--model <model>] [--load <tool>[/<account>]=<sessions>]...
+```
+
+| Route                                                    | Methods and purpose                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/tool-capacity`         | GET states of the policy's tool accounts; machine-local      |
+| `/checkouts/{owner}/orchestration/tool-capacity/signals` | POST one signal for a configured tool; machine-local         |
+| `/checkouts/{owner}/orchestration/tool-capacity/select`  | POST the selection for one target; reads only; machine-local |
+
+A signal through the route must name a tool, and an account when given, that the
+owner's policy configures. An AI actor may report a limit or usage but is refused
+`recovered` with `forbidden`: the session a limit holds back must not lift it. A
+route signal that changes the state is recorded in the audit journal (§26.7) as
+`tool_capacity_<kind>` with the new state code. MCP `hotsheet_targets` adds the
+read-only `tool_capacity` and `tool_select`; it reports no signals.
+hotsheet-cli ... orchestration capacity show --project <owner> --target <target-id> [--claims <namespace>]
+hotsheet-cli ... orchestration capacity show --checkout <checkout-id> # this machine
+hotsheet-cli orchestration admission show
+hotsheet-cli orchestration admission set [--max-sessions N] [--min-free-ram-mb N] \
+[--max-cpu-percent N] [--min-free-disk-mb N] [--allow-unknown true|false] \
+[--default-footprint-mb N] [--tool-footprint <tool>=<mb>] [--clear <limit>]
+hotsheet-cli ... orchestration admission check --project <owner> --target <target-id> \
+--tool <tool> [--model <model>] [--sessions N]
+hotsheet-cli ... orchestration admission check --checkout <checkout-id> --tool <tool>
+
+```
+
+`admission set` is idempotent: the same command again writes nothing. It is a person's
+act at the machine; an AI actor is refused, and there is no HTTP or MCP route that
+writes the file, so a remote orchestrator can never loosen it. `--clear` takes
+`max_sessions`, `min_free_ram_mb`, `max_cpu_percent`, `min_free_disk_mb`,
+`default_footprint_mb` or `tool_footprint:<tool>`. There is no `status` command, so
+capacity lives under `orchestration`.
+
+| Route                                                         | Methods and purpose                                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `/checkouts/{checkout}/target-capacity`                       | Hosted half: GET this machine's snapshot (`?claim_namespaces=a,b`)                  |
+| `/checkouts/{checkout}/target-admission`                      | Hosted half: POST `{tool, model?, sessions?, limits?}` for this machine's answer    |
+| `/checkouts/{owner}/orchestration/targets/{target}/capacity`  | GET (`?actor_id=`) or POST (`actor` in the body) a target's snapshot; machine-local |
+| `/checkouts/{owner}/orchestration/targets/{target}/admission` | POST `{tool, model?, sessions?}` for the target's answer; machine-local             |
+
+The hosted routes are ordinary authenticated project data under the caller's device
+role, like the hosted ticket route, so a remote orchestration project reaches them
+over its reviewed registration. A read-only device can read capacity and cannot ask
+for admission. A peer that predates the routes answers `target_peer_unsupported`. MCP
+`hotsheet_targets` adds the read-only actions `capacity` and `admission_check`.
+
 ## 26.11 AI tool capacity (HS2-AHG7HW)
 
 The policy (§26.8) configures how many sessions each tool and account may run and,
@@ -872,27 +1046,4 @@ error on every route and is never overwritten. At capacity, the longest-quiet re
 with no limit, no unconfirmed recovery and no spend for the current day is forgotten;
 when every record still holds something in force, a new tool account is refused with
 `capacity_reached`.
-
-### Headless surface
-
-```sh
-hotsheet-cli ... orchestration tool-capacity show --project <owner>
-hotsheet-cli ... orchestration tool-capacity signal --project <owner> --tool <tool> \
-  [--account <account>] --kind rate_limit|usage_limit|recovered|usage \
-  [--at-ms <unix-ms>] [--resets-at-ms <unix-ms>] [--cost-cents <n>] [--session <id>]
-hotsheet-cli ... orchestration tool-capacity select --project <owner> --target <target-id> \
-  [--tool <tool>] [--model <model>] [--load <tool>[/<account>]=<sessions>]...
 ```
-
-| Route                                                    | Methods and purpose                                          |
-| -------------------------------------------------------- | ------------------------------------------------------------ |
-| `/checkouts/{owner}/orchestration/tool-capacity`         | GET states of the policy's tool accounts; machine-local      |
-| `/checkouts/{owner}/orchestration/tool-capacity/signals` | POST one signal for a configured tool; machine-local         |
-| `/checkouts/{owner}/orchestration/tool-capacity/select`  | POST the selection for one target; reads only; machine-local |
-
-A signal through the route must name a tool, and an account when given, that the
-owner's policy configures. An AI actor may report a limit or usage but is refused
-`recovered` with `forbidden`: the session a limit holds back must not lift it. A
-route signal that changes the state is recorded in the audit journal (§26.7) as
-`tool_capacity_<kind>` with the new state code. MCP `hotsheet_targets` adds the
-read-only `tool_capacity` and `tool_select`; it reports no signals.

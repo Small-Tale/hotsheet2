@@ -85,6 +85,7 @@ pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 pub use api_error::ApiError;
 pub use events::{AssignmentEvent, ChangeEvent};
 pub(crate) use events::{EventLog, emit_change};
+pub use host_health::capacity::{CapacitySource, MachineReading};
 use routes::accounts::{
     GitHubAuthSession, cancel_github_device_auth, identify_github_account,
     list_account_github_repositories, list_accounts_route, list_github_auth_repositories,
@@ -297,6 +298,8 @@ pub struct AppState {
     mcp_presence: Arc<Mutex<mcp_presence::McpPresenceRegistry>>,
     /// The host health monitor the sampler feeds (HS2-DTAVQA).
     host_health: Arc<host_health::HostHealth>,
+    /// On-demand capacity readings for orchestration (HS2-J8PRTV).
+    capacity: Arc<host_health::capacity::Capacity>,
     /// Stores hosted because a project opened them: the only ones unhosted again once no open
     /// checkout references them. The default and startup-configured stores stay hosted.
     project_hosted: Arc<Mutex<std::collections::HashSet<String>>>,
@@ -629,6 +632,7 @@ impl AppState {
             presence: presence::Presence::default(),
             mcp_presence: Arc::default(),
             host_health: Arc::default(),
+            capacity: Arc::default(),
             project_hosted: Arc::default(),
             unhost_sweep: Arc::default(),
             repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -2134,6 +2138,24 @@ pub fn app(state: AppState) -> Router {
             get(routes::orchestration::read)
                 .post(routes::orchestration::write)
                 .patch(routes::orchestration::write),
+        )
+        // HS2-J8PRTV: this machine's capacity and its own admission answer, read when
+        // asked; and the orchestrating side's gated reach to a target's machine.
+        .route(
+            "/checkouts/{checkout}/target-capacity",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{checkout}/target-admission",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/capacity",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/admission",
+            post(routes::orchestration::write),
         )
         // Resource claims (HS2-FMHH9Y): leases on named machine resources. `acquire` and
         // `wait` may park on the backend's release signal (a long poll).

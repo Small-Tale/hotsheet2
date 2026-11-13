@@ -41,6 +41,8 @@ pub fn is_path(path: &str) -> bool {
                 "tool-capacity",
                 "signals" | "select"
             ]
+            // HS2-J8PRTV: the hosted capacity snapshot and admission answer.
+            | ["checkouts", _, "target-capacity" | "target-admission"]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -56,7 +58,10 @@ pub fn is_machine_path(path: &str) -> bool {
             "orchestration",
             "targets",
             _,
-            "binding" | "resolve" | "grants" | "access"
+            // HS2-J8PRTV: capacity and admission pass this machine's grants and
+            // policy. The hosted `target-capacity` and `target-admission` routes stay
+            // ordinary authenticated data so a remote orchestrator can reach them.
+            "binding" | "resolve" | "grants" | "access" | "capacity" | "admission"
         ] | [
             "checkouts",
             _,
@@ -434,6 +439,90 @@ impl OrchestrationRuntime {
             }
             ("DELETE", ["checkouts", checkout, "target-claims"]) => {
                 value(self.hosted_claim_release(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-J8PRTV hosted half: this machine's capacity and its own admission answer.
+            ("GET", ["checkouts", checkout, "target-capacity"]) => value(self.hosted_capacity(
+                checkout,
+                &super::capacity::claim_namespaces(
+                    query_text(path, "claim_namespaces")?.as_deref(),
+                )?,
+            )?),
+            ("POST", ["checkouts", checkout, "target-admission"]) => {
+                value(self.hosted_admission(checkout, decode(body)?)?)
+            }
+            // HS2-J8PRTV orchestrating half.
+            (
+                "GET",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "targets",
+                    id,
+                    "capacity",
+                ],
+            ) => {
+                // A read carries no body, so its actor travels in the query.
+                let actor = match query_text(path, "actor_id")? {
+                    Some(id) => Some(
+                        MutationActor::parse(
+                            query_text(path, "actor_role")?.as_deref().unwrap_or("ai"),
+                            Some(id),
+                        )
+                        .map_err(|_| {
+                            OrchestrationError::Invalid("actor role must be human, ai, or system")
+                        })?,
+                    ),
+                    None => None,
+                };
+                value(self.target_capacity(
+                    &reference(owner, id)?,
+                    &super::capacity::claim_namespaces(
+                        query_text(path, "claim_namespaces")?.as_deref(),
+                    )?,
+                    actor.as_ref(),
+                    tx,
+                )?)
+            }
+            // The same read for adapters that attach the actor to a body (CLI, MCP).
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "targets",
+                    id,
+                    "capacity",
+                ],
+            ) => {
+                let actor = actor(body)?;
+                let read: super::capacity::ReadCapacity = decode(body)?;
+                value(self.target_capacity(
+                    &reference(owner, id)?,
+                    &super::capacity::claim_namespaces(Some(&read.claim_namespaces.join(",")))?,
+                    actor.as_ref(),
+                    tx,
+                )?)
+            }
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "targets",
+                    id,
+                    "admission",
+                ],
+            ) => {
+                let actor = actor(body)?;
+                value(self.target_admission(
+                    &reference(owner, id)?,
+                    decode(body)?,
+                    actor.as_ref(),
+                    tx,
+                )?)
             }
             // HS2-EBHDSB orchestrating half.
             ("GET", ["checkouts", owner, "orchestration", "runs"]) => value(self.run_list(

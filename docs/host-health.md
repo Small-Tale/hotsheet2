@@ -244,6 +244,30 @@ per-core CPU every 2 seconds:
   live busy percent, the core count, and a per-core meter (`CpuCoreMeter`). It falls back to the
   snapshot whenever the feed has no live frame.
 
+## Capacity readings
+
+Orchestration capacity (HS2-J8PRTV, [26](26-orchestration-projects.md) §26.10) reads the host
+through a second injected source, `CapacitySource`, beside `HostSource`. It adds what the sampler
+does not measure: free and total RAM, and the resident memory of each AI session.
+
+- **On demand only.** These readings are not part of the sampler and do not follow
+  `sample_seconds`. One is taken when a capacity or admission request asks, and it is shared for
+  three seconds. `HOTSHEET_HOST_HEALTH_SAMPLER=off` does not affect it. They emit no change
+  events and do not change the `/host-health` snapshot, whose memory signal stays pressure and
+  swap.
+- **Free and total RAM.** macOS reads `vm_stat` and counts free, speculative and inactive pages
+  at the page size its header states; total memory comes from `sysconf`. Linux reads
+  `MemAvailable` and `MemTotal` from `/proc/meminfo`; a kernel without `MemAvailable` is unknown,
+  and `MemFree` is not used in its place. Windows has no reader yet (HS2-4A5AV7).
+- **CPU.** Two per-core tick readings 250 ms apart, with the live CPU feed's readers. Platforms
+  without one report unknown.
+- **Disk.** The volume holding the checkout the request names, not the store's.
+- **Session memory.** One `ps -A -o pid=,ppid=,rss=` listing, summed over the process tree of each
+  AI terminal's journalled process id. Only ids and sizes are read. A process that is not listed
+  has no value.
+
+A value that cannot be read is unknown and is never estimated.
+
 ## Thresholds
 
 Thresholds are machine-wide settings in `${HOTSHEET_HOME}/settings.json`, and each has a default.
@@ -280,6 +304,8 @@ The next sample applies a change.
   - `tests.rs`: the tests.
 - `crates/hotsheet-cli/src/dispatch/setup.rs`: machine-wide validation for `settings set`.
 - `crates/hotsheet-server/src/host_health/live_cpu.rs`: the live CPU feed and its long poll (HS2-CPFBWP).
+- `crates/hotsheet-server/src/host_health/capacity.rs`: on-demand capacity readings and their shared
+  reading (HS2-J8PRTV); its readers and parsers are in `source.rs`.
 - `clients/web/src/host-health.ts` and `clients/web/src/host-health-resource.ts`: the client
   contract and resource; `clients/web/src/host-cpu-feed.ts`: the live CPU long-poll loop.
 
@@ -293,4 +319,6 @@ Test processes never sample the machine they run on. Each runner sets
 - `migrator/test/isolated-home.mjs` for the migrator suite.
 
 A spawned server therefore never emits host-dependent events into a fixture's change stream.
-Unit and route tests drive the sampler through an injected `HostSource`.
+Unit and route tests drive the sampler through an injected `HostSource`, and capacity readings
+through an injected `CapacitySource` (`capacity_tests.rs`). One capacity test reads the real host
+on macOS and Linux to prove the readers work; it reads numbers only.

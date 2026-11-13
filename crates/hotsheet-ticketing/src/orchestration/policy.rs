@@ -58,6 +58,17 @@ impl Default for MachineLimits {
     }
 }
 
+impl MachineLimits {
+    /// HS2-J8PRTV: the first thing wrong with limits received outside a policy.
+    pub fn problem(&self) -> Option<&'static str> {
+        let mut found = None;
+        check_machine(self, None, &mut |_, message, _| {
+            found.get_or_insert(message);
+        });
+        found
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AccountPolicy {

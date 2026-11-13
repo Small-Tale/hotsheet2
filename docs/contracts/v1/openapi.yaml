@@ -1786,6 +1786,229 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-capacity:
+    description:
+      What the machine hosting this checkout can take right now (HS2-J8PRTV). Read on request, never on a timer; one
+      reading answers every caller for a few seconds. Ordinary authenticated project data under the caller's device
+      role, so a remote orchestration project can reach it. Values are metrics and tool names only.
+    get:
+      operationId: readHostedTargetCapacity
+      parameters:
+        - name: claim_namespaces
+          in: query
+          description:
+            Comma-separated resource-claim namespaces (at most 8) whose live claims the snapshot lists. Without it,
+            `claims` is null.
+          schema:
+            type: string
+            maxLength: 600
+      responses:
+        '200':
+          description: The capacity snapshot; an unmeasured value is null, never a guess.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetCapacitySnapshot'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-admission:
+    description:
+      This machine's own answer to "may sessions of this tool start on this checkout now" (HS2-J8PRTV), from its own
+      snapshot, the caller's policy limits and the machine owner's admission file, which can only be stricter. Starts
+      nothing. Ordinary authenticated project data; a read-only device role cannot ask.
+    post:
+      operationId: decideHostedTargetAdmission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedTargetAdmissionRequest'
+      responses:
+        '200':
+          description: Accepted, reduced or refused, with the reason code and the limits that were enforced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetAdmissionDecision'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/targets/{target}/capacity:
+    description:
+      Machine-local read of the capacity of the machine that hosts a bound target (HS2-J8PRTV). Passes the grant and
+      policy gate as `gates_observe`, then reaches the target's `target-capacity` in process or over the reviewed
+      transport.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readTargetCapacity
+      parameters:
+        - name: actor_id
+          in: query
+          required: true
+          description: The acting identity the grant must cover.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+        - name: actor_role
+          in: query
+          schema:
+            type: string
+            enum:
+              - human
+              - ai
+              - system
+            default: ai
+        - name: claim_namespaces
+          in: query
+          description:
+            Comma-separated resource-claim namespaces (at most 8) whose live claims the snapshot lists. Without it,
+            `claims` is null.
+          schema:
+            type: string
+            maxLength: 600
+      responses:
+        '200':
+          description: The target machine's capacity snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetCapacitySnapshot'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: readTargetCapacityAsActor
+      description: The same read for adapters that attach the acting identity to a body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadTargetCapacity'
+      responses:
+        '200':
+          description: The target machine's capacity snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetCapacitySnapshot'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/admission:
+    description: Machine-local question to the machine that hosts a bound target (HS2-J8PRTV). Passes the gate as
+      `sessions_manage` for the tool and model without starting anything, sends the policy's machine limits for the
+      target, and returns that machine's own decision.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: askTargetAdmission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetAdmissionRequest'
+      responses:
+        '200':
+          description: The target machine's decision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetAdmissionDecision'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -17772,6 +17995,330 @@ components:
           items:
             $ref: '#/components/schemas/OrchestrationToolExclusion'
       additionalProperties: false
+    TargetCapacitySnapshot:
+      description:
+        What one machine measured for a checkout it hosts (HS2-J8PRTV). Megabytes and percent; null means the host
+        could not measure the value.
+      type: object
+      required:
+        - schema_version
+        - server_id
+        - checkout_id
+        - sampled_at_ms
+        - memory
+        - cpu
+        - disk
+        - tools
+        - sessions
+        - claims
+        - claim_namespaces
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        server_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        checkout_id:
+          type: string
+          maxLength: 160
+        sampled_at_ms:
+          description: When the shared reading was taken; null when nothing was sampled.
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        memory:
+          type: object
+          required:
+            - free_mb
+            - total_mb
+          properties:
+            free_mb:
+              description: Memory a new process could use without swapping.
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+            total_mb:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+        cpu:
+          type: object
+          required:
+            - load_percent
+            - logical_cpus
+          properties:
+            load_percent:
+              description: Whole-machine busy share over the sampling window.
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+              maximum: 100
+            logical_cpus:
+              type:
+                - integer
+                - 'null'
+              minimum: 1
+        disk:
+          description: The volume that holds the checkout.
+          type: object
+          required:
+            - free_mb
+            - total_mb
+          properties:
+            free_mb:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+            total_mb:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+        tools:
+          description: Every drivable AI tool the host knows, by name; null when unknown.
+          type:
+            - array
+            - 'null'
+          items:
+            type: object
+            required:
+              - tool
+              - installed
+              - configured
+            properties:
+              tool:
+                type: string
+              installed:
+                type: boolean
+              configured:
+                description: The checkout has not opted out of the tool.
+                type: boolean
+        sessions:
+          description:
+            Running AI sessions on the host, by id, tool and metrics only; null when the terminal host could not be
+            asked.
+          type:
+            - array
+            - 'null'
+          items:
+            type: object
+            required:
+              - session_id
+              - tool
+              - busy
+              - on_checkout
+              - resident_mb
+            properties:
+              session_id:
+                type: string
+              tool:
+                type:
+                  - string
+                  - 'null'
+              busy:
+                type: boolean
+              on_checkout:
+                description: Whether the session was started in this checkout.
+                type:
+                  - boolean
+                  - 'null'
+              resident_mb:
+                description: Resident memory of the session's process tree; null when the platform cannot report it.
+                type:
+                  - integer
+                  - 'null'
+                minimum: 0
+        claims:
+          description: Live resource claims in the named namespaces; null when none was named or they were unreadable.
+          type:
+            - array
+            - 'null'
+          items:
+            type: object
+            required:
+              - namespace
+              - resource
+              - expires_at_ms
+            properties:
+              namespace:
+                type: string
+              resource:
+                type: string
+              expires_at_ms:
+                type: integer
+                minimum: 0
+        claim_namespaces:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+    HostedTargetAdmissionRequest:
+      type: object
+      required:
+        - tool
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        tool:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        model:
+          type:
+            - string
+            - 'null'
+          maxLength: 128
+        sessions:
+          description: How many sessions are asked for.
+          type: integer
+          minimum: 1
+          maximum: 64
+          default: 1
+        limits:
+          description: The orchestrator's policy limits for this machine; the policy defaults when omitted.
+          $ref: '#/components/schemas/OrchestrationMachineLimits'
+      additionalProperties: false
+    TargetAdmissionRequest:
+      type: object
+      required:
+        - tool
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        tool:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        model:
+          type:
+            - string
+            - 'null'
+          maxLength: 128
+        sessions:
+          description: How many sessions to ask for; one when omitted or null.
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          maximum: 64
+      additionalProperties: false
+    ReadTargetCapacity:
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        claim_namespaces:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 64
+      additionalProperties: false
+    TargetAdmissionDecision:
+      description: A machine's own answer to an admission question (HS2-J8PRTV).
+      type: object
+      required:
+        - outcome
+        - tool
+        - requested
+        - admitted
+        - reason
+        - unknown
+        - limits
+        - footprint_mb
+        - footprint_source
+        - sampled_at_ms
+      properties:
+        outcome:
+          type: string
+          enum:
+            - accepted
+            - reduced
+            - refused
+        tool:
+          type: string
+        model:
+          type: string
+        requested:
+          type: integer
+          minimum: 1
+          maximum: 64
+        admitted:
+          description: How many of the requested sessions may start now.
+          type: integer
+          minimum: 0
+          maximum: 64
+        reason:
+          description: The limit that refused or reduced the request; null when accepted.
+          type:
+            - string
+            - 'null'
+          enum:
+            - tool_not_installed
+            - tool_not_configured
+            - session_cap_reached
+            - above_cpu_ceiling
+            - below_disk_floor
+            - below_ram_floor
+            - capacity_unknown
+            - null
+        unknown:
+          description: Measurements the decision needed and the snapshot did not have.
+          type: array
+          items:
+            type: string
+            enum:
+              - tools
+              - sessions
+              - cpu
+              - disk
+              - memory
+        limits:
+          description: The limits enforced, after the machine owner's admission file was applied.
+          type: object
+          required:
+            - max_sessions
+            - min_free_ram_mb
+            - max_cpu_percent
+            - min_free_disk_mb
+          properties:
+            max_sessions:
+              type: integer
+              minimum: 0
+              maximum: 64
+            min_free_ram_mb:
+              type: integer
+              minimum: 0
+            max_cpu_percent:
+              type: integer
+              minimum: 1
+              maximum: 100
+            min_free_disk_mb:
+              type: integer
+              minimum: 0
+        footprint_mb:
+          description: The estimated resident memory of one session of the tool.
+          type: integer
+          minimum: 1
+        footprint_source:
+          type: string
+          enum:
+            - default
+            - configured
+            - observed
+        sampled_at_ms:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
     RemoteIdentity:
       type: object
       required:

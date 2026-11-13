@@ -14,16 +14,31 @@ use hotsheet_ticketing::{ProviderConfigRegistry, orchestration::OrchestrationErr
 use serde_json::Value;
 use std::sync::Arc;
 
-fn runtime(state: &AppState) -> Result<Arc<OrchestrationRuntime>, OrchestrationError> {
+/// The shared runtime with this server as its capacity probe (HS2-J8PRTV): sessions
+/// live here, so only this process can say what is running. Call on a blocking thread.
+fn runtime(
+    state: &AppState,
+    handle: tokio::runtime::Handle,
+) -> Result<Arc<OrchestrationRuntime>, OrchestrationError> {
+    let probe = Arc::new(crate::host_health::capacity::ServerCapacity {
+        state: state.clone(),
+        runtime: handle,
+    });
     if let Some(runtime) = &state.orchestration_runtime {
-        return Ok(runtime.clone());
+        return Ok(Arc::new(
+            OrchestrationRuntime::clone(runtime).with_capacity_probe(probe),
+        ));
     }
     OrchestrationRuntime::live(
         state.machine_home(),
         state.checkout_registry.clone(),
         ProviderConfigRegistry::new(state.store.root().join("providers.json")),
     )
-    .map(|runtime| runtime.with_target_events(target_events(state)))
+    .map(|runtime| {
+        runtime
+            .with_target_events(target_events(state))
+            .with_capacity_probe(probe)
+    })
     .map(Arc::new)
 }
 
@@ -141,7 +156,7 @@ static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<
 /// runs whose tickets changed, backs off after a failure, and ends when the target has
 /// no unfinished run. With no runs, nothing is started and no target is contacted.
 fn ensure_watchers(state: &AppState, owner: &str) {
-    let Ok(shared) = runtime(state) else {
+    let Ok(shared) = runtime(state, tokio::runtime::Handle::current()) else {
         return;
     };
     let targets: std::collections::BTreeSet<String> = shared
@@ -165,14 +180,15 @@ fn ensure_watchers(state: &AppState, owner: &str) {
                 let (task_state, task_owner, task_target) =
                     (state.clone(), owner.clone(), target.clone());
                 let step = tokio::task::spawn_blocking(move || {
-                    let step = runtime(&task_state).map(|runtime| {
-                        runtime.watch_step_now(
-                            &task_owner,
-                            &task_target,
-                            &mut watch,
-                            MAX_TARGET_EVENT_WAIT_MS,
-                        )
-                    });
+                    let step =
+                        runtime(&task_state, tokio::runtime::Handle::current()).map(|runtime| {
+                            runtime.watch_step_now(
+                                &task_owner,
+                                &task_target,
+                                &mut watch,
+                                MAX_TARGET_EVENT_WAIT_MS,
+                            )
+                        });
                     (step, watch)
                 })
                 .await;
@@ -253,6 +269,7 @@ async fn execute_blocking(
     path: String,
     body: Value,
 ) -> Result<Json<Value>, ApiError> {
+    let handle = tokio::runtime::Handle::current();
     tokio::task::spawn_blocking(move || {
         // Must precede runtime/identity/provider construction, including for an orphan
         // owner that the normal checkout router can no longer resolve.
@@ -261,7 +278,7 @@ async fn execute_blocking(
         {
             return result;
         }
-        runtime(&state)?.request_now(method.as_str(), &path, &body)
+        runtime(&state, handle)?.request_now(method.as_str(), &path, &body)
     })
     .await
     .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "target task failed"))?

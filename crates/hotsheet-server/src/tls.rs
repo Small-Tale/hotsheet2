@@ -404,6 +404,9 @@ mod tests {
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",
             "/checkouts/owner/orchestration/tool-capacity/select",
+            // HS2-J8PRTV: asking a target's machine passes this machine's grants.
+            "/checkouts/owner/orchestration/targets/id/capacity",
+            "/checkouts/owner/orchestration/targets/id/admission",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

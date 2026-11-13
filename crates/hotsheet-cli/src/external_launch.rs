@@ -67,6 +67,29 @@ pub fn discover_running_server(store: &Path, home: &Path) -> Result<ServerInstan
     Ok(server)
 }
 
+/// HS2-J8PRTV: every live server recorded under this machine home, whatever store
+/// anchors it. A stale or unreadable record is skipped.
+pub fn running_servers(home: &Path) -> Vec<ServerInstance> {
+    let Ok(entries) = std::fs::read_dir(home.join("instances")) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .collect();
+    paths.sort();
+    paths
+        .iter()
+        .filter_map(|path| {
+            serde_json::from_str::<ServerInstance>(&std::fs::read_to_string(path).ok()?).ok()
+        })
+        .filter(|server| process_is_alive(server.pid))
+        .collect()
+}
+
 /// Headless project launch uses the same machine bootstrap host as the graphical client.
 /// The server owns all registered sources; this store is only its local instance anchor.
 pub fn ensure_running_server(store: &Path, home: &Path) -> Result<ServerInstance> {

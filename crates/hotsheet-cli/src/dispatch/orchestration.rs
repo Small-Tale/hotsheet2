@@ -1,7 +1,8 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
 //! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
-//! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity.
+//! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity; HS2-J8PRTV target capacity and
+//! admission.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -9,6 +10,7 @@ use hotsheet_ticketing::{ProviderConfigRegistry, checkouts::CheckoutRegistry};
 use serde_json::{Value, json};
 
 use super::Ctx;
+use super::orchestration_capacity::{self as capacity, Planned};
 use crate::Cmd;
 
 #[derive(Args)]
@@ -32,6 +34,10 @@ enum OrchestrationCmd {
     Approval(ApprovalArgs),
     /// Show observed AI tool capacity, report a limit signal, and select a tool.
     ToolCapacity(ToolCapacityArgs),
+    /// Read the capacity of the machine that hosts a target or a local checkout.
+    Capacity(capacity::CapacityArgs),
+    /// Show or set this machine's admission limits, or ask whether a session may start.
+    Admission(capacity::AdmissionArgs),
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -927,6 +933,14 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         project.ok_or_else(|| anyhow::anyhow!("--project <registered-checkout-id> is required"))
     };
     let (owner_id, (method, path, mut body)) = match arguments.command {
+        OrchestrationCmd::Capacity(arguments) => match capacity::capacity(arguments)? {
+            Planned::Request(owner_id, request) => (owner_id, request),
+            Planned::Done => return Ok(()),
+        },
+        OrchestrationCmd::Admission(arguments) => match capacity::admission(arguments, context)? {
+            Planned::Request(owner_id, request) => (owner_id, request),
+            Planned::Done => return Ok(()),
+        },
         OrchestrationCmd::Target(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = route(&owner_id, arguments.command)?;
