@@ -16,6 +16,8 @@ fn event(run: u128, at_ms: u64, kind: RunEventKind, dedupe: Option<&str>) -> Run
         reason: None,
         actor_id: None,
         dedupe: dedupe.map(Into::into),
+        gate_id: None,
+        gate_state: None,
     }
 }
 

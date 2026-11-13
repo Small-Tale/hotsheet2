@@ -266,6 +266,8 @@ impl OrchestrationRuntime {
             reason,
             actor_id: actor_id.clone(),
             dedupe,
+            gate_id: None,
+            gate_state: None,
         };
         let now_ms = after.updated_at_ms;
         if after.history.len() != before.history.len() {

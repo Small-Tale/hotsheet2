@@ -157,6 +157,9 @@ pub enum ApprovalGate {
     RoleSessionStart,
     /// Dispatching work on top of a prerequisite whose gate is still pending.
     ProvisionalDispatch,
+    /// HS2-5JBYPV: running a target's deploy script. A production deployment asks a
+    /// person whether or not the policy lists this.
+    Deployment,
 }
 
 impl ApprovalGate {
@@ -169,6 +172,7 @@ impl ApprovalGate {
             Self::SessionStop => "session_stop",
             Self::RoleSessionStart => "role_session_start",
             Self::ProvisionalDispatch => "provisional_dispatch",
+            Self::Deployment => "deployment",
         }
     }
 }
@@ -578,6 +582,7 @@ impl PolicyBody {
                 Some(ApprovalGate::RoleSessionStart)
             }
             TargetAction::SessionsManage => Some(ApprovalGate::SessionStart),
+            TargetAction::DeploymentsRun => Some(ApprovalGate::Deployment),
         };
         // A provisional dispatch asks under its own gate first, then its action's.
         for gate in question

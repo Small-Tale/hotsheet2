@@ -586,3 +586,84 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
         .collect();
     assert_eq!(actions, ["grant_create", "grant_revoke"]);
 }
+
+/// HS2-5JBYPV: a follower and a request confirm authority at the same moment. The one
+/// whose resolve loses the race reads again; it is not told the target is unavailable.
+#[test]
+fn hs2_5jbypv_authorize_reads_again_after_losing_a_race_to_a_concurrent_resolve() {
+    let f = fixture();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let revision = declaration(&f, &mut tx);
+    let destination = register(&f);
+    assert!(
+        f.runtime
+            .bind(request(&f, revision, destination), &mut tx)
+            .unwrap()
+            .usable
+    );
+    f.runtime
+        .grant(
+            &reference(&f),
+            create(&[TargetAction::GatesObserve]),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let race = |f: &Fixture, rounds: usize| {
+        // Each armed observation is interrupted by one complete concurrent resolve.
+        fn arm(runtime: OrchestrationRuntime, peer: Arc<Peer>, target: TargetRef, left: usize) {
+            if left == 0 {
+                return;
+            }
+            let (again, hook_peer) = (runtime.clone(), peer.clone());
+            *peer
+                .before_metadata
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Box::new(move || {
+                let mut rng = Rng(9_000 + left as u128);
+                let mut tx = Transaction {
+                    clock: &Clock,
+                    rng: &mut rng,
+                };
+                assert!(again.resolve(&target, &mut tx).unwrap().usable);
+                arm(again, hook_peer, target, left - 1);
+            }));
+        }
+        arm(f.runtime.clone(), f.peer.clone(), reference(f), rounds);
+    };
+    // Without the retry this is the plain conflict a caller of resolve sees.
+    race(&f, 1);
+    assert!(matches!(
+        f.runtime.resolve(&reference(&f), &mut tx),
+        Err(OrchestrationError::Conflict)
+    ));
+    // The gate reads again, once or as often as it is allowed to.
+    for rounds in [1, 3] {
+        race(&f, rounds);
+        let authorized = f
+            .runtime
+            .authorize(
+                &reference(&f),
+                Some(&ai("worker-1")),
+                act(TargetAction::GatesObserve, None, None),
+                &mut tx,
+            )
+            .unwrap();
+        assert!(authorized.resolution.usable);
+    }
+    // A race that never ends is still a denial, never an allowance.
+    race(&f, 4);
+    assert_eq!(
+        denied(f.runtime.authorize(
+            &reference(&f),
+            Some(&ai("worker-1")),
+            act(TargetAction::GatesObserve, None, None),
+            &mut tx,
+        )),
+        DenialReason::TargetUnavailable
+    );
+}

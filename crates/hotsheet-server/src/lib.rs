@@ -2110,6 +2110,16 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/run-events",
             get(routes::orchestration::read),
         )
+        // HS2-5JBYPV: gate reads. Linking, syncing and deployment requests are run
+        // operations (`runs/{run}/{gates,gate-sync,deployments}`).
+        .route(
+            "/checkouts/{owner}/orchestration/gates",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/gates/{gate}",
+            get(routes::orchestration::read),
+        )
         .route(
             "/checkouts/{checkout}/target-events",
             get(routes::orchestration::read),

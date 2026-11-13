@@ -1400,7 +1400,14 @@ paths:
       description:
         "`renew` extends a direct run's lease, `cancel` releases its claim or withdraws its Up Next mark, and `sync`
         reads the target ticket and brings the run in line with it. A cancel that cannot reach the target records the
-        intent and lists what it could not verify."
+        intent and lists what it could not verify. HS2-5JBYPV adds three operations that answer with gates instead of
+        the run. `gates` links the CI gate of the integrated target `commit` to the run through a provider adapter and
+        starts watching it; it passes the gate as `gates_observe`, a repeat returns the same gate, and another commit
+        supersedes the older link. `gate-sync` brings the run's gates in line with what the adapter recorded, contacts
+        no provider, and with `wait_ms` waits for the adapter's records to change. `deployments` asks for a deployment
+        of the commit the run's CI gate passed through the target's checked-in `script`; it passes the gate as
+        `deployments_run` under `operation_id`, is refused `gate_not_passed` without a passed covering CI gate, and
+        a `production` request always waits for a person's approval."
       requestBody:
         required: true
         content:
@@ -1417,14 +1424,66 @@ paths:
                     - 'null'
                   minimum: 5
                   maximum: 240
+                commit:
+                  description: '`gates` only. The integrated target commit, all 40 hex characters.'
+                  type: string
+                  pattern: ^[0-9A-Fa-f]{40}$
+                provider:
+                  description:
+                    '`gates` (default `github-actions`) and `deployments` (default `target-script`). The provider
+                    adapter.'
+                  type:
+                    - string
+                    - 'null'
+                repository:
+                  description:
+                    '`gates` only. The provider repository as owner/name. Defaults to, and must agree with, the GitHub
+                    repository the target declares.'
+                  type:
+                    - string
+                    - 'null'
+                workflow:
+                  description: '`gates` only. Defaults to CI.'
+                  type:
+                    - string
+                    - 'null'
+                branch:
+                  description: '`gates` only. The shipping branch whose runs count. Defaults to main.'
+                  type:
+                    - string
+                    - 'null'
+                wait_ms:
+                  description: '`gate-sync` only. With nothing new, wait up to this long (at most 20000).'
+                  type: integer
+                  minimum: 0
+                environment:
+                  description: '`deployments` only.'
+                  type: string
+                script:
+                  description: "`deployments` only. The target's checked-in deploy script, relative to its repository root."
+                  type: string
+                production:
+                  description: '`deployments` only. An irreversible production change; a person is always asked first.'
+                  type: boolean
+                operation_id:
+                  description: '`deployments` only. The retained idempotency key the approval is for.'
+                  type: string
+                artifact:
+                  description: '`deployments` only.'
+                  oneOf:
+                    - $ref: '#/components/schemas/OrchestrationGateArtifact'
+                    - type: 'null'
               additionalProperties: false
       responses:
         '200':
-          description: The run after the operation.
+          description: The run after the operation, or the gate or gates for the HS2-5JBYPV operations.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OrchestrationRun'
+                oneOf:
+                  - $ref: '#/components/schemas/OrchestrationRun'
+                  - $ref: '#/components/schemas/OrchestrationGateView'
+                  - $ref: '#/components/schemas/OrchestrationGateSummary'
         default:
           description:
             Stable content-free error code; authentication/device-role/locality denial may return a fixed text
@@ -1459,6 +1518,9 @@ paths:
             - renew
             - cancel
             - sync
+            - gates
+            - gate-sync
+            - deployments
             - status
   /checkouts/{owner}/orchestration/tool-capacity:
     description: Observed capacity of the AI tool accounts an orchestration project's policy configures (HS2-AHG7HW);
@@ -2153,6 +2215,96 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/gates:
+    description:
+      Machine-local CI and deployment gates of an owning checkout's dispatch runs (HS2-5JBYPV). Answers from this
+      machine's records and contacts no target or provider.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationGates
+      parameters:
+        - name: run
+          in: query
+          description: Only this run's gates.
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        - name: target_id
+          in: query
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        - name: commit
+          in: query
+          description: Only gates about this commit, all 40 hex characters.
+          schema:
+            type: string
+            pattern: ^[0-9A-Fa-f]{40}$
+      responses:
+        '200':
+          description: The standing gates matching the query, rolled up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationGateSummary'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/gates/{gate}:
+    description: One gate with its evidence and history, superseded ones included (HS2-5JBYPV); machine-local.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationGate
+      responses:
+        '200':
+          description: The gate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationGate'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: gate
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -16510,6 +16662,7 @@ components:
         - gates_observe
         - validation_run
         - sessions_manage
+        - deployments_run
     TargetSessionScope:
       description: Limits on the AI sessions a `sessions_manage` grant covers; a tool without models allows any model.
       type: object
@@ -17004,6 +17157,7 @@ components:
         - session_stop
         - role_session_start
         - provisional_dispatch
+        - deployment
     OrchestrationPolicyView:
       type: object
       required:
@@ -17766,6 +17920,12 @@ components:
               dedupe:
                 description: Identifies the fact; the same key for one run is recorded once.
                 type: string
+              gate_id:
+                description: The gate a `gate` event is about (HS2-5JBYPV).
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              gate_state:
+                $ref: '#/components/schemas/OrchestrationGateState'
             additionalProperties: false
         cursor:
           description: Pass as `after` to continue.
@@ -18817,6 +18977,260 @@ components:
             - unknown
         outcome:
           $ref: '#/components/schemas/ValidationExecutionOutcome'
+      additionalProperties: false
+    OrchestrationGateState:
+      description:
+        The state of a gate (HS2-5JBYPV). Only typed provider evidence that covers the gate's commit makes it `passed`
+        or `failed`; `unknown` is never the same as passed.
+      enum:
+        - unknown
+        - awaiting_approval
+        - pending
+        - passed
+        - failed
+        - superseded
+    OrchestrationGateArtifact:
+      type: object
+      required:
+        - name
+        - digest
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        digest:
+          description: Lowercase SHA-256 of the artifact.
+          type: string
+          pattern: ^[0-9a-f]{64}$
+      additionalProperties: false
+    OrchestrationGate:
+      description: One CI or deployment gate of a dispatch run. Identifiers, counts and codes only.
+      type: object
+      required:
+        - gate_id
+        - owner_checkout_id
+        - run_id
+        - target_id
+        - kind
+        - provider
+        - commit
+        - state
+        - created_at_ms
+        - updated_at_ms
+        - history
+      properties:
+        gate_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        owner_checkout_id:
+          type: string
+        run_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        kind:
+          enum:
+            - ci
+            - deployment
+        provider:
+          type: string
+        commit:
+          description: The integrated target commit the gate is about.
+          type: string
+          pattern: ^[0-9a-f]{40}$
+        ci:
+          description: Where a CI provider looks for the commit; present on a `ci` gate.
+          type: object
+          required:
+            - repository
+            - workflow
+            - branch
+          properties:
+            repository:
+              type: string
+            workflow:
+              type: string
+            branch:
+              type: string
+          additionalProperties: false
+        deployment:
+          description: What a deployment would run, and where; present on a `deployment` gate.
+          type: object
+          required:
+            - environment
+            - script
+            - production
+            - operation_id
+            - requires_gate_id
+          properties:
+            environment:
+              type: string
+            script:
+              description: The target's checked-in deploy script, relative to its repository root.
+              type: string
+            production:
+              type: boolean
+            operation_id:
+              type: string
+            requires_gate_id:
+              description: The passed CI gate of the same commit this deployment rests on.
+              type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            artifact:
+              $ref: '#/components/schemas/OrchestrationGateArtifact'
+          additionalProperties: false
+        state:
+          $ref: '#/components/schemas/OrchestrationGateState'
+        reason:
+          description: A stable code, never free text.
+          type: string
+        evidence:
+          description: What the provider adapter observed; present on a verdict.
+          type: object
+          required:
+            - provider
+            - reference
+            - order
+            - attempt
+            - commit
+            - coverage
+            - at_ms
+          properties:
+            provider:
+              type: string
+            reference:
+              description: The provider's own id of the CI run or deployment execution.
+              type: string
+            order:
+              type: integer
+              minimum: 0
+            attempt:
+              type: integer
+              minimum: 0
+            commit:
+              description: The commit the provider built or deployed.
+              type: string
+              pattern: ^[0-9a-f]{40}$
+            coverage:
+              description:
+                '`exact` when that is the gate commit; `ancestor` when the provider built a descendant on the shipping
+                branch that contains it.'
+              enum:
+                - exact
+                - ancestor
+            artifact:
+              $ref: '#/components/schemas/OrchestrationGateArtifact'
+            exit_code:
+              type: integer
+            at_ms:
+              type: integer
+              minimum: 0
+          additionalProperties: false
+        watch_ref:
+          description: The adapter's own handle of the watch or execution, for example a Job id.
+          type: string
+        superseded_by:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        linked_by:
+          type: string
+        created_at_ms:
+          type: integer
+          minimum: 0
+        updated_at_ms:
+          type: integer
+          minimum: 0
+        history:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: object
+            required:
+              - at_ms
+              - to
+            properties:
+              at_ms:
+                type: integer
+                minimum: 0
+              from:
+                $ref: '#/components/schemas/OrchestrationGateState'
+              to:
+                $ref: '#/components/schemas/OrchestrationGateState'
+              reason:
+                type: string
+            additionalProperties: false
+      additionalProperties: false
+    OrchestrationGateView:
+      description: The answer to a gate link or a deployment request.
+      type: object
+      required:
+        - gate
+        - created
+        - superseded
+      properties:
+        gate:
+          $ref: '#/components/schemas/OrchestrationGate'
+        created:
+          description: False when an equal link or request already stood.
+          type: boolean
+        superseded:
+          description: Ids of the gates this link superseded.
+          type: array
+          items:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        watching:
+          description: Whether something observes the provider now; absent when that does not apply.
+          type: boolean
+        approval_id:
+          description: The pending request a person must answer, for a deployment awaiting approval.
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      additionalProperties: false
+    OrchestrationGateSummary:
+      description: The standing gates of a run or a target commit, rolled up. `failed` outranks `unknown`, then
+        `awaiting_approval`, then `pending`; `passed` needs every standing gate passed.
+      type: object
+      required:
+        - ci
+        - commits
+        - gates
+        - superseded
+      properties:
+        ci:
+          $ref: '#/components/schemas/OrchestrationGateState'
+        ci_reason:
+          description: '`no_gate` when no CI gate stands.'
+          type: string
+        deployment:
+          $ref: '#/components/schemas/OrchestrationGateState'
+        commits:
+          description: The commits the standing CI gates are about.
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9a-f]{40}$
+        gates:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationGate'
+        superseded:
+          description: How many superseded links were left out.
+          type: integer
+          minimum: 0
+        run_id:
+          description: '`gate-sync` only.'
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        changed:
+          description: '`gate-sync` only. Gates this call changed.'
+          type: array
+          items:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
       additionalProperties: false
     RemoteIdentity:
       type: object

@@ -2,7 +2,7 @@
 //! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
 //! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
 //! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity; HS2-J8PRTV target capacity and
-//! admission; HS2-WN0MXZ validation steps.
+//! admission; HS2-WN0MXZ validation steps; HS2-5JBYPV CI and deployment gates of runs.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
@@ -29,6 +29,8 @@ enum OrchestrationCmd {
     Ticket(TicketArgs),
     /// Dispatch work to an exact target ticket and supervise the run.
     Run(RunArgs),
+    /// Link the CI gate of a target commit to a run, read gates, and request a deployment.
+    Gate(GateArgs),
     /// Show, set, validate and dry-run the checked-in throughput policy.
     Policy(PolicyArgs),
     /// List and answer decisions the policy will not take without a person.
@@ -52,6 +54,166 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 100)]
         limit: u64,
     },
+}
+#[derive(Args)]
+struct GateArgs {
+    /// Registered owning checkout id.
+    #[arg(long, global = true)]
+    project: Option<String>,
+    #[command(subcommand)]
+    command: GateCmd,
+}
+#[derive(Subcommand)]
+enum GateCmd {
+    /// Tie the CI gate of the integrated target commit to a run and start watching it.
+    /// Repeating it returns the same gate, and watches again after a failed or stopped
+    /// watch; another commit supersedes the older link. Needs a gates_observe grant.
+    Link {
+        run_id: String,
+        /// The integrated target commit: all 40 hex characters.
+        #[arg(long)]
+        commit: String,
+        /// owner/name. Defaults to, and must agree with, the GitHub repository the
+        /// target declares.
+        #[arg(long)]
+        repo: Option<String>,
+        /// The workflow name (default CI).
+        #[arg(long)]
+        workflow: Option<String>,
+        /// The shipping branch whose runs count (default main).
+        #[arg(long)]
+        branch: Option<String>,
+        /// The CI provider adapter (default github-actions).
+        #[arg(long)]
+        provider: Option<String>,
+        /// Do not start this machine's Job monitor. The gate then stays pending until
+        /// `hotsheet-cli job watch start` or another process observes the provider.
+        #[arg(long)]
+        no_monitor: bool,
+    },
+    /// The standing gates of a run, or of one commit of a target, with the rolled-up
+    /// state. Reads this machine's records and contacts nothing.
+    List {
+        #[arg(long)]
+        run: Option<String>,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        commit: Option<String>,
+    },
+    /// One gate with its evidence and history, superseded ones included.
+    Show { gate_id: String },
+    /// Bring a run's gates in line with what the provider adapter recorded. With
+    /// --wait-seconds and nothing new it waits for the next change instead of the
+    /// caller polling. Contacts no provider.
+    Sync {
+        run_id: String,
+        /// At most 20.
+        #[arg(long, default_value_t = 0)]
+        wait_seconds: u64,
+    },
+    /// Ask for a deployment of the commit the run's CI gate passed, through the
+    /// target's checked-in script. Needs a deployments_run grant. With --production a
+    /// person is always asked first: answer with `orchestration approval approve`, then
+    /// repeat this command with the same --operation-id.
+    Deploy {
+        run_id: String,
+        #[arg(long)]
+        environment: String,
+        /// The deploy script, relative to the target repository root.
+        #[arg(long)]
+        script: String,
+        #[arg(long)]
+        operation_id: String,
+        /// An irreversible production change.
+        #[arg(long)]
+        production: bool,
+        /// The deployment adapter (default target-script).
+        #[arg(long)]
+        provider: Option<String>,
+        /// The built artifact's name, with --artifact-digest.
+        #[arg(long, requires = "artifact_digest")]
+        artifact_name: Option<String>,
+        /// The artifact's lowercase SHA-256.
+        #[arg(long, requires = "artifact_name")]
+        artifact_digest: Option<String>,
+    },
+}
+/// The request of a gate command, and whether the Job monitor should run afterwards.
+fn gate_route(project: &str, command: GateCmd) -> ((&'static str, String, Value), bool) {
+    let base = format!("/checkouts/{project}/orchestration");
+    match command {
+        GateCmd::Link {
+            run_id,
+            commit,
+            repo,
+            workflow,
+            branch,
+            provider,
+            no_monitor,
+        } => (
+            (
+                "POST",
+                format!("{base}/runs/{run_id}/gates"),
+                json!({"commit":commit,"repository":repo,"workflow":workflow,"branch":branch,
+                    "provider":provider}),
+            ),
+            !no_monitor,
+        ),
+        GateCmd::List {
+            run,
+            target,
+            commit,
+        } => {
+            let query: Vec<String> = [("run", run), ("target_id", target), ("commit", commit)]
+                .into_iter()
+                .filter_map(|(key, value)| value.map(|value| format!("{key}={value}")))
+                .collect();
+            (
+                (
+                    "GET",
+                    format!("{base}/gates?{}", query.join("&")),
+                    Value::Null,
+                ),
+                false,
+            )
+        }
+        GateCmd::Show { gate_id } => (
+            ("GET", format!("{base}/gates/{gate_id}"), Value::Null),
+            false,
+        ),
+        GateCmd::Sync {
+            run_id,
+            wait_seconds,
+        } => (
+            (
+                "POST",
+                format!("{base}/runs/{run_id}/gate-sync"),
+                json!({"wait_ms":wait_seconds.saturating_mul(1000)}),
+            ),
+            false,
+        ),
+        GateCmd::Deploy {
+            run_id,
+            environment,
+            script,
+            operation_id,
+            production,
+            provider,
+            artifact_name,
+            artifact_digest,
+        } => (
+            (
+                "POST",
+                format!("{base}/runs/{run_id}/deployments"),
+                json!({"environment":environment,"script":script,"operation_id":operation_id,
+                    "production":production,"provider":provider,
+                    "artifact":artifact_name.zip(artifact_digest)
+                        .map(|(name, digest)| json!({"name":name,"digest":digest}))}),
+            ),
+            false,
+        ),
+    }
 }
 #[derive(Args)]
 struct RunArgs {
@@ -614,7 +776,7 @@ enum GrantCmd {
         #[arg(long)]
         actor: String,
         /// tickets_read, tickets_write, work_start, gates_observe, validation_run,
-        /// sessions_manage. Repeatable.
+        /// sessions_manage, deployments_run. Repeatable.
         #[arg(long = "action", required = true)]
         actions: Vec<String>,
         /// Lifetime such as 30m, 8h or 14d (at most 90d).
@@ -935,6 +1097,8 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     let required = |project: Option<String>| {
         project.ok_or_else(|| anyhow::anyhow!("--project <registered-checkout-id> is required"))
     };
+    // HS2-5JBYPV: a linked CI gate only advances while this machine's Job monitor runs.
+    let mut ensure_monitor = false;
     let (owner_id, (method, path, mut body)) = match arguments.command {
         OrchestrationCmd::Capacity(arguments) => match capacity::capacity(arguments)? {
             Planned::Request(owner_id, request) => (owner_id, request),
@@ -967,6 +1131,12 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Validation(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = validation::route(&owner_id, arguments)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Gate(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let (request, monitor) = gate_route(&owner_id, arguments.command);
+            ensure_monitor = monitor;
             (owner_id, request)
         }
         OrchestrationCmd::ToolCapacity(arguments) => {
@@ -1080,7 +1250,17 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             },
         )
     };
-    let output = result.map_err(|error| anyhow::anyhow!("{}: {}", error.code(), error))?;
+    let mut output = result.map_err(|error| anyhow::anyhow!("{}: {}", error.code(), error))?;
+    if ensure_monitor && output["watching"] == false {
+        match super::jobs::ensure_default_monitor(&home) {
+            Ok(started) => {
+                output["watching"] = true.into();
+                output["monitor_started"] = started.into();
+            }
+            // The link stands; the gate stays pending until something observes it.
+            Err(_) => output["monitor_error"] = "job_monitor_unavailable".into(),
+        }
+    }
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }

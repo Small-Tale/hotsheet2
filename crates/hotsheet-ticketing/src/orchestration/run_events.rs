@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::audit::{Journal, JournalEntry, JournalPage, JournalRecord};
 use super::contract::{valid_identifier, valid_token};
-use super::{OrchestrationError, RunState};
+use super::{GateState, OrchestrationError, RunState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -60,6 +60,11 @@ pub struct RunEvent {
     /// same event and are recorded once, however often or in whatever order they arrive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dedupe: Option<String>,
+    /// HS2-5JBYPV: the gate a `gate` event is about, and the state it entered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate_state: Option<GateState>,
 }
 
 impl JournalRecord for RunEvent {
@@ -71,6 +76,9 @@ impl JournalRecord for RunEvent {
             .flatten()
         {
             valid_identifier(value)?;
+        }
+        if let Some(gate_id) = &self.gate_id {
+            valid_token(gate_id)?;
         }
         Ok(())
     }

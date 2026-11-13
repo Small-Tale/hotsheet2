@@ -6,7 +6,7 @@ use axum::{
     http::{Method, StatusCode},
 };
 use hotsheet_cli::orchestration::{
-    MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime, TargetEventPage, TargetEvents,
+    GateFollowState, MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime, TargetEventPage, TargetEvents,
     TargetTicketEvent, WatchState, error_status, request_cleanup_now,
 };
 use hotsheet_sync::LockExt;
@@ -215,13 +215,79 @@ fn ensure_watchers(state: &AppState, owner: &str) {
     }
 }
 
+/// Gate followers, one per `(machine home, owner)`.
+static GATE_FOLLOWERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+    std::sync::OnceLock::new();
+
+/// HS2-5JBYPV: follow the owner's gates that still wait on a provider. The follower
+/// holds one bounded wait open on the provider adapter's own records (for GitHub
+/// Actions, the watch Job store), records each change as a run event, and ends when no
+/// gate waits any more. With no such gate nothing is started.
+fn ensure_gate_follower(state: &AppState, owner: &str) {
+    let key = format!("{}|{owner}", state.machine_home().display());
+    if !GATE_FOLLOWERS
+        .get_or_init(Default::default)
+        .lock_or_recover()
+        .insert(key.clone())
+    {
+        return;
+    }
+    let (state, owner) = (state.clone(), owner.to_owned());
+    tokio::spawn(async move {
+        let mut follow = GateFollowState::default();
+        let mut backoff = std::time::Duration::from_secs(1);
+        loop {
+            let (task_state, task_owner) = (state.clone(), owner.clone());
+            let started = std::time::Instant::now();
+            let step = tokio::task::spawn_blocking(move || {
+                let step = runtime(&task_state, tokio::runtime::Handle::current()).map(|runtime| {
+                    runtime.gate_follow_step_now(&task_owner, &mut follow, MAX_TARGET_EVENT_WAIT_MS)
+                });
+                (step, follow)
+            })
+            .await;
+            let Ok((Ok(step), returned)) = step else {
+                break;
+            };
+            follow = returned;
+            if !step.active {
+                break;
+            }
+            // A step that neither waited nor learned anything (a denied grant, an
+            // adapter that cannot wait) backs off instead of spinning.
+            if step.changed.is_empty() && started.elapsed() < std::time::Duration::from_millis(250)
+            {
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(std::time::Duration::from_secs(60));
+            } else {
+                backoff = std::time::Duration::from_secs(1);
+            }
+        }
+        GATE_FOLLOWERS
+            .get_or_init(Default::default)
+            .lock_or_recover()
+            .remove(&key);
+    });
+}
+
 /// The owning checkout of a path that should have its targets followed: a dispatch,
-/// or someone waiting on the run event stream.
+/// a gate link or deployment request, or someone waiting on the run event stream.
 fn watched_owner(method: &Method, path: &str) -> Option<String> {
     let path = path.split_once('?').map_or(path, |(path, _)| path);
     let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
     match (method.as_str(), parts.as_slice()) {
         ("POST", ["checkouts", owner, "orchestration", "runs"])
+        | (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "runs",
+                _,
+                "gates" | "deployments",
+            ],
+        )
         | ("GET", ["checkouts", owner, "orchestration", "run-events"]) => Some((*owner).to_owned()),
         _ => None,
     }
@@ -260,6 +326,7 @@ fn ensure_watchers_blocking(state: &AppState, owner: &str) {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         let _guard = handle.enter();
         ensure_watchers(state, owner);
+        ensure_gate_follower(state, owner);
     }
 }
 

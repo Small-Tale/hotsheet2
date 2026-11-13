@@ -3,6 +3,7 @@
 //! provider account probe, implicit source creation or credential copying.
 mod access;
 mod capacity;
+mod gates;
 mod observer;
 mod policy;
 mod request;
@@ -14,6 +15,10 @@ mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use capacity::{
     CapacityProbe, LocalServerCapacity, ReadCapacity, TargetAdmission, UnknownCapacity,
+};
+pub use gates::{
+    GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
+    MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
@@ -71,6 +76,8 @@ pub struct OrchestrationRuntime {
     target_events: Option<Arc<dyn TargetEvents>>,
     /// HS2-J8PRTV: the session host's own measurements for the hosted half.
     capacity: Arc<dyn CapacityProbe>,
+    /// HS2-5JBYPV: the adapters gate evidence comes from.
+    gate_providers: Vec<Arc<dyn GateProvider>>,
 }
 
 impl OrchestrationRuntime {
@@ -100,6 +107,7 @@ impl OrchestrationRuntime {
             external: Arc::new(tickets::LiveExternalProviders { home: home.clone() }),
             target_events: None,
             capacity: Arc::new(UnknownCapacity),
+            gate_providers: vec![Arc::new(GithubActionsGates::new(&home))],
             home,
             checkouts,
             providers,
@@ -386,6 +394,18 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
             | hotsheet_ticketing::orchestration::ValidationError::ResultNotFound,
         ) => 404,
         OrchestrationError::Validation(_) => 409,
+        OrchestrationError::Gate(error) => {
+            use hotsheet_ticketing::orchestration::GateError as E;
+            match error {
+                E::NotFound => 404,
+                E::ProviderUnsupported => 422,
+                E::ProviderUnavailable => 502,
+                E::NotPassed
+                | E::InvalidTransition
+                | E::RepositoryMismatch
+                | E::DeploymentActive => 409,
+            }
+        }
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

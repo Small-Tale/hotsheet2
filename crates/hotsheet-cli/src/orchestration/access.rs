@@ -10,6 +10,9 @@ use hotsheet_ticketing::orchestration::{
 
 use super::*;
 
+/// How often `authorize` reads again after losing a race to a concurrent resolve.
+const RESOLVE_RETRIES: usize = 3;
+
 /// Proof that one actor may perform one action now. Later steps report their result
 /// with [`OrchestrationRuntime::record_outcome`] under the same operation id.
 pub struct Authorized {
@@ -38,6 +41,9 @@ pub struct ActionRequest {
     /// HS2-WN0MXZ: the action is outside what the grant automates, so a person is
     /// asked under this gate even when the policy would not ask.
     pub person_gate: Option<hotsheet_ticketing::orchestration::ApprovalGate>,
+    /// HS2-5JBYPV: ask a person under this gate even when the policy does not, for an
+    /// act that cannot be undone. Never skipped by `continuing`.
+    pub approval: Option<hotsheet_ticketing::orchestration::ApprovalGate>,
 }
 
 impl ActionRequest {
@@ -51,6 +57,7 @@ impl ActionRequest {
             role_session: false,
             continuing: false,
             person_gate: None,
+            approval: None,
         }
     }
 
@@ -248,7 +255,16 @@ impl OrchestrationRuntime {
         };
         // An unknown owner, tombstoned target or failed probe is a denial, not an error
         // the caller could mistake for "try the action anyway".
-        let resolution = self.resolve(target, tx);
+        let mut resolution = self.resolve(target, tx);
+        // HS2-5JBYPV: followers confirm their authority beside ordinary requests. A
+        // resolve that lost that race to another resolve has nothing wrong with its
+        // target: read again, a bounded number of times, instead of denying.
+        for _ in 0..RESOLVE_RETRIES {
+            if !matches!(resolution, Err(OrchestrationError::Conflict)) {
+                break;
+            }
+            resolution = self.resolve(target, tx);
+        }
         let destination = resolution.as_ref().ok().and_then(|resolution| {
             resolution
                 .binding
@@ -274,6 +290,11 @@ impl OrchestrationRuntime {
                 (policy::PolicyAnswer::Allowed, Some(gate)) if !action.continuing => {
                     policy::PolicyAnswer::Approval(gate)
                 }
+                // HS2-5JBYPV: an irreversible act asks whatever the policy allows.
+                (policy::PolicyAnswer::Allowed, _) => match action.approval {
+                    Some(gate) => policy::PolicyAnswer::Approval(gate),
+                    None => policy::PolicyAnswer::Allowed,
+                },
                 (answer, _) => answer,
             }
         } else {

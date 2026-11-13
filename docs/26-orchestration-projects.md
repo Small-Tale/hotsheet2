@@ -6,7 +6,9 @@
 > ticket operations (§26.3, HS2-AZ15GA), dispatch runs with status and events (§26.9,
 > HS2-EBHDSB, HS2-7QHWHJ), target capacity and admission (§26.10, HS2-J8PRTV), AI tool
 > capacity states with tool selection (§26.11, HS2-AHG7HW), extra validation steps
-> with immutable result references (§26.12, HS2-WN0MXZ), and the headless CLI,
+> with immutable result references (§26.12, HS2-WN0MXZ), CI and deployment gates of
+> runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed),
+> and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests;
 > the OpenAPI contract describes them. Workspace UI and the scheduler remain design
 > work under their separate implementation tickets.
@@ -342,7 +344,7 @@ its own device role. A grant can only narrow what that pairing already allows.
 | `grant_id`        | Canonical ULID. Retain it across retries; an identical retry is a no-op and a different body under the same id conflicts.                                                                                                                                    |
 | `target`          | `(owner_checkout_id, target_id)`. Another owner with the same target id is a different key.                                                                                                                                                                  |
 | `actor_id`        | The one actor the grant covers, such as a worker id. There is no wildcard.                                                                                                                                                                                   |
-| `actions`         | A non-empty set of `tickets_read`, `tickets_write`, `work_start`, `gates_observe`, `validation_run`, `sessions_manage`.                                                                                                                                      |
+| `actions`         | A non-empty set of `tickets_read`, `tickets_write`, `work_start`, `gates_observe`, `validation_run`, `sessions_manage`, `deployments_run`.                                                                                                                   |
 | `session_scope`   | Required with `sessions_manage` and rejected without it: the allowed tools, optionally their models, and the maximum concurrent sessions (1 to 64). A tool listed without models allows any model; a tool listed with models requires a named, listed model. |
 | `expires_at_ms`   | Required, in the future, at most ninety days ahead.                                                                                                                                                                                                          |
 | `destination_key` | SHA-256 of the reviewed destination the grant was issued for.                                                                                                                                                                                                |
@@ -479,7 +481,7 @@ rather than evaluated. All quantities are integers: megabytes, percent and cents
 | `tools[]`     | `tool`, `max_sessions` (1 to 64), `weight` 50 (1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`.      |
 | `targets[]`   | `target_id`, `enabled` true, `actions` (the grant action names), `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides. |
 | `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                          |
-| `approval`    | `required_for`: any of `tickets_write`, `work_start`, `validation_run`, `session_start`, `session_stop`, `role_session_start`, `provisional_dispatch`.                   |
+| `approval`    | `required_for`: any of `tickets_write`, `work_start`, `validation_run`, `session_start`, `session_stop`, `role_session_start`, `provisional_dispatch`, `deployment`.     |
 | `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`.   |
 
 A target the policy does not list, or lists as disabled, is not permitted. A tool
@@ -689,7 +691,7 @@ can be trusted.
 journal per owning checkout, `${HOTSHEET_HOME}/orchestration-run-events/`, with the
 same sequence cursor, rotation and gap reporting as the audit journal. Event kinds
 are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable`,
-`cancel_requested` and `validation` (§26.12), with `gate` and `session` reserved for
+`cancel_requested`, `validation` (§26.12) and `gate` (§26.13), with `session` reserved for
 the tickets that add them. Each event says whether the orchestrator did it or it was learned
 from the target, and carries identifiers, states and codes only.
 
@@ -1259,3 +1261,163 @@ role, like the hosted ticket route. MCP `hotsheet_targets` adds `validation_defi
 `validation_list`, `validation_evidence`, `validation_run` and `validation_remove`.
 Listing and checking a target's profiles headlessly is HS2-YYNW9F, and the workspace
 view is HS2-9XJEZC.
+
+## 26.13 CI and deployment gates (HS2-5JBYPV)
+
+A **gate** ties one run to one commit of its target and records whether a provider
+confirmed that commit. A CI gate says whether the integrated commit passed CI. A
+deployment gate says whether that commit was deployed to an environment. Later
+decisions read gates: promotion and readiness (HS2-42TARA), and provisional work on
+a prerequisite whose gate is still pending (HS2-2SJPCH, HS2-JSF985).
+
+### Evidence comes from adapters only
+
+A gate changes state on exactly two things: a typed reading from a provider adapter,
+or a person's answer to a deployment approval. Nothing a session writes in a note, a
+ticket or a message is evidence, and no text is parsed for a verdict. A reading holds
+a state, a reason code and, for a verdict, evidence: the provider, its own run or
+execution id, the attempt, the commit it built or deployed, how that commit relates
+to the gate's commit, and optionally an artifact name with its digest and an exit
+code. Every field is an identifier, a count or a code.
+
+A `GateProvider` adapter serves one provider name and one kind. It starts a watch or
+an execution idempotently, answers the current reading from records it keeps itself,
+and offers a cursor with a blocking wait that is woken by the change. One adapter
+ships: `github-actions`, the watch Job of [33](33-jobs.md) (HS2-3R9V0R). The Job
+monitor observes GitHub; this machine reads the Job store and waits on its file
+changes. Other CI providers are HS2-TPAHYA.
+
+### Coverage
+
+A verdict counts only when its evidence covers the gate's commit:
+
+- `exact`: the provider built or deployed that very commit.
+- `ancestor`: the provider built a descendant on the shipping branch that contains
+  it, as the watch source attests. Only a CI gate accepts this. A deployment counts
+  only when it deployed exactly the gated commit.
+
+A verdict with no evidence, evidence from another provider, or evidence about another
+commit is recorded as `unknown` with `evidence_missing` or `evidence_not_covering`.
+It is never recorded as passed. A commit id is always the full 40 hex characters; a
+short or symbolic name is refused.
+
+### States
+
+| State               | Meaning                                                | May become                                                          |
+| ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| `unknown`           | Nothing trustworthy is known; the reason code says why | any other state                                                     |
+| `awaiting_approval` | A deployment waits for a person                        | `pending`, `unknown`, `failed`, `superseded`                        |
+| `pending`           | Watched or started, no verdict yet                     | `passed`, `failed`, `unknown`, `superseded`                         |
+| `failed`            | The newest covering run or execution failed            | `pending` (watched again), `passed` (a later attempt), `superseded` |
+| `passed`            | A covering run or execution succeeded                  | `superseded`                                                        |
+| `superseded`        | The link no longer stands for the run                  | nothing                                                             |
+
+Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_cancelled`,
+`gate_provider_unavailable`, `evidence_missing`, `evidence_not_covering` and
+`deployment_executor_unavailable`.
+
+Readings can arrive late, twice or out of order. A reading whose evidence ranks
+below the recorded evidence (an older run, or an earlier attempt of the same run) is
+ignored. A verdict is never replaced by `unknown` or, once passed, by anything but
+supersession. A repeated reading writes nothing and produces no event. A later
+attempt with the same verdict is recorded as news. A provider cannot move a gate
+into or out of `awaiting_approval`. History keeps the first entry and the most
+recent 31.
+
+### Supersession
+
+Gates of one run with the same kind, provider and CI scope (repository, workflow,
+branch), or the same deployment environment, share a slot. Linking another commit in
+a slot marks the older gate `superseded` with `newer_gate_linked` and the id of its
+replacement, and keeps its evidence and history. A deployment that has not started
+(`awaiting_approval` or `unknown`) and rests on a superseded CI gate is withdrawn
+with `required_gate_superseded`. A provider also reports `superseded` with
+`branch_moved` when the shipping branch no longer contains the commit.
+
+The rolled-up state of a run or a commit counts standing gates only. Its `ci` value
+is `failed` if any standing CI gate failed, else `unknown` if any is unknown, else
+`pending`, and `passed` only when every one passed. With no standing CI gate it is
+`unknown` with `no_gate`. `deployment` is rolled up the same way and is absent when
+none was requested.
+
+### Linking and following
+
+`gate link` passes the gate as `gates_observe`, records the link in
+`${HOTSHEET_HOME}/orchestration-gates.json` (mode 0600, version 1, at most 2,048; the
+oldest superseded gate is forgotten first, then the oldest settled one, and a gate
+that still waits never is) and starts the watch. Repeating it returns the same gate
+and, after a failed or stopped watch, watches again. The repository defaults to the
+GitHub repository the target declares; a different repository for such a target is
+refused with `gate_repository_mismatch`. If the adapter cannot start, the link stands
+as `unknown` and the same request starts it later.
+
+Every change is published to the run event stream (§26.9) as a `gate` event with the
+gate's id and new state, once however many readers saw it. A server follows the
+gates of an owning checkout that still wait on a provider: one follower holds a
+bounded wait open on the adapter's records and ends when no gate waits. It starts
+with a link, a deployment request, or a subscriber of the event stream, acts under
+the linking actor's `gates_observe` grant, and confirms that every ten minutes. A
+headless caller uses `gate sync --wait-seconds`, which waits the same way. Nothing
+polls on a timer. Reads answer from this machine's records and contact nothing.
+
+The watch runs on the orchestrating machine with that machine's GitHub credentials;
+watching on the target's own server is HS2-WDQZ37. A watch only advances while the
+Job monitor runs: `gate link` in the CLI starts it, and a link through the server
+reports `watching: false` until one runs (HS2-VVHVF0).
+
+`authorize` reads the target again, up to three times, when its resolution lost a
+race to a concurrent one, so a follower confirming its authority does not turn a
+simultaneous request into `target_unavailable`.
+
+### Deployments
+
+`gate deploy` asks for a deployment of the commit the run's CI gate passed. The
+request names the environment, the target's checked-in script as a path relative to
+its repository root, and an operation id.
+
+- **Precondition.** Every standing CI gate of the run passed, for one commit.
+  Otherwise the request is refused with `gate_not_passed` and nobody is asked.
+- **Authority.** It passes the gate as the grant action `deployments_run` under its
+  operation id.
+- **A person for production.** A request marked `production` always waits for a
+  person, with or without a policy file. Any other request waits when the policy
+  lists `deployment` under `approval.required_for`. While waiting, the gate is
+  `awaiting_approval` and the answer carries the approval id (§26.8). Repeating the
+  request after the answer moves it on; a denial ends it as `failed` with
+  `approval_denied`. An approval is used once.
+- **Idempotent.** The same operation id returns the same gate, asks nobody again
+  and starts nothing twice. The same id for other content conflicts. An environment
+  with a deployment in progress refuses a second with `gate_deployment_active`.
+- **Result.** Only a deployment adapter's typed evidence settles the gate.
+
+No deployment adapter ships. This repository has no hosted deployment
+(`AGENTS.md`, HS2-51HMCC), so an authorized deployment is recorded as `unknown` with
+`deployment_executor_unavailable`: approved, and not run. Running the target's script
+on the target's server with target-scoped credentials, after verifying that it is
+tracked at the gated commit, is HS2-G3VAK4. Artifact identity from CI is HS2-3YC577.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration gate link <run-id> --project <owner> --commit <40-hex> [--repo owner/name] [--workflow CI] [--branch main]
+hotsheet-cli ... orchestration gate list --project <owner> [--run <run-id>] [--target <target-id> --commit <40-hex>]
+hotsheet-cli ... orchestration gate show <gate-id> --project <owner>
+hotsheet-cli ... orchestration gate sync <run-id> --project <owner> [--wait-seconds 20]
+hotsheet-cli ... orchestration gate deploy <run-id> --project <owner> --environment <name> --script scripts/deploy.sh --operation-id <retained-id> [--production]
+```
+
+| Route                                                     | Methods and purpose                                                        |
+| --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/runs/{run}/gates`       | POST link the CI gate of a commit; machine-local                           |
+| `/checkouts/{owner}/orchestration/runs/{run}/gate-sync`   | POST read the adapters' records, with an optional `wait_ms`; machine-local |
+| `/checkouts/{owner}/orchestration/runs/{run}/deployments` | POST request a deployment; machine-local                                   |
+| `/checkouts/{owner}/orchestration/gates`                  | GET the standing gates by `run`, or `target_id` and `commit`, rolled up    |
+| `/checkouts/{owner}/orchestration/gates/{gate}`           | GET one gate with evidence and history                                     |
+
+MCP `hotsheet_targets` adds `gate_link`, `gate_list`, `gate_show`, `gate_sync` and
+`deployment_request`. Approving a deployment is a person's CLI or HTTP action.
+
+The runtime reads other tickets call are
+`OrchestrationRuntime::run_gate_state(owner_id, run_id)` and
+`commit_gate_state(owner_id, target_id, commit)`. Both return the rolled-up
+`GateSummary` from this machine's records.

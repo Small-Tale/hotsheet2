@@ -20,6 +20,7 @@ use super::*;
 
 mod access;
 mod capacity;
+mod gates;
 mod policy;
 mod runs;
 mod tickets;
@@ -132,12 +133,13 @@ impl RemoteCheckoutTransport for Peer {
         _: &str,
     ) -> Result<CheckoutProjection, TargetFailure> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        if let Some(before) = self
+        // Take the hook and let go of its lock first: a hook may reach this peer again.
+        let before = self
             .before_metadata
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-        {
+            .take();
+        if let Some(before) = before {
             before();
         }
         Ok(self.projection.clone())

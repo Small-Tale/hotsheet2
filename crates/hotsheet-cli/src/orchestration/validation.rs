@@ -696,6 +696,8 @@ impl OrchestrationRuntime {
                     reason: Some(result.state.code().into()),
                     actor_id: result.actor_id.clone(),
                     dedupe: Some(format!("{}.{}", result.result_id, result.state.code())),
+                    gate_id: None,
+                    gate_state: None,
                 },
             );
         }

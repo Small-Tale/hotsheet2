@@ -400,6 +400,12 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id",
             "/checkouts/owner/orchestration/runs/id/sync",
             "/checkouts/owner/orchestration/run-events",
+            // HS2-5JBYPV: gate records and deployment requests are this machine's.
+            "/checkouts/owner/orchestration/runs/id/gates",
+            "/checkouts/owner/orchestration/runs/id/gate-sync",
+            "/checkouts/owner/orchestration/runs/id/deployments",
+            "/checkouts/owner/orchestration/gates",
+            "/checkouts/owner/orchestration/gates/id",
             // HS2-AHG7HW: observed tool capacity is this machine's.
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",

@@ -6,6 +6,7 @@ mod audit;
 mod bindings;
 mod capacity;
 pub(crate) mod contract;
+mod gates;
 mod grants;
 mod manifest;
 mod policy;
@@ -33,6 +34,11 @@ pub use capacity::{
     ToolAvailability, decide_admission, effective_limits, estimated_footprint,
 };
 pub use contract::*;
+pub use gates::{
+    ArtifactRef, CiScope, Coverage, DeploymentScope, Gate, GateError, GateEvidence, GateFilter,
+    GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, GateTransition,
+    Linked, MAX_GATE_HISTORY, MAX_GATES, NewGate, summarize, valid_commit, valid_script,
+};
 pub use grants::{
     AccessDecision, AccessRequest, CreateGrant, DenialReason, Grant, GrantRegistry, GrantState,
     GrantView, MAX_GRANT_CONCURRENCY, MAX_GRANT_LIFETIME_MS, MAX_GRANT_MODELS, MAX_GRANT_TOOLS,
@@ -108,6 +114,9 @@ pub enum OrchestrationError {
     /// HS2-WN0MXZ: the validation step or result does not allow this request.
     #[error("orchestration validation refused the request: {}", .0.code())]
     Validation(ValidationError),
+    /// HS2-5JBYPV: the gate, or its provider adapter, refused the request.
+    #[error("orchestration gate refused the request: {}", .0.code())]
+    Gate(GateError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -134,6 +143,7 @@ impl OrchestrationError {
             Self::TargetOperation(error) => error.code(),
             Self::Run(error) => error.code(),
             Self::Validation(error) => error.code(),
+            Self::Gate(error) => error.code(),
         }
     }
 }
@@ -218,6 +228,8 @@ mod audit_tests;
 mod binding_tests;
 #[cfg(test)]
 mod capacity_tests;
+#[cfg(test)]
+mod gate_tests;
 #[cfg(test)]
 mod grant_tests;
 #[cfg(test)]

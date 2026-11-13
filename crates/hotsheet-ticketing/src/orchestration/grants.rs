@@ -33,16 +33,19 @@ pub enum TargetAction {
     GatesObserve,
     ValidationRun,
     SessionsManage,
+    /// HS2-5JBYPV: request a deployment of a gated commit through the target's script.
+    DeploymentsRun,
 }
 
 impl TargetAction {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::TicketsRead,
         Self::TicketsWrite,
         Self::WorkStart,
         Self::GatesObserve,
         Self::ValidationRun,
         Self::SessionsManage,
+        Self::DeploymentsRun,
     ];
 
     pub fn code(self) -> &'static str {
@@ -53,6 +56,7 @@ impl TargetAction {
             Self::GatesObserve => "gates_observe",
             Self::ValidationRun => "validation_run",
             Self::SessionsManage => "sessions_manage",
+            Self::DeploymentsRun => "deployments_run",
         }
     }
 }

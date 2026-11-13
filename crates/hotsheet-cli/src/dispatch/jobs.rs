@@ -328,6 +328,12 @@ fn ensure_monitor(home: &Path, args: MonitorArgs) -> Result<(MonitorInfo, bool)>
         .context("starting the Job monitor")
 }
 
+/// HS2-5JBYPV: make sure the monitor runs with its default timing, for a caller that
+/// just created a watch Job outside `job watch ci`. Returns whether this call started it.
+pub(crate) fn ensure_default_monitor(home: &Path) -> Result<bool> {
+    ensure_monitor(home, MonitorArgs::default()).map(|(_, started)| started)
+}
+
 /// The checkout id and the CI target the arguments name. Without `--repo` the
 /// repository comes from the checkout's `origin` remote.
 fn ci_target(home: &Path, args: &CiArgs) -> Result<(String, CiTarget)> {

@@ -30,6 +30,10 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "runs", _]
             | ["checkouts", _, "orchestration", "runs", _, _]
             | ["checkouts", _, "orchestration", "run-events"]
+            // HS2-5JBYPV: gates of runs. Linking, syncing and deployment requests are
+            // `runs/{run}/{gates,gate-sync,deployments}` above.
+            | ["checkouts", _, "orchestration", "gates"]
+            | ["checkouts", _, "orchestration", "gates", _]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -87,6 +91,9 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "runs", _]
             | ["checkouts", _, "orchestration", "runs", _, _]
             | ["checkouts", _, "orchestration", "run-events"]
+            // HS2-5JBYPV: gate records are this machine's.
+            | ["checkouts", _, "orchestration", "gates"]
+            | ["checkouts", _, "orchestration", "gates", _]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -294,6 +301,25 @@ impl OrchestrationRuntime {
         self.watch_step(
             owner_id,
             target_id,
+            state,
+            wait_ms,
+            &mut Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            },
+        )
+    }
+
+    /// HS2-5JBYPV: one gate follow step on the real clock, for a host's follower.
+    pub fn gate_follow_step_now(
+        &self,
+        owner_id: &str,
+        state: &mut super::GateFollowState,
+        wait_ms: u64,
+    ) -> super::GateFollowStep {
+        let mut rng = Rng;
+        self.gate_follow_step(
+            owner_id,
             state,
             wait_ms,
             &mut Transaction {
@@ -623,8 +649,34 @@ impl OrchestrationRuntime {
                     }
                     "cancel" => value(self.run_cancel(owner, run, actor.as_ref(), tx)?),
                     "sync" => value(self.run_sync(owner, run, actor.as_ref(), tx)?),
+                    // HS2-5JBYPV
+                    "gates" => {
+                        value(self.gate_link(owner, run, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "gate-sync" => {
+                        value(self.gate_sync(owner, run, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "deployments" => {
+                        value(self.gate_deploy(owner, run, decode(body)?, actor.as_ref(), tx)?)
+                    }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
+            }
+            // HS2-5JBYPV: gate reads answer from this machine's records alone.
+            ("GET", ["checkouts", owner, "orchestration", "gates"]) => {
+                let commit = query_text(path, "commit")?.map(|sha| sha.to_ascii_lowercase());
+                value(self.gate_summary(
+                    owner,
+                    &hotsheet_ticketing::orchestration::GateFilter {
+                        run_id: query_text(path, "run")?,
+                        target_id: query_text(path, "target_id")?,
+                        commit,
+                        current_only: false,
+                    },
+                )?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "gates", gate]) => {
+                value(self.gate(owner, gate)?)
             }
             // HS2-AZ15GA orchestrating half.
             ("POST", ["checkouts", owner, "orchestration", "tickets", operation]) => {

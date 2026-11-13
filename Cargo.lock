@@ -1303,6 +1303,7 @@ dependencies = [
  "hotsheet-cli",
  "hotsheet-extsync",
  "hotsheet-index",
+ "hotsheet-jobs",
  "hotsheet-mcp",
  "hotsheet-model",
  "hotsheet-notify",
