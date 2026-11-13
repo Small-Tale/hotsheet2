@@ -219,6 +219,7 @@ impl Monitor {
     /// One step: find Jobs to attach to, then serve each held Job (stop watching, cancel,
     /// poll, renew) as it falls due. Makes no store write when nothing is due.
     pub fn tick(&mut self) -> Result<Tick, JobError> {
+        self.renew_overdue();
         self.attach()?;
         let keys: Vec<Key> = self.watched.keys().cloned().collect();
         for key in keys {
@@ -272,6 +273,30 @@ impl Monitor {
         self.watched.remove(key);
         for source in &mut self.sources {
             source.forget(&key.1);
+        }
+    }
+
+    /// Renew held leases that are due before anything else. After a long pause (a
+    /// sleeping laptop) the monitor's own leases have run out; renewing first keeps the
+    /// reconciliation below from declaring its own Jobs lost.
+    fn renew_overdue(&mut self) {
+        let now = self.store.now_ms();
+        let renew_ms = self.renew_ms();
+        let due: Vec<Key> = self
+            .watched
+            .iter()
+            .filter(|(_, watched)| now >= watched.next_renew_ms)
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in due {
+            let Some(token) = self.watched.get(&key).map(|w| w.token.clone()) else {
+                continue;
+            };
+            if self.store.renew(&key.0, &key.1, &token).is_ok() {
+                self.touch(&key, now, renew_ms);
+            } else {
+                self.drop_job(&key);
+            }
         }
     }
 

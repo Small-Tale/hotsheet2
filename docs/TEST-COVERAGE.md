@@ -1,5 +1,26 @@
 # Feature Coverage Matrix
 
+HS2-3R9V0R: `hotsheet-jobs/src/github.rs` unit tests cover the gate decision for
+every run status and conclusion, covering by a newer run, runs from before the
+commit, a diverged branch, a spent lookup budget, the re-watch floor and a
+re-run, target validation and its external reference, timestamp parsing, and
+cleaning of provider text. `tests/github.rs` drives the source through the real
+monitor and store with a scripted `GithubApi`: queued to green with steps, ETA,
+URL, and 304 answers that write nothing; red, repeated ensure, and re-watch to
+green; a run cancelled for a newer push; cancelled and superseded gates; a commit
+the provider does not know yet; cancel permitted, refused, undeclared, and never
+sent for another commit's run; an unreachable provider, a rate limit with a
+requested delay, a malformed body, and a missing repository; hostile provider
+text; eight concurrent callers of `ensure_ci_watch`; a lost watch; and
+`wait_for_gate_change`. `hotsheet-cli` unit tests cover the API root rule, retry
+delays from headers, and remote URL parsing. `hotsheet-cli/tests/job_ci_watch.rs`
+runs the built CLI and its real HTTP client against a loopback fixture server
+with a synthetic token: `job watch ci` to a green gate, `job watch gate
+--wait-seconds`, idempotent repeats, the credential and media type on every
+request, no token in any machine-local file, and refused targets. No test
+contacts GitHub; a live check against the internal testing repositories was not
+run.
+
 HS2-5TC1GQ: `hotsheet-jobs/tests/monitor.rs` steps the watch monitor against the
 real store with a manual clock and a scripted source: attach, kinds it does not
 serve, lease renewal between polls, steps that write nothing, backoff on

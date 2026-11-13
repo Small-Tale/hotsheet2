@@ -1,9 +1,10 @@
 # 33 — Jobs
 
 **Status:** Partly shipped. The core model, state machine, and local store are
-shipped in `crates/hotsheet-jobs` (HS2-GCHX8V, §33.7), and so are the watch
-monitor and the `job list`, `job show`, and `job watch` commands (HS2-5TC1GQ,
-§33.8). The other producers, the remaining CLI commands, the server, MCP, and the
+shipped in `crates/hotsheet-jobs` (HS2-GCHX8V, §33.7), with the watch monitor and
+the `job list`, `job show`, and `job watch` commands (HS2-5TC1GQ, §33.8) and the
+GitHub Actions CI watch (HS2-3R9V0R, §33.9). The other producers, the remaining
+CLI commands, the server, MCP, the result summary, the notification, and the
 client surfaces remain design only and are tracked by the tickets in §33.6
 (design: HS2-M78N64, from HS2-46YX92 annotation #1).
 
@@ -251,4 +252,79 @@ request the monitor ends the Job as `cancelled` with
 **Recovery.** If the monitor dies, its Jobs keep their state, read as stalled
 when the lease runs out, and become `lost` after the grace window. A new monitor
 reattaches to the same external operation; a message from the old monitor is
-then refused by its lease generation.
+then refused by its lease generation. A monitor that was paused past its
+lease, for example on a sleeping machine, renews its leases before it reconciles,
+so it keeps its Jobs when no other monitor took them.
+
+## 33.9 GitHub Actions CI watch as shipped (HS2-3R9V0R)
+
+A CI watch is a watch Job of kind `github-actions` that follows the **CI gate**
+of one commit. Its target is a repository, a full commit SHA, a workflow name
+(default `CI`), and a shipping branch (default `main`). The gate has the meaning
+of `scripts/ci-gate.mjs status --covers <sha>`: only push runs of that workflow on
+that branch count, and a run **covers** the commit when its head is the commit or
+a descendant of it.
+
+| Gate         | Meaning                                                                                                 | Job status  |
+| ------------ | ------------------------------------------------------------------------------------------------------- | ----------- |
+| `pending`    | No covering run exists yet, or the newest covering run is queued or in progress.                        | active      |
+| `green`      | A successful covering run exists.                                                                       | `succeeded` |
+| `red`        | The newest covering run failed, timed out, failed to start, or needs action.                            | `failed`    |
+| `cancelled`  | The newest covering run was cancelled and nothing newer covers the commit, or watching was stopped.     | `cancelled` |
+| `superseded` | The newest run on the branch is on a line that does not contain the commit, so no run can cover it.     | `failed`    |
+| `unknown`    | No watch Job exists for the target, its observer was lost, or the watch failed for an unrelated reason. | any other   |
+
+A run that the provider cancelled because a newer push replaced it keeps the gate
+`pending` while the newer covering run is running. A covering run that was
+skipped or neutral is not a failure and not the green run the gate needs, so the
+gate stays `pending`.
+
+**Steps, ETA, and links.** The steps are the jobs of the newest covering run;
+an in-progress job counts its completed steps. The producer ETA of a run in
+progress is its start plus the median duration of at least 3 of the last 10
+successful runs of the same workflow in the listing; the history estimate of
+§33.7 applies otherwise. The Job publishes the run's page as its URL. The Job
+carries the qualified ticket that waits on the gate, when the caller names one,
+and the commit. The outcome holds identifiers only: the gate, the commit,
+repository, branch, and workflow, and the run's id, attempt, head commit,
+conclusion, and URL. `ci_outcome` returns that record for the ticket result
+summary (HS2-BDH12X), the notification (HS2-FCBYC8), and orchestration.
+
+**Provider access.** The monitor lists the branch's push runs and the jobs of the
+run it follows, both with conditional requests, so an unchanged answer costs no
+rate limit and writes nothing. Whether a newer run's head contains the commit
+comes from the provider's compare endpoint; an answer is kept for the life of the
+monitor, and one poll starts at most 5 such lookups. A commit the provider does
+not know yet waits for its run. A repository that cannot be read fails the Job
+with gate `unknown`. The HTTP client takes its token from `GH_TOKEN` or
+`GITHUB_TOKEN`, otherwise from `gh auth token`; the token is never written to a
+Job, a log, or the process journal. A failed `gh auth token` is not tried again
+for 15 minutes. `HOTSHEET_GITHUB_API_URL` selects a GitHub
+Enterprise Server API root; a root that is not HTTPS is refused unless it is on
+this machine.
+
+**Cancel and stop watching.** Cancel asks the provider to cancel the run only
+when the newest covering run is the commit's own run and is not finished. A
+covering run that belongs to a newer commit is never cancelled. When the
+provider refuses, the reason is recorded and the Job keeps running. Stop
+watching ends the Job as `cancelled` and never contacts the provider. The CLI
+declares the cancel capability unless `--no-cancel` is given; the library
+default does not declare it.
+
+**Commands.** `hotsheet-cli job watch ci --commit <sha>` starts or finds the
+watch and makes sure the monitor runs; repeating it changes nothing. `--repo`
+defaults to the checkout's `origin` remote. `--ticket <connection_id>:<native_id>`
+links the waiting ticket. `--rewatch` watches again after a `red` or `cancelled`
+verdict in a new Job that is linked to the old one and ignores the run already
+judged, so a pushed fix or a re-run can turn the gate green; without it, a
+retained verdict is returned unchanged. `job watch gate --commit <sha>` prints the
+gate from the local store without contacting the provider, and
+`--wait-seconds <n>` blocks until a verdict or the timeout by waiting on the
+store's file changes.
+
+**Use from another crate.** `hotsheet_jobs` exports `CiTarget`,
+`ensure_ci_watch` and `rewatch_ci` (find or create under the checkout lock, so
+concurrent callers get one Job), `gate_state` (returning `GateState` with the Job
+id and the store revision), `wait_for_gate_change`, `JobStore::wait_for_change`,
+`ci_outcome`, and `ensure_monitor_running`. A caller that creates a watch must
+make sure the monitor runs; the CLI does, and other callers are HS2-DVJTQN.

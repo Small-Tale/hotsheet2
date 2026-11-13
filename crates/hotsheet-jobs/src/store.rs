@@ -224,6 +224,17 @@ impl JobStore {
     /// Create a `queued` Job. Retention runs first; when the checkout is at its cap the
     /// oldest finished Job makes room, and a checkout full of unfinished Jobs refuses.
     pub fn create(&self, new: NewJob) -> Result<Job, JobError> {
+        self.find_or_create(new, |_| false).map(|(job, _)| job)
+    }
+
+    /// Return the newest existing Job that `same` accepts, or create `new`. The search
+    /// and the create happen under one checkout lock, so concurrent callers that ask
+    /// for the same thing get one Job. The flag says whether this call created it.
+    pub fn find_or_create(
+        &self,
+        new: NewJob,
+        same: impl Fn(&Job) -> bool,
+    ) -> Result<(Job, bool), JobError> {
         model::checkout_token(&new.checkout_id)?;
         model::token("kind.name", &new.kind.name)?;
         model::text("job_key", &new.job_key, MAX_KEY)?;
@@ -240,6 +251,16 @@ impl JobStore {
         let _lock = self.lock(&checkout)?;
         let now = self.clock.now_ms();
         self.prune_locked(&checkout, now)?;
+        let mut existing: Vec<Job> = self
+            .job_ids(&checkout)?
+            .iter()
+            .filter_map(|id| self.load(&checkout, id).ok())
+            .filter(|job| same(job))
+            .collect();
+        existing.sort_by(|a, b| (a.created_ms, &a.id).cmp(&(b.created_ms, &b.id)));
+        if let Some(job) = existing.pop() {
+            return Ok((job, false));
+        }
         self.make_room(&checkout)?;
 
         let dir = self.root.join(&checkout);
@@ -285,7 +306,7 @@ impl JobStore {
         fs::create_dir(dir.join(&job.id))?;
         self.save(&mut job, now)?;
         self.bump(&checkout)?;
-        Ok(job)
+        Ok((job, true))
     }
 
     /// One Job's snapshot.

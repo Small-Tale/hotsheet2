@@ -1,6 +1,7 @@
 //! Jobs (`docs/33-jobs.md`): read the machine-local Job store and run the watch monitor
-//! (HS2-5TC1GQ). None of this needs a server or a ticket store. Reporting, running,
-//! cancelling and tailing commands belong to HS2-V4Q2MA.
+//! (HS2-5TC1GQ), including the GitHub Actions CI gate of a commit (HS2-3R9V0R). None of
+//! this needs a server or a ticket store. Reporting, running, cancelling and tailing
+//! commands belong to HS2-V4Q2MA.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -10,13 +11,15 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_jobs::{
-    ChangeWaiter, Clock, Job, JobStore, JournalProbe, Monitor, MonitorClaim, MonitorConfig,
-    MonitorControl, MonitorInfo, MonitorSlot, NoProbe, SlotState, StoreConfig, SystemClock,
-    UlidSource, Wake,
+    ChangeWaiter, CiTarget, CiWatchOptions, Clock, GateReading, GateState, GithubActionsSource,
+    Job, JobStore, JournalProbe, Monitor, MonitorClaim, MonitorConfig, MonitorControl, MonitorInfo,
+    MonitorSlot, NoProbe, SlotState, StoreConfig, SystemClock, TicketLink, UlidSource, Wake,
+    ensure_ci_watch, ensure_monitor_running, gate_state, rewatch_ci, wait_for_gate_change,
 };
 
 use crate::Cmd;
 
+use super::job_github::{UreqGithubApi, repo_from_remote};
 use super::{Ctx, misrouted};
 
 /// How long `job watch start` and `stop` wait for the monitor to answer.
@@ -66,6 +69,56 @@ pub(crate) enum JobWatchCmd {
     Stop,
     /// Print whether the monitor is running.
     Status,
+    /// Watch the CI gate of a commit: start or find its watch Job and make sure the
+    /// monitor runs. Repeating it changes nothing. The gate is green when a successful
+    /// push run of the workflow on the branch contains the commit, as
+    /// `scripts/ci-gate.mjs status --covers <sha>` defines it.
+    Ci {
+        #[command(flatten)]
+        target: CiArgs,
+        /// The ticket waiting on this gate, as `<connection_id>:<native_id>`.
+        #[arg(long)]
+        ticket: Option<String>,
+        /// After a red or cancelled verdict, watch again in a new linked Job that
+        /// ignores the run already judged (for a pushed fix or a re-run).
+        #[arg(long)]
+        rewatch: bool,
+        /// Do not offer cancelling the commit's own run; stop watching stays available.
+        #[arg(long)]
+        no_cancel: bool,
+        #[command(flatten)]
+        monitor: MonitorArgs,
+    },
+    /// Print the CI gate of a commit as JSON from its watch Job, without contacting the
+    /// provider: `pending`, `green`, `red`, `superseded`, `cancelled` or `unknown`.
+    Gate {
+        #[command(flatten)]
+        target: CiArgs,
+        /// Wait up to this many seconds for a verdict before printing. The wait wakes on
+        /// the Job store's file changes; it does not poll.
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=86_400))]
+        wait_seconds: Option<u64>,
+    },
+}
+
+/// The commit whose CI gate is meant, and where its runs are.
+#[derive(Args, Clone)]
+pub(crate) struct CiArgs {
+    /// Full 40-character commit SHA.
+    #[arg(long)]
+    commit: String,
+    /// `owner/name`. Defaults to the checkout's `origin` remote.
+    #[arg(long)]
+    repo: Option<String>,
+    /// The shipping branch whose push runs count.
+    #[arg(long, default_value = "main")]
+    branch: String,
+    /// The workflow's name as the provider shows it.
+    #[arg(long, default_value = "CI")]
+    workflow: String,
+    /// Checkout id, alias, or path (default: the current directory).
+    #[arg(long, default_value = ".")]
+    checkout: String,
 }
 
 /// Timing overrides for tests. The defaults are the product behavior.
@@ -133,6 +186,24 @@ pub(super) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
             JobWatchCmd::Start(args) => watch_start(&home, args),
             JobWatchCmd::Stop => watch_stop(&home),
             JobWatchCmd::Status => print_json(&monitor_status(&MonitorSlot::at(&home))?),
+            JobWatchCmd::Ci {
+                target,
+                ticket,
+                rewatch,
+                no_cancel,
+                monitor,
+            } => watch_ci(
+                &home,
+                &target,
+                ticket.as_deref(),
+                rewatch,
+                !no_cancel,
+                monitor,
+            ),
+            JobWatchCmd::Gate {
+                target,
+                wait_seconds,
+            } => watch_gate(&home, &target, wait_seconds),
         },
         JobCmd::Monitor(args) => monitor(&home, args),
     }
@@ -225,46 +296,151 @@ fn show(
 }
 
 fn watch_start(home: &Path, args: MonitorArgs) -> Result<()> {
-    let slot = MonitorSlot::at(home);
-    if let SlotState::Held(info) = slot.state()? {
-        return print_json(
-            &serde_json::json!({ "running": true, "started": false, "monitor": info }),
-        );
-    }
-    let mut command = Command::new(std::env::current_exe().context("locating hotsheet-cli")?);
-    command
-        .args(["job", "monitor"])
-        .args(args.flags())
-        .env("HOTSHEET_HOME", home)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    detach(&mut command);
-    hotsheet_process_journal::LaunchContext {
-        journal: hotsheet_process_journal::ProcessJournal::at(home),
-        supervisor: "hotsheet-cli",
-        purpose: hotsheet_process_journal::Purpose::JobMonitor,
-        project_id: None,
-        session_id: None,
-        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
-    }
-    .detached(&mut command)
-    .context("starting the Job monitor")?;
+    let (info, started) = ensure_monitor(home, args)?;
+    print_json(&serde_json::json!({ "running": true, "started": started, "monitor": info }))
+}
 
-    // Two starts can race: both spawn, one monitor claims the slot and the other exits.
-    // Either way this start reports the monitor that is running.
-    let deadline = Instant::now() + MONITOR_ANSWER;
-    loop {
-        if let SlotState::Held(Some(info)) = slot.state()? {
-            return print_json(
-                &serde_json::json!({ "running": true, "started": true, "monitor": info }),
-            );
+/// Start the detached monitor unless one already runs, and report the one that does.
+/// Two starts can race: both spawn, one monitor claims the slot and the other exits.
+fn ensure_monitor(home: &Path, args: MonitorArgs) -> Result<(MonitorInfo, bool)> {
+    let spawn = || {
+        let mut command = Command::new(std::env::current_exe()?);
+        command
+            .args(["job", "monitor"])
+            .args(args.flags())
+            .env("HOTSHEET_HOME", home)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        detach(&mut command);
+        hotsheet_process_journal::LaunchContext {
+            journal: hotsheet_process_journal::ProcessJournal::at(home),
+            supervisor: "hotsheet-cli",
+            purpose: hotsheet_process_journal::Purpose::JobMonitor,
+            project_id: None,
+            session_id: None,
+            binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
         }
-        if Instant::now() >= deadline {
-            bail!("the Job monitor did not start");
+        .detached(&mut command)
+    };
+    ensure_monitor_running(&MonitorSlot::at(home), spawn, MONITOR_ANSWER)
+        .context("starting the Job monitor")
+}
+
+/// The checkout id and the CI target the arguments name. Without `--repo` the
+/// repository comes from the checkout's `origin` remote.
+fn ci_target(home: &Path, args: &CiArgs) -> Result<(String, CiTarget)> {
+    let checkout_id = resolve_checkout_id(home, &args.checkout)?;
+    let repo = match &args.repo {
+        Some(repo) => repo.clone(),
+        None => origin_repo(home, &args.checkout)
+            .context("no GitHub repository found for this checkout: pass --repo <owner>/<name>")?,
+    };
+    let target = CiTarget::new(&repo, &args.commit, &args.workflow, &args.branch).context(
+        "pass --commit as a full 40-character SHA, --repo as <owner>/<name>, and a plain \
+         --branch name",
+    )?;
+    Ok((checkout_id, target))
+}
+
+fn origin_repo(home: &Path, reference: &str) -> Option<String> {
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let root = match registry.describe(reference) {
+        Ok(checkout) => std::path::PathBuf::from(checkout.root),
+        Err(_) => std::path::PathBuf::from(reference),
+    };
+    let output = hotsheet_ticketing::git::command_in(&root)
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    repo_from_remote(&String::from_utf8(output.stdout).ok()?)
+}
+
+fn gate_json(reading: &GateReading) -> serde_json::Value {
+    let (state, run) = match &reading.state {
+        GateState::Pending => ("pending", None),
+        GateState::Green { run } => ("green", Some(run)),
+        GateState::Red { run } => ("red", Some(run)),
+        GateState::Superseded => ("superseded", None),
+        GateState::Cancelled => ("cancelled", None),
+        GateState::Unknown => ("unknown", None),
+    };
+    serde_json::json!({
+        "state": state,
+        "run": run.map(|run| serde_json::json!({
+            "id": run.id,
+            "attempt": run.attempt,
+            "head_sha": run.head_sha,
+            "url": run.url,
+        })),
+        "job_id": reading.job_id,
+        "revision": reading.revision,
+    })
+}
+
+fn watch_ci(
+    home: &Path,
+    args: &CiArgs,
+    ticket: Option<&str>,
+    rewatch: bool,
+    can_cancel: bool,
+    monitor: MonitorArgs,
+) -> Result<()> {
+    let (checkout_id, target) = ci_target(home, args)?;
+    let ticket = ticket
+        .map(|qualified| {
+            let (connection_id, native_id) = qualified
+                .split_once(':')
+                .filter(|(connection, native)| !connection.is_empty() && !native.is_empty())
+                .context("pass --ticket as <connection_id>:<native_id>")?;
+            Ok::<_, anyhow::Error>(TicketLink {
+                connection_id: connection_id.to_owned(),
+                native_id: native_id.to_owned(),
+            })
+        })
+        .transpose()?;
+    let options = CiWatchOptions { ticket, can_cancel };
+    let store = JobStore::at(home);
+    let job = if rewatch {
+        rewatch_ci(&store, &checkout_id, &target, &options)?
+    } else {
+        ensure_ci_watch(&store, &checkout_id, &target, &options)?
+    };
+    // A finished watch needs no observer; anything else does.
+    let monitor = if job.status.is_finished() && job.status != hotsheet_jobs::Status::Lost {
+        monitor_status(&MonitorSlot::at(home))?
+    } else {
+        let (info, started) = ensure_monitor(home, monitor)?;
+        serde_json::json!({ "running": true, "started": started, "monitor": info })
+    };
+    let reading = gate_state(&store, &checkout_id, &target)?;
+    print_json(&serde_json::json!({
+        "checkout_id": checkout_id,
+        "job": job_view(&job, store.now_ms())?,
+        "gate": gate_json(&reading),
+        "monitor": monitor,
+    }))
+}
+
+fn watch_gate(home: &Path, args: &CiArgs, wait_seconds: Option<u64>) -> Result<()> {
+    let (checkout_id, target) = ci_target(home, args)?;
+    let store = JobStore::at(home);
+    let mut reading = gate_state(&store, &checkout_id, &target)?;
+    if let Some(seconds) = wait_seconds {
+        let deadline = Instant::now() + Duration::from_secs(seconds);
+        // Only a pending gate can still become a verdict.
+        while reading.state == GateState::Pending {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            reading =
+                wait_for_gate_change(&store, &checkout_id, &target, &reading.state, remaining)?;
         }
-        std::thread::sleep(EVENT_SETTLE);
     }
+    print_json(&gate_json(&reading))
 }
 
 fn watch_stop(home: &Path) -> Result<()> {
@@ -365,19 +541,18 @@ fn monitor(home: &Path, args: MonitorArgs) -> Result<()> {
         args.store_config(),
     );
     let mut monitor = Monitor::new(store, info.owner, args.monitor_config());
-    register_sources(&mut monitor);
+    register_sources(&mut monitor, home);
     let waiter = ChangeWaiter::new(slot.dir())?;
     monitor.run(&mut ProcessControl { claim, waiter })?;
     Ok(())
 }
 
-fn register_sources(monitor: &mut Monitor) {
+fn register_sources(monitor: &mut Monitor, home: &Path) {
+    monitor.register(Box::new(GithubActionsSource::new(UreqGithubApi::new(home))));
     // A file-backed source so process tests can drive a real monitor offline. It is not
     // compiled into release builds.
     #[cfg(debug_assertions)]
     if let Some(dir) = std::env::var_os("HOTSHEET_JOB_WATCH_FIXTURES") {
         monitor.register(Box::new(hotsheet_jobs::FixtureWatchSource::new(dir)));
     }
-    #[cfg(not(debug_assertions))]
-    let _ = monitor;
 }

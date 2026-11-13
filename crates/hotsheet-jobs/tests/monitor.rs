@@ -738,3 +738,28 @@ fn an_idle_monitor_step_wakes_no_watcher() {
     }
     assert!(woke, "a store write must wake the watcher");
 }
+
+#[test]
+fn a_monitor_that_slept_past_its_lease_keeps_its_jobs() {
+    let fx = fixture();
+    let source = Scripted::default();
+    let job = fx.create(ProducerFamily::Watch);
+    source.observe(Observed::Running);
+    let mut monitor = monitor(&fx, "monitor-a", &source);
+    monitor.tick().unwrap();
+
+    // The machine slept far past the lease and the grace window, and nobody took over.
+    fx.clock.advance(10 * (LEASE_MS + LOST_AFTER_MS));
+    source.observe(Observed::Running);
+    let tick = monitor.tick().unwrap();
+    assert_eq!(tick.watching, 1);
+    let after = fx.get(&job.id);
+    assert_eq!(
+        after.status,
+        Status::Running,
+        "it did not declare its own Job lost"
+    );
+    assert_eq!(after.lease.as_ref().unwrap().generation, 1);
+    assert_eq!(after.liveness(fx.store.now_ms()), Liveness::Live);
+    assert_eq!(source.polls().len(), 2);
+}

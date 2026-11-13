@@ -20,10 +20,12 @@
 //! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
+mod ci;
 mod clock;
 mod error;
 mod feed;
 mod fixture;
+mod github;
 mod lock;
 mod model;
 mod monitor;
@@ -34,12 +36,20 @@ mod state;
 mod steps;
 mod store;
 
+pub use ci::{
+    CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome, ensure_ci_watch,
+    find_ci_watch, gate_of, gate_state, rewatch_ci, wait_for_gate_change,
+};
 pub use clock::{Clock, IdSource, ManualClock, SequenceIds, SystemClock, UlidSource};
 pub use error::JobError;
 pub use feed::{
     FeedEntry, FeedGap, FeedLine, FeedPage, FeedStream, MAX_FEED_BATCH, MAX_FEED_LINE_BYTES,
 };
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
+pub use github::{
+    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiTarget, GITHUB_ACTIONS_KIND,
+    GithubActionsSource, GithubApi, RunFloor,
+};
 pub use model::{
     ActiveStatus, Capabilities, Eta, EtaSource, ExternalRef, FeedState, FinalStatus, Job, JobKind,
     Lease, LeaseToken, Liveness, Outcome, ProducerFamily, RECORD_VERSION, Status, TicketLink,
@@ -50,7 +60,7 @@ pub use monitor::{
 };
 pub use probe::{JournalProbe, NoProbe, OwnerProbe, OwnerState};
 pub use signal::ChangeWaiter;
-pub use slot::{MonitorClaim, MonitorInfo, MonitorSlot, SlotState};
+pub use slot::{MonitorClaim, MonitorInfo, MonitorSlot, SlotState, ensure_monitor_running};
 pub use state::{check_transition, transition_allowed};
 pub use steps::{
     FlatStep, Progress, Step, StepStatus, rollup, step_progress, tree_from_flat, validate_steps,

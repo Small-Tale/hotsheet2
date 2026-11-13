@@ -148,6 +148,37 @@ impl Drop for MonitorClaim {
     }
 }
 
+/// Make sure the machine's monitor runs: report the running one, or call `spawn` (which
+/// starts a detached `hotsheet-cli job monitor`) and wait until it has published itself.
+/// The flag says whether this call started it. Safe to race: every caller ends up naming
+/// the one monitor that holds the slot.
+pub fn ensure_monitor_running(
+    slot: &MonitorSlot,
+    spawn: impl FnOnce() -> io::Result<()>,
+    timeout: std::time::Duration,
+) -> io::Result<(MonitorInfo, bool)> {
+    if let SlotState::Held(Some(info)) = slot.state()? {
+        return Ok((info, false));
+    }
+    let started = slot.state()? == SlotState::Free;
+    if started {
+        spawn()?;
+    }
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if let SlotState::Held(Some(info)) = slot.state()? {
+            return Ok((info, started));
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "the Job monitor did not start",
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 fn remove_if_present(path: &Path) -> io::Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),

@@ -10,6 +10,7 @@ mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;
 pub(crate) mod groups;
+mod job_github;
 pub(crate) mod jobs;
 pub(crate) mod notify;
 pub(crate) mod orchestration;

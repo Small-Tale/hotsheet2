@@ -211,8 +211,10 @@ records, are shipped in [04](04-core-server-cli.md) (HS2-GDCMXE, HS2-G9TF60).
 and client contract, and state transitions (HS2-M78N64). Partial: the core model,
 state machine, leases, and local store are shipped in `crates/hotsheet-jobs`
 (HS2-GCHX8V), with the watch monitor and the `job list`, `job show`, and
-`job watch` commands (HS2-5TC1GQ). The remaining CLI commands, the server, MCP,
-the producers, and the client implementations remain follow-ups.
+`job watch` commands (HS2-5TC1GQ), and the GitHub Actions CI gate watch with its
+`job watch ci` and `job watch gate` commands (HS2-3R9V0R). The remaining CLI
+commands, the server, MCP, the other producers, the ticket result summary, the
+notification, and the client implementations remain follow-ups.
 
 **Development strategies:** [34-development-strategies.md](34-development-strategies.md)
 defines the versioned shared project policy and the Ticket Assured, Steady Main,

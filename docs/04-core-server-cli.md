@@ -770,6 +770,18 @@ manage the one background monitor that hosts watch Jobs for the machine; start
 and stop are idempotent. [33](33-jobs.md) §33.8 owns the behavior. Commands that
 report, run, cancel, retry, dismiss, and tail Jobs are HS2-V4Q2MA.
 
+**CI gate (HS2-3R9V0R).** `hotsheet-cli job watch ci --commit <full-sha>` starts or
+finds the GitHub Actions watch for a commit and makes sure the monitor runs.
+`--repo <owner>/<name>` defaults to the checkout's `origin` remote, `--branch` to
+`main`, and `--workflow` to `CI`; `--ticket <connection_id>:<native_id>` links the
+waiting ticket, `--rewatch` watches again after a red or cancelled verdict, and
+`--no-cancel` withholds the cancel action. `job watch gate --commit <full-sha>`
+prints the gate (`pending`, `green`, `red`, `superseded`, `cancelled`, or
+`unknown`) from the local Job store, and `--wait-seconds <n>` waits for a verdict
+without polling. The monitor reads the provider with a token from `GH_TOKEN`,
+`GITHUB_TOKEN`, or `gh auth token`; `HOTSHEET_GITHUB_API_URL` selects a GitHub
+Enterprise Server API root. [33](33-jobs.md) §33.9 owns the behavior.
+
 **Child-process diagnostics (HS2-GDCMXE).** `hotsheet-cli processes` reads the
 machine-local `${HOTSHEET_HOME:-~/.hotsheet2}/processes` journal as JSON without a
 server or selected store. Each tracked PTY, AI drive, discovery-probe, utility,
@@ -1790,7 +1802,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Migration | `import` | [07](07-migration.md) |
 | Server and transport security | `serve`, `cert` | §4.3.1, §4.6, [08](08-distributed-and-remote.md) |
 | Terminal launch relay (macOS) | `terminal-relay` (HS2-HYF56Y) | [05](05-ai-tool-plugins.md) |
-| Jobs | `job list`, `job show`, `job watch start`, `job watch stop`, `job watch status` (HS2-5TC1GQ) | [33](33-jobs.md) §33.8 |
+| Jobs | `job list`, `job show`, `job watch start`, `job watch stop`, `job watch status` (HS2-5TC1GQ), `job watch ci`, `job watch gate` (HS2-3R9V0R) | [33](33-jobs.md) §33.8, §33.9 |
 
 ## 4.5 How the three stay consistent
 
