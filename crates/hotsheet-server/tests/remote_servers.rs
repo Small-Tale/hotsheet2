@@ -518,6 +518,11 @@ mod session_executor;
 #[cfg(unix)]
 #[path = "remote_servers/session_work.rs"]
 mod session_work;
+// HS2-DG0YPA, HS2-T16SK0, HS2-NPTKS8, HS2-R7QH35: the automatic loop's robustness,
+// with real PTYs of the same fake agent.
+#[cfg(unix)]
+#[path = "remote_servers/session_loop.rs"]
+mod session_loop;
 #[path = "remote_servers/sessions.rs"]
 mod sessions;
 #[path = "remote_servers/summary.rs"]

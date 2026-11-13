@@ -485,7 +485,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::HumanOwned
                 | E::NotSafe
                 | E::AdmissionRefused
-                | E::RoleActive => 409,
+                | E::RoleActive
+                | E::RunHeld => 409,
             }
         }
         OrchestrationError::TargetOperation(error) => {

@@ -57,6 +57,12 @@ pub enum StartOutcome {
         /// dispatches one.
         run_id: Option<String>,
     },
+    /// HS2-DG0YPA: a live session already works the step's run; it is adopted and
+    /// nothing is launched.
+    Adopted {
+        session_id: String,
+        run_id: String,
+    },
     /// The gate, the target or its machine refused, with a stable code.
     Refused {
         reason: String,
@@ -199,6 +205,9 @@ pub struct RecordingSessions {
     pub fail_list: Mutex<Option<String>>,
     /// What a wind-down answers; `Requested` when unset.
     pub wind_down_answer: Mutex<Option<WindDownOutcome>>,
+    /// HS2-DG0YPA: answer every start by adopting this `(session, run)`, as when a
+    /// live session already works the step's run.
+    pub adopt_starts: Mutex<Option<(String, String)>>,
 }
 
 fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -234,6 +243,9 @@ impl SessionExecutor for RecordingSessions {
         locked(&self.calls).push(SessionCall::Start(request.clone()));
         if let Some(reason) = locked(&self.refuse_starts).clone() {
             return StartOutcome::Refused { reason };
+        }
+        if let Some((session_id, run_id)) = locked(&self.adopt_starts).clone() {
+            return StartOutcome::Adopted { session_id, run_id };
         }
         let mut sessions = locked(&self.sessions);
         let session_id = format!("session-{}", sessions.len() + 1);

@@ -28,6 +28,7 @@
 > resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads),
 > the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
 > cost is read for targets on this machine only),
+> one live session per run, adopted rather than doubled (§26.24, HS2-DG0YPA),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -1665,8 +1666,8 @@ safe point keeps running, and a person's session is never touched.
 
 **Never a duplicate.** `may_start(session)` is false while a session runs, and
 `run_session_holder(owner, run_id)` names the session that still holds a run's work.
-The session start path does not consult it yet: wiring it in, once a scheduler-started
-session is linked to its run (HS2-YC2P7K), is HS2-DG0YPA.
+A start or a refill for a run it names is refused, and the scheduler adopts the
+holder instead (HS2-DG0YPA, §26.24).
 
 **Never a duplicate.** New work of a kind may be started for a run only when that
 source was read and shows none going on (`Assessment::may_start`). A source that
@@ -2011,7 +2012,9 @@ person took over still runs, so it still counts until it stops.
    returns the same session, whatever became of it, and never launches twice. The same
    id for another target, tool, model, effort, role, account or run is a conflict. A
    target has at most one active `dispatcher` and one active `integrator` session
-   (`session_role_active`). None of these asks a person or a target anything.
+   (`session_role_active`), and a run at most one live session
+   (`session_run_held`, §26.24). None of these asks a person anything; only the run
+   check asks the target, about the run's other live sessions.
 2. The start passes the gate (§26.7) as `sessions_manage` for the tool and model, with
    the load counted from the records and the operation id. A `dispatcher` or
    `integrator` start asks under `role_session_start` when the policy lists it, a
@@ -2619,6 +2622,9 @@ session never restarts. The executor joins the two:
 | None                                    | A new session under the scheduler's id                                                   |
 | `requested` or `running`                | The same start again: the same session is returned, and nothing launches twice           |
 | `failed`, `stopped` or `lost`           | A new session under `<id>.<n>` (`.2`, `.3`, …) that names the finished one in `replaces` |
+
+Another live session that already works the step's run is adopted instead, and a
+person's or an unconfirmed one refuses the start (`session_run_held`, §26.24).
 
 So a repeated request never launches a second session, a refused start can be tried
 again after its backoff, and a crashed session is replaced by the next pass that
@@ -3265,3 +3271,51 @@ findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q42
 longer outlives a later state change (HS2-68DWAM). External-provider targets and a contended resource are HS2-30XYPY.
 Checks that need a real AI tool, a real GitHub repository or Windows and Linux hosts
 are in [the manual test plan](manual-test-plan.md#orchestration-end-to-end-with-real-tools-and-hosts-hs2-2ey9dp).
+
+## 26.24 Keeping the automatic loop moving
+
+The automatic loop (§26.17, §26.19) must not get stuck without saying so. This
+section collects what keeps it moving when a session or a target does not do what
+the loop expected.
+
+### One live session per run (HS2-DG0YPA)
+
+A run has at most one live session. A session start for a run (`run_id`) under a new
+operation id, and a link of a running session to a run (a refill, §26.19), is
+refused with `session_run_held` (HTTP 409) while another `requested` or `running`
+session of the same owner holds that run. The check is made in the session registry
+under its file lock, so two starts that race cannot both be recorded. The same
+operation id is still the same start, whatever holds the run.
+
+| The run's other live session, after asking its host | `session start`                      | The scheduler's start                   |
+| --------------------------------------------------- | ------------------------------------ | --------------------------------------- |
+| None                                                | Starts                               | Starts                                  |
+| `running`, the orchestrator's, same target          | `session_run_held`                   | Adopts it: outcome `adopted`, no launch |
+| `running`, a person's                               | `session_run_held`                   | Refused, `session_run_held`             |
+| `requested` (its host has not confirmed it)         | `session_run_held`                   | Refused, `session_run_held`             |
+| Its host cannot be asked                            | `session_run_held`: nothing assumed  | Refused, `session_run_held`             |
+| It crashed (the host no longer has it)              | Learned as `lost`; the start goes on | Learned as `lost`; the start goes on    |
+
+- **The holder is asked first.** Before deciding, a start syncs each other live
+  session of the run with its host (§26.16, "Crashes"), as the starting actor. A
+  holder that crashed is then `lost` and holds nothing, so its replacement starts,
+  naming it in `replaces` when the caller does. A holder whose host cannot be asked
+  keeps the run: a start is refused rather than doubled.
+- **The scheduler adopts.** `OwnedSessions::placed_start` checks the run's holder
+  before it starts anything. A running orchestrator-owned holder on the step's target
+  is adopted: `StartOutcome::Adopted { session_id, run_id }`, logged as outcome
+  `adopted` with that session and run and audited as `scheduler_start`. Nothing
+  launches, and the target's placement memory is unchanged, so an adoption starts no
+  cooldown. Any other holder is a typed refusal, logged with detail `session_run_held`
+  and backed off like any refused start (§26.17).
+- **A refill of a held run** is refused by the link (`assign` answers `refused`
+  with `session_run_held`) and links nothing.
+- `run_session_holder(owner, run_id)` answers the run's latest live session; it is
+  the read reconciliation (§26.14) and the start path share. Reconciliation still
+  reports two live sessions for one run as `different_live_work`, for records an
+  older build or another process left.
+- The pure core is `run_holder(sessions, run_id)` in
+  `crates/hotsheet-ticketing/src/orchestration/sessions.rs`.
+
+No route, command or MCP action was added: the start, the refill and the decision
+log carry the new code and outcome.

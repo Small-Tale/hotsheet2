@@ -233,6 +233,13 @@ impl OrchestrationRuntime {
                 }
                 true
             }
+            // HS2-DG0YPA: nothing started, so the target's memory is unchanged.
+            StartOutcome::Adopted { session_id, run_id } => {
+                outcome.outcome = "adopted".into();
+                outcome.session_id = Some(session_id);
+                outcome.run_id = Some(run_id);
+                true
+            }
             StartOutcome::Refused { reason } => {
                 outcome.outcome = "refused".into();
                 applied.push((

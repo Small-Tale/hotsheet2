@@ -351,6 +351,18 @@ impl Fixture {
         )
         .unwrap()
     }
+    /// HS2-DG0YPA: link a session to a run behind the runtime's back, as an older
+    /// build or another process could have left the records.
+    fn plant_run(&self, session_id: &str, run_id: &str) {
+        let path = self.m.home.join("orchestration-sessions.json");
+        let mut file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        for session in file["sessions"].as_array_mut().unwrap() {
+            if session["session_id"] == session_id {
+                session["run_id"] = json!(run_id);
+            }
+        }
+        std::fs::write(&path, serde_json::to_vec(&file).unwrap()).unwrap();
+    }
     /// Write the target's coordination pool as a role session would have left it.
     fn pool(&self, change: impl FnOnce(&mut crate::coordination::State)) {
         let mut state = crate::coordination::State::new("project".into(), "source".into());
@@ -1995,15 +2007,18 @@ fn hs2_75q254_reconciliation_reads_adopts_and_winds_down_the_sessions_of_a_run()
     );
     assert_eq!(disposition(&view), Disposition::Continue);
     // Two sessions running for one run: the older one is a duplicate the run does
-    // not name.
+    // not name. HS2-DG0YPA: the runtime refuses to make one, so the second is
+    // planted in the records, as an older build or another process could have left it.
     let third = f
         .start("session-3", 1, "codex", for_run.clone(), &mut tx)
         .unwrap()
         .session;
-    let fourth = f
-        .start("session-4", 1, "codex", for_run.clone(), &mut tx)
-        .unwrap()
-        .session;
+    assert_eq!(
+        session_error(f.start("session-4", 1, "codex", for_run.clone(), &mut tx)),
+        SessionError::RunHeld
+    );
+    let fourth = f.started("session-4", 1, "codex", &mut tx).session;
+    f.plant_run(&fourth.session_id, &run.run_id);
     let view = reconcile(&mut tx);
     assert_eq!(
         session(&view),
@@ -2064,4 +2079,146 @@ fn hs2_75q254_reconciliation_reads_adopts_and_winds_down_the_sessions_of_a_run()
             .state,
         SessionState::Running
     );
+}
+
+/// HS2-DG0YPA: a dispatched run of target 1 for the fixture's orchestration ticket.
+fn dispatched_run(
+    f: &Fixture,
+    operation: &str,
+    tx: &mut Transaction<'_>,
+) -> hotsheet_ticketing::orchestration::Run {
+    let orchestration = f.m.orchestration_ticket("Coordinate");
+    let work = f.target_ticket("Do the work");
+    f.m.runtime
+        .run_dispatch(
+            &f.m.owner.id,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": f.m.owner_connection(),
+                    "native_id": orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": f.m.target_connection(),
+                "native_id": work.id.to_string(), "operation_id": operation,
+                "worker_id": "worker-a",
+            }))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+        .unwrap()
+        .run
+}
+
+/// HS2-DG0YPA: a start for a run another live session still holds is refused with a
+/// typed code, however often it is repeated; a holder that crashed is learned from
+/// its host first and the start proceeds; a holder whose host cannot be asked keeps
+/// the run; a person's holder keeps it too.
+#[test]
+fn hs2_dg0ypa_a_second_start_for_a_held_run_is_refused_until_its_holder_is_gone() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(Vec::new(), &mut tx);
+    let owner = f.m.owner.id.clone();
+    let run = dispatched_run(&f, "run-1", &mut tx);
+    let for_run = json!({"run_id": run.run_id});
+    let holder = |tx: &mut Transaction<'_>| {
+        let _ = tx;
+        f.m.runtime
+            .run_session_holder(&owner, &run.run_id)
+            .unwrap()
+            .map(|session| session.session_id)
+    };
+    let first = f
+        .start("session-1", 1, "codex", for_run.clone(), &mut tx)
+        .unwrap()
+        .session;
+    assert_eq!(holder(&mut tx), Some(first.session_id.clone()));
+    // Repeated: refused every time, nothing recorded or launched.
+    for _ in 0..3 {
+        assert_eq!(
+            session_error(f.start("session-2", 1, "codex", for_run.clone(), &mut tx)),
+            SessionError::RunHeld
+        );
+    }
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(f.m.runtime.session_list(&owner, false).unwrap().len(), 1);
+    // The holder's own start repeated is still itself.
+    assert_eq!(
+        f.start("session-1", 1, "codex", for_run.clone(), &mut tx)
+            .unwrap()
+            .session
+            .session_id,
+        first.session_id
+    );
+    // The holder crashes while its host cannot be asked: nothing is concluded, the
+    // run stays held.
+    let terminal = first.hosted.as_ref().unwrap().session_id.clone();
+    f.host.crash(&terminal);
+    f.host.down.store(true, Ordering::SeqCst);
+    assert_eq!(
+        session_error(f.start("session-2", 1, "codex", for_run.clone(), &mut tx)),
+        SessionError::RunHeld
+    );
+    f.host.down.store(false, Ordering::SeqCst);
+    // Its host answers: the crash is learned and the replacement takes the run.
+    let second = f
+        .start(
+            "session-2",
+            1,
+            "codex",
+            json!({"run_id": run.run_id, "replaces": first.session_id}),
+            &mut tx,
+        )
+        .unwrap()
+        .session;
+    assert_eq!(second.state, SessionState::Running);
+    assert_eq!(
+        f.m.runtime
+            .session(&owner, &first.session_id)
+            .unwrap()
+            .state,
+        SessionState::Lost
+    );
+    assert_eq!(holder(&mut tx), Some(second.session_id.clone()));
+    assert_eq!(f.host.launches().len(), 2);
+    // Out of order: the first start repeated late is the same lost session.
+    assert_eq!(
+        f.start("session-1", 1, "codex", for_run.clone(), &mut tx)
+            .unwrap()
+            .session
+            .state,
+        SessionState::Lost
+    );
+    // A person takes the replacement over: still live work, still held.
+    f.m.runtime
+        .session_takeover(
+            &owner,
+            &second.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        session_error(f.start("session-3", 1, "codex", for_run.clone(), &mut tx)),
+        SessionError::RunHeld
+    );
+    // A free session cannot be linked to the held run either.
+    let free = f.started("session-free", 1, "codex", &mut tx).session;
+    assert_eq!(
+        f.m.runtime
+            .session_link(&owner, &free.session_id, &run.run_id, &worker(), &mut tx)
+            .unwrap_err()
+            .code(),
+        "session_run_held"
+    );
+    // The person stops it: the run is empty and the next start takes it.
+    f.stop(&second.session_id, true, &human(), &mut tx).unwrap();
+    assert_eq!(holder(&mut tx), None);
+    let third = f
+        .start("session-3", 1, "codex", for_run.clone(), &mut tx)
+        .unwrap()
+        .session;
+    assert_eq!(holder(&mut tx), Some(third.session_id));
 }

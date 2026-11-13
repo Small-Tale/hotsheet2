@@ -1315,3 +1315,124 @@ fn hs2_yc2p7k_a_free_session_is_given_the_next_run_and_a_failed_run_is_replaced(
         1
     );
 }
+
+/// HS2-DG0YPA: the scheduler's start for a step whose run another live session
+/// already works adopts that session and launches nothing; a person's holder refuses
+/// the start; a refill of a held run is refused; once the holder is gone the next
+/// pass replaces it on the same run.
+#[test]
+fn hs2_dg0ypa_the_executor_adopts_a_live_holder_and_never_doubles_a_run() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let first = f.record(&operation);
+    let run = f.run_of(&step);
+    // The scheduler's session crashes and, before any pass, someone starts a session
+    // for the run by hand: the crash is learned from the host and the manual start
+    // takes the run.
+    f.host.crash(&f.terminal(&first));
+    let manual =
+        f.m.runtime
+            .session_start(
+                &f.owner(),
+                serde_json::from_value(json!({"target_id": id(1), "operation_id": "manual-1",
+                "tool": "codex", "run_id": run.run_id}))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .session;
+    assert_eq!(f.record(&operation).state, SessionState::Lost);
+    assert_eq!(f.host.launches().len(), 2);
+    // A start placed for the step now adopts it, however often it is asked.
+    for _ in 0..2 {
+        assert_eq!(
+            OwnedSessions.start(&f.m.runtime, &f.start_request(&step, no_load()), &mut tx),
+            StartOutcome::Adopted {
+                session_id: manual.session_id.clone(),
+                run_id: run.run_id.clone(),
+            }
+        );
+    }
+    assert_eq!(f.host.launches().len(), 2);
+    assert_eq!(f.records().len(), 2);
+    // Passes see the run worked and start nothing.
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty());
+        assert_eq!(
+            placement(&tick, &manual.session_id),
+            (PlacementAction::Keep, "busy")
+        );
+    }
+    // A refill of the held run is refused, and links nothing.
+    let free =
+        f.m.runtime
+            .session_start(
+                &f.owner(),
+                serde_json::from_value(
+                    json!({"target_id": id(1), "operation_id": "free-1", "tool": "codex"}),
+                )
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .session;
+    assert_eq!(
+        OwnedSessions.assign(
+            &f.m.runtime,
+            &PlacementAssign {
+                owner_id: f.owner(),
+                target_id: id(1),
+                session_id: free.session_id.clone(),
+                step_id: step.clone(),
+                actor_id: "worker-1".into(),
+            },
+            &mut tx,
+        ),
+        AssignOutcome::Refused {
+            reason: "session_run_held".into()
+        }
+    );
+    assert_eq!(f.record("free-1").run_id, None);
+    // A person takes the holder over: the start is refused, typed, not adopted.
+    f.m.runtime
+        .session_takeover(
+            &f.owner(),
+            &manual.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        OwnedSessions.start(&f.m.runtime, &f.start_request(&step, no_load()), &mut tx),
+        StartOutcome::Refused {
+            reason: "session_run_held".into()
+        }
+    );
+    // The person's session ends: the run is empty again, and the next pass gives it
+    // to the free session, on the same run; nothing launches or is dispatched twice.
+    f.host.crash(&f.terminal(&f.record("manual-1")));
+    f.at(&clock, START + MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("assigned", None)]);
+    assert_eq!(
+        (
+            tick.outcomes[0].session_id.as_deref(),
+            tick.outcomes[0].run_id.as_deref()
+        ),
+        (Some(free.session_id.as_str()), Some(run.run_id.as_str()))
+    );
+    assert_eq!(
+        f.record("free-1").run_id.as_deref(),
+        Some(run.run_id.as_str())
+    );
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 3);
+    assert!(f.tick(&mut tx).outcomes.is_empty());
+}

@@ -2506,7 +2506,8 @@ paths:
         Passes the grant and policy gate as `sessions_manage` with the load counted from this machine's records. The
         target's own machine may still refuse. The same `operation_id` returns the same session and never launches
         twice, including a session that already failed. A refusal by the target's admission is `session_admission_refused`
-        with the reason in the failed session's history.
+        with the reason in the failed session's history. A start for a run another live session still holds is
+        `session_run_held` (HS2-DG0YPA).
       requestBody:
         required: true
         content:
@@ -21301,7 +21302,8 @@ components:
               step_id:
                 type: string
               outcome:
-                description: '`started`, `assigned`, `wind_down_requested`, `executor_unavailable`, `executor_failed`,
+                description:
+                  '`started`, `adopted`, `assigned`, `wind_down_requested`, `executor_unavailable`, `executor_failed`,
                   `refused`, `not_at_safe_point`, `session_not_found`, or the denial code of the gate such as
                   `approval_required`.'
                 type: string

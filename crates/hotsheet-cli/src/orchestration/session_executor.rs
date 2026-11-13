@@ -14,6 +14,9 @@
 //!   in dispatcher mode under `sched-run-<step id>`, through `run_dispatch` with its
 //!   readiness guard, and starts the session linked to that run. The step is then in
 //!   progress. A refill gives a free session the run of its new step the same way.
+//! - **One session per run (HS2-DG0YPA).** A start for a run another live session
+//!   already works adopts that session instead of launching a second one; a person's
+//!   or an unconfirmed holder refuses the start as `session_run_held`.
 //! - **Wind down.** A stop without force. The host checks the safe point itself, so
 //!   nothing here can interrupt work, and a person's session is never stopped.
 use hotsheet_ticketing::actor::MutationActor;
@@ -285,6 +288,31 @@ impl OrchestrationRuntime {
             },
             (None, None) => None,
         };
+        // HS2-DG0YPA: a live session that already works the run is adopted, never
+        // doubled. A crashed one was just learned as lost and holds nothing.
+        if !repeated && let Some(run_id) = &run_id {
+            self.sync_run_holders(owner_id, run_id, &operation_id, Some(&actor), tx);
+            match self.run_session_holder(owner_id, run_id) {
+                Ok(None) => {}
+                Ok(Some(holder))
+                    if holder.state == SessionState::Running
+                        && holder.owner == SessionOwner::Orchestrator
+                        && holder.target_id == request.target_id =>
+                {
+                    return StartOutcome::Adopted {
+                        session_id: holder.session_id,
+                        run_id: run_id.clone(),
+                    };
+                }
+                // A person's session, or a start its host has not confirmed yet.
+                Ok(Some(_)) => {
+                    return StartOutcome::Refused {
+                        reason: SessionError::RunHeld.code().into(),
+                    };
+                }
+                Err(error) => return refused(&error),
+            }
+        }
         let (start_run, link_run) = if repeated {
             (
                 latest.and_then(|(_, session)| session.run_id.clone()),

@@ -1162,3 +1162,191 @@ fn hs2_yc2p7k_a_hosted_origin_names_its_ticket_and_it_is_validated() {
     start.origin.ticket = Some("not a ticket id".into());
     assert!(start.validate().is_err());
 }
+
+fn for_run(operation: &str, run: &str) -> NewSession {
+    NewSession {
+        run_id: Some(run.into()),
+        ..new(operation, "codex")
+    }
+}
+
+/// HS2-DG0YPA: a run has at most one live session. A start or a link for a run
+/// another `requested` or `running` session holds is refused, whatever the holder's
+/// state, and a finished holder holds nothing.
+#[test]
+fn hs2_dg0ypa_a_run_held_by_a_live_session_refuses_a_second_one_in_every_state() {
+    use SessionState::{Failed, Lost, Requested, Running, Stopped};
+    // (the holder's state, whether it still holds the run)
+    for (state, holds) in [
+        (Requested, true),
+        (Running, true),
+        (Stopped, false),
+        (Failed, false),
+        (Lost, false),
+    ] {
+        with_registry(|registry, clock, rng, _| {
+            let mut tx = Transaction { clock, rng };
+            let run = id(50);
+            let (holder, _) = registry
+                .begin(OWNER, for_run("op-holder", &run), None, &mut tx)
+                .unwrap();
+            // A failed start never ran; every other end ran first.
+            if !matches!(state, Requested | Failed) {
+                registry
+                    .update(OWNER, &holder.session_id, to(Running, "started"), &mut tx)
+                    .unwrap();
+            }
+            if !matches!(state, Requested | Running) {
+                registry
+                    .update(OWNER, &holder.session_id, to(state, "ended"), &mut tx)
+                    .unwrap();
+            }
+            let records = registry.list(OWNER, false).unwrap();
+            assert_eq!(
+                run_holder(&records, &run).map(|s| s.session_id.clone()),
+                holds.then(|| holder.session_id.clone()),
+                "{state:?}"
+            );
+            // A second start for the run.
+            let check = registry.check(OWNER, &for_run("op-second", &run));
+            let begun = registry.begin(OWNER, for_run("op-second", &run), None, &mut tx);
+            if holds {
+                assert_eq!(session_error(check), SessionError::RunHeld, "{state:?}");
+                assert_eq!(session_error(begun), SessionError::RunHeld, "{state:?}");
+                assert_eq!(registry.list(OWNER, false).unwrap().len(), 1);
+            } else {
+                assert_eq!(check.unwrap(), None, "{state:?}");
+                assert!(begun.unwrap().1, "{state:?}");
+            }
+            // A running session without a run is linked to it.
+            let (free, _) = registry
+                .begin(OWNER, new("op-free", "codex"), None, &mut tx)
+                .unwrap();
+            let link = registry.update(
+                OWNER,
+                &free.session_id,
+                SessionUpdate {
+                    run_id: Some(run.clone()),
+                    ..SessionUpdate::default()
+                },
+                &mut tx,
+            );
+            // Whoever started second now holds it in the free case.
+            assert_eq!(session_error(link), SessionError::RunHeld, "{state:?}");
+            // The same operation id is still the same start, whatever holds the run.
+            let (again, created) = registry
+                .begin(OWNER, for_run("op-holder", &run), None, &mut tx)
+                .unwrap();
+            assert!(!created);
+            assert_eq!(again.session_id, holder.session_id);
+        });
+    }
+}
+
+/// HS2-DG0YPA: repeated, interleaved, out-of-order and empty-then-refill sequences on
+/// one run, with another run and another owner alongside.
+#[test]
+fn hs2_dg0ypa_one_live_session_per_run_across_repeats_losses_and_refills() {
+    with_registry(|registry, clock, rng, _| {
+        let mut tx = Transaction { clock, rng };
+        let (run, other_run) = (id(60), id(61));
+        // Two starts race for the run: the first is recorded, the second refused, and
+        // repeating either changes nothing.
+        let (a, _) = registry
+            .begin(OWNER, for_run("op-a", &run), None, &mut tx)
+            .unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                session_error(registry.begin(OWNER, for_run("op-b", &run), None, &mut tx)),
+                SessionError::RunHeld
+            );
+            assert!(
+                !registry
+                    .begin(OWNER, for_run("op-a", &run), None, &mut tx)
+                    .unwrap()
+                    .1
+            );
+        }
+        // Another run and another owner's run of the same id are unaffected.
+        assert!(
+            registry
+                .begin(OWNER, for_run("op-c", &other_run), None, &mut tx)
+                .unwrap()
+                .1
+        );
+        assert!(
+            registry
+                .begin("owner-ba9876543210", for_run("op-b", &run), None, &mut tx)
+                .unwrap()
+                .1
+        );
+        registry
+            .update(
+                OWNER,
+                &a.session_id,
+                to(SessionState::Running, "started"),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(
+            session_error(registry.begin(OWNER, for_run("op-b", &run), None, &mut tx)),
+            SessionError::RunHeld
+        );
+        // It crashes: the run is empty, and the replacement that names it takes it.
+        registry
+            .update(
+                OWNER,
+                &a.session_id,
+                to(SessionState::Lost, "host_lost"),
+                &mut tx,
+            )
+            .unwrap();
+        let replacement = NewSession {
+            replaces: Some(a.session_id.clone()),
+            ..for_run("op-b", &run)
+        };
+        let (b, created) = registry
+            .begin(OWNER, replacement.clone(), None, &mut tx)
+            .unwrap();
+        assert!(created);
+        assert_eq!(
+            run_holder(&registry.list(OWNER, false).unwrap(), &run).map(|s| s.session_id.clone()),
+            Some(b.session_id.clone())
+        );
+        // Out of order: the lost session's own start is repeated late; it is the same
+        // finished session and holds nothing.
+        let (late, created) = registry
+            .begin(OWNER, for_run("op-a", &run), None, &mut tx)
+            .unwrap();
+        assert!(!created);
+        assert_eq!(late.state, SessionState::Lost);
+        // Refill: the replacement ends too, and the run takes a third session; the
+        // second's repeat is still itself.
+        registry
+            .update(
+                OWNER,
+                &b.session_id,
+                to(SessionState::Failed, "refused"),
+                &mut tx,
+            )
+            .unwrap();
+        assert!(
+            registry
+                .begin(OWNER, for_run("op-d", &run), None, &mut tx)
+                .unwrap()
+                .1
+        );
+        assert_eq!(
+            registry
+                .begin(OWNER, replacement, None, &mut tx)
+                .unwrap()
+                .0
+                .session_id,
+            b.session_id
+        );
+        assert_eq!(
+            session_error(registry.begin(OWNER, for_run("op-e", &run), None, &mut tx)),
+            SessionError::RunHeld
+        );
+    });
+}

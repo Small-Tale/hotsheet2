@@ -1388,3 +1388,42 @@ fn hs2_ecwg50_scheduler_routes_share_the_runtime_and_validate_their_bodies() {
 }
 /// HS2-2FG91X: scheduling around claimable resources, on the same fixtures.
 mod resources;
+
+/// HS2-DG0YPA: a start the executor answers by adopting a live session is logged as
+/// `adopted` with that session and run, audited, and is not a start: the target's
+/// memory is unchanged.
+#[test]
+fn hs2_dg0ypa_an_adopted_start_is_logged_and_audited_and_not_remembered() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    *s.sessions
+        .adopt_starts
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+        Some(("session-held".into(), "run-held".into()));
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("adopted", None)]);
+    assert_eq!(
+        (
+            tick.outcomes[0].session_id.as_deref(),
+            tick.outcomes[0].run_id.as_deref()
+        ),
+        (Some("session-held"), Some("run-held"))
+    );
+    let log = s.log();
+    assert_eq!(log[1].kind, DecisionKind::Start);
+    assert_eq!(log[1].outcome.as_deref(), Some("adopted"));
+    assert_eq!(log[1].session_id.as_deref(), Some("session-held"));
+    assert_eq!(log[1].run_id.as_deref(), Some("run-held"));
+    assert!(s.memory().is_empty());
+    assert_eq!(
+        s.audited("scheduler_start"),
+        [(
+            AuditOutcome::Succeeded,
+            Some("adopted".into()),
+            Some(format!("sched-start-{first}"))
+        )]
+    );
+}

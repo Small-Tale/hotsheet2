@@ -357,19 +357,19 @@ impl OrchestrationRuntime {
     }
 
     /// HS2-75Q254: the session that still holds a run's work, from this machine's
-    /// records: its latest session while that is `requested` or `running`. A start for
-    /// the run's work while this answers `Some` would be a duplicate; the start path
-    /// should adopt it instead (see the handoff of HS2-75Q254).
+    /// records: the run's latest session that is `requested` or `running`. HS2-DG0YPA:
+    /// a start or a refill for the run's work is refused (`session_run_held`) while
+    /// this answers `Some`, and the scheduler adopts it instead.
     pub fn run_session_holder(
         &self,
         owner_id: &str,
         run_id: &str,
     ) -> Result<Option<OrchestratedSession>, OrchestrationError> {
-        Ok(self
-            .session_list(owner_id, false)?
-            .into_iter()
-            .rfind(|session| session.run_id.as_deref() == Some(run_id))
-            .filter(|session| session.state.is_active()))
+        Ok(hotsheet_ticketing::orchestration::run_holder(
+            &self.session_list(owner_id, true)?,
+            run_id,
+        )
+        .cloned())
     }
 
     /// HS2-75Q254: a run reconciliation found finished no longer needs its sessions.

@@ -116,7 +116,7 @@ pub use sessions::{
     MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession, OrchestratedSession,
     SafePoint, SafePointBlocker, SafePointFacts, SessionControl, SessionError, SessionOrigin,
     SessionOwner, SessionRegistry, SessionRole, SessionState, SessionTransition, SessionUpdate,
-    StopRequest, decide_safe_point, decide_stop, session_label,
+    StopRequest, decide_safe_point, decide_stop, run_holder, session_label,
 };
 pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,

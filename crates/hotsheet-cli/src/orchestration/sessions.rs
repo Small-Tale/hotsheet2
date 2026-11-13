@@ -1678,6 +1678,12 @@ impl OrchestrationRuntime {
             replaces: request.replaces.clone(),
         };
         let registry = self.session_registry();
+        // HS2-DG0YPA: another live session of the run is asked about first, so a holder
+        // that crashed is `lost` and no longer holds the work. One its host cannot be
+        // asked about stays as it is, and the start is refused rather than doubled.
+        if let Some(run_id) = &request.run_id {
+            self.sync_run_holders(owner_id, run_id, &request.operation_id, actor, tx);
+        }
         // The registry decides whether this is a repeat, a conflict or a start that can
         // never be recorded, before a person or the target is asked anything.
         let known = registry.check(owner_id, &new)?;
@@ -1857,6 +1863,27 @@ impl OrchestrationRuntime {
         })();
         self.finish(&target, &authorized, &outcome, tx)?;
         outcome
+    }
+
+    /// HS2-DG0YPA: bring every live session of a run other than the one `operation_id`
+    /// names in line with its host, as `actor`. Best effort: a session that cannot be
+    /// read keeps its state, and so keeps holding the run.
+    pub(super) fn sync_run_holders(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        operation_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) {
+        let Ok(sessions) = self.session_list(owner_id, true) else {
+            return;
+        };
+        for session in sessions.iter().filter(|session| {
+            session.run_id.as_deref() == Some(run_id) && session.operation_id != operation_id
+        }) {
+            let _ = self.session_sync(owner_id, &session.session_id, actor, tx);
+        }
     }
 
     /// Read the session from its host and bring the record up to date: a session the

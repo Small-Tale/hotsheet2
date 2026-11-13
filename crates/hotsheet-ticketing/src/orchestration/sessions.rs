@@ -171,10 +171,12 @@ pub enum SessionError {
     RoleActive,
     /// The host could not launch the tool.
     StartFailed,
+    /// HS2-DG0YPA: another `requested` or `running` session still holds the run's work.
+    RunHeld,
 }
 
 impl SessionError {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::NotFound,
         Self::NotActive,
         Self::InvalidTransition,
@@ -185,6 +187,7 @@ impl SessionError {
         Self::AdmissionRefused,
         Self::RoleActive,
         Self::StartFailed,
+        Self::RunHeld,
     ];
 
     pub fn code(self) -> &'static str {
@@ -199,6 +202,7 @@ impl SessionError {
             Self::AdmissionRefused => "session_admission_refused",
             Self::RoleActive => "session_role_active",
             Self::StartFailed => "session_start_failed",
+            Self::RunHeld => "session_run_held",
         }
     }
 
@@ -644,6 +648,16 @@ impl SessionRegistry {
         let now_ms = tx.clock.now_ms();
         let _lock = self.storage.lock()?;
         let mut file = self.read_file()?;
+        // HS2-DG0YPA: a session is linked only to a run no other live session holds.
+        let held = update.run_id.as_ref().is_some_and(|run_id| {
+            run_holder(
+                file.sessions.iter().filter(|other| {
+                    other.owner_checkout_id == owner_checkout_id && other.session_id != session_id
+                }),
+                run_id,
+            )
+            .is_some()
+        });
         let session = file
             .sessions
             .iter_mut()
@@ -654,6 +668,9 @@ impl SessionRegistry {
         let before = session.clone();
         if session.state.is_terminal() {
             return Err(OrchestrationError::Session(SessionError::NotActive));
+        }
+        if held && update.run_id != before.run_id {
+            return Err(OrchestrationError::Session(SessionError::RunHeld));
         }
         let mut entry = None;
         if let Some(to) = update.to.filter(|to| *to != session.state) {
@@ -721,6 +738,19 @@ impl SessionRegistry {
         self.write_file(&file)?;
         Ok(updated)
     }
+}
+
+/// HS2-DG0YPA: the session that holds a run's work: the latest of `sessions` linked
+/// to the run that is still `requested` or `running`. A finished session holds
+/// nothing, so a run whose sessions all ended may take a new one.
+pub fn run_holder<'a>(
+    sessions: impl IntoIterator<Item = &'a OrchestratedSession>,
+    run_id: &str,
+) -> Option<&'a OrchestratedSession> {
+    sessions
+        .into_iter()
+        .filter(|session| session.run_id.as_deref() == Some(run_id) && session.state.is_active())
+        .last()
 }
 
 fn candidate(
@@ -798,6 +828,13 @@ fn admit(
         if known.state.is_active() {
             return Err(OrchestrationError::Session(SessionError::InvalidTransition));
         }
+    }
+    // HS2-DG0YPA: one live session per run. A crashed holder is learned from its host
+    // before a start asks (`lost` is not active), so only a surviving one refuses.
+    if let Some(run_id) = &session.run_id
+        && run_holder(file.sessions.iter().filter(owned), run_id).is_some()
+    {
+        return Err(OrchestrationError::Session(SessionError::RunHeld));
     }
     if session.role.is_role_session()
         && file.sessions.iter().filter(owned).any(|other| {

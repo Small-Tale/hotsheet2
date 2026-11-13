@@ -101,7 +101,8 @@ pub struct DecisionOutcome {
     pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step_id: Option<String>,
-    /// `started`, `wind_down_requested`, `executor_unavailable`, `refused`,
+    /// `started`, `adopted` (HS2-DG0YPA), `assigned`, `wind_down_requested`,
+    /// `executor_unavailable`, `refused`,
     /// `not_at_safe_point`, `session_not_found`, or the gate's denial code
     /// (`approval_required`, `policy_denied`, `no_grant` and the others).
     pub outcome: String,
