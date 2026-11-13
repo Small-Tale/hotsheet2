@@ -748,6 +748,12 @@ data — a conflict is surfaced, never a silent overwrite. `hotsheet doctor` fla
 any store missing the `.gitattributes` registration so the automatic path can't be
 silently bypassed.
 
+**Both sides added the same ticket (HS2-QR1K8R).** When Git passes an empty base and
+both versions are the same ticket (same id), the driver uses the version with the older
+`updated_at` as the ancestor. The newer version's fields then win and notes union,
+instead of the whole file conflicting. This is the merge a continued replay needs when a
+ticket was rewritten while `git rebase` had its file out of the tree (§2.12.3).
+
 ### 2.7.1 Ticket groups (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4)
 
 A ticket may name one **group** in its optional `group` frontmatter field
@@ -955,10 +961,11 @@ engine** so the user effectively never runs git by hand:
   another writer's stage and no-op check. The lock releases before retry backoff and
   automatically on process exit. Retrying rechecks for an already-committed no-op and
   preserves path-scoped commits. The sync cycle holds the same lock for its local Git
-  steps — the stray-change commit and the rebase (re-committing any write that landed
+  steps — the stray-change commit and the replay (re-committing any write that landed
   during fetch first) — while fetch and push run unlocked, so a sync pass never
   collides with a concurrent autocommit on `index.lock` and a slow remote never blocks
-  local writes (HS2-V454FB).
+  local writes (HS2-V454FB). The replay itself never runs in the working tree, and an
+  autocommit never commits while a rebase or merge is unfinished (§2.12.3, HS2-QR1K8R).
   Hot Sheet never deletes another process's Git lock. Exhausted contention or any
   other Git failure warns while preserving the successful ticket write; network
   publication remains asynchronous (HS2-C71XN1).
@@ -1054,7 +1061,7 @@ Each cycle ends in one state:
 | `offline`                   | Fetch or push could not reach the remote, authentication failed, or another pusher won a race | exponential backoff                  |
 | `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit)   | exponential backoff; needs a repair  |
 | `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it                 | not replayed for the same divergence |
-| `rebase_in_progress`        | A rebase or merge is in progress or was abandoned in the store                                | none until finished or aborted       |
+| `rebase_in_progress`        | An unfinished rebase or merge in the store needs a decision (§2.12.3)                         | none until finished or aborted       |
 | `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                          | none until recovered                 |
 
 The rules:
@@ -1066,15 +1073,17 @@ The rules:
   blob over the remote's file limit (GitHub's 100 MiB) by path and size. Local commits
   are kept.
 - **Never stack replays.** A cycle first checks for `rebase-merge`, `rebase-apply`, or
-  `MERGE_HEAD` in the store's Git directory. If one exists, the cycle stops before
-  committing or fetching. A conflicting rebase records its `(HEAD, upstream)` pair. The
-  next pass reports the same conflict without replaying thousands of local commits
+  `MERGE_HEAD` in the store's Git directory. If one exists and needs a decision, the
+  cycle stops before committing or fetching; a rebase with nothing to decide is
+  continued first (§2.12.3). A conflicting replay records its `(HEAD, upstream)` pair.
+  The next pass reports the same conflict without replaying thousands of local commits
   again, until either side moves.
 - **Durable failure counter.** Every failure state increments
   `consecutive_failures`; a publication resets it and sets `last_success_at`.
 - **Live conditions win.** The health read checks the remote, the recovery guard, and
-  an unfinished rebase live, without contacting the remote. Unpublished and incoming
-  commit counts compare `HEAD` with the last fetched upstream.
+  an unfinished rebase live, without contacting the remote. Its `reason` is the one the
+  last cycle recorded for that stall (for example a failed continue and its backup ref).
+  Unpublished and incoming commit counts compare `HEAD` with the last fetched upstream.
 
 `GET /checkouts/{id}/repository/sync` returns every linked Git source's health, with
 its state, `syncing`, `unpublished_commits`, `incoming_commits`, `last_attempt_at`,
@@ -1098,7 +1107,50 @@ Headless parity:
 
 Bounded automatic repair through the merge path (HS2-XJC62Z) and the guided
 oversized-attachment repair through Git LFS or compaction (HS2-VYPTN0) are follow-ups.
-So is deferring store autocommits while a rebase or merge is unfinished (HS2-JGH11Q).
+
+### 2.12.3 Replays, concurrent writes, and unfinished rebases (HS2-QR1K8R)
+
+A ticket write puts its file in the working tree before it takes the Git transaction
+lock, and other tools can write there without any lock. `git rebase` works in the same
+tree: it first checks out the upstream, so a file that only unpublished local commits
+contain is absent until its pick is replayed. A write in that window recreated the file,
+Git refused and rescheduled the pick, the abort refused for the same reason, and the
+waiting autocommit committed onto the detached `HEAD`. The store then reported
+`rebase_in_progress` until a person ran `git rebase --continue`.
+
+The rules that prevent and repair this:
+
+- **Replay outside the working tree.** The cycle builds the rebased history from objects
+  alone: for each local commit the upstream lacks, `git merge-tree --write-tree
+--merge-base=<parent>` merges it onto the new tip through the registered merge driver,
+  and `git commit-tree` writes it with its author, author date, and message. The
+  selection matches `git rebase` (no merge commits, no commits whose patch the upstream
+  already has, commits that become empty are dropped). The working tree, the index, and
+  `HEAD` are untouched, so a conflict leaves nothing to abort.
+- **One checked branch move.** `git reset --keep <new tip>` then moves the branch and
+  updates only the files the incoming commits changed. Git checks every such path first
+  and changes nothing when one has an uncommitted write. The cycle then commits that
+  write and replays again, at most three times; after that it ends `offline` with the
+  reason "local writes kept changing files the incoming changes touch", and the next
+  pass retries.
+- **Older Git.** The isolated replay needs Git 2.40. With an older Git, or a history it
+  does not handle (a local root commit), the cycle uses `git rebase`. A refused,
+  rescheduled pick is then continued in the same cycle. Only a real conflict (unmerged
+  paths) is aborted, because the abort discards uncommitted writes to tracked files.
+- **No commit during an unfinished rebase or merge.** `FsStore` autocommits check for
+  `rebase-merge`, `rebase-apply`, and `MERGE_HEAD` under the transaction lock. While one
+  exists, the write is saved, the commit is skipped with a warning, and the file is
+  committed on the branch by the first cycle after the rebase or merge finishes.
+- **Continue what needs no judgment.** A cycle that finds a `rebase-merge` replay with
+  no unmerged path and no `stopped-sha` (the shape a rescheduled pick leaves) records
+  `refs/hotsheet/sync-backup/<timestamp>` at `HEAD`, commits stray working-tree changes,
+  and runs `git rebase --continue` under both locks. It logs the attempt and the backup
+  ref. One replay (one `orig-head`) is continued at most three times; the count is kept
+  in the sync record and cleared when no rebase or merge is unfinished.
+- **Leave what needs a decision.** A rebase stopped at a conflict, one a person resolved
+  but did not continue, a `rebase-apply` replay, and any unfinished merge are reported
+  as `rebase_in_progress` and never touched. A continue that fails stays in place with
+  its reason and backup ref; nothing is aborted or discarded automatically.
 
 ## 2.13 Copy & move between stores
 

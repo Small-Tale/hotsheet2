@@ -54,6 +54,7 @@ pub mod store;
 pub mod store_git;
 pub mod sync;
 pub mod sync_health;
+pub mod sync_replay;
 pub mod terminal_limits;
 pub mod wire;
 pub mod worklist;

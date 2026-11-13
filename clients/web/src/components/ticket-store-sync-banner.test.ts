@@ -81,7 +81,7 @@ describe('syncFailureSummary (HS2-ADHFKZ)', () => {
 
   it('distinguishes each failure state', () => {
     expect(syncFailureSummary(health('conflict'))).toContain('could not be merged');
-    expect(syncFailureSummary(health('rebase_in_progress'))).toContain('left unfinished');
+    expect(syncFailureSummary(health('rebase_in_progress'))).toContain('needs a decision');
     expect(syncFailureSummary(health('history_recovery_required'))).toContain('must be recovered');
     expect(syncFailureSummary(health('offline', { consecutive_failures: 5 }))).toContain('5 sync attempts');
   });

@@ -153,6 +153,10 @@ pub struct SyncRecord {
     /// again on every pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conflict_heads: Option<(String, String)>,
+    /// `(orig-head, attempts)` of the unfinished rebase sync last tried to continue
+    /// (HS2-QR1K8R), so one replay is continued a bounded number of times.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continue_attempts: Option<(String, u32)>,
 }
 
 /// What a finished cycle reports into the record beyond its [`SyncReport`].
@@ -271,7 +275,12 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
         );
     } else if integration_in_progress(store_path).is_some() {
         health.state = SyncState::RebaseInProgress;
-        health.reason = Some(crate::sync::STALLED_INTEGRATION_REASON.to_string());
+        // The cycle that found it says why it was not continued (HS2-QR1K8R).
+        health.reason = record
+            .reason
+            .clone()
+            .filter(|_| record.outcome == Some(SyncState::RebaseInProgress))
+            .or_else(|| Some(crate::sync::STALLED_INTEGRATION_REASON.to_string()));
     } else if let Some(outcome) = record.outcome {
         // A live-only condition the store no longer shows has been resolved; the next
         // cycle decides the new state.
@@ -324,9 +333,10 @@ fn next_action(health: &SyncHealth) -> Option<String> {
              `hotsheet-cli sync`."
                 .to_string()
         }
-        SyncState::RebaseInProgress => "Finish the rebase or merge in the store, or run \
-             `hotsheet-cli sync --abort-stalled-rebase` to restore the local branch (a backup ref \
-             is kept)."
+        SyncState::RebaseInProgress => "Sync continues an unfinished rebase by itself when \
+             nothing conflicts; this one needs a decision. Finish the rebase or merge in the \
+             store, or run `hotsheet-cli sync --abort-stalled-rebase` to restore the local \
+             branch (a backup ref is kept)."
             .to_string(),
         SyncState::HistoryRecoveryRequired => "Recover the store after the history rewrite: run \
              `hotsheet-cli checkout compact <source> --recover`."
@@ -372,6 +382,33 @@ fn apply_outcome(record: &mut SyncRecord, report: SyncReport, detail: CycleDetai
     record.reason = detail.reason.map(|reason| sanitize_reason(&reason));
     record.oversized = detail.oversized;
     record.conflict_heads = detail.conflict_heads;
+}
+
+/// Count one more automatic continue of the unfinished rebase that started at
+/// `orig_head` and return the new count (HS2-QR1K8R). The count stops one past
+/// [`crate::sync_replay::MAX_CONTINUE_ATTEMPTS`], so a stall the cycle no longer continues
+/// does not rewrite the record on every pass.
+pub(crate) fn note_continue_attempt(store_path: &Path, orig_head: &str) -> u32 {
+    let mut record = read_record(store_path).unwrap_or_default();
+    let before = match &record.continue_attempts {
+        Some((head, count)) if head == orig_head => *count,
+        _ => 0,
+    };
+    let count = (before + 1).min(crate::sync_replay::MAX_CONTINUE_ATTEMPTS + 1);
+    if count != before {
+        record.continue_attempts = Some((orig_head.to_string(), count));
+        let _ = write_record(store_path, &record);
+    }
+    count
+}
+
+/// Forget the continue count once no rebase or merge is unfinished.
+pub(crate) fn clear_continue_attempts(store_path: &Path) {
+    if let Some(mut record) = read_record(store_path)
+        && record.continue_attempts.take().is_some()
+    {
+        let _ = write_record(store_path, &record);
+    }
 }
 
 /// The recorded conflict's `(HEAD, upstream)`, when the last outcome was a conflict.

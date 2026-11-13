@@ -845,6 +845,17 @@ pub(crate) fn cmd_merge_driver(base: &Path, ours: &Path, theirs: &Path) -> Resul
         parse_file(&theirs_txt),
     ) {
         (Ok(b), Ok(o), Ok(t)) => (b, o, t),
+        // HS2-QR1K8R: both sides added the same ticket (Git passes an empty base), for
+        // example a ticket rewritten while a replay had its file out of the tree. The
+        // older version is the ancestor, so the newer one's fields win and notes union.
+        (Err(_), Ok(o), Ok(t)) if base_txt.is_empty() && o.id == t.id => {
+            let older = if o.updated_at.as_str() <= t.updated_at.as_str() {
+                o.clone()
+            } else {
+                t.clone()
+            };
+            (older, o, t)
+        }
         _ => {
             // Unparseable input → git's plain text 3-way merge (never silent data loss).
             let (merged, clean) = git_merge_file(&ours_txt, &base_txt, &theirs_txt)?;

@@ -10146,6 +10146,207 @@ fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
     assert_eq!(status_json(a.path())["state"], "up_to_date");
 }
 
+/// HS2-QR1K8R: when both sides added the same ticket file (Git passes an empty base), the
+/// driver takes the older version as the ancestor: the newer fields win, notes union, and
+/// no conflict markers are written, whichever side is "ours".
+#[test]
+fn hs2_qr1k8r_merge_driver_merges_two_additions_of_one_ticket() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    git(p, &["config", "user.email", "t@example.com"]);
+    git(p, &["config", "user.name", "Tester"]);
+    // A base commit without the ticket, whether or not init already committed.
+    git(p, &["add", "-A"]);
+    assert!(git(p, &["commit", "-q", "--allow-empty", "-m", "base"]));
+    let root = String::from_utf8(
+        hotsheet_ticketing::git::command()
+            .current_dir(p)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let root = root.trim().to_string();
+    let slug = new_ticket(p, "added twice");
+    let file = String::from_utf8(
+        hotsheet_ticketing::git::command()
+            .current_dir(p)
+            .args(["show", "--name-only", "--format=", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let file = file
+        .lines()
+        .find(|line| line.starts_with("tickets/") && line.ends_with(".md"))
+        .unwrap()
+        .to_string();
+    let older = std::fs::read_to_string(p.join(&file)).unwrap();
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--title",
+            "added twice, retitled",
+            "--note",
+            "newer note",
+        ])
+        .assert()
+        .success();
+    let newer = std::fs::read_to_string(p.join(&file)).unwrap();
+    assert_ne!(older, newer);
+
+    for (ours, theirs) in [(&older, &newer), (&newer, &older)] {
+        assert!(git(p, &["checkout", "-q", "--detach", &root]));
+        for (branch, body) in [("ours-side", ours), ("theirs-side", theirs)] {
+            assert!(git(p, &["checkout", "-q", "-B", branch, &root]));
+            std::fs::create_dir_all(p.join(&file).parent().unwrap()).unwrap();
+            std::fs::write(p.join(&file), body).unwrap();
+            assert!(git(p, &["add", "--", &file]));
+            assert!(git(p, &["commit", "-q", "-m", branch]));
+        }
+        assert!(git(p, &["checkout", "-q", "ours-side"]));
+        assert!(
+            git(p, &["merge", "-q", "theirs-side", "-m", "merge"]),
+            "two additions of one ticket merge without a conflict"
+        );
+        let merged = std::fs::read_to_string(p.join(&file)).unwrap();
+        assert!(!merged.contains("<<<<<<<"), "{merged}");
+        hs(p)
+            .args(["show", &slug])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("added twice, retitled"))
+            .stdout(predicate::str::contains("newer note"));
+    }
+}
+
+/// HS2-QR1K8R end to end, with real CLI processes and the registered ticket merge driver:
+/// a store left in the incident's state (a ticket rewritten while `git rebase` had its
+/// file out of the tree, so the pick was rescheduled and the abort refused) accepts a new
+/// ticket without committing onto the detached `HEAD`, and the next `sync` continues the
+/// rebase, reattaches the branch, and publishes every change.
+#[cfg(unix)]
+#[test]
+fn hs2_qr1k8r_sync_continues_an_unfinished_rebase_and_defers_commits_meanwhile() {
+    use std::os::unix::fs::PermissionsExt;
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a = tempfile::tempdir().unwrap();
+    let a = a.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    hs(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+
+    // Two unpublished local commits; the second creates the ticket that is rewritten.
+    new_ticket(a, "first local ticket");
+    let slug = new_ticket(a, "second local ticket");
+    let ticket_file = git_out(a, &["show", "--name-only", "--format=", "HEAD"]);
+    assert!(ticket_file.ends_with(".md"), "{ticket_file}");
+    // The rewrite another process lands mid-replay: the same ticket with a new title.
+    hs(a)
+        .env("HOTSHEET_NO_AUTOCOMMIT", "1")
+        .args(["edit", &slug, "--title", "second ticket, retitled"])
+        .assert()
+        .success();
+    let prepared = a.join(".git/hotsheet-test-rewrite");
+    std::fs::copy(a.join(&ticket_file), &prepared).unwrap();
+    assert!(git(a, &["checkout", "--quiet", "--", &ticket_file]));
+    let hook = a.join(".git/hooks/post-commit");
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nif [ -e .git/hotsheet-test-rewrite ]; then\n  mkdir -p \"$(dirname \
+             '{ticket_file}')\"\n  mv .git/hotsheet-test-rewrite '{ticket_file}'\nfi\n"
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(git(a, &["fetch", "--quiet"]));
+    assert!(!git(a, &["rebase", "--quiet", "@{u}"]));
+    assert!(!git(a, &["rebase", "--abort"]));
+    std::fs::remove_file(&hook).unwrap();
+    assert!(a.join(".git/rebase-merge").is_dir());
+    assert!(!git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    let detached = git_out(a, &["rev-parse", "HEAD"]);
+
+    // A ticket created during the stall is saved but not committed onto the detached HEAD.
+    let during = new_ticket(a, "created during the stall");
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), detached);
+    hs(a).args(["show", &during]).assert().success();
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: rebase_in_progress"));
+
+    // The next cycle finishes the rebase on its own and publishes.
+    hs(a).arg("sync").assert().success();
+    assert!(!a.join(".git/rebase-merge").exists());
+    assert!(git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    assert!(git_out(a, &["status", "--porcelain"]).is_empty());
+    assert!(!git_out(a, &["for-each-ref", "refs/hotsheet/sync-backup"]).is_empty());
+    let status = hs(a)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert_eq!(status["state"], "synced");
+    assert_eq!(status["unpublished_commits"], 0);
+    assert!(git(&peer, &["pull", "--quiet"]));
+    hs(&peer)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("second ticket, retitled"));
+    hs(&peer).args(["show", &during]).assert().success();
+}
+
 /// Per-user read tracking via the gitignored local overlay (HS2-21): a fresh ticket lists
 /// as unread (●); `read` clears it; the state lives in `local/reads.json`, gitignored.
 #[test]

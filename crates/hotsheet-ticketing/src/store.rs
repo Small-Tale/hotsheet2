@@ -938,6 +938,16 @@ impl FsStore {
     ) -> Result<bool, StoreError> {
         // Queued jobs may have waited behind a history rewrite (HS2-RFJ1GN).
         self.ensure_compaction_recovered()?;
+        // HS2-QR1K8R: never commit onto the detached `HEAD` of an unfinished rebase, or
+        // into a merge. The file is saved; the next sync cycle continues the replay
+        // when nothing conflicts and commits it on the branch.
+        if crate::sync_health::integration_in_progress(&self.root).is_some() {
+            eprintln!(
+                "warning: hotsheet autocommit deferred: a rebase or merge is unfinished in \
+                 the store; the change is saved and is committed once it finishes"
+            );
+            return Ok(false);
+        }
         self.ensure_managed_gitignore()?;
         // An unborn repository has no baseline tree: its first mutation must also commit
         // the store metadata/attributes. Once HEAD exists, path-scoped commits are safe.

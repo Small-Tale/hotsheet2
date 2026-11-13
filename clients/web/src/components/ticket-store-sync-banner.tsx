@@ -49,7 +49,7 @@ export function syncFailureSummary(health: TicketStoreSyncHealth): string {
     case 'conflict':
       return 'A ticket changed on both sides and could not be merged automatically.';
     case 'rebase_in_progress':
-      return 'A rebase or merge was left unfinished in the store.';
+      return 'An unfinished rebase or merge in the store needs a decision before sync can continue.';
     case 'history_recovery_required':
       return "The remote's history was rewritten, so this copy must be recovered first.";
     case 'offline':

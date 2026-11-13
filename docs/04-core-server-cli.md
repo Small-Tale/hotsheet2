@@ -250,8 +250,10 @@ cumulative flow remains unavailable until status transitions are persisted
 `{checkout_id, stores: [{connection_id, label, locator, health}]}` for every linked Git
 ticket source. It reads local state only and never fetches. `health` is the
 `sync_health::SyncHealth` contract of [02](02-ticket-storage.md) §2.12.2. The CLI twin is
-`hotsheet-cli sync --status [--json]`, which prints one store's `health`. A stalled rebase
-or merge is aborted headlessly with `hotsheet-cli sync --abort-stalled-rebase`.
+`hotsheet-cli sync --status [--json]`, which prints one store's `health`. A cycle continues
+an unfinished rebase that needs no decision by itself ([02](02-ticket-storage.md) §2.12.3,
+HS2-QR1K8R). A stalled rebase or merge is aborted headlessly with
+`hotsheet-cli sync --abort-stalled-rebase`.
 `hotsheet-cli sync` exits non-zero for `rejected`, `rebase_in_progress`, and
 `history_recovery_required`. The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.

@@ -15,9 +15,14 @@
 //! Every remote-backed cycle records its outcome in the store's durable sync health
 //! ([`crate::sync_health`], HS2-ADHFKZ). A push the remote *refuses* is
 //! [`SyncReport::Rejected`] (with the oversized unpublished objects named), not
-//! [`SyncReport::Offline`]; an in-progress or abandoned rebase stops the cycle before it
-//! touches the tree; and a recorded conflict on the same `(HEAD, upstream)` pair is not
-//! replayed again.
+//! [`SyncReport::Offline`]; an in-progress or abandoned rebase that needs a decision stops
+//! the cycle before it touches the tree; and a recorded conflict on the same
+//! `(HEAD, upstream)` pair is not replayed again.
+//!
+//! Local commits are replayed outside the live working tree ([`crate::sync_replay`],
+//! HS2-QR1K8R), so a ticket write that lands during a replay can neither make Git
+//! reschedule a pick nor be committed onto a detached `HEAD`. An unfinished rebase that
+//! needs no judgment is continued by the next cycle.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -27,6 +32,10 @@ use crate::store::{lock_git_transaction, lock_history_sync};
 use crate::sync_health::{
     CycleDetail, OVERSIZED_OBJECT_BYTES, OversizedObject, integration_in_progress,
     record_attempt_start, record_outcome, recorded_conflict,
+};
+use crate::sync_replay::{
+    Continued, MAX_REPLAY_ATTEMPTS, ReplayError, continue_unfinished, isolated_replay_supported,
+    move_branch_to, replay_onto_upstream, unmerged_paths,
 };
 
 /// The outcome of one [`sync_once`] cycle.
@@ -48,8 +57,9 @@ pub enum SyncReport {
     /// The merge driver couldn't auto-resolve; the rebase was aborted so the working tree
     /// is clean, and the conflict is left for the user (the rare same-paragraph body case).
     Conflict,
-    /// A rebase or merge is in progress or was abandoned in the store (HS2-ADHFKZ); the
-    /// cycle did nothing so it never stacks a second replay on top of it.
+    /// A rebase or merge is in progress or was abandoned in the store and needs a decision
+    /// (HS2-ADHFKZ); the cycle did nothing so it never stacks a second replay on top of
+    /// it. An unfinished rebase with nothing to decide is continued instead (HS2-QR1K8R).
     RebaseInProgress,
     /// A history rewrite replaced the remote; the store must be recovered before it may
     /// sync again (HS2-RFJ1GN).
@@ -60,14 +70,30 @@ pub enum SyncReport {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SyncLimits {
     pub oversized_bytes: u64,
+    pub replay: ReplayMode,
 }
 
 impl Default for SyncLimits {
     fn default() -> Self {
         Self {
             oversized_bytes: OVERSIZED_OBJECT_BYTES,
+            replay: ReplayMode::Auto,
         }
     }
+}
+
+/// How a cycle replays local commits onto the upstream (HS2-QR1K8R).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReplayMode {
+    /// Outside the working tree when the installed Git supports it, else `git rebase`.
+    Auto,
+    /// `git rebase` in the working tree: the path for a Git older than 2.40 and for a
+    /// history the isolated replay does not handle. Tests select it to cover that path.
+    #[cfg_attr(
+        not(test),
+        allow(dead_code, reason = "HS2-QR1K8R selected by tests only")
+    )]
+    LiveRebase,
 }
 
 /// Run one sync cycle for the store at `store_path`, recording its outcome in the store's
@@ -113,10 +139,6 @@ fn failed(report: SyncReport, reason: impl Into<String>) -> (SyncReport, CycleDe
 pub const STALLED_INTEGRATION_REASON: &str = "a rebase or merge is in progress or was \
      abandoned in the store; sync will not start another until it is finished or aborted";
 
-fn stalled_integration_reason() -> String {
-    STALLED_INTEGRATION_REASON.to_string()
-}
-
 fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
     // HS2-RFJ1GN: never replay an old local branch after compaction replaced origin.
     if crate::repository_compaction::recovery_required(store_path) {
@@ -124,10 +146,6 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
             SyncReport::HistoryRecoveryRequired,
             "a history rewrite replaced the remote; recover this checkout before syncing",
         );
-    }
-    // HS2-ADHFKZ: never commit into, or stack a replay on top of, an unfinished rebase.
-    if integration_in_progress(store_path).is_some() {
-        return failed(SyncReport::RebaseInProgress, stalled_integration_reason());
     }
     // A sync that already passed its entry check must finish before a rewrite
     // starts; one waiting behind a rewrite must see its recovery guard (HS2-RFJ1GN).
@@ -149,8 +167,15 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
         let Ok(_lock) = lock_git_transaction(store_path) else {
             return failed(SyncReport::Offline, "could not lock the store for sync");
         };
-        if integration_in_progress(store_path).is_some() {
-            return failed(SyncReport::RebaseInProgress, stalled_integration_reason());
+        // HS2-ADHFKZ: never commit into, or stack a replay on top of, an unfinished
+        // rebase or merge. HS2-QR1K8R: one that needs no judgment is continued first.
+        match integration_in_progress(store_path) {
+            Some(kind) => {
+                if let Continued::Stalled { reason } = continue_unfinished(store_path, kind) {
+                    return failed(SyncReport::RebaseInProgress, reason);
+                }
+            }
+            None => crate::sync_health::clear_continue_attempts(store_path),
         }
         commit_pending(store_path);
     }
@@ -182,28 +207,17 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
 
     let (ahead, behind) = ahead_behind(store_path);
 
-    // Integrate incoming commits by rebasing onto the upstream (uses the merge driver).
+    // Integrate incoming commits by replaying local ones onto the upstream (through the
+    // merge driver).
     let mut pulled = false;
     if behind > 0 {
         let Ok(_lock) = lock_git_transaction(store_path) else {
             return failed(SyncReport::Offline, "could not lock the store for sync");
         };
-        // A Hot Sheet write that landed its file while fetch ran commits only once it
-        // takes this lock; commit it here so the rebase never sees a dirty tree.
-        commit_pending(store_path);
-        let heads = current_heads(store_path);
-        // HS2-ADHFKZ: the same divergence already failed to merge; replaying thousands
-        // of local commits again cannot change the answer.
-        if heads.is_some() && recorded_conflict(store_path) == heads {
-            return conflict(heads);
+        if let Err(stopped) = integrate(store_path, limits) {
+            return stopped;
         }
-        if git_ok(store_path, &["rebase", "--quiet", "@{u}"]) {
-            pulled = true;
-        } else {
-            // Unresolved conflict → abort so the tree stays clean, surface it to the user.
-            git_ok(store_path, &["rebase", "--abort"]);
-            return conflict(heads);
-        }
+        pulled = true;
     }
 
     // Push local commits (recompute ahead after a rebase may have replayed them).
@@ -227,6 +241,78 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
         SyncReport::UpToDate
     };
     (report, CycleDetail::default())
+}
+
+/// Replay local commits onto the fetched upstream and move the branch there. The caller
+/// holds the Git transaction lock.
+fn integrate(store_path: &Path, limits: SyncLimits) -> Result<(), (SyncReport, CycleDetail)> {
+    let isolated = limits.replay == ReplayMode::Auto && isolated_replay_supported();
+    for _ in 0..MAX_REPLAY_ATTEMPTS {
+        // A Hot Sheet write that landed its file while fetch ran (or while an earlier
+        // replay of this cycle ran) commits only once it takes the lock; commit it here
+        // so the replay includes it.
+        commit_pending(store_path);
+        let heads = current_heads(store_path);
+        // HS2-ADHFKZ: the same divergence already failed to merge; replaying thousands
+        // of local commits again cannot change the answer.
+        if heads.is_some() && recorded_conflict(store_path) == heads {
+            return Err(conflict(heads));
+        }
+        if !isolated {
+            return live_rebase(store_path, heads);
+        }
+        match replay_onto_upstream(store_path) {
+            Ok(tip) => {
+                let head = heads.as_ref().map_or("", |(head, _)| head.as_str());
+                if move_branch_to(store_path, head, &tip) {
+                    return Ok(());
+                }
+                // A write touched a path the incoming commits change. Nothing moved:
+                // commit it and replay again.
+            }
+            Err(ReplayError::Conflict) => return Err(conflict(heads)),
+            Err(ReplayError::Unsupported(_)) => return live_rebase(store_path, heads),
+        }
+    }
+    Err(failed(
+        SyncReport::Offline,
+        "local writes kept changing files the incoming changes touch; the next sync retries",
+    ))
+}
+
+/// `git rebase` in the working tree, for a Git without the isolated replay. A write that
+/// lands during it can make Git refuse and reschedule a pick; that is continued here
+/// rather than aborted, because the abort would discard the write (HS2-QR1K8R).
+fn live_rebase(
+    store_path: &Path,
+    heads: Option<(String, String)>,
+) -> Result<(), (SyncReport, CycleDetail)> {
+    if git_ok(store_path, &["rebase", "--quiet", "@{u}"]) {
+        return Ok(());
+    }
+    if unmerged_paths(store_path).is_empty() {
+        return match integration_in_progress(store_path) {
+            Some(kind) => match continue_unfinished(store_path, kind) {
+                Continued::Finished { .. } => Ok(()),
+                Continued::Stalled { reason } => Err(failed(SyncReport::RebaseInProgress, reason)),
+            },
+            // Git refused before it started (for example a foreign `index.lock`).
+            None => Err(failed(
+                SyncReport::Offline,
+                "the store was busy when the rebase started; the next sync retries",
+            )),
+        };
+    }
+    // Unresolved conflict → abort so the tree stays clean, surface it to the user.
+    git_ok(store_path, &["rebase", "--abort"]);
+    if integration_in_progress(store_path).is_some() {
+        return Err(failed(
+            SyncReport::RebaseInProgress,
+            "a conflicting rebase could not be aborted; sync will not start another until it \
+             is finished or aborted",
+        ));
+    }
+    Err(conflict(heads))
 }
 
 fn conflict(heads: Option<(String, String)>) -> (SyncReport, CycleDetail) {
@@ -459,21 +545,7 @@ pub fn abort_stalled_integration(
     let Some(kind) = integration_in_progress(store_path) else {
         return Err(StalledIntegrationError::NothingInProgress);
     };
-    let head = git_stdout(store_path, &["rev-parse", "HEAD"])
-        .map(|value| value.trim().to_string())
-        .ok_or_else(|| StalledIntegrationError::Git {
-            step: "rev-parse",
-            detail: "HEAD is not a commit".to_string(),
-        })?;
-    let stamp = time::OffsetDateTime::now_utc().unix_timestamp_nanos();
-    let backup_ref = format!("refs/hotsheet/sync-backup/{stamp}");
-    let update = git_run(store_path, &["update-ref", &backup_ref, &head]);
-    if !update.ok {
-        return Err(StalledIntegrationError::Git {
-            step: "update-ref",
-            detail: update.stderr.trim().to_string(),
-        });
-    }
+    let (_head, backup_ref) = record_backup_ref(store_path)?;
     let args: &[&str] = match kind {
         crate::sync_health::IntegrationInProgress::Rebase => &["rebase", "--abort"],
         crate::sync_health::IntegrationInProgress::Merge => &["merge", "--abort"],
@@ -495,6 +567,29 @@ pub fn abort_stalled_integration(
     })
 }
 
+/// Record `refs/hotsheet/sync-backup/<timestamp>` at the current `HEAD`, so no commit is
+/// unreachable after a recovery step. Returns `(HEAD, ref name)`.
+pub(crate) fn record_backup_ref(
+    store_path: &Path,
+) -> Result<(String, String), StalledIntegrationError> {
+    let head = git_stdout(store_path, &["rev-parse", "HEAD"])
+        .map(|value| value.trim().to_string())
+        .ok_or_else(|| StalledIntegrationError::Git {
+            step: "rev-parse",
+            detail: "HEAD is not a commit".to_string(),
+        })?;
+    let stamp = time::OffsetDateTime::now_utc().unix_timestamp_nanos();
+    let backup_ref = format!("refs/hotsheet/sync-backup/{stamp}");
+    let update = git_run(store_path, &["update-ref", &backup_ref, &head]);
+    if !update.ok {
+        return Err(StalledIntegrationError::Git {
+            step: "update-ref",
+            detail: update.stderr.trim().to_string(),
+        });
+    }
+    Ok((head, backup_ref))
+}
+
 /// Whether the store's git repo has any remote configured.
 fn has_remote(store_path: &Path) -> bool {
     git_stdout(store_path, &["remote"])
@@ -503,7 +598,7 @@ fn has_remote(store_path: &Path) -> bool {
 }
 
 /// Auto-commit any pending working-tree changes (no-op when the tree is clean).
-fn commit_pending(store_path: &Path) {
+pub(crate) fn commit_pending(store_path: &Path) {
     let _ = git_ok(store_path, &["add", "-A"]);
     if !git_ok(store_path, &["diff", "--cached", "--quiet"]) {
         let _ = git_ok(
@@ -529,12 +624,12 @@ fn ahead_behind(store_path: &Path) -> (u32, u32) {
     .unwrap_or((0, 0))
 }
 
-struct GitRun {
-    ok: bool,
-    stderr: String,
+pub(crate) struct GitRun {
+    pub(crate) ok: bool,
+    pub(crate) stderr: String,
 }
 
-fn git_run(root: &Path, args: &[&str]) -> GitRun {
+pub(crate) fn git_run(root: &Path, args: &[&str]) -> GitRun {
     match crate::git::command()
         .arg("-C")
         .arg(root)
@@ -553,7 +648,7 @@ fn git_run(root: &Path, args: &[&str]) -> GitRun {
     }
 }
 
-fn git_ok(root: &Path, args: &[&str]) -> bool {
+pub(crate) fn git_ok(root: &Path, args: &[&str]) -> bool {
     crate::git::command()
         .arg("-C")
         .arg(root)
@@ -563,7 +658,7 @@ fn git_ok(root: &Path, args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
-fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
     let out = crate::git::command()
         .arg("-C")
         .arg(root)
@@ -574,6 +669,9 @@ fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
+
+#[cfg(test)]
+mod stall_tests;
 
 #[cfg(test)]
 mod tests {
@@ -627,7 +725,7 @@ mod tests {
         assert_eq!(sync_once(dir.path()), SyncReport::Offline);
     }
 
-    fn ok(root: &Path, args: &[&str]) {
+    pub(super) fn ok(root: &Path, args: &[&str]) {
         assert!(
             git_ok(root, args),
             "git {args:?} failed in {}",
@@ -635,14 +733,15 @@ mod tests {
         );
     }
 
-    fn identity(root: &Path) {
+    pub(super) fn identity(root: &Path) {
         ok(root, &["config", "user.name", "Sync Test"]);
         ok(root, &["config", "user.email", "sync@test.invalid"]);
     }
 
     /// A bare remote with one commit, plus two clones of it: `store` (the synced store)
     /// and `peer` (another collaborator).
-    fn remote_with_two_clones() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+    pub(super) fn remote_with_two_clones()
+    -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let remote = dir.path().join("remote.git");
         let store = dir.path().join("store");
@@ -666,17 +765,17 @@ mod tests {
         (dir, store, peer)
     }
 
-    fn head(root: &Path) -> String {
+    pub(super) fn head(root: &Path) -> String {
         git_stdout(root, &["rev-parse", "HEAD"]).unwrap()
     }
 
-    fn clean(root: &Path) -> bool {
+    pub(super) fn clean(root: &Path) -> bool {
         git_stdout(root, &["status", "--porcelain"])
             .unwrap()
             .is_empty()
     }
 
-    fn peer_pushes(peer: &Path, file: &str) {
+    pub(super) fn peer_pushes(peer: &Path, file: &str) {
         std::fs::write(peer.join(file), "from peer\n").unwrap();
         ok(peer, &["add", "-A"]);
         ok(peer, &["commit", "--quiet", "-m", file]);
@@ -848,16 +947,17 @@ mod tests {
     fn small_limits() -> SyncLimits {
         SyncLimits {
             oversized_bytes: 1_024,
+            ..SyncLimits::default()
         }
     }
 
-    fn commit_file(root: &Path, file: &str, body: &str) {
+    pub(super) fn commit_file(root: &Path, file: &str, body: &str) {
         std::fs::write(root.join(file), body).unwrap();
         ok(root, &["add", "-A"]);
         ok(root, &["commit", "--quiet", "-m", file]);
     }
 
-    fn reflog_len(root: &Path) -> usize {
+    pub(super) fn reflog_len(root: &Path) -> usize {
         git_stdout(root, &["reflog", "show", "--format=%H", "HEAD"])
             .unwrap_or_default()
             .lines()
@@ -1111,10 +1211,15 @@ mod tests {
         assert!(clean(&store));
         assert_eq!(health(&store).state, SyncState::Conflict);
 
-        // The upstream moving is a new divergence, so it is tried again.
+        // The upstream moving is a new divergence, so it is tried again. The replay runs
+        // outside the working tree (HS2-QR1K8R), so the reflog does not show it; the
+        // recorded divergence does.
+        let recorded = read_record(&store).unwrap().conflict_heads;
         peer_pushes(&peer, "more.md");
         assert_eq!(sync_once(&store), SyncReport::Conflict);
-        assert!(reflog_len(&store) > after_first);
+        assert_ne!(read_record(&store).unwrap().conflict_heads, recorded);
+        assert_eq!(reflog_len(&store), after_first);
+        assert_eq!(head(&store), local_head);
 
         // The user resolves by taking the remote body; sync settles.
         ok(&store, &["reset", "--quiet", "--hard", "@{u}"]);

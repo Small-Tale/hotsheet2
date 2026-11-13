@@ -34,7 +34,7 @@ const STALLED: TicketStoreSyncHealth = {
   unpublished_commits: 12,
   consecutive_failures: 2,
   next_action:
-    'Finish the rebase or merge in the store, or run `hotsheet-cli sync --abort-stalled-rebase` to restore the local branch (a backup ref is kept).',
+    'Sync continues an unfinished rebase by itself when nothing conflicts; this one needs a decision. Finish the rebase or merge in the store, or run `hotsheet-cli sync --abort-stalled-rebase` to restore the local branch (a backup ref is kept).',
 };
 
 const OFFLINE: TicketStoreSyncHealth = {
@@ -58,7 +58,7 @@ export function TicketStoreSyncBannerDemo() {
       </CatalogExample>
       <CatalogExample
         label="Stalled Rebase"
-        note="A rebase was left unfinished; sync will not start another one."
+        note="A rebase stopped at a conflict sync cannot settle; it will not start another one."
         viewport={{ width: 'full' }}
       >
         {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', STALLED]) })}
