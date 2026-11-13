@@ -4,7 +4,7 @@
 //! pure and lives in the core (`reconcile_sources.rs`); this module only reads.
 use hotsheet_ticketing::orchestration::{
     ExternalWork, GateError, GateFilter, GateKind, GateObservation, Observations, Observed, Run,
-    TargetFacts, ci_work,
+    TargetFacts, ci_work, deployment_work,
 };
 
 use super::*;
@@ -23,6 +23,7 @@ impl OrchestrationRuntime {
     ) -> Observations {
         Observations {
             ci: self.run_ci_work(owner_id, &run.run_id),
+            deployment: self.run_deployment_work(owner_id, &run.run_id),
             ..Observations::target_only(target)
         }
     }
@@ -64,6 +65,18 @@ impl OrchestrationRuntime {
     pub fn run_ci_work(&self, owner_id: &str, run_id: &str) -> Observed<ExternalWork> {
         match self.gate_readings(owner_id, run_id, GateKind::Ci) {
             Ok(readings) => ci_work(&readings),
+            Err(_) => Observed::Unverifiable(GATE_RECORDS_UNREADABLE.into()),
+        }
+    }
+
+    /// HS2-BYEB60: the deployments started for a run, for reconciliation, by their
+    /// retained operation ids. No deployment executor ships (HS2-G3VAK4), so for an
+    /// approved request this verifies, from this machine's records, that nothing was
+    /// executed (`deployment_not_executed`). An execution a registered executor
+    /// recorded is read from that executor's own records.
+    pub fn run_deployment_work(&self, owner_id: &str, run_id: &str) -> Observed<ExternalWork> {
+        match self.gate_readings(owner_id, run_id, GateKind::Deployment) {
+            Ok(readings) => deployment_work(&readings),
             Err(_) => Observed::Unverifiable(GATE_RECORDS_UNREADABLE.into()),
         }
     }

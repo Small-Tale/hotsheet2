@@ -77,7 +77,11 @@ pub use reconcile::{
     Observed, RunReconciliation, SOURCE_NOT_WIRED, SourceFinding, TargetFacts, Verification, align,
     assess,
 };
-pub use reconcile_sources::{GateObservation, NOTE_NO_GATE, NOTE_WATCH_ADOPTED, ci_work};
+pub use reconcile_sources::{
+    EXECUTION_NOT_FOUND, GateObservation, NOTE_AWAITING_APPROVAL, NOTE_DEPLOYMENT_NOT_EXECUTED,
+    NOTE_NO_DEPLOYMENT, NOTE_NO_GATE, NOTE_WATCH_ADOPTED, SourceWork, ci_work, combine_work,
+    deployment_work,
+};
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
     ResourceState, TargetResources, UnreadableClaims, UnreadableReason, resource_standings,

@@ -105,3 +105,178 @@ fn hs2_7qnk7y_reconciliation_reads_the_ci_runs_gating_a_run() {
         )
     );
 }
+
+#[test]
+fn hs2_byeb60_reconciliation_reads_deployments_by_their_operation_id() {
+    use super::gates::{CI, Scripted, deploy, link, verdict};
+    use hotsheet_ticketing::orchestration::{Coverage, GateKind, GateReading, GateState};
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(
+        &[TargetAction::GatesObserve, TargetAction::DeploymentsRun],
+        &mut tx,
+    );
+    let ci = Scripted::new(CI, GateKind::Ci);
+    m.runtime = m.runtime.clone().with_gate_provider(ci.clone());
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let reconcile = |m: &super::tickets::Machine, tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_reconcile(&owner, &run, Some(&worker()), tx)
+            .unwrap()
+    };
+    let deployment = |view: &RunView| finding(view, ExternalSource::Deployment);
+    // Nothing requested.
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(
+        deployment(&view),
+        (Verification::Verified, Some("no_deployment".into()))
+    );
+    m.runtime
+        .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
+        .unwrap();
+    ci.set(&a, verdict(CI, GateState::Passed, 2, &a, Coverage::Exact));
+    m.runtime
+        .gate_sync(
+            &owner,
+            &run,
+            &SyncGates::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    // Production waits for a person: nothing was executed, and the records say so.
+    let waiting = m
+        .runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-prod", true),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(waiting.gate.state, GateState::AwaitingApproval);
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(
+        deployment(&view),
+        (Verification::Verified, Some("awaiting_approval".into()))
+    );
+    // The shipped case: approved, and no executor exists to run it. Verified means
+    // exactly that this machine's records show nothing was executed.
+    m.runtime
+        .decide_approval(
+            &owner,
+            &waiting.approval_id.unwrap(),
+            true,
+            Some(&super::tickets::human()),
+            &mut tx,
+        )
+        .unwrap();
+    let approved = m
+        .runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-prod", true),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        approved.gate.reason.as_deref(),
+        Some("deployment_executor_unavailable")
+    );
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(
+        deployment(&view),
+        (
+            Verification::Verified,
+            Some("deployment_not_executed".into())
+        )
+    );
+    assert_eq!(disposition(&view), Disposition::Continue);
+    // With an executor registered, a beta deployment starts once and stays live.
+    let executor = Scripted::new(TARGET_SCRIPT_PROVIDER, GateKind::Deployment);
+    m.runtime = m.runtime.clone().with_gate_provider(executor.clone());
+    let started = m
+        .runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-beta", false),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(started.gate.state, GateState::Pending);
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(deployment(&view), (Verification::Verified, None));
+    // A retry after the interruption, with the same operation id, starts nothing.
+    m.runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-beta", false),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(executor.starts().len(), 1);
+    // The executor has no such execution: the recorded deployment is missing.
+    executor.set(
+        &a,
+        GateReading::new(GateState::Unknown).reason("execution_not_found"),
+    );
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(
+        deployment(&view),
+        (
+            Verification::Mismatched,
+            Some("recorded_work_missing".into())
+        )
+    );
+    assert_eq!(disposition(&view), Disposition::NeedsAttention);
+    // The executor cannot answer: the run is held with the executor's code.
+    executor.readings.lock().unwrap().clear();
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(
+        deployment(&view),
+        (
+            Verification::Unverifiable,
+            Some("gate_provider_unavailable".into())
+        )
+    );
+    assert_eq!(disposition(&view), Disposition::HoldUnverified);
+    // The executor goes away: an execution nothing can confirm.
+    let mut bare = OrchestrationRuntime::clone(&m.runtime);
+    bare.gate_providers
+        .retain(|provider| provider.kind() == GateKind::Ci);
+    assert_eq!(
+        bare.run_deployment_work(&owner, &run),
+        hotsheet_ticketing::orchestration::Observed::Unverifiable(
+            "deployment_executor_unavailable".into()
+        )
+    );
+    // The execution finishes: nothing is in flight any more.
+    executor.set(
+        &a,
+        verdict(
+            TARGET_SCRIPT_PROVIDER,
+            GateState::Passed,
+            3,
+            &a,
+            Coverage::Exact,
+        ),
+    );
+    let view = reconcile(&m, &mut tx);
+    assert_eq!(
+        deployment(&view),
+        (
+            Verification::Verified,
+            Some("deployment_not_executed".into())
+        )
+    );
+}

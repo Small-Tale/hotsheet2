@@ -13,9 +13,10 @@ use super::tickets::{Machine, NOW, bind_and_grant, human, machine, op, unsupport
 use super::*;
 
 const LEASE: &str = "2030-01-01T00:00:00Z";
-/// The sources nobody reports yet. HS2-7QNK7Y wired `ci_run`: a run without a gate
-/// has it verified as `no_gate`.
-const NOT_WIRED: [&str; 2] = ["deployment", "session"];
+/// The sources nobody reports yet. HS2-7QNK7Y and HS2-BYEB60 wired `ci_run` and
+/// `deployment`: a run without gates has them verified as `no_gate` and
+/// `no_deployment`.
+const NOT_WIRED: [&str; 1] = ["session"];
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
     ops::create(
@@ -240,15 +241,17 @@ fn hs2_wbredm_a_restart_reconciles_each_interrupted_dispatch_without_a_duplicate
     assert_eq!(disposition(&view), Disposition::Continue);
     // Exactly the sources nobody reports yet are named, with the reason.
     assert_eq!(view.unverified, NOT_WIRED);
-    for source in [ExternalSource::Deployment, ExternalSource::Session] {
-        assert_eq!(
-            finding(&view, source),
-            (Verification::Unverifiable, Some(SOURCE_NOT_WIRED.into()))
-        );
-    }
+    assert_eq!(
+        finding(&view, ExternalSource::Session),
+        (Verification::Unverifiable, Some(SOURCE_NOT_WIRED.into()))
+    );
     assert_eq!(
         finding(&view, ExternalSource::CiRun),
         (Verification::Verified, Some("no_gate".into()))
+    );
+    assert_eq!(
+        finding(&view, ExternalSource::Deployment),
+        (Verification::Verified, Some("no_deployment".into()))
     );
     for source in ExternalSource::ALL.into_iter().filter(|s| s.is_target()) {
         assert_eq!(finding(&view, source), (Verification::Verified, None));

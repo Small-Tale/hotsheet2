@@ -52,50 +52,9 @@ fn work(recorded: Option<&str>, live: Option<&str>, note: Option<&str>) -> Obser
     })
 }
 
-/// What a run with one gate amounts to, then how `assess` reports it.
+/// What a run with one CI observation amounts to, then how `assess` reports it.
 fn finding_of(observed: &Observed<ExternalWork>) -> (Verification, Option<String>, bool) {
-    let run = Run {
-        run_id: id(900),
-        owner_checkout_id: "owner-0123456789ab".into(),
-        operation_id: "op".into(),
-        ticket: RunTicket {
-            connection_id: "c".into(),
-            native_id: "n".into(),
-        },
-        target: RunTarget {
-            target_id: id(1),
-            connection_id: "c".into(),
-            native_id: "t".into(),
-        },
-        mode: DispatchMode::Direct,
-        worker_id: Some("w".into()),
-        state: RunState::Dispatched,
-        lease_expires_at_ms: Some(5_000),
-        cancel_requested: false,
-        observed: None,
-        unreachable: None,
-        paused: None,
-        reconciliation: None,
-        created_at_ms: 1,
-        updated_at_ms: 1,
-        history: Vec::new(),
-    };
-    let observations = Observations {
-        ci: observed.clone(),
-        ..Observations::target_only(Observed::Verified(TargetFacts {
-            exists: true,
-            status: "started".into(),
-            claimed_by: Some("w".into()),
-            lease_expires_at_ms: Some(5_000),
-        }))
-    };
-    let assessment = assess(&run, &observations, 1_000);
-    let found = assessment.finding(ExternalSource::CiRun).unwrap().clone();
-    (
-        found.verification,
-        found.reason,
-        assessment.may_start(ExternalSource::CiRun),
-    )
+    finding_of_source(observed, ExternalSource::CiRun)
 }
 
 #[test]
@@ -340,4 +299,288 @@ fn hs2_7qnk7y_gates_combine_unverifiable_first_then_missing_then_live() {
         ci_work(&[(unnamed.clone(), gone())]),
         work(Some(&unnamed.gate_id), None, None)
     );
+}
+
+fn deployment_gate(n: u128, state: GateState, reason: Option<&str>) -> Gate {
+    Gate {
+        kind: GateKind::Deployment,
+        provider: "target-script".into(),
+        ci: None,
+        deployment: Some(DeploymentScope {
+            environment: "beta".into(),
+            script: "scripts/deploy.sh".into(),
+            production: false,
+            operation_id: format!("deploy-{n}"),
+            requires_gate_id: id(1),
+            artifact: None,
+        }),
+        ..ci_gate(n, state, reason, None)
+    }
+}
+
+fn deployment_finding(observed: &Observed<ExternalWork>) -> (Verification, Option<String>, bool) {
+    finding_of_source(observed, ExternalSource::Deployment)
+}
+
+/// Like `finding_of`, for any of the work sources.
+fn finding_of_source(
+    observed: &Observed<ExternalWork>,
+    source: ExternalSource,
+) -> (Verification, Option<String>, bool) {
+    let mut observations = Observations::target_only(Observed::Verified(TargetFacts {
+        exists: true,
+        status: "started".into(),
+        claimed_by: Some("w".into()),
+        lease_expires_at_ms: Some(5_000),
+    }));
+    match source {
+        ExternalSource::CiRun => observations.ci = observed.clone(),
+        ExternalSource::Deployment => observations.deployment = observed.clone(),
+        ExternalSource::Session => observations.session = observed.clone(),
+        _ => panic!("not a work source"),
+    }
+    let run = test_run();
+    let assessment = assess(&run, &observations, 1_000);
+    let found = assessment.finding(source).unwrap().clone();
+    (
+        found.verification,
+        found.reason,
+        assessment.may_start(source),
+    )
+}
+
+fn test_run() -> Run {
+    Run {
+        run_id: id(900),
+        owner_checkout_id: "owner-0123456789ab".into(),
+        operation_id: "op".into(),
+        ticket: RunTicket {
+            connection_id: "c".into(),
+            native_id: "n".into(),
+        },
+        target: RunTarget {
+            target_id: id(1),
+            connection_id: "c".into(),
+            native_id: "t".into(),
+        },
+        mode: DispatchMode::Direct,
+        worker_id: Some("w".into()),
+        state: RunState::Dispatched,
+        lease_expires_at_ms: Some(5_000),
+        cancel_requested: false,
+        observed: None,
+        unreachable: None,
+        paused: None,
+        reconciliation: None,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+        history: Vec::new(),
+    }
+}
+
+#[test]
+fn hs2_byeb60_every_recorded_deployment_state_against_every_executor_answer() {
+    use GateState::{AwaitingApproval, Failed, Passed, Pending, Superseded, Unknown};
+    use Verification::{Mismatched, Unverifiable, Verified};
+    let running = || Ok(reading(Pending, None, Some("exec-1")));
+    let deployed = || Ok(reading(Passed, None, Some("exec-1")));
+    let broke = || Ok(reading(Failed, None, Some("exec-1")));
+    let unknown = || Ok(reading(Unknown, Some(EXECUTION_NOT_FOUND), None));
+    let silent = || Ok(reading(Unknown, None, None));
+    let offline = || Ok(reading(Unknown, Some("executor_offline"), None));
+    let none = || Err::<GateReading, String>("gate_provider_unsupported".into());
+    let unreadable = || Err::<GateReading, String>("gate_provider_unavailable".into());
+    type Row = (
+        GateState,
+        Option<&'static str>,
+        Result<GateReading, String>,
+        Verification,
+        Option<&'static str>,
+        bool,
+    );
+    let rows: Vec<Row> = vec![
+        // Nothing executed: verified from the records whatever an executor says.
+        (
+            AwaitingApproval,
+            None,
+            none(),
+            Verified,
+            Some("awaiting_approval"),
+            true,
+        ),
+        (
+            AwaitingApproval,
+            None,
+            running(),
+            Verified,
+            Some("awaiting_approval"),
+            true,
+        ),
+        (
+            Unknown,
+            Some("deployment_executor_unavailable"),
+            none(),
+            Verified,
+            Some("deployment_not_executed"),
+            true,
+        ),
+        (
+            Unknown,
+            Some("required_gate_superseded"),
+            none(),
+            Verified,
+            None,
+            true,
+        ),
+        (
+            Failed,
+            Some("approval_denied"),
+            none(),
+            Verified,
+            None,
+            true,
+        ),
+        (Passed, None, unreadable(), Verified, None, true),
+        (
+            Superseded,
+            Some("newer_gate_linked"),
+            none(),
+            Verified,
+            Some("no_deployment"),
+            true,
+        ),
+        // Recorded as executing: only the executor can say.
+        (Pending, None, running(), Verified, None, false),
+        (Pending, None, deployed(), Verified, None, true),
+        (Pending, None, broke(), Verified, None, true),
+        (
+            Pending,
+            None,
+            unknown(),
+            Mismatched,
+            Some("recorded_work_missing"),
+            true,
+        ),
+        (
+            Pending,
+            None,
+            silent(),
+            Unverifiable,
+            Some("deployment_state_unknown"),
+            false,
+        ),
+        (
+            Pending,
+            None,
+            offline(),
+            Unverifiable,
+            Some("executor_offline"),
+            false,
+        ),
+        (
+            Pending,
+            None,
+            none(),
+            Unverifiable,
+            Some("deployment_executor_unavailable"),
+            false,
+        ),
+        (
+            Pending,
+            None,
+            unreadable(),
+            Unverifiable,
+            Some("gate_provider_unavailable"),
+            false,
+        ),
+        (
+            Unknown,
+            Some("deployment_starting"),
+            running(),
+            Verified,
+            None,
+            false,
+        ),
+        (
+            Unknown,
+            Some("deployment_starting"),
+            unknown(),
+            Mismatched,
+            Some("recorded_work_missing"),
+            true,
+        ),
+        (
+            Unknown,
+            Some("deployment_starting"),
+            none(),
+            Unverifiable,
+            Some("deployment_executor_unavailable"),
+            false,
+        ),
+    ];
+    for (state, why, answer, verification, reason, may_start) in rows {
+        let gate = deployment_gate(7, state, why);
+        let observed = deployment_work(&[(gate, answer.clone())]);
+        assert_eq!(
+            deployment_finding(&observed),
+            (verification, reason.map(Into::into), may_start),
+            "{state:?} {why:?} {answer:?}"
+        );
+    }
+    // A live execution is named by its retained operation id.
+    assert_eq!(
+        deployment_work(&[(deployment_gate(7, Pending, None), running())]),
+        work(Some("deploy-7"), Some("deploy-7"), None)
+    );
+}
+
+#[test]
+fn hs2_byeb60_deployments_combine_and_ci_gates_are_not_deployments() {
+    use GateState::{AwaitingApproval, Pending, Unknown};
+    let none = || Err::<GateReading, String>("gate_provider_unsupported".into());
+    let waiting = deployment_gate(1, AwaitingApproval, None);
+    let approved = deployment_gate(2, Unknown, Some("deployment_executor_unavailable"));
+    let executing = deployment_gate(3, Pending, None);
+    // Empty, then refilled, then empty.
+    assert_eq!(
+        deployment_work(&[]),
+        work(None, None, Some("no_deployment"))
+    );
+    assert_eq!(
+        deployment_work(&[(waiting.clone(), none())]),
+        work(None, None, Some("awaiting_approval"))
+    );
+    assert_eq!(
+        deployment_work(&[]),
+        work(None, None, Some("no_deployment"))
+    );
+    // A CI gate is not a deployment, and a deployment gate is not a CI run.
+    let ci = ci_gate(4, Pending, None, Some("job-4"));
+    assert_eq!(
+        deployment_work(&[(ci.clone(), none())]),
+        work(None, None, Some("no_deployment"))
+    );
+    assert_eq!(
+        ci_work(&[(waiting.clone(), none())]),
+        work(None, None, Some("no_gate"))
+    );
+    // The first settled note qualifies the answer, in either order.
+    assert_eq!(
+        deployment_work(&[(waiting.clone(), none()), (approved.clone(), none())]),
+        work(None, None, Some("awaiting_approval"))
+    );
+    assert_eq!(
+        deployment_work(&[(approved.clone(), none()), (waiting.clone(), none())]),
+        work(None, None, Some("deployment_not_executed"))
+    );
+    // One execution nothing can confirm makes the whole source unverifiable.
+    for gates in [
+        vec![(approved.clone(), none()), (executing.clone(), none())],
+        vec![(executing.clone(), none()), (approved.clone(), none())],
+    ] {
+        assert_eq!(
+            deployment_work(&gates),
+            Observed::Unverifiable("deployment_executor_unavailable".into())
+        );
+    }
 }

@@ -264,6 +264,11 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
         reconciled["reconciliation"]["findings"][4],
         json!({"source":"ci_run","verification":"verified"})
     );
+    // HS2-BYEB60: no deployment was requested, and the answer says so.
+    assert_eq!(
+        reconciled["reconciliation"]["findings"][5],
+        json!({"source":"deployment","verification":"verified","reason":"no_deployment"})
+    );
     assert!(
         !reconciled["unverified"]
             .as_array()

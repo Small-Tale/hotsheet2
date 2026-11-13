@@ -28,7 +28,7 @@ pub(super) fn sha(digit: char) -> String {
 pub(super) struct Scripted {
     name: &'static str,
     kind: GateKind,
-    readings: Mutex<HashMap<String, GateReading>>,
+    pub(super) readings: Mutex<HashMap<String, GateReading>>,
     starts: Mutex<Vec<(String, bool)>>,
     refuse: AtomicBool,
     cursor: Mutex<u64>,
@@ -53,7 +53,7 @@ impl Scripted {
         *self.cursor.lock().unwrap() += 1;
         self.changed.notify_all();
     }
-    fn starts(&self) -> Vec<(String, bool)> {
+    pub(super) fn starts(&self) -> Vec<(String, bool)> {
         self.starts.lock().unwrap().clone()
     }
 }
@@ -164,7 +164,7 @@ pub(super) fn link(commit: &str, provider: &str) -> LinkGate {
     )
     .unwrap()
 }
-fn deploy(operation: &str, production: bool) -> RequestDeployment {
+pub(super) fn deploy(operation: &str, production: bool) -> RequestDeployment {
     serde_json::from_value(json!({
         "environment": if production { "production" } else { "beta" },
         "script": "scripts/deploy.sh", "production": production, "operation_id": operation,

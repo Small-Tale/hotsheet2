@@ -21,12 +21,13 @@ pub const NOTE_WATCH_ADOPTED: &str = "watch_adopted";
 /// A standing gate with its adapter's own answer, or the code of why there is none.
 pub type GateObservation = (Gate, Result<GateReading, String>);
 
-/// What one gate amounts to for reconciliation.
+/// What one piece of recorded work (a gate, a validation attempt, a session) amounts
+/// to for reconciliation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum GateWork {
-    /// Nothing is in flight: the gate holds a verdict, was never watched, or its watch
-    /// was stopped on purpose.
-    Settled,
+pub enum SourceWork {
+    /// Nothing is in flight: the work ended in the open, or never started. The note,
+    /// when present, says which, as a stable code.
+    Settled(Option<String>),
     /// A watch or execution is going on. `adopted` when the record did not name it.
     Live { reference: String, adopted: bool },
     /// The record says something is in flight and its adapter has no trace of it.
@@ -39,14 +40,14 @@ enum GateWork {
 /// or the code of why there is none (`gate_provider_unsupported` when no adapter
 /// serves the gate's provider, `gate_provider_unavailable` when its records could
 /// not be read).
-fn ci_gate(gate: &Gate, reading: &Result<GateReading, String>) -> GateWork {
+fn ci_gate(gate: &Gate, reading: &Result<GateReading, String>) -> SourceWork {
     // A passed gate is final; a superseded one no longer stands for the run.
     if matches!(gate.state, GateState::Passed | GateState::Superseded) {
-        return GateWork::Settled;
+        return SourceWork::Settled(None);
     }
     let reading = match reading {
         Ok(reading) => reading,
-        Err(code) => return GateWork::Unverifiable(code.clone()),
+        Err(code) => return SourceWork::Unverifiable(code.clone()),
     };
     let recorded = gate.awaits_provider();
     let reference = || {
@@ -55,39 +56,43 @@ fn ci_gate(gate: &Gate, reading: &Result<GateReading, String>) -> GateWork {
             .unwrap_or_else(|| gate.gate_id.clone())
     };
     match reading.state {
-        GateState::Pending => GateWork::Live {
+        GateState::Pending => SourceWork::Live {
             reference: reading.watch_ref.clone().unwrap_or_else(reference),
             // The record named no watch, or another one: the live watch is adopted.
             adopted: !recorded
                 || (reading.watch_ref.is_some() && reading.watch_ref != gate.watch_ref),
         },
         // A verdict ended the watch in the open; the record follows it on the next sync.
-        GateState::Passed | GateState::Failed | GateState::Superseded => GateWork::Settled,
+        GateState::Passed | GateState::Failed | GateState::Superseded => SourceWork::Settled(None),
         GateState::Unknown | GateState::AwaitingApproval => match reading.reason.as_deref() {
             // Somebody stopped watching on purpose: nothing is in flight.
-            Some("watch_cancelled") => GateWork::Settled,
+            Some("watch_cancelled") => SourceWork::Settled(None),
             // The Job is there and its observer is gone: the CI run may have moved on.
-            Some("watch_lost") if recorded => GateWork::Unverifiable("watch_lost".into()),
+            Some("watch_lost") if recorded => SourceWork::Unverifiable("watch_lost".into()),
             // The record says a watch runs and the adapter has none.
-            Some("not_watched") | None if recorded => GateWork::Missing {
+            Some("not_watched") | None if recorded => SourceWork::Missing {
                 reference: reference(),
             },
-            Some(other) if recorded => GateWork::Unverifiable(other.into()),
+            Some(other) if recorded => SourceWork::Unverifiable(other.into()),
             // A gate already settled or never watched: nothing was in flight.
-            _ => GateWork::Settled,
+            _ => SourceWork::Settled(None),
         },
     }
 }
 
-fn combine(works: Vec<GateWork>, empty_note: Option<&str>) -> Observed<ExternalWork> {
+/// Combine the work of one source: any unverifiable piece makes the source
+/// unverifiable, then a missing piece outranks a live one, and with nothing in flight
+/// the first settled note (or `empty_note` when there is no piece at all) qualifies
+/// the verified answer.
+pub fn combine_work(works: Vec<SourceWork>, empty_note: Option<&str>) -> Observed<ExternalWork> {
     if let Some(code) = works.iter().find_map(|work| match work {
-        GateWork::Unverifiable(code) => Some(code.clone()),
+        SourceWork::Unverifiable(code) => Some(code.clone()),
         _ => None,
     }) {
         return Observed::Unverifiable(code);
     }
     if let Some(reference) = works.iter().find_map(|work| match work {
-        GateWork::Missing { reference } => Some(reference.clone()),
+        SourceWork::Missing { reference } => Some(reference.clone()),
         _ => None,
     }) {
         return Observed::Verified(ExternalWork {
@@ -97,7 +102,7 @@ fn combine(works: Vec<GateWork>, empty_note: Option<&str>) -> Observed<ExternalW
         });
     }
     if let Some((reference, adopted)) = works.iter().find_map(|work| match work {
-        GateWork::Live { reference, adopted } => Some((reference.clone(), *adopted)),
+        SourceWork::Live { reference, adopted } => Some((reference.clone(), *adopted)),
         _ => None,
     }) {
         return Observed::Verified(ExternalWork {
@@ -112,7 +117,10 @@ fn combine(works: Vec<GateWork>, empty_note: Option<&str>) -> Observed<ExternalW
         note: if works.is_empty() {
             empty_note.map(Into::into)
         } else {
-            None
+            works.into_iter().find_map(|work| match work {
+                SourceWork::Settled(note) => note,
+                _ => None,
+            })
         },
     })
 }
@@ -123,12 +131,94 @@ fn combine(works: Vec<GateWork>, empty_note: Option<&str>) -> Observed<ExternalW
 /// watch is the run's own; a recorded watch the adapter no longer has is missing; a
 /// lost watch or an adapter that cannot answer leaves the source unverifiable.
 pub fn ci_work(gates: &[GateObservation]) -> Observed<ExternalWork> {
-    combine(
+    combine_work(
         gates
             .iter()
             .filter(|(gate, _)| gate.kind == GateKind::Ci && gate.state != GateState::Superseded)
             .map(|(gate, reading)| ci_gate(gate, reading))
             .collect(),
         Some(NOTE_NO_GATE),
+    )
+}
+
+/// HS2-BYEB60: no deployment was requested for the run.
+pub const NOTE_NO_DEPLOYMENT: &str = "no_deployment";
+/// HS2-BYEB60: a deployment waits for a person; nothing was executed.
+pub const NOTE_AWAITING_APPROVAL: &str = "awaiting_approval";
+/// HS2-BYEB60: a deployment was approved and no executor exists to run it, so this
+/// machine's records show that nothing was executed (HS2-G3VAK4).
+pub const NOTE_DEPLOYMENT_NOT_EXECUTED: &str = "deployment_not_executed";
+/// The reason a deployment that is approved and cannot run is recorded with.
+const EXECUTOR_UNAVAILABLE: &str = "deployment_executor_unavailable";
+/// The reason a deployment whose executor was asked to start it is recorded with.
+const DEPLOYMENT_STARTING: &str = "deployment_starting";
+/// What a deployment executor answers for an operation it has no execution of.
+pub const EXECUTION_NOT_FOUND: &str = "execution_not_found";
+
+/// A deployment gate against its executor's own records, by its retained operation id.
+fn deployment_gate(gate: &Gate, reading: &Result<GateReading, String>) -> SourceWork {
+    let operation = gate
+        .deployment
+        .as_ref()
+        .map_or_else(|| gate.gate_id.clone(), |scope| scope.operation_id.clone());
+    let reason = gate.reason.as_deref();
+    match gate.state {
+        GateState::Passed | GateState::Failed | GateState::Superseded => {
+            return SourceWork::Settled(None);
+        }
+        // A person has not answered: nothing was asked of an executor.
+        GateState::AwaitingApproval => {
+            return SourceWork::Settled(Some(NOTE_AWAITING_APPROVAL.into()));
+        }
+        GateState::Unknown if reason == Some(EXECUTOR_UNAVAILABLE) => {
+            return SourceWork::Settled(Some(NOTE_DEPLOYMENT_NOT_EXECUTED.into()));
+        }
+        // Withdrawn, or otherwise never handed to an executor.
+        GateState::Unknown if reason != Some(DEPLOYMENT_STARTING) => {
+            return SourceWork::Settled(None);
+        }
+        // Executing, or asked to start: only the executor can say.
+        GateState::Pending | GateState::Unknown => {}
+    }
+    let reading = match reading {
+        Ok(reading) => reading,
+        // No executor serves the provider on this machine: nothing can confirm it.
+        Err(code) if code == "gate_provider_unsupported" => {
+            return SourceWork::Unverifiable(EXECUTOR_UNAVAILABLE.into());
+        }
+        Err(code) => return SourceWork::Unverifiable(code.clone()),
+    };
+    match (reading.state, reading.reason.as_deref()) {
+        (GateState::Pending, _) => SourceWork::Live {
+            reference: operation,
+            adopted: false,
+        },
+        (GateState::Passed | GateState::Failed | GateState::Superseded, _) => {
+            SourceWork::Settled(None)
+        }
+        (_, Some(EXECUTION_NOT_FOUND)) => SourceWork::Missing {
+            reference: operation,
+        },
+        (_, reason) => {
+            SourceWork::Unverifiable(reason.unwrap_or("deployment_state_unknown").into())
+        }
+    }
+}
+
+/// HS2-BYEB60: the deployments started for a run, observed by their retained
+/// operation ids. Verified when nothing was executed (no request, a request waiting
+/// for a person, or one approved with no executor to run it) or the executor shows the
+/// recorded execution; mismatched when the executor has no such execution;
+/// unverifiable with the executor's code, or `deployment_executor_unavailable`, when
+/// an execution is recorded and nothing can confirm it.
+pub fn deployment_work(gates: &[GateObservation]) -> Observed<ExternalWork> {
+    combine_work(
+        gates
+            .iter()
+            .filter(|(gate, _)| gate.kind == GateKind::Deployment)
+            .filter(|(gate, _)| gate.state != GateState::Superseded)
+            .map(|(gate, reading)| deployment_gate(gate, reading))
+            .collect(),
+        Some(NOTE_NO_DEPLOYMENT),
     )
 }

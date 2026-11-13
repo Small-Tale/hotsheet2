@@ -10,7 +10,8 @@
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed;
 > the Job monitor is started by whoever links or follows a gate, HS2-VVHVF0),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM;
-> reconciliation reads the CI runs gating a run, HS2-7QNK7Y),
+> reconciliation reads the CI runs gating a run, HS2-7QNK7Y, and its deployments,
+> HS2-BYEB60),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
@@ -1493,7 +1494,7 @@ yields one **finding**: `verified`, `mismatched` or `unverifiable`.
 | `target_claim`        | Who holds a live claim, against the run's state and worker  | Yes                                             |
 | `run_lease`           | The lease the run recorded, against the lease on the ticket | Yes                                             |
 | `ci_run`              | CI runs gating the run                                      | Yes (HS2-7QNK7Y)                                |
-| `deployment`          | Deployments started for the run                             | `unverifiable`, `source_not_wired` (HS2-BYEB60) |
+| `deployment`          | Deployments started for the run                             | Yes (HS2-BYEB60)                                |
 | `session`             | Orchestrator-owned sessions working the run                 | `unverifiable`, `source_not_wired` (HS2-75Q254) |
 
 When the target cannot be confirmed, all four target sources are `unverifiable` with
@@ -1530,6 +1531,40 @@ itself; the gate follower or the next `gate sync` brings the gate in line with t
 same reading. A live watch makes `may_start(ci_run)` false, and `gate link` never
 starts a second watch while one is live: the watch is found or reattached by its
 target, and only a finished one is watched again.
+
+### Deployments (HS2-BYEB60)
+
+The deployment source reads the run's standing deployment gates by their retained
+operation ids. No deployment executor ships (§26.13, HS2-G3VAK4), so for most
+requests the only thing reconciliation can verify is that nothing was executed, and
+it says so in the finding's reason:
+
+| A standing deployment gate                                  | Finding                                      |
+| ----------------------------------------------------------- | -------------------------------------------- |
+| None requested                                              | `verified`, reason `no_deployment`           |
+| `awaiting_approval`                                         | `verified`, reason `awaiting_approval`       |
+| `unknown` with `deployment_executor_unavailable` (approved) | `verified`, reason `deployment_not_executed` |
+| `passed`, `failed`, or withdrawn                            | `verified`                                   |
+
+`verified` here means: this machine's records show that no execution was started for
+the operation, and no executor exists on this machine that could have started one. It
+does not mean anything was deployed.
+
+A gate recorded as executing (`pending`, or `unknown` with `deployment_starting`) can
+only come from a registered executor adapter, and only that adapter can say what
+became of it. Its own records are read by the gate, never the provider:
+
+| The executor answers                               | Finding                                                               |
+| -------------------------------------------------- | --------------------------------------------------------------------- |
+| The execution is going on                          | `verified`; `may_start(deployment)` is false                          |
+| A verdict                                          | `verified`: the execution ended                                       |
+| `unknown` with `execution_not_found`               | `mismatched`, `recorded_work_missing`                                 |
+| Any other `unknown`, or its records cannot be read | `unverifiable` with its code (`deployment_state_unknown` without one) |
+| No executor is registered for the provider         | `unverifiable`, `deployment_executor_unavailable`                     |
+
+A retry after an interruption never starts a duplicate: `gate deploy` with the same
+operation id returns the existing gate and starts nothing once it left
+`awaiting_approval`, and a live execution is adopted, not replaced.
 
 **Never a duplicate.** New work of a kind may be started for a run only when that
 source was read and shows none going on (`Assessment::may_start`). A source that
