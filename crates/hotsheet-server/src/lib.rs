@@ -2079,6 +2079,32 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/approvals/{approval}",
             post(routes::orchestration::write),
         )
+        // Resource claims (HS2-FMHH9Y): leases on named machine resources. `acquire` and
+        // `wait` may park on the backend's release signal (a long poll).
+        .route(
+            "/resource-claims/{namespace}",
+            get(routes::resource_claims::read),
+        )
+        .route(
+            "/resource-claims/{namespace}/{resource}",
+            get(routes::resource_claims::read),
+        )
+        .route(
+            "/resource-claims/{namespace}/{resource}/acquire",
+            post(routes::resource_claims::park),
+        )
+        .route(
+            "/resource-claims/{namespace}/{resource}/wait",
+            post(routes::resource_claims::park),
+        )
+        .route(
+            "/resource-claims/{namespace}/{resource}/renew",
+            post(routes::resource_claims::write),
+        )
+        .route(
+            "/resource-claims/{namespace}/{resource}/release",
+            post(routes::resource_claims::write),
+        )
         // A client may supervise this process but never owns it: restart is accepted only
         // after mutation admission closes and all server-owned work is proven quiescent.
         .route("/lifecycle/quiescence", get(lifecycle_quiescence))
@@ -2296,6 +2322,12 @@ pub fn app(state: AppState) -> Router {
             "/webhooks/github/{connection_id}",
             post(github_webhooks::receive)
                 .layer(DefaultBodyLimit::max(github_webhooks::MAX_WEBHOOK_BYTES)),
+        )
+        // A renewal token is the only credential here (HS2-FMHH9Y): it renews or releases
+        // its own claim, so a task with no server secret (inside a VM) can keep its lease.
+        .route(
+            "/resource-claim-token/{action}",
+            post(routes::resource_claims::token).layer(DefaultBodyLimit::max(1024)),
         )
         .route("/ws/sync", get(ws_sync))
         // Long-poll fallback for clients that can't hold a WebSocket (HS2-P3P3CC). Like

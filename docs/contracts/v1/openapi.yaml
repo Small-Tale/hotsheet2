@@ -14550,6 +14550,201 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /resource-claims/{namespace}:
+    parameters:
+      - &a5
+        name: namespace
+        in: path
+        required: true
+        description: 'Namespace: 1-64 characters of a-z, 0-9, ., _ or -.'
+        schema:
+          type: string
+    get:
+      operationId: list_resource_claims
+      description: The live claims in one namespace (HS2-FMHH9Y, docs/36-resource-claims.md). Never includes a renewal token.
+      responses:
+        '200':
+          description: Live claims by resource name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceClaimList'
+        '400': &a4
+          description: The request failed; code is one of the resource-claim codes in docs/36-resource-claims.md §36.5.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default: *a4
+  /resource-claims/{namespace}/{resource}:
+    parameters:
+      - *a5
+      - &a6
+        name: resource
+        in: path
+        required: true
+        description: 'Resource: 1-128 characters of letters, digits, ., _ or -.'
+        schema:
+          type: string
+    get:
+      operationId: get_resource_claim
+      description: Whether one resource is held, and by which claim (HS2-FMHH9Y). Never acquires.
+      responses:
+        '200':
+          description: The live claim, or held false.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceClaimStatus'
+        '400': *a4
+        default: *a4
+  /resource-claims/{namespace}/{resource}/acquire:
+    parameters:
+      - *a5
+      - *a6
+    post:
+      operationId: acquire_resource_claim
+      description:
+        'Claim a resource (HS2-FMHH9Y). A held resource is an ordinary 200 answer with acquired false, naming the
+        holder. With wait_ms the request is one long poll: it parks until the backend signals a release or the holder
+        lapses, for at most 55 seconds per request; a client with a later deadline asks again at once. At most 64
+        requests park at a time (503 capacity). A grant whose client disconnected while parked is released immediately.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceClaimAcquireRequest'
+      responses:
+        '200':
+          description: The grant, or the refusal naming the holder.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceClaimAcquireResult'
+        '400': *a4
+        '503': *a4
+        '507': *a4
+        default: *a4
+  /resource-claims/{namespace}/{resource}/wait:
+    parameters:
+      - *a5
+      - *a6
+    post:
+      operationId: wait_resource_claim_free
+      description:
+        Long poll until a resource is free, without claiming it (HS2-FMHH9Y). Parks for at most 55 seconds per
+        request and answers with the holder when that passes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceClaimWaitRequest'
+      responses:
+        '200':
+          description: Free, or still held by the named claim.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceClaimStatus'
+        '400': *a4
+        '503': *a4
+        default: *a4
+  /resource-claims/{namespace}/{resource}/renew:
+    parameters:
+      - *a5
+      - *a6
+    post:
+      operationId: renew_resource_claim
+      description:
+        Extend a claim (HS2-FMHH9Y). The renewal token must be for the resource in the path (403 token_invalid
+        otherwise). 410 expired when the lease lapsed; 409 not_holder when a later claim replaced it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceClaimRenewRequest'
+      responses:
+        '200':
+          description: The renewed claim.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceClaimRenewed'
+        '400': *a4
+        '403': *a4
+        '409': *a4
+        '410': *a4
+        default: *a4
+  /resource-claims/{namespace}/{resource}/release:
+    parameters:
+      - *a5
+      - *a6
+    post:
+      operationId: release_resource_claim
+      description: End a claim early and revoke its renewal token (HS2-FMHH9Y). The token must be for the resource in the path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceClaimReleaseRequest'
+      responses:
+        '200':
+          description: The ended claim.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceClaimReleased'
+        '400': *a4
+        '403': *a4
+        '409': *a4
+        '410': *a4
+        default: *a4
+  /resource-claim-token/{action}:
+    parameters:
+      - name: action
+        in: path
+        required: true
+        description: renew or release; any other action is 501 unsupported.
+        schema:
+          type: string
+          enum:
+            - renew
+            - release
+    post:
+      operationId: use_resource_claim_token
+      description: Renew or release one claim with its renewal token as the only credential (HS2-FMHH9Y,
+        docs/36-resource-claims.md §36.11), so a task with no server secret, such as one inside a VM, can keep or end
+        its own lease. The server secret is neither needed nor accepted here, and the token authorizes no other route.
+        The token is read only from the Authorization header; renew takes duration_ms in the body and release takes no
+        body.
+      security:
+        - ResourceClaimRenewalToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceClaimTokenRenewRequest'
+      responses:
+        '200':
+          description: The renewed claim, or the released claim.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ResourceClaimRenewed'
+                  - $ref: '#/components/schemas/ResourceClaimReleased'
+        '400': *a4
+        '401': *a4
+        '403': *a4
+        '409': *a4
+        '410': *a4
+        '501': *a4
+        default: *a4
 components:
   securitySchemes:
     HotsheetSecret:
@@ -14564,6 +14759,10 @@ components:
       type: apiKey
       in: query
       name: secret
+    ResourceClaimRenewalToken:
+      type: http
+      scheme: bearer
+      description: A resource-claim renewal token. It authorizes renew and release of its own claim only.
   parameters:
     CheckoutReference:
       name: reference
@@ -25373,4 +25572,255 @@ components:
         updated:
           type: integer
           minimum: 0
+      additionalProperties: false
+    ResourceClaim:
+      type: object
+      required:
+        - namespace
+        - resource
+        - claim_id
+        - fencing_token
+        - guarantee
+        - acquired_at_ms
+        - expires_at_ms
+        - expires_at
+        - metadata
+      properties:
+        namespace: &a8
+          type: string
+        resource: &a9
+          type: string
+        claim_id: &a10
+          type: string
+          description: ULID naming this claim.
+        fencing_token: &a11
+          type: integer
+          minimum: 1
+          description: Greater than every earlier grant of the same resource.
+        guarantee: &a12
+          type: string
+          enum:
+            - exclusive_with_fencing
+            - advisory_only
+        acquired_at_ms: &a13
+          type: integer
+          minimum: 0
+          description: Backend-clock grant time, Unix milliseconds.
+        expires_at_ms: &a14
+          type: integer
+          minimum: 0
+          description: Backend-clock expiry, Unix milliseconds.
+        expires_at: &a15
+          type: string
+          description: The expiry as RFC 3339 UTC.
+        metadata: &a16
+          type: object
+          description: 'Stored values, each with a plain:, hmac-sha256: or enc:v1: codec prefix.'
+          additionalProperties:
+            type: string
+      additionalProperties: false
+    ResourceClaimCapabilities:
+      type: object
+      required:
+        - backend
+        - guarantee
+        - wait
+        - max_metadata_entries
+        - max_metadata_bytes
+        - max_lease_ms
+      properties:
+        backend:
+          type: string
+        guarantee:
+          type: string
+          enum:
+            - exclusive_with_fencing
+            - advisory_only
+        wait:
+          type: string
+          enum:
+            - push_signal
+            - long_poll
+            - none
+        max_metadata_entries:
+          type: integer
+          minimum: 0
+        max_metadata_bytes:
+          type: integer
+          minimum: 0
+        max_lease_ms:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    ResourceClaimGrant:
+      type: object
+      required:
+        - namespace
+        - resource
+        - claim_id
+        - fencing_token
+        - guarantee
+        - acquired_at_ms
+        - expires_at_ms
+        - expires_at
+        - metadata
+        - acquired
+        - renewal_token
+      properties:
+        namespace: *a8
+        resource: *a9
+        claim_id: *a10
+        fencing_token: *a11
+        guarantee: *a12
+        acquired_at_ms: *a13
+        expires_at_ms: *a14
+        expires_at: *a15
+        metadata: *a16
+        acquired:
+          const: true
+        renewal_token:
+          type: string
+          description: Bearer capability for renewing and releasing this claim only. Returned once; only a keyed digest is stored.
+      additionalProperties: false
+    ResourceClaimRefusal:
+      type: object
+      required:
+        - acquired
+        - code
+        - error
+        - holder
+      properties:
+        acquired:
+          const: false
+        code:
+          type: string
+          enum:
+            - held_by
+            - wait_timeout
+        error:
+          type: string
+        holder:
+          $ref: '#/components/schemas/ResourceClaim'
+      additionalProperties: false
+    ResourceClaimAcquireResult:
+      oneOf:
+        - $ref: '#/components/schemas/ResourceClaimGrant'
+        - $ref: '#/components/schemas/ResourceClaimRefusal'
+    ResourceClaimAcquireRequest:
+      type: object
+      required:
+        - duration_ms
+      properties:
+        duration_ms:
+          type: integer
+          minimum: 1
+          maximum: 86400000
+          description: Lease length.
+        wait_ms:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 86400000
+          description: Wait this long instead of failing at once; the server parks at most 55000 per request.
+        metadata:
+          type:
+            - object
+            - 'null'
+          description:
+            'Up to 16 entries and 4096 stored bytes. A plain:, hmac-sha256: or enc:v1: prefix on a value selects its
+            codec; a value with no prefix is stored plain:.'
+          additionalProperties:
+            type: string
+    ResourceClaimWaitRequest:
+      type: object
+      required:
+        - wait_ms
+      properties:
+        wait_ms:
+          type: integer
+          minimum: 0
+          maximum: 86400000
+    ResourceClaimRenewRequest:
+      type: object
+      required:
+        - renewal_token
+        - duration_ms
+      properties:
+        renewal_token:
+          type: string
+        duration_ms:
+          type: integer
+          minimum: 1
+          maximum: 86400000
+          description: New lease length from now.
+    ResourceClaimReleaseRequest:
+      type: object
+      required:
+        - renewal_token
+      properties:
+        renewal_token:
+          type: string
+    ResourceClaimTokenRenewRequest:
+      type: object
+      properties:
+        duration_ms:
+          type: integer
+          minimum: 1
+          maximum: 86400000
+          description: Required for renew.
+    ResourceClaimStatus:
+      type: object
+      required:
+        - target
+        - held
+        - claim
+        - capabilities
+      properties:
+        target:
+          type: string
+          description: <namespace>/<resource>
+        held:
+          type: boolean
+        claim:
+          oneOf:
+            - $ref: '#/components/schemas/ResourceClaim'
+            - type: 'null'
+        capabilities:
+          $ref: '#/components/schemas/ResourceClaimCapabilities'
+      additionalProperties: false
+    ResourceClaimList:
+      type: object
+      required:
+        - namespace
+        - capabilities
+        - claims
+      properties:
+        namespace:
+          type: string
+        capabilities:
+          $ref: '#/components/schemas/ResourceClaimCapabilities'
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceClaim'
+      additionalProperties: false
+    ResourceClaimRenewed:
+      type: object
+      required:
+        - claim
+      properties:
+        claim:
+          $ref: '#/components/schemas/ResourceClaim'
+      additionalProperties: false
+    ResourceClaimReleased:
+      type: object
+      required:
+        - released
+        - claim
+      properties:
+        released:
+          const: true
+        claim:
+          $ref: '#/components/schemas/ResourceClaim'
       additionalProperties: false

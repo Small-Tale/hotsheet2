@@ -14,6 +14,7 @@ pub(crate) mod notify;
 pub(crate) mod orchestration;
 pub(crate) mod providers;
 pub(crate) mod remotes;
+pub(crate) mod resources;
 pub(crate) mod server;
 pub(crate) mod setup;
 pub(crate) mod store;
@@ -50,6 +51,7 @@ pub(crate) enum Group {
     Setup,
     Coordination,
     Notify,
+    Resources,
 }
 
 impl Cmd {
@@ -60,6 +62,7 @@ impl Cmd {
             Orchestration(_) => Group::Orchestration,
             Coordination(_) => Group::Coordination,
             Notify { .. } => Group::Notify,
+            Resource { .. } => Group::Resources,
             Init { .. }
             | Bootstrap { .. }
             | Link { .. }
@@ -181,6 +184,7 @@ impl Cmd {
                 | Cmd::Processes
                 | Cmd::Guidance { .. }
                 | Cmd::Notify { .. }
+                | Cmd::Resource { .. }
                 | Cmd::TerminalRelay { .. }
                 | Cmd::Serve { list: true, .. }
         )
@@ -212,6 +216,7 @@ impl Cmd {
                 | Cmd::Activity { .. }
                 | Cmd::Notifications { .. }
                 | Cmd::Notify { .. }
+                | Cmd::Resource { .. }
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
@@ -244,6 +249,7 @@ pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Group::Setup => setup::run(cmd, ctx),
         Group::Coordination => coordination::run(cmd, ctx),
         Group::Notify => notify::run(cmd, ctx),
+        Group::Resources => resources::run(cmd, ctx),
     }
 }
 

@@ -21,6 +21,7 @@ hotsheet-extsync.workspace = true
 hotsheet-index.workspace = true
 hotsheet-plugins.workspace = true
 hotsheet-notify.workspace = true
+hotsheet-resource-claims.workspace = true
 hotsheet-aitools.workspace = true
 hotsheet-process-journal.workspace = true
 hotsheet-tls.workspace = true

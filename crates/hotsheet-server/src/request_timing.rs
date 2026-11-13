@@ -63,6 +63,9 @@ pub(crate) const LONG_WAIT_ROUTES: &[&str] = &[
     "/permissions/ask",
     // `GET` parks until the person finishes GitHub device authorization.
     "/github-auth/device/{session_id}",
+    // Park until a resource claim is released or lapses (HS2-FMHH9Y).
+    "/resource-claims/{namespace}/{resource}/acquire",
+    "/resource-claims/{namespace}/{resource}/wait",
 ];
 
 /// Classify a matched route template (for example `/checkouts/{reference}/tickets/{id}`).
@@ -202,7 +205,12 @@ mod tests {
             assert_eq!(classify(route).budget(), None);
         }
         // Waits on a person are neither timed nor offloaded (HS2-V3S89Q).
-        for route in ["/permissions/ask", "/github-auth/device/{session_id}"] {
+        for route in [
+            "/permissions/ask",
+            "/github-auth/device/{session_id}",
+            "/resource-claims/{namespace}/{resource}/acquire",
+            "/resource-claims/{namespace}/{resource}/wait",
+        ] {
             assert_eq!(classify(route), RequestClass::LongWait, "{route}");
             assert_eq!(classify(route).budget(), None);
         }
@@ -211,6 +219,9 @@ mod tests {
             "/permissions/{id}",
             "/github-auth/device",
             "/github-auth/device/{session_id}/repositories",
+            "/resource-claims/{namespace}/{resource}",
+            "/resource-claims/{namespace}/{resource}/renew",
+            "/resource-claim-token/{action}",
         ] {
             assert_eq!(classify(route), RequestClass::Api, "{route}");
         }

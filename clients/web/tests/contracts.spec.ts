@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(263); // HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(270); // HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(263); // HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
+  expect(Object.keys(openapi.paths)).toHaveLength(270); // HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -573,6 +573,109 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
         action: 'no_ready_work',
       },
     });
+  } finally {
+    await server.stop();
+  }
+});
+
+/**
+ * HS2-FMHH9Y: the resource-claim schemas forbid unknown members, so a field the contract
+ * misses fails a real response. Walk acquire, conflict, show, list, wait, token-only renew
+ * and release on a real server, and check the renewal token is no credential elsewhere.
+ */
+test('HS2-FMHH9Y real resource-claim responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: number, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[String(status)].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, headers: Record<string, string>, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const secret = { 'X-Hotsheet-Secret': server.secret };
+    const target = '/resource-claims/{namespace}/{resource}';
+
+    const grant = await send('POST', '/resource-claims/vms/mac-1/acquire', secret, {
+      duration_ms: 600_000,
+      metadata: { purpose: 'contract', worker: 'hmac-sha256:synthetic-worker', label: 'enc:v1:Synthetic' },
+    });
+    expect(grant.status).toBe(200);
+    matches(`${target}/acquire`, 'post', 200, grant.body);
+    expect(grant.body.acquired).toBe(true);
+    const token = grant.body.renewal_token as string;
+    const bearer = { Authorization: `Bearer ${token}` };
+
+    const refused = await send('POST', '/resource-claims/vms/mac-1/acquire', secret, {
+      duration_ms: 1_000,
+      wait_ms: 200,
+    });
+    expect(refused.status).toBe(200);
+    matches(`${target}/acquire`, 'post', 200, refused.body);
+    expect(refused.body.code).toBe('wait_timeout');
+
+    const shown = await send('GET', '/resource-claims/vms/mac-1', secret);
+    matches(target, 'get', 200, shown.body);
+    expect(shown.body.held).toBe(true);
+    const free = await send('GET', '/resource-claims/vms/mac-2', secret);
+    matches(target, 'get', 200, free.body);
+    expect(free.body.claim).toBeNull();
+    const listed = await send('GET', '/resource-claims/vms', secret);
+    matches('/resource-claims/{namespace}', 'get', 200, listed.body);
+    const waited = await send('POST', '/resource-claims/vms/mac-1/wait', secret, { wait_ms: 100 });
+    matches(`${target}/wait`, 'post', 200, waited.body);
+    for (const answer of [refused, shown, listed, waited]) expect(JSON.stringify(answer.body)).not.toContain(token);
+
+    const renewed = await send('POST', '/resource-claims/vms/mac-1/renew', secret, {
+      renewal_token: token,
+      duration_ms: 900_000,
+    });
+    matches(`${target}/renew`, 'post', 200, renewed.body);
+
+    // The token alone works on its own route and nowhere else.
+    const tokenRoute = '/resource-claim-token/{action}';
+    const byToken = await send('POST', '/resource-claim-token/renew', bearer, { duration_ms: 1_200_000 });
+    expect(byToken.status).toBe(200);
+    matches(tokenRoute, 'post', 200, byToken.body);
+    for (const path of ['/resource-claims/vms', '/tickets', '/checkouts'])
+      expect((await send('GET', path, bearer)).status, path).toBe(401);
+    const anonymous = await send('POST', '/resource-claim-token/renew', {}, { duration_ms: 1_000 });
+    expect(anonymous.status).toBe(401);
+    matches(tokenRoute, 'post', 401, anonymous.body);
+    const wrongAction = await send('POST', '/resource-claim-token/acquire', bearer, { duration_ms: 1_000 });
+    expect(wrongAction.status).toBe(501);
+    matches(tokenRoute, 'post', 501, wrongAction.body);
+
+    const released = await send('POST', '/resource-claim-token/release', bearer);
+    expect(released.status).toBe(200);
+    matches(tokenRoute, 'post', 200, released.body);
+    expect(released.body.released).toBe(true);
+    const revoked = await send('POST', '/resource-claims/vms/mac-1/release', secret, { renewal_token: token });
+    expect(revoked.status).toBe(403);
+    matches(`${target}/release`, 'post', 403, revoked.body);
+    expect(revoked.body.code).toBe('token_invalid');
+    const invalid = await send('POST', '/resource-claims/vms/mac-1/acquire', secret, { duration_ms: 0 });
+    expect(invalid.status).toBe(400);
+    matches(`${target}/acquire`, 'post', 400, invalid.body);
   } finally {
     await server.stop();
   }

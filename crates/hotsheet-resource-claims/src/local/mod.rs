@@ -63,11 +63,6 @@ impl LocalBackend {
         }
     }
 
-    /// The metadata codecs keyed for this backend.
-    pub fn codecs(&self) -> Result<MetadataCodecs, ClaimError> {
-        MetadataCodecs::new(&self.keys.key()?)
-    }
-
     /// How many times this instance has read claim state. A waiter reads once per
     /// wake-up, so an idle wait leaves this unchanged; tests pin that.
     pub fn inspections(&self) -> u64 {
@@ -208,6 +203,10 @@ impl ClaimBackend for LocalBackend {
             max_metadata_bytes: MAX_METADATA_BYTES,
             max_lease_ms: u64::try_from(MAX_LEASE.as_millis()).unwrap_or(u64::MAX),
         }
+    }
+
+    fn codecs(&self) -> Result<MetadataCodecs, ClaimError> {
+        MetadataCodecs::new(&self.keys.key()?)
     }
 
     fn acquire(&self, target: &ResourceRef, request: &AcquireRequest) -> Result<Grant, ClaimError> {

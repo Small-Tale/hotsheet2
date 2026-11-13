@@ -1081,3 +1081,26 @@ launchd. On a Mac logged in to its desktop, verify the launchd-specific parts by
 For the packaged app, launch the desktop app from Finder. Confirm `hotsheet-cli
 terminal-relay status` reports the default label as healthy and naming the bundled
 `hotsheet-server`. Then quit the app and confirm that its terminals keep running.
+
+## Resource-claim token route from a guest VM (HS2-FMHH9Y)
+
+Automated tests reach the token route over loopback and through a router with a
+synthetic non-loopback peer address, never from a real guest over TLS. With a VM whose
+host-only network can reach the host, verify the exposure choice in
+[36-resource-claims.md](36-resource-claims.md) §36.11 by hand. Use a throwaway
+`HOTSHEET_HOME` and store.
+
+1. On the host, run `hotsheet-cli cert init`, then start the server with
+   `--bind <host-only address>:<port> --remote-transport https`.
+2. On the host, run `hotsheet-cli resource acquire vms/guest-check --duration 10m` and
+   pass the printed `renewal_token` into the guest as `HOTSHEET_RESOURCE_CLAIM_TOKEN`.
+3. In the guest, with the server certificate trusted, send
+   `POST /resource-claim-token/renew` with `Authorization: Bearer <token>` and
+   `{"duration_ms": 600000}`. Confirm 200 and a later `expires_at`; on the host,
+   `hotsheet-cli resource show vms/guest-check` shows the same expiry.
+4. In the guest, confirm that `GET /resource-claims/vms` and `GET /tickets` with the same
+   bearer token, and with the server secret, both answer 401.
+5. In the guest, send `POST /resource-claim-token/release`. Confirm 200, then that a
+   second release answers 403 `token_invalid` and the host shows the resource free.
+6. Restart the server with the default loopback bind and confirm the guest can no longer
+   connect.

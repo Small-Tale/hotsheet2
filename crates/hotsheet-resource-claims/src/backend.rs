@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use crate::codec::MetadataCodecs;
 use crate::error::ClaimError;
 use crate::model::{
     AcquireRequest, Capabilities, Claim, Grant, Namespace, ResourceRef, WaitOutcome,
@@ -13,6 +14,9 @@ use crate::model::{
 pub trait ClaimBackend: Send + Sync {
     /// What this backend guarantees and how it waits.
     fn capabilities(&self) -> Capabilities;
+
+    /// The metadata codecs keyed for this backend's configuration.
+    fn codecs(&self) -> Result<MetadataCodecs, ClaimError>;
 
     /// Take the resource now, or fail with [`ClaimError::HeldBy`].
     fn acquire(&self, target: &ResourceRef, request: &AcquireRequest) -> Result<Grant, ClaimError>;

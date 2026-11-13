@@ -545,6 +545,12 @@ enum Cmd {
         #[command(subcommand)]
         cmd: NotifyCmd,
     },
+    /// Claim a named resource for a duration, renew it, and release it (machine-wide; no
+    /// server needed). See docs/36-resource-claims.md.
+    Resource {
+        #[command(subcommand)]
+        cmd: dispatch::resources::ResourceCmd,
+    },
     /// Manage encrypted machine-local provider keys backed by one OS credential-store master.
     Key {
         #[command(subcommand)]

@@ -13,6 +13,7 @@
 mod orchestration_tools;
 pub mod presence;
 mod remote_tools;
+mod resource_claim_tools;
 
 use serde_json::{Value, json};
 
@@ -138,6 +139,7 @@ fn base_tools_list() -> Value {
     json!({ "tools": [
         remote_tools::definition(),
         orchestration_tools::definition(),
+        resource_claim_tools::definition(),
         {
             "name": "hotsheet_providers",
             "description": "List configured ticket-provider connections and their structured capabilities.",
@@ -604,6 +606,7 @@ fn render_result(value: &Value) -> String {
 const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_remotes",
     "hotsheet_targets",
+    "hotsheet_resource_claim",
     "hotsheet_annotate_attachment",
     "hotsheet_rename_attachment",
     "hotsheet_delete_attachment",
@@ -721,6 +724,7 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
     match name {
         "hotsheet_remotes" => remote_tools::dispatch(args, backend),
         "hotsheet_targets" => orchestration_tools::dispatch(args, backend),
+        "hotsheet_resource_claim" => resource_claim_tools::dispatch(args, backend),
         "hotsheet_annotate_attachment" => {
             if args.get("connection").is_some() {
                 return Err("media annotations require a git-backed ticket".into());
@@ -1463,7 +1467,7 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 mod core_backend {
     use super::{
         Backend, BackendError, checkout_array_result, decode_checkout_reference,
-        orchestration_tools, remote_tools,
+        orchestration_tools, remote_tools, resource_claim_tools,
     };
     use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
@@ -1630,6 +1634,25 @@ mod core_backend {
         ) -> Self {
             self.orchestration_runtime = Some(Arc::new(runtime));
             self
+        }
+
+        /// HS2-FMHH9Y: serve a resource-claim route from the machine home, with the same
+        /// workflow the server routes call.
+        fn resource_claim_request(
+            &self,
+            method: &str,
+            path: &str,
+            body: &Value,
+        ) -> Result<Value, BackendError> {
+            let home = self
+                .checkout_registry
+                .path()
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .ok_or_else(|| bad_request("machine registry home is unavailable"))?;
+            hotsheet_resource_claims::ClaimService::new(home)
+                .request(method, path, body)
+                .map_err(resource_claim_tools::backend_error)
         }
 
         fn orchestration_request(
@@ -2119,6 +2142,9 @@ mod core_backend {
             if hotsheet_cli::orchestration::is_path(path) {
                 return self.orchestration_request("GET", path, &Value::Null);
             }
+            if hotsheet_resource_claims::is_path(path) {
+                return self.resource_claim_request("GET", path, &Value::Null);
+            }
             if remote_tools::is_registry_path(path) {
                 return self
                     .remote_runtime()?
@@ -2540,6 +2566,9 @@ mod core_backend {
         fn route(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
             if hotsheet_cli::orchestration::is_path(path) {
                 return self.orchestration_request(method, path, body);
+            }
+            if hotsheet_resource_claims::is_path(path) {
+                return self.resource_claim_request(method, path, body);
             }
             if remote_tools::is_registry_path(path) {
                 return self

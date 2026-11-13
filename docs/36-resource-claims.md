@@ -11,9 +11,10 @@ Two uses drive the design (decided 2026-11-03, HS2-H3WPPY):
 2. **Non-ticket resources**, for example a local macOS VM that allows one automation
    process at a time.
 
-This document covers the contract and the built-in local machine backend, which is the
-`hotsheet-resource-claims` crate. Backend configurations, namespace binding, and the
-other backends are design only; §36.9 names their tickets. The claim on a Git-backed
+This document covers the contract, the built-in local machine backend, and the CLI,
+MCP, and server surfaces; the `hotsheet-resource-claims` crate implements all three.
+Backend configurations, namespace binding, and the other backends are design only;
+§36.9 names their tickets. The claim on a Git-backed
 ticket ([10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)) is
 unchanged and is not yet routed through this contract.
 
@@ -112,7 +113,7 @@ change any other claim.
 
 ## 36.5 Backend contract
 
-`ClaimBackend` is a blocking Rust trait: `capabilities`, `acquire` (try-now),
+`ClaimBackend` is a blocking Rust trait: `capabilities`, `codecs`, `acquire` (try-now),
 `acquire_wait` (with a timeout), `renew`, `release`, `get`, `list` (one namespace),
 `wait_free` (wait without acquiring), and `verify_fencing`. `get` and `list` return live
 claims only and never include a renewal token.
@@ -189,9 +190,115 @@ has an idempotent `hotsheet-cli` path shared with the graphical client.
 
 ## 36.9 Status
 
-| Part                                                                                             | Status      | Ticket     |
-| ------------------------------------------------------------------------------------------------ | ----------- | ---------- |
-| Backend contract, error model, codecs, local machine backend                                     | Shipped     | HS2-H3WPPY |
-| CLI, MCP, and server surfaces with token-only renew and release                                  | Design only | HS2-FMHH9Y |
-| Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Design only | HS2-JJWESD |
-| AI guidance for the acquire-and-hand-off pattern                                                 | Design only | HS2-SHDW2Q |
+| Part                                                                                             | Status                                                     | Ticket     |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ---------- |
+| Backend contract, error model, codecs, local machine backend                                     | Shipped                                                    | HS2-H3WPPY |
+| CLI, MCP, and server surfaces with token-only renew and release (§36.10 to §36.12)               | Shipped for machine-scoped namespaces on the local backend | HS2-FMHH9Y |
+| Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Design only                                                | HS2-JJWESD |
+| AI guidance for the acquire-and-hand-off pattern                                                 | Design only                                                | HS2-SHDW2Q |
+
+HS2-FMHH9Y shipped ahead of HS2-JJWESD. Until configurations exist, every namespace is
+machine-scoped and served by the local machine backend. The single seam is
+`hotsheet_resource_claims::resolve_backend(home, namespace)`; HS2-JJWESD replaces its
+body with a configuration lookup, and no surface changes.
+
+## 36.10 Surfaces
+
+The CLI, the MCP tool, and the server routes are thin adapters over one workflow,
+`hotsheet_resource_claims::ClaimService`, so they return the same JSON. The CLI and the
+serverless MCP shim need no running server.
+
+| Operation                 | CLI                                                                                   | MCP `hotsheet_resource_claim`                                 | Server route                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
+| Acquire                   | `hotsheet-cli resource acquire <ns>/<res> --duration 30m [--wait 5m] [--meta k=v]...` | `action: "acquire"`, `target`, `duration`, `wait`, `metadata` | `POST /resource-claims/{namespace}/{resource}/acquire`         |
+| Renew                     | `hotsheet-cli resource renew [<ns>/<res>] --token <token> --duration 30m`             | `action: "renew"`, `renewal_token`, `duration`                | `POST /resource-claims/{namespace}/{resource}/renew`           |
+| Release                   | `hotsheet-cli resource release [<ns>/<res>] --token <token>`                          | `action: "release"`, `renewal_token`                          | `POST /resource-claims/{namespace}/{resource}/release`         |
+| Show                      | `hotsheet-cli resource show <ns>/<res> [--wait 5m]`                                   | `action: "show"`, `target`, `wait`                            | `GET /resource-claims/{namespace}/{resource}`; `POST .../wait` |
+| List a namespace          | `hotsheet-cli resource list <namespace>`                                              | `action: "list"`, `namespace`                                 | `GET /resource-claims/{namespace}`                             |
+| Renew or release by token | The renew and release commands above with no target                                   | The renew and release actions above                           | `POST /resource-claim-token/renew` and `/release` (§36.11)     |
+
+- **Durations** are written `500ms`, `90s`, `30m`, `1h30m`, or `2d` in the CLI and MCP
+  tool, and as `duration_ms` and `wait_ms` in a request body.
+- **Acquire** answers with the claim fields of §36.1 plus `acquired: true`. When the
+  resource is held, the answer is `{ "acquired": false, "code": "held_by", "error",
+"holder" }`, or `code: "wait_timeout"` after a wait. This is an ordinary answer (HTTP
+  200 and a successful MCP result). The CLI prints it on standard output and exits
+  non-zero, so a script can read the holder and a shell can branch.
+- **Renew and release** need only the renewal token. The CLI reads it from `--token`
+  or, when that is absent, from `HOTSHEET_RESOURCE_CLAIM_TOKEN`, so a task need not put
+  it on a command line. An optional target is a cross-check: a token for any other claim
+  is `token_invalid`. Renew answers `{ "claim" }`; release answers `{ "released": true,
+"claim" }`.
+- **Show** answers `{ "target", "held", "claim", "capabilities" }` and **list** answers
+  `{ "namespace", "capabilities", "claims" }`. Neither ever includes a renewal token.
+  `show --wait` waits for the resource to become free without claiming it.
+- **Metadata** values are encoded as §36.3 describes before they are stored.
+- **Errors** carry the codes of §36.5. HTTP statuses: `invalid` 400, `token_invalid` 403,
+  `not_holder` 409, `expired` 410, `unsupported` 501, `backend_unreachable` 503,
+  `capacity` 507, `corrupt` and `storage` 500. The error text starts with the code.
+- **Actors.** The MCP tool accepts `actor_role` and `actor_id` like every mutating tool,
+  but a claim records its holder only through metadata.
+
+**Waiting over the server.** `acquire` with `wait_ms` and the `wait` route are genuine
+long polls: one request parks on the backend's release signal and answers when the
+resource changes hands, when the holder's lease lapses, or when the wait ends. The
+server parks one request for at most 55 seconds; a client with a later deadline asks
+again as soon as the previous answer arrives, and sends nothing in between. The MCP tool
+does this for a `wait` of up to 10 minutes per call. At most 64 requests park at a time;
+another is refused with 503 `capacity`. A parked request does not hold an API request
+slot. If the client disconnects while parked and the request then wins the resource,
+the server releases that grant at once, because nobody received its token. A parked
+`acquire` or `wait` is an in-flight mutation, so a safe server restart waits for it, for
+at most those 55 seconds.
+
+## 36.11 The renewal-token route and guest VMs
+
+`POST /resource-claim-token/renew` and `POST /resource-claim-token/release` accept
+`Authorization: Bearer <renewal token>` as the **only** credential. Renew takes
+`{ "duration_ms" }`; release takes no body. This is how a task that has no server secret,
+for example one inside a guest VM, keeps or ends its own lease.
+
+- The token is read only from the header. The route renews or releases that token's own
+  claim and does nothing else: any other action is 501, and it cannot acquire, list, or
+  read another claim.
+- A renewal token is not a credential anywhere else. Every other route, including the
+  `/resource-claims/...` routes, still requires the server's ordinary authentication,
+  and the server secret is not accepted in place of a token here.
+- A missing or malformed header is 401; a well-formed token that does not match is 403.
+
+**Bind and exposure.** The token route is served by the same listener as every other
+route; there is no second port. By default the server binds `127.0.0.1`, which a guest
+cannot reach, so the route is loopback-only until the operator chooses otherwise:
+
+| Server start                                                 | Guest reaches the token route? | Notes                                                                                         |
+| ------------------------------------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------- |
+| Default (`--bind 127.0.0.1:<port>`)                          | No                             | Use the CLI on the host instead.                                                              |
+| `--bind <host-only address>:<port> --remote-transport https` | Yes, with the token alone      | Recommended. The guest trusts the server certificate from `hotsheet-cli cert init`.           |
+| `--bind <host-only address>:<port> --remote-transport http`  | Yes, with the token alone      | Only on a host-only network that no other machine can reach; the token crosses in clear text. |
+| `--bind <address>:<port>` with the default `mtls` transport  | Only with a client certificate | The TLS handshake requires an enrolled client certificate before any route is reached.        |
+
+Bind the address of the hypervisor's host-only or shared network interface, not a
+wildcard, so the listener is not exposed on other networks. An off-loopback listener
+already refuses the server secret from a non-loopback peer, so exposing the listener
+for the token route does not let a guest use the secret-authenticated routes. Inside
+the guest, a task needs only an HTTP client:
+
+```sh
+curl -fsS -X POST "https://<host-address>:<port>/resource-claim-token/renew" \
+  -H "Authorization: Bearer $HOTSHEET_RESOURCE_CLAIM_TOKEN" \
+  -H "Content-Type: application/json" -d '{"duration_ms": 600000}'
+```
+
+## 36.12 Rust API for other crates
+
+A crate that schedules work, such as orchestration, treats a held resource as
+unavailable capacity through `hotsheet_resource_claims`:
+
+- `held(home, &ResourceRef) -> Result<Option<Claim>, ClaimError>` reports the live claim,
+  with its `expires_at_ms`, without acquiring.
+- `wait_until_free(home, &ResourceRef, timeout) -> Result<WaitOutcome, ClaimError>` blocks
+  until the resource is free or the timeout passes, woken by the backend signal.
+- `ClaimService` offers typed `acquire`, `renew`, `release`, `show`, `wait_free`, and
+  `list`, and `resolve_backend` returns the `ClaimBackend` for a namespace.
+
+All of these block; an async caller runs them on a blocking thread.
