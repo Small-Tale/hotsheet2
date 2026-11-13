@@ -4,7 +4,7 @@ description: Keep a local worker session receiving exact dispatcher or legacy as
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 49 -->
+<!-- hotsheet-skill-version: 50 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -258,6 +258,29 @@ handoff` with the branch name, full commit SHA, worktree location labeled as
    reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal for code;
    for findings it verifies the note and completes without code integration or CI. Do not
    mark the ticket Completed or Verified from a worker worktree.
+
+## Provisional assignments (HS2-2SJPCH)
+
+An assignment may rest on a prerequisite that is pushed and still waiting on CI.
+`speculation-status` lists it with its speculative base SHA and pending gate, and
+`speculation-explain --ticket <slug>` says `provisional on <slug> CI <run>`.
+
+- Create the worktree from the assignment's exact `base`, then run
+  `speculation-branch --assignment <id> --worktree <path>`. It records the base
+  and pending gate on the branch as `branch.<name>.hotsheet-speculative-base`,
+  `hotsheet-pending-gate` and `hotsheet-speculation-state`. Run it again after a
+  rebase or a gate result.
+- Work, verify and hand off as usual. Name the base gate in the handoff note.
+  Your own local gates are still required; a pending base gate never replaces
+  them.
+- A regular `## Provisional work at risk` note on your ticket means the base gate
+  finished red. Stop adding scope, keep the branch and worktree, and wait for the
+  repair. Then rebase onto the base the integrator names, rerun the affected
+  gates, and ask the integrator to record `speculation-rebase`. Never reset,
+  delete or abandon the branch.
+- If the fix invalidates the work, the integrator reopens it with a
+  `## Provisional work reopened` note. The branch stays; a new assignment starts
+  from the repaired base.
 
 ## Reviewed handoff corrections
 

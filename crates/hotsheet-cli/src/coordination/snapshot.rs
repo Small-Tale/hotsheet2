@@ -223,6 +223,12 @@ impl Coordinator {
         if let Some(batches) = &batches {
             digest.update(serde_json::to_vec(batches)?);
         }
+        // HS2-2SJPCH: a gate result wakes waiters; a pool without provisional work keeps
+        // its cursor and its serialized snapshot.
+        let speculation = self.speculation_ledger()?.map(|ledger| ledger.status());
+        if let Some(speculation) = &speculation {
+            digest.update(serde_json::to_vec(speculation)?);
+        }
         let cursor = format!("{:x}", digest.finalize());
         let integration_strategy = state
             .integrator
@@ -248,6 +254,7 @@ impl Coordinator {
             worker_matches,
             unmatched_tickets,
             batches,
+            speculation,
         })
     }
 

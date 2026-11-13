@@ -3133,6 +3133,102 @@ The HS2-2D3099 real CLI-process fixture demonstrates the transition and serializ
 with synthetic tickets, commits, evidence notes, and an exact tree receipt; it does
 not represent a live multi-session pilot.
 
+#### Provisional readiness of a prerequisite awaiting CI (HS2-2SJPCH)
+
+By default a `blocked_by` prerequisite satisfies a dependent only once it is closed.
+A ticket in `final_testing` (local gates passed, commit pushed, remote CI running)
+therefore keeps its dependents blocked for a whole CI run. A project may opt in to
+**provisional readiness**: the assignment authority starts the dependent on the
+prerequisite's pushed commit, and the gate's result decides what happens to that work.
+
+**Rule.** `hotsheet_ticketing::provisional` is pure. A prerequisite is
+
+- _confirmed_ when it is closed, or when it waits in `final_testing` and its gate is
+  already green;
+- _provisional_ when the policy is enabled, neither ticket carries the
+  `speculate:never` tag, the prerequisite is in `final_testing`, its newest note line
+  `CI gate commit: <full SHA>` names a commit reachable from the shipping branch, its
+  gate is pending or unwatched, and no more than `max_depth` unconfirmed gates stack
+  beneath the dependent;
+- _blocked_ otherwise, with one reason code: `speculation_disabled`,
+  `prerequisite_unknown`, `speculation_opted_out`, `prerequisite_not_awaiting_ci`,
+  `gate_commit_unrecorded`, `gate_commit_unreachable`,
+  `gate_commit_reachability_unknown`, `gate_red`, `gate_superseded`, `gate_cancelled`
+  or `speculation_depth_exceeded`.
+
+Depth counts the unconfirmed gates stacked at the prerequisite, itself included. A
+prerequisite that was itself started on an undecided gate counts two, so the default
+`max_depth` of 1 refuses a dependent of a dependent. A dependency cycle never
+qualifies. Reachability that Git cannot determine is never treated as pushed.
+
+**Policy.** The committed shared setting `speculation` holds `enabled` (default
+`false`), `max_depth` (default 1, at most 8), `integration` (`push-per-ticket` or
+`parked`) and an optional `base_branch`; without one, a gate commit must be reachable
+from the shipping checkout's upstream. `coordination speculation-policy` reads and
+writes it without opening the pool. A machine-local value is never consulted. With
+the policy disabled `coordination assign` runs the same dependency check, with the
+same refusal text, as before the policy existed, and no pool, snapshot or worker view
+carries a speculation field.
+
+**Recorded base.** A provisional reservation requires that `--base` contains every
+pending gate commit. It is recorded in `speculation.json` beside the pool, under the
+pool's `state.lock`, with its own `version`; like the batch ledger it needs no pool
+schema bump, because only an opted-in project ever creates it. The record holds the
+assignment, the speculative base SHA, the depth, the integration rule in force and
+each pending gate (prerequisite, commit, result, run). A replayed reservation keeps
+the first record. `coordination speculation-branch` writes the same facts to the
+worker's branch as Git config (`branch.<name>.hotsheet-speculative-base`,
+`hotsheet-pending-gate`, `hotsheet-speculation-state`).
+
+**Results.** The event source is the CI watch Job of the gate commit
+([33](33-jobs.md) §33.9). `coordination speculation-sync` reads the newest watch Job
+of every commit the ledger still waits on from the local Job store; with `--wait-ms`
+it blocks on that store's file events. It performs one read per wake, sends no
+request to the CI provider and has no timer. `coordination speculation-result`
+records a result by hand for a project without a watch. A ledger change moves the
+`status` and `workers` cursors, so `coordination next` waiters wake on it.
+
+| Result                  | Effect on each record that depends on the gate                                                                                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| green                   | The gate is green; the record is `confirmed` once every gate is. Nothing else changes.                                                                                                                                      |
+| red                     | `at_risk`. One regular note on the dependent names the run and its recovery, and one on the failing ticket says its repair comes first. A later red run of the same commit is noted again; a replay of the same run is not. |
+| superseded or cancelled | Stays `provisional` and is listed under `reevaluate` until the newest covering run reports, or until `speculation-rebase` names the commit that replaced it.                                                                |
+| pending or unknown      | Recorded on an undecided gate. Nothing short of a verdict clears a verdict: a pending re-run never clears red, and only red clears green.                                                                                   |
+
+While any gate is red, the failing tickets are listed under `repair_first` and the
+runtime refuses new provisional reservations, so the repair has priority over new
+speculative work; confirmed-ready tickets still dispatch. Recovery depends on where
+the dependent is. Work still on its branch is rebased onto the fix and its affected
+gates rerun, then recorded with `speculation-rebase --replaces <red sha> --gate-commit
+<fix sha> --base <new base>`; the command checks that the fix is reachable and that
+the new base contains it. Work already on the shipping branch is re-verified by the
+next covering run and recorded the same way without `--base`. Work the fix
+invalidates is reopened with `speculation-reopen --reason`: the record and branch
+stay, the ticket gets a note, and a ticket that was already closed returns to
+Started. No transition deletes a record.
+
+**Integration rule.** `mark --phase integrating` refuses provisional work that its
+rule holds back. Under `push-per-ticket` the dependent may integrate once its own
+local gates pass and is then covered by the batch CI rule. Under `parked` it stays on
+its branch until its record is confirmed. At-risk work integrates under neither rule
+until it is rebased, and reopened work never does.
+
+**Surfaces.** `speculation-explain --ticket` answers `confirmed`, `provisional on
+<slug> CI <run>` with the base commit, pending gate and depth, or each blocking
+reason. `speculation-status`, `coordination status`, `coordination workers`, `GET
+/checkouts/{reference}/workers` and MCP `hotsheet_workers` list the records,
+`repair_first` and `reevaluate`. Opting a ticket out is the ordinary tag edit in the
+CLI (`edit --tag`) and MCP (`hotsheet_update`).
+
+**Not built here.** `plan-dispatch` and the worker next plan, automatic `claim-next`
+and worker preference candidates remain confirmed-only (HS2-J77XJA, HS2-XYF4YT). The
+policy and the explanation have no REST or MCP action yet (HS2-7J2ZSE), the web
+client does not display the records (HS2-N8H97X), a ticket entering `final_testing`
+does not start its watch by itself (HS2-X6FB9V), and a batch or ci-staged member is
+not checked against the integration rule (HS2-CK4S3F). The shared playbook wording for
+`final_testing` is proposed in HS2-5BNWVN. The cross-target form is
+HS2-JSF985 ([26](26-orchestration-projects.md) §26.18).
+
 ## 5.10 Testability — injected adapters + the fake agent
 
 > **Load-bearing rule** (maintainer, 2026-08-19): adding a tool to HS1 was a manual

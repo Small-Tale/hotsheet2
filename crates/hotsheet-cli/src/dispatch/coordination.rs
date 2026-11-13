@@ -26,6 +26,8 @@ mod batch;
 mod claims;
 #[path = "coordination_readiness.rs"]
 mod readiness;
+#[path = "coordination_speculation.rs"]
+mod speculation;
 
 #[derive(Debug, Args)]
 pub(crate) struct CoordinationArgs {
@@ -460,6 +462,85 @@ enum CoordinationCmd {
     },
     /// Print the batch ledger: every batch and the circuit breaker.
     BatchStatus,
+    /// Show or change the project's provisional readiness policy (HS2-2SJPCH), without
+    /// opening the pool. Off by default: a dependency then satisfies only once closed.
+    SpeculationPolicy {
+        /// Let a `final_testing` dependency with a pushed `CI gate commit` satisfy
+        /// dependents provisionally.
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        #[arg(long)]
+        disable: bool,
+        /// How many unconfirmed CI gates may stack beneath one ticket (default 1).
+        #[arg(long)]
+        max_depth: Option<u32>,
+        /// `push-per-ticket` (land after own local gates) or `parked` (stay on the branch
+        /// until the base gate is green).
+        #[arg(long, value_parser = speculation::parse_integration)]
+        integration: Option<hotsheet_ticketing::provisional::IntegrationRule>,
+        /// Branch a gate commit must be reachable from; default is the shipping upstream.
+        #[arg(long, conflicts_with = "clear_base_branch")]
+        base_branch: Option<String>,
+        #[arg(long)]
+        clear_base_branch: bool,
+    },
+    /// Explain one ticket's readiness: confirmed, `provisional on <slug> CI <run>` with
+    /// its base SHA and pending gate, or each blocking reason. Read-only.
+    SpeculationExplain {
+        /// Slug or ULID in the selected source.
+        #[arg(long)]
+        ticket: String,
+    },
+    /// Print every provisional assignment with its base SHA, pending gates and state,
+    /// the repairs that come first and the gates to re-evaluate. Read-only.
+    SpeculationStatus,
+    /// Record a CI result for a gate commit when no CI watch reports it. Red marks every
+    /// dependent at risk with a ticket note naming the run; green confirms.
+    SpeculationResult {
+        #[arg(long)]
+        gate_commit: String,
+        #[arg(long, value_parser = speculation::parse_result)]
+        result: hotsheet_ticketing::provisional::GateResult,
+        /// Provider run identifier, for example `<run id>.<attempt>`.
+        #[arg(long)]
+        run: Option<String>,
+    },
+    /// Apply the CI watch Jobs' current gate results (HS2-3R9V0R). With --wait-ms it
+    /// blocks on the Job store's file events until a result changes; it never polls and
+    /// never contacts the CI provider.
+    SpeculationSync {
+        #[arg(long, default_value_t = 0)]
+        wait_ms: u64,
+    },
+    /// Record that at-risk or stale work now rests on the repaired prerequisite's gate
+    /// commit, and on a new base when it was rebased.
+    SpeculationRebase {
+        #[arg(long)]
+        assignment: String,
+        /// The red, superseded or cancelled gate commit being replaced.
+        #[arg(long)]
+        replaces: String,
+        /// The repaired prerequisite's pushed commit.
+        #[arg(long)]
+        gate_commit: String,
+        /// The base the work was rebased onto; required while it is still on its branch.
+        #[arg(long)]
+        base: Option<String>,
+    },
+    /// Reopen provisional work the fix invalidated, with a ticket note. Never discards.
+    SpeculationReopen {
+        #[arg(long)]
+        assignment: String,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Record the speculative base and pending gates on the worker's worktree branch.
+    SpeculationBranch {
+        #[arg(long)]
+        assignment: String,
+        #[arg(long)]
+        worktree: PathBuf,
+    },
     /// Check an exact worker handoff before writing its durable ticket note.
     Preflight {
         #[command(flatten)]
@@ -697,6 +778,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     if strategy_policy(&args.project, &args.command)? {
         return Ok(());
     }
+    // HS2-2SJPCH: so is the provisional readiness policy.
+    if speculation::policy(&args.project, &args.command)? {
+        return Ok(());
+    }
     let coordinator = Coordinator::open(&args.project, &ctx.path)?;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     match args.command {
@@ -817,6 +902,20 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         | CoordinationCmd::BatchRestage { .. }
         | CoordinationCmd::BatchStatus => {
             let report = batch::run(&coordinator, ctx, &args.project, args.command, now)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        CoordinationCmd::SpeculationPolicy { .. } => {
+            unreachable!("handled before opening the pool")
+        }
+        CoordinationCmd::SpeculationExplain { .. }
+        | CoordinationCmd::SpeculationStatus
+        | CoordinationCmd::SpeculationResult { .. }
+        | CoordinationCmd::SpeculationSync { .. }
+        | CoordinationCmd::SpeculationRebase { .. }
+        | CoordinationCmd::SpeculationReopen { .. }
+        | CoordinationCmd::SpeculationBranch { .. } => {
+            let report = speculation::run(&coordinator, ctx, &args.project, args.command, now)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
             return Ok(());
         }
@@ -1049,6 +1148,17 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 operation.clone(),
             );
             let evidence = route_override.clone().zip(route_evidence_note.clone());
+            // HS2-2SJPCH: the project's opt-in. Disabled, the dependency check below is
+            // exactly the one that ran before the policy existed.
+            let speculation = hotsheet_ticketing::provisional::SpeculationPolicy::read(
+                &hotsheet_ticketing::Settings::for_project(&args.project),
+            )?;
+            let probe = speculation
+                .enabled
+                .then(|| coordinator.speculation_probe(&speculation));
+            let reserved = std::cell::RefCell::new(None);
+            let (reserved_at, probe_at, coordinator_at, speculation_at, checked_base) =
+                (&reserved, &probe, &coordinator, &speculation, base.clone());
             // HS2-TWZW7X: eligibility, dependencies and route evidence are checked at the
             // serialized reservation boundary, after the current authority is verified, from
             // fresh ticket reads. The evidence author is therefore the active assignment
@@ -1063,8 +1173,34 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                         &checked_worker,
                         time::OffsetDateTime::now_utc(),
                     )?;
-                    // Under either authority, as automatic selection does (HS2-PWDXB6).
-                    claims::dependencies_closed(&ticket, &tickets)?;
+                    match probe_at {
+                        // Confirmed, or provisional on a pushed prerequisite awaiting CI.
+                        Some(probe) => {
+                            *reserved_at.borrow_mut() = coordinator_at.speculation_reservation(
+                                speculation_at,
+                                probe,
+                                &ticket,
+                                &tickets,
+                                &checked_base,
+                            )?;
+                        }
+                        // Under either authority, as automatic selection does (HS2-PWDXB6).
+                        None => claims::dependencies_closed(&ticket, &tickets)?,
+                    }
+                } else if let Some(probe) = probe_at {
+                    // A replay repairs a ledger write interrupted after the reservation;
+                    // it never refuses the durable reservation it acknowledges.
+                    let tickets = store.list_tickets()?;
+                    *reserved_at.borrow_mut() = coordinator_at
+                        .speculation_reservation(
+                            speculation_at,
+                            probe,
+                            &ticket,
+                            &tickets,
+                            &checked_base,
+                        )
+                        .ok()
+                        .flatten();
                 }
                 if let Some((route, note_id)) = &evidence {
                     // New operations require evidence authored by the active assignment
@@ -1102,7 +1238,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 &i.session,
                 &|| time::OffsetDateTime::now_utc().unix_timestamp(),
                 Assignment {
-                    id: operation,
+                    id: operation.clone(),
                     worker,
                     generation: worker_session,
                     ticket: TicketRef {
@@ -1124,6 +1260,15 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 },
                 check,
             )?;
+            if let Some(reservation) = reserved.into_inner() {
+                coordinator.speculation_record(
+                    &operation,
+                    reservation.depth,
+                    speculation.integration,
+                    reservation.gates,
+                    now,
+                )?;
+            }
         }
         CoordinationCmd::Worker {
             worker: w,

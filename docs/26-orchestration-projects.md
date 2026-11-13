@@ -10,7 +10,8 @@
 > runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
-> HS2-42TARA; provisional dispatch is HS2-2SJPCH and HS2-JSF985),
+> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18, and
+> cross-target provisional dispatch is HS2-JSF985),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
 > HS2-GDJXGZ),
 > the throughput scheduler with its plan, explanations, decision log and event-driven
@@ -2217,3 +2218,46 @@ machine reads as `capacity_unknown`.
 MCP `hotsheet_targets` adds `scheduler_plan`, `scheduler_explain`,
 `scheduler_decisions` and `scheduler_tick` (with `dry_run`). The workspace view is
 HS2-77SRHC.
+
+## 26.18 Provisional readiness inside one project (HS2-2SJPCH)
+
+§26.15 computes a `provisional` level with `base_commits` and refuses it at the
+dispatch guard. That refusal is unchanged. HS2-2SJPCH built the rule and its
+recovery for one project's dispatcher, integrator and worker loop; the design is
+[05](05-ai-tool-plugins.md) §5.9.1, "Provisional readiness of a prerequisite awaiting
+CI". Nothing in the cross-target runtime calls it yet.
+
+HS2-JSF985 builds cross-target provisional dispatch on the same pure rule in
+`hotsheet_ticketing::provisional`:
+
+```rust
+pub fn blocker_readiness(
+    policy: &SpeculationPolicy,
+    dependent: &Ticket,
+    blocker: &Ulid,
+    tickets: &[Ticket],
+    probe: &dyn GateProbe,
+) -> BlockerReadiness;
+
+pub fn ticket_readiness(
+    policy: &SpeculationPolicy,
+    dependent: &Ticket,
+    tickets: &[Ticket],
+    probe: &dyn GateProbe,
+) -> TicketReadiness;
+```
+
+`BlockerReadiness` is `Confirmed { by }`, `Provisional(ProvisionalBase)` or `Blocked {
+reason }`. A `ProvisionalBase` names the prerequisite, the `base_commit` to build on,
+the pending `gate` (result and run) and the `depth` of unconfirmed gates stacked
+there. `GateProbe` supplies the two facts the rule cannot compute: whether a commit is
+reachable from the shipping branch, and the newest reading of its CI gate. The
+single-project probe reads Git and the CI watch Jobs; a cross-target probe can answer
+from `commit_gate_state` (§26.13). `SpeculationPolicy` carries the opt-in, the depth
+limit (default 1) and the integration rule, and `OPT_OUT_TAG` is `speculate:never`.
+
+The transitions after a gate result (confirmed, at risk with a note naming the run,
+rebased onto the fix, reopened and never discarded) live in
+`hotsheet_cli::coordination::speculation` as a ledger that is independent of the pool
+schema, so the cross-target form can reuse `SpeculationLedger::apply`, `rebase` and
+`reopen` with its own storage.

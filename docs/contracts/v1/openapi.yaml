@@ -21256,6 +21256,130 @@ components:
         more:
           type: boolean
       additionalProperties: false
+    WorkerSpeculation:
+      description:
+        Provisional assignments (HS2-2SJPCH), work started on a prerequisite that is pushed and waiting on remote CI.
+        Absent when the pool never reserved provisional work.
+      type: object
+      required:
+        - records
+        - repair_first
+        - reevaluate
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerSpeculationRecord'
+        repair_first:
+          description: Prerequisite slugs whose gate is red; their repair comes before new work.
+          type: array
+          items:
+            type: string
+        reevaluate:
+          description: Superseded or cancelled gates awaiting the newest covering run.
+          type: array
+          items:
+            type: object
+            required:
+              - slug
+              - commit
+              - result
+            properties:
+              slug:
+                type: string
+              commit:
+                type: string
+              result:
+                $ref: '#/components/schemas/WorkerSpeculationGateResult'
+            additionalProperties: false
+      additionalProperties: false
+    WorkerSpeculationGateResult:
+      type: string
+      enum:
+        - pending
+        - green
+        - red
+        - superseded
+        - cancelled
+        - unknown
+    WorkerSpeculationRecord:
+      type: object
+      required:
+        - assignment
+        - ticket
+        - slug
+        - worker
+        - base
+        - depth
+        - state
+        - gates
+        - explain
+      properties:
+        assignment:
+          type: string
+        ticket:
+          type: object
+          required:
+            - connection_id
+            - native_id
+          properties:
+            connection_id:
+              type: string
+            native_id:
+              type: string
+          additionalProperties: false
+        slug:
+          type: string
+        worker:
+          type: string
+        base:
+          description: The speculative base SHA; it contains every gate commit.
+          type: string
+        depth:
+          description: Unconfirmed gates stacked beneath this work when it was reserved.
+          type: integer
+          minimum: 1
+        state:
+          type: string
+          enum:
+            - provisional
+            - confirmed
+            - at_risk
+            - reopened
+        gates:
+          type: array
+          items:
+            type: object
+            required:
+              - blocker
+              - slug
+              - commit
+              - result
+            properties:
+              blocker:
+                description: Native id of the prerequisite ticket.
+                type: string
+              slug:
+                type: string
+              commit:
+                description: The prerequisite's integrated commit.
+                type: string
+              result:
+                $ref: '#/components/schemas/WorkerSpeculationGateResult'
+              run:
+                description: Provider run identifier, when known.
+                type: string
+            additionalProperties: false
+        explain:
+          description: For example "provisional on <slug> CI <run>".
+          type: string
+        recovery:
+          description: Set while at risk.
+          type: string
+          enum:
+            - rebase_onto_fix
+            - reverify_by_covering_run
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:
@@ -24716,6 +24840,8 @@ components:
           type: array
           items:
             type: string
+        speculation:
+          $ref: '#/components/schemas/WorkerSpeculation'
       additionalProperties: false
     WorkerCadence:
       type: object

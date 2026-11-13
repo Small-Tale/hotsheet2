@@ -35,6 +35,10 @@ mod snapshot;
 mod source_support;
 #[cfg(test)]
 mod source_support_tests;
+pub mod speculation;
+pub mod speculation_runtime;
+#[cfg(test)]
+mod speculation_tests;
 pub mod strategy;
 #[cfg(test)]
 mod strategy_tests;
@@ -876,6 +880,11 @@ impl Coordinator {
         id: &str,
         phase: Phase,
     ) -> Result<()> {
+        // HS2-2SJPCH: provisional work enters integration only as its rule allows. A pool
+        // without a speculation ledger is not read here at all.
+        if phase == Phase::Integrating {
+            self.speculation_integration_rule(id)?;
+        }
         self.change_batches(|state, ledger| {
             Self::integrator(state, integrator, generation, now)?;
             ensure!(

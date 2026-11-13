@@ -116,6 +116,10 @@ pub struct WorkerView {
     /// Ready tickets no live idle worker's strict preferences admit (HS2-6WFCZR).
     #[serde(default)]
     pub unmatched_tickets: Vec<String>,
+    /// Provisional assignments with their speculative base and pending gates
+    /// (HS2-2SJPCH). Absent when the pool never reserved provisional work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<super::speculation::SpeculationStatus>,
 }
 
 impl WorkerView {
@@ -436,6 +440,7 @@ impl WorkerView {
                 .as_ref()
                 .and_then(|batches| batches.cadence.clone()),
             unmatched_tickets: snapshot.unmatched_tickets.clone(),
+            speculation: snapshot.speculation.clone(),
         }
     }
 }
@@ -614,6 +619,7 @@ mod tests {
             worker_matches: Default::default(),
             unmatched_tickets: Vec::new(),
             batches: None,
+            speculation: None,
         }
     }
 

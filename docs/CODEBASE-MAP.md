@@ -1285,6 +1285,21 @@ event-driven Workers stream and watch policy-file changes; the headless `batch-s
 uses the same projection. `clients/web/src/components/worker-columns.tsx` displays
 the source-scoped goal without network polling. Promotion still goes through the
 exact-SHA and fast-forward guard in `integration-batch.mjs`.
+`speculation.rs` owns provisional assignments (HS2-2SJPCH): the `speculation.json`
+ledger beside the pool (own `version: 1`, written under `state.lock`, no pool schema
+bump), the provisional, confirmed, at-risk and reopened transitions with their
+idempotent `record`/`apply`/`rebase`/`reopen`, the integration rule that `mark`
+enforces, the `SpeculationStatus` projected into the snapshot and worker view, and
+the timer-free `follow` wait. `speculation_runtime.rs` is its I/O: `LiveGateProbe`
+(Git reachability and the HS2-3R9V0R watch Jobs), the reservation check
+`speculation_reservation`, `speculation_explain`, `speculation_sync`,
+`speculation_result`, at-risk and reopen ticket notes, and the worktree branch
+record. The rule itself is `crates/hotsheet-ticketing/src/provisional.rs`
+(`SpeculationPolicy` in the shared `speculation` setting, `blocker_readiness`,
+`ticket_readiness`, `ci_gate_commit`, the `speculate:never` tag). The CLI side is
+`dispatch/coordination_speculation.rs` (`coordination speculation-*`);
+`provisional_tests.rs`, `speculation_tests.rs` and `tests/coordination_speculation.rs`
+pin the transitions.
 `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,

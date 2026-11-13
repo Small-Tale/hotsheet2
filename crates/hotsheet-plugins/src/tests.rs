@@ -438,8 +438,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 49 -->")); // HS2-F9062F
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 27 -->")); // HS2-EBART6
+    assert!(worker.contains("<!-- hotsheet-skill-version: 50 -->")); // HS2-2SJPCH
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 28 -->")); // HS2-2SJPCH
     assert!(flatten(integrator).contains("A `partial` result (exit 2)")); // HS2-EBART6
     assert!(flatten(worker).contains("Record the selected source and test plan in the ticket"));
     assert!(
@@ -510,9 +510,68 @@ fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy() {
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
     }
-    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 8 -->")); // HS2-F9062F
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 9 -->")); // HS2-2SJPCH
     assert!(dispatcher.contains("development-strategy-resolve"));
     assert!(dispatcher.contains("A policy change does not rewrite an accepted assignment"));
+}
+
+#[test]
+fn hs2_2sjpch_role_skills_keep_provisional_work_opt_in_event_driven_and_never_discarded() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let dispatcher = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-dispatcher/SKILL.md"
+    ));
+    let worker = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-worker/SKILL.md"
+    ));
+    let integrator = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-integrator/SKILL.md"
+    ));
+    for phrase in [
+        "Confirmed readiness is the default",
+        "never enable it yourself",
+        "`speculation-explain --ticket <slug>`",
+        "`provisional on <slug> CI <run>`",
+        "`speculate:never`",
+        "`max_depth` (default 1)",
+        "`speculation-sync --wait-ms <ms>`",
+        "it never polls and never contacts the CI provider",
+        "Assign that repair before any new work",
+        "it is rebased or reopened, never discarded",
+    ] {
+        assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
+    }
+    for phrase in [
+        "`speculation-branch --assignment <id> --worktree <path>`",
+        "`branch.<name>.hotsheet-speculative-base`",
+        "a pending base gate never replaces them",
+        "`## Provisional work at risk`",
+        "Never reset, delete or abandon the branch",
+    ] {
+        assert!(worker.contains(phrase), "worker missing {phrase}");
+    }
+    for phrase in [
+        "Only the maintainer decides the policy",
+        "Record `CI gate commit: <full SHA>` the moment a ticket enters `final_testing`",
+        "`mark --phase integrating` enforces it",
+        "Under `parked` (branch or review projects) it stays on its branch until the base gate is green",
+        "At-risk work never integrates before it is rebased",
+        "`speculation-rebase --assignment <id> --replaces <red-gate-sha> --gate-commit <fix-sha> --base <new-base-sha>`",
+        "reopened, never discarded",
+        "Do not complete a ticket whose provisional record is not `confirmed`",
+    ] {
+        assert!(integrator.contains(phrase), "integrator missing {phrase}");
+    }
+    // The project rule is the one place that states the `final_testing` refinement.
+    let rule = flatten(include_str!("../../../.rulesync/rules/project-local.md"));
+    for phrase in [
+        "## Provisional dependents of a `final_testing` ticket (HS2-2SJPCH)",
+        "Only when the maintainer enables the committed `speculation` policy",
+        "never by polling",
+        "Automatic `claim-next` and `plan-dispatch` remain confirmed-only",
+    ] {
+        assert!(rule.contains(phrase), "project rule missing {phrase}");
+    }
 }
 
 #[test]

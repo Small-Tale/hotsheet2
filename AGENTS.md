@@ -163,6 +163,34 @@ do not switch an active claim, batch, or integration generation silently. If the
 CLI lacks the resolver, report the missing capability and use the project's
 supported headless upgrade path before acting on a presumed strategy.
 
+## Provisional dependents of a `final_testing` ticket (HS2-2SJPCH)
+
+HS2-2SJPCH refines the shared `final_testing` wording for dependent work. By
+default a `blocked_by` dependency satisfies a dependent only once it is closed, so
+a ticket waiting on remote CI in `final_testing` still blocks its dependents.
+Only when the maintainer enables the committed `speculation` policy
+(`hotsheet-cli coordination --project . speculation-policy --enable`) may the
+assignment authority start a dependent on a prerequisite that is in
+`final_testing`, has a recorded `CI gate commit: <full SHA>` reachable from the
+shipping branch, and whose gate is undecided. The reservation records the
+speculative base SHA and the pending gate; `speculation-explain` and
+`speculation-status` show `provisional on <slug> CI <run>`. At most `max_depth`
+unconfirmed gates stack (default 1), and the `speculate:never` tag on either
+ticket opts it out.
+
+The dependent's own ticket and integration gates stay mandatory. Under
+`push-per-ticket` it may land on the shipping branch once those pass and is then
+covered by the batch CI rule; a project that sets `integration: parked` keeps it
+on its branch until the base gate is green. A red base gate marks the dependent at
+risk with a ticket note naming the run: repair the failing ticket before new
+work, rebase parked work onto the fix and rerun its affected gates, and let the
+next covering run re-verify work that already landed. Reopen work the fix
+invalidates with `speculation-reopen`; never discard it silently. Do not complete
+a ticket whose provisional record is not confirmed. CI results arrive through the
+HS2-3R9V0R watch and `speculation-sync --wait-ms`, never by polling. Automatic
+`claim-next` and `plan-dispatch` remain confirmed-only. The design is
+`docs/05-ai-tool-plugins.md` §5.9.1, "Provisional readiness".
+
 ## Deployment-scripts deviation (HS2-51HMCC)
 
 Hot Sheet 2 has no hosted deployment environment or infrastructure definitions.

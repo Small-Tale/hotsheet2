@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 27 -->
+<!-- hotsheet-skill-version: 28 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -520,6 +520,37 @@ If a handoff is missing, a claim conflicts, integration fails, or the main check
 cannot be used safely, leave the ticket Started with a note naming the exact branch,
 SHA, worktree, and blocker. Release your claim whenever you stop. Before ending,
 check `hotsheet-cli ls --claimed` and release every claim you still hold.
+
+## Provisional work and its base gate (HS2-2SJPCH)
+
+When the project enables `speculation-policy`, the assignment authority may start
+a ticket on a prerequisite that is in `final_testing` with a pushed `CI gate
+commit`. Only the maintainer decides the policy: `speculation-policy --enable
+[--max-depth <n>] [--integration push-per-ticket|parked] [--base-branch <name>]`.
+
+- Record `CI gate commit: <full SHA>` the moment a ticket enters `final_testing`,
+  and start its watch with `hotsheet-cli job watch ci`. Provisional readiness
+  needs the recorded, reachable commit; the watch is the event source for its
+  result.
+- Integration rule. `mark --phase integrating` enforces it. Under
+  `push-per-ticket` a provisional handoff integrates once its own local gates
+  pass, and the covering `main` CI run then gates it together with its base.
+  Under `parked` (branch or review projects) it stays on its branch until the
+  base gate is green. At-risk work never integrates before it is rebased.
+- Green: nothing to do; the record becomes confirmed.
+- Red: the runtime marks each dependent `at_risk` with a note naming the run and
+  lists the failing ticket under `repair_first`. Repair that ticket before other
+  work. Parked dependents are rebased onto the fix and their affected gates
+  rerun; record it with `speculation-rebase --assignment <id> --replaces
+  <red-gate-sha> --gate-commit <fix-sha> --base <new-base-sha>`. Dependents
+  already on `main` are re-verified by the next covering run: record
+  `speculation-rebase` without `--base`, and they confirm when that run is green.
+- Work the fix invalidates is reopened, never discarded: `speculation-reopen
+  --assignment <id> --reason "<why>"` writes the ticket note and returns a closed
+  ticket to Started. Then use `review-return` or a new assignment as usual.
+- Superseded or cancelled: watch the gate again (`job watch ci --rewatch`) or
+  record the commit that replaced it with `speculation-rebase`.
+- Do not complete a ticket whose provisional record is not `confirmed`.
 
 ## Local verification (HS2-RS0FFT)
 

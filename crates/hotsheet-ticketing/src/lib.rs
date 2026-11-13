@@ -43,6 +43,7 @@ pub mod ports;
 pub mod pricing;
 pub mod provider;
 pub mod provider_outbox;
+pub mod provisional;
 pub mod registry;
 pub mod remote_servers;
 pub mod roster;

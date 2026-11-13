@@ -424,6 +424,10 @@ pub struct Snapshot {
     /// circuit breaker and unfinished batches. Absent for every serial-only pool.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batches: Option<super::batch::BatchStatus>,
+    /// Provisional assignments, their base and pending gates (HS2-2SJPCH). Absent for
+    /// every pool that never reserved provisional work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<super::speculation::SpeculationStatus>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

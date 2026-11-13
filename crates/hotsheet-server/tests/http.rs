@@ -7943,6 +7943,159 @@ async fn hs2_ney1qh_integration_strategy_policy_and_active_strategy_round_trip_o
 }
 
 #[tokio::test]
+async fn hs2_2sjpch_provisional_assignments_reach_rest_workers() {
+    use hotsheet_cli::coordination::speculation::PendingGate;
+    use hotsheet_ticketing::provisional::{GateObservation, GateResult, IntegrationRule};
+    const BASE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let project = workspace.path().join("code");
+    let tickets = workspace.path().join("tickets");
+    std::fs::create_dir(&project).unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .args(["init", "-q"])
+            .arg(&project)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let store = FsStore::init_git(&tickets, &StoreMetadata::new("PLAN")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": project, "stores": [tickets]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+        &project,
+        &tickets,
+        registry.path().to_path_buf(),
+    )
+    .unwrap();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    for (role, session) in [
+        (hotsheet_cli::coordination::Role::Integrator, "integrator"),
+        (hotsheet_cli::coordination::Role::Worker, "worker"),
+    ] {
+        coordinator
+            .register(
+                role,
+                session,
+                "generation-one",
+                now,
+                120,
+                hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+            )
+            .unwrap();
+    }
+    let route = format!("/checkouts/{id}/workers");
+    let read = || async {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", &route, None))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        body_json(response).await
+    };
+    // Default: the view carries no speculation field at all.
+    let before = read().await;
+    assert!(before.get("speculation").is_none(), "{before}");
+    coordinator
+        .assign(
+            "integrator",
+            "generation-one",
+            now,
+            hotsheet_cli::coordination::Assignment {
+                id: "rest-provisional".into(),
+                worker: "worker".into(),
+                generation: "generation-one".into(),
+                ticket: hotsheet_ticketing::TicketRef {
+                    connection_id: hotsheet_ticketing::git_connection_id(&store),
+                    native_id: "01J00000000000000000000000".into(),
+                },
+                slug: "PLAN-DEPEND".into(),
+                base: BASE.into(),
+                phase: hotsheet_cli::coordination::Phase::Offered,
+                commit: None,
+                handoff: None,
+                return_route: hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+                recovery_note: None,
+                suspension: None,
+                suspension_history: Vec::new(),
+                scope: Vec::new(),
+                transitions: Vec::new(),
+                retirement_note: None,
+            },
+        )
+        .unwrap();
+    coordinator
+        .speculation_record(
+            "rest-provisional",
+            1,
+            IntegrationRule::PushPerTicket,
+            vec![PendingGate {
+                blocker: "01J00000000000000000000001".into(),
+                slug: "PLAN-BLOCK".into(),
+                commit: BASE.into(),
+                result: GateResult::Pending,
+                run: None,
+            }],
+            now,
+        )
+        .unwrap();
+    let provisional = read().await;
+    assert_ne!(provisional["cursor"], before["cursor"]);
+    let row = &provisional["speculation"]["records"][0];
+    assert_eq!(row["assignment"], "rest-provisional");
+    assert_eq!(row["base"], BASE);
+    assert_eq!(row["depth"], 1);
+    assert_eq!(row["state"], "provisional");
+    assert_eq!(row["gates"][0]["commit"], BASE);
+    assert_eq!(row["explain"], "provisional on PLAN-BLOCK CI pending");
+    assert_eq!(
+        provisional["speculation"]["repair_first"],
+        serde_json::json!([])
+    );
+    // Superseded is listed for re-evaluation; red names the repair that comes first.
+    for (result, state) in [
+        (GateResult::Superseded, "provisional"),
+        (GateResult::Red, "at_risk"),
+    ] {
+        coordinator
+            .speculation_apply(
+                &[(BASE.into(), GateObservation::with_run(result, "9.1"))],
+                now,
+            )
+            .unwrap();
+        let view = read().await;
+        assert_eq!(view["speculation"]["records"][0]["state"], state);
+        assert_eq!(
+            view["speculation"]["reevaluate"].as_array().unwrap().len(),
+            usize::from(result == GateResult::Superseded)
+        );
+        assert_eq!(
+            view["speculation"]["repair_first"]
+                .as_array()
+                .unwrap()
+                .len(),
+            usize::from(result == GateResult::Red)
+        );
+    }
+}
+
+#[tokio::test]
 async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

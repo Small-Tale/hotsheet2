@@ -400,7 +400,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_workers",
-            "description": "Read the authoritative worker view for a registered checkout and linked source. Shows exact coordination sessions, assignments, claims, and unknown source coverage; it never registers a worker or claims a ticket.",
+            "description": "Read the authoritative worker view for a registered checkout and linked source. Shows exact coordination sessions, assignments, claims, and unknown source coverage; `speculation` lists provisional assignments with their speculative base SHA, pending CI gates, state and the repairs that come first (HS2-2SJPCH; opt a ticket out with the `speculate:never` tag through hotsheet_update). It never registers a worker or claims a ticket.",
             "inputSchema": { "type": "object", "properties": {
                 "checkout": str_prop("registered checkout id or alias"),
                 "connection_id": str_prop("optional linked Git source id; required when no unambiguous default exists"),
@@ -7136,6 +7136,154 @@ mod tests {
             "{:?}",
             fake.calls.borrow()
         );
+    }
+
+    #[test]
+    fn hs2_2sjpch_worker_tool_shows_provisional_base_and_gate_and_update_opts_out() {
+        use hotsheet_cli::coordination::speculation::PendingGate;
+        use hotsheet_ticketing::provisional::{GateResult, IntegrationRule, opted_out};
+        const BASE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("code");
+        let source = root.path().join("tickets");
+        std::fs::create_dir(&project).unwrap();
+        assert!(
+            hotsheet_ticketing::git::launch("git")
+                .args(["init", "-q"])
+                .arg(&project)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let store = FsStore::init_git(&source, &StoreMetadata::new("HS")).unwrap();
+        let connection_id = hotsheet_ticketing::git_connection_id(&store);
+        let registry_path = root.path().join("home/checkouts.json");
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+        registry
+            .register(&project, Some("workers"), None, vec![source.clone()])
+            .unwrap();
+        let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+            &project,
+            &source,
+            registry_path.parent().unwrap().to_path_buf(),
+        )
+        .unwrap();
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        for (role, id) in [
+            (hotsheet_cli::coordination::Role::Integrator, "integrator"),
+            (hotsheet_cli::coordination::Role::Worker, "worker-a"),
+        ] {
+            coordinator
+                .register(
+                    role,
+                    id,
+                    "generation-a",
+                    now,
+                    120,
+                    hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+                )
+                .unwrap();
+        }
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        let blocker = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title": "Prerequisite"}),
+        );
+        let dependent = call(&backend, "hotsheet_create", json!({"title": "Dependent"}));
+        // The default view has no speculation at all.
+        let before = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        assert!(before.get("speculation").is_none(), "{before}");
+        coordinator
+            .assign(
+                "integrator",
+                "generation-a",
+                now,
+                hotsheet_cli::coordination::Assignment {
+                    id: "mcp-provisional".into(),
+                    worker: "worker-a".into(),
+                    generation: "generation-a".into(),
+                    ticket: hotsheet_ticketing::TicketRef {
+                        connection_id,
+                        native_id: dependent["id"].as_str().unwrap().into(),
+                    },
+                    slug: dependent["slug"].as_str().unwrap().into(),
+                    base: BASE.into(),
+                    phase: hotsheet_cli::coordination::Phase::Offered,
+                    commit: None,
+                    handoff: None,
+                    return_route: hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+                    recovery_note: None,
+                    suspension: None,
+                    suspension_history: Vec::new(),
+                    scope: Vec::new(),
+                    transitions: Vec::new(),
+                    retirement_note: None,
+                },
+            )
+            .unwrap();
+        coordinator
+            .speculation_record(
+                "mcp-provisional",
+                1,
+                IntegrationRule::PushPerTicket,
+                vec![PendingGate {
+                    blocker: blocker["id"].as_str().unwrap().into(),
+                    slug: blocker["slug"].as_str().unwrap().into(),
+                    commit: BASE.into(),
+                    result: GateResult::Pending,
+                    run: Some("77.1".into()),
+                }],
+                now,
+            )
+            .unwrap();
+        let view = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        assert_ne!(view["cursor"], before["cursor"]);
+        let row = &view["speculation"]["records"][0];
+        assert_eq!(row["assignment"], "mcp-provisional");
+        assert_eq!(row["state"], "provisional");
+        assert_eq!(row["base"], BASE);
+        assert_eq!(row["gates"][0]["commit"], BASE);
+        assert_eq!(row["gates"][0]["result"], "pending");
+        assert_eq!(
+            row["explain"],
+            format!(
+                "provisional on {} CI 77.1",
+                blocker["slug"].as_str().unwrap()
+            )
+        );
+        // A red result reaches the same read, with the repair named first.
+        coordinator
+            .speculation_apply(
+                &[(
+                    BASE.into(),
+                    hotsheet_ticketing::provisional::GateObservation::with_run(
+                        GateResult::Red,
+                        "77.1",
+                    ),
+                )],
+                now,
+            )
+            .unwrap();
+        let red = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        assert_eq!(red["speculation"]["records"][0]["state"], "at_risk");
+        assert_eq!(
+            red["speculation"]["records"][0]["recovery"],
+            "rebase_onto_fix"
+        );
+        assert_eq!(red["speculation"]["repair_first"][0], blocker["slug"]);
+        // Opting a ticket out is an ordinary tag update.
+        let updated = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id": dependent["slug"], "tags": ["speculate:never"]}),
+        );
+        assert_eq!(updated["tags"], json!(["speculate:never"]));
+        let stored = FsStore::open_without_maintenance(&source)
+            .unwrap()
+            .read_ticket(&dependent["id"].as_str().unwrap().parse().unwrap())
+            .unwrap();
+        assert!(opted_out(&stored));
     }
 
     #[test]

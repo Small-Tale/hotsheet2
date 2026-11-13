@@ -4,7 +4,7 @@ description: Keep a local dispatcher assigning independent Hot Sheet tickets whi
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 8 -->
+<!-- hotsheet-skill-version: 9 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -136,6 +136,43 @@ atomic ticket claim. Retry an uncertain delivery with the same operation id and
 identical arguments; never mint another reservation to make a lost cue appear
 successful. Only the live dispatcher may reserve in three-role mode. Verify the
 worker's exact live claim before treating acceptance as work in progress.
+
+## Provisional dependents (HS2-2SJPCH)
+
+Confirmed readiness is the default: `assign` refuses a ticket until every
+`blocked_by` dependency is closed. A project may opt in with `speculation-policy
+--enable`; read the policy with `speculation-policy` at session start and never
+enable it yourself. Under an enabled policy `assign` also accepts a dependency
+that is in `final_testing`, has a recorded `CI gate commit: <full SHA>` reachable
+from the shipping branch, and whose CI gate is undecided. A red, superseded or
+cancelled gate, an unpushed or unrecorded commit, a `speculate:never` tag on
+either ticket, and a stack deeper than `max_depth` (default 1) all refuse.
+
+- Before reserving, run `speculation-explain --ticket <slug>`. It answers
+  `confirmed`, `provisional on <slug> CI <run>` with the base commit and pending
+  gate, or each blocking reason code.
+- Reserve with the ordinary `assign`; `--base` must be the integrator's published
+  SHA and must contain every pending gate commit. The reservation records the
+  speculative base SHA, the pending gates and the depth. `speculation-status`,
+  `status`, `workers` and MCP `hotsheet_workers` show them.
+- Opt a risky ticket out with the `speculate:never` tag (`hotsheet-cli edit <slug>
+  --tag …` or MCP `hotsheet_update`). Tags replace the list, so keep the others.
+- While any gate is pending, wait with `speculation-sync --wait-ms <ms>` next to
+  your `next` wait. It reads the machine's CI watch Jobs and blocks on their file
+  events; it never polls and never contacts the CI provider. If it answers
+  `event_source: none`, no watch exists: do not call it again in a loop. A gate nobody
+  watches stays `unknown`: ask the integrator to start `hotsheet-cli job watch
+  ci`, or record the result with `speculation-result --gate-commit <sha> --result
+  <green|red|superseded|cancelled> --run <id>`.
+- Green confirms the work and changes nothing else.
+- Red marks every dependent `at_risk`, writes one note per dependent and one on
+  the failing ticket naming the run, and lists the failing ticket under
+  `repair_first`. Assign that repair before any new work; the runtime refuses new
+  provisional reservations until it is repaired. Do not release, recover or
+  reassign at-risk work: it is rebased or reopened, never discarded.
+- `reevaluate` lists superseded or cancelled gates. Have the gate watched again
+  (`job watch ci --rewatch`) or, when another commit replaced it, have the
+  integrator record `speculation-rebase`.
 
 Use the optional `--return-route` and `--route-evidence-note` only when the selected
 CLI advertises both (HS2-HM9FRV). First write a separate regular
