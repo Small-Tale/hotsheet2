@@ -1109,6 +1109,7 @@ dependencies = [
  "hotsheet-aitools",
  "hotsheet-extsync",
  "hotsheet-index",
+ "hotsheet-jobs",
  "hotsheet-model",
  "hotsheet-notify",
  "hotsheet-plugins",
@@ -1174,6 +1175,7 @@ version = "0.0.0"
 dependencies = [
  "hotsheet-process-journal",
  "libc",
+ "notify",
  "serde",
  "serde_json",
  "tempfile",

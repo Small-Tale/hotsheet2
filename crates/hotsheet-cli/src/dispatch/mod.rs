@@ -10,6 +10,7 @@ mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;
 pub(crate) mod groups;
+pub(crate) mod jobs;
 pub(crate) mod notify;
 pub(crate) mod orchestration;
 pub(crate) mod providers;
@@ -52,6 +53,7 @@ pub(crate) enum Group {
     Coordination,
     Notify,
     Resources,
+    Jobs,
 }
 
 impl Cmd {
@@ -63,6 +65,7 @@ impl Cmd {
             Coordination(_) => Group::Coordination,
             Notify { .. } => Group::Notify,
             Resource { .. } => Group::Resources,
+            Job { .. } => Group::Jobs,
             Init { .. }
             | Bootstrap { .. }
             | Link { .. }
@@ -182,6 +185,7 @@ impl Cmd {
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
                 | Cmd::Processes
+                | Cmd::Job { .. }
                 | Cmd::Guidance { .. }
                 | Cmd::Notify { .. }
                 | Cmd::Resource { .. }
@@ -221,6 +225,7 @@ impl Cmd {
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
                 | Cmd::Processes
+                | Cmd::Job { .. }
                 | Cmd::Guidance { .. }
                 | Cmd::TerminalRelay { .. }
                 | Cmd::Setup { diagnose: true, .. }
@@ -250,6 +255,7 @@ pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Group::Coordination => coordination::run(cmd, ctx),
         Group::Notify => notify::run(cmd, ctx),
         Group::Resources => resources::run(cmd, ctx),
+        Group::Jobs => jobs::run(cmd, ctx),
     }
 }
 

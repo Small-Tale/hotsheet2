@@ -210,8 +210,9 @@ records, are shipped in [04](04-core-server-cli.md) (HS2-GDCMXE, HS2-G9TF60).
 **Jobs:** [33-jobs.md](33-jobs.md) defines the machine-local Job model, producer
 and client contract, and state transitions (HS2-M78N64). Partial: the core model,
 state machine, leases, and local store are shipped in `crates/hotsheet-jobs`
-(HS2-GCHX8V). The CLI, server, MCP, monitor, and client implementations remain
-follow-ups.
+(HS2-GCHX8V), with the watch monitor and the `job list`, `job show`, and
+`job watch` commands (HS2-5TC1GQ). The remaining CLI commands, the server, MCP,
+the producers, and the client implementations remain follow-ups.
 
 **Development strategies:** [34-development-strategies.md](34-development-strategies.md)
 defines the versioned shared project policy and the Ticket Assured, Steady Main,

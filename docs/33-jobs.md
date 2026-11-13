@@ -1,9 +1,11 @@
 # 33 — Jobs
 
 **Status:** Partly shipped. The core model, state machine, and local store are
-shipped in `crates/hotsheet-jobs` (HS2-GCHX8V, §33.7). The producers, CLI, server,
-MCP, and client surfaces remain design only and are tracked by the tickets in
-§33.6 (design: HS2-M78N64, from HS2-46YX92 annotation #1).
+shipped in `crates/hotsheet-jobs` (HS2-GCHX8V, §33.7), and so are the watch
+monitor and the `job list`, `job show`, and `job watch` commands (HS2-5TC1GQ,
+§33.8). The other producers, the remaining CLI commands, the server, MCP, and the
+client surfaces remain design only and are tracked by the tickets in §33.6
+(design: HS2-M78N64, from HS2-46YX92 annotation #1).
 
 A **Job** is a transient, machine-local record of long-running work such as a test
 run, a project command, or a wait for CI. It is not a ticket: it has no provider,
@@ -191,3 +193,62 @@ finish; `failed` and `lost` Jobs after 24 hours. A checkout holds at most 64 Job
 A create at the cap removes the oldest finished Job, and is refused when every
 Job is unfinished. Retention runs on create and on `reconcile`, which also removes
 abandoned temporary files, unfinished creates, and damaged records.
+
+## 33.8 Watch monitor as shipped (HS2-5TC1GQ)
+
+A watch Job is hosted by the **monitor**, a background `hotsheet-cli` process. It
+owns no work. It observes an external operation through a watch source, renews
+the Job's lease, and writes what it sees to the Job store. It needs no server.
+
+**One monitor per machine home.** One process serves every watch Job in every
+checkout under `${HOTSHEET_HOME}/jobs/`, instead of one process for each Job. It
+holds a file lock for its whole life, so a second monitor cannot start, and the
+operating system frees the lock however the process ends. The reasons for this
+choice are a fixed cost and one place to apply backoff: the number of watched
+operations does not change the number of processes or directory watchers, and a
+provider's rate budget is spent by one poller. The cost of the choice is that a
+monitor crash stalls every watch Job at once; the next start recovers them all.
+Measured on macOS arm64 with a debug build: about 18 MB resident, and about 10 ms
+of processor time in 45 seconds while watching one waiting Job, which made 3 polls
+and 2 lease renewals in that time. A monitor with no Job to serve exits after 30
+seconds.
+
+**Commands.** `hotsheet-cli job watch start` starts the monitor when none is
+running and prints the running monitor either way. `job watch stop` stops it and
+is a no-op when none is running. `job watch status` reports it. Stopping is
+cooperative: the command leaves a request addressed to that monitor's owner id,
+and no process id is signalled. A stopped monitor releases its leases, so its
+Jobs read as stalled at once and the next start resumes them without waiting.
+`job list` and `job show` print Jobs as JSON with their derived liveness,
+progress, and ETA; `job list` first turns expired producers into `lost` and
+applies retention. The launch of the monitor is recorded in the process journal
+with the purpose `job_monitor`.
+
+**Serving a Job.** The monitor serves a watch Job when it has a source for the
+Job's kind and the Job records its external operation. It attaches to a `queued`
+Job, reattaches to a `lost` one, and takes over one whose lease has expired, each
+time under a new lease generation. It wakes on a file change under the Job
+directory, or when a renewal or poll is due; it does not rescan on a timer. A
+step with nothing due writes nothing. It renews each lease at a third of the
+lease length, whether or not a poll is due.
+
+**Polling.** A source may answer a poll with "not modified" when the provider
+supports conditional requests. The first poll is immediate. The delay is 15
+seconds after a poll that saw a change, grows by half after each unchanged poll
+up to 2 minutes, and returns to 15 seconds on the next change. A failed poll
+doubles the delay up to 5 minutes, or waits as long as the provider asks when
+that is longer; the Job stays live and shows `latest.watch = retrying` until a
+poll succeeds. An operation that no longer exists fails the Job. Polling stops
+when the Job finishes, is cancelled, or is no longer held by this monitor.
+
+**Cancel and stop watching.** For a cancel request the monitor asks the source
+once. If the provider accepts, the Job becomes `cancelled` when a later poll
+reports it. If the source cannot cancel, or the provider refuses, the request is
+cleared and the reason is recorded; the Job keeps its state. For a stop-watching
+request the monitor ends the Job as `cancelled` with
+`refs.cancel = stopped_watching` and never contacts the provider.
+
+**Recovery.** If the monitor dies, its Jobs keep their state, read as stalled
+when the lease runs out, and become `lost` after the grace window. A new monitor
+reattaches to the same external operation; a message from the old monitor is
+then refused by its lease generation.

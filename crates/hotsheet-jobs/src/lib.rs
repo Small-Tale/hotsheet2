@@ -13,15 +13,23 @@
 //! whose lease is not renewed reads as [`Liveness::Stalled`] and becomes `lost` when
 //! [`JobStore::reconcile`] runs after the grace window.
 //!
-//! Nothing here reads the wall clock or a random source except through [`Clock`] and
+//! Watch Jobs are hosted by a [`Monitor`] (HS2-5TC1GQ): one process per machine home,
+//! claimed through a [`MonitorSlot`], observing external operations through
+//! [`WatchSource`] implementations.
+//!
+//! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
 mod clock;
 mod error;
 mod feed;
+mod fixture;
 mod lock;
 mod model;
+mod monitor;
 mod probe;
+mod signal;
+mod slot;
 mod state;
 mod steps;
 mod store;
@@ -31,11 +39,18 @@ pub use error::JobError;
 pub use feed::{
     FeedEntry, FeedGap, FeedLine, FeedPage, FeedStream, MAX_FEED_BATCH, MAX_FEED_LINE_BYTES,
 };
+pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use model::{
     ActiveStatus, Capabilities, Eta, EtaSource, ExternalRef, FeedState, FinalStatus, Job, JobKind,
     Lease, LeaseToken, Liveness, Outcome, ProducerFamily, RECORD_VERSION, Status, TicketLink,
 };
+pub use monitor::{
+    CancelReply, Monitor, MonitorConfig, MonitorControl, MonitorExit, Observation, Observed, Poll,
+    Tick, WATCH_STATE_KEY, Wake, WatchError, WatchSource,
+};
 pub use probe::{JournalProbe, NoProbe, OwnerProbe, OwnerState};
+pub use signal::ChangeWaiter;
+pub use slot::{MonitorClaim, MonitorInfo, MonitorSlot, SlotState};
 pub use state::{check_transition, transition_allowed};
 pub use steps::{
     FlatStep, Progress, Step, StepStatus, rollup, step_progress, tree_from_flat, validate_steps,

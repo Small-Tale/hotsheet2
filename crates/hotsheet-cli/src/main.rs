@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 mod dispatch;
 
 use dispatch::coordination::CoordinationArgs;
+use dispatch::jobs::JobCmd;
 use dispatch::notify::NotifyCmd;
 use dispatch::orchestration::OrchestrationArgs;
 use dispatch::providers::{
@@ -550,6 +551,13 @@ enum Cmd {
     Resource {
         #[command(subcommand)]
         cmd: dispatch::resources::ResourceCmd,
+    },
+    /// Jobs: transient machine-local records of long-running work such as a wait for CI
+    /// (docs/33-jobs.md). Reads the local Job store and runs the watch monitor; no
+    /// server or ticket store is needed.
+    Job {
+        #[command(subcommand)]
+        cmd: JobCmd,
     },
     /// Manage encrypted machine-local provider keys backed by one OS credential-store master.
     Key {

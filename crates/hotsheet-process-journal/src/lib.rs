@@ -37,6 +37,8 @@ pub enum Purpose {
     BrokerSupervisor,
     GuidanceGit,
     Rulesync,
+    /// The detached watch-Job monitor started by `hotsheet-cli job watch start` (HS2-5TC1GQ).
+    JobMonitor,
 }
 
 /// The observed end of one child; a crash leaves this absent rather than inventing an exit.

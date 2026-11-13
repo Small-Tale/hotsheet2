@@ -793,20 +793,21 @@ impl JobStore {
 
     fn lock(&self, checkout_id: &str) -> Result<DirLock, JobError> {
         let dir = self.root.join(checkout_id);
-        fs::create_dir_all(&dir)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            for path in [&self.root, &dir] {
-                fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        // Only a new directory is touched: taking the lock on an existing one must not
+        // change anything a directory watcher would report.
+        if !dir.is_dir() {
+            fs::create_dir_all(&dir)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                for path in [&self.root, &dir] {
+                    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+                }
             }
         }
-        let file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(dir.join(".lock"))?;
-        Ok(DirLock::acquire(file)?)
+        Ok(DirLock::acquire(crate::lock::open_lock_file(
+            &dir.join(".lock"),
+        )?)?)
     }
 
     fn feed_path(&self, checkout_id: &str, job_id: &str) -> Result<PathBuf, JobError> {

@@ -761,6 +761,15 @@ the one running. `serve --list` prints those fields per server and prunes regist
 files whose recorded pid is dead (invalid records are kept for inspection), and
 `hotsheet-server --stop` prints the launcher and build of the process it signals.
 
+**Jobs (HS2-5TC1GQ).** `hotsheet-cli job list` and `job show <id>` read the
+machine-local Job store under `${HOTSHEET_HOME:-~/.hotsheet2}/jobs` as JSON, without
+a server or a selected ticket store. Both take `--checkout <id, alias, or path>`
+and default to the current directory; `job show --feed-after <seq>` adds a page of
+the Job's feed. `job watch start`, `job watch stop`, and `job watch status`
+manage the one background monitor that hosts watch Jobs for the machine; start
+and stop are idempotent. [33](33-jobs.md) §33.8 owns the behavior. Commands that
+report, run, cancel, retry, dismiss, and tail Jobs are HS2-V4Q2MA.
+
 **Child-process diagnostics (HS2-GDCMXE).** `hotsheet-cli processes` reads the
 machine-local `${HOTSHEET_HOME:-~/.hotsheet2}/processes` journal as JSON without a
 server or selected store. Each tracked PTY, AI drive, discovery-probe, utility,
@@ -1781,6 +1790,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Migration | `import` | [07](07-migration.md) |
 | Server and transport security | `serve`, `cert` | §4.3.1, §4.6, [08](08-distributed-and-remote.md) |
 | Terminal launch relay (macOS) | `terminal-relay` (HS2-HYF56Y) | [05](05-ai-tool-plugins.md) |
+| Jobs | `job list`, `job show`, `job watch start`, `job watch stop`, `job watch status` (HS2-5TC1GQ) | [33](33-jobs.md) §33.8 |
 
 ## 4.5 How the three stay consistent
 

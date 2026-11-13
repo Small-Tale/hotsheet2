@@ -1,5 +1,20 @@
 # Feature Coverage Matrix
 
+HS2-5TC1GQ: `hotsheet-jobs/tests/monitor.rs` steps the watch monitor against the
+real store with a manual clock and a scripted source: attach, kinds it does not
+serve, lease renewal between polls, steps that write nothing, backoff on
+unchanged and failed polls, a vanished operation, outcomes in two checkouts with
+idle exit, every cancel answer, stop watching, takeover of a dead monitor's Job,
+reattach after `lost`, release on stop, the file-backed fixture source, and the
+change waiter. `slot.rs` unit tests cover the single monitor slot and addressed
+stop requests. `hotsheet-cli/tests/job_monitor.rs` spawns the built CLI on a
+temporary machine home: idempotent start and stop, four racing starts, a watch
+Job reported to its outcome followed by idle exit, a monitor killed with
+`SIGKILL` whose Job goes stalled then `lost` and is reattached by a new monitor,
+release and immediate resume across stop and start, and the read commands. The
+process tests passed 20 consecutive runs with retries disabled. Fixtures use
+synthetic data only.
+
 HS2-GCHX8V: `hotsheet-jobs` unit tests compare the transition function with the
 `docs/33-jobs.md` §33.2 table for every source, target, and producer family, and
 cover step validation and weighted rollup, parent-linked step cycles, feed cursor

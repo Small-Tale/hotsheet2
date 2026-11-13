@@ -824,7 +824,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/feed.rs            #   Bounded append-only `feed.jsonl`: seq cursor, compaction, explicit gap
       src/store.rs           #   JobStore under `${HOTSHEET_HOME}/jobs/<checkout-id>/<ulid>/`: per-checkout file lock, atomic snapshot, leases, cancel, reconcile (stalled to lost), retention and cap, history ETA, revision counter
       src/probe.rs           #   OwnerProbe; JournalProbe reads process-journal launch ids (never PIDs)
-      tests/                 #   transitions.rs (full matrix through the store), adversarial.rs, concurrency.rs (threads and separate processes)
+      src/monitor.rs         #   Watch monitor (HS2-5TC1GQ): WatchSource trait, Monitor tick/run, attach/reattach/takeover, renew, conditional-poll and failure backoff, cancel and stop-watching
+      src/slot.rs            #   MonitorSlot: one monitor per machine home (held file lock, published info, addressed stop request)
+      src/signal.rs          #   ChangeWaiter and JobStore::wait_for_change: wake on file changes under the Job directory
+      src/fixture.rs         #   FixtureWatchSource: file-backed source for offline process tests (registered by debug CLI builds only)
+      tests/                 #   transitions.rs (full matrix through the store), adversarial.rs, concurrency.rs (threads and separate processes), monitor.rs (step function, backoff, recovery)
     hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
       src/limits.rs          #   Physical memory (sysconf) and replay bounds behind the terminal limits (HS2-Y5DYC0)
