@@ -2503,6 +2503,8 @@ A failed pass, such as an executor that cannot list its sessions, backs off from
 second, doubling to a minute. A pass whose decisions equal the last logged ones logs
 nothing, so an event that changes nothing leaves no record. The session an applied
 start began is part of the decision, so a replacement start is always logged.
+Passes of one owner run one at a time on this machine (HS2-7Q428Z, §26.24), so a
+start is decided, applied and logged once however many passes are asked for at once.
 
 Capacity has no event stream yet (HS2-P5GTSW), so a machine that gains room is
 noticed at the end of the refusal backoff or at the next event (HS2-AWB7BX). Each
@@ -3295,6 +3297,10 @@ scenarios found and fixed: HS2-YZBCX5 (§26.7), HS2-2C5N1W (§26.9) and HS2-KM9C
 (§26.17). A cancel the gate denies is answered as the denial (HS2-WC3W2G). Open
 findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-7Q428Z (concurrent passes each log a start). A shown reconciliation no
 longer outlives a later state change (HS2-68DWAM). External-provider targets and a contended resource are HS2-30XYPY.
+(§26.17), and HS2-7Q428Z (concurrent passes each logged a start, §26.24). Open
+findings: HS2-HV9ED3 (what a person's cancel of a scheduler run means), HS2-WC3W2G
+(a cancel denied by the gate reads as an unverified target), HS2-68DWAM (a stale shown
+reconciliation). External-provider targets and a contended resource are HS2-30XYPY.
 Checks that need a real AI tool, a real GitHub repository or Windows and Linux hosts
 are in [the manual test plan](manual-test-plan.md#orchestration-end-to-end-with-real-tools-and-hosts-hs2-2ey9dp).
 
@@ -3503,3 +3509,18 @@ A session is never refilled with the run it already holds: `assign` answers
 concurrent reader (the loop, a follower) finished between a read and its update is
 answered as that reader left it rather than as an error, so reconciliation does not
 report a session it could not read in that race.
+
+### One pass at a time (HS2-7Q428Z)
+
+The server's loop, a manual `scheduler tick` over HTTP, the CLI and the stdio MCP
+tool may all ask for a pass of the same owner at once. Each pass used to read the
+step as ready, apply a start (the executor's operation ids made it the same session)
+and log its own `started` record, so the log showed one start per concurrent pass.
+
+Every pass (`tick`, and each pass of the loop) now holds the owner's pass lock,
+`${HOTSHEET_HOME}/orchestration-scheduler-pass-<owner>.json.lock`, from before it
+reads anything until it has logged. A second pass waits for the first and then reads
+what it did: the session is running and busy with the run, so it starts and logs
+nothing more. The lock is a file lock, so processes over the same home serialize too.
+`plan` and `explain` change nothing and take no lock. The pure helper is
+`scheduler_pass_lock(home, owner)`.

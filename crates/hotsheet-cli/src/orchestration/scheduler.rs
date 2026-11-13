@@ -1036,6 +1036,9 @@ impl OrchestrationRuntime {
         logging: Logging<'_>,
         tx: &mut Transaction<'_>,
     ) -> Result<TickView, OrchestrationError> {
+        // HS2-7Q428Z: one pass of this owner at a time, so concurrent passes (the loop,
+        // manual ticks, other processes) never decide and log the same start twice.
+        let _pass = hotsheet_ticketing::orchestration::scheduler_pass_lock(&self.home, owner_id)?;
         let now_ms = tx.clock.now_ms();
         let tick_id = hotsheet_ticketing::mint_ulid(tx.clock, tx.rng).to_string();
         // HS2-JSF985: a gate result that arrived while nothing was running is applied

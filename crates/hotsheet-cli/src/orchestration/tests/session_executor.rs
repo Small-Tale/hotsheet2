@@ -2183,3 +2183,63 @@ fn hs2_3rexq7_a_run_that_waits_needs_no_session_and_no_refill_with_itself() {
     assert_eq!(replacement.run_id.as_deref(), Some(run.run_id.as_str()));
     assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
 }
+
+/// HS2-7Q428Z: passes of one owner run one at a time, so concurrent applied passes
+/// start, and log as started, one session for a step, and the later passes see it
+/// busy; repeated rounds start nothing more.
+#[test]
+fn hs2_7q428z_concurrent_passes_start_and_log_one_session_once() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    let owner = f.owner();
+    for round in 0..2u128 {
+        std::thread::scope(|scope| {
+            for n in 0..6u128 {
+                let (runtime, owner) = (&f.m.runtime, owner.clone());
+                scope.spawn(move || {
+                    let clock = At(Cell::new(START));
+                    let mut rng = Rng(1_000_000 * (round * 10 + n + 1));
+                    let mut tx = Transaction {
+                        clock: &clock,
+                        rng: &mut rng,
+                    };
+                    runtime
+                        .scheduler_tick(&owner, &TickRequest::default(), Some(&worker()), &mut tx)
+                        .unwrap();
+                });
+            }
+        });
+    }
+    let log =
+        f.m.runtime
+            .scheduler_decisions(
+                &owner,
+                &DecisionsRequest {
+                    after: 0,
+                    limit: Some(200),
+                },
+            )
+            .unwrap()
+            .entries;
+    let started: Vec<_> = log
+        .iter()
+        .filter(|entry| entry.record.outcome.as_deref() == Some("started"))
+        .collect();
+    assert_eq!(started.len(), 1, "{started:#?}");
+    assert_eq!(
+        started[0].record.operation_id.as_deref(),
+        Some(format!("sched-start-{step}").as_str())
+    );
+    assert_eq!(
+        log.iter()
+            .filter(
+                |entry| entry.record.kind == hotsheet_ticketing::orchestration::DecisionKind::Tick
+            )
+            .count(),
+        12
+    );
+    assert_eq!(f.records().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(f.m.runtime.run_list(&owner, false).unwrap().len(), 1);
+}

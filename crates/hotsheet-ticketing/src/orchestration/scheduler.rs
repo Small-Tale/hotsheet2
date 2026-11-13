@@ -1498,6 +1498,22 @@ pub struct SchedulerStore {
     storage: Storage,
 }
 
+/// HS2-7Q428Z: hold this owner's scheduling passes to one at a time on this machine,
+/// across the server's loop, manual ticks and other processes over the same home. A
+/// pass reads what the last one did, so a start is decided, applied and logged once.
+/// Blocks until the pass before it ends; released when dropped.
+pub fn scheduler_pass_lock(
+    home: &Path,
+    owner_id: &str,
+) -> Result<crate::FileLock, OrchestrationError> {
+    valid_identifier(owner_id)?;
+    Storage::machine_named(
+        home,
+        &format!("orchestration-scheduler-pass-{owner_id}.json"),
+    )
+    .lock()
+}
+
 impl SchedulerStore {
     pub fn new(home: &Path) -> Self {
         Self {

@@ -117,7 +117,7 @@ pub use scheduler::{
     REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, Schedule, ScheduleInput,
     ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
     TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation, plan, refusal_backoff_ms, remember,
-    score,
+    scheduler_pass_lock, score,
 };
 pub use session_idle::{SessionIdleStore, observe_idle};
 pub use sessions::{

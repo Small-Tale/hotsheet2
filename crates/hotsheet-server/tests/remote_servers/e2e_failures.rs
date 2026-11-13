@@ -506,10 +506,10 @@ async fn hs2_2ey9dp_duplicate_requests_never_dispatch_or_start_twice() {
         .await;
     assert_eq!(session["session_id"], a.session_id.as_str(), "{session}");
 
-    // Every start any pass logged names the one session, run and operation. That
-    // each concurrent pass logs its own `started` record is HS2-7Q428Z.
+    // One start is logged, naming the one session, run and operation: passes of
+    // one owner run one at a time (HS2-7Q428Z).
     let log = fleet.decisions().await;
-    let mut named: Vec<_> = log
+    let named: Vec<_> = log
         .iter()
         .filter(|entry| started(entry))
         .map(|entry| {
@@ -520,7 +520,6 @@ async fn hs2_2ey9dp_duplicate_requests_never_dispatch_or_start_twice() {
             )
         })
         .collect();
-    named.dedup();
     assert_eq!(
         named,
         [(
