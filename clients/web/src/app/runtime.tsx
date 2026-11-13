@@ -147,6 +147,7 @@ import {
 } from '../features/project-refresh';
 import { createProjectTeardown } from '../features/project-teardown';
 import { createReaderLayersSurface } from '../features/reader-layers-surface';
+import { createRemoteDevices } from '../features/remote-devices';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createSettingsSurface } from '../features/settings-surface';
@@ -1655,6 +1656,13 @@ export async function startHotSheetWebClient() {
       );
       return answers.flatMap((answer) => (answer.status === 'fulfilled' ? [answer.value] : []));
     },
+  });
+  // App Settings → Devices (HS2-DXM0YN): one long poll follows the host's device list while the category
+  // shows, and stops when it hides.
+  const remoteDevices = createRemoteDevices();
+  effect(() => {
+    if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
+    else remoteDevices.stop();
   });
   let notificationSettingsShown = false;
   effect(() => {
@@ -5042,6 +5050,12 @@ export async function startHotSheetWebClient() {
       ruleEditor: notificationSettings.ruleEditor.value,
       viewChoices: notificationSettings.viewChoices.value,
     }),
+    remoteDevices: () => ({
+      state: remoteDevices.state.value,
+      list: remoteDevices.list.value,
+      message: remoteDevices.message.value,
+      busy: remoteDevices.busy.value,
+    }),
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
@@ -6386,6 +6400,7 @@ export async function startHotSheetWebClient() {
     refreshTerminalSettings,
     terminalLimitsSettings,
     notificationSettings,
+    remoteDevices,
     refreshTrashSettings,
     capturingShortcutId,
     saveAiDefaults,

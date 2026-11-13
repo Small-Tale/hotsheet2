@@ -48,6 +48,24 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-85W6BE / HS2-DXM0YN: `hotsheet-server/src/remote_auth.rs` tests the 15-minute
+boundary, admin and local grants through approve, redeem, reopen and change, reject,
+a pre-grant catalog, the change cursor (visible changes only) and the long-poll wait.
+`hotsheet-server/tests/remote_auth.rs` walks every management route for a plain,
+read-only admin, and local admin session (403 without admin, Origin/CSRF on changes,
+no local grant from a non-local admin, `revoke-all` host-only, 404/422 answers) and
+the long poll waking on a pairing and refusing a session revoked while it waited.
+`clients/web/src/remote-auth-bridge.test.ts` gates the folder chooser on the local
+grant (Origin/CSRF still required) and management on the admin grant;
+`client-origin.test.ts` decides local versus remote from the grant on a remote-mode
+host; `device-name.test.ts`, `remote-devices-model.test.ts`,
+`features/remote-devices.test.ts` (cursor long poll, bounded backoff, 401/403 stop,
+changes) and `components/remote-devices-settings.test.ts` (menus, states, Host Access
+reason) cover the client; `crates/hotsheet-cli/src/dispatch/remotes.rs` tests the
+`update` body. `remote-auth-server-integration.test.ts` repeats the grants through the
+real CLI, server and bridge and captures App Settings → Devices in the shipped app.
+No customer content was copied into fixtures.
+
 HS2-9FWETT: `clients/web/src/remote-auth-bridge.test.ts` reads remote HS1 migration
 status only for registered checkouts and keeps the local status and start routes off
 the remote allowlist; `migration-job-client.test.ts` pins the configured status path;

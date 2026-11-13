@@ -504,6 +504,20 @@ missing CSRF, server restart, and a browser restart. Verify the local trusted
 client and headless CLI continue without browser prompts. Do not use customer
 data or capture a cookie/challenge in screenshots.
 
+### Device grants and App Settings → Devices (HS2-85W6BE, HS2-DXM0YN)
+
+With the same disposable remote-mode host behind Tailscale Serve, pair a browser
+opened at `http://127.0.0.1:<port>` and one opened through the Serve URL. Approve
+the first with `--admin --local` and the second plainly. The loopback browser
+must show the native folder chooser from Open Project and open a project by path;
+the Serve browser keeps the registered-project picker. Grant the Serve browser
+admin from the first browser's Settings → Devices, reload it, and confirm it lists
+devices but cannot change Host Access. A plain session sees "Administrator
+access required." Approve, reject and revoke from the Devices page and confirm
+another open Devices page updates without reload. Confirm a request still
+redeems after 14 minutes and the proposed device name matches the browser and
+platform on an iPhone, an iPad, and a Mac.
+
 ### Direct remote listener modes (HS2-W4JJJE)
 
 Using only a disposable synthetic store, start the server off-loopback without a

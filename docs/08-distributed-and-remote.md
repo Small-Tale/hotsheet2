@@ -198,10 +198,17 @@ orchestration manifest, queue fan-out or second claim coordinator.
 
 The reviewed remote-server registry above belongs to a native client connecting
 to another server. Browser device pairing is a separate machine-server
-authorization path. A remote browser requests a random five-minute challenge;
-the host owner verifies its server id, origin, label and request id, then
-approves read-only or read-write access from a trusted local CLI. A remote
-browser session cannot approve devices. The server issues a revocable,
+authorization path. A remote browser requests a random 15-minute challenge
+under a device name proposed from its user agent and low-entropy client hints
+(for example "Safari on iPhone"; HS2-DXM0YN). The host owner verifies its server
+id, origin, label and request id, then approves read-only or read-write access
+from the trusted local CLI or from App Settings → Devices on the host or an
+admin device. A session approves devices only with the **admin** grant; the
+separate **local** grant marks the host owner's own browser, which may use
+host-only actions such as the folder chooser (HS2-85W6BE). Trust never comes
+from the hostname, peer address or forwarded headers, because Tailscale Serve
+reaches the host through the same loopback port the owner opens locally. See
+[04](04-core-server-cli.md) §4.6.1 for the grant rules. The server issues a revocable,
 server-side session and checks it on REST, polling and WebSocket routes;
 the browser-facing bridge authenticates before proxying and never passes its
 loopback secret for a remote request. The session catalog is private to each

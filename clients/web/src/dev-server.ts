@@ -57,6 +57,30 @@ export function changePollSessionHeaders(browser: Headers): Headers {
   return headers;
 }
 
+/** Which grant a remote-mode bridge route needs (HS2-85W6BE, HS2-DXM0YN): any live session
+ * (`session`), the admin grant (`management`), or the local grant (`host`). */
+export function remoteRouteKind(path: string): 'session' | 'management' | 'host' {
+  if (path.startsWith('/__hotsheet/remote-auth/owner')) return 'management';
+  const remote =
+    path === '/__hotsheet/checkouts' ||
+    path === REMOTE_PROJECT_OPEN_PATH ||
+    path === REMOTE_MIGRATION_JOBS_PATH ||
+    path === CHANGE_MUX_PATH ||
+    path.startsWith('/__hotsheet/project-api/') ||
+    ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
+  return remote ? 'session' : 'host';
+}
+
+/** The grants the bridge reads from a `/remote-auth/me` answer; anything missing is not granted. */
+export function remoteSessionGrants(device: unknown): { origin?: string; admin: boolean; local: boolean } {
+  if (!isRecord(device)) return { admin: false, local: false };
+  return {
+    ...(typeof device.origin === 'string' ? { origin: device.origin } : {}),
+    admin: device.admin === true,
+    local: device.local === true,
+  };
+}
+
 export function createDevApp(
   dev = true,
   reveal = revealCorruptTicket,
@@ -95,26 +119,30 @@ export function createDevApp(
       path === '/__hotsheet/remote-auth/redeem'
     )
       return next();
-    if (path.startsWith('/__hotsheet/remote-auth/owner')) return context.json({ error: 'Trusted host required.' }, 403);
-    const allowed =
-      path === '/__hotsheet/checkouts' ||
-      path === REMOTE_PROJECT_OPEN_PATH ||
-      path === REMOTE_MIGRATION_JOBS_PATH ||
-      path === CHANGE_MUX_PATH ||
-      path.startsWith('/__hotsheet/project-api/') ||
-      ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
-    if (!allowed) return context.notFound();
-    if (!context.req.header('cookie')) return context.json({ error: 'Remote session required.' }, 401);
+    // HS2-85W6BE: trust comes from the session's grants, never from the hostname, peer address,
+    // Host or forwarded headers. Tailscale Serve reaches this host through the same loopback
+    // port the owner opens locally, so the request itself cannot tell the two apart.
+    const route = remoteRouteKind(path);
+    if (!context.req.header('cookie')) {
+      if (route === 'host') return context.notFound();
+      return context.json({ error: 'Remote session required.' }, 401);
+    }
     const checked = await checkRemoteSession(context.req.raw.headers);
-    if (!checked.ok) return context.json({ error: 'Remote session required.' }, 401);
+    if (!checked.ok) {
+      if (route === 'host') return context.notFound();
+      return context.json({ error: 'Remote session required.' }, 401);
+    }
+    const device = remoteSessionGrants(await checked.json().catch(() => undefined));
+    // Device management needs the admin grant (HS2-DXM0YN); the server checks it again.
+    if (route === 'management' && !device.admin) return context.json({ error: 'Administrator access required.' }, 403);
+    // Host-only routes (folder chooser, open by path, setup) need the local grant.
+    if (route === 'host' && !device.local) return context.notFound();
     if (context.req.method !== 'GET' && context.req.method !== 'HEAD') {
       // HS2-CD8YNK: compare with the origin the device paired from, as the server does. A
       // TLS-terminating proxy (Tailscale Serve) hands this host a plain-HTTP request, so the
       // request URL's origin is never the browser's https origin.
-      const device: unknown = await checked.json().catch(() => undefined);
-      const paired = isRecord(device) && typeof device.origin === 'string' ? device.origin : undefined;
       const origin = context.req.header('origin');
-      if (!origin || !paired || origin !== paired || !remoteCsrfCookie(context.req.raw.headers))
+      if (!origin || !device.origin || origin !== device.origin || !remoteCsrfCookie(context.req.raw.headers))
         return context.json({ error: 'Origin and CSRF token required.' }, 403);
     }
     return next();
@@ -123,12 +151,14 @@ export function createDevApp(
   app.all('/__hotsheet/remote-auth/*', async (context) => {
     const path = context.req.path.slice('/__hotsheet'.length);
     if (
-      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|owner(?:\/approve|\/revoke-all|\/devices\/[A-Za-z0-9]+)?)$/.test(
+      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|owner(?:\/approve|\/reject|\/changes|\/revoke-all|\/devices\/[A-Za-z0-9]+)?)$/.test(
         path,
       )
     )
       return context.notFound();
-    return browserAuthRequest(path, context.req.raw, path.startsWith('/remote-auth/owner'));
+    // The device-list long poll carries its cursor in the query (HS2-DXM0YN).
+    const search = new URL(context.req.url).search;
+    return browserAuthRequest(`${path}${search}`, context.req.raw, path.startsWith('/remote-auth/owner'));
   });
   // The development latency monitor's durable log (HS2-ZGBQ5Q): the browser posts each slow
   // interaction/request once (event-driven, never polled); GET reads the recent reports back.

@@ -1852,15 +1852,40 @@ production desktop storage bridge is unavailable in remote mode.
 
 A remote browser posts a device label to `/remote-auth/pair`. The response has a
 random 256-bit challenge, a request id, the existing durable machine server id,
-and a five-minute expiry. The challenge stays in page memory; the screen shows
+and a 15-minute expiry (HS2-DXM0YN). The challenge stays in page memory; the screen shows
 the two ids, never the challenge. On the host Mac, `hotsheet-cli remote sessions
 status` lists pending requests and paired devices. The owner verifies the id,
 server id, label, and browser origin, then runs `hotsheet-cli remote sessions
-approve <request-id> --role read_only|read_write`. This approval path requires
-the local server bearer; a remote session cannot approve another device or
-bootstrap itself. `remote sessions revoke <device-id>` and `revoke-all` are
-idempotent. The server checks the same approved role on every protected route;
-read-only sessions cannot mutate projects or hosted stores.
+approve <request-id> --role read_only|read_write [--admin] [--local]`. The
+server checks the same approved role on every protected route; read-only
+sessions cannot mutate projects or hosted stores.
+
+**Device grants (HS2-85W6BE, HS2-DXM0YN).** Besides its read role a session
+carries two independent grants. **Admin** lets it list, approve, reject,
+revoke and change other devices. **Local** marks the browser as the host
+owner's own: on a remote-mode host it may use host-only bridge routes (the
+folder chooser, opening a project by path, ticket-store setup and HS1
+migration) and the client treats it as same-device. Neither grant is derived
+from the URL, peer address, `Host` or forwarded headers: Tailscale Serve reaches
+the browser host through the same loopback port the owner opens locally, so the
+request cannot tell them apart. A plain session keeps the remote route set. The
+grants persist in the catalog; a catalog written before them loads with both
+false.
+
+Device management (`/remote-auth/owner`, `/owner/changes?after=<revision>`,
+`/owner/approve`, `/owner/reject`, `PATCH|DELETE /owner/devices/{id}`) accepts
+the machine secret from the trusted host or an admin session; a session change
+also needs its paired Origin and CSRF token, and the read role does not limit
+it. Only the trusted host or a local session may grant or remove local, so an
+admin cannot make itself host-trusted. `revoke-all` stays with the trusted host.
+The list answer names its change cursor and its caller (`manager.device_id`,
+`manager.local`); `/owner/changes` is a 25-second long poll that answers when
+the cursor moves and re-authorizes after the wait. The headless equivalents are
+`remote sessions reject <request-id>` and `remote sessions update <device-id>
+[--role read_only|read_write] [--admin true|false] [--local true|false]`. A
+remote session without the admin grant cannot approve another device or
+bootstrap itself, and `remote sessions revoke <device-id>` and `revoke-all`
+remain idempotent.
 
 After approval, the browser redeems the challenge once. Five failed attempts
 disable it; the server admits at most ten new requests per minute. Successful

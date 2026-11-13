@@ -47,6 +47,8 @@ export interface SettingsSurfaceDependencies {
   terminalLimitDeviceDefaults?: () => NonNullable<Props['terminalMemory']>['deviceDefaults'];
   /** App Settings → Notifications (HS2-DPBJJA). */
   notificationSettings?: () => Props['notifications'];
+  /** App Settings → Devices (HS2-DXM0YN). */
+  remoteDevices?: () => Props['devices'];
   developmentStrategy?: (projectId: string) => Props['developmentStrategy'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
@@ -109,6 +111,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     terminalLimitsMessage,
     terminalLimitDeviceDefaults,
     notificationSettings,
+    remoteDevices,
     developmentStrategy,
     permissionAutomation,
     permissionRules,
@@ -196,6 +199,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           message: terminalSettingsMessage.value,
         }}
         notifications={notificationSettings?.()}
+        devices={remoteDevices?.()}
         terminalMemory={{
           limits: terminalLimits?.value,
           deviceDefaults: terminalLimitDeviceDefaults?.(),

@@ -40,6 +40,7 @@ import { demoModule as projectLiveSection } from './project-live-section-demo';
 import { demoModule as projectSidebar } from './project-sidebar-demo';
 import { demoModule as providerIcon } from './provider-icon-demo';
 import { demoModule as remoteAuthScreen } from './remote-auth-screen-demo';
+import { demoModule as remoteDevicesSettings } from './remote-devices-settings-demo';
 import { demoModule as repositorySize } from './repository-size-demo';
 import { demoModule as repositoryStatus } from './repository-status-demo';
 import { demoModule as searchScopeToolbar } from './search-scope-toolbar-demo';
@@ -99,6 +100,7 @@ export const demoModules: readonly DemoModule[] = [
   connectionDetails,
   setupSettings,
   notificationSettings,
+  remoteDevicesSettings,
   tagChip,
   statusBadge,
   confidenceCalibration,

@@ -74,6 +74,7 @@ const registrations = new Set([
   'wireTicketCollection',
   'wireCommandSettingsEditor',
   'wireNotificationSettings',
+  'wireRemoteDevicesSettings',
   'wireBulkTicketDialog',
   'wireTicketGroups',
   'wireAiConversation',

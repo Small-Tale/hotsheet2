@@ -87,6 +87,25 @@ enum SessionCmd {
         id: String,
         #[arg(long, value_parser = ["read_only", "read_write"])]
         role: String,
+        /// Let the device approve, reject, revoke and change other devices (HS2-DXM0YN).
+        #[arg(long)]
+        admin: bool,
+        /// Trust the device as this host's own browser: folder chooser, open by path and
+        /// setup (HS2-85W6BE). Grant it only to a browser on this machine.
+        #[arg(long)]
+        local: bool,
+    },
+    /// Refuse one pending pairing request.
+    Reject { id: String },
+    /// Change a paired device's role, admin grant or host access; omitted values stay.
+    Update {
+        id: String,
+        #[arg(long, value_parser = ["read_only", "read_write"])]
+        role: Option<String>,
+        #[arg(long)]
+        admin: Option<bool>,
+        #[arg(long)]
+        local: Option<bool>,
     },
     /// Revoke one device immediately, including its live browser streams.
     Revoke { id: String },
@@ -112,11 +131,33 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 "remote-auth/owner",
                 None,
             )?,
-            SessionCmd::Approve { id, role } => super::server::local_server_json_with_body(
+            SessionCmd::Approve {
+                id,
+                role,
+                admin,
+                local,
+            } => super::server::local_server_json_with_body(
                 &context.path,
                 "POST",
                 "remote-auth/owner/approve",
-                Some(&serde_json::json!({"id": id, "role": role})),
+                Some(&serde_json::json!({"id": id, "role": role, "admin": admin, "local": local})),
+            )?,
+            SessionCmd::Reject { id } => super::server::local_server_json_with_body(
+                &context.path,
+                "POST",
+                "remote-auth/owner/reject",
+                Some(&serde_json::json!({"id": id})),
+            )?,
+            SessionCmd::Update {
+                id,
+                role,
+                admin,
+                local,
+            } => super::server::local_server_json_with_body(
+                &context.path,
+                "PATCH",
+                &format!("remote-auth/owner/devices/{id}"),
+                Some(&device_change(role, admin, local)?),
             )?,
             SessionCmd::Revoke { id } => super::server::local_server_json_with_body(
                 &context.path,
@@ -204,6 +245,29 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     Ok(())
 }
 
+/// The partial device change `remote sessions update` sends; at least one value is required.
+fn device_change(
+    role: Option<String>,
+    admin: Option<bool>,
+    local: Option<bool>,
+) -> Result<serde_json::Value> {
+    let mut change = serde_json::Map::new();
+    if let Some(role) = role {
+        change.insert("role".into(), role.into());
+    }
+    if let Some(admin) = admin {
+        change.insert("admin".into(), admin.into());
+    }
+    if let Some(local) = local {
+        change.insert("local".into(), local.into());
+    }
+    anyhow::ensure!(
+        !change.is_empty(),
+        "pass at least one of --role, --admin or --local"
+    );
+    Ok(serde_json::Value::Object(change))
+}
+
 fn credentials(
     path: &std::path::Path,
 ) -> Result<hotsheet_ticketing::remote_servers::RemoteCredentials> {
@@ -215,5 +279,23 @@ fn credentials(
         Ok(hotsheet_cli::remote_servers::read_remote_credentials(
             std::fs::File::open(path)?,
         )?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::device_change;
+
+    #[test]
+    fn hs2_dxm0yn_update_sends_only_the_values_given() {
+        assert_eq!(
+            device_change(None, Some(true), None).unwrap(),
+            serde_json::json!({"admin": true})
+        );
+        assert_eq!(
+            device_change(Some("read_only".into()), Some(false), Some(true)).unwrap(),
+            serde_json::json!({"role": "read_only", "admin": false, "local": true})
+        );
+        assert!(device_change(None, None, None).is_err());
     }
 }

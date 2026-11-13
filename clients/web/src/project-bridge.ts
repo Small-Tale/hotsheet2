@@ -1851,15 +1851,16 @@ export function remoteCsrfCookie(headers: Headers): string | undefined {
 }
 
 /** Forward a browser session to this machine server without exposing or injecting its
- * loopback bearer. Owner routes may be used only by the trusted local host. */
+ * loopback bearer. A host in local browser mode is the trusted owner and authorizes device
+ * management with its secret; a remote-mode host forwards only the browser's own session, which
+ * the server accepts for device management only with the admin grant (HS2-DXM0YN). */
 export async function browserAuthRequest(path: string, request: Request, owner = false): Promise<Response> {
-  if (owner && remoteBrowserAuthRequired()) return Response.json({ error: 'Trusted host required.' }, { status: 403 });
   const store = await bootstrapStore();
   const instance = await ensureServer(store);
   const headers = new Headers(request.headers);
   headers.delete('host');
   headers.delete('x-hotsheet-secret');
-  if (owner) headers.set('x-hotsheet-secret', instance.secret);
+  if (owner && !remoteBrowserAuthRequired()) headers.set('x-hotsheet-secret', instance.secret);
   else if (remoteBrowserAuthRequired() && request.method !== 'GET' && request.method !== 'HEAD') {
     headers.delete('x-hotsheet-csrf');
     const csrf = remoteCsrfCookie(headers);

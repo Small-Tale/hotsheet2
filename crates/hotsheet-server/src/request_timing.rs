@@ -63,6 +63,8 @@ pub(crate) const LONG_WAIT_ROUTES: &[&str] = &[
     "/permissions/ask",
     // `GET` parks until the person finishes GitHub device authorization.
     "/github-auth/device/{session_id}",
+    // Parks until the remote device list changes, up to 25 s (HS2-DXM0YN).
+    "/remote-auth/owner/changes",
 ];
 
 /// Classify a matched route template (for example `/checkouts/{reference}/tickets/{id}`).
@@ -202,7 +204,11 @@ mod tests {
             assert_eq!(classify(route).budget(), None);
         }
         // Waits on a person are neither timed nor offloaded (HS2-V3S89Q).
-        for route in ["/permissions/ask", "/github-auth/device/{session_id}"] {
+        for route in [
+            "/permissions/ask",
+            "/github-auth/device/{session_id}",
+            "/remote-auth/owner/changes",
+        ] {
             assert_eq!(classify(route), RequestClass::LongWait, "{route}");
             assert_eq!(classify(route).budget(), None);
         }

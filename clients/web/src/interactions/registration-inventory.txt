@@ -351,6 +351,7 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="select-tic
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-ticket-link-choice"]'
 notifications-and-links	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="ticket-link-choice-dialog"]'
 notifications-and-links	wireNotificationSettings	document.body
+notifications-and-links	wireRemoteDevicesSettings	document.body
 search-and-composer	wireTicketSearchFields	document.body
 search-and-composer	wireSearchFields	document.body
 search-and-composer	document.addEventListener	'pointerdown'

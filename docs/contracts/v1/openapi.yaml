@@ -185,31 +185,52 @@ paths:
   /remote-auth/owner:
     get:
       operationId: list_remote_browser_devices
-      summary: List paired and pending devices from the trusted host
+      summary: List paired and pending devices for the trusted host or an admin browser session
+      description:
+        The trusted host authenticates with its machine secret; a browser session needs the admin grant (HS2-DXM0YN).
+        A session without it is refused with 403.
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
       responses:
         '200':
-          description: Server identity, paired devices and pending requests.
+          description: Server identity, change cursor, the caller, paired devices and pending requests.
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - server_id
-                  - devices
-                  - pending
-                properties:
-                  server_id:
-                    type: string
-                  devices:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/RemoteDevice'
-                  pending:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/RemotePendingDevice'
+                $ref: '#/components/schemas/RemoteDeviceList'
         default:
-          description: Trusted host credential missing or invalid.
+          description: Trusted host credential or admin session missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner/changes:
+    get:
+      operationId: watch_remote_browser_devices
+      summary: Long poll for the device list
+      description:
+        Answers as soon as the device list's revision differs from after, or with the unchanged list after 25 seconds
+        (HS2-DXM0YN). Authorization is checked before and again after the wait.
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
+      parameters:
+        - name: after
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: The current device list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDeviceList'
+        default:
+          description: Trusted host credential or admin session missing or invalid.
           content:
             application/json:
               schema:
@@ -217,7 +238,13 @@ paths:
   /remote-auth/owner/approve:
     post:
       operationId: approve_remote_browser_device
-      summary: Approve one pairing request from the trusted host
+      summary: Approve one pairing request with its role and grants
+      description:
+        Only the trusted host or a session with the local grant may set local (HS2-85W6BE). A browser session needs
+        the admin grant, its paired Origin and the CSRF token.
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
       requestBody:
         required: true
         content:
@@ -232,11 +259,45 @@ paths:
                   type: string
                 role:
                   $ref: '#/components/schemas/RemoteDeviceRole'
+                admin:
+                  type: boolean
+                  default: false
+                local:
+                  type: boolean
+                  default: false
       responses:
         '204':
-          description: Pairing request approved for the selected role.
+          description: Pairing request approved for the selected role and grants.
         default:
           description: Trusted host credential or pairing request invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner/reject:
+    post:
+      operationId: reject_remote_browser_device
+      summary: Refuse one pending pairing request
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+      responses:
+        '204':
+          description: Pairing request removed; its browser's redeem fails.
+        default:
+          description: Credential invalid (401/403) or no such pending request (404).
           content:
             application/json:
               schema:
@@ -248,9 +309,38 @@ paths:
         required: true
         schema:
           type: string
+    patch:
+      operationId: change_remote_browser_device
+      summary: Change a paired device's role, admin grant or host access
+      description: Only the trusted host or a session with the local grant may change local (HS2-85W6BE).
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteDeviceChange'
+      responses:
+        '200':
+          description: The changed device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDevice'
+        default:
+          description: Credential invalid (401/403), unknown field (422) or no such device (404).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     delete:
       operationId: revoke_remote_browser_device
-      summary: Revoke one paired device from the trusted host
+      summary: Revoke one paired device
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
       responses:
         '204':
           description: Device revoked.
@@ -14168,6 +14258,8 @@ components:
         - server_id
         - label
         - role
+        - admin
+        - local
         - origin
         - created_at
         - last_used_at
@@ -14181,6 +14273,12 @@ components:
           type: string
         role:
           $ref: '#/components/schemas/RemoteDeviceRole'
+        admin:
+          description: May manage other devices (HS2-DXM0YN).
+          type: boolean
+        local:
+          description: Host-trusted, the owner's own browser; may use host-only actions (HS2-85W6BE).
+          type: boolean
         origin:
           type: string
         created_at:
@@ -14216,6 +14314,53 @@ components:
           format: int64
         approved:
           type: boolean
+    RemoteDeviceChange:
+      type: object
+      additionalProperties: false
+      properties:
+        role:
+          $ref: '#/components/schemas/RemoteDeviceRole'
+        admin:
+          type: boolean
+        local:
+          type: boolean
+    RemoteDeviceList:
+      type: object
+      required:
+        - server_id
+        - revision
+        - pair_ttl_seconds
+        - manager
+        - devices
+        - pending
+      properties:
+        server_id:
+          type: string
+        revision:
+          description: Change cursor for /remote-auth/owner/changes.
+          type: integer
+          format: int64
+        pair_ttl_seconds:
+          type: integer
+        manager:
+          type: object
+          required:
+            - local
+          properties:
+            device_id:
+              description: The managing browser's own device; absent for the trusted host.
+              type: string
+            local:
+              description: Whether this caller may grant or remove host access.
+              type: boolean
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteDevice'
+        pending:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemotePendingDevice'
     NoteDoctorFinding:
       type: object
       required:

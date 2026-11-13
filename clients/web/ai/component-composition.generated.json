@@ -5800,6 +5800,72 @@
       }
     },
     {
+      "key": "hotsheet-web:remote-devices-settings",
+      "package": "hotsheet-web",
+      "id": "remote-devices-settings",
+      "name": "RemoteDevicesSettings",
+      "kind": "component",
+      "purpose": "App Settings → Devices: this host's pairing requests and paired browsers, with approve, reject, revoke, read role, administrator, and host-access commands in each row's menu, and an administrator-required state for other sessions (HS2-DXM0YN, HS2-85W6BE).",
+      "publicExports": [
+        {
+          "name": "RemoteDevicesSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-devices-settings.tsx",
+        "src/components/remote-devices-settings-interactions.ts",
+        "src/features/remote-devices.ts"
+      ],
+      "source": "src/components/remote-devices-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-devices-settings.tsx",
+        "composition": "src/components/remote-devices-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:repository-size",
       "package": "hotsheet-web",
       "id": "repository-size",

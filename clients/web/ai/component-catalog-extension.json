@@ -1915,6 +1915,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "remote-devices-settings",
+      "name": "RemoteDevicesSettings",
+      "kind": "component",
+      "purpose": "App Settings → Devices: this host's pairing requests and paired browsers, with approve, reject, revoke, read role, administrator, and host-access commands in each row's menu, and an administrator-required state for other sessions (HS2-DXM0YN, HS2-85W6BE).",
+      "useWhen": [
+        "Hot Sheet needs App Settings for approving and managing this host's remote browser devices."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific RemoteDevicesSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/remote-devices-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "repository-size",
       "name": "RepositorySize",
       "kind": "component",

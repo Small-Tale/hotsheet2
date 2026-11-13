@@ -1095,11 +1095,21 @@ machine's existing `server-identity.json`. `routes/remote_auth.rs` exposes
 pairing, redemption and trusted-owner endpoints; `routes/auth.rs`,
 `routes/store_scoped.rs` and `routes/terminals/attach.rs` enforce REST, polling
 and WebSocket authorization. `crates/hotsheet-cli/src/dispatch/remotes.rs`
-exposes `remote sessions status|approve|revoke|revoke-all`. In the browser,
-`clients/web/src/components/remote-auth-screen.tsx` gates startup;
+exposes `remote sessions status|approve|reject|update|revoke|revoke-all`. Sessions
+carry `admin` and `local` grants (HS2-85W6BE, HS2-DXM0YN); `routes/remote_auth.rs`
+`manager()` authorizes device management for the machine secret or an admin session,
+and the catalog's in-memory revision drives the `/remote-auth/owner/changes` long poll
+(a `LongWait` route in `request_timing.rs`). In the browser,
+`clients/web/src/components/remote-auth-screen.tsx` gates startup, proposes a device
+name (`device-name.ts`) and records the session grants in `client-origin.ts`, which
+decides same-device from the local grant on a remote-mode host;
+`dev-server.ts` `remoteRouteKind`/`remoteSessionGrants` gate host-only routes on the
+local grant and device management on the admin grant;
 `{dev-server,project-bridge,terminal-ws-bridge,local-host}.ts` enforce remote
-mode before proxying or local bearer injection. See [04](04-core-server-cli.md)
-§4.6.1 and [08](08-distributed-and-remote.md) §8.2.2.
+mode before proxying or local bearer injection. App Settings → Devices is
+`components/remote-devices-settings{,-interactions}.tsx`, `features/remote-devices.ts`
+and `remote-devices-model.ts`. See [04](04-core-server-cli.md) §4.6.1 and
+[08](08-distributed-and-remote.md) §8.2.2.
 
 ## Where do I look for X?
 

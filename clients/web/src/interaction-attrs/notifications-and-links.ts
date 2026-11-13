@@ -68,6 +68,14 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   closeNotificationRule: action('close-notification-rule'),
   removeNotificationRule: action('remove-notification-rule'),
   refreshNotificationDeliveries: action('refresh-notification-deliveries'),
+  // App Settings → Devices (HS2-DXM0YN).
+  openRemoteDeviceActions: action('open-remote-device-actions'),
+  approveRemoteDevice: action('approve-remote-device'),
+  rejectRemoteDevice: action('reject-remote-device'),
+  setRemoteDeviceRole: action('set-remote-device-role'),
+  toggleRemoteDeviceAdmin: action('toggle-remote-device-admin'),
+  toggleRemoteDeviceHostAccess: action('toggle-remote-device-host-access'),
+  revokeRemoteDevice: action('revoke-remote-device'),
 } as const;
 
 /**

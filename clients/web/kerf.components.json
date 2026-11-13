@@ -8206,6 +8206,73 @@
       }
     },
     {
+      "id": "remote-devices-settings",
+      "name": "RemoteDevicesSettings",
+      "kind": "component",
+      "purpose": "App Settings → Devices: this host's pairing requests and paired browsers, with approve, reject, revoke, read role, administrator, and host-access commands in each row's menu, and an administrator-required state for other sessions (HS2-DXM0YN, HS2-85W6BE).",
+      "source": "src/components/remote-devices-settings.tsx",
+      "publicExports": [
+        {
+          "name": "RemoteDevicesSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-devices-settings.tsx",
+        "src/components/remote-devices-settings-interactions.ts",
+        "src/features/remote-devices.ts"
+      ],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-devices-settings.tsx",
+        "composition": "src/components/remote-devices-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs App Settings for approving and managing this host's remote browser devices."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific RemoteDevicesSettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",
