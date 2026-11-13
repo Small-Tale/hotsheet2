@@ -769,7 +769,8 @@ tombstone is never a member. The full behavior is in
   keeps one committed file per group, `<checkout>/.hotsheet2/groups/<id>.json` holding
   `{ "name": … }`. One file per group means two clones that each create a group merge
   without a conflict. The checkout's `.gitignore` must allow `/.hotsheet2/groups/` when it
-  ignores the rest of `.hotsheet2/`. A machine-local `.hotsheet2/groups.lock` serializes a
+  ignores the rest of `.hotsheet2/`; the managed block Hot Sheet writes does
+  ([04](04-core-server-cli.md) §4.7.0, HS2-61ZMVA). A machine-local `.hotsheet2/groups.lock` serializes a
   find-or-create by name. A registry entry with no members is not a visible group, and no
   entry or leftover value is ever deleted automatically.
 - **Names are unique without regard to case or spacing.** Setting a group by name resolves
@@ -843,7 +844,7 @@ that references the store path (`.mcp.json`, the hooks command) is per-machine.
 
 **Finding the store without `-C`** (HS2-5CXKZ0/HS2-77YTS1): a code repo can point at its
 standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
-`.hotsheet2/store` file holding the store's absolute path. Any later `hotsheet-cli`
+`.hotsheet2/store` file (managed `.gitignore` block, [04](04-core-server-cli.md) §4.7.0) holding the store's absolute path. Any later `hotsheet-cli`
 run inside that repo resolves the store automatically: an explicit `-C` wins, else
 `$HOTSHEET_STORE`, else the nearest `.hotsheet2/store` walking up from the cwd, with
 read-only fallback to the legacy `.hotsheet/store` location. A

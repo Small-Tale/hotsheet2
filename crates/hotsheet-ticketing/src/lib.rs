@@ -41,6 +41,7 @@ pub mod phase_report;
 pub mod phase_timing;
 pub mod ports;
 pub mod pricing;
+pub mod project_gitignore;
 pub mod provider;
 pub mod provider_outbox;
 pub mod registry;

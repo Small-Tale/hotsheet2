@@ -6,7 +6,8 @@
 //! - **Shared** (`<project>/.hotsheet2/settings.json`): committed in the code project,
 //!   independent of how many ticket sources that project uses.
 //! - **Local** (`<project>/.hotsheet2/settings.local.json`): machine-local,
-//!   **gitignored**. `set --scope local` adds the path to the project's `.gitignore`.
+//!   **gitignored**. `set --scope local` keeps the managed Hot Sheet block in the
+//!   project's `.gitignore` ([`crate::project_gitignore`], HS2-61ZMVA).
 //!
 //! Each scope is a flat `key -> JSON value` map. The **effective** value of a key is
 //! resolved in precedence order **Global < Shared < Local** — the most specific wins.
@@ -501,31 +502,14 @@ impl Settings {
             write_file_atomically(&path, text.as_bytes())?;
         }
         if scope == Scope::Local {
-            let ignored = if self.project_owned {
-                format!("{SETTINGS_DIR}/{}", Scope::Local.file_name())
+            if self.project_owned {
+                // HS2-61ZMVA: the one managed `.hotsheet2/` block covers the local file.
+                let report = crate::project_gitignore::ensure_project_block(&self.project_root)?;
+                crate::project_gitignore::warn_conflicts(&report);
             } else {
-                LEGACY_LOCAL_FILE.to_owned()
-            };
-            self.ensure_gitignored(&ignored)?;
+                crate::project_gitignore::ensure_entry(&self.project_root, LEGACY_LOCAL_FILE)?;
+            }
         }
-        Ok(())
-    }
-
-    /// Ensure `name` is listed in the project's `.gitignore` (create/append as needed),
-    /// so a local settings file is never committed.
-    fn ensure_gitignored(&self, name: &str) -> Result<(), SettingsError> {
-        let gi = self.project_root.join(".gitignore");
-        let existing = std::fs::read_to_string(&gi).unwrap_or_default();
-        if existing.lines().any(|l| l.trim() == name) {
-            return Ok(());
-        }
-        let mut out = existing;
-        if !out.is_empty() && !out.ends_with('\n') {
-            out.push('\n');
-        }
-        out.push_str(name);
-        out.push('\n');
-        std::fs::write(&gi, out)?;
         Ok(())
     }
 }
@@ -842,11 +826,8 @@ mod tests {
         // local file exists AND is gitignored
         assert!(d.path().join(".hotsheet2/settings.local.json").is_file());
         let gi = std::fs::read_to_string(d.path().join(".gitignore")).unwrap();
-        assert!(
-            gi.lines()
-                .any(|line| line == ".hotsheet2/settings.local.json")
-        );
-        assert!(!gi.lines().any(|line| line == ".hotsheet2/settings.json"));
+        assert!(gi.lines().any(|line| line == "/.hotsheet2/*"));
+        assert!(gi.lines().any(|line| line == "!/.hotsheet2/settings.json"));
     }
 
     #[test]
@@ -861,7 +842,9 @@ mod tests {
         s.set("a", json!(1), Scope::Local).unwrap();
         s.set("b", json!(2), Scope::Local).unwrap();
         let gi = std::fs::read_to_string(d.path().join(".gitignore")).unwrap();
-        assert_eq!(gi.matches(".hotsheet2/settings.local.json").count(), 1);
+        // HS2-61ZMVA: the legacy single-file line folds into the one managed block.
+        assert!(!gi.contains(".hotsheet2/settings.local.json"));
+        assert_eq!(gi.matches(crate::project_gitignore::BLOCK_BEGIN).count(), 1);
         assert!(gi.contains("target/"), "existing entries preserved");
     }
 

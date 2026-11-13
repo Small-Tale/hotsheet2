@@ -251,25 +251,10 @@ pub fn link_store(store: &Path, project_dir: &Path) -> Result<PathBuf> {
     let hs = project_dir.join(".hotsheet2");
     std::fs::create_dir_all(&hs)?;
     std::fs::write(hs.join("store"), format!("{}\n", abs.display()))?;
-    ensure_gitignored(project_dir, STORE_LINK)?;
+    // HS2-61ZMVA: the managed `.hotsheet2/` block keeps the machine-local link ignored.
+    let report = hotsheet_ticketing::project_gitignore::ensure_project_block(project_dir)?;
+    hotsheet_ticketing::project_gitignore::warn_conflicts(&report);
     Ok(abs)
-}
-
-/// Append `entry` to `<dir>/.gitignore` if not already present.
-fn ensure_gitignored(dir: &Path, entry: &str) -> Result<()> {
-    let gi = dir.join(".gitignore");
-    let existing = std::fs::read_to_string(&gi).unwrap_or_default();
-    if existing.lines().any(|l| l.trim() == entry) {
-        return Ok(());
-    }
-    let mut out = existing;
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str(entry);
-    out.push('\n');
-    std::fs::write(&gi, out)?;
-    Ok(())
 }
 
 /// Read a `hotsheet-export.json` and import it into the store (creating the store on
@@ -650,8 +635,9 @@ mod store_link_tests {
         let linked = std::fs::read_to_string(code.path().join(STORE_LINK)).unwrap();
         assert_eq!(linked.trim(), abs.display().to_string());
         let gi = std::fs::read_to_string(code.path().join(".gitignore")).unwrap();
+        // HS2-61ZMVA: the managed block, not a per-file line, ignores the link.
         assert!(
-            gi.lines().any(|l| l.trim() == STORE_LINK),
+            gi.lines().any(|l| l.trim() == "/.hotsheet2/*"),
             "link is gitignored"
         );
 

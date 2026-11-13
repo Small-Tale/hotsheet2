@@ -693,6 +693,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/corrupt_cache.rs   #   stat-validated per-store memo of corrupt ticket files; re-parses only changed files (checkout corrupt-tickets, HS2-KYSBT2)
       src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata; `command_groups` kept-group list (HS2-EZ5KMC)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
+      src/project_gitignore.rs #   the one writer of a code project's .gitignore: managed `.hotsheet2/` block, legacy-line fold-in, git check-ignore conflict warnings (docs/04 §4.7.0, HS2-61ZMVA)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary + note confidence and derived latest_confidence (HS2-DWTJ43), ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib

@@ -1925,8 +1925,8 @@ handle, never that CLI reply.
 > `key -> JSON` map per scope: **global** `${HOTSHEET_HOME}/settings.json`
 > (machine-wide and project-independent), **shared**
 > `<project-root>/.hotsheet2/settings.json` (committed with the code project), and
-> **local** `<project-root>/.hotsheet2/settings.local.json` (auto-added to the code
-> project's `.gitignore`). The effective value resolves in precedence **global < shared < local**
+> **local** `<project-root>/.hotsheet2/settings.local.json` (kept out of Git by the
+> managed `.gitignore` block, §4.7.0). The effective value resolves in precedence **global < shared < local**
 > (most specific wins). Driven headless by `hotsheet-cli settings get|set|list
 [--scope global|shared|local]`. Client/device-only settings still never enter core.
 >
@@ -1958,6 +1958,43 @@ it's shared or local and lives in core-owned settings. If it only means somethin
 a running GUI on one device, it's client-only and the core never sees it. This is
 why `hotsheet settings` (§4.4) can manage the first two scopes with no client at all,
 while a window position stays out of the core entirely.
+
+### 4.7.0 The managed project `.gitignore` block (HS2-61ZMVA)
+
+Hot Sheet changes a code project's `.gitignore` through one function,
+`hotsheet_ticketing::project_gitignore::ensure_project_block`. Local settings writes
+(`settings set --scope local` and the server's checkout settings route) and
+`hotsheet-cli link` / `init --standalone` call it, so the CLI and the server keep the
+file the same way. It owns one delimited block:
+
+```gitignore
+# >>> Hot Sheet 2 (managed; edit outside this block) >>>
+/.hotsheet2/*
+!/.hotsheet2/settings.json
+!/.hotsheet2/groups/
+# <<< Hot Sheet 2 <<<
+```
+
+- Everything under `.hotsheet2/` is machine-local except the shared settings file and the
+  group registry ([02](02-ticket-storage.md) §2.7.1). A new machine-local file
+  needs no new ignore line.
+- Lines outside the block are never changed. The only exception is the exact
+  single-file lines earlier releases appended (`.hotsheet2/settings.local.json`,
+  `.hotsheet2/store`); the block replaces them.
+- An edited, duplicated, or unterminated block is restored to the rules above in place.
+  CRLF files stay CRLF.
+- When no block exists and `git check-ignore` reports that the existing rules already
+  give every Hot Sheet path the expected outcome, the file is left alone.
+- After writing, Git is asked how the shared and machine-local paths resolve. A rule that
+  hides a shared path (a bare `.hotsheet2/` ignores the directory, so no `!` rule can
+  re-include `settings.json`) or re-includes a machine-local one prints a warning naming
+  the rule. Hot Sheet does not edit that rule. Outside a Git work tree the block is
+  written without the check.
+- `setup --diagnose` reports a `.gitignore` write only when this function would write.
+- Group registry writes do not touch `.gitignore`; they change only registry paths
+  (HS2-9EGWC4).
+- AI-tool MCP configs owned wholly by Hot Sheet stay in `.git/info/exclude` (§4.4 setup),
+  and a ticket store's own `.gitignore` is maintained by the store.
 
 Checkout-owned settings remain available when a project has zero ticket sources and have
 one identity when it has several. Older `hotsheet-settings.json` and

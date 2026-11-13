@@ -839,6 +839,14 @@ app poll and verifies both readers see the done event. It advances the installed
 virtual clock through the transport's bounded reconnect window before asserting
 the interrupted state, so a frozen test clock cannot strand a pending retry.
 
+HS2-61ZMVA covers the managed project `.gitignore` block in
+`crates/hotsheet-ticketing/src/project_gitignore_tests.rs`: missing, trailing-blank,
+unterminated, CRLF, legacy-line, hand-written-equivalent, edited, duplicated, and
+damaged-before-complete files; idempotent re-runs; and real `git check-ignore`
+conflicts from a bare `.hotsheet2/`, a later `*.json`, and a re-included local file.
+The CLI `settings` and `init --standalone` tests and the server checkout-settings
+round trip assert the block through the shipped paths. Manual: none.
+
 HS2-KYP8ZT tests forced two-process local and shared settings lock interleavings in
 `settings::tests::conditional_write_serializes_with_a_second_process` and
 root command/group HTTP stale, CLI-style out-of-band edit, and explicit force

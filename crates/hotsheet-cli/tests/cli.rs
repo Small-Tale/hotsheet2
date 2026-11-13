@@ -6775,7 +6775,9 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
         store.canonicalize().unwrap().to_str().unwrap()
     );
     let ignore = std::fs::read_to_string(project.join(".gitignore")).unwrap();
-    assert!(ignore.lines().any(|line| line == hotsheet_cli::STORE_LINK));
+    // HS2-61ZMVA: the managed `.hotsheet2/` block ignores the link.
+    assert!(ignore.lines().any(|line| line == "/.hotsheet2/*"));
+    assert!(!ignore.lines().any(|line| line == hotsheet_cli::STORE_LINK));
 
     let origin = Command::from_std(hotsheet_ticketing::git::command())
         .current_dir(&store)
@@ -9477,10 +9479,9 @@ fn settings_shared_and_local_scopes() {
 
     // local file is gitignored; shared file is committed (present, not ignored)
     let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
-    assert!(
-        gi.lines()
-            .any(|line| line == ".hotsheet2/settings.local.json")
-    );
+    // HS2-61ZMVA: one managed block ignores `.hotsheet2/` except the shared files.
+    assert!(gi.lines().any(|line| line == "/.hotsheet2/*"));
+    assert!(gi.lines().any(|line| line == "!/.hotsheet2/settings.json"));
     assert!(p.join(".hotsheet2/settings.json").is_file());
 
     // an unknown key errors

@@ -8338,7 +8338,8 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
         std::fs::read_to_string(checkout.join(".gitignore"))
             .unwrap()
             .lines()
-            .any(|line| line == ".hotsheet2/settings.local.json")
+            .any(|line| line == "/.hotsheet2/*"),
+        "HS2-61ZMVA managed block"
     );
     assert!(!primary.path().join(".hotsheet2/settings.json").exists());
     assert!(!primary.path().join("hotsheet-settings.json").exists());
