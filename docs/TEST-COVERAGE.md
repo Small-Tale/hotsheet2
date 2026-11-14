@@ -3745,7 +3745,9 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   run's own actor cancels it.
 - `remote_servers/runs.rs` dispatches to a real second server over authenticated TLS
   with the owned CLI process, including the peer narrowing the pairing to read-only,
-  and drives the stdio MCP tool on a live service.
+  and drives the stdio MCP tool on a live service. Before it asserts that the event
+  feed is quiet, it follows the feed until the run's own follower has reconciled the
+  run on connect, which under load can land after the test's snapshot (HS2-8C9KFP).
 
 ### Orchestration target tickets (HS2-AZ15GA)
 

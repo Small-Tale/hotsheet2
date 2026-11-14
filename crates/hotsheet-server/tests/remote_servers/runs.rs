@@ -497,8 +497,30 @@ async fn hs2_ebhdsb_stdio_mcp_dispatches_and_supervises_a_run() {
         .collect();
     assert_eq!(kinds[0], "state");
     assert!(kinds.contains(&"observed".to_owned()));
+    // HS2-8C9KFP: the server starts a follower for the new run, and the follower's
+    // first step reconciles it (HS2-WBREDM), which publishes a `reconciled` event.
+    // Under load that step can run after the snapshot above, so the feed is quiet only
+    // once it has: follow the feed, woken by its own long poll, until it is there.
+    let mut cursor = stream["cursor"].clone();
+    let mut reconciled = kinds.contains(&"reconciled".to_owned());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while !reconciled {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run's follower never reconciled it"
+        );
+        let page = call(json!({"action":"run_events","run_id":run_id,"after":cursor,
+            "wait_ms":5000}));
+        reconciled = page["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "reconciled");
+        cursor = page["cursor"].clone();
+    }
+    // With the follower caught up, nothing more is published for an unchanged run.
     assert_eq!(
-        call(json!({"action":"run_events","after":stream["cursor"],"wait_ms":200}))["entries"],
+        call(json!({"action":"run_events","after":cursor,"wait_ms":200}))["entries"],
         json!([])
     );
     let cancelled = call(json!({"action":"run_cancel","run_id":run_id}));
