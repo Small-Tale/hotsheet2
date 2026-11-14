@@ -1830,6 +1830,7 @@ fn hs2_fj6mdw_a_targets_setting_is_read_alone_and_followed_by_its_feed() {
     let on = hotsheet_ticketing::orchestration::TargetSpeculation {
         enabled: true,
         max_depth: 1,
+        integration: Default::default(),
     };
     // The hosted read: the project's committed setting, nothing else.
     assert_eq!(
@@ -1956,4 +1957,59 @@ fn hs2_08f1m8_work_on_gates_about_several_commits_waits_for_every_commit() {
             .iter()
             .any(|gate| gate.gate_ids == [lint.clone()])
     );
+}
+
+/// HS2-ERYQDV: a working project whose own setting parks provisional work has that
+/// rule carried in its reports, stored on the record and named in the dispatch note;
+/// the work is reported held until its base gate is green. A project that keeps the
+/// default reports nothing new.
+#[test]
+fn hs2_eryqdv_a_targets_parked_rule_travels_with_the_work_and_holds_it() {
+    tx!(tx);
+    let t = two(Some(&Opt::on()), &mut tx);
+    let capacity = |checkout: &Checkout| {
+        serde_json::to_value(t.m.runtime.hosted_capacity(&checkout.id, &[]).unwrap()).unwrap()
+    };
+    // Default rule: nothing new is reported, and the work is not held.
+    assert!(
+        capacity(&t.second)
+            .get("speculation")
+            .and_then(|setting| setting.get("integration"))
+            .is_none()
+    );
+    // The working project parks provisional work.
+    SpeculationPolicy {
+        enabled: true,
+        max_depth: 1,
+        integration: hotsheet_ticketing::provisional::IntegrationRule::Parked,
+        ..SpeculationPolicy::default()
+    }
+    .write(&Settings::for_project(&t.second.root))
+    .unwrap();
+    assert_eq!(capacity(&t.second)["speculation"]["integration"], "parked");
+    assert_eq!(
+        t.m.runtime
+            .hosted_speculation(&t.second.id)
+            .unwrap()
+            .speculation
+            .unwrap()
+            .integration,
+        hotsheet_ticketing::provisional::IntegrationRule::Parked
+    );
+    t.dispatch_b(&mut tx).unwrap();
+    let work = t.only();
+    assert_eq!(
+        (work.integration, work.held),
+        (
+            hotsheet_ticketing::provisional::IntegrationRule::Parked,
+            true
+        )
+    );
+    let notes = t.notes("Provisional dispatch");
+    assert!(notes[0].contains("Integration is parked"), "{}", notes[0]);
+    // Green: confirmed, and no longer held.
+    t.ci_says(&t.run_a, &sha('a'), GateState::Passed, 1, &mut tx);
+    let confirmed = t.only();
+    assert_eq!(confirmed.state, SpeculationState::Confirmed);
+    assert!(!confirmed.held);
 }

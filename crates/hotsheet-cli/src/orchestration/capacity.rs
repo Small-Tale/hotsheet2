@@ -436,5 +436,6 @@ pub(super) fn checkout_speculation(root: &str) -> Option<TargetSpeculation> {
     .map(|policy| TargetSpeculation {
         enabled: policy.enabled,
         max_depth: policy.max_depth,
+        integration: policy.integration,
     })
 }

@@ -20144,6 +20144,11 @@ components:
                   type: integer
                   minimum: 1
                   maximum: 8
+                integration:
+                  description: HS2-ERYQDV. Present only when the project parks provisional work.
+                  enum:
+                    - push-per-ticket
+                    - parked
               additionalProperties: false
       additionalProperties: false
     OrchestrationToolCapacityState:
@@ -20663,6 +20668,11 @@ components:
               type: integer
               minimum: 1
               maximum: 8
+            integration:
+              description: HS2-ERYQDV. Present only when the project parks provisional work.
+              enum:
+                - push-per-ticket
+                - parked
           additionalProperties: false
         version:
           description:
@@ -23711,6 +23721,8 @@ components:
         - explain
         - gates
         - recorded_at_ms
+        - integration
+        - held
       properties:
         assignment:
           type: string
@@ -23760,6 +23772,16 @@ components:
         recorded_at_ms:
           type: integer
           minimum: 0
+        integration:
+          description: HS2-ERYQDV. The working target project's own integration rule when the work was recorded.
+          enum:
+            - push-per-ticket
+            - parked
+        held:
+          description:
+            The work must stay off the target's shipping branch now (parked and not yet green, at risk, or reopened). The
+            target's own workflow integrates it; the orchestrator reports the rule.
+          type: boolean
       additionalProperties: false
     ProvisionalStatus:
       description: Which work is provisional on which gate, from the records of this machine (HS2-JSF985).

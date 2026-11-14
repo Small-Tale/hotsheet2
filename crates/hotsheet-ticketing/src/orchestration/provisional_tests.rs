@@ -117,6 +117,7 @@ impl Fixture {
         let on = TargetSpeculation {
             enabled: true,
             max_depth: 1,
+            integration: Default::default(),
         };
         Self {
             steps: vec![step(2, &b, vec![ci(&a)])],
@@ -189,6 +190,7 @@ fn hs2_jsf985_a_pending_gate_is_built_on_only_when_every_policy_allows_it() {
     let off = TargetSpeculation {
         enabled: false,
         max_depth: 1,
+        integration: Default::default(),
     };
     let cases: Vec<(&str, Edit, &str, bool)> = vec![
         (
@@ -403,6 +405,7 @@ fn hs2_jsf985_depth_counts_stacked_gates_and_takes_the_smallest_limit() {
     let deep = TargetSpeculation {
         enabled: true,
         max_depth: 2,
+        integration: Default::default(),
     };
     fixture.own.insert(id(3), deep);
     let refused = (false, Some("speculation_depth_exceeded".to_owned()), 0);
@@ -764,6 +767,7 @@ fn hs2_jsf985_new_fields_are_absent_until_they_say_something() {
     let said = snapshot.with_speculation(Some(TargetSpeculation {
         enabled: true,
         max_depth: 2,
+        integration: Default::default(),
     }));
     wire = serde_json::to_value(&said).unwrap();
     assert_eq!(

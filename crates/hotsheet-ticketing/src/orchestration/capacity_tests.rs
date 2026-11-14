@@ -697,6 +697,7 @@ fn hs2_p5gtsw_the_capacity_version_changes_with_room_not_with_jitter() {
             s.speculation = Some(TargetSpeculation {
                 enabled: true,
                 max_depth: 1,
+                integration: Default::default(),
             });
         }),
     ];

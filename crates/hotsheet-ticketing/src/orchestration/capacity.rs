@@ -99,6 +99,15 @@ pub struct TargetSpeculation {
     pub enabled: bool,
     /// How many unconfirmed gates the project lets stack beneath one dependent.
     pub max_depth: u32,
+    /// HS2-ERYQDV: where the project lets provisional work go while its base gate is
+    /// pending. Absent (the default) is `push-per-ticket`, so an older host and a
+    /// project that keeps the default answer as before.
+    #[serde(default, skip_serializing_if = "pushes_per_ticket")]
+    pub integration: crate::provisional::IntegrationRule,
+}
+
+fn pushes_per_ticket(rule: &crate::provisional::IntegrationRule) -> bool {
+    *rule == crate::provisional::IntegrationRule::PushPerTicket
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,6 +245,7 @@ impl TargetSpeculation {
     pub const NOT_OPTED_IN: Self = Self {
         enabled: false,
         max_depth: 1,
+        integration: crate::provisional::IntegrationRule::PushPerTicket,
     };
 }
 

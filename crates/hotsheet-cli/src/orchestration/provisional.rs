@@ -122,6 +122,13 @@ pub struct ProvisionalWork {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reopen_reason: Option<String>,
     pub recorded_at_ms: u64,
+    /// HS2-ERYQDV: the working target project's own integration rule when the work
+    /// was recorded.
+    pub integration: IntegrationRule,
+    /// The work must stay off the target's shipping branch now: its rule is `parked`
+    /// and a gate is not green yet, it is at risk, or it was reopened. The target's own
+    /// workflow integrates it; this machine reports the rule and does not drive it.
+    pub held: bool,
 }
 
 /// A prerequisite whose gate failed under provisional work: its repair comes first.
@@ -219,6 +226,12 @@ fn view_work(record: &SpeculativeRecord, work: &WorkRecord) -> ProvisionalWork {
             .flatten(),
         reopen_reason: record.reopen_reason.clone(),
         recorded_at_ms: work.recorded_at_ms,
+        integration: record.integration,
+        held: match record.state {
+            SpeculationState::Confirmed => false,
+            SpeculationState::AtRisk | SpeculationState::Reopened => true,
+            SpeculationState::Provisional => record.integration == IntegrationRule::Parked,
+        },
     }
 }
 
@@ -376,6 +389,16 @@ impl OrchestrationRuntime {
             text,
         )
         .is_ok()
+    }
+
+    /// HS2-ERYQDV: whether a step's live provisional work is under a `parked` rule.
+    fn provisional_parked(&self, owner_id: &str, step_id: &str) -> bool {
+        self.provisional_store()
+            .read::<Document>(owner_id)
+            .ok()
+            .flatten()
+            .and_then(|document| of_step(&document, step_id).map(|(record, _)| record.integration))
+            == Some(IntegrationRule::Parked)
     }
 
     // ---- What the rule reads ----
@@ -559,6 +582,14 @@ impl OrchestrationRuntime {
                         .filter(|work| work.step_id == step.step_id)
                         .count();
                     let assignment = format!("{}-{}", step.step_id, earlier + 1);
+                    // HS2-ERYQDV: the working project's own rule, as its machine last
+                    // reported it.
+                    let integration = document
+                        .targets
+                        .get(&step.target.target_id)
+                        .and_then(|seen| seen.speculation)
+                        .map(|setting| setting.integration)
+                        .unwrap_or_default();
                     document
                         .ledger
                         .record(
@@ -574,7 +605,7 @@ impl OrchestrationRuntime {
                                 // integrated commit the work assumes, not a branch point.
                                 base: first.commit.clone(),
                                 depth: standing.depth,
-                                integration: IntegrationRule::default(),
+                                integration,
                                 gates: standing
                                     .bases
                                     .iter()
@@ -740,11 +771,18 @@ impl OrchestrationRuntime {
                 &step.ticket,
                 format!(
                     "Provisional dispatch: plan step `{}` is dispatched under operation \
-                     `{operation_id}` ahead of {} (depth {} of {}).",
+                     `{operation_id}` ahead of {} (depth {} of {}).{}",
                     step.step_id,
                     gates.join(", "),
                     standing.depth,
                     standing.max_depth,
+                    // HS2-ERYQDV: the working project's own rule travels with the work.
+                    if self.provisional_parked(owner_id, &step.step_id) {
+                        " Integration is parked: keep the work off the target's shipping \
+                         branch until its base gates are green."
+                    } else {
+                        ""
+                    },
                 ),
                 tx,
             );

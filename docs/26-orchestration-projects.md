@@ -3787,10 +3787,17 @@ The workspace view of provisional state is HS2-0D60T8.
 - **Pool storage.** `Coordinator::speculation_*` reads and writes `speculation.json`
   under the worker pool's lock. An orchestration owner has no pool; the same ledger
   type is stored in the orchestration file above.
-- **The integration rule.** `integration_rule` refuses a pool worker's
+- **The integration rule (HS2-ERYQDV).** `integration_rule` refuses a pool worker's
   `mark --phase integrating`. Integration of target work stays with the target's own
-  workflow (§26.8), which this machine does not drive, so the rule is recorded and
-  not enforced here (HS2-ERYQDV).
+  workflow (§26.8), which this machine does not drive, so the run reports the rule
+  rather than this machine enforcing it:
+  - the working target reports its own rule beside `enabled` and `max_depth`, in its
+    capacity snapshot and `target-speculation`, only when it is `parked`;
+  - the record stores that rule, and the dispatch note says when integration is
+    parked;
+  - each piece of work shows `integration` and `held`. `held` means it must stay off
+    the target's shipping branch now: parked and not yet green, at risk, or reopened.
+    The session and the target's integrator read it with the run's status.
 - **Notes on the target ticket.** The single-project loop notes the dependent and the
   failing ticket. Across targets the note goes on the orchestration ticket: nothing
   is written to a target for this.
