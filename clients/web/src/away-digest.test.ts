@@ -198,6 +198,37 @@ describe('away digest (HS2-JJ9RYN)', () => {
     expect(digest.events).toEqual([]);
   });
 
+  it('HS2-ZTRF4Q prefers the server window read, never shows fewer than seen, and is unknown without either', () => {
+    const before = store();
+    const record = beginAwayRecord([before], T0);
+    // No snapshot during a long standby (the reported 27 minutes): the window read counts what the
+    // five-minute snapshot series could not.
+    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE, 48_000)).toMatchObject({ tokens: 48_000 });
+    // The read failed and nothing was seen: unknown, not 0, and an otherwise quiet standby stays silent.
+    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE)).toBeUndefined();
+    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE)).toMatchObject({ tokens: null });
+    // A read of zero is a real zero.
+    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE, 0)).toMatchObject({ tokens: 0 });
+    // Snapshot minutes count when the read failed, and the read never reports fewer than they saw.
+    observeAwayStates(
+      record,
+      map(before),
+      [
+        store({
+          revision: 2,
+          rates: {
+            ...before.rates,
+            tokens: { window_minutes: 5, minutes: [{ start_ms: T0, tokens: 700 }], peak_per_minute: 1_000 },
+          },
+        }),
+      ],
+      [],
+      T0 + MINUTE,
+    );
+    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE)).toMatchObject({ tokens: 700 });
+    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE, 500)).toMatchObject({ tokens: 700 });
+  });
+
   it('counts completions inside the window once across projects that share a store', () => {
     const report = (completed_at: string[]) => ({
       completions: completed_at.length,

@@ -20,12 +20,13 @@ const ENTERED = new Date(2026, 10, 5, 23, 42).getTime();
 const at = (hour: number, minute: number) => new Date(2026, 10, hour < 12 ? 6 : 5, hour, minute).getTime();
 const EXITED = at(7, 8);
 
-type Scenario = 'overnight' | 'nothing-needs-you' | 'completions-only';
+type Scenario = 'overnight' | 'nothing-needs-you' | 'completions-only' | 'tokens-unknown';
 
 const SCENARIO_CHOICES: SelectChoice[] = [
   { value: 'overnight', label: 'Overnight (m7)' },
   { value: 'nothing-needs-you', label: 'Nothing Needs You' },
   { value: 'completions-only', label: 'Completions Only' },
+  { value: 'tokens-unknown', label: 'Tokens Unknown' },
 ];
 
 /** Synthetic digests in the controller's exact shape; no customer content. */
@@ -80,6 +81,9 @@ function digest(scenario: Scenario): AwayDigest {
       };
     case 'completions-only':
       return { ...base, completed: 2, needYou: 0, tokens: 0, events: [] };
+    // HS2-ZTRF4Q: the window read failed and no snapshot counted any, so the tile shows a dash, not 0.
+    case 'tokens-unknown':
+      return { ...base, completed: 2, needYou: 0, tokens: null, events: [] };
     default:
       return scenario satisfies never;
   }

@@ -36,6 +36,7 @@ import type {
   LiveHistoryList,
   LiveStateList,
   LiveStoreState,
+  LiveTokenTotal,
   MessageConnectionReceipt,
   NoteActor,
   NoteDoctorReport,
@@ -998,6 +999,14 @@ export const parseLiveStateList = shape<LiveStateList>('live state list', {
   stores: listOf(parseLiveStoreState.check),
 });
 const isHistoryState: Check = (field) => field === 'waiting_on_ci' || isLiveWord(field);
+export const parseLiveTokenTotal = shape<LiveTokenTotal>('live tokens', {
+  store: isString,
+  since_ms: isNumber,
+  until_ms: isNumber,
+  tokens: isNumber,
+  complete: isBoolean,
+});
+
 export const parseLiveHistoryList = shape<LiveHistoryList>('live history', {
   since_ms: isNumber,
   until_ms: isNumber,

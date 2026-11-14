@@ -334,6 +334,24 @@ test.describe('standby (HS2-EQVZTZ)', () => {
         },
       }),
     );
+    // HS2-ZTRF4Q: the server's `GET /stores/{id}/live-tokens` shape, read once on exit for the whole window.
+    let windowTokens = 0;
+    const tokenReads: URL[] = [];
+    // Every open store answers; only `stw` worked during standby.
+    await page.route('**/stores/*/live-tokens**', (route) => {
+      const url = new URL(route.request().url());
+      const storeId = /\/stores\/([^/]+)\/live-tokens/u.exec(url.pathname)?.[1] ?? '';
+      if (storeId === 'stw') tokenReads.push(url);
+      return route.fulfill({
+        json: {
+          store: storeId,
+          since_ms: Number(url.searchParams.get('since_ms')),
+          until_ms: Number(url.searchParams.get('until_ms')),
+          tokens: storeId === 'stw' ? windowTokens : 0,
+          complete: true,
+        },
+      });
+    });
     await expect.poll(() => host.sockets.length).toBeGreaterThan(0);
     const moon = page.getByRole('button', { name: 'Enter Standby' });
     const digest = page.locator('[data-away-digest]');
@@ -363,10 +381,17 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     };
     for (const socket of host.sockets)
       socket.send(JSON.stringify({ cursor: 1, store: 'stw', kind: 'live_state', id: 'stw', slug: '', live: waiting }));
+    // No snapshot carries these tokens (the pushed series covers five minutes); only the window read does.
+    windowTokens = 48_000;
     await page.clock.fastForward(3 * 60 * MINUTE);
     await standby(page).click({ position: { x: 700, y: 450 } });
     await expect(digest).toBeVisible();
     await expect(digest.getByText('While you were away')).toBeVisible();
+    await expect(digest.locator('[data-away-tile="tokens"]')).toContainText('48k');
+    const read = tokenReads.at(-1)!;
+    expect(Number(read.searchParams.get('until_ms')) - Number(read.searchParams.get('since_ms'))).toBeGreaterThan(
+      3 * 60 * MINUTE,
+    );
     await expect(digest.locator('[data-away-tile="completed"]')).toContainText('1');
     await expect(digest.locator('[data-away-tile="need-you"]')).toHaveAttribute('data-attention', 'true');
     const row = digest.locator('[data-away-event="waiting"]');

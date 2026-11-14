@@ -4348,6 +4348,23 @@ export async function startHotSheetWebClient() {
       );
       return reports.filter((report) => report !== undefined);
     },
+    // HS2-ZTRF4Q: each store's recorded tokens across the whole standby window. Any failed read makes the
+    // total unknown to the digest, which then falls back to what the pushed snapshots saw.
+    windowTokens: async (stores, sinceMs, untilMs) => {
+      const byProject = new Map(projects.peek().map((item) => [item.id, item]));
+      const totals = await Promise.all(
+        stores.map(({ projectId, store }) => {
+          const item = byProject.get(projectId);
+          return item
+            ? new Api(item.apiPath, '', { trackBusy: false })
+                .storeLiveTokens(store, sinceMs, untilMs)
+                .catch(() => undefined)
+            : Promise.resolve(undefined);
+        }),
+      );
+      if (totals.some((total) => total === undefined || !total.complete)) return undefined;
+      return totals.reduce((sum, total) => sum + (total?.tokens ?? 0), 0);
+    },
   });
   let standbySettingsServer: string | undefined;
   effect(() => {

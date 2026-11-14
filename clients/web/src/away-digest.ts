@@ -44,7 +44,8 @@ export interface AwayDigest {
   exitedAtMs: number;
   completed: number;
   needYou: number;
-  tokens: number;
+  /** `null` when neither the server's window read nor the pushed snapshots could count them (HS2-ZTRF4Q). */
+  tokens: number | null;
   events: AwayEvent[];
 }
 
@@ -195,15 +196,21 @@ export function finishAwayDigest(
   current: Iterable<LiveStoreState>,
   completed: number,
   nowMs: number,
+  /** Tokens the server recorded across the whole window, read once on exit (HS2-ZTRF4Q); `undefined` when
+   * that read failed. Pushed snapshots carry only five minutes, so a longer gap between them loses tokens. */
+  windowTokens?: number,
 ): AwayDigest | undefined {
-  let tokens = 0;
+  let recorded = 0;
   for (const [key, value] of record.tokenMinutes) {
     const start = Number(key.slice(key.indexOf('\0') + 1));
-    if (start >= record.enteredAtMs - 60_000 && start <= nowMs) tokens += value;
+    if (start >= record.enteredAtMs - 60_000 && start <= nowMs) recorded += value;
   }
+  // The window read covers every minute the snapshots saw; never report fewer than were seen. With no
+  // window read and nothing seen, the count is unknown rather than zero.
+  const tokens = windowTokens === undefined ? (recorded > 0 ? recorded : null) : Math.max(windowTokens, recorded);
   let needYou = 0;
   for (const state of current) needYou += state.waiting.count;
-  if (!record.events.length && completed === 0 && tokens === 0) return undefined;
+  if (!record.events.length && completed === 0 && !tokens) return undefined;
   return {
     enteredAtMs: record.enteredAtMs,
     exitedAtMs: nowMs,

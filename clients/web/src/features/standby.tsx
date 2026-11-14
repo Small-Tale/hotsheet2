@@ -57,6 +57,12 @@ export interface StandbyControllerDependencies {
    * what completed meanwhile (HS2-JJ9RYN). A failed read counts none.
    */
   completions?: (projectIds: readonly string[]) => Promise<readonly CalibrationReport[]>;
+  /** Tokens the open projects' stores recorded in the standby window, read once on exit (HS2-ZTRF4Q). */
+  windowTokens?: (
+    stores: ReadonlyArray<{ projectId: string; store: string }>,
+    sinceMs: number,
+    untilMs: number,
+  ) => Promise<number | undefined>;
   /** Injected for tests. */
   setInterval?: (callback: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -171,11 +177,18 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
       // Need you counts what waits at the moment standby exits.
       current = dependencies.liveStates.forProjects(open);
     let reports: readonly CalibrationReport[] = [];
-    try {
-      reports = (await dependencies.completions?.(open)) ?? [];
-    } catch {
-      // Completions stay uncounted; the rest of the digest still stands.
-    }
+    let windowTokens: number | undefined;
+    const stores = current.flatMap((state) => {
+      const projectId = state.checkouts.find((id) => open.includes(id));
+      return projectId ? [{ projectId, store: state.store }] : [];
+    });
+    const [completed, tokens] = await Promise.allSettled([
+      dependencies.completions?.(open),
+      dependencies.windowTokens?.(stores, record.enteredAtMs, exitedAt),
+    ]);
+    // A failed read leaves its count to what the pushed snapshots saw; the rest of the digest still stands.
+    if (completed.status === 'fulfilled') reports = completed.value ?? [];
+    if (tokens.status === 'fulfilled') windowTokens = tokens.value;
     // Standby re-entered (or another exit finished) while the reports loaded.
     if (generation !== awayGeneration || away) return;
     awayDigest.value = finishAwayDigest(
@@ -183,6 +196,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
       current,
       completionsBetween(reports, record.enteredAtMs, exitedAt),
       exitedAt,
+      windowTokens,
     );
   }
 

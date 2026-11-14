@@ -6228,6 +6228,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/live-tokens:
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: store_live_tokens
+      description: One hosted store's recorded tokens (in plus out) inside a window, the minute containing since_ms
+        included (HS2-ZTRF4Q). until_ms defaults to now. complete is false when the window starts before the retained
+        two-day series. Read once when standby exits.
+      parameters:
+        - name: since_ms
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: until_ms
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveTokenTotal'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /stores/{store_id}/tickets:
     get:
       operationId: list_store_tickets
@@ -19248,6 +19290,27 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LiveHistoryCompletion'
+      additionalProperties: false
+    LiveTokenTotal:
+      type: object
+      required:
+        - store
+        - since_ms
+        - until_ms
+        - tokens
+        - complete
+      properties:
+        store:
+          type: string
+        since_ms:
+          type: integer
+        until_ms:
+          type: integer
+        tokens:
+          type: integer
+          minimum: 0
+        complete:
+          type: boolean
       additionalProperties: false
     LiveHistoryList:
       type: object

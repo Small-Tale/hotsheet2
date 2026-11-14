@@ -1300,3 +1300,92 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
     assert_eq!(after["ci"]["status"], "failure");
     assert_eq!(after["ci"]["checkout"], worktree_id.as_str());
 }
+
+/// HS2-ZTRF4Q: the standby digest reads one store's recorded tokens for its whole window, so a
+/// long gap between pushed snapshots (each carries only five minutes) cannot read as zero.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_ztrf4q_live_tokens_sums_the_recorded_window() {
+    use time::format_description::well_known::Rfc3339;
+    let h = harness();
+    let router = app(h.state.clone());
+    let now = time::OffsetDateTime::now_utc();
+    let raw = h._dir.path().join("demo.hs2").join("metrics").join("raw");
+    std::fs::create_dir_all(&raw).unwrap();
+    // 40 and 20 minutes ago, and a minute ago; each line lands in its own UTC day file.
+    for (minutes_ago, tokens) in [(40, 1000_u64), (20, 2000), (1, 500)] {
+        let at = now - time::Duration::minutes(minutes_ago);
+        let file = raw.join(format!(
+            "{:04}-{:02}-{:02}.jsonl",
+            at.year(),
+            u8::from(at.month()),
+            at.day()
+        ));
+        let line = format!(
+            "{{\"ts\":\"{}\",\"tool\":\"claude\",\"tokens_in\":{tokens},\"tokens_out\":0}}\n",
+            at.format(&Rfc3339).unwrap()
+        );
+        let mut text = std::fs::read_to_string(&file).unwrap_or_default();
+        text.push_str(&line);
+        std::fs::write(&file, text).unwrap();
+    }
+    let ms = |at: time::OffsetDateTime| (at.unix_timestamp_nanos() / 1_000_000) as i64;
+    let since = ms(now - time::Duration::minutes(30));
+    let (status, total) = call(
+        &router,
+        "GET",
+        &format!("/stores/{}/live-tokens?since_ms={since}", h.store_id),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(total["tokens"], 2500, "{total}");
+    assert_eq!(total["complete"], true);
+    assert_eq!(total["store"], h.store_id.as_str());
+    // A window that ends before the newest line excludes it; one that starts before the
+    // retained two days is marked incomplete.
+    let until = ms(now - time::Duration::minutes(10));
+    let (_, early) = call(
+        &router,
+        "GET",
+        &format!(
+            "/stores/{}/live-tokens?since_ms={since}&until_ms={until}",
+            h.store_id
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(early["tokens"], 2000, "{early}");
+    let old = ms(now - time::Duration::days(3));
+    let (_, wide) = call(
+        &router,
+        "GET",
+        &format!("/stores/{}/live-tokens?since_ms={old}", h.store_id),
+        None,
+    )
+    .await;
+    assert_eq!(wide["tokens"], 3500, "{wide}");
+    assert_eq!(wide["complete"], false);
+    // An unknown store is a 404, and the route needs authentication like every live read.
+    let (missing, _) = call(
+        &router,
+        "GET",
+        "/stores/unknown/live-tokens?since_ms=0",
+        None,
+    )
+    .await;
+    assert_eq!(missing, StatusCode::NOT_FOUND);
+    let unauthenticated = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/stores/{}/live-tokens?since_ms={since}",
+                    h.store_id
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+}

@@ -55,6 +55,7 @@ import {
   parseLiveHistoryList,
   parseLiveStateList,
   parseLiveStoreState,
+  parseLiveTokenTotal,
   parseMessageConnectionReceipt,
   parseNoteDoctorReport,
   parseNotificationChannel,
@@ -1523,6 +1524,15 @@ export interface LiveCi {
   reported_at_ms: number | null;
 }
 /** A hosted store's server-pushed live snapshot; clients derive ages and decaying rates locally. */
+/** `GET /stores/{store_id}/live-tokens` (HS2-ZTRF4Q): recorded tokens in a window; `complete` is false
+ * when the window starts before the server's retained series. */
+export interface LiveTokenTotal {
+  store: string;
+  since_ms: number;
+  until_ms: number;
+  tokens: number;
+  complete: boolean;
+}
 export interface LiveStoreState {
   store: string;
   root: string;
@@ -1997,6 +2007,14 @@ export class Api {
   /** Recorded per-store state segments and completion ticks since `sinceMs` (HS2-9AN4DN). Read on demand only. */
   liveHistory = (sinceMs: number) =>
     this.parsed(parseLiveHistoryList, `/live-history?since_ms=${String(Math.floor(sinceMs))}`);
+  /** One store's recorded tokens between `sinceMs` and now, read once when standby exits (HS2-ZTRF4Q). */
+  storeLiveTokens = (store: string, sinceMs: number, untilMs?: number) =>
+    this.parsed(
+      parseLiveTokenTotal,
+      `/stores/${encodeURIComponent(store)}/live-tokens?since_ms=${String(Math.floor(sinceMs))}${
+        untilMs === undefined ? '' : `&until_ms=${String(Math.floor(untilMs))}`
+      }`,
+    );
   /** One hosted store's live snapshot (HS2-JTTQMY). */
   storeLiveState = (store: string) =>
     this.parsed(parseLiveStoreState, `/stores/${encodeURIComponent(store)}/live-state`);

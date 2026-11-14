@@ -89,6 +89,12 @@ members (plain and admin-only sessions get 404 without forwarding);
 a remote change-mux subscription for a plain session, and resolves it for a local session. Manual:
 open a paired server's project from Safari on a remote-mode host.
 
+HS2-ZTRF4Q: `crates/hotsheet-server/tests/live_state.rs # hs2_ztrf4q_live_tokens_sums_the_recorded_window`
+sums recorded usage over a window (bounds, retention, 404, 401); `clients/web/src/away-digest.test.ts`
+and `clients/web/src/features/standby.test.ts` prefer the exit-time window read, never show fewer than
+the snapshots saw, and show unknown when neither counts; `clients/web/tests/standby.spec.ts` shows a
+read total that no snapshot carried after a three-hour standby.
+
 HS2-H4REBS: `clients/web/src/remote-projects/host.test.ts` accepts an address without a port, refuses
 paths and credentials, and pairs over HTTPS without a CA or a pre-session identity read.
 `clients/web/src/peer-gateway.test.ts` pins the gateway prefixes to the Rust router, forwards a

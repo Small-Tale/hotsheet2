@@ -2112,6 +2112,11 @@ pub fn app(state: AppState) -> Router {
             "/stores/{store_id}/live-state",
             get(live_state::store_live_state),
         )
+        // Recorded tokens in a window, read once when standby exits (HS2-ZTRF4Q).
+        .route(
+            "/stores/{store_id}/live-tokens",
+            get(live_state::store_live_tokens),
+        )
         // Persisted per-store state transitions and completion ticks (HS2-9AN4DN).
         .route("/live-history", get(live_history::get_live_history))
         .route("/analytics/usage", get(usage_metrics_summary))
