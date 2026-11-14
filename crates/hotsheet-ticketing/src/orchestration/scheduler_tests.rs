@@ -215,6 +215,8 @@ pub(super) struct World {
     pub(super) memory: Vec<PlacementMemory>,
     /// HS2-2FG91X
     pub(super) unreadable: Vec<UnreadableClaims>,
+    /// HS2-AWB7BX
+    pub(super) capacity_streams: Vec<String>,
 }
 
 impl World {
@@ -239,6 +241,7 @@ impl World {
                 held: &self.held,
                 unreadable: &self.unreadable,
                 memory: &self.memory,
+                capacity_streams: &self.capacity_streams,
             },
             &|_| FULL,
         )
@@ -1751,4 +1754,104 @@ fn hs2_xyahb4_the_loop_acts_as_the_orchestration_project_without_a_named_actor()
             .acting_actor("owner")
             .starts_with(ORCHESTRATOR_ACTOR_PREFIX)
     );
+}
+
+/// HS2-AWB7BX: a capacity refusal on a target whose capacity changes arrive as events
+/// waits for the change; elsewhere, and for any other refusal, the backoff retry stays.
+#[test]
+fn hs2_awb7bx_an_evented_capacity_refusal_sets_no_retry_time_and_a_change_lifts_it() {
+    let mut world = World::new(&[(1, 2), (2, 2)]);
+    world.work = vec![work(1, 1), work(2, 2)];
+    let ram = PlacementOutcome::Refused("below_ram_floor".into());
+    let other = PlacementOutcome::Refused("session_start_failed".into());
+    world.memory = remember(&world.memory, &[(target(1), ram), (target(2), other)], T0);
+    let at = T0 + 30 * 1000;
+    // No stream: both keep their timed retry (the fallback).
+    let plain = world.at(at);
+    assert_eq!(plain.unplaced[0].retry_at_ms, Some(T0 + MIN));
+    assert_eq!(plain.retry_at_ms, Some(T0 + MIN));
+    // A stream on both targets: only the capacity refusal waits for the event.
+    world.capacity_streams = vec![target(1), target(2)];
+    let evented = world.at(at);
+    assert_eq!(
+        blocked(&evented, 1),
+        ("refusal_backoff", Some("below_ram_floor".into()))
+    );
+    let retry = |schedule: &Schedule, n: u128| {
+        schedule
+            .unplaced
+            .iter()
+            .find(|item| item.step_id == id(n))
+            .unwrap()
+            .retry_at_ms
+    };
+    assert_eq!(retry(&evented, 1), None);
+    assert_eq!(retry(&evented, 2), Some(T0 + MIN));
+    assert_eq!(evented.retry_at_ms, Some(T0 + MIN));
+    // The change lifts the capacity refusal only: target 1 is asked again at once,
+    // target 2 still waits out its backoff.
+    let lifted = lift_capacity_refusal(&world.memory, &target(1));
+    assert_eq!(
+        lift_capacity_refusal(&world.memory, &target(2)),
+        world.memory
+    );
+    world.memory = lifted;
+    let after = world.at(at);
+    assert_eq!(starts(&after), vec![(id(1), "alpha".into())]);
+    assert_eq!(blocked(&after, 2).0, "refusal_backoff");
+    // Lifting again, or lifting an unknown target, changes nothing.
+    assert_eq!(
+        lift_capacity_refusal(&world.memory, &target(1)),
+        world.memory
+    );
+    assert_eq!(
+        lift_capacity_refusal(&world.memory, &target(9)),
+        world.memory
+    );
+    assert!(lift_capacity_refusal(&[], &target(1)).is_empty());
+}
+
+#[test]
+fn hs2_awb7bx_capacity_refusals_are_the_admission_reasons() {
+    for code in [
+        "session_admission_refused",
+        "tool_not_installed",
+        "tool_not_configured",
+        "session_cap_reached",
+        "above_cpu_ceiling",
+        "below_disk_floor",
+        "below_ram_floor",
+        "capacity_unknown",
+    ] {
+        assert!(is_capacity_refusal(code), "{code}");
+    }
+    for code in [
+        "session_start_failed",
+        "resource_unknown",
+        "permission_required",
+        "",
+    ] {
+        assert!(!is_capacity_refusal(code), "{code}");
+    }
+}
+
+#[test]
+fn hs2_awb7bx_the_store_lifts_a_capacity_refusal_once() {
+    let home = tempfile::tempdir().unwrap();
+    let store = SchedulerStore::new(home.path());
+    let owner = "owner-0123456789ab";
+    assert!(!store.lift_capacity_refusal(owner, &target(1)).unwrap());
+    store
+        .record(
+            owner,
+            &[(
+                target(1),
+                PlacementOutcome::Refused("below_ram_floor".into()),
+            )],
+            T0,
+        )
+        .unwrap();
+    assert!(store.lift_capacity_refusal(owner, &target(1)).unwrap());
+    assert!(store.memory(owner).unwrap().is_empty());
+    assert!(!store.lift_capacity_refusal(owner, &target(1)).unwrap());
 }

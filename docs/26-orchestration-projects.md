@@ -11,7 +11,8 @@
 > gated, bounded list and search of a target's open tickets (§26.3, HS2-D85G19),
 > dispatch runs with status and events (§26.9, HS2-EBHDSB, HS2-7QHWHJ), target
 > capacity and admission (§26.10, HS2-J8PRTV; a capacity version subscribers wait on
-> while they are connected, HS2-P5GTSW), AI tool capacity states with tool
+> while they are connected, HS2-P5GTSW, which wakes the scheduling loop when a machine
+> that had no room gains it, HS2-AWB7BX), AI tool capacity states with tool
 > selection (§26.11, HS2-AHG7HW), extra validation steps with immutable result
 > references (§26.12, HS2-WN0MXZ), CI and deployment gates of runs (§26.13,
 > HS2-5JBYPV; deployments are recorded and allowed, not yet executed; the Job
@@ -2623,9 +2624,23 @@ start began is part of the decision, so a replacement start is always logged.
 Passes of one owner run one at a time on this machine (HS2-7Q428Z, §26.24), so a
 start is decided, applied and logged once however many passes are asked for at once.
 
-Capacity has no event stream yet (HS2-P5GTSW), so a machine that gains room is
-noticed at the end of the refusal backoff or at the next event (HS2-AWB7BX). Each
-capacity read is audited, which a busy loop makes numerous (HS2-SV4SMY).
+**A machine that gains room (HS2-AWB7BX).** When a pass of the loop leaves work
+unplaced because a target's machine had no room (`machine_refused`, or a
+`refusal_backoff` whose reason is a capacity refusal: `session_admission_refused` or an
+admission reason such as `below_ram_floor`), the loop follows that target's capacity
+with the wait of §26.10 (HS2-P5GTSW), from the version the pass read and with the same
+claim namespaces. It passes the gate as `gates_observe` (it never asks; again after 10
+minutes) on a thread of its own, at most 16 targets at a time and once per target. A
+changed version lifts the target's capacity refusal (`SchedulerStore::lift_capacity_refusal`)
+and wakes the loop, which asks the machine again at once. While a target is followed a
+capacity refusal there sets no retry time: the change ends it, not the clock. The
+refusal backoff stays the fallback wherever no event can arrive: a one-shot `plan` or
+`tick`, an older host whose snapshot has no version, a host that cannot be reached or
+answers without waiting, a gate refusal, or after 24 hours. The follow then ends, wakes
+the loop once so the retry time applies again, and the target is not followed again
+until a read sees a version. The pass that first records a refusal still sets its retry
+time, because the follow starts after it. Each capacity read is audited, which a busy
+loop makes numerous (HS2-SV4SMY).
 
 ### Headless surface
 

@@ -1638,3 +1638,188 @@ fn hs2_j3zf27_a_software_project_places_and_dispatches_nothing() {
     assert_eq!((resumed.active, resumed.trigger), (true, Some("start")));
     assert_eq!(s.sessions.calls().len(), 1);
 }
+
+/// HS2-AWB7BX: wait (on state) until `done` or the bound passes.
+fn until_state(bound: Duration, mut done: impl FnMut() -> bool) -> bool {
+    let began = std::time::Instant::now();
+    while began.elapsed() < bound {
+        if done() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    done()
+}
+
+/// HS2-AWB7BX: follow steps until one is triggered, within `bound`.
+fn followed_until(
+    s: &Setup,
+    state: &mut SchedulerFollowState,
+    bound: Duration,
+    tx: &mut Transaction<'_>,
+) -> Option<&'static str> {
+    let began = std::time::Instant::now();
+    let mut trigger = None;
+    while trigger.is_none() && began.elapsed() < bound {
+        trigger =
+            s.m.runtime
+                .scheduler_follow_step(&s.owner(), state, 1_000, tx)
+                .trigger;
+    }
+    trigger
+}
+
+#[test]
+fn hs2_awb7bx_a_machine_that_gets_room_wakes_the_follower() {
+    tx!(tx);
+    let mut s = setup(true, &mut tx);
+    s.m.runtime =
+        s.m.runtime
+            .clone()
+            .with_capacity_resample(Duration::from_millis(20));
+    let (_, first) = s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
+    let owner = s.owner();
+    s.probe
+        .set(|observation| observation.memory.free_mb = Some(2500));
+    let mut state = SchedulerFollowState::default();
+    let pass =
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!(pass.trigger, Some("start"));
+    assert!(s.sessions.calls().is_empty());
+    // The target is followed from the version the pass read.
+    assert_eq!(s.m.runtime.capacity_watches(&owner), [id(1)]);
+    let asked = s.probe.asked();
+    assert!(until_state(Duration::from_secs(5), || s.probe.asked() > asked));
+    // While the capacity stands still nothing wakes the loop.
+    assert_eq!(
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 300, &mut tx)
+            .trigger,
+        None
+    );
+    // Room appears on the machine: the follow sees the change, lifts the refusal and
+    // wakes the loop, which starts the work long before the backoff ends.
+    s.probe.set(|observation| *observation = roomy());
+    assert_eq!(
+        followed_until(&s, &mut state, Duration::from_secs(20), &mut tx),
+        Some("signal")
+    );
+    let [SessionCall::Start(request)] = &s.sessions.calls()[..] else {
+        panic!("one start: {:?}", s.sessions.calls());
+    };
+    assert_eq!(request.steps, [first]);
+    assert!(s.memory().iter().all(|entry| entry.refusals == 0));
+    assert!(until_state(Duration::from_secs(5), || s
+        .m
+        .runtime
+        .capacity_watches(&owner)
+        .is_empty()));
+}
+
+#[test]
+fn hs2_awb7bx_a_followed_capacity_refusal_waits_for_the_change_not_the_time() {
+    tx!(tx);
+    let mut s = setup(true, &mut tx);
+    s.m.runtime =
+        s.m.runtime
+            .clone()
+            .with_capacity_resample(Duration::from_millis(20));
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
+    let owner = s.owner();
+    // The host refuses the start for its own reason after the pass saw room.
+    *s.sessions.refuse_starts.lock().unwrap() = Some("below_ram_floor".into());
+    let mut state = SchedulerFollowState::default();
+    let first =
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!(first.trigger, Some("start"));
+    assert_eq!(
+        s.memory()[0].refusal_reason.as_deref(),
+        Some("below_ram_floor")
+    );
+    // Without a follow the backoff retry stood; the next pass, with the target
+    // followed, waits for the change instead of a time.
+    OrchestrationRuntime::scheduler_wake_at(&s.m.home);
+    let next =
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!(next.trigger, Some("signal"));
+    assert_eq!(s.m.runtime.capacity_watches(&owner), [id(1)]);
+    let view = s.tick(&mut tx).view;
+    assert_eq!(
+        unplaced(&view),
+        [("refusal_backoff", Some("below_ram_floor"))]
+    );
+    assert_eq!(view.schedule.unplaced[0].retry_at_ms, None);
+    // The machine changes: the refusal is lifted and the target asked again.
+    *s.sessions.refuse_starts.lock().unwrap() = None;
+    s.probe
+        .set(|observation| observation.memory.free_mb = Some(12_288));
+    assert_eq!(
+        followed_until(&s, &mut state, Duration::from_secs(20), &mut tx),
+        Some("signal")
+    );
+    assert!(s.memory().iter().all(|entry| entry.refusals == 0));
+    assert!(
+        s.sessions
+            .calls()
+            .iter()
+            .filter(|call| matches!(call, SessionCall::Start(_)))
+            .count()
+            >= 2
+    );
+}
+
+#[test]
+fn hs2_awb7bx_a_follow_ends_without_an_event_and_keeps_the_backoff() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let target = TargetRef {
+        owner_checkout_id: s.owner(),
+        target_id: id(1),
+    };
+    // A version that is not current answers at once as a change.
+    let changed = s.m.runtime.follow_capacity_change(
+        &target,
+        &worker(),
+        &[],
+        "0000000000000000",
+        std::time::Instant::now() + Duration::from_secs(30),
+        &mut tx,
+    );
+    assert!(matches!(changed, CapacityFollow::Changed(_)));
+    // A deadline already passed asks nothing.
+    let asked = s.probe.asked();
+    assert_eq!(
+        s.m.runtime.follow_capacity_change(
+            &target,
+            &worker(),
+            &[],
+            "0000000000000000",
+            std::time::Instant::now(),
+            &mut tx,
+        ),
+        CapacityFollow::Ended("deadline".into())
+    );
+    assert_eq!(s.probe.asked(), asked);
+    // A target the gate cannot reach ends the follow before the host is asked.
+    let undeclared = TargetRef {
+        owner_checkout_id: s.owner(),
+        target_id: id(7),
+    };
+    assert!(matches!(
+        s.m.runtime.follow_capacity_change(
+            &undeclared,
+            &worker(),
+            &[],
+            "0000000000000000",
+            std::time::Instant::now() + Duration::from_secs(30),
+            &mut tx,
+        ),
+        CapacityFollow::Ended(code) if code != "deadline"
+    ));
+    assert_eq!(s.probe.asked(), asked);
+}

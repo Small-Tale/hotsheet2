@@ -707,6 +707,51 @@ pub struct ScheduleInput<'a> {
     /// HS2-2FG91X: namespaces whose claims could not be read, per machine.
     pub unreadable: &'a [UnreadableClaims],
     pub memory: &'a [PlacementMemory],
+    /// HS2-AWB7BX: targets whose capacity changes reach the loop as events (their host
+    /// offers the capacity wait of HS2-P5GTSW). A capacity refusal there is lifted by
+    /// the change, so it sets no retry time; elsewhere the backoff retry stays.
+    pub capacity_streams: &'a [String],
+}
+
+/// HS2-AWB7BX: a refusal that says the machine had no room: a refused admission or one
+/// of its reasons. A change of the machine's capacity can end it.
+pub fn is_capacity_refusal(code: &str) -> bool {
+    use super::capacity::AdmissionReason as R;
+    code == super::SessionError::AdmissionRefused.code()
+        || [
+            R::ToolNotInstalled,
+            R::ToolNotConfigured,
+            R::SessionCapReached,
+            R::AboveCpuCeiling,
+            R::BelowDiskFloor,
+            R::BelowRamFloor,
+            R::CapacityUnknown,
+        ]
+        .iter()
+        .any(|reason| reason.code() == code)
+}
+
+/// HS2-AWB7BX: forget a target's capacity refusal because its capacity changed, so the
+/// next pass asks it again. Any other refusal, and every other entry, is kept.
+pub fn lift_capacity_refusal(memory: &[PlacementMemory], target_id: &str) -> Vec<PlacementMemory> {
+    memory
+        .iter()
+        .cloned()
+        .map(|mut entry| {
+            if entry.target_id == target_id
+                && entry
+                    .refusal_reason
+                    .as_deref()
+                    .is_some_and(is_capacity_refusal)
+            {
+                entry.refusals = 0;
+                entry.refused_at_ms = None;
+                entry.refusal_reason = None;
+            }
+            entry
+        })
+        .filter(|entry| !entry.is_empty())
+        .collect()
 }
 
 /// The policy rule a running session breaks, if any.
@@ -1067,12 +1112,17 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .and_then(PlacementMemory::refused_until_ms)
             .filter(|until| *until > now)
         {
-            earliest(&mut retry_at, until, now);
-            skip(
-                Blocker::RefusalBackoff,
-                remembered.and_then(|entry| entry.refusal_reason.clone()),
-                Some(until),
-            );
+            let reason = remembered.and_then(|entry| entry.refusal_reason.clone());
+            // HS2-AWB7BX: a capacity refusal on a target whose changes arrive as events
+            // waits for the change, not for a time.
+            let evented = input.capacity_streams.contains(&item.target_id)
+                && reason.as_deref().is_some_and(is_capacity_refusal);
+            if evented {
+                skip(Blocker::RefusalBackoff, reason, None);
+            } else {
+                earliest(&mut retry_at, until, now);
+                skip(Blocker::RefusalBackoff, reason, Some(until));
+            }
             continue;
         }
         if let Some(until) = remembered
@@ -1548,6 +1598,31 @@ impl SchedulerStore {
             .owners
             .remove(owner_id)
             .unwrap_or_default())
+    }
+
+    /// HS2-AWB7BX: forget one target's capacity refusal after its capacity changed.
+    /// True when anything was forgotten.
+    pub fn lift_capacity_refusal(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+    ) -> Result<bool, OrchestrationError> {
+        valid_identifier(owner_id)?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let before = file.owners.get(owner_id).cloned().unwrap_or_default();
+        let after = lift_capacity_refusal(&before, target_id);
+        if after == before {
+            return Ok(false);
+        }
+        if after.is_empty() {
+            file.owners.remove(owner_id);
+        } else {
+            file.owners.insert(owner_id.into(), after);
+        }
+        let bytes = serde_json::to_vec(&file).map_err(|_| OrchestrationError::Corrupt)?;
+        self.storage.write(&bytes, MAX_MEMORY_BYTES)?;
+        Ok(true)
     }
 
     /// Fold one pass into the owner's memory. Nothing applied writes nothing.

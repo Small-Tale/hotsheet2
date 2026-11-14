@@ -557,6 +557,13 @@ impl OrchestrationRuntime {
             };
             match read {
                 Ok(snapshot) => {
+                    // HS2-AWB7BX: what a capacity watch of this target waits to change.
+                    self.capacity_seen(
+                        owner_id,
+                        target_id,
+                        &namespaces,
+                        snapshot.version.as_deref(),
+                    );
                     // A resource name means something only on the machine that
                     // answered: its claims are that machine's.
                     let unread = |namespace: &String, offline, reason| UnreadableClaims {
@@ -713,6 +720,7 @@ impl OrchestrationRuntime {
                 held: &gathered.held,
                 unreadable: &gathered.unreadable,
                 memory: &gathered.memory,
+                capacity_streams: &self.capacity_streams(owner_id),
             },
             &|tool| gathered.supports.get(tool).copied().unwrap_or_default(),
         );
@@ -1508,6 +1516,8 @@ impl OrchestrationRuntime {
                         // HS2-2FG91X: a release wakes this loop; an expiry is the
                         // retry time below.
                         self.watch_releases(owner_id, &actor, &view.view.schedule);
+                        // HS2-AWB7BX: a target that had no room is followed until it has.
+                        self.watch_capacity(owner_id, &actor, &view.view.schedule);
                         state.retry_at_ms = view.view.schedule.retry_at_ms;
                         step.failed = view.view.inputs.executor == "failed";
                     }

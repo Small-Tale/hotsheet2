@@ -5,6 +5,7 @@ mod access;
 mod assignment;
 mod cancel_hold;
 mod capacity;
+mod capacity_watch;
 mod decisions;
 mod gates;
 mod job_monitor;
@@ -41,6 +42,7 @@ pub use capacity::{
     CAPACITY_RESAMPLE_MS, CapacityProbe, LocalServerCapacity, MAX_CAPACITY_WAIT_MS, ReadCapacity,
     TargetAdmission, UnknownCapacity,
 };
+pub use capacity_watch::{CapacityFollow, MAX_CAPACITY_WATCHES};
 pub use gates::{
     GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,

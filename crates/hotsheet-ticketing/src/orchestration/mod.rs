@@ -129,8 +129,8 @@ pub use scheduler::{
     PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
     REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, Schedule, ScheduleInput,
     ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
-    TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation, plan, refusal_backoff_ms, remember,
-    scheduler_pass_lock, score,
+    TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation, is_capacity_refusal,
+    lift_capacity_refusal, plan, refusal_backoff_ms, remember, scheduler_pass_lock, score,
 };
 pub use session_fence::{
     MAX_WITHDRAWN_FENCES, WITHDRAWN_FENCE_MS, Withdrawal, WithdrawnFences, WithdrawnOperation,

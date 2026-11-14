@@ -1463,3 +1463,44 @@ fn hs2_g1pkk2_the_hosted_wait_answers_from_this_machines_backend() {
     assert!(is_path(&base));
     assert!(!is_machine_path(&base));
 }
+
+/// HS2-AWB7BX: a capacity follow of a remote target long-polls the peer's own
+/// capacity wait over the reviewed transport; a peer without the route ends it.
+#[test]
+fn hs2_awb7bx_a_remote_capacity_follow_uses_the_peers_wait() {
+    tx!(tx);
+    let r = remote(&mut tx);
+    let target = TargetRef {
+        owner_checkout_id: r.owner.id.clone(),
+        target_id: id(1),
+    };
+    let follow = |tx: &mut Transaction<'_>| {
+        r.runtime.follow_capacity_change(
+            &target,
+            &worker(),
+            &["vm".to_owned()],
+            "0000000000000000",
+            std::time::Instant::now() + Duration::from_secs(30),
+            tx,
+        )
+    };
+    assert!(matches!(follow(&mut tx), CapacityFollow::Changed(_)));
+    let last = r.peer.calls.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(
+        last,
+        (
+            "GET".to_owned(),
+            format!(
+                "/checkouts/{}/target-capacity?claim_namespaces=vm&after=0000000000000000&wait_ms={MAX_CAPACITY_WAIT_MS}",
+                r.peer.hosted.target.id
+            )
+        )
+    );
+    // An older peer without the route, or one that cannot be reached, ends it.
+    *r.peer.status_override.lock().unwrap() = Some(404);
+    assert_eq!(
+        follow(&mut tx),
+        CapacityFollow::Ended("target_peer_unsupported".into())
+    );
+    *r.peer.status_override.lock().unwrap() = None;
+}
