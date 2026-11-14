@@ -107,6 +107,15 @@ enum ValidationCmd {
         #[arg(long)]
         no_wait: bool,
     },
+    /// List and check the test profiles a checkout offers in its checked-in
+    /// .hotsheet2/validation-profiles.json (HS2-YYNW9F). Without --target, the
+    /// --project checkout's own file; with it, a declared target's file, read through
+    /// the gate as an observation. Exits non-zero when the file has problems.
+    Profiles {
+        /// A declared target project of the --project orchestration project.
+        #[arg(long)]
+        target: Option<String>,
+    },
     /// Remove a step and its retained results.
     Remove {
         #[command(flatten)]
@@ -178,6 +187,18 @@ pub(super) fn route(
         ),
         ValidationCmd::Show { step } => ("POST", format!("{base}/evidence"), of(&step)),
         ValidationCmd::Remove { step } => ("POST", format!("{base}/remove"), of(&step)),
+        ValidationCmd::Profiles { target: None } => (
+            "GET",
+            format!("/checkouts/{project}/target-validation-profiles"),
+            Value::Null,
+        ),
+        ValidationCmd::Profiles {
+            target: Some(target),
+        } => (
+            "POST",
+            format!("{base}/profiles"),
+            json!({"target_id": target}),
+        ),
         ValidationCmd::Cancel {
             step,
             operation_id,

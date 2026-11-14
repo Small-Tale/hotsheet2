@@ -169,10 +169,11 @@ pub use validation::{
     DEFAULT_STEP_TIMEOUT_SECONDS, ExecutionEnd, ExecutionOutcome, ExpectedEvidence,
     MAX_COMMAND_ARGS, MAX_COMMAND_BYTES, MAX_STEP_ATTEMPTS, MAX_STEP_PREREQUISITES,
     MAX_STEP_RESULTS, MAX_STEP_TIMEOUT_SECONDS, MAX_STEPS_PER_TICKET, MAX_VALIDATION_PROFILES,
-    MAX_VALIDATION_STEPS, NewResult, ResultUpdate, RetryPolicy, StepDefinition, StreamRef,
-    VALIDATION_DEADLINE_GRACE_MS, ValidationCheck, ValidationError, ValidationEvidence,
-    ValidationProfile, ValidationProfileStore, ValidationRegistry, ValidationResult,
-    ValidationState, ValidationStep, effective, evaluate, may_retry, next_lapse_ms,
+    MAX_VALIDATION_STEPS, NewResult, ProfileCheck, ProfileProblem, ResultUpdate, RetryPolicy,
+    StepDefinition, StreamRef, VALIDATION_DEADLINE_GRACE_MS, ValidationCheck, ValidationError,
+    ValidationEvidence, ValidationProfile, ValidationProfileStore, ValidationRegistry,
+    ValidationResult, ValidationState, ValidationStep, effective, evaluate, may_retry,
+    next_lapse_ms,
 };
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 

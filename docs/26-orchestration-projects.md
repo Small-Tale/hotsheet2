@@ -1280,15 +1280,62 @@ unique within that ticket.
 
 - A **profile** is a test profile the target project defines itself, in its checked-in
   `.hotsheet2/validation-profiles.json`: `schema_version: 1` and `profiles`, each a
-  `name`, a `program` and `args`. The orchestration project names the profile and
-  never supplies its command. The file is read where the target lives, at most 64
-  profiles; a damaged, duplicated or newer file is an error and never a guess.
+  `name`, a `program`, `args` and an optional `timeout_seconds`. The orchestration
+  project names the profile and never supplies its command. The file is read where
+  the target lives, at most 64 profiles; a damaged, duplicated or newer file is an
+  error and never a guess. How a target project sets it up and checks it is below.
 - A **command** is a program and arguments chosen by the orchestration project. It
   is started directly, without a shell. A program and its arguments are at most 4,096
   bytes and 32 arguments together.
 - A program with a directory part (`scripts/check.sh`) is the checkout's own file; a
   bare name is looked up on the host's `PATH`. Both run with the target checkout as
   the working directory.
+
+### Offering test profiles (HS2-YYNW9F)
+
+A target project that wants to be validated by name checks in
+`.hotsheet2/validation-profiles.json`:
+
+```json
+{
+  "schema_version": 1,
+  "profiles": [
+    { "name": "smoke", "program": "scripts/check.sh", "args": ["--smoke"], "timeout_seconds": 600 },
+    { "name": "lint", "program": "cargo", "args": ["clippy", "--all-targets"] }
+  ]
+}
+```
+
+- `name` is the identifier steps refer to; names are unique.
+- `program` and `args` follow the command rules above and are started without a
+  shell.
+- `timeout_seconds` (1 to 3600) is the longest the project lets the profile run. A
+  step's own timeout still bounds it; the shorter applies, so the orchestrating
+  side's deadline is never outlived.
+
+Check the file headlessly from the checkout that offers it, and from an
+orchestration project through the gate:
+
+```sh
+hotsheet-cli ... orchestration validation profiles --project <checkout>
+hotsheet-cli ... orchestration validation profiles --project <owner> --target <target-id>
+```
+
+Both print every profile and every problem and exit non-zero when there is one. A
+problem is a code with the profile's position: `invalid_name`, `invalid_command`,
+`invalid_timeout`, `duplicate_name`, or for the whole file `too_large`,
+`invalid_json`, `schema_version_missing`, `unsupported_schema_version`,
+`invalid_shape`, `too_many_profiles`. A name is shown only when it is itself valid,
+and a program or argument is never echoed in a problem. An absent file is valid and
+offers nothing.
+
+The read through the gate is an observation (§26.7): it never asks a person, is
+audited as `gates_observe`, and runs and writes nothing on the target. It is
+`GET /checkouts/{checkout}/target-validation-profiles` on the hosting machine,
+`POST .../orchestration/validations/profiles` with `target_id` on the orchestrating
+one, and MCP `validation_profiles` (with `target_id`, or without it for the
+checkout's own file). Adding this file to the installed project setup guidance is
+HS2-28E486.
 
 Defining a step again with the same definition changes nothing. A changed definition
 gets the next `revision`, and evidence produced for an earlier revision no longer
@@ -1480,6 +1527,7 @@ hotsheet-cli ... orchestration validation cancel --project <owner> --ticket <orc
   --step <name> [--operation-id <retained-id>] [--no-wait]
 hotsheet-cli ... orchestration validation show|remove --project <owner> --ticket <orchestration-ticket> --step <name>
 hotsheet-cli ... orchestration validation list --project <owner> [--ticket <orchestration-ticket>]
+hotsheet-cli ... orchestration validation profiles --project <checkout-or-owner> [--target <target-id>]
 ```
 
 `validation run` repeats its one request until the attempt is finished and the retry
@@ -1488,17 +1536,16 @@ The result is in the JSON (`result.state`), not in the exit status. `--source` n
 the orchestration ticket's connection and may be omitted when the project has one git
 ticket source.
 
-| Route                                                                                   | Methods and purpose                                                                                                       |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/validations/{define,list,evidence,run,remove,cancel}` | POST orchestrating-side operations; machine-local                                                                         |
-| `/checkouts/{checkout}/target-validations`                                              | Hosted half: POST start or re-attach by `execution_id`; GET its state; DELETE stop it (HS2-17ABM2), each with a `wait_ms` |
+| Route                                                                                            | Methods and purpose                                                                                                       |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/validations/{define,list,evidence,run,remove,cancel,profiles}` | POST orchestrating-side operations; machine-local                                                                         |
+| `/checkouts/{checkout}/target-validation-profiles`                                               | Hosted half: GET the checkout's profiles, checked (HS2-YYNW9F)                                                            |
+| `/checkouts/{checkout}/target-validations`                                                       | Hosted half: POST start or re-attach by `execution_id`; GET its state; DELETE stop it (HS2-17ABM2), each with a `wait_ms` |
 
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. MCP `hotsheet_targets` adds `validation_define`,
-`validation_list`, `validation_evidence`, `validation_run`, `validation_remove` and
-`validation_cancel`.
-Listing and checking a target's profiles headlessly is HS2-YYNW9F, and the workspace
-view is HS2-9XJEZC.
+`validation_list`, `validation_evidence`, `validation_run`, `validation_remove`,
+`validation_cancel` and `validation_profiles`. The workspace view is HS2-9XJEZC.
 
 ## 26.13 CI and deployment gates (HS2-5JBYPV)
 

@@ -2256,6 +2256,11 @@ pub fn app(state: AppState) -> Router {
                 // HS2-17ABM2: stop an execution.
                 .delete(routes::orchestration::write),
         )
+        // HS2-YYNW9F: the test profiles a hosted checkout offers, checked.
+        .route(
+            "/checkouts/{checkout}/target-validation-profiles",
+            get(routes::orchestration::read),
+        )
         // HS2-J8PRTV: this machine's capacity and its own admission answer, read when
         // asked; and the orchestrating side's gated reach to a target's machine.
         .route(

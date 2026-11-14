@@ -1863,3 +1863,113 @@ fn hs2_17abm2_the_hosted_stop_ends_an_execution_once() {
             .is_err()
     );
 }
+
+/// HS2-YYNW9F: a hosting checkout's profiles are listed and checked locally, an
+/// orchestrating project reads a target's through the gate without asking, and a
+/// profile's own timeout shortens the step's.
+#[test]
+fn hs2_yynw9f_profiles_are_listed_checked_and_read_through_the_gate() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    // Nothing is offered yet, and that is valid.
+    let none = m.runtime.hosted_validation_profiles(&m.target.id).unwrap();
+    assert!(!none.present && none.valid && none.profiles.is_empty());
+    assert!(
+        m.runtime
+            .hosted_validation_profiles("unknown-checkout")
+            .is_err()
+    );
+    let directory = Path::new(&m.target.root).join(".hotsheet2");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("validation-profiles.json"),
+        json!({"schema_version": 1, "profiles": [
+            {"name": "smoke", "program": "/bin/sh", "args": ["-c", "printf ok"]},
+            {"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 30"], "timeout_seconds": 1},
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+    let local = m.runtime.hosted_validation_profiles(&m.target.id).unwrap();
+    assert!(local.present && local.valid);
+    assert_eq!(
+        local
+            .profiles
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>(),
+        ["smoke", "slow"]
+    );
+    // Through the gate: an observation, so no rule is needed and nobody is asked.
+    bind_and_allow(&m, 1, &[], &mut tx);
+    let read = |m: &Machine, tx: &mut Transaction<'_>| {
+        m.runtime.validation_profiles(
+            &m.owner.id,
+            TargetProfiles { target_id: id(1) },
+            Some(&worker()),
+            tx,
+        )
+    };
+    assert_eq!(read(&m, &mut tx).unwrap(), local);
+    assert!(
+        m.runtime
+            .permission_list(&m.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+    assert_eq!(
+        m.last_audit(),
+        ("gates_observe".into(), AuditOutcome::Succeeded, None)
+    );
+    assert!(
+        m.runtime
+            .validation_profiles(
+                &m.owner.id,
+                TargetProfiles { target_id: id(9) },
+                Some(&worker()),
+                &mut tx
+            )
+            .is_err()
+    );
+    // A damaged file is answered with its problems, not an error.
+    std::fs::write(
+        directory.join("validation-profiles.json"),
+        br#"{"schema_version":1,"profiles":[{"name":"a","program":"x"},{"name":"a","program":"y"}]}"#,
+    )
+    .unwrap();
+    let damaged = read(&m, &mut tx).unwrap();
+    assert!(!damaged.valid);
+    assert_eq!(damaged.problems[0].code, "duplicate_name");
+    // A profile's own timeout stops the step sooner than the step's 20 seconds.
+    std::fs::write(
+        directory.join("validation-profiles.json"),
+        json!({"schema_version": 1, "profiles": [
+            {"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 30"], "timeout_seconds": 1},
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
+    let slow = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            HostedValidationStart {
+                execution_id: id(1),
+                check: hotsheet_ticketing::orchestration::ValidationCheck::Profile {
+                    name: "slow".into(),
+                },
+                timeout_seconds: 20,
+                wait_ms: 8_000,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(slow.outcome.unwrap().end, ExecutionEnd::TimedOut);
+    assert!(started.elapsed() < std::time::Duration::from_secs(8));
+}

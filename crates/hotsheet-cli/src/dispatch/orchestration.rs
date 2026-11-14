@@ -1438,5 +1438,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         }
     }
     println!("{}", serde_json::to_string_pretty(&output)?);
+    // HS2-YYNW9F: checking a profile file fails the command when it has problems.
+    if (path.ends_with("/target-validation-profiles") || path.ends_with("/validations/profiles"))
+        && output["valid"] == false
+    {
+        bail!("validation_profiles_invalid: the profile file has problems; see `problems`");
+    }
     Ok(())
 }

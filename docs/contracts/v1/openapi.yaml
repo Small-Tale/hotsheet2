@@ -2262,7 +2262,9 @@ paths:
         `permission_required`). `cancel` stops a running attempt (HS2-17ABM2): it only lowers activity, so it never asks
         and the policy never refuses it; the attempt ends `cancelled`, unless the step ended by itself first, and while
         the host has not confirmed the stop it stays `running` with `unverified: [target_execution]`. `define` and
-        `remove` change only the orchestration project's records. Refusals use the `validation_*` codes."
+        `remove` change only the orchestration project's records. `profiles` (HS2-YYNW9F) reads the test profiles the
+        `target_id` target offers through the gate as an observation, which never asks. Refusals use the `validation_*`
+        codes."
       requestBody:
         required: true
         content:
@@ -2281,6 +2283,7 @@ paths:
                 anyOf:
                   - $ref: '#/components/schemas/ValidationEvidence'
                   - $ref: '#/components/schemas/ValidationRunView'
+                  - $ref: '#/components/schemas/ValidationProfileCheck'
                   - type: array
                     items:
                       $ref: '#/components/schemas/ValidationEvidence'
@@ -2315,6 +2318,7 @@ paths:
             - run
             - remove
             - cancel
+            - profiles
   /checkouts/{checkout}/target-validations:
     description: Runs a validation step in a checkout this machine hosts, for a local or remote orchestration project
       (HS2-WN0MXZ). The step's output is digested as it is read and never kept or returned. Ordinary authenticated
@@ -3885,6 +3889,43 @@ paths:
             - sync
             - rebase
             - reopen
+  /checkouts/{checkout}/target-validation-profiles:
+    description:
+      The test profiles a checkout this machine hosts offers in its checked-in `.hotsheet2/validation-profiles.json`,
+      checked as a validator would (HS2-YYNW9F). Reads the file only; runs and writes nothing. Ordinary authenticated
+      project data under the caller's device role, so a remote orchestrator can read it.
+    get:
+      operationId: readHostedValidationProfiles
+      description:
+        Every profile and every problem. An absent file is valid and offers nothing. Problems are stable codes with the
+        profile's position; a name is echoed only when it is itself valid.
+      responses:
+        '200':
+          description: The profiles and their problems.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationProfileCheck'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -20599,7 +20640,7 @@ components:
       description:
         The body of a validation operation. `define` needs `ticket` and `step`; `evidence` and `remove` need `ticket`
         and `step_id`; `run` also needs `operation_id`; `cancel` takes an optional `operation_id` (omit for the running
-        attempt) and `wait_ms`; `list` takes an optional `ticket`.
+        attempt) and `wait_ms`; `list` takes an optional `ticket`; `profiles` needs only `target_id`.
       type: object
       properties:
         actor:
@@ -20617,6 +20658,9 @@ components:
               type: string
               maxLength: 200
           additionalProperties: false
+        target_id:
+          description: The declared target whose profiles `profiles` reads.
+          type: string
         step:
           $ref: '#/components/schemas/ValidationStepDefinition'
         step_id:
@@ -24321,6 +24365,75 @@ components:
             - 'null'
         clear_base_branch:
           type: boolean
+      additionalProperties: false
+    ValidationProfile:
+      description: A test profile a target project offers; a name for a command it chose itself (HS2-WN0MXZ).
+      type: object
+      required:
+        - name
+        - program
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        program:
+          type: string
+        args:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+        timeout_seconds:
+          description:
+            HS2-YYNW9F. The longest the target project lets this profile run; a step's own timeout still bounds it and
+            the shorter applies.
+          type: integer
+          minimum: 1
+          maximum: 3600
+      additionalProperties: false
+    ValidationProfileCheck:
+      description: What a checkout's profile file offers, and everything wrong with it (HS2-YYNW9F).
+      type: object
+      required:
+        - present
+        - valid
+        - profiles
+      properties:
+        present:
+          type: boolean
+        valid:
+          description: No problems; every listed profile can be run by name.
+          type: boolean
+        profiles:
+          description: The profiles when the file could be read as a whole; empty otherwise.
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationProfile'
+        problems:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+            properties:
+              code:
+                enum:
+                  - too_large
+                  - invalid_json
+                  - schema_version_missing
+                  - unsupported_schema_version
+                  - invalid_shape
+                  - too_many_profiles
+                  - invalid_name
+                  - invalid_command
+                  - invalid_timeout
+                  - duplicate_name
+              index:
+                type: integer
+                minimum: 0
+              name:
+                type: string
+            additionalProperties: false
       additionalProperties: false
     RemoteIdentity:
       type: object

@@ -940,6 +940,76 @@ pub struct ValidationProfile {
     pub program: String,
     #[serde(default)]
     pub args: Vec<String>,
+    /// HS2-YYNW9F: the longest the target project lets this profile run, 1 to 3600
+    /// seconds. A step's own timeout still bounds it; the shorter one applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<u32>,
+}
+
+impl ValidationProfile {
+    /// How long a step with `step_timeout_seconds` may run this profile.
+    pub fn effective_timeout(&self, step_timeout_seconds: u32) -> u32 {
+        self.timeout_seconds
+            .map_or(step_timeout_seconds, |own| own.min(step_timeout_seconds))
+    }
+
+    /// The first thing wrong with this profile on its own, as a stable code.
+    fn problem(&self) -> Option<&'static str> {
+        if valid_identifier(&self.name).is_err() {
+            Some("invalid_name")
+        } else if command(&self.program, &self.args).is_err() {
+            Some("invalid_command")
+        } else if self
+            .timeout_seconds
+            .is_some_and(|seconds| !(1..=MAX_STEP_TIMEOUT_SECONDS).contains(&seconds))
+        {
+            Some("invalid_timeout")
+        } else {
+            None
+        }
+    }
+}
+
+/// HS2-YYNW9F: one thing wrong with a profile file. Codes and positions only; a name
+/// is echoed only when it is itself a valid profile name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileProblem {
+    pub code: String,
+    /// The profile's position in the file, from 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// HS2-YYNW9F: what a checkout's profile file offers, and everything wrong with it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileCheck {
+    /// Whether the file exists. An absent file offers no profiles and is valid.
+    pub present: bool,
+    /// No problems: every profile below can be run by name.
+    pub valid: bool,
+    /// The profiles, when the file could be read as a whole; empty otherwise.
+    pub profiles: Vec<ValidationProfile>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub problems: Vec<ProfileProblem>,
+}
+
+impl ProfileCheck {
+    fn refused(code: &str) -> Self {
+        Self {
+            present: true,
+            valid: false,
+            profiles: Vec::new(),
+            problems: vec![ProfileProblem {
+                code: code.into(),
+                index: None,
+                name: None,
+            }],
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -976,9 +1046,9 @@ impl ValidationProfileStore {
             return Err(OrchestrationError::Corrupt);
         }
         for (index, profile) in file.profiles.iter().enumerate() {
-            valid_identifier(&profile.name)
-                .and_then(|()| command(&profile.program, &profile.args))
-                .map_err(|_| OrchestrationError::Corrupt)?;
+            if profile.problem().is_some() {
+                return Err(OrchestrationError::Corrupt);
+            }
             if file.profiles[..index]
                 .iter()
                 .any(|other| other.name == profile.name)
@@ -987,6 +1057,68 @@ impl ValidationProfileStore {
             }
         }
         Ok(file.profiles)
+    }
+
+    /// HS2-YYNW9F: check the file as a validator would, reporting every problem
+    /// rather than the first. Like [`Self::read`] it never creates the file. Only an
+    /// I/O failure is an error; anything wrong with the content is in the answer.
+    pub fn check(&self) -> Result<ProfileCheck, OrchestrationError> {
+        let bytes = match self.storage.read(MAX_PROFILE_BYTES) {
+            Ok(None) => {
+                return Ok(ProfileCheck {
+                    present: false,
+                    valid: true,
+                    profiles: Vec::new(),
+                    problems: Vec::new(),
+                });
+            }
+            Ok(Some(bytes)) => bytes,
+            Err(OrchestrationError::Corrupt) => return Ok(ProfileCheck::refused("too_large")),
+            Err(error) => return Err(error),
+        };
+        let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+            return Ok(ProfileCheck::refused("invalid_json"));
+        };
+        match value.get("schema_version").map(serde_json::Value::as_u64) {
+            None | Some(None) => return Ok(ProfileCheck::refused("schema_version_missing")),
+            Some(Some(1)) => {}
+            Some(Some(_)) => return Ok(ProfileCheck::refused("unsupported_schema_version")),
+        }
+        let Ok(file) = serde_json::from_value::<ProfileFile>(value) else {
+            return Ok(ProfileCheck::refused("invalid_shape"));
+        };
+        let mut problems = Vec::new();
+        if file.profiles.len() > MAX_VALIDATION_PROFILES {
+            problems.push(ProfileProblem {
+                code: "too_many_profiles".into(),
+                index: None,
+                name: None,
+            });
+        }
+        for (index, profile) in file.profiles.iter().enumerate() {
+            let name = valid_identifier(&profile.name)
+                .is_ok()
+                .then(|| profile.name.clone());
+            let problem = profile.problem().or_else(|| {
+                file.profiles[..index]
+                    .iter()
+                    .any(|other| other.name == profile.name)
+                    .then_some("duplicate_name")
+            });
+            if let Some(code) = problem {
+                problems.push(ProfileProblem {
+                    code: code.into(),
+                    index: Some(index),
+                    name,
+                });
+            }
+        }
+        Ok(ProfileCheck {
+            present: true,
+            valid: problems.is_empty(),
+            profiles: file.profiles,
+            problems,
+        })
     }
 
     pub fn find(&self, name: &str) -> Result<Option<ValidationProfile>, OrchestrationError> {

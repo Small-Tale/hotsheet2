@@ -21,9 +21,9 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     AuditOutcome, AuditRecord, ExecutionEnd, ExecutionOutcome, MAX_STEP_TIMEOUT_SECONDS, NewResult,
-    ResultUpdate, RunEvent, RunEventKind, RunEventSource, RunTicket, StepDefinition, StreamRef,
-    TargetAction, ValidationCheck, ValidationEvidence, ValidationProfileStore, ValidationRegistry,
-    ValidationResult, ValidationState, evaluate, may_retry,
+    ProfileCheck, ResultUpdate, RunEvent, RunEventKind, RunEventSource, RunTicket, StepDefinition,
+    StreamRef, TargetAction, ValidationCheck, ValidationEvidence, ValidationProfileStore,
+    ValidationRegistry, ValidationResult, ValidationState, evaluate, may_retry,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -389,13 +389,17 @@ impl OrchestrationRuntime {
             } else {
                 // Resolve before anything is remembered: a damaged profile file is an
                 // error, never a guess.
+                // HS2-YYNW9F: a profile's own timeout shortens the step's.
                 let command = match &request.check {
                     ValidationCheck::Command { program, args } => {
-                        Some((program.clone(), args.clone()))
+                        Some((program.clone(), args.clone(), request.timeout_seconds))
                     }
                     ValidationCheck::Profile { name } => ValidationProfileStore::new(&root)
                         .find(name)?
-                        .map(|profile| (profile.program, profile.args)),
+                        .map(|profile| {
+                            let timeout = profile.effective_timeout(request.timeout_seconds);
+                            (profile.program, profile.args, timeout)
+                        }),
                 };
                 make_room(&mut known)?;
                 if command.is_some()
@@ -415,9 +419,9 @@ impl OrchestrationRuntime {
                         started_at_ms,
                         Instant::now(),
                     )),
-                    Some((program, args)) => {
+                    Some((program, args, timeout_seconds)) => {
                         let running = execution.clone();
-                        let timeout = Duration::from_secs(u64::from(request.timeout_seconds));
+                        let timeout = Duration::from_secs(u64::from(timeout_seconds));
                         std::thread::spawn(move || {
                             running.finish(execute(
                                 &root,
@@ -461,6 +465,16 @@ impl OrchestrationRuntime {
                 outcome: None,
             },
         })
+    }
+
+    /// HS2-YYNW9F: the test profiles a checkout this machine hosts offers, checked
+    /// as a validator would. Reads the checked-in file only; runs and writes nothing.
+    pub fn hosted_validation_profiles(
+        &self,
+        checkout_id: &str,
+    ) -> Result<ProfileCheck, OrchestrationError> {
+        let checkout = self.owner(checkout_id)?;
+        ValidationProfileStore::new(Path::new(&checkout.root)).check()
     }
 
     /// HS2-17ABM2: stop an execution this host process started and wait a bounded time
@@ -544,6 +558,13 @@ pub struct RunValidation {
     /// How long to wait for the attempt to finish, at most 8000.
     #[serde(default)]
     pub wait_ms: Option<u64>,
+}
+
+/// HS2-YYNW9F: read the test profiles a declared target offers.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetProfiles {
+    pub target_id: String,
 }
 
 /// HS2-17ABM2: stop a step's running attempt.
@@ -1072,6 +1093,38 @@ impl OrchestrationRuntime {
                 )),
             other => other,
         }
+    }
+
+    /// HS2-YYNW9F: the test profiles a declared target offers, read from its
+    /// checked-in file on the machine that hosts it. Reading a target never asks: it
+    /// passes the gate as an observation, is audited, and runs or writes nothing.
+    pub fn validation_profiles(
+        &self,
+        owner_id: &str,
+        request: TargetProfiles,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<ProfileCheck, OrchestrationError> {
+        let target = Self::target_ref(owner_id, &request.target_id)?;
+        let authorized = self.authorize(
+            &target,
+            actor,
+            ActionRequest::new(TargetAction::GatesObserve),
+            tx,
+        )?;
+        let outcome = Self::destination(&authorized).and_then(|destination| {
+            serde_json::from_value(self.hosted_call_at(
+                destination,
+                "/target-validation-profiles",
+                "GET",
+                "",
+                None,
+                tx,
+            )?)
+            .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+        });
+        self.finish(&target, &authorized, &outcome, tx)?;
+        outcome
     }
 
     /// HS2-17ABM2: stop a step's running attempt.

@@ -71,6 +71,7 @@ pub fn is_path(path: &str) -> bool {
             // HS2-WN0MXZ: validation steps (orchestrating) and the hosted execution.
             | ["checkouts", _, "orchestration", "validations", _]
             | ["checkouts", _, "target-validations"]
+            | ["checkouts", _, "target-validation-profiles"]
             // HS2-42TARA: the plan of prerequisites and its readiness.
             | ["checkouts", _, "orchestration", "readiness", _]
             // HS2-GDJXGZ: orchestrator-owned sessions (orchestrating) and the hosted half.
@@ -596,6 +597,10 @@ impl OrchestrationRuntime {
             ("POST", ["checkouts", checkout, "target-validations"]) => {
                 value(self.hosted_validation_start(checkout, decode(body)?, tx)?)
             }
+            // HS2-YYNW9F: the profiles this checkout offers, checked.
+            ("GET", ["checkouts", checkout, "target-validation-profiles"]) => {
+                value(self.hosted_validation_profiles(checkout)?)
+            }
             // HS2-17ABM2: stop it; only lowers activity.
             ("DELETE", ["checkouts", checkout, "target-validations"]) => {
                 value(self.hosted_validation_cancel(checkout, decode(body)?, tx)?)
@@ -713,6 +718,10 @@ impl OrchestrationRuntime {
                     }
                     "remove" => {
                         value(self.validation_remove(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    // HS2-YYNW9F
+                    "profiles" => {
+                        value(self.validation_profiles(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     // HS2-17ABM2
                     "cancel" => {

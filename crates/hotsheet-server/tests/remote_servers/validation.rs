@@ -406,6 +406,22 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
             ("absent".into(), "unavailable".into()),
         ]
     );
+    // HS2-YYNW9F: what the peer offers is read through the gate, and this
+    // project's own (absent) file is checked locally.
+    let offered = ok(&worker, &["profiles", "--target", TARGET]);
+    assert_eq!(offered["valid"], true, "{offered}");
+    let names: Vec<_> = offered["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|profile| profile["name"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(names, ["smoke", "flaky", "held"]);
+    let own = ok(&worker, &["profiles"]);
+    assert_eq!(
+        (own["present"].clone(), own["valid"].clone()),
+        (json!(false), json!(true))
+    );
     // HS2-17ABM2: a running step is stopped on the peer by a cancel that asks nobody,
     // and ends `cancelled`, not `failed`.
     ok(
@@ -562,6 +578,11 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         ("POST", format!("{base}/validations/list")),
         ("POST", format!("{base}/validations/run")),
         ("POST", format!("{base}/validations/cancel")),
+        ("POST", format!("{base}/validations/profiles")),
+        (
+            "GET",
+            format!("/checkouts/{}/target-validation-profiles", checkout.id),
+        ),
         ("POST", hosted.clone()),
         ("DELETE", hosted.clone()),
         ("GET", format!("{hosted}?execution_id={TARGET}")),
@@ -715,6 +736,11 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         cancelled["result"]["result_id"],
         held["result"]["result_id"]
     );
+    // HS2-YYNW9F: the profiles a target offers, and this checkout's own, checked.
+    let offered = call(json!({"action":"validation_profiles","target_id":TARGET}));
+    assert_eq!(offered["valid"], true, "{offered}");
+    assert_eq!(offered["profiles"].as_array().unwrap().len(), 3);
+    assert_eq!(call(json!({"action":"validation_profiles"})), offered);
     for arguments in [
         // No step object, no target, an unknown step, no identified actor, an unknown
         // action.

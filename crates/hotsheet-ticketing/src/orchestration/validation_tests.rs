@@ -1229,6 +1229,7 @@ fn hs2_wn0mxz_target_profiles_are_read_from_the_checked_in_file_only() {
             name: "smoke".into(),
             program: "scripts/check.sh".into(),
             args: vec!["--smoke".into()],
+            timeout_seconds: None,
         })
     );
     assert_eq!(
@@ -1310,4 +1311,98 @@ fn hs2_j7n3pq_the_next_lapse_is_the_first_running_deadline_ahead() {
     assert_eq!(next_lapse_ms(&both, 300), Some(301));
     assert_eq!(next_lapse_ms(&both, 301), Some(501));
     assert_eq!(next_lapse_ms(&both, 501), None);
+}
+
+/// HS2-YYNW9F: a profile file is checked as a validator would, every problem coded,
+/// and a profile's own timeout shortens a step's.
+#[test]
+fn hs2_yynw9f_a_profile_file_is_checked_with_every_problem_coded() {
+    let checkout = tempfile::tempdir().unwrap();
+    let store = ValidationProfileStore::new(checkout.path());
+    // Absent: valid, nothing offered, nothing created.
+    let absent = store.check().unwrap();
+    assert_eq!(
+        (absent.present, absent.valid, absent.profiles.len()),
+        (false, true, 0)
+    );
+    assert!(!checkout.path().join(".hotsheet2").exists());
+    std::fs::create_dir(checkout.path().join(".hotsheet2")).unwrap();
+    let path = checkout.path().join(".hotsheet2/validation-profiles.json");
+    std::fs::write(
+        &path,
+        br#"{"schema_version":1,"profiles":[
+            {"name":"smoke","program":"scripts/check.sh","args":["--smoke"],"timeout_seconds":120},
+            {"name":"lint","program":"cargo"}]}"#,
+    )
+    .unwrap();
+    let valid = store.check().unwrap();
+    assert!(valid.present && valid.valid && valid.problems.is_empty());
+    assert_eq!(valid.profiles, store.read().unwrap());
+    let smoke = store.find("smoke").unwrap().unwrap();
+    assert_eq!(smoke.timeout_seconds, Some(120));
+    // The shorter of the profile's and the step's timeout applies.
+    assert_eq!(smoke.effective_timeout(300), 120);
+    assert_eq!(smoke.effective_timeout(60), 60);
+    assert_eq!(
+        store.find("lint").unwrap().unwrap().effective_timeout(300),
+        300
+    );
+    // Every problem is reported with its position; a name only when it is valid.
+    std::fs::write(
+        &path,
+        br#"{"schema_version":1,"profiles":[
+            {"name":"ok","program":"x"},
+            {"name":"bad name","program":"x"},
+            {"name":"empty","program":""},
+            {"name":"slow","program":"x","timeout_seconds":0},
+            {"name":"slower","program":"x","timeout_seconds":3601},
+            {"name":"ok","program":"y"}]}"#,
+    )
+    .unwrap();
+    let checked = store.check().unwrap();
+    assert!(checked.present && !checked.valid);
+    assert_eq!(checked.profiles.len(), 6);
+    let problems: Vec<_> = checked
+        .problems
+        .iter()
+        .map(|p| (p.code.as_str(), p.index, p.name.as_deref()))
+        .collect();
+    assert_eq!(
+        problems,
+        [
+            ("invalid_name", Some(1), None),
+            ("invalid_command", Some(2), Some("empty")),
+            ("invalid_timeout", Some(3), Some("slow")),
+            ("invalid_timeout", Some(4), Some("slower")),
+            ("duplicate_name", Some(5), Some("ok")),
+        ]
+    );
+    // The runtime read still refuses the whole file.
+    assert!(matches!(store.read(), Err(OrchestrationError::Corrupt)));
+    // Whole-file problems are one code each, and the content is never echoed.
+    let too_many = serde_json::json!({"schema_version": 1, "profiles":
+        (0..=MAX_VALIDATION_PROFILES).map(|n| serde_json::json!({"name": format!("p{n}"), "program": "x"}))
+            .collect::<Vec<_>>()})
+    .to_string();
+    for (bytes, code) in [
+        (b"not json".to_vec(), "invalid_json"),
+        (br#"{"profiles":[]}"#.to_vec(), "schema_version_missing"),
+        (
+            br#"{"schema_version":2,"profiles":[]}"#.to_vec(),
+            "unsupported_schema_version",
+        ),
+        (
+            br#"{"schema_version":1,"profiles":[{"name":"a","program":"x","shell":true}]}"#
+                .to_vec(),
+            "invalid_shape",
+        ),
+        (too_many.into_bytes(), "too_many_profiles"),
+        (vec![b' '; 256 * 1024 + 1], "too_large"),
+    ] {
+        std::fs::write(&path, &bytes).unwrap();
+        let checked = store.check().unwrap();
+        assert!(!checked.valid, "{code}");
+        assert_eq!(checked.problems[0].code, code);
+        assert!(checked.problems.iter().all(|p| p.name.is_none()), "{code}");
+    }
 }
