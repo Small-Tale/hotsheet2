@@ -330,6 +330,14 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         .contains("readiness_step_not_found")
     );
     assert_eq!(readiness(&["plan"])["steps"].as_array().unwrap().len(), 1);
+    // HS2-SQS266: the removal is the step's last readiness event, so a follower of
+    // the stream hears of it.
+    let events = cli_named(
+        &home,
+        &worker,
+        &["run", "events", "--project", &owner.id, "--run", &a],
+    );
+    assert_eq!(levels(&events, &a), ["confirmed", "finished", "removed"]);
 }
 
 /// A real server serves the plan routes behind its bearer, refuses unready work with
@@ -559,6 +567,12 @@ async fn hs2_42tara_server_routes_and_stdio_mcp_share_the_plan() {
     assert_eq!(
         call(json!({"action":"readiness_remove","step_id":a}))["step_id"],
         a
+    );
+    // HS2-SQS266: the removal is the step's last readiness event.
+    let stream = call(json!({"action":"run_events","after":0}));
+    assert_eq!(
+        levels(&stream, &a),
+        ["confirmed", "in_progress", "finished", "removed"]
     );
     mcp_rejected(
         &home,

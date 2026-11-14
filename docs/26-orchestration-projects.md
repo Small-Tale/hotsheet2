@@ -1916,7 +1916,9 @@ stream of §26.9. Its `reason` is the new level, and because a step may have no 
 its `run_id` holds the step id, so `run events --run <step-id>` replays one step's
 levels (a dedicated field is HS2-J7RG42). Repeated evaluation publishes nothing,
 concurrent evaluations publish a change once, and a level reached again later is its
-own event. The scheduler (HS2-ECWG50) waits on that stream; nothing polls.
+own event. Removing a step publishes one last `readiness` event for it, with reason
+`removed` (HS2-SQS266, §26.24). The scheduler (HS2-ECWG50) waits on that stream;
+nothing polls.
 
 `readiness refresh` reads the named tickets again through the gate and lists under
 `unverified` those it could not confirm. It is how a prerequisite ticket without a
@@ -3547,3 +3549,16 @@ behaviour: the step is dispatched again.
   until the worker lets go, and the session's turn end wakes the loop. Such a
   wind-down starts no cooldown. A person's session is left alone.
 - The Up Next mark a dispatched dispatcher-mode run set is not withdrawn by this.
+
+### Removing a step is an event (HS2-SQS266)
+
+Removing a plan step used to publish nothing when it emptied the plan, and nothing
+either when no other step's level moved, so the scheduling loop ran no pass and a
+session that served the step was not considered for wind-down until some other
+event or a named retry time. `readiness remove` now records one `readiness` event
+for the removed step itself: `run_id` is the step id, `reason` is `removed`, and its
+dedupe key is `removed-<step id>`. It is the step's last event, so
+`run events --run <step-id>` ends with it, and every follower of the owner's stream,
+the loop above all, is woken by it like by any level change. A step id is never
+reused: removing it again is `readiness_step_not_found` and publishes nothing, and
+planning the same target ticket again is a new step whose levels start afresh.

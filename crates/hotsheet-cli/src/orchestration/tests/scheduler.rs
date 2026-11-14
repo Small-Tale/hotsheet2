@@ -1337,6 +1337,97 @@ fn hs2_ecwg50_the_follower_runs_a_pass_on_events_and_never_on_its_own() {
 }
 
 #[test]
+fn hs2_sqs266_removing_a_step_wakes_the_follower_even_when_the_plan_empties() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    let (_, first) = s.ready("First", &mut tx);
+    let (_, second) = s.ready("Second", &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let step = |state: &mut SchedulerFollowState, tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .scheduler_follow_step(&owner, state, 0, tx)
+            .trigger
+    };
+    let remove = |step_id: &str, tx: &mut Transaction<'_>| {
+        s.m.runtime.readiness_remove(
+            &owner,
+            &serde_json::from_value(json!({ "step_id": step_id })).unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    let journal = RunEventJournal::new(&s.m.home, &owner).unwrap();
+    // `(reason, dedupe)` of a step's readiness events, oldest first.
+    let levels = |step_id: &str| -> Vec<(Option<String>, Option<String>)> {
+        journal
+            .read(0, 100, Some(step_id))
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| entry.record.kind == RunEventKind::Readiness)
+            .map(|entry| (entry.record.reason, entry.record.dedupe))
+            .collect()
+    };
+    assert_eq!(step(&mut state, &mut tx), Some("start"));
+    assert_eq!(step(&mut state, &mut tx), None);
+
+    // A step whose removal moves no other step's level.
+    remove(&first, &mut tx).unwrap();
+    assert_eq!(step(&mut state, &mut tx), Some("event"));
+    assert_eq!(step(&mut state, &mut tx), None);
+    // The last step: the plan is empty and no level is left to publish.
+    remove(&second, &mut tx).unwrap();
+    assert!(
+        s.m.runtime
+            .readiness_plan(&owner, &mut tx)
+            .unwrap()
+            .steps
+            .is_empty()
+    );
+    assert_eq!(step(&mut state, &mut tx), Some("event"));
+    assert_eq!(step(&mut state, &mut tx), None);
+    // Each removal is its step's last event, published once.
+    for removed in [&first, &second] {
+        let published = levels(removed);
+        assert_eq!(
+            published.last().unwrap(),
+            &(Some("removed".into()), Some(format!("removed-{removed}"))),
+            "{published:?}"
+        );
+        assert_eq!(
+            published
+                .iter()
+                .filter(|(reason, _)| reason.as_deref() == Some("removed"))
+                .count(),
+            1
+        );
+    }
+    // Removing it again changes nothing and publishes nothing.
+    assert!(matches!(
+        remove(&second, &mut tx),
+        Err(OrchestrationError::Readiness(
+            hotsheet_ticketing::orchestration::ReadinessError::StepNotFound
+        ))
+    ));
+    assert_eq!(step(&mut state, &mut tx), None);
+
+    // Empty, then planned again: the new step is new work with its own levels.
+    let (_, third) = s.ready("Third", &mut tx);
+    assert_ne!(third, second);
+    assert_eq!(step(&mut state, &mut tx), Some("event"));
+    assert_eq!(
+        levels(&third),
+        [(Some("confirmed".into()), Some("readiness-1".into()))]
+    );
+    // And removed again: the loop hears of it once more.
+    remove(&third, &mut tx).unwrap();
+    assert_eq!(step(&mut state, &mut tx), Some("event"));
+    assert_eq!(step(&mut state, &mut tx), None);
+}
+
+#[test]
 fn hs2_ecwg50_scheduler_routes_share_the_runtime_and_validate_their_bodies() {
     tx!(tx);
     let s = setup(true, &mut tx);

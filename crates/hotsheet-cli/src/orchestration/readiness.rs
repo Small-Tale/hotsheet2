@@ -26,6 +26,9 @@ use super::runs::{field_ms, text};
 use super::tickets::{identifier, native, timestamp};
 use super::*;
 
+/// HS2-SQS266: the `reason` of the `readiness` event that publishes a step's removal.
+pub const STEP_REMOVED: &str = "removed";
+
 /// A prerequisite as a caller names it. Native ids may be slugs; the plan stores the
 /// provider's canonical id.
 #[derive(Debug, Clone, Deserialize)]
@@ -689,8 +692,32 @@ impl OrchestrationRuntime {
             },
             tx,
         )?;
+        self.readiness_withdrawn(owner_id, &step.step_id, tx.clock.now_ms());
         self.readiness_reevaluate(owner_id, tx.clock.now_ms());
         Ok(step)
+    }
+
+    /// HS2-SQS266: publish a step's removal as its last `readiness` event, reason
+    /// `removed`. The remaining steps' levels need not move, and an emptied plan
+    /// publishes nothing at all, so without it no follower (the scheduling loop
+    /// above all) would learn of the removal. Best effort, like every event. A step
+    /// id is never reused, so the event's dedupe key names one removal.
+    fn readiness_withdrawn(&self, owner_id: &str, step_id: &str, now_ms: u64) {
+        let Ok(journal) = RunEventJournal::new(&self.home, owner_id) else {
+            return;
+        };
+        let _ = journal.record(RunEvent {
+            at_ms: now_ms,
+            run_id: step_id.into(),
+            kind: RunEventKind::Readiness,
+            source: RunEventSource::Orchestrator,
+            state: None,
+            reason: Some(STEP_REMOVED.into()),
+            actor_id: None,
+            dedupe: Some(format!("removed-{step_id}")),
+            gate_id: None,
+            gate_state: None,
+        });
     }
 
     /// Read again every ticket a step (or the whole plan) names, through the gate as
