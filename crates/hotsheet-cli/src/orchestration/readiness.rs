@@ -789,8 +789,35 @@ impl OrchestrationRuntime {
                 .map(|record| record.step)
                 .collect(),
         };
+        let tickets: Vec<RunTarget> = steps.iter().flat_map(named_tickets).collect();
+        let unverified = self.refresh_tickets(owner_id, tickets, actor, true, tx)?;
+        self.readiness_publish(owner_id, tx.clock.now_ms())?;
+        let mut plan = self.plan_evaluate(owner_id, tx.clock.now_ms())?;
+        if let Some(step_id) = &request.step_id {
+            plan.retain(|view| view.readiness.step.step_id == *step_id);
+        }
+        Ok(RefreshView {
+            plan: Self::plan_view(plan),
+            unverified,
+        })
+    }
+
+    /// Read these target tickets through the gate, one gate pass per target, and fold
+    /// what each says into the plan's ticket facts. Returns the tickets that could not
+    /// be confirmed. With `mark_unverified` a ticket that could not be read is recorded
+    /// as unreachable (an explicit refresh); without it (HS2-TMA4YA, the follower's
+    /// opportunistic read) a failed read changes nothing. Publishing the levels this
+    /// changes is the caller's.
+    pub(super) fn refresh_tickets(
+        &self,
+        owner_id: &str,
+        tickets: Vec<RunTarget>,
+        actor: Option<&MutationActor>,
+        mark_unverified: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Vec<RunTarget>, OrchestrationError> {
         let mut by_target: BTreeMap<String, Vec<RunTarget>> = BTreeMap::new();
-        for target in steps.iter().flat_map(named_tickets) {
+        for target in tickets {
             let tickets = by_target.entry(target.target_id.clone()).or_default();
             if !tickets.contains(&target) {
                 tickets.push(target);
@@ -852,21 +879,84 @@ impl OrchestrationRuntime {
                             }
                         }
                     };
+                if !mark_unverified && update.observed.is_none() {
+                    continue;
+                }
                 self.plan().observe(owner_id, &target, update)?;
             }
             if let Ok(authorized) = &authorized {
                 self.record_outcome(&reference, authorized, failed.is_none(), failed, tx)?;
             }
         }
-        self.readiness_publish(owner_id, tx.clock.now_ms())?;
-        let mut plan = self.plan_evaluate(owner_id, tx.clock.now_ms())?;
-        if let Some(step_id) = &request.step_id {
-            plan.retain(|view| view.readiness.step.step_id == *step_id);
+        Ok(unverified)
+    }
+
+    /// HS2-TMA4YA: owning checkouts with an unfinished plan step naming a ticket, so a
+    /// starting server follows those tickets again.
+    pub fn plan_owners(&self) -> Vec<String> {
+        self.checkouts
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|checkout| checkout.id)
+            .filter(|owner| !self.planned_targets(owner).is_empty())
+            .collect()
+    }
+
+    /// HS2-TMA4YA: the targets whose tickets an unfinished plan step names, which a
+    /// server follows on their change feed.
+    pub fn planned_targets(&self, owner_id: &str) -> Vec<String> {
+        let mut targets: Vec<String> = self
+            .plan()
+            .records(owner_id)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|record| {
+                record
+                    .published
+                    .as_ref()
+                    .is_none_or(|published| published.level != ReadinessLevel::Finished)
+            })
+            .flat_map(|record| {
+                named_tickets(&record.step)
+                    .map(|ticket| ticket.target_id)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        targets.sort();
+        targets.dedup();
+        targets
+    }
+
+    /// HS2-TMA4YA: the tickets on one target that an unfinished plan step names (its
+    /// prerequisites and its own target ticket), with the actor who last defined a
+    /// step naming them. A finished step names nothing any more.
+    pub(super) fn plan_tickets(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+    ) -> (Vec<RunTarget>, Option<String>) {
+        let records = self.plan().records(owner_id).unwrap_or_default();
+        let mut tickets: Vec<RunTarget> = Vec::new();
+        let mut actor = None;
+        for record in records {
+            if record
+                .published
+                .as_ref()
+                .is_some_and(|published| published.level == ReadinessLevel::Finished)
+            {
+                continue;
+            }
+            for ticket in named_tickets(&record.step) {
+                if ticket.target_id == target_id && !tickets.contains(&ticket) {
+                    if actor.is_none() {
+                        actor.clone_from(&record.step.updated_by);
+                    }
+                    tickets.push(ticket);
+                }
+            }
         }
-        Ok(RefreshView {
-            plan: Self::plan_view(plan),
-            unverified,
-        })
+        (tickets, actor)
     }
 
     /// The dispatch guard: work on a planned target ticket starts only at the

@@ -9,6 +9,11 @@
 //! orchestrator started there (an exit, a finished turn), and a target is followed
 //! while the owner has an unfinished session on it as well. A change the owner's
 //! scheduler cannot learn from a run event wakes its loop from here.
+//!
+//! HS2-TMA4YA: a target is also followed while an unfinished plan step names one of
+//! its tickets (a prerequisite, or the step's own ticket), whether or not a run
+//! stands on it. A change of such a ticket reads it again through the gate and
+//! publishes the readiness level it changes.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::orchestration::{
@@ -97,6 +102,9 @@ pub struct WatchStep {
     /// HS2-257Q2Z: the owner's scheduler was woken, because a session of the owner on
     /// this target changed in a way no run event reports.
     pub woke_scheduler: bool,
+    /// HS2-TMA4YA: plan tickets of this target read again because they changed (or the
+    /// follower could not tell what it missed), so their readiness was published.
+    pub refreshed: usize,
 }
 
 /// The actor a run's supervision acts as: whoever dispatched it.
@@ -146,11 +154,17 @@ impl OrchestrationRuntime {
             .into_iter()
             .filter(|session| session.target_id == target_id)
             .collect();
-        // Idle: no run and no session, no request.
+        // HS2-TMA4YA: the tickets of this target an unfinished plan step names.
+        let (tickets, planner) = self.plan_tickets(owner_id, target_id);
+        let planner = planner
+            .filter(|_| !tickets.is_empty())
+            .and_then(|id| MutationActor::parse("system", Some(id)).ok());
+        // Idle: no run, no session and no planned ticket, no request.
         let Some(lead) = runs
             .iter()
             .find_map(supervisor)
             .or_else(|| sessions.iter().find_map(session_supervisor))
+            .or(planner)
         else {
             *state = WatchState::default();
             return WatchStep::default();
@@ -252,6 +266,29 @@ impl OrchestrationRuntime {
         if wakes_scheduler(&page, &sessions, &runs, caught_up) {
             self.scheduler_wake(owner_id);
             step.woke_scheduler = true;
+        }
+        // HS2-TMA4YA: planned tickets that changed, or all of them when the follower
+        // cannot tell what it missed, are read again and their levels published.
+        let changed: Vec<_> = tickets
+            .iter()
+            .filter(|ticket| {
+                caught_up
+                    || page.events.iter().any(|event| {
+                        event.connection_id == ticket.connection_id
+                            && event.native_id == ticket.native_id
+                    })
+            })
+            .cloned()
+            .collect();
+        if !changed.is_empty() {
+            let count = changed.len();
+            if self
+                .refresh_tickets(owner_id, changed, Some(&lead), false, tx)
+                .is_ok()
+            {
+                self.readiness_reevaluate(owner_id, tx.clock.now_ms());
+                step.refreshed = count;
+            }
         }
         if caught_up {
             // Nothing is known about what happened before: catch every run up.

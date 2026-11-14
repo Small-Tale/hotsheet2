@@ -227,6 +227,9 @@ fn ensure_watchers(state: &AppState, owner: &str) {
             .into_iter()
             .map(|session| session.target_id),
     );
+    // HS2-TMA4YA: a target whose tickets an unfinished plan step names, with or without
+    // a run on them.
+    targets.extend(shared.planned_targets(owner));
     for target in targets {
         let key = format!("{}|{target}", loop_key(state, owner));
         let registry = WATCHERS.get_or_init(Default::default);
@@ -469,6 +472,10 @@ impl AppState {
                 for owner in shared.gate_owners() {
                     ensure_watchers_blocking(&state, &owner);
                 }
+                // HS2-TMA4YA: and every owner whose plan names target tickets.
+                for owner in shared.plan_owners() {
+                    ensure_watchers_blocking(&state, &owner);
+                }
                 // HS2-ECWG50: and the scheduling loop of every owner whose policy
                 // enables automatic placement. With none, nothing is started.
                 for owner in shared.scheduler_owners() {
@@ -503,6 +510,10 @@ fn watched_owner(method: &Method, path: &str) -> Option<String> {
         | ("GET", ["checkouts", owner, "orchestration", "run-events"])
         // HS2-J89JC7: a timeline reader waits on the same run events.
         | ("GET", ["checkouts", owner, "orchestration", "timeline"]) => Some((*owner).to_owned()),
+        // HS2-TMA4YA: a defined or refreshed plan step's tickets are followed from then on.
+        ("POST", ["checkouts", owner, "orchestration", "readiness", "define" | "refresh"]) => {
+            Some((*owner).to_owned())
+        }
         // HS2-WBREDM: a run that was resumed, handed off or corrected back to life, or
         // an explicit reconciliation, is followed from then on.
         ("POST", ["checkouts", owner, "orchestration", "run-reconcile"])

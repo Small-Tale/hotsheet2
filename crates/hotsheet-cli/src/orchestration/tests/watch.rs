@@ -1075,3 +1075,185 @@ fn hs2_257q2z_a_page_without_sessions_reads_as_before() {
     .unwrap();
     assert_eq!(with.sessions[0].session_id, "t");
 }
+
+/// HS2-TMA4YA: a prerequisite ticket no run stands on is followed on the target's
+/// change feed, and its completion publishes the waiting step's new level.
+#[test]
+fn hs2_tma4ya_a_planned_ticket_without_a_run_is_followed_and_publishes_its_level() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let mut state = WatchState::default();
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let before = target_ticket(&m, "Must finish first");
+    let after = target_ticket(&m, "Then this");
+    let unrelated = target_ticket(&m, "Not planned");
+    // Nothing planned and no run: idle, nothing asked.
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx),
+        WatchStep::default()
+    );
+    assert!(feed.calls().is_empty());
+    let step_id = m
+        .runtime
+        .readiness_define(
+            &m.owner.id,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": m.owner_connection(),
+                    "native_id": orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": m.target_connection(),
+                "native_id": after.slug,
+                "prerequisites": [{"kind": "ticket", "target_id": id(1),
+                    "connection_id": m.target_connection(), "native_id": before.slug,
+                    "gates": "none"}],
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .readiness
+        .step
+        .step_id;
+    assert_eq!(m.runtime.planned_targets(&m.owner.id), [id(1)]);
+    let levels = |m: &Machine| -> Vec<String> {
+        m.runtime
+            .run_events(&m.owner.id, 0, 500, Some(&step_id), 0)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter_map(|entry| entry.record.reason)
+            .collect()
+    };
+    assert_eq!(levels(&m).last().map(String::as_str), Some("blocked"));
+    // First contact: a handshake, and both planned tickets are read once.
+    let first = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(first.active && !first.failed);
+    assert_eq!(first.refreshed, 2);
+    assert!(first.synced.is_empty());
+    // Quiet, or a change to a ticket the plan does not name: nothing is read.
+    let quiet = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(quiet.refreshed, 0);
+    feed.push(&m.target_connection(), &unrelated);
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .refreshed,
+        0
+    );
+    // The prerequisite completes on the target with no run on it: the change is read
+    // and the step's new level is published, with nobody asking for a refresh.
+    complete(&m, &before);
+    feed.push(&m.target_connection(), &before);
+    let changed = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(changed.refreshed, 1);
+    assert_eq!(levels(&m).last().map(String::as_str), Some("confirmed"));
+    // The same change again publishes nothing new.
+    let count = levels(&m).len();
+    feed.push(&m.target_connection(), &before);
+    m.runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(levels(&m).len(), count);
+    // An overflow means the follower cannot tell what it missed: every planned
+    // ticket is read again.
+    feed.overflow.store(true, Ordering::SeqCst);
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .refreshed,
+        2
+    );
+    feed.overflow.store(false, Ordering::SeqCst);
+    // Once the step is removed nothing is followed and nothing is asked.
+    m.runtime
+        .readiness_remove(
+            &m.owner.id,
+            &PlanStepRef {
+                step_id: step_id.clone(),
+            },
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(m.runtime.planned_targets(&m.owner.id).is_empty());
+    let asked = feed.calls().len();
+    assert!(
+        !m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .active
+    );
+    assert_eq!(feed.calls().len(), asked);
+}
+
+/// HS2-TMA4YA: the follower's read is opportunistic. A planned ticket it cannot read
+/// (here the target is unbound) does not make the step stale; an explicit refresh would.
+#[test]
+fn hs2_tma4ya_a_follower_read_that_fails_changes_no_level() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let before = target_ticket(&m, "First");
+    let after = target_ticket(&m, "Then");
+    let step_id = m
+        .runtime
+        .readiness_define(
+            &m.owner.id,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": m.owner_connection(),
+                    "native_id": orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": m.target_connection(),
+                "native_id": after.slug,
+                "prerequisites": [{"kind": "ticket", "target_id": id(1),
+                    "connection_id": m.target_connection(), "native_id": before.slug,
+                    "gates": "none"}],
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .readiness
+        .step
+        .step_id;
+    let mut state = WatchState::default();
+    m.runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    let published = |m: &Machine| {
+        m.runtime
+            .run_events(&m.owner.id, 0, 500, Some(&step_id), 0)
+            .unwrap()
+            .entries
+            .len()
+    };
+    let count = published(&m);
+    // The target becomes unreadable for the gate; a change arrives anyway.
+    super::tickets::unbind(&m, 1, &mut tx);
+    feed.push(&m.target_connection(), &before);
+    let step = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(step.refreshed, 1);
+    assert_eq!(
+        published(&m),
+        count,
+        "no stale level from a failed follower read"
+    );
+}

@@ -23,7 +23,8 @@
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18;
 > a level a validation deadline changes is published at that deadline, HS2-J7N3PQ;
-> step events name their step in `step_id`, HS2-J7RG42),
+> step events name their step in `step_id`, HS2-J7RG42; prerequisite tickets without a
+> run are followed on their target's change feed, HS2-TMA4YA),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
@@ -867,6 +868,19 @@ unreachable once, and retries with bounded backoff from one second up to a minut
 It confirms its authority through the gate when it connects, after any failure and
 every ten minutes, acting as whoever dispatched the run. A target with no unfinished
 run is not contacted at all, and a run a person took over is still followed.
+
+**Planned tickets without a run (HS2-TMA4YA).** A target is also followed while an
+unfinished plan step names one of its tickets: a prerequisite, or the step's own
+ticket. On the first request, after an `overflow` and on a reconnect every such ticket
+is read again through the gate (`tickets_read`, one pass per target); after that only
+those whose change the feed reports. What is read becomes the plan's ticket facts and
+any level it changes is published as a `readiness` event (§26.15). The follower's read
+is opportunistic: a ticket it cannot read changes nothing, so a passing outage never
+makes a step stale (an explicit `readiness refresh` still records it as unverified). With no run or
+session, the follower acts as whoever last defined a step naming the ticket. A server
+starts these followers at start for every owner whose plan names target tickets, and
+when a step is defined or refreshed; a finished or removed step names nothing, and a
+target with nothing left to follow is not contacted.
 
 **Session changes on the same feed (HS2-257Q2Z).** When a session an orchestrator
 started exits or finishes a turn, its hosting server publishes that on its change
@@ -2067,9 +2081,10 @@ own event. Removing a step publishes one last `readiness` event for it, with rea
 nothing polls.
 
 `readiness refresh` reads the named tickets again through the gate and lists under
-`unverified` those it could not confirm. It is how a prerequisite ticket without a
-run is confirmed today; following such tickets on the target's change feed is
-HS2-TMA4YA.
+`unverified` those it could not confirm. A prerequisite ticket no run stands on is
+also followed on its target's change feed (HS2-TMA4YA, §26.9): its change is read
+again through the gate and the level it changes is published, with nobody asking for
+a refresh.
 
 **Changes that only time causes (HS2-J7N3PQ).** One level changes by time alone: a
 running validation attempt that outlives its deadline is `unverified`, so a step that
