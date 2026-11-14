@@ -10,7 +10,8 @@
 > structured ticket links with target ticket operations (§26.3, HS2-AZ15GA) and a
 > gated, bounded list and search of a target's open tickets (§26.3, HS2-D85G19),
 > dispatch runs with status and events (§26.9, HS2-EBHDSB, HS2-7QHWHJ), target
-> capacity and admission (§26.10, HS2-J8PRTV), AI tool capacity states with tool
+> capacity and admission (§26.10, HS2-J8PRTV; a capacity version subscribers wait on
+> while they are connected, HS2-P5GTSW), AI tool capacity states with tool
 > selection (§26.11, HS2-AHG7HW), extra validation steps with immutable result
 > references (§26.12, HS2-WN0MXZ), CI and deployment gates of runs (§26.13,
 > HS2-5JBYPV; deployments are recorded and allowed, not yet executed; the Job
@@ -935,8 +936,24 @@ an admission answer, and it is shared for three seconds: callers queue on one lo
 a burst is one reading. A server that nobody asks reads nothing. The host health
 sampler ([host-health](host-health.md)) is separate and unchanged.
 
-This ticket ships request-driven snapshots only. A capacity stream on the live channel
-that runs while a subscriber exists is HS2-P5GTSW.
+**Waiting for a change (HS2-P5GTSW).** Every snapshot carries a `version` that changes
+exactly when the room it describes changes, compared in coarse steps so ordinary jitter
+is not a change: free and total memory in 1 GiB steps, CPU load in 20 % steps, disk in
+4 GiB steps, and exactly which sessions run (with their tool and checkout, not whether
+one is mid-turn), which tools are installed and configured, which claims are held (not
+their expiry), the offline policy and the speculation setting. The sampling time is
+never part of it, so the same capacity gives the same version after a restart.
+
+A read that names the version it has (`after`) and a `wait_ms` is a genuine long poll:
+the host samples again every three seconds (one shared reading, so waiting subscribers
+share it) while that request waits, and answers as soon as the version differs, or with
+the same version when the wait ends (at most 8 seconds, under the target transport's
+read timeout). A version that is not current answers at once, which is how a
+subscriber catches up after a reconnect. Sampling runs only while a request waits: with
+no subscriber the host reads nothing, and it stops when the last one leaves. An older
+host's snapshot has no `version` and offers no wait. The host health sampler
+([host-health](host-health.md)) and its live CPU feed are separate and unchanged; a
+machine-wide indicator (HS2-SW5ZK3) can subscribe to the same route.
 
 A headless process hosts no sessions. `hotsheet-cli` and the MCP core backend ask the
 Hot Sheet server running on the same machine for its snapshot and report every value
@@ -1027,8 +1044,9 @@ owner's policy configures. An AI actor may report a limit or usage but is refuse
 route signal that changes the state is recorded in the audit journal (§26.7) as
 `tool_capacity_<kind>` with the new state code. MCP `hotsheet_targets` adds the
 read-only `tool_capacity` and `tool_select`; it reports no signals.
-hotsheet-cli ... orchestration capacity show --project <owner> --target <target-id> [--claims <namespace>]
-hotsheet-cli ... orchestration capacity show --checkout <checkout-id> # this machine
+hotsheet-cli ... orchestration capacity show --project <owner> --target <target-id> [--claims <namespace>] \
+[--after <version> --wait-seconds 8]
+hotsheet-cli ... orchestration capacity show --checkout <checkout-id> [--after <version> --wait-seconds 8] # this machine
 hotsheet-cli orchestration admission show
 hotsheet-cli orchestration admission set [--max-sessions N] [--min-free-ram-mb N] \
 [--max-cpu-percent N] [--min-free-disk-mb N] [--allow-unknown true|false] \
@@ -1048,7 +1066,7 @@ capacity lives under `orchestration`.
 
 | Route                                                         | Methods and purpose                                                                 |
 | ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `/checkouts/{checkout}/target-capacity`                       | Hosted half: GET this machine's snapshot (`?claim_namespaces=a,b`)                  |
+| `/checkouts/{checkout}/target-capacity`                       | Hosted half: GET this machine's snapshot (`?claim_namespaces=a,b&after=&wait_ms=`)  |
 | `/checkouts/{checkout}/target-admission`                      | Hosted half: POST `{tool, model?, sessions?, limits?}` for this machine's answer    |
 | `/checkouts/{owner}/orchestration/targets/{target}/capacity`  | GET (`?actor_id=`) or POST (`actor` in the body) a target's snapshot; machine-local |
 | `/checkouts/{owner}/orchestration/targets/{target}/admission` | POST `{tool, model?, sessions?}` for the target's answer; machine-local             |
@@ -1057,7 +1075,9 @@ The hosted routes are ordinary authenticated project data under the caller's dev
 role, like the hosted ticket route, so a remote orchestration project reaches them
 over its reviewed registration. A read-only device can read capacity and cannot ask
 for admission. A peer that predates the routes answers `target_peer_unsupported`. MCP
-`hotsheet_targets` adds the read-only actions `capacity` and `admission_check`.
+`hotsheet_targets` adds the read-only actions `capacity` and `admission_check`;
+`capacity` takes `version` and `wait_ms` to wait for a change (HS2-P5GTSW), as the
+orchestrating routes take `after` and `wait_ms`.
 
 ## 26.11 AI tool capacity (HS2-AHG7HW)
 

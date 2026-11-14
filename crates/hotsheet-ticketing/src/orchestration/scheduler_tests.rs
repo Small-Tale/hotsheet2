@@ -139,6 +139,7 @@ pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> Capacity
         claim_namespaces: Vec::new(),
         claims_offline: None,
         speculation: None,
+        version: None,
     }
 }
 pub(super) fn state(n: u128, capacity: CapacitySnapshot) -> TargetState {

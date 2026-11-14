@@ -38,7 +38,8 @@ pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
-    CapacityProbe, LocalServerCapacity, ReadCapacity, TargetAdmission, UnknownCapacity,
+    CAPACITY_RESAMPLE_MS, CapacityProbe, LocalServerCapacity, MAX_CAPACITY_WAIT_MS, ReadCapacity,
+    TargetAdmission, UnknownCapacity,
 };
 pub use gates::{
     GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
@@ -159,6 +160,8 @@ pub struct OrchestrationRuntime {
     claims: Arc<dyn ClaimSource>,
     /// HS2-XHQ1EH: where waiting permission requests are shown to people.
     prompt: Arc<dyn PermissionPrompt>,
+    /// HS2-P5GTSW: how often a capacity wait samples again (tests shorten it).
+    capacity_resample: std::time::Duration,
 }
 
 impl OrchestrationRuntime {
@@ -193,6 +196,7 @@ impl OrchestrationRuntime {
             session_executor: Arc::new(ExecutorUnavailable),
             claims: Arc::new(MachineClaims::new(&home)),
             prompt: Arc::new(NoPrompt),
+            capacity_resample: std::time::Duration::from_millis(capacity::CAPACITY_RESAMPLE_MS),
             home,
             checkouts,
             providers,

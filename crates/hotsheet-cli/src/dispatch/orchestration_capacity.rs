@@ -33,6 +33,13 @@ enum CapacityCmd {
         /// Also list live claims of this resource-claim namespace. Repeatable.
         #[arg(long = "claims")]
         claims: Vec<String>,
+        /// The `version` of the snapshot you have; with --wait-seconds, answer when the
+        /// capacity changes instead of at once (HS2-P5GTSW).
+        #[arg(long, requires = "wait_seconds")]
+        after: Option<String>,
+        /// How long to wait for a change, at most 8 seconds per request.
+        #[arg(long, requires = "after")]
+        wait_seconds: Option<u64>,
     },
 }
 
@@ -112,17 +119,35 @@ pub(super) fn capacity(arguments: CapacityArgs) -> Result<Planned> {
         target,
         checkout,
         claims,
+        after,
+        wait_seconds,
     } = arguments.command;
+    let wait_ms = wait_seconds.map(|seconds| seconds.saturating_mul(1000));
     Ok(match (project, target, checkout) {
         (Some(project), Some(target), None) => {
             let path = format!("/checkouts/{project}/orchestration/targets/{target}/capacity");
-            Planned::Request(project, ("POST", path, json!({"claim_namespaces": claims})))
+            Planned::Request(
+                project,
+                (
+                    "POST",
+                    path,
+                    json!({"claim_namespaces": claims, "after": after, "wait_ms": wait_ms}),
+                ),
+            )
         }
         (None, None, Some(checkout)) => {
-            let query = if claims.is_empty() {
+            let mut parts = Vec::new();
+            if !claims.is_empty() {
+                parts.push(format!("claim_namespaces={}", encoded(&claims)));
+            }
+            if let (Some(after), Some(wait_ms)) = (&after, wait_ms) {
+                // A version is hexadecimal: safe in a query.
+                parts.push(format!("after={after}&wait_ms={wait_ms}"));
+            }
+            let query = if parts.is_empty() {
                 String::new()
             } else {
-                format!("?claim_namespaces={}", encoded(&claims))
+                format!("?{}", parts.join("&"))
             };
             let path = format!("/checkouts/{checkout}/target-capacity{query}");
             Planned::Request(checkout, ("GET", path, Value::Null))
@@ -236,5 +261,70 @@ pub(super) fn admission(arguments: AdmissionArgs, context: &Ctx) -> Result<Plann
                 ),
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        command: CapacityCmd,
+    }
+    fn plan(arguments: &[&str]) -> Planned {
+        let parsed =
+            Cli::try_parse_from(std::iter::once("capacity").chain(arguments.iter().copied()))
+                .unwrap();
+        capacity(CapacityArgs {
+            command: parsed.command,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn hs2_p5gtsw_capacity_show_waits_for_a_change_by_version() {
+        let Planned::Request(owner, (method, path, body)) = plan(&[
+            "show",
+            "--project",
+            "owner",
+            "--target",
+            "t1",
+            "--after",
+            "ab12",
+            "--wait-seconds",
+            "8",
+        ]) else {
+            panic!("a request");
+        };
+        assert_eq!((owner.as_str(), method), ("owner", "POST"));
+        assert_eq!(path, "/checkouts/owner/orchestration/targets/t1/capacity");
+        assert_eq!(
+            body,
+            json!({"claim_namespaces": [], "after": "ab12", "wait_ms": 8000})
+        );
+        let Planned::Request(_, (_, path, _)) = plan(&[
+            "show",
+            "--checkout",
+            "c1",
+            "--claims",
+            "vm",
+            "--after",
+            "ab12",
+            "--wait-seconds",
+            "3",
+        ]) else {
+            panic!("a request");
+        };
+        assert_eq!(
+            path,
+            "/checkouts/c1/target-capacity?claim_namespaces=vm&after=ab12&wait_ms=3000"
+        );
+        // One without the other is refused by the parser.
+        assert!(
+            Cli::try_parse_from(["capacity", "show", "--checkout", "c1", "--after", "ab"]).is_err()
+        );
     }
 }

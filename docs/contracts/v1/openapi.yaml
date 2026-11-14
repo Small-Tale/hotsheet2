@@ -1992,7 +1992,8 @@ paths:
   /checkouts/{checkout}/target-capacity:
     description:
       What the machine hosting this checkout can take right now (HS2-J8PRTV). Read on request, never on a timer; one
-      reading answers every caller for a few seconds. Ordinary authenticated project data under the caller's device
+      reading answers every caller for a few seconds. With `after` and `wait_ms` it is a long poll that samples again
+      only while that subscriber waits (HS2-P5GTSW). Ordinary authenticated project data under the caller's device
       role, so a remote orchestration project can reach it. Values are metrics and tool names only.
     get:
       operationId: readHostedTargetCapacity
@@ -2005,6 +2006,22 @@ paths:
           schema:
             type: string
             maxLength: 600
+        - name: after
+          in: query
+          description:
+            The snapshot `version` already seen (HS2-P5GTSW). With `wait_ms`, the answer comes when the version differs,
+            or when the wait ends; a version that is not current answers at once.
+          schema:
+            type: string
+            maxLength: 64
+            pattern: ^[A-Za-z0-9]+$
+        - name: wait_ms
+          in: query
+          description: How long to wait for a change, at most 8000. Only with `after`.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8000
       responses:
         '200':
           description: The capacity snapshot; an unmeasured value is null, never a guess.
@@ -2106,6 +2123,22 @@ paths:
           schema:
             type: string
             maxLength: 600
+        - name: after
+          in: query
+          description:
+            The snapshot `version` already seen (HS2-P5GTSW). With `wait_ms`, the answer comes when the version differs,
+            or when the wait ends; a version that is not current answers at once.
+          schema:
+            type: string
+            maxLength: 64
+            pattern: ^[A-Za-z0-9]+$
+        - name: wait_ms
+          in: query
+          description: How long to wait for a change, at most 8000. Only with `after`.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8000
       responses:
         '200':
           description: The target machine's capacity snapshot.
@@ -20103,6 +20136,12 @@ components:
               minimum: 1
               maximum: 8
           additionalProperties: false
+        version:
+          description:
+            Changes exactly when the room this snapshot describes changes, in coarse steps; pass it back as `after` to
+            wait for the next change (HS2-P5GTSW). Absent from an older host, which offers no wait.
+          type: string
+          maxLength: 64
     HostedTargetAdmissionRequest:
       type: object
       required:
@@ -20166,6 +20205,18 @@ components:
           items:
             type: string
             maxLength: 64
+        after:
+          description: The snapshot `version` already seen; with `wait_ms`, wait for the next change (HS2-P5GTSW).
+          type:
+            - string
+            - 'null'
+          maxLength: 64
+        wait_ms:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 8000
       additionalProperties: false
     TargetAdmissionDecision:
       description: A machine's own answer to an admission question (HS2-J8PRTV).

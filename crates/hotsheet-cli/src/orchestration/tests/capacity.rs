@@ -839,3 +839,169 @@ fn hs2_j8prtv_a_runtime_without_a_session_host_reports_unknown_and_fails_closed(
     std::fs::write(m.home.join("instances/stale.json"), b"{not json").unwrap();
     assert_eq!(headless.observe(&m.target), HostObservation::default());
 }
+
+/// HS2-P5GTSW: a capacity subscriber waits on the host instead of asking again.
+#[test]
+fn hs2_p5gtsw_a_capacity_wait_samples_only_while_a_subscriber_waits() {
+    let mut m = machine(10, false, unsupported);
+    let probe = probed(&mut m);
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_resample(std::time::Duration::from_millis(40));
+    let checkout = m.target.id.clone();
+    let asked = || probe.asked.load(Ordering::SeqCst);
+    // Nobody subscribes: nothing is sampled.
+    assert_eq!(asked(), 0);
+    // A plain read samples once and carries the version a subscriber passes back.
+    let first = m
+        .runtime
+        .hosted_capacity_wait(&checkout, &[], None, 5_000)
+        .unwrap();
+    assert_eq!(asked(), 1);
+    let version = first.version.clone().unwrap();
+    assert_eq!(version.len(), 16);
+    // A version that is not current answers at once (a reconnect after a change).
+    let stale = m
+        .runtime
+        .hosted_capacity_wait(&checkout, &[], Some("0000000000000000"), 5_000)
+        .unwrap();
+    assert_eq!(stale.version.as_deref(), Some(version.as_str()));
+    assert_eq!(asked(), 2);
+    // Subscribed to the current version: it samples while it waits, and answers the
+    // same version at the deadline when nothing changed.
+    let began = std::time::Instant::now();
+    let same = m
+        .runtime
+        .hosted_capacity_wait(&checkout, &[], Some(&version), 300)
+        .unwrap();
+    assert!(began.elapsed() >= std::time::Duration::from_millis(300));
+    assert_eq!(same.version.as_deref(), Some(version.as_str()));
+    let during = asked() - 2;
+    assert!((2..=12).contains(&during), "{during}");
+    // Jitter inside a step is not a change.
+    probe.set(|observation| {
+        observation.memory.free_mb = Some(8_200);
+        observation.cpu.load_percent = Some(15);
+        observation.sampled_at_ms = Some(999);
+    });
+    assert_eq!(
+        m.runtime
+            .hosted_capacity_wait(&checkout, &[], Some(&version), 100)
+            .unwrap()
+            .version,
+        Some(version.clone())
+    );
+    // A change while it waits answers early with the new version.
+    let changer = probe.clone();
+    let change = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        changer.set(|observation| observation.memory.free_mb = Some(1_000));
+    });
+    let began = std::time::Instant::now();
+    let changed = m
+        .runtime
+        .hosted_capacity_wait(&checkout, &[], Some(&version), 5_000)
+        .unwrap();
+    change.join().unwrap();
+    assert!(began.elapsed() < std::time::Duration::from_millis(2_000));
+    assert_ne!(changed.version.as_deref(), Some(version.as_str()));
+    // After the subscriber leaves nothing samples.
+    let settled = asked();
+    std::thread::yield_now();
+    assert_eq!(asked(), settled);
+    // The same capacity reads as the same version from a new process.
+    let mut again = machine(10, false, unsupported);
+    let other = probed(&mut again);
+    other.set(|observation| observation.memory.free_mb = Some(1_000));
+    assert_eq!(
+        again
+            .runtime
+            .hosted_capacity(&again.target.id, &[])
+            .unwrap()
+            .version,
+        changed.version
+    );
+    // The version a subscriber passes is bounded.
+    for bad in ["", "not hex!", &"a".repeat(65)] {
+        assert!(matches!(
+            m.runtime.hosted_capacity_wait(&checkout, &[], Some(bad), 0),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+}
+
+#[test]
+fn hs2_p5gtsw_the_capacity_routes_wait_by_version_locally_and_over_the_transport() {
+    let mut m = machine(10, false, unsupported);
+    let probe = probed(&mut m);
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_resample(std::time::Duration::from_millis(20));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[], &mut tx);
+    let hosted = format!("/checkouts/{}/target-capacity", m.target.id);
+    let version = m.runtime.request_now("GET", &hosted, &Value::Null).unwrap()["version"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let waited = m
+        .runtime
+        .request_now(
+            "GET",
+            &format!("{hosted}?after={version}&wait_ms=100"),
+            &Value::Null,
+        )
+        .unwrap();
+    assert_eq!(waited["version"], version.as_str());
+    // The wait is bounded by the hosted half whatever the caller asks.
+    assert!(
+        m.runtime
+            .request_now(
+                "GET",
+                &format!("{hosted}?after=bad%20one&wait_ms=100"),
+                &Value::Null,
+            )
+            .is_err()
+    );
+    // The orchestrating read passes the same wait through the gate (observation never
+    // asks) and answers the new version once the host changes.
+    let owner_route = format!(
+        "/checkouts/{}/orchestration/targets/{}/capacity",
+        m.owner.id,
+        id(1)
+    );
+    let changer = probe.clone();
+    let change = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        changer.set(|observation| observation.tools = None);
+    });
+    let read = m
+        .runtime
+        .request(
+            "POST",
+            &owner_route,
+            &json!({"after": version, "wait_ms": 5_000,
+                "actor": {"role": "ai", "id": "worker-1"}}),
+            &mut tx,
+        )
+        .unwrap();
+    change.join().unwrap();
+    assert_ne!(read["version"], version.as_str());
+    assert!(read["tools"].is_null());
+    assert_eq!(
+        m.last_audit(),
+        ("gates_observe".into(), AuditOutcome::Succeeded, None)
+    );
+    // The query a remote host receives carries the wait.
+    assert_eq!(
+        super::super::capacity::capacity_query(&["vm".into()], Some("ab12"), 60_000),
+        format!("?claim_namespaces=vm&after=ab12&wait_ms={MAX_CAPACITY_WAIT_MS}")
+    );
+    assert_eq!(super::super::capacity::capacity_query(&[], None, 5), "");
+}

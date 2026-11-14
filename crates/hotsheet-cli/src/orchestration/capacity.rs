@@ -3,7 +3,10 @@
 //! The hosted half runs where the target lives: its own measurements, its own
 //! admission file, its own decision. The orchestrating half passes the gate and then
 //! reaches that half in process or over the reviewed transport. Nothing here samples
-//! on a timer: a snapshot exists only because a request asked for it.
+//! on a timer: a snapshot exists only because a request asked for it. HS2-P5GTSW: a
+//! request that names the `version` it has (`after`) and a `wait_ms` is a long poll:
+//! the host samples again while that one subscriber waits and answers as soon as the
+//! version changes, so sampling runs only while someone is subscribed.
 use hotsheet_resource_claims::Namespace;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
@@ -84,6 +87,35 @@ pub struct ReadCapacity {
     /// Resource-claim namespaces whose live claims the snapshot should list.
     #[serde(default)]
     pub claim_namespaces: Vec<String>,
+    /// HS2-P5GTSW: the snapshot `version` already seen; with `wait_ms`, wait for the
+    /// next change instead of asking again.
+    #[serde(default)]
+    pub after: Option<String>,
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
+}
+
+/// HS2-P5GTSW: the longest one capacity wait parks, under the target transport's read
+/// timeout. A subscriber with a later deadline asks again with the version it got.
+pub const MAX_CAPACITY_WAIT_MS: u64 = 8_000;
+/// HS2-P5GTSW: how often a waiting request samples again. The server's capacity reading
+/// is shared for three seconds, so waiting subscribers share one reading.
+pub const CAPACITY_RESAMPLE_MS: u64 = 3_000;
+
+/// HS2-P5GTSW: a capacity version a subscriber passes back: bounded, printable.
+pub(super) fn capacity_after(after: Option<&str>) -> Result<Option<&str>, OrchestrationError> {
+    match after {
+        Some(version)
+            if version.is_empty()
+                || version.len() > 64
+                || !version.bytes().all(|byte| byte.is_ascii_alphanumeric()) =>
+        {
+            Err(OrchestrationError::Invalid(
+                "bounded capacity version required",
+            ))
+        }
+        other => Ok(other),
+    }
 }
 
 /// Parse `a,b` into distinct claim namespaces. An invalid name is the caller's error.
@@ -113,6 +145,13 @@ impl OrchestrationRuntime {
     #[must_use]
     pub fn with_capacity_probe(mut self, probe: Arc<dyn CapacityProbe>) -> Self {
         self.capacity = probe;
+        self
+    }
+
+    /// HS2-P5GTSW: sample a waiting capacity request this often instead (tests).
+    #[must_use]
+    pub fn with_capacity_resample(mut self, every: std::time::Duration) -> Self {
+        self.capacity_resample = every;
         self
     }
 
@@ -177,7 +216,33 @@ impl OrchestrationRuntime {
                 enabled: policy.enabled,
                 max_depth: policy.max_depth,
             }),
-        ))
+        )
+        .with_version())
+    }
+
+    /// HS2-P5GTSW hosted half: this machine's capacity once its version differs from
+    /// `after`, or when `wait_ms` (at most [`MAX_CAPACITY_WAIT_MS`]) passes. Without
+    /// `after`, or with a version that is not current, it answers at once. While it
+    /// waits it samples again every [`CAPACITY_RESAMPLE_MS`]; nothing samples once
+    /// the request ends, so a host nobody subscribes to reads nothing.
+    pub fn hosted_capacity_wait(
+        &self,
+        checkout_id: &str,
+        namespaces: &[String],
+        after: Option<&str>,
+        wait_ms: u64,
+    ) -> Result<CapacitySnapshot, OrchestrationError> {
+        let after = capacity_after(after)?;
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_millis(wait_ms.min(MAX_CAPACITY_WAIT_MS));
+        loop {
+            let snapshot = self.hosted_capacity(checkout_id, namespaces)?;
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if after.is_none() || snapshot.version.as_deref() != after || remaining.is_zero() {
+                return Ok(snapshot);
+            }
+            std::thread::sleep(remaining.min(self.capacity_resample));
+        }
     }
 
     /// This machine's own answer: its snapshot, its admission file, the limits the
@@ -203,6 +268,21 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<CapacitySnapshot, OrchestrationError> {
+        self.target_capacity_wait(target, namespaces, None, 0, actor, tx)
+    }
+
+    /// HS2-P5GTSW: the same read as a long poll: answered once the host's capacity
+    /// `version` differs from `after`, or when `wait_ms` passes.
+    pub fn target_capacity_wait(
+        &self,
+        target: &TargetRef,
+        namespaces: &[String],
+        after: Option<&str>,
+        wait_ms: u64,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<CapacitySnapshot, OrchestrationError> {
+        let after = capacity_after(after)?;
         let authorized = self.authorize(
             target,
             actor,
@@ -210,11 +290,7 @@ impl OrchestrationRuntime {
             tx,
         )?;
         let outcome = (|| {
-            let query = if namespaces.is_empty() {
-                String::new()
-            } else {
-                format!("?claim_namespaces={}", encode(&namespaces.join(",")))
-            };
+            let query = capacity_query(namespaces, after, wait_ms);
             serde_json::from_value(self.hosted_call_at(
                 Self::destination(&authorized)?,
                 "/target-capacity",
@@ -292,5 +368,29 @@ impl OrchestrationRuntime {
         })();
         self.finish(target, &authorized, &outcome, tx)?;
         outcome
+    }
+}
+
+/// The hosted capacity route's query: claim namespaces and, for a wait, the version
+/// already seen and how long to wait.
+pub(super) fn capacity_query(namespaces: &[String], after: Option<&str>, wait_ms: u64) -> String {
+    let mut parts = Vec::new();
+    if !namespaces.is_empty() {
+        parts.push(format!(
+            "claim_namespaces={}",
+            encode(&namespaces.join(","))
+        ));
+    }
+    if let Some(after) = after {
+        parts.push(format!(
+            "after={}&wait_ms={}",
+            encode(after),
+            wait_ms.min(MAX_CAPACITY_WAIT_MS)
+        ));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", parts.join("&"))
     }
 }

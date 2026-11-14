@@ -125,6 +125,104 @@ pub struct CapacitySnapshot {
     /// not say (an older peer) or the setting could not be read: never allowed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speculation: Option<TargetSpeculation>,
+    /// HS2-P5GTSW: changes exactly when what admission and scheduling read changes,
+    /// at the granularity of [`capacity_version`]. A subscriber passes it back as
+    /// `after` to wait for the next change. Absent from an older peer, which offers no
+    /// stream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+/// HS2-P5GTSW: free memory is compared in steps of this many MiB.
+pub const CAPACITY_MEMORY_STEP_MB: u64 = 1024;
+/// HS2-P5GTSW: CPU load is compared in steps of this many percent.
+pub const CAPACITY_LOAD_STEP_PERCENT: u32 = 20;
+/// HS2-P5GTSW: free disk is compared in steps of this many MiB.
+pub const CAPACITY_DISK_STEP_MB: u64 = 4096;
+
+/// HS2-P5GTSW: a stable digest of what a snapshot says about room on the machine.
+/// Measurements are compared in coarse steps, so ordinary jitter is not a change; the
+/// sampling time is never part of it. Sessions (which run, their tool, on the
+/// checkout; not whether one is mid-turn, which changes every turn and is not room),
+/// tools, claims, the offline policy and the speculation setting are compared
+/// exactly, in an order of their own. The same capacity always gives the same
+/// version, also after a restart.
+pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
+    use std::fmt::Write as _;
+    let mut text = String::new();
+    let step = |value: Option<u64>, by: u64| value.map_or("?".to_owned(), |v| (v / by).to_string());
+    let _ = write!(
+        text,
+        "m{}/{};c{}/{};d{}/{};",
+        step(snapshot.memory.free_mb, CAPACITY_MEMORY_STEP_MB),
+        step(snapshot.memory.total_mb, CAPACITY_MEMORY_STEP_MB),
+        step(
+            snapshot.cpu.load_percent.map(u64::from),
+            u64::from(CAPACITY_LOAD_STEP_PERCENT)
+        ),
+        step(snapshot.cpu.logical_cpus.map(u64::from), 1),
+        step(snapshot.disk.free_mb, CAPACITY_DISK_STEP_MB),
+        step(snapshot.disk.total_mb, CAPACITY_DISK_STEP_MB),
+    );
+    match &snapshot.tools {
+        None => text.push_str("t?;"),
+        Some(tools) => {
+            let mut tools: Vec<String> = tools
+                .iter()
+                .map(|tool| {
+                    format!(
+                        "{}:{}{}",
+                        tool.tool,
+                        u8::from(tool.installed),
+                        u8::from(tool.configured)
+                    )
+                })
+                .collect();
+            tools.sort();
+            let _ = write!(text, "t{};", tools.join(","));
+        }
+    }
+    match &snapshot.sessions {
+        None => text.push_str("s?;"),
+        Some(sessions) => {
+            let mut sessions: Vec<String> = sessions
+                .iter()
+                .map(|session| {
+                    format!(
+                        "{}:{}:{:?}",
+                        session.session_id,
+                        session.tool.as_deref().unwrap_or("?"),
+                        session.on_checkout
+                    )
+                })
+                .collect();
+            sessions.sort();
+            let _ = write!(text, "s{};", sessions.join(","));
+        }
+    }
+    match &snapshot.claims {
+        None => text.push_str("h?;"),
+        Some(claims) => {
+            let mut claims: Vec<String> = claims
+                .iter()
+                .map(|claim| format!("{}/{}", claim.namespace, claim.resource))
+                .collect();
+            claims.sort();
+            let _ = write!(text, "h{};", claims.join(","));
+        }
+    }
+    let _ = write!(
+        text,
+        "o{:?};p{:?}",
+        snapshot.claims_offline, snapshot.speculation
+    );
+    // FNV-1a: stable across processes and versions, unlike the std hasher.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 impl TargetSpeculation {
@@ -157,7 +255,17 @@ impl CapacitySnapshot {
             claim_namespaces,
             claims_offline: None,
             speculation: None,
+            version: None,
         }
+    }
+
+    /// HS2-P5GTSW: stamp the snapshot with its [`capacity_version`], after every
+    /// other member is set.
+    #[must_use]
+    pub fn with_version(mut self) -> Self {
+        self.version = None;
+        self.version = Some(capacity_version(&self));
+        self
     }
 
     /// HS2-JSF985: say what the hosted project's own speculation setting is.

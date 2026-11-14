@@ -578,12 +578,17 @@ impl OrchestrationRuntime {
                 value(self.hosted_claim_release(checkout, hosted(body)?, tx)?)
             }
             // HS2-J8PRTV hosted half: this machine's capacity and its own admission answer.
-            ("GET", ["checkouts", checkout, "target-capacity"]) => value(self.hosted_capacity(
-                checkout,
-                &super::capacity::claim_namespaces(
-                    query_text(path, "claim_namespaces")?.as_deref(),
-                )?,
-            )?),
+            ("GET", ["checkouts", checkout, "target-capacity"]) => {
+                // HS2-P5GTSW: with `after` and `wait_ms` the read is a long poll.
+                value(self.hosted_capacity_wait(
+                    checkout,
+                    &super::capacity::claim_namespaces(
+                        query_text(path, "claim_namespaces")?.as_deref(),
+                    )?,
+                    query_text(path, "after")?.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
+                )?)
+            }
             ("POST", ["checkouts", checkout, "target-admission"]) => {
                 value(self.hosted_admission(checkout, decode(body)?)?)
             }
@@ -794,11 +799,13 @@ impl OrchestrationRuntime {
                     ),
                     None => None,
                 };
-                value(self.target_capacity(
+                value(self.target_capacity_wait(
                     &reference(owner, id)?,
                     &super::capacity::claim_namespaces(
                         query_text(path, "claim_namespaces")?.as_deref(),
                     )?,
+                    query_text(path, "after")?.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
                     actor.as_ref(),
                     tx,
                 )?)
@@ -817,9 +824,11 @@ impl OrchestrationRuntime {
             ) => {
                 let actor = actor(body)?;
                 let read: super::capacity::ReadCapacity = decode(body)?;
-                value(self.target_capacity(
+                value(self.target_capacity_wait(
                     &reference(owner, id)?,
                     &super::capacity::claim_namespaces(Some(&read.claim_namespaces.join(",")))?,
+                    read.after.as_deref(),
+                    read.wait_ms.unwrap_or(0),
                     actor.as_ref(),
                     tx,
                 )?)

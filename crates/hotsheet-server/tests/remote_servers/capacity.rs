@@ -599,3 +599,58 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
     assert_eq!(gone["outcome"], "refused");
     assert_eq!(gone["reason"], "capacity_unknown");
 }
+
+/// HS2-P5GTSW: the hosted capacity read is a long poll by version on a live service:
+/// a current version waits for its bound, a stale one answers at once.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_p5gtsw_capacity_waits_by_version_on_a_live_service() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+            .register(&project, None, None, vec![source.clone()])
+            .unwrap();
+    let router = app(host);
+    let api = super::orchestration::api;
+    let route = format!("/checkouts/{}/target-capacity", checkout.id);
+    let (status, first) = api(router.clone(), "GET", &route, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    let version = first["version"].as_str().unwrap().to_owned();
+    let began = std::time::Instant::now();
+    let (status, stale) = api(
+        router.clone(),
+        "GET",
+        &format!("{route}?after=0000000000000000&wait_ms=8000"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(began.elapsed() < std::time::Duration::from_secs(4));
+    assert!(stale["version"].is_string());
+    let (status, bad) = api(
+        router.clone(),
+        "GET",
+        &format!("{route}?after=not%20hex&wait_ms=10"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    assert_eq!(
+        api(
+            router,
+            "GET",
+            &format!("{route}?after={version}&wait_ms=10"),
+            Value::Null,
+            false
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+}

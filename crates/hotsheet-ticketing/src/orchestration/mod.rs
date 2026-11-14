@@ -46,10 +46,12 @@ pub use audit::{
 pub use bindings::BindingRegistry;
 pub use capacity::{
     AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest,
-    AdmissionStore, AdmissionView, CapacityField, CapacitySnapshot, CpuCapacity,
+    AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,
+    CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot, CpuCapacity,
     DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
     MAX_CLAIM_NAMESPACES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, SessionFootprint,
-    TargetSpeculation, ToolAvailability, decide_admission, effective_limits, estimated_footprint,
+    TargetSpeculation, ToolAvailability, capacity_version, decide_admission, effective_limits,
+    estimated_footprint,
 };
 pub use contract::*;
 pub use gates::{

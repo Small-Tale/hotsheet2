@@ -620,3 +620,110 @@ fn hs2_j8prtv_the_admission_file_is_idempotent_private_and_fails_closed() {
         assert!(store.update(|config| config.allow_unknown = true).is_err());
     }
 }
+
+/// HS2-P5GTSW: the capacity version changes exactly when room changes.
+#[test]
+fn hs2_p5gtsw_the_capacity_version_changes_with_room_not_with_jitter() {
+    let base = healthy().with_version();
+    let version = base.version.clone().unwrap();
+    assert_eq!(version, capacity_version(&healthy()));
+    assert_eq!(version.len(), 16);
+    // Stamping twice is the same; the stamp itself is not part of the digest.
+    assert_eq!(base.clone().with_version().version, Some(version.clone()));
+    type Change = fn(&mut CapacitySnapshot);
+    let same: [(&str, Change); 6] = [
+        ("sampling time", |s| s.sampled_at_ms = Some(9_999)),
+        ("memory within a step", |s| {
+            s.memory.free_mb = Some(8192 + 1000)
+        }),
+        ("load within a step", |s| s.cpu.load_percent = Some(39)),
+        ("disk within a step", |s| {
+            s.disk.free_mb = Some(50_000 + 1000)
+        }),
+        ("tools reordered", |s| s.tools.as_mut().unwrap().reverse()),
+        ("a session going busy", |s| {
+            s.sessions = Some(vec![session("a", Some("codex"), Some(10))]);
+        }),
+    ];
+    let busy_base = {
+        let mut s = healthy();
+        s.sessions = Some(vec![session("a", Some("codex"), Some(10))]);
+        capacity_version(&s)
+    };
+    for (name, change) in same {
+        let mut snapshot = healthy();
+        change(&mut snapshot);
+        let expected = if name == "a session going busy" {
+            // Compared against the same session idle: busy and footprint do not count.
+            let mut busy = snapshot.clone();
+            busy.sessions.as_mut().unwrap()[0].busy = true;
+            busy.sessions.as_mut().unwrap()[0].resident_mb = Some(999);
+            assert_eq!(capacity_version(&busy), busy_base, "{name}");
+            busy_base.clone()
+        } else {
+            version.clone()
+        };
+        assert_eq!(capacity_version(&snapshot), expected, "{name}");
+    }
+    let differs: [(&str, Change); 12] = [
+        ("memory a step lower", |s| {
+            s.memory.free_mb = Some(8192 - 1024)
+        }),
+        ("memory unknown", |s| s.memory.free_mb = None),
+        ("load a step higher", |s| s.cpu.load_percent = Some(40)),
+        ("load unknown", |s| s.cpu.load_percent = None),
+        ("disk a step lower", |s| {
+            s.disk.free_mb = Some(50_000 - 4096)
+        }),
+        ("a tool installed", |s| {
+            s.tools.as_mut().unwrap()[2].installed = true
+        }),
+        ("tools unknown", |s| s.tools = None),
+        ("a session started", |s| {
+            s.sessions = Some(vec![session("a", Some("codex"), None)]);
+        }),
+        ("sessions unknown", |s| s.sessions = None),
+        ("a claim held", |s| {
+            s.claims = Some(vec![HeldClaim {
+                namespace: "vm".into(),
+                resource: "macos-vm".into(),
+                expires_at_ms: 5,
+            }]);
+        }),
+        ("claims offline", |s| {
+            s.claims_offline = Some(OfflinePolicy::Provisional)
+        }),
+        ("speculation opted in", |s| {
+            s.speculation = Some(TargetSpeculation {
+                enabled: true,
+                max_depth: 1,
+            });
+        }),
+    ];
+    let mut seen = std::collections::BTreeSet::from([version.clone()]);
+    for (name, change) in differs {
+        let mut snapshot = healthy();
+        change(&mut snapshot);
+        let changed = capacity_version(&snapshot);
+        assert_ne!(changed, version, "{name}");
+        assert!(seen.insert(changed), "{name} collides with another change");
+    }
+    // A claim renewed (a new expiry) is the same claim.
+    let held = |expires_at_ms| {
+        let mut s = healthy();
+        s.claims = Some(vec![HeldClaim {
+            namespace: "vm".into(),
+            resource: "macos-vm".into(),
+            expires_at_ms,
+        }]);
+        capacity_version(&s)
+    };
+    assert_eq!(held(5), held(500));
+    // The wire form carries it, and an older peer's snapshot without it still reads.
+    let wire = serde_json::to_value(&base).unwrap();
+    assert_eq!(wire["version"], version.as_str());
+    let mut older = wire.clone();
+    older.as_object_mut().unwrap().remove("version");
+    let read: CapacitySnapshot = serde_json::from_value(older).unwrap();
+    assert_eq!(read.version, None);
+}
