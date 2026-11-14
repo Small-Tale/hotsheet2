@@ -21,7 +21,8 @@
 > reconciliation reads the CI runs gating a run, HS2-7QNK7Y, its deployments,
 > HS2-BYEB60, its validation attempts, HS2-G5H9FQ, and its sessions, HS2-75Q254),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
-> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18),
+> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18;
+> a level a validation deadline changes is published at that deadline, HS2-J7N3PQ),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
@@ -2030,8 +2031,18 @@ nothing polls.
 `readiness refresh` reads the named tickets again through the gate and lists under
 `unverified` those it could not confirm. It is how a prerequisite ticket without a
 run is confirmed today; following such tickets on the target's change feed is
-HS2-TMA4YA. A level that only time changes (a running validation attempt passing its
-deadline) is correct in every read and published at the next event (HS2-J7N3PQ).
+HS2-TMA4YA.
+
+**Changes that only time causes (HS2-J7N3PQ).** One level changes by time alone: a
+running validation attempt that outlives its deadline is `unverified`, so a step that
+waits on it becomes `stale`. Every evaluation of an owner's plan (a read, or an event
+that reevaluates it) arms one timer for the first instant one of the owner's running
+attempts passes its deadline (`next_lapse_ms`). It is a one-shot wake-up at a known
+time, never an interval, and an earlier deadline replaces a later armed one. When it
+fires the plan is evaluated at that instant, which publishes the changed level as a
+`readiness` event (with that instant as its time) and arms the next deadline, if any. An
+attempt that finishes first makes the wake-up publish nothing. A timer lives as long as
+its process; after a restart the next evaluation of the plan arms it again.
 
 ### Reads for the scheduler
 

@@ -1390,3 +1390,113 @@ fn hs2_42tara_routes_are_machine_local_and_share_the_runtime() {
         ("readiness_step_not_found", 404)
     );
 }
+
+/// HS2-J7N3PQ: a running validation attempt that outlives its deadline makes the step
+/// waiting on it stale, and that change is published when it happens, by a timer armed
+/// for the deadline: not at the next unrelated event, and never on an interval.
+#[test]
+fn hs2_j7n3pq_a_lapsed_validation_is_published_at_its_deadline() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, orchestration) = setup(
+        &[TargetAction::TicketsRead, TargetAction::ValidationRun],
+        &mut tx,
+    );
+    // The timer's wait is recorded and skipped; the instant it was armed for is what the
+    // plan is evaluated at.
+    let waits = Arc::new(Mutex::new(Vec::<std::time::Duration>::new()));
+    let seen = waits.clone();
+    m.runtime = m.runtime.clone().with_timer_sleep(Arc::new(move |wait| {
+        seen.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(wait);
+    }));
+    let owner = m.owner.id.clone();
+    let a = target_ticket(&m, "First");
+    let step_id = m
+        .runtime
+        .readiness_define(
+            &owner,
+            define(
+                &m,
+                &orchestration,
+                &a.slug,
+                json!([{"kind": "validation", "step_id": "smoke"}]),
+            ),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .readiness
+        .step
+        .step_id;
+    let ticket = json!({"native_id": orchestration.id.to_string()});
+    m.runtime
+        .validation_define(
+            &owner,
+            serde_json::from_value(json!({"ticket": ticket, "step": {"step_id": "smoke",
+                "target_id": id(1), "check": {"kind": "profile", "name": "smoke"},
+                "timeout_seconds": 20}}))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    // No running attempt: nothing is armed.
+    m.runtime.readiness(&owner, &step_id, &mut tx).unwrap();
+    assert_eq!(m.runtime.lapse_timer(&owner), None);
+    assert!(waits.lock().unwrap().is_empty());
+    // An attempt is running (recorded as a request would, outside any run).
+    let run_ticket = hotsheet_ticketing::orchestration::RunTicket {
+        connection_id: m.owner_connection(),
+        native_id: orchestration.id.to_string(),
+    };
+    let (running, _) = hotsheet_ticketing::orchestration::ValidationRegistry::new(&m.home)
+        .begin(
+            &owner,
+            &run_ticket,
+            "smoke",
+            hotsheet_ticketing::orchestration::NewResult {
+                operation_id: "check-1".into(),
+                state: hotsheet_ticketing::orchestration::ValidationState::Running,
+                reason: None,
+                actor_id: Some("worker-1".into()),
+                run_id: None,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let deadline = running.deadline_ms.unwrap();
+    let before = m.runtime.readiness(&owner, &step_id, &mut tx).unwrap();
+    assert_ne!(before.readiness.level, ReadinessLevel::Stale);
+    // The read armed the timer for the instant after the deadline; it fires, evaluates
+    // the plan then and publishes `stale` with no other event.
+    let published = || levels(&m, &step_id);
+    let began = std::time::Instant::now();
+    while !published().iter().any(|level| level == "stale")
+        && began.elapsed() < std::time::Duration::from_secs(10)
+    {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(published().last().map(String::as_str), Some("stale"));
+    assert_eq!(
+        waits.lock().unwrap().first().copied(),
+        Some(std::time::Duration::from_millis(deadline + 1 - 200))
+    );
+    let event = m
+        .runtime
+        .run_events(&owner, 0, 500, Some(&step_id), 0)
+        .unwrap()
+        .entries
+        .pop()
+        .unwrap();
+    assert_eq!(event.record.at_ms, deadline + 1);
+    // Nothing further is due: no timer stays armed, and reading again publishes nothing.
+    let count = published().len();
+    assert_eq!(m.runtime.lapse_timer(&owner), None);
+    m.runtime.readiness(&owner, &step_id, &mut tx).unwrap();
+    assert_eq!(published().len(), count);
+}

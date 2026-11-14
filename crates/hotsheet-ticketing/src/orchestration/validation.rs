@@ -442,6 +442,20 @@ pub fn may_retry(step: &ValidationStep, previous: &ValidationResult) -> bool {
         && previous.attempt < step.definition.retry.max_attempts
 }
 
+/// HS2-J7N3PQ: the first instant after `now_ms` at which a running attempt among this
+/// evidence passes its deadline, so a level computed from it changes by time alone.
+/// `None` when no running attempt is still within its deadline.
+pub fn next_lapse_ms(evidence: &[ValidationEvidence], now_ms: u64) -> Option<u64> {
+    evidence
+        .iter()
+        .filter_map(|evidence| evidence.latest.as_ref())
+        .filter(|result| result.state == ValidationState::Running)
+        .filter_map(|result| result.deadline_ms)
+        .filter(|deadline| *deadline >= now_ms)
+        .map(|deadline| deadline.saturating_add(1))
+        .min()
+}
+
 fn lapsed(result: &ValidationResult, now_ms: u64) -> bool {
     result.state == ValidationState::Running
         && result.deadline_ms.is_some_and(|deadline| now_ms > deadline)

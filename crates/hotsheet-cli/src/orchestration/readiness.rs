@@ -342,6 +342,8 @@ impl OrchestrationRuntime {
         if steps.is_empty() {
             return Ok(Vec::new());
         }
+        // HS2-J7N3PQ: a level that time alone will change is published when it does.
+        self.arm_lapse_timer(owner_id, now_ms);
         let facts = self.plan_facts(owner_id, &steps, now_ms)?;
         let answers = evaluate_plan(&steps, &facts);
         // HS2-JSF985: both are empty while the policy does not opt in.

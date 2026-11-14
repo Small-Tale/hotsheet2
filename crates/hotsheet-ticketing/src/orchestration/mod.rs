@@ -171,7 +171,7 @@ pub use validation::{
     MAX_VALIDATION_STEPS, NewResult, ResultUpdate, RetryPolicy, StepDefinition, StreamRef,
     VALIDATION_DEADLINE_GRACE_MS, ValidationCheck, ValidationError, ValidationEvidence,
     ValidationProfile, ValidationProfileStore, ValidationRegistry, ValidationResult,
-    ValidationState, ValidationStep, effective, evaluate, may_retry,
+    ValidationState, ValidationStep, effective, evaluate, may_retry, next_lapse_ms,
 };
 pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 

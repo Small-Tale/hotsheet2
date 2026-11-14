@@ -17,6 +17,7 @@ mod policy;
 mod projects;
 mod provisional;
 mod readiness;
+mod readiness_timer;
 mod reconcile_sources;
 mod recovery;
 mod request;
@@ -164,6 +165,8 @@ pub struct OrchestrationRuntime {
     prompt: Arc<dyn PermissionPrompt>,
     /// HS2-P5GTSW: how often a capacity wait samples again (tests shorten it).
     capacity_resample: std::time::Duration,
+    /// HS2-J7N3PQ: how a deadline timer waits until its instant (tests skip the wait).
+    timer_sleep: Arc<dyn Fn(std::time::Duration) + Send + Sync>,
 }
 
 impl OrchestrationRuntime {
@@ -199,6 +202,7 @@ impl OrchestrationRuntime {
             claims: Arc::new(MachineClaims::new(&home)),
             prompt: Arc::new(NoPrompt),
             capacity_resample: std::time::Duration::from_millis(capacity::CAPACITY_RESAMPLE_MS),
+            timer_sleep: Arc::new(std::thread::sleep),
             home,
             checkouts,
             providers,

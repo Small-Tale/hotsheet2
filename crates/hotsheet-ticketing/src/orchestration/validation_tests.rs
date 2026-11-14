@@ -1239,3 +1239,62 @@ fn hs2_wn0mxz_target_profiles_are_read_from_the_checked_in_file_only() {
         }
     }
 }
+
+/// HS2-J7N3PQ: the first instant a running attempt's deadline changes a level.
+#[test]
+fn hs2_j7n3pq_the_next_lapse_is_the_first_running_deadline_ahead() {
+    let result = |state: ValidationState, deadline_ms: Option<u64>| ValidationResult {
+        result_id: "r".into(),
+        operation_id: "op".into(),
+        attempt: 1,
+        step_revision: 1,
+        state,
+        reason: None,
+        actor_id: None,
+        run_id: None,
+        host_started: false,
+        created_at_ms: 0,
+        deadline_ms,
+        finished_at_ms: None,
+        outcome: None,
+    };
+    let evidence = |latest: Option<ValidationResult>| ValidationEvidence {
+        step: ValidationStep {
+            owner_checkout_id: OWNER.into(),
+            ticket: ticket(1),
+            definition: step("smoke"),
+            revision: 1,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            updated_by: None,
+        },
+        state: ValidationState::Running,
+        reason: None,
+        latest,
+        history: Vec::new(),
+    };
+    // Empty, then only finished or deadline-free attempts: nothing is due.
+    assert_eq!(next_lapse_ms(&[], 10), None);
+    assert_eq!(
+        next_lapse_ms(
+            &[
+                evidence(None),
+                evidence(Some(result(ValidationState::Passed, Some(50)))),
+                evidence(Some(result(ValidationState::Running, None))),
+            ],
+            10
+        ),
+        None
+    );
+    // The earliest running deadline ahead, one millisecond after it (a deadline is
+    // passed once now is beyond it).
+    let both = [
+        evidence(Some(result(ValidationState::Running, Some(500)))),
+        evidence(Some(result(ValidationState::Running, Some(300)))),
+    ];
+    assert_eq!(next_lapse_ms(&both, 10), Some(301));
+    // At the deadline it is still ahead; past it, the next one is.
+    assert_eq!(next_lapse_ms(&both, 300), Some(301));
+    assert_eq!(next_lapse_ms(&both, 301), Some(501));
+    assert_eq!(next_lapse_ms(&both, 501), None);
+}
