@@ -31,6 +31,9 @@ pub struct BusyDetector {
     state: OscState,
     payload: Vec<u8>,
     busy: bool,
+    /// HS2-RG91SK: when the terminal last became idle (a turn finished), or started
+    /// idle, in milliseconds since the epoch. `None` while busy or never stamped.
+    idle_since_ms: Option<u64>,
 }
 
 impl BusyDetector {
@@ -45,6 +48,29 @@ impl BusyDetector {
         } else {
             Activity::Idle
         }
+    }
+
+    /// HS2-RG91SK: a detector for a terminal that starts idle at `now_ms`.
+    pub fn idle_from(now_ms: u64) -> Self {
+        Self {
+            idle_since_ms: Some(now_ms),
+            ..Self::default()
+        }
+    }
+
+    /// HS2-RG91SK: since when the terminal has been idle; `None` while busy.
+    pub fn idle_since_ms(&self) -> Option<u64> {
+        if self.busy { None } else { self.idle_since_ms }
+    }
+
+    /// Feed output bytes seen at `now_ms`. A turn that finishes stamps the time it went
+    /// idle; one that starts clears it. Returns `true` if the busy state changed.
+    pub fn feed_at(&mut self, bytes: &[u8], now_ms: u64) -> bool {
+        let changed = self.feed(bytes);
+        if changed {
+            self.idle_since_ms = (!self.busy).then_some(now_ms);
+        }
+        changed
     }
 
     /// Feed output bytes. Returns `true` if the busy state changed (so a caller can emit).
@@ -159,5 +185,39 @@ mod tests {
         assert!(contains_spinner("⠋ working".as_bytes()));
         assert!(contains_spinner("⣾".as_bytes()));
         assert!(!contains_spinner(b"plain ascii output"));
+    }
+}
+
+#[cfg(test)]
+mod hs2_rg91sk_tests {
+    use super::*;
+
+    const START: &[u8] = b"\x1b]133;C\x07";
+    const DONE: &[u8] = b"\x1b]133;D;0\x07";
+
+    #[test]
+    fn hs2_rg91sk_the_detector_says_since_when_it_is_idle() {
+        // Started idle at launch: idle since then.
+        let mut d = BusyDetector::idle_from(100);
+        assert_eq!(d.idle_since_ms(), Some(100));
+        // Output that changes nothing keeps the time.
+        assert!(!d.feed_at(b"plain text", 150));
+        assert_eq!(d.idle_since_ms(), Some(100));
+        // A turn starts: busy, no idle time.
+        assert!(d.feed_at(START, 200));
+        assert_eq!(d.idle_since_ms(), None);
+        // More output mid-turn changes nothing.
+        assert!(!d.feed_at(b"working", 250));
+        // The turn finishes: idle since then, not since launch.
+        assert!(d.feed_at(DONE, 300));
+        assert_eq!(d.idle_since_ms(), Some(300));
+        // A repeated finish keeps the first time; a new turn and its end move it.
+        assert!(!d.feed_at(DONE, 350));
+        assert_eq!(d.idle_since_ms(), Some(300));
+        d.feed_at(START, 400);
+        d.feed_at(DONE, 500);
+        assert_eq!(d.idle_since_ms(), Some(500));
+        // A detector never stamped knows nothing.
+        assert_eq!(BusyDetector::new().idle_since_ms(), None);
     }
 }

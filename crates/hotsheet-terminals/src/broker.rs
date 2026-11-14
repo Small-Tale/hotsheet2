@@ -285,6 +285,10 @@ pub struct BrokerTermInfo {
     /// Whether a command the user started holds the PTY foreground; absent where unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub foreground_command: Option<bool>,
+    /// HS2-RG91SK: since when the terminal has been idle; absent while busy, or from an
+    /// older broker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_since_ms: Option<u64>,
 }
 
 #[cfg(unix)]
@@ -302,6 +306,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
         progress: osc.progress,
         worker: term.worker_id().map(str::to_string),
         foreground_command: term.foreground_command_running(),
+        idle_since_ms: term.idle_since_ms(),
     }
 }
 

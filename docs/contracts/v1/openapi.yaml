@@ -21470,7 +21470,10 @@ components:
                 - integer
                 - 'null'
               minimum: 0
-          additionalProperties: false
+            idle_since_ms:
+              description: Since when the session has been idle, as its host measured it (HS2-RG91SK); absent while busy.
+              type: integer
+              minimum: 0
       additionalProperties: false
     OrchestrationSessionStart:
       type: object
@@ -30083,6 +30086,12 @@ components:
           type: boolean
         busy:
           type: boolean
+        idle_since_ms:
+          description:
+            Since when the terminal has been idle (its last turn finished, or its launch), in milliseconds since the
+            epoch; absent while busy (HS2-RG91SK).
+          type: integer
+          minimum: 0
         cwd:
           type: string
         link:

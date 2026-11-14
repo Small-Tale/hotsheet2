@@ -24,7 +24,8 @@
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18;
 > a level a validation deadline changes is published at that deadline, HS2-J7N3PQ;
 > step events name their step in `step_id`, HS2-J7RG42; prerequisite tickets without a
-> run are followed on their target's change feed, HS2-TMA4YA),
+> run are followed on their target's change feed, HS2-TMA4YA; a session's host reports
+> since when it has been idle, HS2-RG91SK),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
@@ -2849,14 +2850,17 @@ scheduler decides anything.
   to a host) and still unknown to its host is ended as `never_started`. Nothing ran,
   so nothing is interrupted. A start for a changed tool, model or account ends it at
   once instead (HS2-7VV79Q, below).
-- **Idle time.** A host says whether a session is mid-turn, not since when. This
-  machine keeps the first listing that saw each session idle in
-  `${HOTSHEET_HOME}/orchestration-session-idle.json` (private, version 1). A listing
+- **Idle time (HS2-RG91SK).** A host says since when a session has been idle: its
+  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output),
+  or its launch, and clears it while a turn runs. The time travels as `idle_since_ms` on
+  the terminal listing (`GET /terminals`, the broker's terminal info) and in the safe
+  point's facts, and the scheduler uses it, so a turn that began and ended between two
+  passes restarts the idle time. A host that does not report it (an older one) falls
+  back to the first listing here that saw the session idle, kept in
+  `${HOTSHEET_HOME}/orchestration-session-idle.json` (private, version 1): a listing
   that sees it working forgets the time, one that cannot ask leaves it, and a finished
-  session is dropped. Work that begins and ends between two passes is not seen, so a
-  session may be asked to stop sooner after its last turn than `idle_minutes` says;
-  the host's safe point, not this time, is what protects work. Having the host
-  report the time is HS2-RG91SK.
+  session is dropped. The host's safe point, not this time, is still what protects
+  work. Safe point facts are read leniently, so a host that reports more is understood.
 - Sessions other owners or people run on a target's machine are not listed. They
   reach the scheduler through the machine's capacity snapshot (§26.10).
 

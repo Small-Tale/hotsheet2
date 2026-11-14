@@ -660,6 +660,7 @@ fn hs2_gdjxgz_a_safe_point_needs_every_fact_known_and_clear() {
                             held_claims,
                             dirty_worktrees,
                             pending_handoffs,
+                            idle_since_ms: None,
                         };
                         let decided = decide_safe_point(&facts);
                         let expected = alive == Some(false)
@@ -713,6 +714,7 @@ fn hs2_gdjxgz_a_stop_is_decided_by_owner_asker_force_and_safe_point() {
         held_claims: Some(0),
         dirty_worktrees: Some(0),
         pending_handoffs: Some(0),
+        idle_since_ms: None,
     });
     let held = decide_safe_point(&SafePointFacts {
         held_claims: Some(1),
@@ -1448,4 +1450,41 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
         serde_json::to_value(RequestKind::Claimed).unwrap(),
         "claimed"
     );
+}
+
+/// HS2-RG91SK: the host's idle time rides on the facts without deciding anything, and
+/// facts from a host that reports more read leniently.
+#[test]
+fn hs2_rg91sk_the_idle_time_is_a_fact_not_a_blocker() {
+    let base = SafePointFacts {
+        alive: Some(true),
+        busy: Some(false),
+        held_claims: Some(0),
+        dirty_worktrees: Some(0),
+        pending_handoffs: Some(0),
+        idle_since_ms: None,
+    };
+    let stamped = SafePointFacts {
+        idle_since_ms: Some(5_000),
+        ..base
+    };
+    assert_eq!(
+        decide_safe_point(&base).safe,
+        decide_safe_point(&stamped).safe
+    );
+    assert_eq!(decide_safe_point(&stamped).facts.idle_since_ms, Some(5_000));
+    let wire = serde_json::to_value(stamped).unwrap();
+    assert_eq!(wire["idle_since_ms"], 5_000);
+    assert!(
+        serde_json::to_value(base)
+            .unwrap()
+            .get("idle_since_ms")
+            .is_none()
+    );
+    let newer: SafePointFacts = serde_json::from_value(serde_json::json!({
+        "alive": true, "busy": false, "held_claims": 0, "dirty_worktrees": 0,
+        "pending_handoffs": 0, "idle_since_ms": 7, "a_later_fact": 1
+    }))
+    .unwrap();
+    assert_eq!(newer.idle_since_ms, Some(7));
 }

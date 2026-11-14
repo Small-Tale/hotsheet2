@@ -2680,3 +2680,42 @@ fn hs2_vrc0cq_a_stopping_hosts_scheduler_runs_no_pass() {
     assert_eq!(f.host.launches().len(), 2);
     let _ = &clock;
 }
+
+/// HS2-RG91SK: the host says since when a session has been idle, so a turn that began
+/// and ended between two passes restarts the idle time, which the orchestrator's own
+/// first sighting would miss.
+#[test]
+fn hs2_rg91sk_the_hosts_idle_time_is_used_and_an_older_host_falls_back() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("First", &mut tx);
+    let operation = format!("sched-start-{step}");
+    f.tick(&mut tx);
+    let session = f.record(&operation);
+    let sid = session.session_id.clone();
+    let terminal = f.terminal(&session);
+    f.gone(&step, &mut tx);
+    // An older host says nothing: the first sighting here is the idle time.
+    f.tick(&mut tx);
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START));
+    // The host now reports a turn that finished later, unseen by any pass: the idle
+    // time is the host's, so no wind-down comes sooner than the policy allows.
+    f.at(&clock, START + 2 * MINUTE);
+    f.host.set_idle_since(&terminal, Some(START + 90 * 1000));
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START + 90 * 1000));
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placement(&tick, &sid),
+        (PlacementAction::Keep, "idle_grace")
+    );
+    assert_eq!(tick.view.schedule.retry_at_ms, Some(START + 150 * 1000));
+    // Busy: no idle time, whatever was reported before.
+    f.host.set_busy(&terminal, true);
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, None);
+    f.host.set_busy(&terminal, false);
+    // The host's time stands even against an earlier first sighting here.
+    assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START + 90 * 1000));
+    // The host forgets (an older host again): back to this machine's memory.
+    f.host.set_idle_since(&terminal, None);
+    assert!(f.listed(&mut tx)[0].idle_since_ms.is_some());
+}

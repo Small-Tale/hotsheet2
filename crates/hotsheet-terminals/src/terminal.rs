@@ -625,7 +625,8 @@ impl Terminal {
             clamp_replay_bytes(spec.replay_bytes),
             OUTPUT_CHANNEL_CAP,
         ));
-        let busy = Arc::new(Mutex::new(BusyDetector::new()));
+        // HS2-RG91SK: a terminal starts idle at its launch.
+        let busy = Arc::new(Mutex::new(BusyDetector::idle_from(epoch_ms())));
         let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(
             initial_cwd.clone(),
         )));
@@ -645,7 +646,7 @@ impl Terminal {
                         out.publish(chunk);
                         {
                             let mut d = bz.lock_or_recover();
-                            d.feed(chunk);
+                            d.feed_at(chunk, epoch_ms());
                         }
                         {
                             let mut o = oc.lock_or_recover();
@@ -878,6 +879,12 @@ impl Terminal {
         self.busy.with_lock(|d| d.activity())
     }
 
+    /// HS2-RG91SK: since when the terminal has been idle (its last turn finished, or
+    /// its launch); `None` while busy.
+    pub fn idle_since_ms(&self) -> Option<u64> {
+        self.busy.with_lock(|d| d.idle_since_ms())
+    }
+
     /// Informational terminal state parsed from OSC 7/8/9 (cwd / hyperlink / progress).
     pub fn term_state(&self) -> TermState {
         self.osc.with_lock(|o| o.state())
@@ -915,6 +922,14 @@ impl Terminal {
         }
         self.child.lock_or_recover().kill().map_err(TermError::Io)
     }
+}
+
+/// HS2-RG91SK: milliseconds since the epoch, for the idle time a terminal reports.
+fn epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

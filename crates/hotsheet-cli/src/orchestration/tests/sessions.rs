@@ -84,6 +84,14 @@ impl ScriptedHost {
             }
         }
     }
+    /// HS2-RG91SK: what the host says about since when a session has been idle.
+    pub(super) fn set_idle_since(&self, session_id: &str, since: Option<u64>) {
+        for state in self.live().iter_mut() {
+            if state.session_id == session_id {
+                state.idle_since_ms = since;
+            }
+        }
+    }
     /// HS2-R7QH35: every message pushed into a session, as (terminal, text), in order.
     pub(super) fn pushes(&self) -> Vec<(String, String)> {
         self.joined
@@ -137,6 +145,7 @@ impl SessionHost for ScriptedHost {
             live.push(HostSessionState {
                 session_id: launch.session_id.clone(),
                 busy: false,
+                idle_since_ms: None,
             });
         }
         Ok(Launched {
@@ -863,6 +872,7 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
         f.host.live().push(HostSessionState {
             session_id: format!("someone-elses-{n}"),
             busy: false,
+            idle_since_ms: None,
         });
     }
     assert_eq!(

@@ -66,6 +66,9 @@ pub fn plugin_role_paths(tool: &str, plugin_dirs: &[PathBuf]) -> Option<(bool, b
 pub struct HostSessionState {
     pub session_id: String,
     pub busy: bool,
+    /// HS2-RG91SK: since when the session has been idle (its last turn finished), as the
+    /// host measured it; `None` while busy or from a host that does not say.
+    pub idle_since_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -366,6 +369,7 @@ impl SessionHost for LocalServerSessions {
                     live.push(HostSessionState {
                         session_id: id.into(),
                         busy: field("busy").and_then(Value::as_bool).unwrap_or(true),
+                        idle_since_ms: field("idle_since_ms").and_then(Value::as_u64),
                     });
                 }
             }
@@ -884,6 +888,11 @@ impl OrchestrationRuntime {
                     held_claims: self.session_claims(checkout, &worker_id, tx),
                     dirty_worktrees: dirty_worktrees(Path::new(&checkout.root)),
                     pending_handoffs: Self::pending_handoffs(checkout, &session, &worker_id),
+                    // HS2-RG91SK: the host's own time of the last finished turn.
+                    idle_since_ms: state
+                        .flatten()
+                        .filter(|state| !state.busy)
+                        .and_then(|state| state.idle_since_ms),
                 }
             })
         });

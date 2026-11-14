@@ -97,6 +97,7 @@ impl SessionHost for ServerSessions {
                 .map(|info| HostSessionState {
                     session_id: info.id,
                     busy: info.busy,
+                    idle_since_ms: info.idle_since_ms,
                 })
                 .collect(),
         )

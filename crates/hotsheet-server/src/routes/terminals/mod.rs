@@ -579,6 +579,10 @@ pub(crate) struct TerminalInfo {
     /// names the hosted operation a person takes over or pauses. Absent otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) orchestrator: Option<TerminalOrchestrator>,
+    /// HS2-RG91SK: since when the terminal has been idle (its last turn finished, or its
+    /// launch), in milliseconds since the epoch; absent while busy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) idle_since_ms: Option<u64>,
 }
 
 /// HS2-6MNMVB: the orchestrator-owned session in a terminal, by identifiers and labels.
@@ -880,6 +884,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         kind: term.kind(),
         alive: term.is_alive(),
         busy: term.activity() == hotsheet_terminals::Activity::Busy,
+        idle_since_ms: term.idle_since_ms(),
         cwd: osc.cwd,
         launch_cwd: term.launch_cwd().map(str::to_string),
         link: osc.link,
@@ -904,6 +909,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         kind: bi.kind,
         alive: bi.alive,
         busy: bi.busy,
+        idle_since_ms: bi.idle_since_ms,
         cwd: bi.cwd,
         launch_cwd: bi.launch_cwd,
         link: bi.link,

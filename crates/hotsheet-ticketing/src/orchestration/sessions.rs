@@ -243,8 +243,8 @@ impl SessionError {
 // ---- Safe points ----
 
 /// What the host established about one session. `None` means it could not find out.
+/// HS2-RG91SK: read leniently, so a host that reports more facts is still understood.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct SafePointFacts {
     /// Whether the session's process is still running.
     pub alive: Option<bool>,
@@ -257,6 +257,11 @@ pub struct SafePointFacts {
     /// Assignments of the session that are not finished: work not yet handed off, or a
     /// handoff the integrator has not finished.
     pub pending_handoffs: Option<u32>,
+    /// HS2-RG91SK: since when the session has been idle, as its host measured it (its
+    /// last turn finished). Not a blocker; the scheduler's idle time. Absent while busy
+    /// or from a host that does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_since_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

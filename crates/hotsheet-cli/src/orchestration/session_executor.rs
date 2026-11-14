@@ -171,6 +171,8 @@ impl OrchestrationRuntime {
         let cancelled = self.withdrawn_runs(owner_id);
         let mut listed = Vec::new();
         let mut seen = Vec::new();
+        let mut reported_idle: std::collections::BTreeMap<String, u64> =
+            std::collections::BTreeMap::new();
         for record in self.session_list(owner_id, true)? {
             // One request to the session's host. A host that cannot be asked, or a
             // gate that no longer allows the read, leaves the record as it is: the
@@ -204,6 +206,12 @@ impl OrchestrationRuntime {
             }
             let idle = idle(safe_point.as_ref());
             seen.push((session.session_id.clone(), idle));
+            if let Some(since) = safe_point
+                .as_ref()
+                .and_then(|safe_point| safe_point.facts.idle_since_ms)
+            {
+                reported_idle.insert(session.session_id.clone(), since);
+            }
             // HS2-YC2P7K: a session works its run while the run is unfinished, idle
             // between turns or not; one whose run finished is free again.
             // HS2-HV9ED3: a session whose run a person cancelled stays busy with it
@@ -241,10 +249,17 @@ impl OrchestrationRuntime {
                 winding_down: false,
             });
         }
+        // HS2-RG91SK: the host says since when a session has been idle (its last
+        // finished turn), so work that began and ended between two passes is not missed.
+        // A host that does not say (an older one) falls back to the first listing here
+        // that saw the session idle.
         let idle_since = SessionIdleStore::new(&self.home).observe(owner_id, &seen, now_ms)?;
         for session in &mut listed {
             if session.activity == SessionActivity::Idle {
-                session.idle_since_ms = idle_since.get(&session.session_id).copied();
+                session.idle_since_ms = reported_idle
+                    .get(&session.session_id)
+                    .copied()
+                    .or_else(|| idle_since.get(&session.session_id).copied());
             }
         }
         Ok(listed)
