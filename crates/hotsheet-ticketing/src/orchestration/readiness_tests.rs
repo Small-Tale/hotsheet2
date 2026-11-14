@@ -1427,3 +1427,97 @@ fn hs2_2fg91x_a_step_declares_the_resources_its_session_must_hold() {
     }
     assert_eq!(fixture.registry.records(OWNER).unwrap(), before);
 }
+
+/// HS2-E7HR4R: a step and the reads of the tickets it names are one write, so any
+/// evaluation that sees the new step also sees its tickets observed, never a
+/// prerequisite missing a read (which published `stale`). A read for a ticket no step
+/// names is dropped, an unchanged definition still takes a newer read, and a malformed
+/// read refuses the whole definition before anything is written.
+#[test]
+fn hs2_e7hr4r_a_definition_and_its_reads_are_one_write() {
+    let mut fixture = Fixture::new();
+    let (a, b, c) = (ticket(1, "a"), ticket(2, "b"), ticket(3, "c"));
+    let read = |status: &str, at_ms| TicketUpdate {
+        observed: Some(seen(status, at_ms)),
+        unreachable: Some(None),
+    };
+    let new = |target: &RunTarget, prerequisites| NewPlanStep {
+        ticket: orchestration_ticket(),
+        target: target.clone(),
+        prerequisites,
+        resources: Vec::new(),
+        tool: None,
+    };
+    let facts = |fixture: &Fixture, target: &RunTarget| {
+        fixture
+            .registry
+            .tickets(OWNER)
+            .unwrap()
+            .into_iter()
+            .find(|record| record.target == *target)
+            .and_then(|record| record.facts.observed)
+            .map(|seen| (seen.status, seen.at_ms))
+    };
+    let define = |fixture: &mut Fixture, prerequisites, observed| {
+        let (clock, rng) = (&fixture.clock, &mut fixture.rng);
+        fixture.registry.define_observed(
+            OWNER,
+            new(&b, prerequisites),
+            observed,
+            Some("worker-1".into()),
+            &mut Transaction { clock, rng },
+        )
+    };
+    let (step, created) = define(
+        &mut fixture,
+        vec![requires(&a, GateRequirement::None)],
+        vec![
+            (b.clone(), read("not_started", 10)),
+            (a.clone(), read("started", 10)),
+            (c.clone(), read("started", 10)),
+        ],
+    )
+    .unwrap();
+    assert!(created);
+    // Both named tickets are observed by the same write as the step; the unnamed one
+    // is not kept.
+    assert_eq!(facts(&fixture, &a), Some(("started".into(), 10)));
+    assert_eq!(facts(&fixture, &b), Some(("not_started".into(), 10)));
+    assert_eq!(facts(&fixture, &c), None);
+
+    // The same definition again changes no step but keeps a newer read, and ignores an
+    // older one.
+    let (again, changed) = define(
+        &mut fixture,
+        vec![requires(&a, GateRequirement::None)],
+        vec![
+            (a.clone(), read("completed", 20)),
+            (b.clone(), read("started", 5)),
+        ],
+    )
+    .unwrap();
+    assert!(!changed);
+    assert_eq!(again, step);
+    assert_eq!(facts(&fixture, &a), Some(("completed".into(), 20)));
+    assert_eq!(facts(&fixture, &b), Some(("not_started".into(), 10)));
+
+    // A malformed read refuses the definition: no revision, no read recorded.
+    let mut broken = read("started", 30);
+    broken.unreachable = Some(Some(RunUnreachable {
+        since_ms: 30,
+        reason: "not a code".into(),
+    }));
+    assert!(
+        define(
+            &mut fixture,
+            vec![requires(&a, GateRequirement::Ci)],
+            vec![(a.clone(), broken)],
+        )
+        .is_err()
+    );
+    assert_eq!(
+        fixture.registry.records(OWNER).unwrap()[0].step.revision,
+        step.revision
+    );
+    assert_eq!(facts(&fixture, &a), Some(("completed".into(), 20)));
+}

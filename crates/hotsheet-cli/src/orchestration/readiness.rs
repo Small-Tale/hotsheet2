@@ -635,7 +635,21 @@ impl OrchestrationRuntime {
                     })
                 })
                 .collect::<Result<Vec<_>, OrchestrationError>>()?;
-            let (step, changed) = self.plan().define(
+            // HS2-E7HR4R: the step and the reads just made are one write, so no
+            // concurrent evaluation sees the step before its tickets are observed.
+            let observed = read
+                .iter()
+                .map(|(target, seen)| {
+                    (
+                        target.clone(),
+                        TicketUpdate {
+                            observed: Some(seen.clone()),
+                            unreachable: Some(None),
+                        },
+                    )
+                })
+                .collect();
+            let (step, changed) = self.plan().define_observed(
                 owner_id,
                 NewPlanStep {
                     ticket: ticket.clone(),
@@ -644,19 +658,10 @@ impl OrchestrationRuntime {
                     resources: request.resources.clone(),
                     tool: request.tool.clone(),
                 },
+                observed,
                 actor.and_then(|actor| actor.id.clone()),
                 tx,
             )?;
-            for (target, seen) in &read {
-                self.plan().observe(
-                    owner_id,
-                    target,
-                    TicketUpdate {
-                        observed: Some(seen.clone()),
-                        unreachable: Some(None),
-                    },
-                )?;
-            }
             if changed {
                 // HS2-2FG91X: a changed requirement moves no level, so no readiness
                 // event would tell a running scheduler to look again. The wake is

@@ -798,11 +798,29 @@ impl PlanRegistry {
     pub fn define(
         &self,
         owner_checkout_id: &str,
+        new: NewPlanStep,
+        actor_id: Option<String>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(PlanStep, bool), OrchestrationError> {
+        self.define_observed(owner_checkout_id, new, Vec::new(), actor_id, tx)
+    }
+
+    /// HS2-E7HR4R: [`Self::define`] together with the reads of the tickets the step
+    /// names, in one write. A step written without them, and observed a moment later,
+    /// could be evaluated in between with a prerequisite not yet observed and published
+    /// as `stale`. Returns whether the step itself changed.
+    pub fn define_observed(
+        &self,
+        owner_checkout_id: &str,
         mut new: NewPlanStep,
+        observed: Vec<(RunTarget, TicketUpdate)>,
         actor_id: Option<String>,
         tx: &mut Transaction<'_>,
     ) -> Result<(PlanStep, bool), OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
+        for (target, update) in &observed {
+            validate_update(target, update)?;
+        }
         new.resources.sort();
         let now_ms = tx.clock.now_ms();
         let _lock = self.storage.lock()?;
@@ -820,7 +838,15 @@ impl PlanRegistry {
                     && step.resources == new.resources
                     && step.tool == new.tool
                 {
-                    return Ok((step.clone(), false));
+                    let step = step.clone();
+                    let mut seen = false;
+                    for (target, update) in observed {
+                        seen |= apply_observation(&mut file, owner_checkout_id, &target, update);
+                    }
+                    if seen {
+                        self.write_file(&file)?;
+                    }
+                    return Ok((step, false));
                 }
                 step.prerequisites = new.prerequisites;
                 step.resources = new.resources;
@@ -862,6 +888,9 @@ impl PlanRegistry {
             }
         };
         prune_tickets(&mut file);
+        for (target, update) in observed {
+            apply_observation(&mut file, owner_checkout_id, &target, update);
+        }
         self.write_file(&file)?;
         Ok((step, true))
     }
@@ -913,49 +942,10 @@ impl PlanRegistry {
         update: TicketUpdate,
     ) -> Result<bool, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
-        validate_target(target)?;
-        if let Some(seen) = &update.observed {
-            validate_seen(seen)?;
-        }
-        if let Some(Some(down)) = &update.unreachable {
-            valid_identifier(&down.reason)?;
-        }
+        validate_update(target, &update)?;
         let _lock = self.storage.lock()?;
         let mut file = self.read_file()?;
-        let key = ticket_key(target);
-        if !named(&file, owner_checkout_id).contains(&key) {
-            return Ok(false);
-        }
-        let index = match file.tickets.iter().position(|record| {
-            record.owner_checkout_id == owner_checkout_id && record.target == *target
-        }) {
-            Some(index) => index,
-            None => {
-                file.tickets.push(TicketRecord {
-                    owner_checkout_id: owner_checkout_id.into(),
-                    target: target.clone(),
-                    facts: TicketFacts::default(),
-                });
-                file.tickets.len() - 1
-            }
-        };
-        let facts = &mut file.tickets[index].facts;
-        let before = facts.clone();
-        if let Some(seen) = update.observed
-            && facts
-                .observed
-                .as_ref()
-                .is_none_or(|stored| seen.at_ms >= stored.at_ms)
-        {
-            facts.observed = Some(seen);
-        }
-        match update.unreachable {
-            // An outage keeps when it began; reporting it again changes nothing.
-            Some(Some(down)) if facts.unreachable.is_none() => facts.unreachable = Some(down),
-            Some(None) => facts.unreachable = None,
-            _ => {}
-        }
-        if *facts == before {
+        if !apply_observation(&mut file, owner_checkout_id, target, update) {
             return Ok(false);
         }
         self.write_file(&file)?;
@@ -1009,6 +999,61 @@ impl PlanRegistry {
 }
 
 /// Every ticket the owner's steps work or require.
+fn validate_update(target: &RunTarget, update: &TicketUpdate) -> Result<(), OrchestrationError> {
+    validate_target(target)?;
+    if let Some(seen) = &update.observed {
+        validate_seen(seen)?;
+    }
+    if let Some(Some(down)) = &update.unreachable {
+        valid_identifier(&down.reason)?;
+    }
+    Ok(())
+}
+
+/// Record one read in `file`: a read older than the stored one is ignored, and a
+/// ticket no step of the owner names is not kept. Returns whether anything changed.
+fn apply_observation(
+    file: &mut PlanFile,
+    owner_checkout_id: &str,
+    target: &RunTarget,
+    update: TicketUpdate,
+) -> bool {
+    let key = ticket_key(target);
+    if !named(file, owner_checkout_id).contains(&key) {
+        return false;
+    }
+    let index = match file.tickets.iter().position(|record| {
+        record.owner_checkout_id == owner_checkout_id && record.target == *target
+    }) {
+        Some(index) => index,
+        None => {
+            file.tickets.push(TicketRecord {
+                owner_checkout_id: owner_checkout_id.into(),
+                target: target.clone(),
+                facts: TicketFacts::default(),
+            });
+            file.tickets.len() - 1
+        }
+    };
+    let facts = &mut file.tickets[index].facts;
+    let before = facts.clone();
+    if let Some(seen) = update.observed
+        && facts
+            .observed
+            .as_ref()
+            .is_none_or(|stored| seen.at_ms >= stored.at_ms)
+    {
+        facts.observed = Some(seen);
+    }
+    match update.unreachable {
+        // An outage keeps when it began; reporting it again changes nothing.
+        Some(Some(down)) if facts.unreachable.is_none() => facts.unreachable = Some(down),
+        Some(None) => facts.unreachable = None,
+        _ => {}
+    }
+    *facts != before
+}
+
 fn named(file: &PlanFile, owner_checkout_id: &str) -> BTreeSet<TicketKey> {
     file.steps
         .iter()
