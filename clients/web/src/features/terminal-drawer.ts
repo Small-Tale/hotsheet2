@@ -3,7 +3,7 @@ import { batch, type Signal } from 'kerfjs';
 import { type AiToolDefaults, Api, ApiHttpError, type CommandDefinition, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
 import type { AppTabMenuState } from '../components/project-tab-context-menu';
-import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { TerminalDashboardGroup, TerminalDashboardSession } from '../components/terminal-dashboard';
 import {
   drawerInputFocusRequestStillOwned,
   drawerTabFocusRequestStillOwned,
@@ -422,6 +422,21 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
     }
   }
+  /**
+   * HS2-HVKS7M: closing the tab of a session an orchestrator started here is a person's stop. It
+   * goes through the hosted stop with `force`, which ends the terminal and records `person_stopped`,
+   * so the orchestrator never reads it as a crash (`host_lost`). Any other terminal, or a hosted
+   * stop that found nothing left to stop, is closed the ordinary way.
+   */
+  async function closeTerminal(current: Project, session: TerminalDashboardSession | undefined, id: string) {
+    const client = new Api(current.apiPath),
+      orchestrator = session?.orchestrator;
+    if (orchestrator) {
+      const reply = await client.stopHostedSession(orchestrator.checkout_id, orchestrator.operation_id, true);
+      if (reply.stopped) return;
+    }
+    await client.deleteTerminal(id);
+  }
   async function closeDrawerTabIds(ids: readonly string[]) {
     const current = project(),
       group = current && terminalGroups.value.find((item) => item.projectId === current.id);
@@ -450,7 +465,15 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     if (closingTerminals.length) {
       terminalDashboardLoading.value = true;
       try {
-        await Promise.all(closingTerminals.map((id) => new Api(current.apiPath).deleteTerminal(id)));
+        await Promise.all(
+          closingTerminals.map((id) =>
+            closeTerminal(
+              current,
+              group.sessions.find((item) => item.id === id),
+              id,
+            ),
+          ),
+        );
         await refreshTerminalDashboard();
       } catch (reason) {
         terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);

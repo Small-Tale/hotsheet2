@@ -194,3 +194,56 @@ test('takes an orchestrator session over from its drawer tab (HS2-6MNMVB)', asyn
     await app.stop();
   }
 });
+
+// HS2-HVKS7M: closing an orchestrator-started session's drawer tab is a person's stop. The host
+// records it as `person_stopped`, not as a crash the orchestrator would learn as `host_lost`.
+test("records closing an orchestrator session's tab as a person's stop (HS2-HVKS7M)", async ({ context, baseURL }) => {
+  test.setTimeout(150_000);
+  const app = await desktopApp(context, baseURL!, {
+    canonicalRoot: true,
+    seed: async (fixture) => syntheticTool(fixture.env.HOTSHEET_HOME!),
+  });
+  try {
+    const hosted = `/checkouts/${app.server.checkoutId}/target-sessions`;
+    const started = await app.server.request<{ outcome: string; session?: { session: { session_id: string } } }>(
+      hosted,
+      'POST',
+      {
+        session: {
+          operation_id: 'sched-start-close',
+          tool: TOOL,
+          origin: { owner_checkout_id: app.server.checkoutId, project: 'Release train', run_id: RUN },
+        },
+        limits: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        actor: { role: 'human', id: 'maintainer' },
+      },
+    );
+    expect(started, JSON.stringify(started)).toMatchObject({ outcome: 'started' });
+    const terminal = started.session!.session.session_id;
+    const page = await app.launch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const tab = page
+      .locator('[data-component="terminal-drawer"]')
+      .locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
+    await expect(tab).toBeVisible();
+    await tab.click({ button: 'right' });
+    await page
+      .locator('[data-context-menu="app-tab"]')
+      .getByRole('menuitem', { name: 'Close Tab', exact: true })
+      .click();
+    await expect(tab).toHaveCount(0);
+    const ended = async () =>
+      (
+        await app.server.request<{
+          sessions: { session: { operation_id: string; ended_at_ms?: number; end_reason?: string } }[];
+        }>(hosted)
+      ).sessions.find((item) => item.session.operation_id === 'sched-start-close')?.session;
+    await expect.poll(async () => (await ended())?.end_reason).toBe('person_stopped');
+  } finally {
+    await app.stop();
+  }
+});

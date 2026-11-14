@@ -1433,6 +1433,13 @@ const terminalOptional: Record<string, Check> = {
     isBoolean(value.paused),
 };
 
+/** HS2-HVKS7M: the hosted stop's answer; the session view it may carry is not read. */
+export const parseHostedStop = shape<{ stopped: boolean; reason?: string }>(
+  'hosted session stop',
+  { stopped: isBoolean },
+  { reason: isString },
+);
+
 export const parseTerminalInfo = shape<TerminalInfo>(
   'terminal',
   { id: isString, alive: isBoolean, busy: isBoolean },

@@ -2361,8 +2361,7 @@ and Pause** while the orchestrator owns it. A takeover, pause or stop writes a t
 platform file watcher, publishes `terminal_orchestrator`, so every client refetches its
 terminals and stops offering the takeover (HS2-DX1PQB). The orchestrator learns of it on its next sync or from
 the host's refusal of a wind-down. Typing into the terminal does not take it over;
-whether it should is HS2-8BY9Y1. Closing the tab is not yet recorded as a person's stop
-(HS2-HVKS7M).
+whether it should is HS2-8BY9Y1. Closing the tab is a person's stop (HS2-HVKS7M): the drawer sends it through the hosted stop with `force`, which records `person_stopped`, so the orchestrator never reads it as a crash (`host_lost`).
 
 ### Crashes
 

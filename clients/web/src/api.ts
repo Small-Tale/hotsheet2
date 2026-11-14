@@ -61,6 +61,7 @@ import {
   parseGuidanceRulePreview,
   parseGuidanceSourceReview,
   parseGuidanceSourceUpdates,
+  parseHostedStop,
   parseLegacyPermissionDiscardOutcome,
   parseLegacyPermissionPreview,
   parseLiveHistoryList,
@@ -2958,6 +2959,16 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/sessions/${encodeURIComponent(session)}/stop`,
       { method: 'POST', body: JSON.stringify({ force, actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR } }) },
     );
+  /** HS2-HVKS7M: a person at the hosting machine stops a hosted session; `force` skips the safe point. */
+  stopHostedSession = (checkout: string, operationId: string, force: boolean) =>
+    this.parsed(parseHostedStop, `/checkouts/${encodeURIComponent(checkout)}/target-sessions`, {
+      method: 'DELETE',
+      body: JSON.stringify({
+        operation_id: operationId,
+        force,
+        actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR },
+      }),
+    });
   /** HS2-6MNMVB: a person at the hosting machine takes over (or pauses) a hosted session. */
   takeOverHostedSession = (checkout: string, operationId: string, pause: boolean) =>
     this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/target-sessions`, {
