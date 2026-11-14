@@ -671,7 +671,25 @@ async fn hs2_2ey9dp_out_of_order_and_replayed_events_settle_a_run_once() {
                 .collect::<Vec<_>>()
         }
     };
+    // HS2-HJ64ZX: the status reads the run record, which is written before its events
+    // are published, so the follower may still be publishing the completion (its
+    // `state completed` and `target_reachable` events) when the record reads completed.
+    // A sync holds the run's operation lock (HS2-EZV83C), so its answer waits until the
+    // follower's sync has published everything; only then is the feed a baseline.
+    fleet
+        .ok(
+            "POST",
+            &format!("/runs/{}/sync", b.run_id),
+            json!({"actor":Fleet::ai()}),
+        )
+        .await;
     let before = events(&fleet).await;
+    assert!(
+        before
+            .iter()
+            .any(|entry| entry == r#""state" "completed" "target_completed""#),
+        "{before:#?}"
+    );
     // Every source is asked again: nothing more is recorded.
     for _ in 0..2 {
         fleet
