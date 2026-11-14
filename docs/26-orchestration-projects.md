@@ -2009,7 +2009,28 @@ After alignment the run gets a **disposition**:
 | `finished`            | The run is over                                                                      |
 
 The outcome (disposition and findings) is stored on the run as `reconciliation` and
-shown by `run status`. The answer's `unverified` lists exactly the sources that are
+shown by `run status`.
+
+**What the scheduler does with it (HS2-AH8CRS).** Reconciliation itself starts no
+work. An applied scheduler pass (§26.17) acts on the stored disposition of every
+unfinished run, decided by the pure `disposition_action`:
+
+- `retry_dispatch` on a run still `requested` and not paused: the dispatch is
+  repeated with the run's retained operation id, ticket, target, mode and worker. It
+  passes the gate as `work_start` like any dispatch (§26.7), so a remembered rule or
+  an Allow Once allows it and otherwise a person is asked. It is tried at most three
+  times for one stored outcome; a new reconciliation outcome allows it again.
+- `needs_attention`: one `FEEDBACK NEEDED` note on the run's goal ticket per stored
+  outcome, by identifiers and codes (the run, the target, the state and the findings),
+  pointing at `run status` and the run's controls. Nothing is decided for the person;
+  the note is recorded in the decision ledger so a later pass does not repeat it.
+- `paused` (or a paused run whatever its outcome) and `hold_unverified`: left alone.
+- `wait_for_dispatcher`, `continue`, `retry_cancel` and `finished`: nothing to do;
+  reconciliation repeats a cancel itself.
+
+Each act is a decision-log record of kind `reconcile` (the run, `redispatch` or
+`needs_attention`, the outcome such as `queued`, `dispatched`, `asked` or a refusal
+code, and the request id a refused dispatch waits on). A dry run acts on nothing. The answer's `unverified` lists exactly the sources that are
 `unverifiable`. An unchanged outcome is not rewritten and produces no event; a new
 one is a `reconciled` event whose reason is the disposition. A finished run keeps no
 outcome, and neither does a run whose state changed since (a sync that moved it
@@ -2830,8 +2851,9 @@ Every `tick` appends to `${HOTSHEET_HOME}/orchestration-scheduler-decisions/`, o
 bounded journal per owner with a sequence cursor: one `tick` record with what the
 pass read (the policy revision, counts of work, sessions, targets, limited tools and
 held resources, and whether the executor answered) and one record per `start`,
-`keep`, `wind_down` and `unplaced` decision, and one `assignment` record per placed
-run nobody will assign (§26.24), with its reason, its score parts, the
+`keep`, `wind_down` and `unplaced` decision, one `assignment` record per placed
+run nobody will assign (§26.24), and one `reconcile` record per run whose stored
+reconciliation the pass acted on (§26.14, HS2-AH8CRS), with its reason, its score parts, the
 figures it was decided on (sessions against the target, machine and tool caps, free
 RAM and the session footprint, the tool account's state) and, when applied, the
 outcome and operation id. Records hold identifiers, codes and numbers only.

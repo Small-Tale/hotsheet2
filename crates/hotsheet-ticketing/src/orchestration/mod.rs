@@ -101,9 +101,9 @@ pub use readiness::{
     TicketRecord, TicketSeen, TicketUpdate, evaluate_plan, ticket_key,
 };
 pub use reconcile::{
-    Alignment, Assessment, Disposition, ExternalSource, ExternalWork, MAX_FINDINGS, Observations,
-    Observed, RunReconciliation, SOURCE_NOT_WIRED, SourceFinding, TargetFacts, Verification, align,
-    assess,
+    Alignment, Assessment, Disposition, DispositionAction, ExternalSource, ExternalWork,
+    MAX_FINDINGS, Observations, Observed, RunReconciliation, SOURCE_NOT_WIRED, SourceFinding,
+    TargetFacts, Verification, align, assess, disposition_action,
 };
 pub use reconcile_sources::{
     AttemptAnswer, AttemptRecord, DEADLINE_PASSED, EXECUTION_LOST, EXECUTION_NOT_FOUND,

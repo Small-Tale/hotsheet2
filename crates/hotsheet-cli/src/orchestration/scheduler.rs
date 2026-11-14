@@ -1114,6 +1114,7 @@ impl OrchestrationRuntime {
         let mut outcomes = Vec::new();
         let mut applied: Vec<(String, PlacementOutcome)> = Vec::new();
         let mut assignments;
+        let mut reconciled = Vec::new();
         if let (DecisionMode::Applied, Some(actor_id)) = (mode, &actor_id) {
             // HS2-HV9ED3: told why before it is asked to stop.
             self.tell_cancelled(owner_id, &schedule, actor, tx);
@@ -1157,6 +1158,8 @@ impl OrchestrationRuntime {
             assignments =
                 self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
             self.assignment_apply(owner_id, &mut assignments, actor, &mut applied, tx);
+            // HS2-AH8CRS: what reconciliation found is acted on, through the gate.
+            reconciled = self.scheduler_dispositions(owner_id, actor, tx);
             // A machine that had no room, or could not be read, is left alone for a
             // bounded, growing time instead of being asked on every event.
             for item in &schedule.unplaced {
@@ -1198,6 +1201,7 @@ impl OrchestrationRuntime {
             &inputs,
             &outcomes,
             &assignments,
+            &reconciled,
             logging,
         )?;
         Ok(TickView {
@@ -1229,6 +1233,7 @@ impl OrchestrationRuntime {
         inputs: &TickInputs,
         outcomes: &[DecisionOutcome],
         assignments: &[super::assignment::Assignment],
+        reconciled: &[super::scheduler_dispositions::DispositionOutcome],
         logging: Logging<'_>,
     ) -> Result<usize, OrchestrationError> {
         // HS2-T16SK0: only a run nobody will assign, or whose pool is unknown, is news.
@@ -1390,6 +1395,20 @@ impl OrchestrationRuntime {
                 outcome_detail: found.outcome_detail.clone(),
                 retry_at_ms: found.claim_at_ms,
                 ..base(DecisionKind::Assignment)
+            })?;
+            logged += 1;
+        }
+        // HS2-AH8CRS: what the pass did about a reconciled run.
+        for done in reconciled {
+            journal.append(DecisionRecord {
+                target_id: Some(done.target_id.clone()),
+                run_id: Some(done.run_id.clone()),
+                reason: Some(done.action.into()),
+                detail: Some(done.reconciled_at_ms.to_string()),
+                outcome: Some(done.outcome.clone()),
+                outcome_detail: done.outcome_detail.clone(),
+                operation_id: Some(done.operation_id.clone()),
+                ..base(DecisionKind::Reconcile)
             })?;
             logged += 1;
         }

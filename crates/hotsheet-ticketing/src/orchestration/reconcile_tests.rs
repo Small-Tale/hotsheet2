@@ -1037,3 +1037,65 @@ fn hs2_wbredm_unfinished_owners_empty_then_refilled() {
     assert!(again.state.is_active());
     assert_eq!(registry.unfinished_owners().unwrap(), ["owner-b"]);
 }
+
+/// HS2-AH8CRS: what the scheduler does about every stored disposition, in every state,
+/// paused or not, and with a cancel pending.
+#[test]
+fn hs2_ah8crs_the_scheduler_acts_only_on_a_retry_or_a_person_and_never_on_a_paused_run() {
+    use DispositionAction as A;
+    use RunState::{Cancelled, Completed, Dispatched, Failed, Intervened, Queued, Requested};
+    let mut bench = Bench::new();
+    for state in [
+        Requested, Queued, Dispatched, Intervened, Completed, Failed, Cancelled,
+    ] {
+        for disposition in Disposition::ALL {
+            for paused in [false, true] {
+                let mut run = bench.run(state, DispatchMode::Dispatcher);
+                // No stored outcome: nothing to act on.
+                assert_eq!(disposition_action(&run), None);
+                run.reconciliation = Some(RunReconciliation {
+                    at_ms: 1,
+                    disposition,
+                    findings: Vec::new(),
+                });
+                if paused {
+                    run.paused = Some(RunPause {
+                        since_ms: 1,
+                        reason: None,
+                        actor_id: Some("maintainer".into()),
+                    });
+                }
+                let expected = if state.is_terminal() {
+                    None
+                } else if paused {
+                    Some(A::Leave("paused"))
+                } else {
+                    match disposition {
+                        Disposition::RetryDispatch if state == Requested => Some(A::Redispatch),
+                        Disposition::NeedsAttention => Some(A::AskPerson),
+                        Disposition::HoldUnverified => Some(A::Leave("hold_unverified")),
+                        Disposition::Paused => Some(A::Leave("paused")),
+                        _ => None,
+                    }
+                };
+                assert_eq!(
+                    disposition_action(&run),
+                    expected,
+                    "{state:?} {disposition:?} paused={paused}"
+                );
+            }
+        }
+    }
+    // A cancel already asked for is reconciliation's to repeat, never a new dispatch.
+    let mut run = bench.run(Requested, DispatchMode::Dispatcher);
+    run.reconciliation = Some(RunReconciliation {
+        at_ms: 1,
+        disposition: Disposition::RetryDispatch,
+        findings: Vec::new(),
+    });
+    run.cancel_requested = true;
+    assert_eq!(disposition_action(&run), None);
+    assert_eq!(A::Redispatch.code(), "redispatch");
+    assert_eq!(A::AskPerson.code(), "needs_attention");
+    assert_eq!(A::Leave("paused").code(), "paused");
+}

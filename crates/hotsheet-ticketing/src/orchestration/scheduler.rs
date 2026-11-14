@@ -1412,6 +1412,9 @@ pub enum DecisionKind {
     /// HS2-T16SK0: a placed step's run that nobody in the target's pool will assign,
     /// or whose pool could not be read, and what the pass did about it.
     Assignment,
+    /// HS2-AH8CRS: a run's reconciliation disposition the pass acted on: a dispatch
+    /// repeated under its retained operation id, or a person told on the goal ticket.
+    Reconcile,
 }
 
 /// What one pass read, as counts and identifiers.

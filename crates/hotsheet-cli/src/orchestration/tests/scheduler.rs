@@ -1952,3 +1952,204 @@ fn hs2_1jfvcj_planning_new_work_wakes_a_waiting_follower_with_its_event() {
             .collect::<Vec<_>>()
     );
 }
+
+/// HS2-AH8CRS: an applied pass acts on what reconciliation stored. A `retry_dispatch`
+/// run is dispatched again under its own operation id, at most three times for one
+/// stored outcome; a paused run is left alone; a `needs_attention` run gets one
+/// FEEDBACK NEEDED note on its goal ticket. A dry run acts on nothing.
+#[test]
+fn hs2_ah8crs_the_scheduler_acts_on_reconciliation_dispositions() {
+    use hotsheet_ticketing::orchestration::{
+        DispatchMode, Disposition, NewRun, RunReconciliation, RunRegistry, RunState, RunTarget,
+        RunTicket, RunUpdate,
+    };
+    tx!(tx);
+    let s = setup(false, &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
+    let owner = s.owner();
+    let registry = RunRegistry::new(&s.m.home);
+    let target = |title: &str| {
+        ops::create(
+            &s.m.target_store,
+            ulid::Ulid::new(),
+            "TGT",
+            NOW.into(),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    // A run recorded before its dispatch reached the target, with what reconciliation
+    // stored about it.
+    let stored = |operation: &str,
+                  target_id: String,
+                  native: &Ticket,
+                  disposition: Disposition,
+                  tx: &mut Transaction<'_>| {
+        let (run, _) = registry
+            .begin(
+                &owner,
+                NewRun {
+                    operation_id: operation.into(),
+                    ticket: RunTicket {
+                        connection_id: s.m.owner_connection(),
+                        native_id: s.orchestration.id.to_string(),
+                    },
+                    target: RunTarget {
+                        target_id,
+                        connection_id: s.m.target_connection(),
+                        native_id: native.id.to_string(),
+                    },
+                    mode: DispatchMode::Dispatcher,
+                    worker_id: None,
+                },
+                Some("worker-1".into()),
+                tx,
+            )
+            .unwrap();
+        registry
+            .update(
+                &owner,
+                &run.run_id,
+                RunUpdate {
+                    reconciliation: Some(RunReconciliation {
+                        at_ms: 77,
+                        disposition,
+                        findings: Vec::new(),
+                    }),
+                    ..RunUpdate::default()
+                },
+                tx,
+            )
+            .unwrap()
+    };
+    let retry = stored(
+        "op-retry",
+        id(1),
+        &target("Retry"),
+        Disposition::RetryDispatch,
+        &mut tx,
+    );
+    let paused = stored(
+        "op-paused",
+        id(1),
+        &target("Paused"),
+        Disposition::RetryDispatch,
+        &mut tx,
+    );
+    s.m.runtime
+        .run_pause(
+            &owner,
+            &paused.run_id,
+            serde_json::from_value(json!({})).unwrap(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let attention = stored(
+        "op-attn",
+        id(1),
+        &target("Attention"),
+        Disposition::NeedsAttention,
+        &mut tx,
+    );
+    // A target this project never declared: the gate refuses every try.
+    let refused = stored(
+        "op-refused",
+        id(2),
+        &target("Elsewhere"),
+        Disposition::RetryDispatch,
+        &mut tx,
+    );
+    let state = |run_id: &str| s.m.runtime.run(&owner, run_id).unwrap().state;
+    let notes = || {
+        s.m.owner_store
+            .read_ticket(&s.orchestration.id)
+            .unwrap()
+            .notes
+            .into_iter()
+            .filter(|note| note.kind == hotsheet_model::NoteKind::FeedbackNeeded)
+            .collect::<Vec<_>>()
+    };
+    let reconciled = |s: &Setup| {
+        s.log()
+            .into_iter()
+            .filter(|record| record.kind == DecisionKind::Reconcile)
+            .map(|record| {
+                (
+                    record.run_id.unwrap(),
+                    record.reason.unwrap(),
+                    record.outcome.unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    // A dry run acts on nothing.
+    s.m.runtime
+        .scheduler_tick(
+            &owner,
+            &serde_json::from_value(json!({"dry_run": true})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(state(&retry.run_id), RunState::Requested);
+    assert!(notes().is_empty() && reconciled(&s).is_empty());
+    // Applied: the retry is dispatched again (queued for the dispatcher), the paused
+    // run is untouched, a person is told about the other, the refusal is recorded.
+    s.tick(&mut tx);
+    assert_eq!(state(&retry.run_id), RunState::Queued);
+    assert_eq!(
+        s.m.runtime.run(&owner, &retry.run_id).unwrap().operation_id,
+        "op-retry"
+    );
+    assert_eq!(state(&paused.run_id), RunState::Requested);
+    assert_eq!(state(&refused.run_id), RunState::Requested);
+    let asked = notes();
+    assert_eq!(asked.len(), 1);
+    assert!(asked[0].text.contains(&attention.run_id));
+    assert!(asked[0].text.contains("needs_attention"));
+    assert!(!asked[0].text.contains("Attention"), "no ticket content");
+    let first = reconciled(&s);
+    assert!(first.contains(&(retry.run_id.clone(), "redispatch".into(), "queued".into())));
+    assert!(first.contains(&(
+        attention.run_id.clone(),
+        "needs_attention".into(),
+        "asked".into()
+    )));
+    assert!(
+        first
+            .iter()
+            .any(|(run, reason, outcome)| *run == refused.run_id
+                && reason == "redispatch"
+                && outcome != "queued")
+    );
+    assert!(!first.iter().any(|(run, _, _)| *run == paused.run_id));
+    // Repeated passes: the queued run needs nothing more, the note is not repeated,
+    // and the refused run is tried three times in all for this stored outcome.
+    for _ in 0..4 {
+        s.tick(&mut tx);
+    }
+    assert_eq!(notes().len(), 1);
+    let all = reconciled(&s);
+    assert_eq!(
+        all.iter()
+            .filter(|(run, _, _)| *run == refused.run_id)
+            .count(),
+        3
+    );
+    assert_eq!(
+        all.iter()
+            .filter(|(run, _, _)| *run == retry.run_id)
+            .count(),
+        1
+    );
+    assert_eq!(
+        all.iter()
+            .filter(|(run, _, _)| *run == attention.run_id)
+            .count(),
+        1
+    );
+}

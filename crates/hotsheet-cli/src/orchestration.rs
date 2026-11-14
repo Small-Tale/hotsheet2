@@ -25,6 +25,7 @@ mod resources;
 mod runs;
 mod scheduler;
 mod scheduler_apply;
+mod scheduler_dispositions;
 mod session_control;
 mod session_executor;
 mod sessions;

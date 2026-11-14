@@ -303,6 +303,59 @@ impl Disposition {
     }
 }
 
+/// HS2-AH8CRS: what the scheduler does about a run's stored reconciliation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DispositionAction {
+    /// Repeat the dispatch with the run's retained operation id: nothing is held in
+    /// the target, and the run is still `requested`.
+    Redispatch,
+    /// Tell a person on the goal ticket; nothing is decided for them.
+    AskPerson,
+    /// Leave the run alone, for this reason (`paused`, `hold_unverified`, ...).
+    Leave(&'static str),
+}
+
+impl DispositionAction {
+    /// The code the scheduler's decision log records for this action.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Redispatch => "redispatch",
+            Self::AskPerson => "needs_attention",
+            Self::Leave(reason) => reason,
+        }
+    }
+}
+
+/// HS2-AH8CRS: the scheduler's action for one run, from its stored reconciliation.
+/// `None` when there is nothing to act on: no stored outcome, a finished run, or a
+/// disposition that is already being handled (a queued run waits for its dispatcher,
+/// a worker holds the ticket, reconciliation repeats a cancel itself). A paused run is
+/// left alone whatever its outcome says; a dispatch is repeated only while the run is
+/// still `requested`.
+pub fn disposition_action(run: &Run) -> Option<DispositionAction> {
+    if run.state.is_terminal() {
+        return None;
+    }
+    let found = run.reconciliation.as_ref()?;
+    if run.paused.is_some() {
+        return Some(DispositionAction::Leave(Disposition::Paused.code()));
+    }
+    match found.disposition {
+        Disposition::RetryDispatch if run.state == RunState::Requested && !run.cancel_requested => {
+            Some(DispositionAction::Redispatch)
+        }
+        Disposition::NeedsAttention => Some(DispositionAction::AskPerson),
+        Disposition::HoldUnverified | Disposition::Paused => {
+            Some(DispositionAction::Leave(found.disposition.code()))
+        }
+        Disposition::RetryDispatch
+        | Disposition::RetryCancel
+        | Disposition::WaitForDispatcher
+        | Disposition::Continue
+        | Disposition::Finished => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceFinding {
