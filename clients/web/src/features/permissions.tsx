@@ -149,9 +149,10 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   // Projects whose last rule load failed without a lock: the list on screen is the last good copy,
   // and the view offers a refresh retry that never resubmits a mutation (HS2-9YVX6Q).
   const unrefreshedPermissionRules = signal<ReadonlySet<string>>(new Set());
-  // The last bulk result shown and the exact status it produced. While that status stands, a later
-  // list load reports its own outcome after the result instead of replacing it (HS2-HBAEMM).
-  let bulkPermissionRulesSummary: { projectId: string; summary: string; shown: string } | undefined;
+  // The last mutation result shown (a bulk edit or a legacy discard) and the exact status it produced.
+  // While that status stands, a later list load reports its own outcome after the result instead of
+  // replacing it (HS2-HBAEMM, HS2-JRBFSN).
+  let keptPermissionRulesSummary: { projectId: string; summary: string; shown: string } | undefined;
   const legacyDiscard = signal<
     | {
         projectId: string;
@@ -196,8 +197,15 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       const outcome = await new Api(project.apiPath).discardCheckoutLegacyPermissions(project.id, review.sourceId);
       if (legacyDiscardFor(project.id)?.sourceId !== review.sourceId) return;
       legacyDiscard.value = undefined;
-      permissionRulesMessage.value = `${outcome.discarded} legacy answer${outcome.discarded === 1 ? '' : 's'} discarded. Future requests need fresh approval.`;
-      markPermissionRulesStale(project.id);
+      // Show the confirmation now and keep it through the list refresh: the shared reload reports
+      // its outcome after the confirmation instead of erasing it (HS2-JRBFSN).
+      if (selectedProjectId.value === project.id)
+        showPermissionRulesSummary(
+          project.id,
+          `${outcome.discarded} legacy answer${outcome.discarded === 1 ? '' : 's'} discarded. Future requests need fresh approval.`,
+          { status: 'loaded' },
+        );
+      await reloadPermissionRules(project);
     } catch (reason) {
       if (legacyDiscardFor(project.id)?.sourceId === review.sourceId)
         legacyDiscard.value = {
@@ -797,38 +805,38 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       return true;
     }
     if (finishSelection() && selectedProjectId.value === projectId)
-      showBulkPermissionRulesSummary(
+      showPermissionRulesSummary(
         projectId,
         `${operation === 'delete' ? 'Deleted' : 'Updated'} ${succeeded.size} of ${targets.length} answers.${failed.size ? ` ${failed.size} failed and remain selected for retry.` : ''}`,
         refreshed,
       );
   }
 
-  /** Show a bulk result followed by how the list refresh after it settled (HS2-HBAEMM). */
-  function showBulkPermissionRulesSummary(projectId: string, summary: string, refreshed: PermissionRulesLoad) {
+  /** Show a mutation result followed by how the list refresh after it settled (HS2-HBAEMM). */
+  function showPermissionRulesSummary(projectId: string, summary: string, refreshed: PermissionRulesLoad) {
     const shown =
       refreshed.status === 'failed'
         ? `${summary} The list could not be refreshed. ${refreshed.reason}`
         : refreshed.status === 'locked'
           ? `${summary} ${PERMISSION_RULES_LOCKED_MESSAGE}`
           : summary;
-    bulkPermissionRulesSummary = { projectId, summary, shown };
+    keptPermissionRulesSummary = { projectId, summary, shown };
     permissionRulesMessage.value = shown;
   }
 
-  /** The bulk result still shown for `projectId`, if no other status has replaced it (HS2-HBAEMM). */
-  function shownBulkPermissionRulesSummary(projectId: string) {
-    const current = bulkPermissionRulesSummary;
+  /** The mutation result still shown for `projectId`, if no other status has replaced it (HS2-HBAEMM). */
+  function shownPermissionRulesSummary(projectId: string) {
+    const current = keptPermissionRulesSummary;
     return current?.projectId === projectId && permissionRulesMessage.peek() === current.shown
       ? current.summary
       : undefined;
   }
 
-  /** Report a settled list load in the status, after a bulk result that is still shown (HS2-HBAEMM). */
+  /** Report a settled list load in the status, after a mutation result that is still shown (HS2-HBAEMM). */
   function reportPermissionRulesLoad(projectId: string, outcome: PermissionRulesLoad) {
     if (selectedProjectId.value !== projectId) return;
-    const summary = shownBulkPermissionRulesSummary(projectId);
-    if (summary !== undefined) showBulkPermissionRulesSummary(projectId, summary, outcome);
+    const summary = shownPermissionRulesSummary(projectId);
+    if (summary !== undefined) showPermissionRulesSummary(projectId, summary, outcome);
     else
       permissionRulesMessage.value =
         outcome.status === 'failed'
@@ -938,9 +946,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     const project = projects.value.find((value) => value.id === projectId);
     if (!project || loadingPermissionRules.has(projectId)) return;
     if (selectedProjectId.value === projectId) {
-      // Keep a shown bulk result; drop only the failed-refresh text the retry is about to replace.
-      const summary = shownBulkPermissionRulesSummary(projectId);
-      if (summary !== undefined) showBulkPermissionRulesSummary(projectId, summary, { status: 'loaded' });
+      // Keep a shown mutation result; drop only the failed-refresh text the retry is about to replace.
+      const summary = shownPermissionRulesSummary(projectId);
+      if (summary !== undefined) showPermissionRulesSummary(projectId, summary, { status: 'loaded' });
       else permissionRulesMessage.value = '';
     }
     await reloadPermissionRules(project);

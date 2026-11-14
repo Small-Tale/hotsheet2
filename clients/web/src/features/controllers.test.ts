@@ -2935,3 +2935,101 @@ describe('bulk remembered-answer summary across list refreshes (HS2-HBAEMM)', ()
     owner.dispose();
   });
 });
+
+describe('legacy-answer discard confirmation across list refreshes (HS2-JRBFSN)', () => {
+  const rule = (action: string) => ({
+    project: '/work/a',
+    tool: 'Bash',
+    action,
+    exact_action: action,
+    decision: 'allow',
+    scope: 'always',
+    created_at: '2026-10-16T00:00:00Z',
+    match_type: 'exact',
+  });
+  const flush = async () => {
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+  };
+  const failure = (status: number) => Response.json({ error: `status ${status}` }, { status });
+  const calls = (path: string, method: 'GET' | 'DELETE') =>
+    fetchMock.mock.calls.filter(
+      ([url, options]) => typeof url === 'string' && url.startsWith(path) && (options?.method ?? 'GET') === method,
+    ).length;
+  const rulesGets = () => calls('/api/a/permissions/rules', 'GET');
+  const discards = () => calls('/api/a/checkouts/a/permissions/legacy', 'DELETE');
+  const confirmed = '2 legacy answers discarded. Future requests need fresh approval.';
+  // A shown Settings → Permissions list with the legacy discard review opened and confirmed.
+  async function discarded(afterDiscard: Response[]) {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    fetchMock.mockResolvedValueOnce(json([rule('one')]));
+    let rows: string[] = [];
+    const stop = effect(() => {
+      rows = owner.permissionRules('a').map((value) => value.action);
+    });
+    await flush();
+    fetchMock.mockResolvedValueOnce(json({ checkout: 'a', project_name: 'a', source: 'legacy-source', count: 2 }));
+    await owner.openLegacyPermissionDiscard('a', 'legacy-source');
+    fetchMock.mockResolvedValueOnce(json({ discarded: 2 }));
+    for (const response of afterDiscard) fetchMock.mockResolvedValueOnce(response);
+    await owner.applyLegacyPermissionDiscard();
+    await flush();
+    return { owner, stop, rows: () => rows };
+  }
+
+  it('keeps the confirmation after a successful refresh and its rules-change echo', async () => {
+    const { owner, stop, rows } = await discarded([json([rule('one')])]);
+    expect(owner.legacyDiscardFor('a')).toBeUndefined();
+    // The shown view's automatic refetch must not clear the confirmation.
+    expect(owner.permissionRulesMessage.value).toBe(confirmed);
+    expect(rulesGets()).toBe(2);
+    expect(rows()).toEqual(['one']);
+    // The discard echoes back as a rules-change event; its refetch keeps the confirmation too.
+    fetchMock.mockResolvedValueOnce(json([rule('one')]));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(rulesGets()).toBe(3);
+    expect(owner.permissionRulesMessage.value).toBe(confirmed);
+    fetchMock.mockResolvedValueOnce(failure(500));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe(`${confirmed} The list could not be refreshed. status 500`);
+    expect(discards()).toBe(1);
+    stop();
+    owner.dispose();
+  });
+
+  it('reports a failed refresh after the confirmation, retries the list only, and keeps it after recovery', async () => {
+    const { owner, stop, rows } = await discarded([failure(500)]);
+    expect(owner.permissionRulesMessage.value).toBe(`${confirmed} The list could not be refreshed. status 500`);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(true);
+    expect(rows()).toEqual(['one']);
+    // No automatic refetch replaced the result: one GET for the view, one refresh after the discard.
+    expect(rulesGets()).toBe(2);
+    fetchMock.mockResolvedValueOnce(failure(502));
+    await owner.retryPermissionRules('a');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe(`${confirmed} The list could not be refreshed. status 502`);
+    fetchMock.mockResolvedValueOnce(json([]));
+    await owner.retryPermissionRules('a');
+    await flush();
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(owner.permissionRulesMessage.value).toBe(confirmed);
+    expect(rows()).toEqual([]);
+    // Retry re-read the list only; it never resubmitted the discard.
+    expect(rulesGets()).toBe(4);
+    expect(discards()).toBe(1);
+    stop();
+    owner.dispose();
+  });
+
+  it('reports a lock found by the refresh after the confirmation', async () => {
+    const { owner, stop, rows } = await discarded([failure(503)]);
+    expect(owner.permissionRulesMessage.value).toMatch(
+      /^2 legacy answers discarded\. Future requests need fresh approval\. Remembered answers are locked\./,
+    );
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(true);
+    expect(rows()).toEqual([]);
+    stop();
+    owner.dispose();
+  });
+});

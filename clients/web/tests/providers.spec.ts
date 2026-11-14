@@ -19081,6 +19081,86 @@ test('reports repeated bulk edits from a refresh started after each edit, not an
   await expect(list.locator('[data-permission-rule-decision="allow"]')).toHaveCount(2);
 });
 
+/**
+ * Settings → Permissions behind the HS2-HBAEMM rule fixture, plus a legacy-answer source whose
+ * preview and discard answer like the server: the review counts one answer, and DELETE reports it
+ * discarded (HS2-JRBFSN).
+ */
+async function legacyDiscardFixture(page: import('@playwright/test').Page) {
+  const fixture = await bulkPermissionRulesFixture(page);
+  const discards: unknown[] = [];
+  await page.route('**/permissions/legacy*', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET')
+      return route.fulfill({
+        json: {
+          checkout: 'checkout:demo-checkout',
+          project_name: 'demo',
+          source: new URL(request.url()).searchParams.get('source'),
+          count: 1,
+        },
+      });
+    discards.push(request.postDataJSON());
+    return route.fulfill({ json: { discarded: 1 } });
+  });
+  return {
+    ...fixture,
+    discards,
+    discard: async () => {
+      await fixture.settings
+        .getByRole('button', { name: /Discard .* answers/ })
+        .first()
+        .click();
+      const dialog = page.getByRole('dialog', { name: 'Discard legacy permission answers' });
+      await dialog.getByRole('button', { name: 'Discard Answers' }).click();
+      await expect(dialog).toHaveCount(0);
+    },
+  };
+}
+
+const legacyDiscardConfirmation = '1 legacy answer discarded. Future requests need fresh approval.';
+
+for (const width of [1280, 390]) {
+  test(`keeps the legacy-answer discard confirmation when its list refresh fails, then retries the list only at ${width}px (HS2-JRBFSN)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const { state, settings, list, status, retry, discard, discards } = await legacyDiscardFixture(page);
+    state.getFailures.push(500);
+    await discard();
+    await expect(status).toHaveText(
+      `${legacyDiscardConfirmation} The list could not be refreshed. rule store busy 500`,
+    );
+    await expect(retry).toBeVisible();
+    // The last good list stays on screen.
+    await expect(list).toContainText('npm run lint');
+    await settings.screenshot({ path: `target/visual-captures/hs2-jrbfsn-refresh-failed-${width}.png` });
+    // No automatic refetch replaced the confirmation: one GET for the view, one refresh after the discard.
+    await expect(status).toHaveText(
+      `${legacyDiscardConfirmation} The list could not be refreshed. rule store busy 500`,
+    );
+    expect(state.requests).toEqual(['GET', 'GET']);
+    await retry.click();
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveText(legacyDiscardConfirmation);
+    // Retry re-read the list only and never resubmitted the discard.
+    expect(state.requests).toEqual(['GET', 'GET', 'GET']);
+    expect(discards).toEqual([expect.objectContaining({ confirm: true })]);
+    await settings.screenshot({ path: `target/visual-captures/hs2-jrbfsn-recovered-${width}.png` });
+  });
+}
+
+test('keeps the legacy-answer discard confirmation after a successful list refresh (HS2-JRBFSN)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const { state, status, retry, discard } = await legacyDiscardFixture(page);
+  await discard();
+  await expect.poll(() => state.requests).toEqual(['GET', 'GET']);
+  // The settled refresh reports nothing after the confirmation instead of clearing it.
+  await expect(status).toHaveText(legacyDiscardConfirmation);
+  await expect(retry).toHaveCount(0);
+  expect(state.requests).toEqual(['GET', 'GET']);
+});
+
 test('validates and applies the dedicated match editor through a real permission server (HS2-400WZZ)', async ({
   page,
 }) => {

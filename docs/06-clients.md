@@ -3199,7 +3199,9 @@ and loads another 100 on request, still newest first (HS2-988X4X).
 Legacy Answers lists linked Git sources separately. Opening one source shows its answer count
 without revealing action text. Confirmation discards that source's old answers for every linked
 project; future actions need fresh approval. Cancel leaves the encrypted vault unchanged
-(HS2-AFSF4X).
+(HS2-AFSF4X). The discard confirmation stays shown while the remembered-answer list refreshes:
+the refresh waits out older loads and reports a failure or lock after the confirmation, and a
+later automatic or list-only Retry refresh keeps it, as for a batch edit (HS2-JRBFSN).
 Search sits above two equal-width segmented controls that filter the dialog by Persistent or
 Session and by Allow or Disallow, defaulting to Persistent and Allow. The controls stack at
 phone width. Session includes chat-only answers, whose exact lifetime remains in their row.
