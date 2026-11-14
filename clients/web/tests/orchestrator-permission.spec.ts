@@ -262,6 +262,8 @@ test('sets an orchestrator rule sentence in body type (HS2-7NGC69)', async ({ co
     const sentence = preview.locator('[data-exact-action]').first();
     await expect(sentence).toHaveText('Create or change tickets in API');
     await expect(sentence.locator('code')).toHaveCount(0);
+    // HS2-AY0XPM: nothing to expand under a one-line sentence.
+    await expect(preview.getByRole('button', { name: 'Expand action' })).toHaveCount(0);
     const family = await sentence.evaluate((element) => getComputedStyle(element).fontFamily);
     expect(family).not.toMatch(/mono/iu);
     for (const scheme of ['light', 'dark'] as const) {
@@ -277,7 +279,7 @@ test('sets an orchestrator rule sentence in body type (HS2-7NGC69)', async ({ co
         await page.waitForFunction(() =>
           document.getAnimations().every((animation) => animation.playState !== 'running'),
         );
-        await preview.screenshot({ path: `target/visual-captures/hs2-7ngc69-rule-${scheme}-${width}.png` });
+        await preview.screenshot({ path: `target/visual-captures/hs2-ay0xpm-rule-${scheme}-${width}.png` });
       }
     }
   } finally {

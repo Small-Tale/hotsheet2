@@ -224,7 +224,8 @@ export function PermissionRulesSettings({
                 // HS2-7NGC69: an orchestrator rule's action is a sentence, set in body type;
                 // commands and file actions keep code type.
                 rule.orchestrator ? (
-                  <Text variant="span" wrap="anywhere" maxLines={expanded ? undefined : 2} data-exact-action>
+                  // HS2-AY0XPM: one bounded sentence, shown in full; nothing to expand.
+                  <Text variant="span" wrap="anywhere" data-exact-action>
                     {rule.exact_action ?? 'Action unavailable — revoke and review again'}
                   </Text>
                 ) : (
@@ -266,7 +267,7 @@ export function PermissionRulesSettings({
               <span class="permission-rules-settings__context">{`Applies to: ${reachLabel(rule)}`}</span>
               <span class="permission-rules-settings__context">{ruleOwner(rule, owner)}</span>
               {matchLabel(rule) && <span class="permission-rules-settings__context">{matchLabel(rule)}</span>}
-              {rule.exact_action && (
+              {rule.exact_action && !rule.orchestrator && (
                 <Row gap="xs">
                   <Button
                     emphasis="plain"
