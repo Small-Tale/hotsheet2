@@ -162,6 +162,10 @@ enum GateCmd {
         /// The CI provider adapter (default github-actions).
         #[arg(long)]
         provider: Option<String>,
+        /// HS2-TQG6AT: the artifact whose digest a passed verdict records, by name;
+        /// needed when the workflow builds several.
+        #[arg(long)]
+        artifact: Option<String>,
         /// Do not start this machine's Job monitor. The gate then stays pending until
         /// `hotsheet-cli job watch start` or another process observes the provider.
         #[arg(long)]
@@ -227,13 +231,14 @@ fn gate_route(project: &str, command: GateCmd) -> ((&'static str, String, Value)
             workflow,
             branch,
             provider,
+            artifact,
             no_monitor,
         } => (
             (
                 "POST",
                 format!("{base}/runs/{run_id}/gates"),
                 json!({"commit":commit,"repository":repo,"workflow":workflow,"branch":branch,
-                    "provider":provider}),
+                    "provider":provider,"artifact":artifact}),
             ),
             !no_monitor,
         ),

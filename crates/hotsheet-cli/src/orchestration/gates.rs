@@ -126,6 +126,7 @@ impl GithubActionsGates {
             &scope.workflow,
             &scope.branch,
         )
+        .and_then(|target| target.with_artifact(scope.artifact.as_deref()))
         .map_err(|_| GateError::ProviderUnsupported)
     }
 }
@@ -257,6 +258,10 @@ pub struct LinkGate {
     /// The shipping branch. Defaults to `main`.
     #[serde(default)]
     pub branch: Option<String>,
+    /// HS2-TQG6AT: the artifact whose digest a passed verdict records, by name. Needed
+    /// when the workflow builds several.
+    #[serde(default)]
+    pub artifact: Option<String>,
 }
 
 /// Ask for a deployment of the commit the run's CI gate passed.
@@ -604,6 +609,7 @@ impl OrchestrationRuntime {
                         repository,
                         workflow: request.workflow.unwrap_or_else(|| "CI".into()),
                         branch: request.branch.unwrap_or_else(|| "main".into()),
+                        artifact: request.artifact,
                     }),
                     deployment: None,
                     state: GateState::Unknown,
@@ -1073,18 +1079,32 @@ impl OrchestrationRuntime {
                     (GateState::Passed, [commit], Some(gate)) => (commit.clone(), gate),
                     _ => return Err(OrchestrationError::Gate(GateError::NotPassed)),
                 };
-                // HS2-3YC577: when both the request and the CI run name what was built,
-                // they must be the same artifact. Refused before anything is asked.
-                let built = gate
-                    .evidence
-                    .as_ref()
-                    .and_then(|evidence| evidence.artifact.as_ref());
-                if let (Some(wanted), Some(built)) = (&request.artifact, built) {
-                    if wanted != built {
-                        return Err(OrchestrationError::Gate(GateError::ArtifactMismatch));
+                // HS2-3YC577: when both the request and the CI runs name what was
+                // built, the request's artifact must be one of them. HS2-TQG6AT: each
+                // passed CI gate may name its own artifact; the deployment rests on
+                // the gate that built the one it ships. Refused before anything is
+                // asked.
+                let passed_ci = || {
+                    standing
+                        .gates
+                        .iter()
+                        .filter(|gate| gate.kind == GateKind::Ci && gate.state == GateState::Passed)
+                };
+                let built_by = |gate: &&Gate| {
+                    gate.evidence
+                        .as_ref()
+                        .and_then(|evidence| evidence.artifact.as_ref())
+                        .cloned()
+                };
+                let rests_on = match &request.artifact {
+                    Some(wanted) if passed_ci().any(|gate| built_by(&gate).is_some()) => {
+                        passed_ci()
+                            .find(|gate| built_by(gate).as_ref() == Some(wanted))
+                            .ok_or(OrchestrationError::Gate(GateError::ArtifactMismatch))?
                     }
-                }
-                (commit, gate.gate_id.clone())
+                    _ => gate,
+                };
+                (commit, rests_on.gate_id.clone())
             }
         };
         let new = |state, reason: Option<&str>, actor_id: &str| NewGate {

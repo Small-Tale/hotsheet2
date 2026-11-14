@@ -634,6 +634,7 @@ impl OrchestrationRuntime {
                     repository: text("repository")?,
                     workflow: text("workflow")?,
                     branch: text("branch")?,
+                    artifact: query_text(path, "artifact")?,
                     again: false,
                 };
                 let after = match query_text(path, "after")? {

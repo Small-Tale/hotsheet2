@@ -35,6 +35,7 @@ fn ci(run: u128, commit: &str) -> NewGate {
             repository: "example/widgets".into(),
             workflow: "CI".into(),
             branch: "main".into(),
+            artifact: None,
         }),
         deployment: None,
         state: GateState::Unknown,

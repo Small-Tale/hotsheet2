@@ -847,6 +847,7 @@ fn hs2_42tara_a_superseded_gate_no_longer_counts_for_a_prerequisite() {
             repository: "example/widgets".into(),
             workflow: "CI".into(),
             branch: "main".into(),
+            artifact: None,
         }),
         deployment: None,
         state: GateState::Unknown,

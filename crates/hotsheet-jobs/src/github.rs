@@ -35,6 +35,9 @@ pub struct CiTarget {
     pub workflow: String,
     /// The shipping branch whose push runs count.
     pub branch: String,
+    /// HS2-TQG6AT: the artifact whose digest a green verdict records, by name. Without
+    /// one, a run's only artifact is recorded.
+    pub artifact: Option<String>,
 }
 
 /// A run already judged, which a re-watch must not judge again. A re-run of the same run
@@ -105,7 +108,25 @@ impl CiTarget {
             sha: sha.to_ascii_lowercase(),
             workflow: workflow.to_owned(),
             branch: branch.to_owned(),
+            artifact: None,
         })
+    }
+
+    /// HS2-TQG6AT: name the artifact a green verdict records. A name is letters,
+    /// digits, `-`, `_` and `.`, at most 160 characters.
+    pub fn with_artifact(mut self, artifact: Option<&str>) -> Result<Self, crate::JobError> {
+        if let Some(name) = artifact {
+            let valid = !name.is_empty()
+                && name.len() <= 160
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b));
+            if !valid {
+                return Err(crate::JobError::Invalid("ci.artifact"));
+            }
+        }
+        self.artifact = artifact.map(str::to_owned);
+        Ok(self)
     }
 
     /// Groups runs of one workflow on one branch for the history ETA.
@@ -122,15 +143,19 @@ impl CiTarget {
             || "-".to_owned(),
             |floor| format!("{}.{}", floor.run_id, floor.attempt),
         );
-        let id = [
+        let mut parts = vec![
             self.sha.as_str(),
             floor.as_str(),
             self.repo.as_str(),
             self.branch.as_str(),
             self.workflow.as_str(),
-        ]
-        .map(escape)
-        .join("|");
+        ];
+        // HS2-TQG6AT: a sixth part only when an artifact is named, so an earlier
+        // reference keeps its exact spelling.
+        if let Some(artifact) = &self.artifact {
+            parts.push(artifact);
+        }
+        let id = parts.into_iter().map(escape).collect::<Vec<_>>().join("|");
         ExternalRef {
             system: GITHUB_ACTIONS_KIND.to_owned(),
             id,
@@ -143,8 +168,12 @@ impl CiTarget {
             return None;
         }
         let parts: Vec<String> = external.id.split('|').map(unescape).collect();
-        let [sha, floor, repo, branch, workflow] = parts.as_slice() else {
-            return None;
+        let (sha, floor, repo, branch, workflow, artifact) = match parts.as_slice() {
+            [sha, floor, repo, branch, workflow] => (sha, floor, repo, branch, workflow, None),
+            [sha, floor, repo, branch, workflow, artifact] => {
+                (sha, floor, repo, branch, workflow, Some(artifact.as_str()))
+            }
+            _ => return None,
         };
         let floor = match floor.as_str() {
             "-" => None,
@@ -156,7 +185,10 @@ impl CiTarget {
                 })
             }
         };
-        let target = Self::new(repo, sha, workflow, branch).ok()?;
+        let target = Self::new(repo, sha, workflow, branch)
+            .ok()?
+            .with_artifact(artifact)
+            .ok()?;
         Some((target, floor))
     }
 
@@ -781,7 +813,8 @@ impl<A: GithubApi> WatchSource for GithubActionsSource<A> {
 ///
 /// HS2-3YC577: a green outcome also records `artifact_count`, and the artifact's
 /// `artifact_name` and `artifact_digest` when the run built exactly one with a digest.
-/// Several artifacts record none, since nothing says which one a deployment ships.
+/// Several artifacts record none, since nothing says which one a deployment ships,
+/// unless the target names one (HS2-TQG6AT): then exactly the artifact of that name.
 fn outcome(
     target: &CiTarget,
     gate: &str,
@@ -805,7 +838,13 @@ fn outcome(
             }
             if gate == "green" {
                 refs.insert("artifact_count".to_owned(), artifacts.len().to_string());
-                if let [artifact] = artifacts {
+                // HS2-TQG6AT: a named artifact is looked for by name; otherwise the
+                // run's only one is recorded.
+                let named: Vec<&BuiltArtifact> = match &target.artifact {
+                    Some(name) => artifacts.iter().filter(|a| &a.name == name).collect(),
+                    None => artifacts.iter().collect(),
+                };
+                if let [artifact] = named.as_slice() {
                     refs.insert("artifact_name".to_owned(), artifact.name.clone());
                     refs.insert("artifact_digest".to_owned(), artifact.digest.clone());
                 }

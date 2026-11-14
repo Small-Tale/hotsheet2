@@ -1880,7 +1880,13 @@ attempt (conditionally, by ETag) and keeps the unexpired artifacts that carry a
 `sha256:` digest. The watch Job's outcome records `artifact_count`, and
 `artifact_name` with `artifact_digest` (lowercase hex, without the prefix) when
 exactly one artifact qualifies. Several artifacts record none, because nothing says
-which one a deployment ships (naming it in the CI scope is HS2-TQG6AT). An artifact
+which one a deployment ships, unless the link names one: a CI gate's scope may carry
+an `artifact` name (`gate link --artifact <name>`, MCP `ci_artifact`; HS2-TQG6AT),
+which travels in the watch Job's external reference (a sixth part, so earlier
+references keep their spelling) and on the hosted `target-gates` route. The verdict
+then records exactly the artifact of that name, or none when the run did not build
+it. Another artifact of the same commit is a gate of its own, as another workflow
+would be; linking the same name again returns the same gate. An artifact
 list GitHub refuses (403) or does not have (404) leaves the verdict standing without
 an artifact; any other failure is retried with the watch's backoff before the
 verdict is reported. A red or cancelled run reads no artifacts.
@@ -1888,15 +1894,17 @@ verdict is reported. A red or cancelled run reads no artifacts.
 The adapter puts that artifact into the CI gate's evidence when its name and digest
 are ones a gate record holds (an identifier and a SHA-256), and leaves it out
 otherwise, so an unusual provider name never fails the reading. A deployment request
-that names an `artifact` is then checked against the passed CI gate it rests on:
-when both are known they must be equal, name and digest, or the request is refused
-with `gate_artifact_mismatch` (409) before anyone is asked and before any gate is
-recorded. When either side is unknown, the request is decided as before.
+that names an `artifact` is then checked against the passed CI gates of the run:
+when any of them records an artifact, the request's must equal one of them, name and
+digest, or the request is refused with `gate_artifact_mismatch` (409) before anyone
+is asked and before any gate is recorded; the deployment then rests on the gate that
+built it (HS2-TQG6AT). When no passed gate records one, or the request names none,
+the request is decided as before.
 
 ### Headless surface
 
 ```sh
-hotsheet-cli ... orchestration gate link <run-id> --project <owner> --commit <40-hex> [--repo owner/name] [--workflow CI] [--branch main]
+hotsheet-cli ... orchestration gate link <run-id> --project <owner> --commit <40-hex> [--repo owner/name] [--workflow CI] [--branch main] [--artifact <name>]
 hotsheet-cli ... orchestration gate list --project <owner> [--run <run-id>] [--target <target-id> --commit <40-hex>]
 hotsheet-cli ... orchestration gate show <gate-id> --project <owner>
 hotsheet-cli ... orchestration gate sync <run-id> --project <owner> [--wait-seconds 20]

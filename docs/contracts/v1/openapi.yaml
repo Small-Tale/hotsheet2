@@ -1575,9 +1575,13 @@ paths:
                   description: '`deployments` only. The retained idempotency key the permission request is for.'
                   type: string
                 artifact:
-                  description: '`deployments` only.'
+                  description:
+                    '`deployments`: the built artifact, `{name, digest}`. `gates` (HS2-TQG6AT): the name of the
+                    artifact whose digest a passed verdict records, needed when the workflow builds several.'
                   oneOf:
                     - $ref: '#/components/schemas/OrchestrationGateArtifact'
+                    - type: string
+                      pattern: ^[A-Za-z0-9._-]{1,160}$
                     - type: 'null'
                 reason:
                   description: '`pause` (optional) and `correct` (required). A stable code, never free text.'
@@ -3657,6 +3661,11 @@ paths:
           schema:
             type: string
             maxLength: 100
+        - name: artifact
+          in: query
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._-]{1,160}$
         - name: after
           in: query
           schema:
@@ -21308,6 +21317,9 @@ components:
               type: string
             branch:
               type: string
+            artifact:
+              description: The artifact whose digest a passed verdict records, by name (HS2-TQG6AT).
+              type: string
           additionalProperties: false
         deployment:
           description: What a deployment would run, and where; present on a `deployment` gate.
@@ -25002,6 +25014,10 @@ components:
           type: string
         branch:
           type: string
+        artifact:
+          description: The artifact a green verdict records, by name (HS2-TQG6AT).
+          type: string
+          pattern: ^[A-Za-z0-9._-]{1,160}$
         again:
           description: Watch again after a failed verdict or a stopped watch.
           type: boolean

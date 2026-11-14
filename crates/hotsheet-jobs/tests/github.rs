@@ -1089,3 +1089,57 @@ fn hs2_3yc577_an_artifact_read_that_fails_is_retried_before_the_verdict() {
         "read once more after the failure, then never"
     );
 }
+
+#[test]
+fn hs2_tqg6at_a_named_artifact_is_recorded_among_several() {
+    let named = target().with_artifact(Some("widgets-bundle")).unwrap();
+    // The name travels in the watch Job's external reference; an unnamed one keeps the
+    // five-part spelling earlier Jobs carry.
+    assert_eq!(CiTarget::parse(&named.external(None)).unwrap().0, named);
+    assert_eq!(target().external(None).id.split('|').count(), 5);
+    assert_eq!(
+        CiTarget::parse(&target().external(None)).unwrap().0,
+        target()
+    );
+    assert!(target().with_artifact(Some("not a name")).is_err());
+    assert!(target().with_artifact(Some("")).is_err());
+
+    let digest = |c: char| format!("sha256:{}", c.to_string().repeat(64));
+    let artifacts = json!({"total_count": 3, "artifacts": [
+        artifact("test-report", Some(&digest('a')), false),
+        artifact("widgets-bundle", Some(&digest('b')), false),
+        artifact("coverage", Some(&digest('c')), false),
+    ]});
+    let judge = |watched: &CiTarget| {
+        let fx = fixture();
+        let api = FakeApi::default();
+        let job =
+            ensure_ci_watch(&fx.store, CHECKOUT, watched, &CiWatchOptions::default()).unwrap();
+        api.runs(vec![run(9, SHA, "completed", Some("success"))]);
+        api.jobs(9, vec![]);
+        api.serve(ARTIFACTS, 200, artifacts.clone());
+        let mut monitor = monitor(&fx, &api);
+        monitor.tick().unwrap();
+        let state = gate_state(&fx.store, CHECKOUT, watched).unwrap().state;
+        (state, fx.get(&job.id).outcome.unwrap().refs)
+    };
+    let (state, refs) = judge(&named);
+    let GateState::Green { run: green } = state else {
+        panic!("green: {state:?}");
+    };
+    assert_eq!(
+        green.artifact,
+        Some(CiArtifact {
+            name: "widgets-bundle".into(),
+            digest: "b".repeat(64),
+        })
+    );
+    assert_eq!(refs["artifact_count"], "3");
+    // Unnamed, several record none; a name the run did not build records none.
+    let (state, _) = judge(&target());
+    assert!(matches!(state, GateState::Green { run } if run.artifact.is_none()));
+    let missing = target().with_artifact(Some("installer")).unwrap();
+    let (state, refs) = judge(&missing);
+    assert!(matches!(state, GateState::Green { run } if run.artifact.is_none()));
+    assert!(!refs.contains_key("artifact_digest"));
+}

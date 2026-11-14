@@ -337,6 +337,7 @@ fn hs2_wdqz37_a_remote_targets_ci_gate_is_watched_on_its_host_and_followed_by_cu
         repository: "example/widgets".into(),
         workflow: "CI".into(),
         branch: "main".into(),
+        artifact: None,
         again: false,
     };
     let hosted = &r.peer.hosted.runtime;

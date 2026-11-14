@@ -39,6 +39,9 @@ pub struct HostedGateWatch {
     pub repository: String,
     pub workflow: String,
     pub branch: String,
+    /// HS2-TQG6AT: the artifact a green verdict records, by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<String>,
     /// Watch again after a verdict that failed or a watch that was stopped.
     #[serde(default)]
     pub again: bool,
@@ -140,6 +143,7 @@ fn hosted_record(checkout_id: &str, watch: &HostedGateWatch) -> Result<Gate, Orc
             repository: watch.repository.clone(),
             workflow: watch.workflow.clone(),
             branch: watch.branch.clone(),
+            artifact: watch.artifact.clone(),
         }),
         deployment: None,
         state: GateState::Pending,
@@ -296,6 +300,7 @@ impl OrchestrationRuntime {
                     repository: scope.repository.clone(),
                     workflow: scope.workflow.clone(),
                     branch: scope.branch.clone(),
+                    artifact: scope.artifact.clone(),
                     again,
                 })
                 .map_err(|_| OrchestrationError::Corrupt)?;
@@ -312,6 +317,9 @@ impl OrchestrationRuntime {
                 );
                 if let Some(after) = after {
                     query.push_str(&format!("&after={after}"));
+                }
+                if let Some(artifact) = &scope.artifact {
+                    query.push_str(&format!("&artifact={}", encode(artifact)));
                 }
                 self.hosted_call_at(destination, "/target-gates", "GET", &query, None, tx)?
             }

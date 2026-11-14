@@ -30,6 +30,7 @@ pub(crate) fn definition() -> Value {
         "workflow":{"type":"string","description":"gate_link: the workflow name (default CI)"},
         "branch":{"type":"string","description":"gate_link: the shipping branch whose runs count (default main)"},
         "gate_provider":{"type":"string","description":"gate_link: the CI provider adapter (default github-actions); deployment_request: the deployment adapter (default target-script)"},
+        "ci_artifact":{"type":"string","description":"gate_link: the artifact whose digest a passed verdict records, by name; needed when the workflow builds several (HS2-TQG6AT)"},
         "gate_id":{"type":"string","description":"gate_show: the gate's id"},
         "environment":{"type":"string","description":"deployment_request: the environment name"},
         "script":{"type":"string","description":"deployment_request: the target's checked-in deploy script, relative to its repository root"},
@@ -419,6 +420,7 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
                     ("workflow", "workflow"),
                     ("branch", "branch"),
                     ("gate_provider", "provider"),
+                    ("ci_artifact", "artifact"),
                 ]),
             ),
             "gate_sync" => backend.send(

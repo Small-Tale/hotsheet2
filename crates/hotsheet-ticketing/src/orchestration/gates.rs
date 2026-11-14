@@ -190,6 +190,9 @@ pub struct CiScope {
     pub workflow: String,
     /// The shipping branch whose runs count.
     pub branch: String,
+    /// HS2-TQG6AT: the artifact whose digest a passed verdict records, by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<String>,
 }
 
 /// What a deployment would run, and where.
@@ -932,6 +935,9 @@ fn validate_fields(gate: &Gate) -> Result<(), OrchestrationError> {
             plain(&scope.repository, 200)?;
             plain(&scope.workflow, 100)?;
             plain(&scope.branch, 100)?;
+            if let Some(artifact) = &scope.artifact {
+                valid_identifier(artifact)?;
+            }
         }
         (GateKind::Deployment, None, Some(scope)) => {
             valid_identifier(&scope.environment)?;

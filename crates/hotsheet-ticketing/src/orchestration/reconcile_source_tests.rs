@@ -22,6 +22,7 @@ fn ci_gate(n: u128, state: GateState, reason: Option<&str>, watch: Option<&str>)
             repository: "example/widgets".into(),
             workflow: "CI".into(),
             branch: "main".into(),
+            artifact: None,
         }),
         deployment: None,
         state,

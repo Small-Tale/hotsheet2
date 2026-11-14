@@ -1401,3 +1401,142 @@ fn hs2_3yc577_a_deployment_must_name_the_artifact_the_passed_ci_run_built() {
         "gate_artifact_mismatch"
     );
 }
+
+#[test]
+fn hs2_tqg6at_a_ci_gate_names_the_artifact_its_evidence_records() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (m, run) = with_run(
+        &[TargetAction::GatesObserve, TargetAction::DeploymentsRun],
+        &mut tx,
+    );
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let link_with = |artifact: Option<&str>, tx: &mut Transaction<'_>| {
+        m.runtime.gate_link(
+            &owner,
+            &run,
+            serde_json::from_value(json!({"commit": a, "repository": "example/widgets",
+                "artifact": artifact}))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    let linked = link_with(Some("widgets-bundle"), &mut tx).unwrap();
+    assert_eq!(
+        linked.gate.ci.as_ref().unwrap().artifact.as_deref(),
+        Some("widgets-bundle")
+    );
+    // The name travels to the watch Job, so the watch source can pick it out.
+    let jobs = JobStore::at(&m.home).list(&owner).unwrap().jobs;
+    let (target, _) = hotsheet_jobs::CiTarget::parse(jobs[0].external.as_ref().unwrap()).unwrap();
+    assert_eq!(target.artifact.as_deref(), Some("widgets-bundle"));
+    // The same artifact again is the same gate; another artifact of the same commit is
+    // a gate of its own, as another workflow would be.
+    let again = link_with(Some("widgets-bundle"), &mut tx).unwrap();
+    assert!(!again.created && again.gate.gate_id == linked.gate.gate_id);
+    let installer = link_with(Some("installer"), &mut tx).unwrap();
+    assert!(installer.created && installer.superseded.is_empty());
+    assert!(matches!(
+        link_with(Some("not a name"), &mut tx),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    // Each source recorded its named artifact of a green run that built several.
+    let (built, other) = ("e".repeat(64), "f".repeat(64));
+    for (gate, name, digest) in [
+        (&linked, "widgets-bundle", &built),
+        (&installer, "installer", &other),
+    ] {
+        judge_with(
+            &m.home,
+            &owner,
+            gate.gate.watch_ref.as_deref().unwrap(),
+            "green",
+            &a,
+            71,
+            &[
+                ("artifact_count", "3"),
+                ("artifact_name", name),
+                ("artifact_digest", digest),
+            ],
+        );
+    }
+    let green = m
+        .runtime
+        .gate_sync(
+            &owner,
+            &run,
+            &SyncGates { wait_ms: 0 },
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(green.summary.ci, GateState::Passed);
+    let evidence_of = |gate_id: &str| {
+        green
+            .summary
+            .gates
+            .iter()
+            .find(|gate| gate.gate_id == gate_id)
+            .and_then(|gate| gate.evidence.as_ref())
+            .and_then(|evidence| evidence.artifact.clone())
+    };
+    let recorded = ArtifactRef {
+        name: "widgets-bundle".into(),
+        digest: built,
+    };
+    assert_eq!(evidence_of(&linked.gate.gate_id), Some(recorded.clone()));
+    assert_eq!(
+        evidence_of(&installer.gate.gate_id).map(|artifact| artifact.digest),
+        Some(other)
+    );
+    let deploy = |operation: &str, artifact: &ArtifactRef| -> RequestDeployment {
+        serde_json::from_value(json!({"environment": "beta", "script": "scripts/deploy.sh",
+            "operation_id": operation, "artifact": artifact}))
+        .unwrap()
+    };
+    // An artifact neither run built is refused.
+    let unknown = ArtifactRef {
+        digest: "0".repeat(64),
+        ..recorded.clone()
+    };
+    assert_eq!(
+        gate_error(m.runtime.gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-unknown", &unknown),
+            Some(&worker()),
+            &mut tx
+        )),
+        GateError::ArtifactMismatch
+    );
+    // A deployment of the named artifact rests on the gate that built it.
+    let deployed = m
+        .runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-bundle", &recorded),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(deployed.created);
+    assert_eq!(
+        deployed.gate.deployment.unwrap().requires_gate_id,
+        linked.gate.gate_id
+    );
+    // The hosted read takes the name too (HS2-WDQZ37).
+    let path = format!(
+        "/checkouts/{}/target-gates?commit={a}&repository=example%2Fwidgets&workflow=CI&branch=main&artifact=widgets-bundle",
+        m.target.id
+    );
+    let hosted = m
+        .runtime
+        .request_now("GET", &path, &serde_json::Value::Null)
+        .unwrap();
+    assert_eq!(hosted["reason"], "not_watched");
+}
