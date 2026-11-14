@@ -3647,6 +3647,11 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   halts and resumes to a running router and reads the recorded capacity.
 - `remote_servers/tool_capacity.rs` uses the owned CLI process, the authenticated
   service and the stdio MCP tool on one machine-local registry.
+- HS2-2BAVAM: `stuck_causes.rs # hs2_egkka0` accepts Codex's `rate_limit_exceeded` and
+  still rejects `session_budget_exceeded` and `response_too_many_failed_attempts`;
+  `tool_capacity_signals.rs # hs2_ahg7hw` maps it to a `rate_limit` signal with and
+  without a reset time; `codex_rollout_watch.rs # hs2_cyhawb` reads the variant from a
+  failed turn; the plugin table pins Codex's new declaration.
 - HS2-XFMKHQ: `http.rs # hs2_xfmkhq` records Claude transcript usage through a real
   router for a terminal started for an account: the first responses confirm a backoff
   that ended, each response adds its cost once, a repeated Stop adds nothing and nothing

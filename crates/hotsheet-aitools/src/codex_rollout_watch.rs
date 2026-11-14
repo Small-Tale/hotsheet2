@@ -706,6 +706,18 @@ mod tests {
                 message: "Limit.".into()
             })
         );
+        // HS2-2BAVAM: the request-rate limit arrives as a unit variant, unchanged.
+        assert_eq!(
+            reader.feed_line(&complete(
+                "2026-11-05T01:00:01Z",
+                "t",
+                Some(json!({"codex_error_info":"rate_limit_exceeded","message":"Rate limit reached."}))
+            )),
+            Some(RolloutSignal::Halted {
+                error_type: "rate_limit_exceeded".into(),
+                message: "Rate limit reached.".into()
+            })
+        );
         assert_eq!(
             reader.feed_line(&complete("2026-11-05T01:00:02Z", "t", Some(json!({})))),
             Some(RolloutSignal::Halted {

@@ -1125,8 +1125,8 @@ from the tool. It is data only and selects no parser. Each of `rate_limit_errors
 an omitted key or section is `unknown`. No value means that a limit never happens, so a tool that
 cannot report a limit is never assumed to be available. The loader refuses an unknown key or value,
 `reset_times` without a reported limit error, and `cost` without reported `usage_events`. Claude
-declares all five; Codex all but `rate_limit_errors`; OpenCode only `usage_events`; Antigravity
-none. Orchestration reads the declaration when it judges tool capacity
+and Codex declare all five (Codex's request-rate limits since HS2-2BAVAM); OpenCode only
+`usage_events`; Antigravity none. Orchestration reads the declaration when it judges tool capacity
 ([26](26-orchestration-projects.md) §26.11). A plugin changes its declaration in the same change
 that adds or removes the detection it describes.
 

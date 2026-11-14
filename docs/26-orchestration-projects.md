@@ -1143,11 +1143,17 @@ declare exactly what the existing detection observes:
 | Tool        | Rate-limit errors | Usage-limit errors | Reset times | Usage events | Cost     |
 | ----------- | ----------------- | ------------------ | ----------- | ------------ | -------- |
 | Claude      | reported          | reported           | reported    | reported     | reported |
-| Codex       | unknown           | reported           | reported    | reported     | reported |
+| Codex       | reported          | reported           | reported    | reported     | reported |
 | OpenCode    | unknown           | unknown            | unknown     | reported     | unknown  |
 | Antigravity | unknown           | unknown            | unknown     | unknown      | unknown  |
 
-Detecting the signals that are still unknown is HS2-2BAVAM.
+Codex reports a request-rate limit as its own `CodexErrorInfo` variant,
+`rate_limit_exceeded`, beside `usage_limit_exceeded` (HS2-2BAVAM). The rollout halt path
+accepts it as a `rate_limit` signal with the same reset-time reading. OpenCode and
+Antigravity stay `unknown`. OpenCode's ACP surface reports no typed limit error (it retries
+a 429 inside the prompt, then ends the turn without one), so its detection waits for one
+(HS2-MJZ2QV). Antigravity's one-shot `agy --print` failure carries only an exit status and
+text, and reading the text would be a second message parser (HS2-86MK1Y).
 
 ### Signals
 

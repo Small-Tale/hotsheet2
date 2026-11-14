@@ -228,7 +228,26 @@ mod tests {
                 "Try again in 45 minutes.",
                 Some((SignalKind::UsageLimit, Some(45 * 60_000))),
             ),
+            // HS2-2BAVAM: Codex's request-rate limit keeps its own kind.
+            (
+                "codex",
+                "rate_limit_exceeded",
+                "Rate limit reached. Try again in 20 minutes.",
+                Some((SignalKind::RateLimit, Some(20 * 60_000))),
+            ),
+            (
+                "codex",
+                "rate_limit_exceeded",
+                "Rate limit reached.",
+                Some((SignalKind::RateLimit, None)),
+            ),
             // Halts that are not limits produce no signal for any tool.
+            (
+                "codex",
+                "session_budget_exceeded",
+                "Try again in 5 minutes.",
+                None,
+            ),
             (
                 "claude",
                 "overloaded",

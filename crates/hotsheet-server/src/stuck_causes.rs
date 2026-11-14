@@ -3,7 +3,8 @@
 //!
 //! - **Usage-limit pause.** A terminal halt whose error type is the tool's usage or rate
 //!   limit. Claude's `StopFailure` hook reports `rate_limit`; a Codex rollout's failed turn
-//!   reports `codex_error_info` `usage_limit_exceeded`. Neither carries a structured reset
+//!   reports `codex_error_info` `usage_limit_exceeded`, or `rate_limit_exceeded` for a
+//!   request-rate limit (HS2-2BAVAM). Neither carries a structured reset
 //!   time, so [`reported_reset`] reads one from the message when its instant or time zone is
 //!   explicit, or when the host's local zone is discoverable (HS2-Z28AD3).
 //! - **Awaiting input** is read from hook state (a bridged permission request or a pending
@@ -20,11 +21,13 @@ const LATEST_RESET: Duration = Duration::days(8);
 const EARLIEST_RESET: Duration = Duration::minutes(5);
 
 /// Whether a halt's tool error type is a usage or rate limit: Claude `rate_limit`, Codex
-/// `usage_limit_exceeded`. Other halts (`overloaded`, `billing_error`, …) are not pauses.
+/// `usage_limit_exceeded` and (HS2-2BAVAM) `rate_limit_exceeded`, a `CodexErrorInfo`
+/// variant of the request-rate limit. Other halts (`overloaded`, `billing_error`, …) are
+/// not pauses.
 pub fn is_usage_limit(error_type: &str) -> bool {
     matches!(
         error_type.trim().to_ascii_lowercase().as_str(),
-        "rate_limit" | "usage_limit_exceeded"
+        "rate_limit" | "usage_limit_exceeded" | "rate_limit_exceeded"
     )
 }
 
@@ -258,7 +261,14 @@ mod tests {
     #[test]
     fn hs2_egkka0_usage_limit_error_types_are_exact_per_tool() {
         // Claude StopFailure `error` and Codex `codex_error_info` variant names.
-        for kind in ["rate_limit", "usage_limit_exceeded", " RATE_LIMIT "] {
+        for kind in [
+            "rate_limit",
+            "usage_limit_exceeded",
+            " RATE_LIMIT ",
+            // HS2-2BAVAM: Codex's request-rate limit.
+            "rate_limit_exceeded",
+            " Rate_Limit_Exceeded ",
+        ] {
             assert!(is_usage_limit(kind), "{kind}");
         }
         // Other halts are not pauses, even when their text mentions a limit.
@@ -272,6 +282,8 @@ mod tests {
             "unknown",
             "",
             "rate_limit_exceeded_but_not",
+            "session_budget_exceeded",
+            "response_too_many_failed_attempts",
         ] {
             assert!(!is_usage_limit(kind), "{kind}");
         }

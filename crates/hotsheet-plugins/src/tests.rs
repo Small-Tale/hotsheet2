@@ -1793,7 +1793,7 @@ fn hs2_ahg7hw_bundled_plugins_declare_only_observed_capacity_signals() {
     // rate_limit_errors, usage_limit_errors, reset_times, usage_events, cost
     let declared = [
         ("claude", [R, R, R, R, R]),
-        ("codex", [U, R, R, R, R]),
+        ("codex", [R, R, R, R, R]),
         ("opencode", [U, U, U, R, U]),
         ("antigravity", [U, U, U, U, U]),
     ];
