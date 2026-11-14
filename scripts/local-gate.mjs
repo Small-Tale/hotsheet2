@@ -202,7 +202,7 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     reasons.push('HS2-WWZS75: app startup must boot under degraded WebKit browser APIs');
   }
   const workspaceChromeChanged = changes.some((path) =>
-    /^clients\/web\/src\/(?:components\/(?:workspace-controls|app-shell)\.(?:tsx|css)|workspace-toolbar-visibility\.ts|features\/hot-sheet-shell\.tsx)$/.test(
+    /^clients\/web\/src\/(?:components\/(?:workspace-controls|app-shell|workspace-header|workspace-composition-surfaces)\.(?:tsx|css)|workspace-toolbar-visibility\.ts|features\/hot-sheet-shell\.tsx)$/.test(
       path,
     ),
   );
@@ -223,10 +223,24 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
         "npx playwright test 'tests/search-scope.spec.ts' --grep 'keeps the workspace title whole when a search changes it to a longer title'",
       reasons: ['HS2-P9A21R: title-only search transitions must remeasure workspace action overflow'],
     });
+    // HS2-4S22C4: HS2-6PZ35D narrowed the phone workspace search from app-shell.tsx and escaped to
+    // CI twice, once through these warm-switch width cases and once through the GRAQ2K focus case.
+    scoped.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      command: "npx playwright test 'tests/project-tab-warm-cache.spec.ts' --grep 'HS2-RDFY4A|HS2-C5Y899'",
+      reasons: ['HS2-4S22C4: workspace chrome changes must keep the measured workspace search width across switches'],
+    });
   }
   // Provider flows share one large file. A bounded grep preserves the affected shipped parents.
   const patterns = [];
-  if (workspaceChromeChanged) patterns.push('projects Kerf workspace segments through mode transitions');
+  if (workspaceChromeChanged)
+    patterns.push(
+      'projects Kerf workspace segments through mode transitions',
+      // HS2-4S22C4: the second HS2-6PZ35D escape; workspace search focus lives in the same chrome.
+      'keeps workspace search focused after Select All deletion',
+    );
   const escapeTitle = (title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // HS2-EWF0FT escape: the demo spec is large too; a demo change runs only the tests that open it.
   if (exercised?.demoTitles?.length)

@@ -508,6 +508,10 @@ keeps the title whole and overflow actions reachable at 1280px, then measures
 the desktop fit boundary for a title-only short/long/short overflow transition.
 `scripts/local-gate.test.mjs` pins this bounded search case for every workspace
 chrome owner in the affected browser plan.
+HS2-4S22C4 adds the workspace header and composition surfaces to those owners and
+pins two more selections for each: the `project-tab-warm-cache.spec.ts` search
+width cases (HS2-RDFY4A, HS2-C5Y899) and the `providers.spec.ts` workspace search
+focus case (HS2-GRAQ2K). Both escaped a green local gate for HS2-6PZ35D.
 
 HS2-SGQ183 has synthetic HMAC and repository parsing tests in
 `crates/hotsheet-extsync/src/github.rs`, a shared CLI/HTTP idempotent setup test

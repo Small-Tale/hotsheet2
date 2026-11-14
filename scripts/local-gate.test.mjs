@@ -576,6 +576,41 @@ test('HS2-P9A21R selects bounded search-title remeasurement for every workspace 
   );
 });
 
+test('HS2-4S22C4 selects workspace search width and focus cases for app-shell and workspace toolbar changes', () => {
+  for (const path of [
+    'clients/web/src/components/app-shell.tsx',
+    'clients/web/src/components/app-shell.css',
+    'clients/web/src/components/workspace-controls.tsx',
+    'clients/web/src/components/workspace-header.tsx',
+    'clients/web/src/components/workspace-header.css',
+    'clients/web/src/components/workspace-composition-surfaces.tsx',
+    'clients/web/src/workspace-toolbar-visibility.ts',
+    'clients/web/src/features/hot-sheet-shell.tsx',
+  ]) {
+    const stages = browserStages([path], false);
+    const warm = stages.filter((stage) => stage.command.includes('tests/project-tab-warm-cache.spec.ts'));
+    assert.equal(warm.length, 1, path);
+    assert.ok(warm[0].command.includes("--grep 'HS2-RDFY4A|HS2-C5Y899'"), path);
+    assert.ok(
+      warm[0].reasons.some((reason) => reason.startsWith('HS2-4S22C4:')),
+      path,
+    );
+    assert.ok(
+      stages.some(
+        (stage) =>
+          stage.command.startsWith('npx playwright test tests/providers.spec.ts --grep') &&
+          stage.command.includes('keeps workspace search focused after Select All deletion'),
+      ),
+      path,
+    );
+  }
+  assert.ok(
+    !browserStages(['clients/web/src/ticket-timeline-data.ts'], false).some((stage) =>
+      stage.command.includes('tests/project-tab-warm-cache.spec.ts'),
+    ),
+  );
+});
+
 test('HS2-RS0FFT identifies a changed parent in a browser file larger than the default subprocess buffer', (t) => {
   const f = fixture(t);
   const path = 'clients/web/tests/providers.spec.ts';
