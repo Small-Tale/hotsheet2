@@ -236,3 +236,71 @@ fn long_home_starts_real_server_and_detached_broker_and_preserves_terminals_on_r
         "configured home remains authoritative"
     );
 }
+
+/// A pipe whose write end is open across exec, as a pipe another thread was creating is
+/// when a process is spawned in that instant (HS2-WEYR63). The read end does not block.
+fn leaked_pipe() -> (std::os::fd::OwnedFd, std::os::fd::OwnedFd) {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    let mut fds = [0; 2];
+    // SAFETY: pipe fills two new descriptors, which are owned below.
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    // SAFETY: both descriptors were just created by pipe and are owned exactly once.
+    let (read, write) = unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
+    // SAFETY: plain descriptor flag calls on descriptors this test owns.
+    unsafe {
+        assert_eq!(libc::fcntl(write.as_raw_fd(), libc::F_SETFD, 0), 0);
+        assert_eq!(
+            libc::fcntl(read.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC),
+            0
+        );
+        let flags = libc::fcntl(read.as_raw_fd(), libc::F_GETFL);
+        assert_eq!(
+            libc::fcntl(read.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK),
+            0
+        );
+    }
+    (read, write)
+}
+
+/// End of file on the read end: no process holds a writer any more.
+fn no_writer_left(read: &std::os::fd::OwnedFd) -> Result<(), std::io::Error> {
+    use std::os::fd::AsRawFd;
+    let mut byte = 0u8;
+    // SAFETY: reads at most one byte into a local buffer from a descriptor the test owns.
+    match unsafe { libc::read(read.as_raw_fd(), (&raw mut byte).cast(), 1) } {
+        0 => Ok(()),
+        _ => Err(std::io::Error::last_os_error()),
+    }
+}
+
+/// HS2-ETMKCW: the detached broker (and the terminals it hosts) holds no descriptor the
+/// server inherited. The server here inherits a pipe that is not close-on-exec; once it
+/// has stopped and the broker keeps running, nothing may still hold that pipe's writer.
+#[test]
+fn the_detached_broker_inherits_no_descriptor_from_the_server() {
+    let fixture = tempfile::tempdir().unwrap();
+    let home = fixture.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let store = fixture.path().join("store");
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
+    let project = hotsheet_tls::project_id(&store);
+    let socket = hotsheet_terminals::broker_socket::socket_path(&home, &project).unwrap();
+    let _socket_files = SocketFiles(socket);
+    let binary = fixture.path().join("hotsheet-server");
+    fs::copy(env!("CARGO_BIN_EXE_hotsheet-server"), &binary).unwrap();
+    let (read, write) = leaked_pipe();
+    let mut server = TestServer::start(&binary, &home, &store, fixture.path().join("server.log"));
+    drop(write);
+    let info = server.ready();
+    assert_eq!(
+        request(
+            &info,
+            "POST",
+            "/terminals",
+            Some(json!({"id":"held", "command":"/bin/cat"}))
+        )["alive"],
+        true
+    );
+    server.stop_server_only();
+    no_writer_left(&read).expect("the detached broker holds the server's descriptor");
+}

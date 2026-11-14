@@ -119,10 +119,52 @@ impl LaunchContext {
     }
 
     /// The caller intentionally hands ownership to another process or the OS. The launch
-    /// remains unresolved because this supervisor has not observed an exit.
+    /// remains unresolved because this supervisor has not observed an exit. The child
+    /// inherits no stray descriptor (see [`close_inherited_descriptors`]).
     pub fn detached(&self, command: &mut Command) -> io::Result<()> {
-        self.spawn(command).map(|_| ())
+        self.spawn_detached(command).map(|_| ())
     }
+
+    /// Like [`LaunchContext::spawn`] for a child that outlives this request (a broker or a
+    /// monitor), keeping the handle for startup diagnostics. The child inherits no stray
+    /// descriptor (see [`close_inherited_descriptors`]).
+    pub fn spawn_detached(&self, command: &mut Command) -> io::Result<TrackedChild> {
+        close_inherited_descriptors(command);
+        self.spawn(command)
+    }
+}
+
+/// HS2-WEYR63, HS2-ETMKCW: a long-lived child must hold nothing of its launcher's but
+/// what it is given. On macOS the standard library creates a pipe and sets close-on-exec
+/// in a second step, so a process spawned on another thread in that instant inherits the
+/// pipe, and `posix_spawn` passes it on to every later child. A detached child keeps such
+/// a descriptor for its whole life, and whoever reads the other end never sees its end.
+/// This closes, in the child before exec, every descriptor above stdio that is not
+/// close-on-exec. Close-on-exec descriptors (the standard library's own exec status pipe
+/// among them) close by themselves. A no-op off Unix.
+pub fn close_inherited_descriptors(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: sysconf only reads a system limit, before the fork.
+        let limit = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) };
+        let limit = i32::try_from(limit.clamp(256, 65_536)).unwrap_or(65_536);
+        // SAFETY: runs in the forked child before exec and makes only fcntl and close
+        // calls, which are async-signal-safe.
+        unsafe {
+            command.pre_exec(move || {
+                for fd in 3..limit {
+                    let flags = libc::fcntl(fd, libc::F_GETFD);
+                    if flags >= 0 && flags & libc::FD_CLOEXEC == 0 {
+                        libc::close(fd);
+                    }
+                }
+                Ok(())
+            });
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = command;
 }
 
 /// A child whose observed exit updates its journal record. Dropping a still-running child
@@ -514,6 +556,92 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// HS2-ETMKCW: a detached child holds no descriptor of its launcher's that is not
+    /// close-on-exec; an ordinary tracked child still inherits it, as before.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_etmkcw_detached_children_inherit_no_stray_descriptor() {
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+        let leaked = || {
+            let mut fds = [0; 2];
+            // SAFETY: pipe fills two new descriptors, which are owned below.
+            assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+            // SAFETY: both descriptors were just created by pipe and are owned once.
+            let (read, write) =
+                unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
+            // SAFETY: plain descriptor flag calls on descriptors this test owns.
+            unsafe {
+                assert_eq!(libc::fcntl(write.as_raw_fd(), libc::F_SETFD, 0), 0);
+                assert_eq!(
+                    libc::fcntl(read.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC),
+                    0
+                );
+                let flags = libc::fcntl(read.as_raw_fd(), libc::F_GETFL);
+                assert_eq!(
+                    libc::fcntl(read.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK),
+                    0
+                );
+            }
+            (read, write)
+        };
+        // 0 is end of file (no writer left); -1 with EAGAIN means a child still holds one.
+        let read_once = |read: &OwnedFd| {
+            let mut byte = 0u8;
+            // SAFETY: reads at most one byte into a local buffer from an owned descriptor.
+            unsafe { libc::read(read.as_raw_fd(), (&raw mut byte).cast(), 1) }
+        };
+        let home = tempfile::tempdir().unwrap();
+        let context = LaunchContext {
+            journal: ProcessJournal::at(home.path()),
+            supervisor: "hotsheet-test",
+            purpose: Purpose::JobMonitor,
+            project_id: None,
+            session_id: None,
+            binary_revision: None,
+        };
+        let sleeper = || {
+            let mut command = Command::new("sleep");
+            command.arg("30");
+            command
+        };
+
+        let (read, write) = leaked();
+        let mut detached = context.spawn_detached(&mut sleeper()).unwrap();
+        drop(write);
+        assert_eq!(
+            read_once(&read),
+            0,
+            "spawn_detached passed the descriptor on"
+        );
+        detached.kill().unwrap();
+        detached.wait().unwrap();
+
+        let (read, write) = leaked();
+        let mut ordinary = context.spawn(&mut sleeper()).unwrap();
+        drop(write);
+        assert_eq!(read_once(&read), -1, "an ordinary child inherits as before");
+        ordinary.kill().unwrap();
+        ordinary.wait().unwrap();
+
+        // `detached` takes the same path. Its child is found by its journal record and
+        // ended here, so the test leaves nothing running.
+        let (read, write) = leaked();
+        context.detached(&mut sleeper()).unwrap();
+        drop(write);
+        let held = read_once(&read);
+        let records = context.journal.list().unwrap();
+        let running: Vec<u32> = records
+            .iter()
+            .filter(|record| record.exit_reason.is_none())
+            .map(|record| record.pid)
+            .collect();
+        assert_eq!(running.len(), 1, "{records:?}");
+        let pid = running[0];
+        // SAFETY: the pid is the detached sleep this test just launched and has not reaped.
+        unsafe { libc::kill(i32::try_from(pid).unwrap(), libc::SIGKILL) };
+        assert_eq!(held, 0, "detached passed the descriptor on");
+    }
 
     #[cfg(unix)]
     #[test]

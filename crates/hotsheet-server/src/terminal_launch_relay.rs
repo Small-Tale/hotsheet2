@@ -147,7 +147,8 @@ impl BrokerLauncher for RelayBrokerLauncher {
             session_id: None,
             binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
         }
-        .spawn(&mut command)?;
+        // The broker outlives this request: no stray descriptor of the relay's (HS2-ETMKCW).
+        .spawn_detached(&mut command)?;
         let pid = child.id();
         // The relay is the broker's parent: reap it so an exited broker never stays a zombie,
         // and record the observed exit in the journal.

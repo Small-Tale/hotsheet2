@@ -382,8 +382,9 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<SpawnedBroker> 
         binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
     }
     // Retaining the handle permits startup diagnostics. Dropping it does not wait or
-    // kill: the broker keeps its existing detached lifetime on successful startup.
-    .spawn(&mut command)
+    // kill: the broker keeps its existing detached lifetime on successful startup, so it
+    // inherits no stray descriptor of the server's (HS2-ETMKCW).
+    .spawn_detached(&mut command)
     .map(SpawnedBroker::Direct)
 }
 
