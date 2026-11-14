@@ -329,7 +329,8 @@ pub struct AppState {
     /// A "kick" to the background sync loop (HS2-731C2X): a server write signals it so local
     /// changes push promptly rather than waiting for the next interval. `None` until the
     /// loop is spawned (tests don't run it).
-    sync_kick: Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>,
+    /// A CLI write asks for one store (HS2-D9ZGAE); a server write wakes every store.
+    sync_kick: Arc<Mutex<Option<std::sync::mpsc::Sender<sync_loop::SyncKick>>>>,
     /// Recently indexed server writes, used to distinguish their filesystem echo from
     /// an external edit that happens to match the current index hash.
     local_write_hashes: LocalWriteHashes,
@@ -1260,8 +1261,53 @@ impl AppState {
         configured.unwrap_or(hotsheet_ticketing::DEFAULT_TRASH_CLEANUP_DAYS)
     }
 
+    /// The canonical root of every Git ticket store linked to a registered checkout,
+    /// sorted and without duplicates (HS2-D9ZGAE). Read from the checkout registry alone,
+    /// so it includes stores no client has opened since the host started. A source whose
+    /// directory no longer exists is left out.
+    pub fn registered_git_store_roots(&self) -> Vec<std::path::PathBuf> {
+        let mut roots: Vec<std::path::PathBuf> = self
+            .checkout_registry
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|checkout| checkout.sources)
+            .filter(|source| source.provider == "git")
+            .filter_map(|source| FsPath::new(&source.locator).canonicalize().ok())
+            .filter(|root| root.is_dir())
+            .collect();
+        roots.sort();
+        roots.dedup();
+        roots
+    }
+
+    /// Ask the background sync loop for one prompt sync of the store at `root`
+    /// (HS2-D9ZGAE, `POST /sync/kick`). Only a store this host already syncs is accepted:
+    /// a hosted store or a Git store linked to a registered checkout. The loop coalesces
+    /// the request with other kicks and with its regular pass, and while it is backed off
+    /// for an offline remote the request waits for that pass rather than adding one.
+    pub fn request_store_sync(&self, root: &FsPath) -> sync_loop::StoreSyncRequest {
+        let Ok(root) = root.canonicalize() else {
+            return sync_loop::StoreSyncRequest::NotRegistered;
+        };
+        let hosted = self
+            .hosted_store_roots()
+            .into_iter()
+            .any(|(_, hosted)| FsPath::new(&hosted).canonicalize().ok().as_ref() == Some(&root));
+        if !hosted && !self.registered_git_store_roots().contains(&root) {
+            return sync_loop::StoreSyncRequest::NotRegistered;
+        }
+        let kicker = self.sync_kick.lock_or_recover();
+        match kicker.as_ref() {
+            Some(tx) if tx.send(sync_loop::SyncKick::Store(root)).is_ok() => {
+                sync_loop::StoreSyncRequest::Accepted
+            }
+            _ => sync_loop::StoreSyncRequest::NotRunning,
+        }
+    }
+
     /// Register the background sync loop's kick channel (called by [`sync_loop::spawn_sync_loop`]).
-    pub fn set_sync_kicker(&self, tx: std::sync::mpsc::Sender<()>) {
+    pub fn set_sync_kicker(&self, tx: std::sync::mpsc::Sender<sync_loop::SyncKick>) {
         {
             let mut k = self.sync_kick.lock_or_recover();
             *k = Some(tx);
@@ -1273,7 +1319,7 @@ impl AppState {
         {
             let k = self.sync_kick.lock_or_recover();
             if let Some(tx) = k.as_ref() {
-                let _ = tx.send(());
+                let _ = tx.send(sync_loop::SyncKick::All);
             }
         }
     }
@@ -2258,6 +2304,8 @@ pub fn app(state: AppState) -> Router {
             "/standby-settings/changed",
             post(routes::standby::standby_settings_changed),
         )
+        // A CLI write asks the host to sync the one store it committed to (HS2-D9ZGAE).
+        .route("/sync/kick", post(routes::sync_kick::post_sync_kick))
         // Inside authentication: an authenticated response names the change cursor it was
         // served at, so a client can replay what its read may have missed (HS2-SQKJYG).
         .route_layer(middleware::from_fn_with_state(

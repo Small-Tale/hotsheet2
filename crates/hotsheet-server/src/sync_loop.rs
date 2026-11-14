@@ -4,12 +4,19 @@
 //! so local changes push promptly), with **exponential backoff** when the remote is
 //! offline so an unreachable remote doesn't spin.
 //!
-//! The thread body is thin; the two decisions worth testing are pulled out as pure
-//! functions: [`sync_all`] (one pass over the hosted stores) and [`next_delay`] (the
-//! backoff schedule).
+//! The pass also covers every Git store linked to a registered checkout, opened or not
+//! (HS2-D9ZGAE): after a host restart only the bootstrap store is hosted, and a CLI write
+//! to a project nobody has opened must still publish. A CLI write asks for one store with
+//! `POST /sync/kick`; that request runs a prompt pass over that store only and leaves the
+//! regular pass's schedule alone.
+//!
+//! The thread body is thin; the decisions worth testing are pulled out as pure functions:
+//! [`sync_all`] (one pass over the hosted stores), [`sync_registered`] (the registered
+//! stores no client opened), [`next_delay`] (the backoff schedule), and `drive` (when a
+//! pass runs and over which stores).
 
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 
@@ -24,6 +31,59 @@ use crate::AppState;
 /// The base (idle) interval between sync passes, and the ceiling a backoff climbs to.
 pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
 const MAX_BACKOFF: Duration = Duration::from_secs(300);
+
+/// A request to the sync loop: every store (a server write), or one store a CLI write
+/// committed to (HS2-D9ZGAE). The path is canonical.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SyncKick {
+    All,
+    Store(PathBuf),
+}
+
+/// How the host answered a request to sync one store (HS2-D9ZGAE).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreSyncRequest {
+    /// The sync loop will sync the store promptly.
+    Accepted,
+    /// The store is neither hosted nor linked to a registered checkout.
+    NotRegistered,
+    /// This host runs no background sync loop.
+    NotRunning,
+}
+
+/// The stores one pass covers: every store (the regular pass), or only the stores kicks
+/// named since the previous pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PassScope {
+    All,
+    Stores(BTreeSet<PathBuf>),
+}
+
+impl PassScope {
+    fn empty() -> Self {
+        Self::Stores(BTreeSet::new())
+    }
+
+    fn add(&mut self, kick: SyncKick) {
+        match (&mut *self, kick) {
+            (Self::All, _) => {}
+            (_, SyncKick::All) => *self = Self::All,
+            (Self::Stores(stores), SyncKick::Store(root)) => {
+                stores.insert(root);
+            }
+        }
+    }
+
+    /// Whether this pass covers the store at `root` (compared canonically).
+    pub fn covers(&self, root: &Path) -> bool {
+        match self {
+            Self::All => true,
+            Self::Stores(stores) => root
+                .canonicalize()
+                .is_ok_and(|canonical| stores.contains(&canonical)),
+        }
+    }
+}
 
 /// Keeps the sync-loop thread alive; dropping it lets the thread wind down after its next
 /// wake. Holds nothing the caller needs to touch.
@@ -47,6 +107,16 @@ pub fn sync_all_with_sizes(
     levels: &mut SizeLevels,
     measure: impl Fn(&Path) -> Option<GitObjectSize>,
 ) -> Vec<(String, SyncReport)> {
+    sync_hosted(state, levels, measure, &PassScope::All)
+}
+
+/// [`sync_all_with_sizes`] over the hosted stores `scope` covers.
+fn sync_hosted(
+    state: &AppState,
+    levels: &mut SizeLevels,
+    measure: impl Fn(&Path) -> Option<GitObjectSize>,
+    scope: &PassScope,
+) -> Vec<(String, SyncReport)> {
     let Some(_lifecycle_guard) = state.begin_background_work() else {
         return Vec::new();
     };
@@ -56,6 +126,7 @@ pub fn sync_all_with_sizes(
     state
         .hosted_store_roots()
         .into_iter()
+        .filter(|(_, root)| scope.covers(Path::new(root)))
         .map(|(id, root)| {
             let path = Path::new(&root);
             if !levels.contains(&id) {
@@ -95,6 +166,38 @@ pub fn sync_all_with_sizes(
                 state.announce_repository_size(&id, path, crossing.level, &crossing.message);
             }
             (id, report)
+        })
+        .collect()
+}
+
+/// Sync every Git store `scope` covers that is linked to a registered checkout but not
+/// hosted (HS2-D9ZGAE): the stores of projects no client opened since the host started.
+/// The pass reads the checkout registry only; it never opens a project, and announces
+/// nothing because no client holds the store. Each store's outcome is still recorded in
+/// its durable sync health, which `hotsheet-cli sync --status` and a later project open
+/// read. Reports are keyed by the store's canonical path.
+pub fn sync_registered(state: &AppState, scope: &PassScope) -> Vec<(String, SyncReport)> {
+    let Some(_lifecycle_guard) = state.begin_background_work() else {
+        return Vec::new();
+    };
+    let hosted: Vec<PathBuf> = state
+        .hosted_store_roots()
+        .into_iter()
+        .filter_map(|(_, root)| Path::new(&root).canonicalize().ok())
+        .collect();
+    state
+        .registered_git_store_roots()
+        .into_iter()
+        .filter(|root| !hosted.contains(root) && scope.covers(root))
+        .map(|root| {
+            let before = hotsheet_ticketing::sync_health::read_record(&root)
+                .and_then(|record| record.outcome);
+            let report = sync_once(&root);
+            let after = SyncState::from(report);
+            if report != SyncReport::NoRemote && before != Some(after) {
+                tracing::info!(store = %root.display(), state = ?after, "registered store sync");
+            }
+            (root.display().to_string(), report)
         })
         .collect()
 }
@@ -183,7 +286,7 @@ pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncRep
 /// Spawn the background sync loop. The returned handle keeps it running; a write on the
 /// server sends a "kick" (via [`AppState`]) to wake the loop early for a prompt push.
 pub fn spawn_sync_loop(state: AppState, base: Duration) -> SyncHandle {
-    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let (tx, rx) = std::sync::mpsc::channel::<SyncKick>();
     state.set_sync_kicker(tx);
     std::thread::spawn(move || run(state, base, rx));
     SyncHandle { _kick_marker: () }
@@ -216,16 +319,23 @@ pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
         .collect()
 }
 
-fn run(state: AppState, base: Duration, rx: Receiver<()>) {
+fn run(state: AppState, base: Duration, rx: Receiver<SyncKick>) {
     let mut last_trash_purge: Option<std::time::Instant> = None;
     let mut levels = SizeLevels::default();
     let mut last_registry_sync: Option<std::time::Instant> = None;
-    drive(base, &mut ChannelWaker::new(rx), || {
+    drive(base, &mut ChannelWaker::new(rx), |scope| {
+        if *scope != PassScope::All {
+            // A CLI write's prompt pass syncs the stores it named and nothing else.
+            let mut reports = sync_hosted(&state, &mut levels, git_object_size, scope);
+            reports.extend(sync_registered(&state, scope));
+            return reports;
+        }
         if last_trash_purge.is_none_or(|at| at.elapsed() >= TRASH_PURGE_INTERVAL) {
             purge_all_trash(&state);
             last_trash_purge = Some(std::time::Instant::now());
         }
-        let reports = sync_all_with_sizes(&state, &mut levels, git_object_size);
+        let mut reports = sync_all_with_sizes(&state, &mut levels, git_object_size);
+        reports.extend(sync_registered(&state, scope));
         // Ticket writes kick the loop often; code checkouts are fetched on the base cadence
         // only. Registry writes publish themselves as they happen (HS2-9EGWC4).
         // A second of slack keeps a timer pass that wakes just early on schedule.
@@ -239,9 +349,9 @@ fn run(state: AppState, base: Duration, rx: Receiver<()>) {
 }
 
 /// What ended a wait in [`drive`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum Wake {
-    Kick,
+    Kick(SyncKick),
     Timeout,
     Disconnected,
 }
@@ -252,17 +362,17 @@ trait Waker {
     fn now(&self) -> Duration;
     /// Block until a kick arrives or `deadline` (on the [`Waker::now`] clock) passes.
     fn wait_until(&mut self, deadline: Duration) -> Wake;
-    /// Discard every kick already queued (they coalesce into the pass about to run).
-    fn drain(&mut self);
+    /// Take every kick already queued (they coalesce into the pass about to run).
+    fn drain(&mut self) -> Vec<SyncKick>;
 }
 
 struct ChannelWaker {
-    rx: Receiver<()>,
+    rx: Receiver<SyncKick>,
     started: std::time::Instant,
 }
 
 impl ChannelWaker {
-    fn new(rx: Receiver<()>) -> Self {
+    fn new(rx: Receiver<SyncKick>) -> Self {
         Self {
             rx,
             started: std::time::Instant::now(),
@@ -276,44 +386,69 @@ impl Waker for ChannelWaker {
     }
     fn wait_until(&mut self, deadline: Duration) -> Wake {
         match self.rx.recv_timeout(deadline.saturating_sub(self.now())) {
-            Ok(()) => Wake::Kick,
+            Ok(kick) => Wake::Kick(kick),
             Err(RecvTimeoutError::Timeout) => Wake::Timeout,
             Err(RecvTimeoutError::Disconnected) => Wake::Disconnected,
         }
     }
-    fn drain(&mut self) {
-        while self.rx.try_recv().is_ok() {}
+    fn drain(&mut self) -> Vec<SyncKick> {
+        self.rx.try_iter().collect()
     }
 }
 
-/// The loop core (HS2-2YSMCW). Each pass schedules the next by [`next_delay`]. While the
-/// cadence is healthy (`delay == base`) a kick (a local write) runs a pass immediately so
-/// the change pushes promptly. While backed off for an offline remote, a kick does **not**
-/// reset the backoff or cut the wait short: kicks are coalesced and the pass runs at the
-/// backoff deadline, so a burst of local writes cannot make an unreachable remote spin.
-/// The loop ends when every kicker is gone.
+/// The loop core (HS2-2YSMCW). Each regular pass covers every store and schedules the next
+/// by [`next_delay`]. While the cadence is healthy (`delay == base`) a kick (a local write)
+/// runs a pass immediately so the change pushes promptly: a server write's kick runs a
+/// regular pass, and a CLI write's kick for one store (HS2-D9ZGAE) runs a pass over only
+/// the stores kicked since the previous pass, which leaves the regular pass's deadline
+/// where it was. A kicked pass that finds its remote unreachable backs off like a regular
+/// one. While backed off, a kick does **not** reset the backoff or cut the wait short:
+/// kicks are coalesced and the regular pass runs at the backoff deadline, so a burst of
+/// local writes cannot make an unreachable remote spin. Kicks taken when the regular pass
+/// is due fold into it. The loop ends when every kicker is gone.
 fn drive<W: Waker>(
     base: Duration,
     waker: &mut W,
-    mut pass: impl FnMut() -> Vec<(String, SyncReport)>,
+    mut pass: impl FnMut(&PassScope) -> Vec<(String, SyncReport)>,
 ) {
     let mut delay = base;
+    let mut scope = PassScope::All;
+    let mut deadline = Duration::ZERO;
     loop {
-        let reports = pass();
-        delay = next_delay(base, delay, &reports);
-        let deadline = waker.now() + delay;
+        let reports = pass(&scope);
+        if scope == PassScope::All {
+            delay = next_delay(base, delay, &reports);
+            deadline = waker.now() + delay;
+        } else {
+            // A kicked pass keeps the regular deadline; only an unreachable remote moves
+            // the loop into backoff, which ignores kicks until that deadline.
+            delay = next_delay(base, delay, &reports).max(delay);
+        }
+        let mut next = PassScope::empty();
         loop {
             match waker.wait_until(deadline) {
-                Wake::Kick if delay <= base => break,
+                Wake::Kick(kick) if delay <= base => {
+                    next.add(kick);
+                    break;
+                }
                 // Backed off: remember nothing beyond "a pass is due"; the deadline pass
                 // carries the pending local changes.
-                Wake::Kick => {}
-                Wake::Timeout => break,
+                Wake::Kick(_) => {}
+                Wake::Timeout => {
+                    next = PassScope::All;
+                    break;
+                }
                 Wake::Disconnected => return,
             }
         }
         // Drain any coalesced kicks so a burst of writes is one pass.
-        waker.drain();
+        for kick in waker.drain() {
+            next.add(kick);
+        }
+        if waker.now() >= deadline {
+            next = PassScope::All;
+        }
+        scope = next;
     }
 }
 
@@ -345,14 +480,16 @@ mod tests {
             self.now.set(deadline);
             Wake::Timeout
         }
-        fn drain(&mut self) {
-            while self
-                .events
-                .front()
-                .is_some_and(|(at, wake)| *at <= self.now.get() && *wake == Wake::Kick)
+        fn drain(&mut self) -> Vec<SyncKick> {
+            let mut kicks = Vec::new();
+            while let Some((at, Wake::Kick(_))) = self.events.front()
+                && *at <= self.now.get()
             {
-                self.events.pop_front();
+                if let Some((_, Wake::Kick(kick))) = self.events.pop_front() {
+                    kicks.push(kick);
+                }
             }
+            kicks
         }
     }
 
@@ -361,29 +498,127 @@ mod tests {
     /// Drive the loop over a scripted event list; `report(n)` is pass n's result. Returns
     /// the virtual second each pass ran at. Every script must end in a disconnect.
     fn pass_times(events: &[(u64, Wake)], report: impl Fn(usize) -> SyncReport) -> Vec<u64> {
+        scoped_passes(events, report)
+            .into_iter()
+            .map(|(at, _)| at)
+            .collect()
+    }
+
+    /// [`pass_times`] with each pass's scope.
+    fn scoped_passes(
+        events: &[(u64, Wake)],
+        report: impl Fn(usize) -> SyncReport,
+    ) -> Vec<(u64, PassScope)> {
         let now = Rc::new(Cell::new(Duration::ZERO));
         let mut waker = FakeWaker {
             now: now.clone(),
             events: events
                 .iter()
-                .map(|(at, wake)| (Duration::from_secs(*at), *wake))
+                .map(|(at, wake)| (Duration::from_secs(*at), wake.clone()))
                 .collect(),
         };
-        let mut times = Vec::new();
-        drive(BASE, &mut waker, || {
-            let n = times.len();
-            times.push(now.get().as_secs());
+        let mut passes = Vec::new();
+        drive(BASE, &mut waker, |scope| {
+            let n = passes.len();
+            passes.push((now.get().as_secs(), scope.clone()));
             assert!(n < 100, "loop did not stop");
             vec![("s".into(), report(n))]
         });
-        times
+        passes
     }
 
-    use Wake::{Disconnected as Gone, Kick};
+    use Wake::Disconnected as Gone;
+    /// A server write's kick: every store.
+    const KICK: Wake = Wake::Kick(SyncKick::All);
+
+    /// A CLI write's kick for one store (HS2-D9ZGAE).
+    fn store_kick(name: &str) -> Wake {
+        Wake::Kick(SyncKick::Store(PathBuf::from(name)))
+    }
+
+    fn stores(names: &[&str]) -> PassScope {
+        PassScope::Stores(names.iter().map(PathBuf::from).collect())
+    }
+
+    /// HS2-D9ZGAE: a CLI kick runs a prompt pass over its store only and keeps the regular
+    /// cadence; kicks for several stores in one burst are one pass over those stores; a
+    /// repeated kick for one store is one pass; a server write's kick in the same burst
+    /// widens it to every store; and a kick taken when the regular pass is due folds into
+    /// it.
+    #[test]
+    fn hs2_d9zgae_store_kicks_coalesce_and_keep_the_regular_cadence() {
+        let passes = scoped_passes(
+            &[
+                (10, store_kick("/a")),
+                (10, store_kick("/a")),
+                (12, store_kick("/a")),
+                (12, store_kick("/b")),
+                (12, store_kick("/a")),
+                (15, store_kick("/c")),
+                (15, KICK),
+                (75, store_kick("/d")),
+                (95, Gone),
+            ],
+            |_| SyncReport::UpToDate,
+        );
+        assert_eq!(
+            passes,
+            [
+                (0, PassScope::All),
+                (10, stores(&["/a"])),
+                (12, stores(&["/a", "/b"])),
+                (15, PassScope::All),
+                // The regular pass is 30 s after the last regular pass, not the last kick.
+                (45, PassScope::All),
+                (75, PassScope::All),
+            ],
+            "the kick at 75 s arrives exactly when the regular pass is due"
+        );
+        let times = pass_times(
+            &[(10, store_kick("/a")), (20, store_kick("/a")), (35, Gone)],
+            |_| SyncReport::UpToDate,
+        );
+        assert_eq!(
+            times,
+            [0, 10, 20, 30],
+            "store kicks never move the 30 s pass"
+        );
+    }
+
+    /// HS2-D9ZGAE: a kicked pass that finds its remote offline backs the loop off, so more
+    /// CLI writes to that store cannot re-run Git at the write rate; the backoff deadline
+    /// pass covers every store and returns to the base cadence once it is healthy.
+    #[test]
+    fn hs2_d9zgae_an_offline_store_kick_backs_off_until_the_regular_pass() {
+        let report = |n: usize| match n {
+            1 => SyncReport::Offline,
+            _ => SyncReport::UpToDate,
+        };
+        let passes = scoped_passes(
+            &[
+                (10, store_kick("/a")),
+                (11, store_kick("/a")),
+                (20, store_kick("/a")),
+                (40, store_kick("/a")),
+                (65, Gone),
+            ],
+            report,
+        );
+        assert_eq!(
+            passes,
+            [
+                (0, PassScope::All),
+                (10, stores(&["/a"])),
+                (30, PassScope::All),
+                (40, stores(&["/a"])),
+                (60, PassScope::All),
+            ]
+        );
+    }
 
     #[test]
     fn healthy_kick_runs_an_immediate_pass_and_timeouts_keep_the_base_cadence() {
-        let times = pass_times(&[(10, Kick), (75, Gone)], |_| SyncReport::UpToDate);
+        let times = pass_times(&[(10, KICK), (75, Gone)], |_| SyncReport::UpToDate);
         assert_eq!(times, [0, 10, 40, 70]);
     }
 
@@ -392,7 +627,7 @@ mod tests {
         // Offline: passes at 0, +60, +120, +240 (cap 300). Kicks mid-backoff must not
         // pull a pass forward or restart the doubling from base.
         let times = pass_times(
-            &[(5, Kick), (70, Kick), (71, Kick), (200, Kick), (500, Gone)],
+            &[(5, KICK), (70, KICK), (71, KICK), (200, KICK), (500, Gone)],
             |_| SyncReport::Offline,
         );
         assert_eq!(times, [0, 60, 180, 420]);
@@ -401,7 +636,7 @@ mod tests {
     #[test]
     fn a_burst_of_kicks_while_healthy_coalesces_into_one_pass() {
         let times = pass_times(
-            &[(10, Kick), (10, Kick), (10, Kick), (10, Kick), (35, Gone)],
+            &[(10, KICK), (10, KICK), (10, KICK), (10, KICK), (35, Gone)],
             |_| SyncReport::UpToDate,
         );
         assert_eq!(times, [0, 10], "four kicks at once are one pass");
@@ -422,7 +657,7 @@ mod tests {
             _ => SyncReport::Offline,
         };
         // 0 off, 60 off, 180 up, a kick at 190 is prompt again, 220 off (backs off from base).
-        let times = pass_times(&[(100, Kick), (190, Kick), (260, Gone)], report);
+        let times = pass_times(&[(100, KICK), (190, KICK), (260, Gone)], report);
         assert_eq!(times, [0, 60, 180, 190, 220]);
     }
 

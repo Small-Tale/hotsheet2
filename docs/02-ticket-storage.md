@@ -991,6 +991,25 @@ engine** so the user effectively never runs git by hand:
   healthy; while the loop is backed off for an offline remote (doubling from 60 s to a
   300 s cap), writes are coalesced into the backoff-deadline pass and never reset the
   backoff (HS2-2YSMCW).
+- **Registered stores and headless writes (HS2-D9ZGAE).** The machine host's loop
+  syncs every hosted store and also every Git store linked to a registered checkout,
+  whether or not a client has opened that project since the host started. It reads
+  only the checkout registry and never opens the project. Those stores announce
+  nothing to clients, but each cycle still records durable sync health. A headless
+  write (`hotsheet-cli`) commits locally and starts its own best-effort `git push`,
+  which cannot fetch or rebase. After each command, the CLI therefore sends an
+  authenticated `POST /sync/kick` with the store's absolute path for every store it
+  committed to. It finds the host through the same discovery as other CLI commands,
+  under `HOTSHEET_HOME`. The host accepts only a hosted or registered store (`202`);
+  otherwise it returns `404 store_not_registered`, or `503 sync_not_running` when it
+  runs no sync loop. An accepted kick runs one prompt pass over just the kicked
+  stores. Kicks in one burst coalesce into one pass. A kicked pass leaves the regular
+  pass's deadline unchanged, and a kick that arrives when that pass is due joins it.
+  A kicked pass that finds its remote unreachable backs the loop off like a regular
+  pass. While backed off, kicks wait for the deadline pass. No kick adds a timer or a
+  poll. If no host accepts the kick, the CLI prints on stderr that the commits may be
+  local only and names `hotsheet-cli -C <store> sync`. Writes made through the
+  serverless MCP backend do not kick yet (HS2-4BG2QN); the host's regular pass covers them.
 - **Offline-tolerant:** when the remote is unreachable, keep working locally and
   reconcile on reconnect; never block a local edit on the network.
 - **Surface a conflict only when the driver genuinely cannot resolve** (the rare

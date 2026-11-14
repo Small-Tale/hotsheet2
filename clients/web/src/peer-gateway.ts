@@ -67,6 +67,7 @@ export const PEER_GATEWAY_PREFIXES = [
   'setup',
   'standby-settings',
   'stores',
+  'sync',
   'terminal-limits',
   'terminal-settings',
   'terminals',

@@ -32,6 +32,7 @@ pub mod setup;
 #[allow(dead_code)]
 mod source_revision;
 pub mod sync_ai;
+pub mod sync_kick;
 pub mod workloop;
 
 /// Emit the local build/source revision for the bridge's binary selection probe.

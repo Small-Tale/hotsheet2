@@ -261,6 +261,19 @@ asks an AI through the same workflow as the server and reports it in `ai_help`;
 HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
 
+**Sync after headless writes (HS2-D9ZGAE).** The background loop also syncs every Git
+store linked to a registered checkout, including projects no client has opened since the
+host started. It reads the registry only, emits no events for those stores, and records
+their sync health. After each command, `hotsheet-cli` sends `POST /sync/kick`
+`{store: <absolute path>}` for every store the command committed to and published with
+its own best-effort push. The route is authenticated. It answers `202 {accepted, store}`
+for a hosted or registered store, `404` with code `store_not_registered` for any other
+path, `400` for a relative path, and `503` with code `sync_not_running` when the host
+runs no loop. The kick queues one prompt sync of that store, coalesced with other kicks
+and with the regular pass ([02](02-ticket-storage.md) §2.12). When no host accepts, the
+CLI prints on stderr that the commits may be local only and names
+`hotsheet-cli -C <store> sync`.
+
 **Repository size (HS2-QF44T7).** `GET /checkouts/{id}/repository/size` measures the
 checkout's code repository and every linked ticket source. The CLI twin,
 `hotsheet checkout repo-size [reference] [--json]`, calls the same function in
@@ -688,7 +701,7 @@ local server resolves its host through one helper, `external_launch::discover_lo
   `lifecycle status|restart`) use the machine host first, then a host started on the
   selected store with `hotsheet-cli serve`.
 - Project commands (`live-state`, `commands`, `terminal message`, `ci report`,
-  `notifications`, `ticket-flow`, `activity`) use a host anchored on the selected store
+  `notifications`, `ticket-flow`, `activity`, and the sync kick after a write) use a host anchored on the selected store
   first, then the machine host. `ticket-flow` and `activity` read the host's own store, so
   they refuse a host anchored on another store rather than report the bootstrap store's
   data as the project's.

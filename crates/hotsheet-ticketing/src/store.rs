@@ -1049,6 +1049,10 @@ impl FsStore {
             && !designated
             && git_stdout(&self.root, &["remote"]).is_some_and(|s| !s.trim().is_empty())
         {
+            // HS2-D9ZGAE: a plain push cannot integrate a remote that moved on, so the
+            // process also asks a running host to sync this store (see
+            // [`take_headless_published_stores`]).
+            record_headless_published_store(&self.root);
             if let Ok(mut child) = crate::git::command()
                 .arg("-C")
                 .arg(&self.root)
@@ -2280,6 +2284,32 @@ fn coalesce_commit_jobs(jobs: Vec<CommitJob>) -> Vec<CommitJob> {
             job
         })
         .collect()
+}
+
+/// Stores this process committed to with a headless best-effort push (HS2-D9ZGAE).
+static HEADLESS_PUBLISHED_STORES: std::sync::Mutex<Vec<PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn record_headless_published_store(root: &Path) {
+    let mut stores = HEADLESS_PUBLISHED_STORES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !stores.iter().any(|store| store == root) {
+        stores.push(root.to_path_buf());
+    }
+}
+
+/// Take, in first-commit order and without duplicates, the root of every store this
+/// process committed to and published with a headless best-effort `git push` since the
+/// last call (HS2-D9ZGAE). That push cannot fetch or rebase, so a headless caller (the
+/// CLI) asks the running host to run a full sync of each store. Server-owned stores
+/// defer to their sync loop and are never recorded.
+pub fn take_headless_published_stores() -> Vec<PathBuf> {
+    std::mem::take(
+        &mut *HEADLESS_PUBLISHED_STORES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
 }
 
 /// Block until every background commit queued so far has run (HS2-0DH8ZS). A no-op when
@@ -4180,6 +4210,57 @@ mod tests {
         let committed =
             git_stdout(dir.path(), &["show", "--pretty=", "--name-only", "HEAD"]).unwrap();
         assert!(!committed.lines().any(|path| path == "unrelated.txt"));
+    }
+
+    /// HS2-D9ZGAE: a headless commit that starts a best-effort push records its store so
+    /// the CLI can ask the running host for a full sync; a deferred (server-owned) store
+    /// is never recorded, and taking the set empties it.
+    #[test]
+    fn hs2_d9zgae_headless_published_stores_record_only_headless_pushes() {
+        let with_remote = |store: FsStore, remote: &Path| {
+            let dir = store.root().to_path_buf();
+            git(&dir, &["config", "user.name", "Hot Sheet Test"]).unwrap();
+            git(&dir, &["config", "user.email", "test@localhost"]).unwrap();
+            git(&dir, &["remote", "add", "origin", remote.to_str().unwrap()]).unwrap();
+            store
+        };
+        let remote = tempfile::tempdir().unwrap();
+        git(remote.path(), &["init", "--bare", "-q"]).unwrap();
+        let headless_dir = tempfile::tempdir().unwrap();
+        let headless = with_remote(
+            FsStore::init_git(headless_dir.path(), &StoreMetadata::new("HS")).unwrap(),
+            remote.path(),
+        );
+        let deferred_dir = tempfile::tempdir().unwrap();
+        let deferred = with_remote(
+            FsStore::init_git(deferred_dir.path(), &StoreMetadata::new("HS")).unwrap(),
+            remote.path(),
+        )
+        .with_deferred_push();
+
+        headless
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+        headless
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAW")))
+            .unwrap();
+        deferred
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+
+        // Other tests in this process may record their own stores concurrently.
+        let taken = take_headless_published_stores();
+        assert_eq!(
+            taken.iter().filter(|root| *root == headless.root()).count(),
+            1,
+            "two commits record the store once: {taken:?}"
+        );
+        assert!(!taken.iter().any(|root| root == deferred.root()));
+        assert!(
+            !take_headless_published_stores()
+                .iter()
+                .any(|root| root == headless.root())
+        );
     }
 
     #[cfg(unix)]
