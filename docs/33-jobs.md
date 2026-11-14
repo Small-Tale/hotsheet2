@@ -351,6 +351,27 @@ reported readiness. The measurements and the trace are in
 - **Callers.** `coordination wait` (`Coordinator::next`), the worker view watch,
   and `ChangeWaiter`, which the run event feed, the scheduler follower, the
   monitor and the Job store waits use.
+- **Long-lived watchers (HS2-654VBY).** The server's repository watcher, its
+  orchestration-settings watcher, the Claude transcript follower and the Codex
+  rollout follower start through `PathWatcher` too, so `hotsheet-aitools` depends
+  on this crate; a separate watcher crate was not worth its build plumbing for one
+  module. `PathWatcher::change` stops and starts paths in one registration, which
+  the Codex follower uses as it moves from its home to `sessions/` to the rollout.
+  Platform registrations, before and after, for one start of each:
+
+  | Watcher                                                          | Before            | After |
+  | ---------------------------------------------------------------- | ----------------- | ----- |
+  | Repository, linked worktree (root, Git dir, common dir)          | 3                 | 1     |
+  | Repository, ordinary checkout                                    | 1                 | 1     |
+  | Claude transcript, session directory present                     | 2                 | 1     |
+  | Codex rollout, home then `sessions/` then rollout                | 5                 | 3     |
+  | Orchestration settings, every directory present                  | one per directory | 1     |
+  | Orchestration settings, each event while `.hotsheet2` is missing | one more          | 0     |
+
+  The server keeps a native watcher of its own only for a ticket store, over one
+  path, and polling watchers, which have no stream to restart; a policy test pins
+  this.
+
 - **Platforms.** macOS uses `notify` 8.2 (`notify-batched` in the workspace
   manifest), whose `paths_mut` registers several paths before one start. Linux
   and Windows watch each path separately and have no stream to restart, so they

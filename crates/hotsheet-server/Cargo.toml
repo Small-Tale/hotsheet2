@@ -25,6 +25,8 @@ hotsheet-process-journal.workspace = true
 hotsheet-tls.workspace = true
 hotsheet-sync.workspace = true
 hotsheet-notify.workspace = true
+# HS2-654VBY: the repository watcher starts through the shared batched watcher.
+hotsheet-jobs.workspace = true
 hotsheet-resource-claims.workspace = true
 # Structured diagnostics (HS2-PD8NJ6): the library emits events, the binary installs
 # the stderr subscriber.
@@ -65,7 +67,6 @@ windows-sys.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
-hotsheet-jobs.workspace = true
 rcgen.workspace = true
 rusqlite.workspace = true
 image.workspace = true

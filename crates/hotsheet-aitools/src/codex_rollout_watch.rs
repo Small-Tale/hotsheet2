@@ -29,7 +29,8 @@
 //! when it is closed, so on macOS the rollout itself is followed per write through a kqueue
 //! vnode registration (HS2-TWE913). Windows also reports changes to a file held open only
 //! after the writer closes, so its active rollout gets one local read per second (HS2-WAAKXQ).
-//! Directory waits and other platforms use `notify`; no wake issues a network request.
+//! Directory waits and other platforms use the shared `hotsheet_jobs::watch::PathWatcher`
+//! (HS2-654VBY); no wake issues a network request.
 //!
 //! Only those numeric and identifying fields, and an asked question's titles and option labels,
 //! are parsed. Prompts, tool calls, and agent output in the same file are skipped unread by the
@@ -413,7 +414,7 @@ pub fn watch_rollout(
     live_after: OffsetDateTime,
     mut on_signals: impl FnMut(Vec<RolloutSignal>) + Send + 'static,
 ) -> io::Result<RolloutWatch> {
-    use notify::{RecursiveMode, Watcher};
+    use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
     if !codex_home.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -422,13 +423,13 @@ pub fn watch_rollout(
     }
     let (wake, woken) = channel();
     let notify_wake = wake.clone();
-    let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+    let handler = move |event: Delivery| {
         // Our own reads must not wake us again.
-        if event.is_ok_and(|event| !matches!(event.kind, notify::EventKind::Access(_))) {
+        if event.is_ok_and(|event| !matches!(event.kind, EventKind::Access(_))) {
             let _ = notify_wake.send(Wake::Changed);
         }
-    })
-    .map_err(io::Error::other)?;
+    };
+    let mut handler = Some(handler);
     // FSEvents reports resolved paths (`/private/var/...`); a symlinked home would otherwise
     // have its notifications filtered out as foreign.
     let home = std::fs::canonicalize(codex_home)?;
@@ -436,9 +437,10 @@ pub fn watch_rollout(
     let mut reader = RolloutReader::new(session, live_after);
     let session = session.to_owned();
     // Subscribe to the narrowest existing target, so a change that happens between this
-    // subscription and the first read is still delivered.
-    let subscribe = move |watcher: &mut notify::RecommendedWatcher,
-                          current: &mut Option<Target>| {
+    // subscription and the first read is still delivered. HS2-654VBY: the watcher starts
+    // with its first target, and moving to the next one is one change (one event-stream
+    // restart on macOS) rather than an unwatch and a watch.
+    let mut subscribe = move |watcher: &mut Option<PathWatcher>, current: &mut Option<Target>| {
         let (next, path, mode) =
             match hotsheet_ticketing::metrics::codex_work::find_rollout(&home, &session)? {
                 Some(path) => (
@@ -452,14 +454,24 @@ pub fn watch_rollout(
                 None => (Target::Home, home.clone(), RecursiveMode::NonRecursive),
             };
         if current.as_ref() != Some(&next) {
-            if let Some(previous) = current.take() {
-                let _ = watcher.unwatch(match &previous {
-                    Target::Home => &home,
-                    Target::Sessions => &sessions,
-                    Target::Rollout(path) => path,
-                });
+            match (watcher.as_mut(), handler.take()) {
+                (Some(watcher), _) => {
+                    let previous = current.as_ref().map(|previous| match previous {
+                        Target::Home => home.as_path(),
+                        Target::Sessions => sessions.as_path(),
+                        Target::Rollout(path) => path.as_path(),
+                    });
+                    watcher
+                        .change(previous.as_slice(), &[(&path, mode)])
+                        .map_err(io::Error::other)?;
+                }
+                (None, Some(handler)) => {
+                    *watcher = Some(
+                        PathWatcher::start(&[(&path, mode)], handler).map_err(io::Error::other)?,
+                    );
+                }
+                (None, None) => return Err(io::Error::other("watcher could not start")),
             }
-            watcher.watch(&path, mode).map_err(io::Error::other)?;
             *current = Some(next);
             return io::Result::Ok(true);
         }
@@ -474,7 +486,7 @@ pub fn watch_rollout(
     // Starting a native stream (FSEventStreamStart) can take seconds under load, so even the
     // first subscription happens on the watcher's own thread, off the hook's request path.
     std::thread::spawn(move || {
-        let mut watcher = watcher;
+        let mut watcher: Option<PathWatcher> = None;
         let mut current = None;
         let mut settle_at: Option<Instant> = None;
         #[cfg(target_os = "macos")]

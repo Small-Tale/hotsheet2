@@ -451,7 +451,7 @@ pub fn watch_transcript(
     transcript: &Path,
     mut on_change: impl FnMut() + Send + 'static,
 ) -> io::Result<TranscriptWatch> {
-    use notify::{RecursiveMode, Watcher};
+    use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
     use std::sync::mpsc::{RecvTimeoutError, channel};
     let dir = transcript
         .parent()
@@ -461,24 +461,29 @@ pub fn watch_transcript(
     let session = session_dir(transcript);
     let (wake, woken) = channel::<bool>();
     let notify_wake = wake.clone();
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+    let handler = move |event: Delivery| {
         // Our own reads must not wake us again.
-        if event.is_ok_and(|event| !matches!(event.kind, notify::EventKind::Access(_))) {
+        if event.is_ok_and(|event| !matches!(event.kind, EventKind::Access(_))) {
             let _ = notify_wake.send(true);
         }
-    })
-    .map_err(io::Error::other)?;
+    };
     std::thread::spawn(move || {
         // Starting a native stream can take seconds under load; do it off the caller.
-        if watcher.watch(&dir, RecursiveMode::NonRecursive).is_err() {
-            return;
+        // HS2-654VBY: an existing session directory is registered with the transcript
+        // directory, so the watcher starts once rather than once per path.
+        let mut session_watched = session.is_dir();
+        let mut paths = vec![(dir.as_path(), RecursiveMode::NonRecursive)];
+        if session_watched {
+            paths.push((session.as_path(), RecursiveMode::Recursive));
         }
+        let Ok(mut watcher) = PathWatcher::start(&paths, handler) else {
+            return;
+        };
         // Claude creates the session directory on first use; its creation wakes the
         // transcript directory's watch, and the next wake starts watching it.
-        let mut session_watched = false;
-        let mut watch_session = |watcher: &mut notify::RecommendedWatcher| {
+        let mut watch_session = |watcher: &mut PathWatcher| {
             if !session_watched && session.is_dir() {
-                session_watched = watcher.watch(&session, RecursiveMode::Recursive).is_ok();
+                session_watched = watcher.add(&session, RecursiveMode::Recursive).is_ok();
             }
         };
         watch_session(&mut watcher);

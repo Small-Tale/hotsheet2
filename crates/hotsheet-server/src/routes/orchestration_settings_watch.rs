@@ -12,6 +12,7 @@
 //! the wait only checks whether the server is stopping.
 use crate::AppState;
 use hotsheet_cli::orchestration::OrchestrationRuntime;
+use hotsheet_jobs::watch::{Delivery, PathWatcher, RecursiveMode};
 use hotsheet_sync::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -89,14 +90,20 @@ pub(super) fn ensure_settings_watcher(state: &AppState, owner: &str) {
     // The watch is in place before the reader gets its answer, and the settings are
     // read after it, so no change between the two is missed.
     let (tx, rx) = std::sync::mpsc::channel();
-    let Ok(mut watcher) = notify::recommended_watcher(move |event| {
+    // HS2-654VBY: every directory is registered before the watcher starts once.
+    let mut watched = Vec::new();
+    let initial = targets(&paths, &watched);
+    let initial: Vec<(&std::path::Path, RecursiveMode)> = initial
+        .iter()
+        .map(|target| (target.as_path(), RecursiveMode::NonRecursive))
+        .collect();
+    let Ok(watcher) = PathWatcher::start(&initial, move |event| {
         let _ = tx.send(event);
     }) else {
         forget(&key);
         return;
     };
-    let mut watched = Vec::new();
-    add_watches(&mut watcher, &mut watched, &paths);
+    watched.extend(initial.iter().map(|(target, _)| target.to_path_buf()));
     note_seen(state, &runtime, owner);
     let (state, owner) = (state.clone(), owner.to_owned());
     let spawned = std::thread::Builder::new()
@@ -179,18 +186,11 @@ fn forget(key: &str) {
         .remove(key);
 }
 
-/// Watch each directory that exists; a missing `.hotsheet2` is watched through its
-/// parent until it appears.
-fn add_watches(
-    watcher: &mut notify::RecommendedWatcher,
-    watched: &mut Vec<PathBuf>,
-    paths: &[PathBuf],
-) {
-    use notify::{RecursiveMode, Watcher};
+/// The directories to watch that are not watched yet: each path that exists, or for a
+/// missing `.hotsheet2` its parent until it appears.
+fn targets(paths: &[PathBuf], watched: &[PathBuf]) -> Vec<PathBuf> {
+    let mut targets: Vec<PathBuf> = Vec::new();
     for path in paths {
-        if watched.contains(path) {
-            continue;
-        }
         let target = if path.is_dir() {
             path.clone()
         } else {
@@ -199,9 +199,27 @@ fn add_watches(
                 _ => continue,
             }
         };
-        if watcher.watch(&target, RecursiveMode::NonRecursive).is_ok() && target == *path {
-            watched.push(path.clone());
+        if !watched.contains(&target) && !targets.contains(&target) {
+            targets.push(target);
         }
+    }
+    targets
+}
+
+/// Watch the directories that appeared since the last look, in one change. A directory
+/// already watched is not registered again: on macOS each registration restarted the
+/// event stream (HS2-654VBY).
+fn add_watches(watcher: &mut PathWatcher, watched: &mut Vec<PathBuf>, paths: &[PathBuf]) {
+    let added = targets(paths, watched);
+    if added.is_empty() {
+        return;
+    }
+    let pairs: Vec<(&std::path::Path, RecursiveMode)> = added
+        .iter()
+        .map(|target| (target.as_path(), RecursiveMode::NonRecursive))
+        .collect();
+    if watcher.change(&[], &pairs).is_ok() {
+        watched.extend(added);
     }
 }
 
@@ -212,8 +230,8 @@ fn follow(
     owner: &str,
     key: &str,
     paths: &[PathBuf],
-    (mut watcher, mut watched): (notify::RecommendedWatcher, Vec<PathBuf>),
-    rx: &std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
+    (mut watcher, mut watched): (PathWatcher, Vec<PathBuf>),
+    rx: &std::sync::mpsc::Receiver<Delivery>,
 ) {
     while !state.is_stopping() {
         match rx.recv_timeout(STOP_CHECK) {

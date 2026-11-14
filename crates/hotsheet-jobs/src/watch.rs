@@ -60,9 +60,25 @@ impl PathWatcher {
         Ok(())
     }
 
+    /// HS2-654VBY: stop watching `removed` and start watching `added` in one change. On
+    /// macOS this is one event-stream restart, where a separate unwatch and watch were two.
+    /// A path in `removed` that is not watched is ignored, as an unwatch of it would be.
+    pub fn change(
+        &mut self,
+        removed: &[&Path],
+        added: &[(&Path, RecursiveMode)],
+    ) -> Result<(), Error> {
+        if removed.is_empty() && added.is_empty() {
+            return Ok(());
+        }
+        reregister(&mut self.watcher, removed, added)?;
+        self.starts += 1;
+        Ok(())
+    }
+
     /// How many times this watcher registered paths with the platform: one for
-    /// [`PathWatcher::start`] and one for each [`PathWatcher::add`]. On macOS each is
-    /// one event-stream start.
+    /// [`PathWatcher::start`] and one for each [`PathWatcher::add`] or
+    /// [`PathWatcher::change`]. On macOS each is one event-stream start.
     pub fn starts(&self) -> usize {
         self.starts
     }
@@ -82,6 +98,35 @@ fn register(
         pending.add(path, *mode)?;
     }
     pending.commit()
+}
+
+#[cfg(target_os = "macos")]
+fn reregister(
+    watcher: &mut backend::RecommendedWatcher,
+    removed: &[&Path],
+    added: &[(&Path, RecursiveMode)],
+) -> Result<(), Error> {
+    let mut pending = watcher.paths_mut();
+    for path in removed {
+        // A path that was never watched (or is already gone) has nothing to stop.
+        let _ = pending.remove(path);
+    }
+    for (path, mode) in added {
+        pending.add(path, *mode)?;
+    }
+    pending.commit()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reregister(
+    watcher: &mut backend::RecommendedWatcher,
+    removed: &[&Path],
+    added: &[(&Path, RecursiveMode)],
+) -> Result<(), Error> {
+    for path in removed {
+        let _ = watcher.unwatch(path);
+    }
+    register(watcher, added)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -190,6 +235,47 @@ mod tests {
             fs::write(&file, b"x").unwrap();
             assert!(sees(&receiver, &file), "no event for {}", file.display());
         }
+    }
+
+    /// HS2-654VBY: moving a watch from one path to another is one more start, after
+    /// which only the new path reports; moving it back and an empty change work too.
+    #[test]
+    fn hs2_654vby_a_change_moves_the_watch_in_one_start() {
+        let root = tempfile::tempdir().unwrap();
+        let root = real(root.path());
+        let (first, second) = (root.join("first"), root.join("second"));
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        let (mut watcher, receiver) = watching(&[(&first, RecursiveMode::NonRecursive)]);
+        assert_eq!(watcher.starts(), 1);
+        let file = first.join("one");
+        fs::write(&file, b"x").unwrap();
+        assert!(sees(&receiver, &file));
+
+        watcher
+            .change(&[&first], &[(&second, RecursiveMode::Recursive)])
+            .unwrap();
+        assert_eq!(watcher.starts(), 2, "an unwatch and a watch, one start");
+        let left = first.join("left");
+        let moved = second.join("moved");
+        fs::write(&left, b"x").unwrap();
+        fs::write(&moved, b"x").unwrap();
+        assert!(sees(&receiver, &moved));
+        assert!(!mentions(&receiver, &left, Duration::from_millis(500)));
+
+        // Nothing to change is no start; removing an unwatched path is not an error.
+        watcher.change(&[], &[]).unwrap();
+        assert_eq!(watcher.starts(), 2);
+        watcher
+            .change(
+                &[&second, &root.join("never")],
+                &[(&first, RecursiveMode::NonRecursive)],
+            )
+            .unwrap();
+        assert_eq!(watcher.starts(), 3);
+        let back = first.join("back");
+        fs::write(&back, b"x").unwrap();
+        assert!(sees(&receiver, &back));
     }
 
     #[test]

@@ -474,7 +474,7 @@ impl RepositoryEventFilter {
             .collect();
     }
 
-    fn is_relevant(&self, result: &notify::Result<notify::Event>) -> bool {
+    fn is_relevant(&self, result: &hotsheet_jobs::watch::Delivery) -> bool {
         let Ok(event) = result else {
             return true;
         };
@@ -562,7 +562,7 @@ fn run_native_repository_monitor(
     event_log: Arc<Mutex<EventLog>>,
     stop: std::sync::mpsc::Receiver<()>,
 ) {
-    use notify::{RecursiveMode, Watcher};
+    use hotsheet_jobs::watch::{PathWatcher, RecursiveMode};
 
     let mut previous = git_repository_fingerprint(&root);
     let mut filter = RepositoryEventFilter::load(&root);
@@ -573,27 +573,39 @@ fn run_native_repository_monitor(
     let watch_root = root.clone();
     let git_dirs = filter.git_dirs.clone();
     std::thread::spawn(move || {
-        let started = notify::recommended_watcher(move |result| {
-            let _ = tx.send(result);
-        })
-        .and_then(|mut watcher| {
-            watcher.watch(&watch_root, RecursiveMode::Recursive)?;
-            // A linked worktree keeps its HEAD, index and refs outside the working tree.
-            let roots = path_spellings(&watch_root);
-            for git_dir in &git_dirs {
-                if roots.iter().any(|root| git_dir.starts_with(root)) || !git_dir.is_dir() {
-                    continue;
-                }
-                if let Err(error) = watcher.watch(git_dir, RecursiveMode::Recursive) {
-                    tracing::warn!(
-                        checkout_root = %watch_root.display(),
-                        dir = %git_dir.display(),
-                        %error,
-                        "repository watcher could not watch directory"
-                    );
-                }
+        // A linked worktree keeps its HEAD, index and refs outside the working tree.
+        // HS2-654VBY: every directory is registered before the watcher starts once; a
+        // `watch` call per directory restarted the macOS event stream each time.
+        let roots = path_spellings(&watch_root);
+        let mut outside: Vec<&std::path::Path> = Vec::new();
+        for git_dir in &git_dirs {
+            if roots.iter().any(|root| git_dir.starts_with(root))
+                || !git_dir.is_dir()
+                || outside.contains(&git_dir.as_path())
+            {
+                continue;
             }
-            Ok(watcher)
+            outside.push(git_dir);
+        }
+        let mut paths = vec![(watch_root.as_path(), RecursiveMode::Recursive)];
+        paths.extend(outside.iter().map(|dir| (*dir, RecursiveMode::Recursive)));
+        let handler = {
+            let tx = tx.clone();
+            move |result| {
+                let _ = tx.send(result);
+            }
+        };
+        let started = PathWatcher::start(&paths, handler).or_else(|error| {
+            // One directory that cannot be watched must not cost the others: watch the
+            // working tree alone, as the per-directory registration did.
+            tracing::warn!(
+                checkout_root = %watch_root.display(),
+                %error,
+                "repository watcher could not watch an outside Git directory"
+            );
+            PathWatcher::start(&paths[..1], move |result| {
+                let _ = tx.send(result);
+            })
         });
         // If the monitor already stopped, the send fails and the watcher is dropped.
         let _ = ready_tx.send(started);
@@ -1167,7 +1179,10 @@ mod watcher_tests {
         std::fs::write(root.join("target/debug/artifact"), "build output").unwrap();
         let mut filter = RepositoryEventFilter::load(root);
         let event = |path: std::path::PathBuf| {
-            Ok(notify::Event::new(notify::EventKind::Any).add_path(path))
+            Ok(
+                hotsheet_jobs::watch::Event::new(hotsheet_jobs::watch::EventKind::Any)
+                    .add_path(path),
+            )
         };
         let git_dir = filter.git_dirs[0].clone();
 
@@ -1177,7 +1192,7 @@ mod watcher_tests {
         assert!(filter.is_relevant(&event(git_dir.join("index"))));
         assert!(filter.is_relevant(&event(git_dir.join("refs/heads/main"))));
         assert!(filter.is_relevant(&event(root.join("src/lib.rs"))));
-        assert!(filter.is_relevant(&Err(notify::Error::generic("dropped"))));
+        assert!(filter.is_relevant(&Err(hotsheet_jobs::watch::Error::generic("dropped"))));
         // A canonical spelling of an ignored path (macOS /private/var) is still ignored.
         let canonical = root.canonicalize().unwrap().join("target/debug/artifact");
         assert!(!filter.is_relevant(&event(canonical)));

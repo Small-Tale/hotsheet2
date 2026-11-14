@@ -234,16 +234,23 @@ fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Policy: the waiters of these two crates start the platform watcher only through
+/// Policy: the waiters of these crates start the platform watcher only through
 /// `hotsheet_jobs::watch::PathWatcher`, which registers every path before one start.
 /// A direct `watch` call per path restarts the macOS event stream each time.
+/// HS2-654VBY: the AI-tool followers (Claude transcripts, Codex rollouts) and the server's
+/// repository and orchestration-settings watchers joined; the server keeps its single-path
+/// ticket-store watcher and its polling watchers, which have no event stream to restart.
 #[test]
 fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let mut files = Vec::new();
-    for package in ["hotsheet-jobs", "hotsheet-cli"] {
-        rust_sources(&crates.join(package).join("src"), &mut files);
-    }
+    let sources = |packages: &[&str]| {
+        let mut files = Vec::new();
+        for package in packages {
+            rust_sources(&crates.join(package).join("src"), &mut files);
+        }
+        files
+    };
+    let files = sources(&["hotsheet-jobs", "hotsheet-cli", "hotsheet-aitools"]);
     assert!(files.len() > 50, "scanned too few sources: {}", files.len());
     let sanctioned = crates.join("hotsheet-jobs/src/watch.rs");
     let needles = ["recommended_watcher", "RecommendedWatcher", "PollWatcher"];
@@ -260,11 +267,37 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
         offenders.is_empty(),
         "start file watchers through hotsheet_jobs::watch::PathWatcher: {offenders:?}"
     );
-    // The command-line crate has no watcher library of its own to call.
-    let manifest = std::fs::read_to_string(crates.join("hotsheet-cli/Cargo.toml")).unwrap();
-    assert!(!manifest.lines().any(|line| line.starts_with("notify")));
+    // These crates have no watcher library of their own to call.
+    for package in ["hotsheet-cli", "hotsheet-aitools"] {
+        let manifest = std::fs::read_to_string(crates.join(package).join("Cargo.toml")).unwrap();
+        assert!(
+            !manifest.lines().any(|line| line.starts_with("notify")),
+            "{package} declares a watcher library"
+        );
+    }
+    // The server starts one native watcher of its own: the ticket store's, over one path.
+    let native: Vec<String> = sources(&["hotsheet-server"])
+        .iter()
+        .flat_map(|file| {
+            let source = std::fs::read_to_string(file).unwrap();
+            let name = file.strip_prefix(crates).unwrap().display().to_string();
+            std::iter::repeat_n(name, source.matches("recommended_watcher(").count())
+        })
+        .collect();
+    assert_eq!(native, ["hotsheet-server/src/watcher.rs"], "{native:?}");
+    let repository =
+        std::fs::read_to_string(crates.join("hotsheet-server/src/watcher.rs")).unwrap();
+    let monitor = &repository[repository.find("fn run_native_repository_monitor").unwrap()..];
+    let monitor = &monitor[..monitor.find("\n}\n").unwrap()];
+    assert!(monitor.contains("PathWatcher::start("));
+    assert!(!monitor.contains(".watch("));
+    let settings = std::fs::read_to_string(
+        crates.join("hotsheet-server/src/routes/orchestration_settings_watch.rs"),
+    )
+    .unwrap();
+    assert!(settings.contains("PathWatcher::start(") && !settings.contains(".watch("));
     // The shared watcher batches on macOS and leaves the other platforms as they were.
     let shared = std::fs::read_to_string(sanctioned).unwrap();
-    assert_eq!(shared.matches(".paths_mut()").count(), 1);
+    assert_eq!(shared.matches(".paths_mut()").count(), 2);
     assert_eq!(shared.matches("watcher.watch(").count(), 1);
 }
