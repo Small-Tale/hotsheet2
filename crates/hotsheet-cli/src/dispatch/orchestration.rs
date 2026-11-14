@@ -601,6 +601,29 @@ enum TicketCmd {
         #[arg(long)]
         operation_id: Option<String>,
     },
+    /// List or search a target's open tickets, one bounded page at a time (HS2-D85G19).
+    /// Search before creating, so an existing ticket is linked rather than doubled.
+    List {
+        #[arg(long)]
+        target: String,
+        /// The target's ticket source to list.
+        #[arg(long)]
+        connection: String,
+        /// Text to search for in the target's open tickets.
+        #[arg(long)]
+        text: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        /// Only tickets carrying this tag.
+        #[arg(long)]
+        tag: Option<String>,
+        /// The `next_cursor` of the previous page.
+        #[arg(long)]
+        cursor: Option<String>,
+        /// Rows per page, 1 to 100 (default 50).
+        #[arg(long)]
+        limit: Option<u32>,
+    },
     /// An orchestration ticket's links; --resolve also reads each target ticket.
     Links {
         #[arg(long)]
@@ -688,6 +711,20 @@ fn ticket_route(project: &str, command: TicketCmd) -> (&'static str, String, Val
             path("unlink"),
             json!({"ticket":orchestration(ticket, source),"target_id":target,
                 "connection_id":connection,"native_id":id,"operation_id":operation_id}),
+        ),
+        TicketCmd::List {
+            target,
+            connection,
+            text,
+            category,
+            tag,
+            cursor,
+            limit,
+        } => (
+            "POST",
+            path("list"),
+            json!({"target_id":target,"connection_id":connection,"text":text,
+                "category":category,"tag":tag,"cursor":cursor,"limit":limit}),
         ),
         TicketCmd::Links {
             ticket,

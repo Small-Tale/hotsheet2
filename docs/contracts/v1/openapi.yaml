@@ -1196,8 +1196,9 @@ paths:
     post:
       operationId: orchestrateTargetTicket
       description:
-        '`create` (idempotent by a retained `operation_id`), `read`, `update`, `link`, `unlink` and `links`. Denials are
-        403 with the denial code; target refusals use the `target_*` codes.'
+        "`create` (idempotent by a retained `operation_id`), `read`, `update`, `link`, `unlink`, `links` and `list` (one
+        bounded page of the target source's open tickets, HS2-D85G19). Denials are 403 with the denial code; target
+        refusals use the `target_*` codes."
       requestBody:
         required: true
         content:
@@ -1247,6 +1248,7 @@ paths:
             - link
             - unlink
             - links
+            - list
   /checkouts/{checkout}/target-tickets:
     description:
       Provider-neutral ticket operations on one source of a hosted checkout, for a local or remote orchestration project
@@ -3441,6 +3443,75 @@ paths:
         schema:
           type: string
           pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+  /checkouts/{checkout}/target-tickets/list:
+    description:
+      One bounded page of the open tickets of one source of a hosted checkout, from that source's own provider
+      (HS2-D85G19). Ordinary authenticated project data under the caller's device role.
+    get:
+      operationId: listHostedTargetTickets
+      parameters:
+        - name: connection_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 160
+        - name: text
+          in: query
+          description: Text the provider matches against its open tickets.
+          schema:
+            type: string
+            maxLength: 200
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 160
+        - name: tag
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+        - name: cursor
+          in: query
+          description: The provider's opaque cursor from the previous page.
+          schema:
+            type: string
+            maxLength: 512
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: One page of open tickets, labels and identifiers only.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetTicketPage'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -18822,7 +18893,8 @@ components:
     TargetTicketOperation:
       description: The body of an orchestrating-side operation. `create` needs `ticket`, `target_id`, `connection_id`,
         `operation_id` and `title`; `read` and `update` need the target ticket; `link` and `unlink` need both; `links`
-        needs `ticket`.
+        needs `ticket`; `list` needs `target_id` and `connection_id` and takes `text`, `category`, `tag`, `cursor` and
+        `limit`.
       type: object
       properties:
         actor:
@@ -18871,6 +18943,31 @@ components:
         resolve:
           description: '`links` only: also read each linked target ticket.'
           type: boolean
+        text:
+          description: '`list` only: text to search for among the open tickets.'
+          type:
+            - string
+            - 'null'
+          maxLength: 200
+        tag:
+          description: '`list` only: only tickets carrying this tag.'
+          type:
+            - string
+            - 'null'
+          maxLength: 120
+        cursor:
+          description: '`list` only: the `next_cursor` of the previous page.'
+          type:
+            - string
+            - 'null'
+          maxLength: 512
+        limit:
+          description: '`list` only: rows per page.'
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          maximum: 100
         title:
           type:
             - string
@@ -23574,6 +23671,55 @@ components:
         removed:
           description: The declaration was tombstoned by this request.
           type: boolean
+    TargetTicketPage:
+      description: One bounded page of a target source's open tickets (HS2-D85G19).
+      type: object
+      required:
+        - tickets
+      properties:
+        tickets:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required:
+              - native_id
+              - slug
+              - title
+              - status
+              - priority
+              - category
+              - updated_at
+            properties:
+              native_id:
+                type: string
+              slug:
+                type: string
+              title:
+                type: string
+              status:
+                type: string
+              priority:
+                type: string
+              category:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+              up_next:
+                type: boolean
+              updated_at:
+                type: string
+              transfer_operation_id:
+                description: The operation that created it, when another project did.
+                type: string
+              transferred_from:
+                description: The ticket it was created for, as connection and id.
+                type: string
+        next_cursor:
+          description: Absent on the last page.
+          type: string
     RemoteIdentity:
       type: object
       required:

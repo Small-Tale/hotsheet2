@@ -2195,6 +2195,11 @@ pub fn app(state: AppState) -> Router {
                 .post(routes::orchestration::write)
                 .patch(routes::orchestration::write),
         )
+        // HS2-D85G19: one bounded page of a hosted source's open tickets.
+        .route(
+            "/checkouts/{checkout}/target-tickets/list",
+            get(routes::orchestration::read),
+        )
         // HS2-WN0MXZ: validation steps of an orchestration ticket (machine-local) and
         // the hosted execution of one step where the target lives.
         .route(

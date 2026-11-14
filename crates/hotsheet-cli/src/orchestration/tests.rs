@@ -34,6 +34,7 @@ mod scheduler;
 mod session_executor;
 mod sessions;
 mod summary;
+mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;

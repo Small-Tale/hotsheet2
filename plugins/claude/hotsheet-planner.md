@@ -4,7 +4,7 @@ description: Propose a Hot Sheet orchestration project's dry-run plan from its o
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 1 -->
+<!-- hotsheet-skill-version: 2 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -49,6 +49,15 @@ the `hotsheet_targets` MCP actions; the CLI equivalents are listed beside them.
 4. Read every target ticket a goal names (by slug, id or a
    `@<target-id>/<connection-id>:<native-id>` reference): `ticket_read`
    (`orchestration ticket show`). A ticket you cannot read is not planned.
+5. Search each target's open tickets for the work a goal describes before you plan
+   any of it: `ticket_list` with `target_id`, `connection_id` and a few distinctive
+   words as `text` (`orchestration ticket list --target <target-id> --connection
+   <source> --text "<words>"`), optionally narrowed by `tag` or `category`. A page
+   holds at most 100 rows (`limit`, default 50); follow `next_cursor` (`--cursor`)
+   only while the rows still look relevant. The rows are labels and ids; read a
+   likely match in full with `ticket_read` before you decide it is the same work. An
+   older target server answers `target_peer_unsupported`: then plan from what the
+   goal names and its links, and say so in your summary.
 
 ## Propose the plan
 
@@ -58,14 +67,14 @@ For each goal ticket, decide the pieces of work it needs in each target, in orde
 
 - A target ticket already linked to this goal for the same work is that work. Do not
   create another one.
-- An existing target ticket the goal names, or one you read that already describes the
-  work, is linked: `ticket_link` with `relation: observed`
+- An existing target ticket the goal names, or one your search found that already
+  describes the work, is linked: `ticket_link` with `relation: observed`
   (`orchestration ticket link --ticket <goal> --target <target-id> --connection
   <source> --id <native-id>`).
-- Otherwise create it: `ticket_create` (`orchestration ticket create`) with a short
-  title and details in the target's own words, and the operation id
-  `plan-<goal-slug>-<work-key>`, where `<work-key>` is a short, stable kebab-case
-  name for the piece of work (for example `plan-LCH-1-api-auth`). The same goal and
+- Otherwise, and only after searching that target for it, create it: `ticket_create`
+  (`orchestration ticket create`) with a short title and details in the target's own
+  words, and the operation id `plan-<goal-slug>-<work-key>`, where `<work-key>` is a
+  short, stable kebab-case name for the piece of work (for example `plan-LCH-1-api-auth`). The same goal and
   work key always give the same operation id, so proposing again returns the
   ticket created before (`created: false`) and never a second one.
 

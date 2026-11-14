@@ -230,6 +230,19 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
             &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
         )
     };
+    // HS2-D85G19: the planner searches a target before creating. Reading asks nobody,
+    // crosses the reviewed transport and lists open tickets only.
+    let found = run(&worker, &with("list", &["--text", "SYNTHETIC REMOTE"]));
+    assert_eq!(found["tickets"].as_array().unwrap().len(), 1, "{found}");
+    assert_eq!(found["tickets"][0]["native_id"], native_id);
+    assert!(found["tickets"][0].get("details").is_none());
+    assert!(found.get("next_cursor").is_none());
+    let none = run(
+        &worker,
+        &with("list", &["--text", "no such words", "--limit", "5"]),
+    );
+    assert_eq!(none["tickets"], json!([]));
+    assert!(fail(&worker, &with("list", &["--limit", "0"])).contains("invalid_request"));
     let shown = run(&worker, &with("show", &["--id", &native_id]));
     assert_eq!(shown["details"], "Created through the reviewed transport");
     let updated = run(
@@ -562,6 +575,18 @@ async fn hs2_az15ga_stdio_mcp_creates_and_resolves_target_tickets() {
             "actor_role":"ai","actor_id":"worker-1"}),
     );
     assert_eq!(updated["priority"], "low");
+    // HS2-D85G19: the MCP tool lists and searches the target's open tickets.
+    let listed = mcp_named(
+        &home,
+        &backend,
+        "hotsheet_targets",
+        json!({"action":"ticket_list","checkout":checkout.id,"target_id":TARGET,
+            "connection_id":connection,"text":"from the mcp","limit":10,
+            "actor_role":"ai","actor_id":"worker-1"}),
+    );
+    assert_eq!(listed["tickets"].as_array().unwrap().len(), 1, "{listed}");
+    assert_eq!(listed["tickets"][0]["native_id"], native_id);
+    assert_eq!(listed["tickets"][0]["priority"], "low");
     let links = mcp_named(
         &home,
         &backend,
@@ -596,4 +621,74 @@ async fn hs2_az15ga_stdio_mcp_creates_and_resolves_target_tickets() {
         .await
         .unwrap()
         .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_d85g19_hosted_ticket_list_on_a_live_service() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let connection = checkout.sources[0].connection_id.clone();
+    let store = FsStore::open(&source).unwrap();
+    for (title, status) in [
+        ("Open synthetic work", hotsheet_model::Status::NotStarted),
+        ("Finished synthetic work", hotsheet_model::Status::Completed),
+    ] {
+        ops::create(
+            &store,
+            hotsheet_model::Ulid::new(),
+            "TGT",
+            "2026-10-15T00:00:00Z".into(),
+            NewTicket {
+                title: title.into(),
+                status,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let router = app(host);
+    let list = format!(
+        "/checkouts/{}/target-tickets/list?connection_id={connection}&text=synthetic",
+        checkout.id
+    );
+    assert_eq!(
+        api(router.clone(), "GET", &list, Value::Null, false)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, page) = api(router.clone(), "GET", &list, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(page["tickets"].as_array().unwrap().len(), 1);
+    assert_eq!(page["tickets"][0]["title"], "Open synthetic work");
+    let (status, refused) = api(
+        router.clone(),
+        "GET",
+        &format!("{list}&limit=101"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(refused["code"], "invalid_request");
+    let (status, unknown) = api(
+        router,
+        "GET",
+        &format!(
+            "/checkouts/{}/target-tickets/list?connection_id=not-a-source",
+            checkout.id
+        ),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(unknown["code"], "target_ticket_not_found");
 }

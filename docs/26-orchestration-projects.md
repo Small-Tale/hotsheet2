@@ -4,7 +4,8 @@
 > reviewed machine bindings, permission requests answered through the permission
 > bridge with remembered rules and the audit journal (§26.7, HS2-XHQ1EH; the client
 > card and Settings rule row, §26.28), the throughput policy of limits (§26.8),
-> structured ticket links with target ticket operations (§26.3, HS2-AZ15GA),
+> structured ticket links with target ticket operations (§26.3, HS2-AZ15GA) and a
+> gated, bounded list and search of a target's open tickets (§26.3, HS2-D85G19),
 > dispatch runs with status and events (§26.9, HS2-EBHDSB, HS2-7QHWHJ), target
 > capacity and admission (§26.10, HS2-J8PRTV), AI tool capacity states with tool
 > selection (§26.11, HS2-AHG7HW), extra validation steps with immutable result
@@ -187,6 +188,19 @@ guessed, and it must be one the freshly resolved target lists.
   slug and whether the target ticket names this orchestration ticket as its origin
   (the backlink); a link that cannot be read stays in the list with its reason code;
   a planned link is looked up by its operation id.
+- **List** (HS2-D85G19) finds a target's open tickets, so a planner reuses an existing
+  ticket instead of creating a second one. It names one source of the target and
+  optionally `text` (at most 200 bytes, matched as that source's own provider matches
+  text), a `category` and one `tag`. The answer is one bounded page, `limit` 1 to 100
+  rows (50 by default), and the provider's opaque `next_cursor` while more rows
+  remain; a cursor the provider cannot read is `target_request_invalid`. Rows carry
+  identifiers and labels only (native id, slug, title, status, priority, category,
+  tags, Up Next, updated time, and the create operation and origin when another
+  project created the ticket), never details or notes; read one in full with
+  **Read**. Closed tickets (completed, verified, deleted, archived, moved) are never
+  listed. Listing is a read (`tickets_read`): it asks nobody and is audited like the
+  other operations. An older peer without the hosted route answers
+  `target_peer_unsupported`.
 
 The orchestrating side reaches a hosted half that performs the provider operation
 where the target lives: in process for a local destination, and over the reviewed
@@ -207,20 +221,26 @@ hotsheet-cli ... orchestration ticket update --project <owner> --target <target-
 hotsheet-cli ... orchestration ticket link --project <owner> --ticket <orchestration-ticket> --target <target-id> --connection <source> --id <native-id> [--relation validated]
 hotsheet-cli ... orchestration ticket unlink --project <owner> --ticket <orchestration-ticket> --target <target-id> --connection <source> --id <native-id>
 hotsheet-cli ... orchestration ticket links --project <owner> --ticket <orchestration-ticket> [--resolve]
+hotsheet-cli ... orchestration ticket list --project <owner> --target <target-id> --connection <source> \
+  [--text "..."] [--category <category>] [--tag <tag>] [--cursor <next-cursor>] [--limit 50]
 ```
 
 `--source` names the orchestration ticket's connection and may be omitted when the
 project has one git ticket source. An identified actor is required.
 
-| Route                                                                             | Methods and purpose                                                                              |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `/checkouts/{owner}/orchestration/tickets/{create,read,update,link,unlink,links}` | POST orchestrating-side operations; machine-local                                                |
-| `/checkouts/{checkout}/target-tickets`                                            | Hosted half: GET by `connection_id` and `native_id` or `operation_id`; POST create; PATCH update |
+| Route                                                                                  | Methods and purpose                                                                              |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/tickets/{create,read,update,link,unlink,links,list}` | POST orchestrating-side operations; machine-local                                                |
+| `/checkouts/{checkout}/target-tickets`                                                 | Hosted half: GET by `connection_id` and `native_id` or `operation_id`; POST create; PATCH update |
+| `/checkouts/{checkout}/target-tickets/list`                                            | Hosted half: GET one page of a source's open tickets (HS2-D85G19)                                |
 
-The hosted route is ordinary authenticated project data under the caller's device
-role, because a remote orchestration project must reach it. MCP `hotsheet_targets`
+The hosted routes are ordinary authenticated project data under the caller's device
+role, because a remote orchestration project must reach them. MCP `hotsheet_targets`
 adds `ticket_create`, `ticket_read`, `ticket_update`, `ticket_link`,
-`ticket_unlink` and `ticket_links`. The workspace flows for the same operations are
+`ticket_unlink`, `ticket_links` and `ticket_list` (with `text`, `category`, `tag`,
+`cursor` and `limit`). The runtime function is
+`OrchestrationRuntime::target_ticket_list(owner, ListTargetTickets, actor, tx)` in
+`crates/hotsheet-cli/src/orchestration/ticket_list.rs`. The workspace flows for the same operations are
 part of HS2-HSMH2Q.
 
 ## 26.4 Headless and service contract
@@ -3733,8 +3753,11 @@ uses the existing gated operations only:
 - reads the declared targets (`list`, `resolve`), the goal tickets, each goal's links
   (`ticket links --resolve`), the plan (`readiness plan`) and every target ticket a
   goal names (`ticket show`);
-- reuses a linked target ticket, links an existing one (`ticket link`, `observed`),
-  or creates one (`ticket create`) under the operation id
+- searches each target's open tickets for the work a goal describes with
+  `ticket list` (HS2-D85G19) before it plans any of it;
+- reuses a linked target ticket, links an existing one it named or found
+  (`ticket link`, `observed`), or, only after searching, creates one (`ticket create`)
+  under the operation id
   `plan-<goal-slug>-<work-key>`, so proposing again returns the ticket created before;
 - defines one step per target ticket (`readiness define`) with its prerequisites,
   up to four resources (§26.20) and a preferred `tool`; defining a step again changes
@@ -3760,10 +3783,9 @@ rule allows files an orchestrator permission request. The planner treats
 `permission_required`, `permission_denied` and `decision_required` as a person's
 decision, never something to retry around. Nothing in Propose Plan itself asks a target anything.
 
-**Not yet.** A target's tickets can only be read one by one, so the planner finds
-existing target tickets through what the goal names and what is linked; listing and
-searching a target's tickets through the gate is HS2-D85G19. The workspace's Propose
-Plan button is HS2-J89JC7.
+**Searching first.** The planner finds existing target tickets through what the goal
+names, what is linked and the gated list and search of §26.3 (HS2-D85G19). The
+workspace's Propose Plan button is HS2-J89JC7.
 
 ### Headless surface
 

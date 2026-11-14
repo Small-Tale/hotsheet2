@@ -32,6 +32,8 @@ pub fn is_path(path: &str) -> bool {
             // HS2-AZ15GA: orchestrating-side ticket operations and the hosted half.
             | ["checkouts", _, "orchestration", "tickets", _]
             | ["checkouts", _, "target-tickets"]
+            // HS2-D85G19: one bounded page of a hosted source's open tickets.
+            | ["checkouts", _, "target-tickets", "list"]
             // HS2-EBHDSB: runs (orchestrating) and the hosted exact claim.
             | ["checkouts", _, "orchestration", "runs"]
             | ["checkouts", _, "orchestration", "runs", _]
@@ -508,6 +510,26 @@ impl OrchestrationRuntime {
                     )),
                 }
             }
+            // HS2-D85G19 hosted half: one bounded page of a source's open tickets.
+            ("GET", ["checkouts", checkout, "target-tickets", "list"]) => {
+                let connection = query_text(path, "connection_id")?
+                    .ok_or(OrchestrationError::Invalid("connection_id is required"))?;
+                let limit = match query_text(path, "limit")? {
+                    None => None,
+                    Some(_) => Some(
+                        u32::try_from(query_number(path, "limit", 0)?)
+                            .map_err(|_| OrchestrationError::Invalid("page limit too large"))?,
+                    ),
+                };
+                let search = TargetTicketSearch {
+                    text: query_text(path, "text")?,
+                    category: query_text(path, "category")?,
+                    tag: query_text(path, "tag")?,
+                    cursor: query_text(path, "cursor")?,
+                    limit,
+                };
+                value(self.hosted_ticket_list(checkout, &connection, &search)?)
+            }
             ("POST", ["checkouts", checkout, "target-tickets"]) => {
                 value(self.hosted_ticket_create(checkout, hosted(body)?, tx)?)
             }
@@ -937,6 +959,10 @@ impl OrchestrationRuntime {
                     "unlink" => value(self.target_ticket_unlink(owner, decode(body)?, tx)?),
                     "links" => {
                         value(self.target_ticket_links(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    // HS2-D85G19
+                    "list" => {
+                        value(self.target_ticket_list(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }

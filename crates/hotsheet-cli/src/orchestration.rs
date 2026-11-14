@@ -27,6 +27,7 @@ mod session_control;
 mod session_executor;
 mod sessions;
 mod summary;
+mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;
@@ -86,6 +87,10 @@ pub use sessions::{
     SessionSyncSummary, SessionView, StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession,
     ToolSetup, planner_prompt_text, plugin_role_paths, pool_joined, role_prompt_text, setup_store,
     target_tool_setup,
+};
+pub use ticket_list::{
+    DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
+    TargetTicketRow, TargetTicketSearch,
 };
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,
