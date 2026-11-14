@@ -52,6 +52,12 @@ async function openPermissionSettings(page: Page) {
   await page.getByLabel('Settings View').click();
   const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
   if (await showSidebar.isVisible()) await showSidebar.click();
+  // The orchestrator's declared target made this an Orchestration project. Settings learns the
+  // type after it opens, then inserts the Orchestration category above Permissions; a click
+  // aimed before that lands on the category that moved into its place (HS2-WVYGSM).
+  await expect(
+    page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'Orchestration' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Permissions', exact: true }).click();
   const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
   if (await hideSidebar.isVisible()) await hideSidebar.click();
