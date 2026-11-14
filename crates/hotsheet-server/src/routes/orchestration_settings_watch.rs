@@ -23,6 +23,13 @@ static WATCHERS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 /// The fingerprint each watched owner's settings had when last announced or read.
 static SEEN: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 
+/// HS2-2EKDSM: changes this server is making to an owner's settings right now. The
+/// watcher compares only while none is in flight, so the server's own change, which it
+/// announces itself, is not announced a second time.
+static IN_FLIGHT: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
+/// The longest the watcher defers to a change in flight before comparing anyway.
+const IN_FLIGHT_LIMIT: Duration = Duration::from_secs(30);
+
 /// Writes land as several events (a temporary file, a rename); wait for them to pause.
 const QUIET: Duration = Duration::from_millis(150);
 /// How often an idle watcher checks whether the server is stopping. It reads nothing.
@@ -114,22 +121,55 @@ pub(super) fn ensure_settings_watcher(state: &AppState, owner: &str) {
     }
 }
 
-/// After this server changed the owner's settings and before it announces that: mark
-/// the change as seen when a watcher follows the owner, so it is announced once.
-pub(super) fn seen_after_change(state: &AppState, owner: &str) {
+/// HS2-2EKDSM: before this server changes the owner's settings. Pair with
+/// [`seen_after_change`] or [`change_failed`].
+pub(super) fn begin_change(state: &AppState, owner: &str) {
     let key = super::orchestration::loop_key(state, owner);
-    if !WATCHERS
+    *IN_FLIGHT
         .get_or_init(Default::default)
         .lock_or_recover()
-        .contains(&key)
-    {
-        return;
+        .entry(key)
+        .or_default() += 1;
+}
+
+fn end_change(key: &str) {
+    let mut in_flight = IN_FLIGHT.get_or_init(Default::default).lock_or_recover();
+    if let Some(count) = in_flight.get_mut(key) {
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            in_flight.remove(key);
+        }
     }
-    if let Ok(handle) = tokio::runtime::Handle::try_current()
+}
+
+fn in_flight(key: &str) -> bool {
+    IN_FLIGHT
+        .get_or_init(Default::default)
+        .lock_or_recover()
+        .contains_key(key)
+}
+
+/// HS2-2EKDSM: the change [`begin_change`] announced failed; nothing to record.
+pub(super) fn change_failed(state: &AppState, owner: &str) {
+    end_change(&super::orchestration::loop_key(state, owner));
+}
+
+/// After this server changed the owner's settings and before it announces that: mark
+/// the change as seen when a watcher follows the owner, so it is announced once, and
+/// end the change [`begin_change`] started.
+pub(super) fn seen_after_change(state: &AppState, owner: &str) {
+    let key = super::orchestration::loop_key(state, owner);
+    let watched = WATCHERS
+        .get_or_init(Default::default)
+        .lock_or_recover()
+        .contains(&key);
+    if watched
+        && let Ok(handle) = tokio::runtime::Handle::try_current()
         && let Ok(runtime) = super::orchestration::runtime(state, handle)
     {
         note_seen(state, &runtime, owner);
     }
+    end_change(&key);
 }
 
 fn forget(key: &str) {
@@ -181,8 +221,12 @@ fn follow(
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         }
-        // Let the rest of this write arrive, then read once.
-        while rx.recv_timeout(QUIET).is_ok() {}
+        // Let the rest of this write arrive, then read once. HS2-2EKDSM: while the
+        // server is making a change itself, wait for it to record what it announces.
+        let deferred = std::time::Instant::now();
+        while rx.recv_timeout(QUIET).is_ok()
+            || (in_flight(key) && deferred.elapsed() < IN_FLIGHT_LIMIT)
+        {}
         add_watches(&mut watcher, &mut watched, paths);
         let Ok(fingerprint) = runtime.orchestration_fingerprint(owner) else {
             continue;
@@ -195,5 +239,42 @@ fn follow(
         if changed {
             super::orchestration::note_orchestration_change(state, owner);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// HS2-2EKDSM: changes in flight are counted per owner key, so two overlapping
+    /// changes keep the watcher deferring until both are recorded, an end without a
+    /// begin changes nothing, and other owners are unaffected.
+    #[test]
+    fn hs2_2ekdsm_in_flight_changes_are_counted_per_owner() {
+        let key = |n: u8| format!("hs2-2ekdsm-test|{n}");
+        let begin = |key: &str| {
+            *IN_FLIGHT
+                .get_or_init(Default::default)
+                .lock_or_recover()
+                .entry(key.to_owned())
+                .or_default() += 1;
+        };
+        assert!(!in_flight(&key(1)));
+        begin(&key(1));
+        begin(&key(1));
+        assert!(in_flight(&key(1)) && !in_flight(&key(2)));
+        end_change(&key(1));
+        assert!(in_flight(&key(1)), "one change is still in flight");
+        end_change(&key(1));
+        assert!(!in_flight(&key(1)));
+        // Repeated and out-of-order ends are harmless.
+        end_change(&key(1));
+        end_change(&key(2));
+        assert!(!in_flight(&key(1)) && !in_flight(&key(2)));
+        // Empty, then refilled.
+        begin(&key(1));
+        assert!(in_flight(&key(1)));
+        end_change(&key(1));
+        assert!(!in_flight(&key(1)));
     }
 }

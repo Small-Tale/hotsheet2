@@ -628,7 +628,14 @@ async fn execute(
     // a CLI process writes without this server is announced too.
     let settings = super::orchestration_settings_watch::settings_owner(&method, &path)
         .map(|owner| (state.clone(), owner));
+    // HS2-2EKDSM: a change this server makes is in flight until it is recorded.
+    if let Some((state, owner)) = &changed {
+        super::orchestration_settings_watch::begin_change(state, owner);
+    }
     let result = execute_blocking(state, method, path, body).await;
+    if let (Err(_), Some((state, owner))) = (&result, &changed) {
+        super::orchestration_settings_watch::change_failed(state, owner);
+    }
     if let (Ok(_), Some((state, owner))) = (&result, settings) {
         let _ = tokio::task::spawn_blocking(move || {
             super::orchestration_settings_watch::ensure_settings_watcher(&state, &owner);

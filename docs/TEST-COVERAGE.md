@@ -3646,6 +3646,9 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   halts and resumes to a running router and reads the recorded capacity.
 - `remote_servers/tool_capacity.rs` uses the owned CLI process, the authenticated
   service and the stdio MCP tool on one machine-local registry.
+- HS2-2EKDSM: `orchestration_settings_watch.rs # hs2_2ekdsm` counts changes in flight
+  per owner through overlapping, repeated and out-of-order ends; the real-server
+  `hs2_shhgc6` test passed 12 of 12 with six copies running at once.
 - HS2-B6236S: `tests/summary.rs # hs2_b6236s` reads the hosted cost route (an unknown,
   then a known reading, a missing source, malformed ids, an unknown checkout);
   `remote_servers/runs.rs # HS2-B6236S` reads a remote work item's cost
