@@ -452,6 +452,9 @@ mod tests {
             "/checkouts/owner/orchestration/scheduler/explain",
             "/checkouts/owner/orchestration/scheduler/decisions",
             "/checkouts/owner/orchestration/scheduler/tick",
+            // HS2-HCW7MD: the planner runs on this machine.
+            "/checkouts/owner/orchestration/planning/propose",
+            "/checkouts/owner/orchestration/planning/show",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

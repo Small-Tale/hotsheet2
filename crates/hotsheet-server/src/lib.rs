@@ -2192,6 +2192,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/scheduler/{operation}",
             post(routes::orchestration::write),
         )
+        // HS2-HCW7MD: Propose Plan and where planning stands (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/planning/{operation}",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{checkout}/target-validations",
             get(routes::orchestration::read).post(routes::orchestration::write),

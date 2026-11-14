@@ -47,6 +47,7 @@ fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> P
         target: target.clone(),
         prerequisites,
         resources: Vec::new(),
+        tool: None,
         revision: 1,
         created_at_ms: 1,
         updated_at_ms: 1,

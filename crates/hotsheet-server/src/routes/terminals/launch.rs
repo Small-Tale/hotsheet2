@@ -271,20 +271,15 @@ fn terminal_launch(
     // HS2-2DPGDY: an orchestrator-started session's role is in its environment for
     // any tool, whether or not it can take a message from its host.
     if let Some(role) = req.session_role.as_deref() {
-        let role = match role {
-            "worker" | "dispatcher" | "integrator" => role,
-            _ => {
-                return Err(ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    "session_role must be worker, dispatcher or integrator",
-                ));
-            }
+        // HS2-HCW7MD: the planner of an orchestration project is a role too.
+        let Some(role) = hotsheet_ticketing::orchestration::SessionRole::from_code(role) else {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "session_role must be worker, dispatcher, integrator or planner",
+            ));
         };
-        env.push(("HOTSHEET_SESSION_ROLE".to_string(), role.to_string()));
-        env.push((
-            "HOTSHEET_ROLE_SKILL".to_string(),
-            format!("hotsheet-{role}"),
-        ));
+        env.push(("HOTSHEET_SESSION_ROLE".to_string(), role.code().to_string()));
+        env.push(("HOTSHEET_ROLE_SKILL".to_string(), role.skill().to_string()));
     }
     let mut args = plugin
         .launch_args(req.model.as_deref(), req.effort.as_deref())

@@ -22,6 +22,7 @@ mod access;
 mod capacity;
 mod gates;
 mod job_monitor;
+mod planning;
 mod policy;
 mod provisional;
 mod readiness;

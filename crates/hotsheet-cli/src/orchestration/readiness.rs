@@ -59,6 +59,10 @@ pub struct DefinePlanStep {
     /// HS2-2FG91X: resources the session working the step must hold.
     #[serde(default)]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-HCW7MD: the AI tool preferred for the work, by plugin id. A preference
+    /// recorded with the step; the scheduler does not read it yet (HS2-TH53NN).
+    #[serde(default)]
+    pub tool: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -217,7 +221,7 @@ fn named_tickets(step: &PlanStep) -> impl Iterator<Item = RunTarget> + '_ {
 }
 
 impl OrchestrationRuntime {
-    fn plan(&self) -> PlanRegistry {
+    pub(super) fn plan(&self) -> PlanRegistry {
         PlanRegistry::new(&self.home)
     }
 
@@ -514,6 +518,9 @@ impl OrchestrationRuntime {
     ) -> Result<StepView, OrchestrationError> {
         // HS2-2FG91X: a malformed requirement is refused before any target is read.
         validate_needs(&request.resources, MAX_STEP_RESOURCES)?;
+        if let Some(tool) = &request.tool {
+            identifier(tool, "bounded tool id required")?;
+        }
         let (_, source_id, source_connection) =
             self.orchestration_store(owner_id, &request.ticket)?;
         let ticket = RunTicket {
@@ -620,6 +627,7 @@ impl OrchestrationRuntime {
                     target,
                     prerequisites,
                     resources: request.resources.clone(),
+                    tool: request.tool.clone(),
                 },
                 actor.and_then(|actor| actor.id.clone()),
                 tx,

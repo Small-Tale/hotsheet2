@@ -494,6 +494,10 @@ mod grants;
 mod job_monitor;
 #[path = "remote_servers/orchestration.rs"]
 mod orchestration;
+// HS2-HCW7MD: Propose Plan starts a real PTY of the Unix fake agent as the planner.
+#[cfg(unix)]
+#[path = "remote_servers/planning.rs"]
+mod planning;
 #[path = "remote_servers/policy.rs"]
 mod policy;
 #[path = "remote_servers/provisional.rs"]

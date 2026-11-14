@@ -9,6 +9,7 @@ mod gates;
 mod job_monitor;
 mod joining;
 mod observer;
+mod planning;
 mod policy;
 mod provisional;
 mod readiness;
@@ -39,6 +40,9 @@ pub use gates::{
 };
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use joining::REPLACEMENTS_EXHAUSTED;
+pub use planning::{
+    GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,
+};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
@@ -71,7 +75,8 @@ pub use sessions::{
     HostedStartOutcome, HostedStartReply, HostedStopReply, Launched, LocalServerSessions,
     NoSessionHost, PushAttempt, RolePrompt, SessionHost, SessionHostError, SessionSyncFailure,
     SessionSyncSummary, SessionView, StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession,
-    ToolSetup, plugin_role_paths, pool_joined, role_prompt_text, setup_store, target_tool_setup,
+    ToolSetup, planner_prompt_text, plugin_role_paths, pool_joined, role_prompt_text, setup_store,
+    target_tool_setup,
 };
 pub use tickets::{
     CreateTargetTicket, ExternalProviders, HostedCreate, HostedTicket, HostedUpdate, LinkOutcome,

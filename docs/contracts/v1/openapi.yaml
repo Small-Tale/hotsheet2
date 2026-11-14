@@ -3167,6 +3167,62 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/planning/{operation}:
+    description:
+      Machine-local Propose Plan (HS2-HCW7MD). The orchestration project's planning AI session runs in that project
+      itself, through this machine's ordinary AI terminal launch, and proposes the dry-run plan from the open goal
+      tickets with the existing ticket and readiness operations. Nothing is placed until the policy places sessions.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestratePlanning
+      description:
+        '`propose` starts the planner, or answers with the live one (outcome `existing`); the same `operation_id` never
+        launches twice. It needs an identified actor, is audited as `plan_propose`, and is refused with
+        `plan_no_targets`, `plan_no_goals` or `plan_goal_not_open` before anything launches. `show` reads where
+        planning stands and starts nothing.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanningOperation'
+      responses:
+        '200':
+          description: The press (`propose`) or where planning stands (`show`).
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - $ref: '#/components/schemas/PlanProposal'
+                  - $ref: '#/components/schemas/PlanningView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - propose
+            - show
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -20429,6 +20485,15 @@ components:
           maxItems: 4
           items:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
+        tool:
+          description:
+            "`define` only (HS2-HCW7MD). The AI tool preferred for the step's work, by plugin id. Recorded with the step;
+            the scheduler does not read it yet (HS2-TH53NN)."
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
         step_id:
           type:
             - string
@@ -20535,6 +20600,9 @@ components:
           maxItems: 4
           items:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
+        tool:
+          description: The AI tool preferred for the step's work, by plugin id (HS2-HCW7MD).
+          type: string
         revision:
           type: integer
           minimum: 1
@@ -20715,11 +20783,14 @@ components:
           $ref: '#/components/schemas/ProvisionalStanding'
       additionalProperties: false
     OrchestrationSessionRole:
-      description: The part a started session plays in its target's existing role model (HS2-GDJXGZ).
+      description:
+        The part a started session plays in its target's existing role model (HS2-GDJXGZ). `planner` is the planning
+        session of an orchestration project, which runs only in that project (HS2-HCW7MD).
       enum:
         - worker
         - dispatcher
         - integrator
+        - planner
     OrchestrationSessionOwner:
       description: Who decides about the session now. Ownership only ever moves to a person.
       enum:
@@ -22666,6 +22737,132 @@ components:
         - assigned
         - claimed
         - cancelled
+    PlanningOperation:
+      description:
+        Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one `goal`
+        and a retained `operation_id`; `show` takes nothing.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        tool:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        model:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        effort:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        goal:
+          description: Plan only this goal ticket of the orchestration project; every open goal ticket when omitted.
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationTicketRef'
+            - type: 'null'
+        operation_id:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      additionalProperties: false
+    PlanningGoal:
+      description: An open goal ticket of the orchestration project, with the plan steps this machine holds for it.
+      type: object
+      required:
+        - connection_id
+        - native_id
+        - slug
+        - steps
+      properties:
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        slug:
+          type: string
+        steps:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    PlanProposal:
+      description: What a press of Propose Plan did (HS2-HCW7MD).
+      type: object
+      required:
+        - outcome
+        - proposal_id
+        - goals
+        - goal_count
+        - targets
+        - session
+      properties:
+        outcome:
+          enum:
+            - started
+            - existing
+        proposal_id:
+          description: The planner's operation id, which its prompt names.
+          type: string
+        goals:
+          description: The goal tickets planned, oldest first, at most 256.
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningGoal'
+        goal_count:
+          type: integer
+          minimum: 0
+        targets:
+          type: integer
+          minimum: 0
+        session:
+          $ref: '#/components/schemas/HostedTargetSession'
+        role_prompt:
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        tool_setup:
+          type: object
+          properties:
+            wrote:
+              type: integer
+              minimum: 0
+      additionalProperties: false
+    PlanningView:
+      description: Where planning stands for an orchestration project (HS2-HCW7MD).
+      type: object
+      required:
+        - state
+        - goals
+        - goal_count
+        - steps
+        - placement_automatic
+      properties:
+        state:
+          enum:
+            - idle
+            - planning
+            - ended
+        proposal_id:
+          type: string
+        session:
+          $ref: '#/components/schemas/HostedTargetSession'
+        goals:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningGoal'
+        goal_count:
+          type: integer
+          minimum: 0
+        steps:
+          type: integer
+          minimum: 0
+        placement_automatic:
+          description: Whether the policy places sessions. While false the plan is a dry run.
+          type: boolean
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:
@@ -28549,12 +28746,15 @@ components:
             - type: string
             - type: 'null'
         session_role:
-          description: An orchestrator-started session's role, named in its environment (HS2-2DPGDY).
+          description:
+            An orchestrator-started session's role, named in its environment (HS2-2DPGDY), or `planner` for an
+            orchestration project's planning session (HS2-HCW7MD).
           anyOf:
             - enum:
                 - worker
                 - dispatcher
                 - integrator
+                - planner
             - type: 'null'
         initial_prompt:
           description: The tool's first prompt, used only when its plugin declares launch prompt_args (HS2-2DPGDY).

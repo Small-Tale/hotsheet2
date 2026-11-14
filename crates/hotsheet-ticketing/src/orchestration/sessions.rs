@@ -29,32 +29,56 @@ pub enum SessionRole {
     Worker,
     Dispatcher,
     Integrator,
+    /// HS2-HCW7MD: the session that proposes an orchestration plan from goal tickets.
+    /// It runs in the orchestration project itself, never in a target, and joins no
+    /// coordination pool.
+    Planner,
 }
 
 impl SessionRole {
-    pub const ALL: [Self; 3] = [Self::Worker, Self::Dispatcher, Self::Integrator];
+    pub const ALL: [Self; 4] = [
+        Self::Worker,
+        Self::Dispatcher,
+        Self::Integrator,
+        Self::Planner,
+    ];
 
     pub fn code(self) -> &'static str {
         match self {
             Self::Worker => "worker",
             Self::Dispatcher => "dispatcher",
             Self::Integrator => "integrator",
+            Self::Planner => "planner",
         }
     }
 
-    /// The role skill the session runs to join its target's pool.
+    /// HS2-HCW7MD: the role named by its code, as a launch request carries it.
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|role| role.code() == code)
+    }
+
+    /// The role skill the session runs to join its target's pool, or, for the
+    /// planner, to propose the plan.
     pub fn skill(self) -> &'static str {
         match self {
             Self::Worker => "hotsheet-worker",
             Self::Dispatcher => "hotsheet-dispatcher",
             Self::Integrator => "hotsheet-integrator",
+            Self::Planner => "hotsheet-planner",
         }
     }
 
     /// A target has at most one dispatcher and one integrator; the policy may ask a
-    /// person before either is started.
+    /// person before either is started. HS2-HCW7MD: an orchestration project has at
+    /// most one live planner.
     pub fn is_role_session(self) -> bool {
         !matches!(self, Self::Worker)
+    }
+
+    /// HS2-HCW7MD: whether the orchestrator may start this role in a target project.
+    /// The planner runs only in the orchestration project, through `plan propose`.
+    pub fn is_target_role(self) -> bool {
+        !matches!(self, Self::Planner)
     }
 }
 
@@ -796,6 +820,12 @@ fn admit(
     file: &SessionFile,
     session: &OrchestratedSession,
 ) -> Result<Option<OrchestratedSession>, OrchestrationError> {
+    // HS2-HCW7MD: a planner is never a target session.
+    if !session.role.is_target_role() {
+        return Err(OrchestrationError::Invalid(
+            "a planner runs in the orchestration project; use plan propose",
+        ));
+    }
     let owned = |other: &&OrchestratedSession| other.owner_checkout_id == session.owner_checkout_id;
     if let Some(existing) = file
         .sessions
@@ -1054,6 +1084,12 @@ impl NewHostedSession {
         }
         if let Some(ticket) = &self.origin.ticket {
             valid_identifier(ticket)?;
+        }
+        // HS2-HCW7MD: a planner proposes a plan; it is never started for a run.
+        if self.role == SessionRole::Planner && self.origin.run_id.is_some() {
+            return Err(OrchestrationError::Invalid(
+                "a planner session serves no run",
+            ));
         }
         Ok(())
     }

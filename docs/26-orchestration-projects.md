@@ -34,6 +34,8 @@
 > its role wound down and replaced a bounded number of times (§26.24, HS2-NPTKS8),
 > and a refilled session told its exact ticket through its host's session push
 > (§26.24, HS2-R7QH35),
+> Propose Plan, which starts the orchestration project's planning AI session to
+> propose the dry-run plan from its goal tickets (§26.25, HS2-HCW7MD),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -2079,7 +2081,8 @@ test of the real drawer is HS2-KTHJN2; the link from the orchestration workspace
 HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model
-([05](05-ai-tool-plugins.md) §5.9.1). The host refuses a `dispatcher` or
+([05](05-ai-tool-plugins.md) §5.9.1). The `planner` role is not a target role: it is
+the orchestration project's own planning session (§26.25). The host refuses a `dispatcher` or
 `integrator` start while the target's coordination pool shows a live session in that
 role, whoever started it. The target's dispatcher still assigns each exact ticket.
 
@@ -3547,3 +3550,129 @@ behaviour: the step is dispatched again.
   until the worker lets go, and the session's turn end wakes the loop. Such a
   wind-down starts no cooldown. A person's session is left alone.
 - The Up Next mark a dispatched dispatcher-mode run set is not withdrawn by this.
+
+## 26.25 Proposing the plan from goal tickets (HS2-HCW7MD)
+
+The maintainer's decision on the workspace design (HS2-HSMH2Q, Design v3): "On Start
+(or Propose Plan), an orchestrator AI session reads the goal tickets and proposes
+target tickets, prerequisites and placement as the dry-run plan". The orchestration
+project's own tickets are its **goal tickets**. **Propose Plan** starts one AI
+session, the **planner**, that turns the open goal tickets into the plan of §26.15
+with the existing operations. Nothing is placed: the plan stays a dry run until a
+person presses Start Orchestration (the policy's `placement.automatic`, §26.17).
+
+### Where the planner runs
+
+The planner runs in the orchestration project itself, on this machine, through the
+hosted half of the orchestrator-owned sessions (§26.16) with the project as its own
+checkout. That is the drawer's ordinary AI terminal launch through the injected
+session host (the server in process; a headless process through the local server's
+terminal routes; a scripted host in tests), so the planner:
+
+- is set up for its tool in the project with the project's own headless setup
+  (HS2-WEFJV8) and passes this machine's admission (§26.10);
+- shows in the drawer as `<orchestration project>: planner`;
+- carries `HOTSHEET_SESSION_ROLE=planner` and `HOTSHEET_ROLE_SKILL=hotsheet-planner`
+  and gets its prompt at launch or by session push, retried on readiness events with
+  the same bounds as a role prompt (HS2-2DPGDY).
+
+The orchestrating half of §26.16 (grants, the session registry, the scheduler's
+caps) is not used, because starting the planner acts on no target. `planner` is a
+role of its own: it joins no coordination pool (`joined` is `null`), `session start`
+refuses it for a target (`invalid_request`), and a hosted planner start must name the
+checkout it runs in as its orchestration project.
+
+### Propose and show
+
+| Request                                                                   | What it does                                                                                     |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `propose` with `tool`, optional `model`, `effort`, `goal`, `operation_id` | Starts the planner, or answers with the one already there                                        |
+| `show`                                                                    | Where planning stands: `idle`, `planning` or `ended`, the live or latest planner, the open goals |
+
+A press is decided by `decide_propose`, a pure function of this machine's planner
+records and what the terminal host says now
+(`crates/hotsheet-ticketing/src/orchestration/planning.rs`):
+
+1. A retained `operation_id` this machine knows is that planner, whatever became of
+   it. The same id never launches twice.
+2. Otherwise a live planner, or one reserved and never launched, answers the press
+   (`outcome: existing`). A planner whose host cannot be asked counts as live, so
+   it is never doubled. One planner per orchestration project runs at a time; a press
+   naming another goal while one works answers with that one.
+3. Otherwise a new planner starts (`outcome: started`) under the caller's id or a
+   fresh one, which is the `proposal_id` its prompt names.
+
+Before anything launches the press is refused with `plan_no_targets` (the project
+declares no target), `plan_no_goals` (no open goal ticket) or `plan_goal_not_open`
+(the named goal is closed), all HTTP 409. A host that cannot launch answers as a
+session start does (`session_host_unavailable`, `session_start_failed`,
+`session_admission_refused`) and leaves nothing reserved, so the same press can be
+repeated. A press needs an identified actor and is audited as `plan_propose` with its
+operation id and `plan_started`, `plan_existing` or the refusal code.
+
+`goal` names one goal ticket (slug or id, with its `connection_id` when the project
+has several git sources); without it every open goal ticket is planned. The answer
+lists the goals oldest first with the plan steps this machine holds for each (at most
+256 listed; `goal_count` counts all), the number of declared targets, the planner's
+hosted session, and how its prompt was delivered. `show` adds the plan's step count
+and `placement_automatic`, so a view can say the plan is a dry run.
+
+### What the planner does
+
+The `hotsheet-planner` role skill (`plugins/shared/role-skills/hotsheet-planner.md`,
+mirrored by `scripts/sync-role-skills.mjs` and installed by Claude and Codex setup)
+uses the existing gated operations only:
+
+- reads the declared targets (`list`, `resolve`), the goal tickets, each goal's links
+  (`ticket links --resolve`), the plan (`readiness plan`) and every target ticket a
+  goal names (`ticket show`);
+- reuses a linked target ticket, links an existing one (`ticket link`, `observed`),
+  or creates one (`ticket create`) under the operation id
+  `plan-<goal-slug>-<work-key>`, so proposing again returns the ticket created before;
+- defines one step per target ticket (`readiness define`) with its prerequisites,
+  up to four resources (§26.20) and a preferred `tool`; defining a step again changes
+  it, so a re-proposal updates the plan in place;
+- turns a judgment call it cannot settle into a `FEEDBACK NEEDED` note with `CHOICE`
+  options on the goal ticket, once, and plans the rest;
+- never dispatches a run, starts a session, ticks the scheduler, changes the policy
+  or answers an approval, and ends with a `## Proposed plan` note per goal naming the
+  tickets and steps by identifier.
+
+Re-proposing is idempotent by goal ticket and target ticket: target tickets by the
+create operation id and the goal's links, steps by the one-step-per-target-ticket
+rule of §26.15.
+
+**Preferred tool.** A plan step has an optional `tool` (a plugin id), set by
+`readiness define --tool` and shown with the step. Changing it is a new revision; the
+same definition again changes nothing. The scheduler does not read it yet: carrying it
+into placement is HS2-TH53NN.
+
+**Permissions.** Every action the planner takes on a target goes through the gate of
+the operation it calls. HS2-XHQ1EH replaces grants with orchestrator permission
+requests through the permission bridge; the planner is written against that model and
+treats `approval_required`, a pending request or a denial as a person's decision, never
+something to retry around. Nothing in Propose Plan itself asks a target anything.
+
+**Not yet.** A target's tickets can only be read one by one, so the planner finds
+existing target tickets through what the goal names and what is linked; listing and
+searching a target's tickets through the gate is HS2-D85G19. The workspace's Propose
+Plan button is HS2-J89JC7.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration plan propose --project <owner> --tool <tool> \
+  [--model <model>] [--effort <effort>] [--goal <ticket>] [--source <connection>] \
+  [--operation-id <retained-id>]
+hotsheet-cli ... orchestration plan show --project <owner>
+hotsheet-cli ... orchestration readiness define ... --tool <tool>
+```
+
+| Route                                                      | Methods and purpose                                        |
+| ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/planning/{propose,show}` | POST Propose Plan and where planning stands; machine-local |
+
+MCP `hotsheet_targets` adds `plan_propose` (with `tool`, `model`, `effort`, `goal` and
+`operation_id`) and `plan_show`, and `readiness_define` takes `tool`. The runtime
+functions are `OrchestrationRuntime::plan_propose(owner, ProposePlan, actor, tx)` and
+`plan_status(owner, tx)` in `crates/hotsheet-cli/src/orchestration/planning.rs`.

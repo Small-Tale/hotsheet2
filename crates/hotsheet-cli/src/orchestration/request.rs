@@ -64,6 +64,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "target-sessions"]
             // HS2-ECWG50: the scheduler's plan, explanation, decision log and tick.
             | ["checkouts", _, "orchestration", "scheduler", _]
+            // HS2-HCW7MD: Propose Plan and where planning stands.
+            | ["checkouts", _, "orchestration", "planning", _]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -136,6 +138,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "session-sync"]
             // HS2-ECWG50: scheduling reads and writes this machine's records.
             | ["checkouts", _, "orchestration", "scheduler", _]
+            // HS2-HCW7MD: the planner runs on this machine, in the project itself.
+            | ["checkouts", _, "orchestration", "planning", _]
     )
 }
 
@@ -692,6 +696,21 @@ impl OrchestrationRuntime {
                     "speculation" => value(self.provisional_status(owner)?),
                     "reopen" => {
                         value(self.readiness_reopen(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
+            // HS2-HCW7MD: Propose Plan starts the project's planner; `show` reads
+            // where planning stands.
+            ("POST", ["checkouts", owner, "orchestration", "planning", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "propose" => {
+                        value(self.plan_propose(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "show" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.plan_status(owner, tx)?)
                     }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }

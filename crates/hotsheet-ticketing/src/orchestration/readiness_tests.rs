@@ -61,6 +61,7 @@ fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> P
         target: target.clone(),
         prerequisites,
         resources: Vec::new(),
+        tool: None,
         revision: 1,
         created_at_ms: 1,
         updated_at_ms: 1,
@@ -953,6 +954,7 @@ impl Fixture {
                 target: target.clone(),
                 prerequisites,
                 resources: std::mem::take(&mut self.resources),
+                tool: None,
             },
             Some("worker-1".into()),
             &mut Transaction {
@@ -1023,6 +1025,7 @@ fn hs2_42tara_define_is_idempotent_revises_on_change_and_validates() {
             target: b.clone(),
             prerequisites: Vec::new(),
             resources: Vec::new(),
+            tool: None,
         },
         None,
         &mut Transaction {

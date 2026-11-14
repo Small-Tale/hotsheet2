@@ -11,6 +11,7 @@ mod gates;
 mod grants;
 mod joining;
 mod manifest;
+mod planning;
 mod policy;
 mod provisional;
 mod readiness;
@@ -65,6 +66,9 @@ pub use joining::{
     DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
 };
 pub use manifest::ManifestStore;
+pub use planning::{
+    PlannerFacts, PlanningState, ProposeDecision, current_planner, decide_propose, planning_state,
+};
 pub use policy::{
     AccountPolicy, ApprovalGate, ApprovalPolicy, MAX_POLICY_ACCOUNTS, MAX_POLICY_SESSIONS,
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PlacementPolicy, PolicyBody,
@@ -318,6 +322,8 @@ mod gate_tests;
 mod grant_tests;
 #[cfg(test)]
 mod joining_tests;
+#[cfg(test)]
+mod planning_tests;
 #[cfg(test)]
 mod policy_tests;
 #[cfg(test)]
