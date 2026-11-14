@@ -106,6 +106,13 @@ impl OrchestrationRuntime {
         let Ok(waiter) = hotsheet_jobs::ChangeWaiter::watching(&dirs) else {
             return Ok(first);
         };
+        // HS2-F8174X: the stores to watch are known only after the first read, so the
+        // watcher starts after it. Read once more now that it runs, so a change made in
+        // between is not missed (as HS2-ANQXQ4 does for the timeline).
+        let (current, ..) = self.target_lines_now(&checkout.id, tx)?;
+        if current.version != first.version {
+            return Ok(current);
+        }
         let deadline = std::time::Instant::now()
             + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
         loop {
@@ -115,9 +122,10 @@ impl OrchestrationRuntime {
                     .target_lines_now(&checkout.id, tx)
                     .map(|(lines, ..)| lines);
             }
-            if !waiter.wait(remaining) {
-                continue;
-            }
+            // HS2-F8174X: read again at the waiter's one-second safety re-check too, so a
+            // change no watched directory reported ends the wait within a second rather
+            // than at the deadline (HS2-1C77XH). Each read is local files only.
+            let _ = waiter.wait(remaining);
             let (lines, ..) = self.target_lines_now(&checkout.id, tx)?;
             if lines.version != first.version {
                 return Ok(lines);

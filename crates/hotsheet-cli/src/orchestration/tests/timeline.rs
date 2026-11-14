@@ -592,6 +592,75 @@ fn hs2_s3fkj7_target_lines_read_the_owner_plan_from_the_target_side() {
     );
 }
 
+/// HS2-F8174X: a change no watched directory reports (here a run record written without
+/// its events) ends a waiting target-lines read at the waiter's safety re-check, which
+/// reads the lines again rather than waiting on to the deadline.
+#[test]
+fn hs2_f8174x_target_lines_find_an_unreported_change_at_the_safety_recheck() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let goal = m.orchestration_ticket("Coordinate");
+    let work = target_ticket(&m, "Work");
+    define(&m, &goal, &work, None);
+    let dispatch: DispatchRun = serde_json::from_value(json!({
+        "ticket": {"connection_id": m.owner_connection(), "native_id": goal.id.to_string()},
+        "target_id": id(1), "connection_id": m.target_connection(),
+        "native_id": work.id.to_string(), "operation_id": "op-1", "worker_id": "worker-1",
+    }))
+    .unwrap();
+    let run = m
+        .runtime
+        .run_dispatch(&m.owner.id, dispatch, Some(&worker()), &mut tx)
+        .unwrap()
+        .run;
+    let first = lines(&m, &m.target.id);
+    let (home, owner) = (m.home.clone(), m.owner.id.clone());
+    let writer = std::thread::spawn(move || {
+        // After the read below has started waiting, as the dispatch in the timeline test.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let mut rng = Rng(900);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        hotsheet_ticketing::orchestration::RunRegistry::new(&home)
+            .update(
+                &owner,
+                &run.run_id,
+                hotsheet_ticketing::orchestration::RunUpdate {
+                    to: Some(hotsheet_ticketing::orchestration::RunState::Completed),
+                    reason: Some("target_completed".into()),
+                    ..Default::default()
+                },
+                &mut tx,
+            )
+            .unwrap();
+    });
+    let started = std::time::Instant::now();
+    let changed = m
+        .runtime
+        .orchestration_target_lines(&m.target.id, Some(&first.version), 15_000, &mut tx)
+        .unwrap();
+    writer.join().unwrap();
+    assert_ne!(changed.version, first.version);
+    // The re-check runs at least every second; the deadline is fifteen.
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
 /// Wait on the timeline at `version` while `change` runs on another thread after a
 /// short delay; answers the version the wait returned and how long it took.
 fn wait_through(

@@ -4710,7 +4710,10 @@ the others.
 
 With `after` equal to the current version and `wait_ms` (at most 20 seconds) the read is
 a long poll on the same records the timeline watches; a checkout nothing orchestrates
-still waits to the deadline, so a reader that keeps asking never spins.
+still waits to the deadline, so a reader that keeps asking never spins. Like the
+timeline, it reads once more after its watcher starts and again at each one-second
+safety re-check, so a change no watched directory reported ends the wait within a
+second (HS2-F8174X).
 
 ### The client
 
