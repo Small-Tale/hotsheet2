@@ -117,34 +117,56 @@ pub fn permission_signal_directory(home: &std::path::Path) -> std::path::PathBuf
 
 /// The permission signal's current token; `None` before the first change.
 pub fn permission_signal_token(home: &std::path::Path) -> Option<String> {
-    std::fs::read_to_string(permission_signal_directory(home).join("token")).ok()
+    signal_token(&permission_signal_directory(home))
 }
 
-/// HS2-E16FWJ: waits for the permission signal to change. It holds one platform file
-/// watcher for its lifetime; every wait also re-checks the token locally at least once
-/// a second, so a missed file event cannot strand it. It never makes a request.
-pub struct PermissionSignalWaiter {
-    home: std::path::PathBuf,
+/// HS2-E16FWJ: waits for a machine-local signal directory's token to change (the
+/// permission signal; HS2-DX1PQB the hosted-session signal). It holds one platform
+/// file watcher for its lifetime; every wait also re-checks the token locally at least
+/// once a second, so a missed file event cannot strand it. It never makes a request.
+pub struct SignalWaiter {
+    directory: std::path::PathBuf,
     seen: Option<String>,
     waiter: hotsheet_jobs::ChangeWaiter,
 }
 
-impl std::fmt::Debug for PermissionSignalWaiter {
+/// The waiter for the permission signal (HS2-E16FWJ).
+pub type PermissionSignalWaiter = SignalWaiter;
+
+impl std::fmt::Debug for SignalWaiter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PermissionSignalWaiter")
+        f.debug_struct("SignalWaiter")
             .field("seen", &self.seen)
             .finish_non_exhaustive()
     }
 }
 
-impl PermissionSignalWaiter {
+/// A signal directory's current token; `None` before the first change.
+pub fn signal_token(directory: &std::path::Path) -> Option<String> {
+    std::fs::read_to_string(directory.join("token")).ok()
+}
+
+/// Write a fresh token to a signal directory. Best effort: a missed signal is caught
+/// up by the next read.
+pub(super) fn touch_signal(directory: &std::path::Path) {
+    if std::fs::create_dir_all(directory).is_ok() {
+        let _ = std::fs::write(directory.join("token"), ulid::Ulid::new().to_string());
+    }
+}
+
+impl SignalWaiter {
     /// Start watching `home`'s permission signal; a change already written counts as
     /// seen.
     pub fn new(home: &std::path::Path) -> std::io::Result<Self> {
-        let waiter = hotsheet_jobs::ChangeWaiter::new(&permission_signal_directory(home))?;
+        Self::at(&permission_signal_directory(home))
+    }
+
+    /// Start watching one signal directory; a change already written counts as seen.
+    pub fn at(directory: &std::path::Path) -> std::io::Result<Self> {
+        let waiter = hotsheet_jobs::ChangeWaiter::new(directory)?;
         Ok(Self {
-            home: home.to_path_buf(),
-            seen: permission_signal_token(home),
+            directory: directory.to_path_buf(),
+            seen: signal_token(directory),
             waiter,
         })
     }
@@ -154,7 +176,7 @@ impl PermissionSignalWaiter {
     pub fn wait(&mut self, timeout: std::time::Duration) -> bool {
         let deadline = std::time::Instant::now() + timeout;
         loop {
-            let token = permission_signal_token(&self.home);
+            let token = signal_token(&self.directory);
             if token != self.seen {
                 self.seen = token;
                 return true;
@@ -217,10 +239,7 @@ impl OrchestrationRuntime {
     /// HS2-E16FWJ: tell every server on this machine that the permission ledger
     /// changed. Best effort: a missed signal is caught up by the next client read.
     pub(super) fn permission_signal(&self) {
-        let directory = permission_signal_directory(&self.home);
-        if std::fs::create_dir_all(&directory).is_ok() {
-            let _ = std::fs::write(directory.join("token"), ulid::Ulid::new().to_string());
-        }
+        touch_signal(&permission_signal_directory(&self.home));
     }
 
     /// Labels of the owner and of one of its targets. A target that is no longer

@@ -53,7 +53,8 @@ pub use joining::REPLACEMENTS_EXHAUSTED;
 pub use permissions::{
     AnswerPermission, NoPrompt, PERMISSION_SIGNAL_DIRECTORY, PermissionList, PermissionPrompt,
     PermissionSignalWaiter, PromptRequest, RememberPermission, Remembered, RetiredRemoved,
-    RuleView, permission_signal_directory, permission_signal_token, permission_summary,
+    RuleView, SignalWaiter, permission_signal_directory, permission_signal_token,
+    permission_summary, signal_token,
 };
 pub use planning::{
     GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,
@@ -89,13 +90,13 @@ pub use session_control::{
 };
 pub use session_executor::{OwnedSessions, UNCONFIRMED_START_MS};
 pub use sessions::{
-    HostLaunch, HostSessionState, HostedControlReply, HostedRoles, HostedSessionControl,
-    HostedSessionList, HostedSessionStart, HostedSessionStop, HostedSessionView,
-    HostedStartOutcome, HostedStartReply, HostedStopReply, Launched, LocalServerSessions,
-    NoSessionHost, PushAttempt, RolePrompt, SessionHost, SessionHostError, SessionSyncFailure,
-    SessionSyncSummary, SessionView, StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession,
-    ToolSetup, planner_prompt_text, plugin_role_paths, pool_joined, role_prompt_text, setup_store,
-    target_tool_setup,
+    HOSTED_SESSION_SIGNAL_DIRECTORY, HostLaunch, HostSessionState, HostedControlReply, HostedRoles,
+    HostedSessionControl, HostedSessionList, HostedSessionStart, HostedSessionStop,
+    HostedSessionView, HostedStartOutcome, HostedStartReply, HostedStopReply, Launched,
+    LocalServerSessions, NoSessionHost, PushAttempt, RolePrompt, SessionHost, SessionHostError,
+    SessionSyncFailure, SessionSyncSummary, SessionView, StartSession, StopSession,
+    TOOL_SETUP_FAILED, TakeoverSession, ToolSetup, planner_prompt_text, plugin_role_paths,
+    pool_joined, role_prompt_text, setup_store, target_tool_setup,
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use ticket_list::{

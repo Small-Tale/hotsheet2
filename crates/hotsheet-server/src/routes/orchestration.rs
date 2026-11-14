@@ -617,20 +617,7 @@ async fn execute(
     // a CLI process writes without this server is announced too.
     let settings = super::orchestration_settings_watch::settings_owner(&method, &path)
         .map(|owner| (state.clone(), owner));
-    // HS2-6MNMVB: a takeover, pause or stop of a hosted session changes what this
-    // machine's drawer offers for its terminal.
-    let hosted_control = matches!(method.as_str(), "PATCH" | "DELETE")
-        && path.trim_end_matches('/').ends_with("/target-sessions")
-        && path.starts_with("/checkouts/");
-    let announcer = state.clone();
     let result = execute_blocking(state, method, path, body).await;
-    if let (true, Ok(Json(reply))) = (hosted_control, &result) {
-        let terminal = reply
-            .pointer("/session/session/session_id")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        announce_terminal_orchestrator(&announcer, terminal);
-    }
     if let (Ok(_), Some((state, owner))) = (&result, settings) {
         let _ = tokio::task::spawn_blocking(move || {
             super::orchestration_settings_watch::ensure_settings_watcher(&state, &owner);
@@ -655,6 +642,37 @@ async fn execute(
         let _ = tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner)).await;
     }
     result
+}
+
+impl AppState {
+    /// HS2-DX1PQB: tell clients when a person takes over, pauses or stops an
+    /// orchestrator session hosted on this machine, whichever process recorded it (this
+    /// server's hosted route or a headless CLI). One thread waits on the runtime's
+    /// hosted-session signal with the platform file watcher and publishes
+    /// `terminal_orchestrator`; every client then refetches its terminals. Idle, it
+    /// publishes nothing and makes no request. It ends when the server stops. Call
+    /// inside the runtime, once per serving process.
+    pub fn spawn_hosted_session_follower(&self) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let watcher = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("orchestration-hosted-session-signal".into())
+            .spawn(move || {
+                let Ok(runtime) = runtime(&watcher, handle) else {
+                    return;
+                };
+                let Ok(mut waiter) = runtime.hosted_session_signal_waiter() else {
+                    return;
+                };
+                while !watcher.is_stopping() {
+                    if waiter.wait(std::time::Duration::from_secs(1)) {
+                        announce_terminal_orchestrator(&watcher, "");
+                    }
+                }
+            });
+    }
 }
 
 /// HS2-6MNMVB: a person took over, paused or stopped an orchestrator session hosted

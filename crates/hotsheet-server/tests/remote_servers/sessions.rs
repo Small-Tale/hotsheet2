@@ -908,12 +908,34 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
             "session",
         ]
     };
+    // HS2-DX1PQB: the server follows the hosted-session signal, so a takeover the
+    // headless CLI records reaches its clients without a request to the server.
+    let mut events = host.subscribe();
+    host.spawn_hosted_session_follower();
+    let announced =
+        |events: &mut tokio::sync::broadcast::Receiver<hotsheet_server::ChangeEvent>,
+         wait: std::time::Duration| {
+            let deadline = std::time::Instant::now() + wait;
+            loop {
+                match events.try_recv() {
+                    Ok(event) if event.kind == "terminal_orchestrator" => return true,
+                    Ok(_) | Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => {}
+                    Err(_) if std::time::Instant::now() >= deadline => return false,
+                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
+                }
+            }
+        };
     let refused = cli_failure(
         &home,
         &host_side("ai"),
         &["takeover", "cli-op", "--checkout", &checkout.id],
     );
     assert!(refused.contains("forbidden"), "{refused}");
+    // Refused, so nothing changed hands and nothing is announced.
+    assert!(!announced(
+        &mut events,
+        std::time::Duration::from_millis(1_500)
+    ));
     assert_eq!(
         tab(&drawer(&router).await, &cli_terminal)["orchestrator"]["owner"],
         "orchestrator"
@@ -925,6 +947,7 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
     );
     assert_eq!(paused["session"]["session"]["owner"], "human", "{paused}");
     assert_eq!(paused["session"]["session"]["paused"], true);
+    assert!(announced(&mut events, std::time::Duration::from_secs(15)));
     // Taking over again keeps it the person's; the drawer shows both.
     cli_named(
         &home,

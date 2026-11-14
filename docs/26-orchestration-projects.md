@@ -2355,12 +2355,13 @@ operation id, with no orchestration project of their own:
 `target-sessions` route. `GET /terminals` names the hosted session behind each such
 terminal (`orchestrator`: checkout, operation id, project label, owner, paused), and
 the drawer tab's context menu offers **Take Over from Orchestrator** and **Take Over
-and Pause** while the orchestrator owns it. A takeover, pause or stop through the
-server publishes `terminal_orchestrator`, so every client refetches its terminals and
-stops offering the takeover. The orchestrator learns of it on its next sync or from
+and Pause** while the orchestrator owns it. A takeover, pause or stop writes a token to
+`${HOTSHEET_HOME}/orchestration-hosted-session-signal/` from whichever process made it
+(this server's hosted route or a headless CLI), and each server, waiting on it with the
+platform file watcher, publishes `terminal_orchestrator`, so every client refetches its
+terminals and stops offering the takeover (HS2-DX1PQB). The orchestrator learns of it on its next sync or from
 the host's refusal of a wind-down. Typing into the terminal does not take it over;
-whether it should is HS2-8BY9Y1. A headless CLI's host-side takeover is not announced
-yet (HS2-DX1PQB), and closing the tab is not yet recorded as a person's stop
+whether it should is HS2-8BY9Y1. Closing the tab is not yet recorded as a person's stop
 (HS2-HVKS7M).
 
 ### Crashes

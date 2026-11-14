@@ -578,6 +578,9 @@ pub struct HostedControlReply {
     pub session: Option<HostedSessionView>,
 }
 
+/// HS2-DX1PQB: where a hosted session's owner, pause or end changing is signalled.
+pub const HOSTED_SESSION_SIGNAL_DIRECTORY: &str = "orchestration-hosted-session-signal";
+
 /// The orchestrating start request.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -760,6 +763,22 @@ impl OrchestrationRuntime {
 
     fn hosted_sessions_registry(&self) -> HostedSessionRegistry {
         HostedSessionRegistry::new(&self.home)
+    }
+
+    /// HS2-DX1PQB: the directory a runtime touches when a person changes a hosted
+    /// session's owner, pause or end, so every server on this machine tells its
+    /// clients, whichever process (a server or a headless CLI) made the change.
+    pub fn hosted_session_signal_dir(&self) -> PathBuf {
+        self.home.join(HOSTED_SESSION_SIGNAL_DIRECTORY)
+    }
+
+    /// HS2-DX1PQB: a waiter on the hosted-session signal.
+    pub fn hosted_session_signal_waiter(&self) -> std::io::Result<super::SignalWaiter> {
+        super::SignalWaiter::at(&self.hosted_session_signal_dir())
+    }
+
+    fn hosted_session_signal(&self) {
+        super::permissions::touch_signal(&self.hosted_session_signal_dir());
     }
 
     /// Live ticket claims held under `worker` in the checkout's git stores. `None`
@@ -1411,6 +1430,7 @@ impl OrchestrationRuntime {
                 tx.clock.now_ms(),
             )?
             .unwrap_or(session);
+        self.hosted_session_signal();
         Ok(HostedStopReply {
             stopped: true,
             reason: ended.end_reason.clone(),
@@ -1440,6 +1460,9 @@ impl OrchestrationRuntime {
             &request.operation_id,
             request.pause,
         )?;
+        if taken.is_some() {
+            self.hosted_session_signal();
+        }
         let live = self.sessions.sessions(&checkout);
         Ok(HostedControlReply {
             session: taken

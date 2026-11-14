@@ -539,6 +539,8 @@ async fn main() -> Result<()> {
     // Show orchestrator permission requests filed by a headless CLI without waiting
     // for a client read (HS2-E16FWJ). Idle when nothing is filed.
     state.spawn_permission_follower();
+    // Tell clients when a hosted orchestrator session changes hands (HS2-DX1PQB).
+    state.spawn_hosted_session_follower();
 
     // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or
     // a quiescent restart) stops accepting and tells long waits to finish; open connections
