@@ -596,7 +596,8 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['settings-workspace', 1],
     ['trash-settings', 3],
     ['terminal-memory-settings', 6],
-    ['permission-rules-settings', 5],
+    // HS2-4K43DK adds Locked, with Orchestrator Answers.
+    ['permission-rules-settings', 6],
     ['project-sidebar', 1],
     ['command-settings-editor', 1],
     ['ai-tool-settings', 1],
