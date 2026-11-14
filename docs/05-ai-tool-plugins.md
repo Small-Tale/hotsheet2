@@ -1458,7 +1458,8 @@ ledger). The request carries the orchestration project, the target project, the
 action and, for a session start, the tool, by identifiers and labels only. Clients
 show it as the ordinary card, headed `Orchestrator:` and the action, with Allow Once,
 Always Allow and Deny; there is no Allow This AI Session, no chat answer and no
-pattern review. `POST /permissions/{id}` routes the answer to the runtime, which
+pattern review. A project's Auto-allow or Auto-deny setting never decides it and
+shows no countdown on it (HS2-42WS4Z). `POST /permissions/{id}` routes the answer to the runtime, which
 records it, remembers an Always Allow as a rule keyed (orchestration project, target
 project, action, tool), wakes the scheduler, and settles the card with the ordinary
 `permission_resolved` event. Those rules live in the orchestration ledger rather than

@@ -161,6 +161,15 @@ export function allowsImmediately(automation: PermissionAutomation): boolean {
   return automation.action === 'allow' && automation.delayMs === 0;
 }
 
+/**
+ * HS2-42WS4Z: whether a project's automatic decision (Auto-allow or Auto-deny after a delay, and
+ * the Always review it continues into) may decide this request. An orchestrator request is answered
+ * only by a person (docs/26 §26.7): it never starts a countdown and is never decided automatically.
+ */
+export function automationDecides(item: Pick<WirePermissionRequest, 'orchestrator'>): boolean {
+  return item.orchestrator === undefined;
+}
+
 export function permissionBelongsToProject(
   request: WirePermissionRequest,
   connections: ToolConnection[],

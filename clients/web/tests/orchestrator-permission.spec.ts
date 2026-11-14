@@ -123,3 +123,40 @@ for (const scheme of ['light', 'dark'] as const)
       }
     });
   }
+
+// HS2-42WS4Z: a project's Auto-allow decides AI tool requests only. With Auto-allow after
+// 0 seconds, an AI tool's request would never be presented; the orchestrator's card is
+// presented, shows no countdown, and waits for a person.
+test('keeps an orchestrator card out of the project auto-allow (HS2-42WS4Z)', async ({ context, baseURL }) => {
+  test.setTimeout(120_000);
+  const app = await desktopApp(context, baseURL!);
+  try {
+    await app.server.request(`/checkouts/${app.server.checkoutId}/permission-automation`, 'PUT', {
+      action: 'allow',
+      delayMs: 0,
+    });
+    const page = await app.launch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
+    await orchestratorRequest(app.server, 'op-browser-auto');
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await expect(popup).toContainText('Orchestrator: Create or change tickets in API');
+    for (const width of [1440, 1100, 390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeVisible();
+      await expect(popup).not.toContainText('Auto-allow in');
+      await expect(popup.getByRole('button', { name: 'Stop auto-allow Countdown' })).toHaveCount(0);
+      await popup.screenshot({ path: `target/visual-captures/hs2-42ws4z-card-${width}.png` });
+    }
+    // Still waiting on the server: nothing answered it automatically.
+    const pending = await app.server.request<{ orchestrator?: unknown }[]>('/permissions');
+    expect(pending.filter((request) => request.orchestrator)).toHaveLength(1);
+    await popup.getByRole('button', { name: 'Allow Once' }).click();
+    await expect(popup).toHaveCount(0);
+  } finally {
+    await app.stop();
+  }
+});

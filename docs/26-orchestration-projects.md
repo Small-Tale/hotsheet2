@@ -4184,6 +4184,12 @@ is needed to answer one.
   orchestrator of the orchestration project), the action, the target project and,
   for a session start, the tool. The decision row offers Allow Once, Always Allow
   and Deny only; there is no Allow This AI Session and no chat answer.
+- **No automatic answer** (HS2-42WS4Z). A project's Auto-allow or Auto-deny setting
+  decides AI tool requests only. An orchestrator card shows no countdown, is never
+  decided after 0 seconds or after a delay, and never continues into the Always rule
+  review an automatic Allow offers, because only a person answers it. The server
+  refuses that review (`continue_review`, `/permissions/{id}/remember`) for an
+  orchestrator request.
 - **Always Allow review.** Always Allow opens the usual confirmation, which names the
   rule owner (the orchestrator of the orchestration project, in the target project)
   and its lifetime ("Persistent, until revoked") and offers no rule-type or pattern

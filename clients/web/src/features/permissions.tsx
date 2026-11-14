@@ -28,6 +28,7 @@ import {
 import { createPermissionDecisionWorkflow } from '../permission-decision-workflow';
 import {
   allowsImmediately,
+  automationDecides,
   DEFAULT_PERMISSION_AUTOMATION,
   formatPermissionCountdown,
   parsePermissionAutomation,
@@ -324,6 +325,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       for (const item of pendingPermissions())
         if (
           !item.ignored &&
+          automationDecides(item) &&
           !permissionTimer.isCancelled(item.key) &&
           allowsImmediately(permissionAutomation(item.projectId))
         )
@@ -347,7 +349,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       return;
     }
     const setting = permissionAutomation(item.projectId);
-    if (setting.action === 'off') {
+    // HS2-42WS4Z: a person answers an orchestrator card; no countdown, no automatic answer.
+    if (setting.action === 'off' || !automationDecides(item)) {
       permissionTimer.hide();
       permissionCountdown = undefined;
       return;
@@ -423,7 +426,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           error,
           reviewAlreadyAllowed: held?.allowed,
           countdown,
-          countdownAction: held || automation.action === 'off' ? undefined : automation.action,
+          countdownAction:
+            held || automation.action === 'off' || !automationDecides(permission) ? undefined : automation.action,
           groupCount: permissionInbox.identical(permission.key).length,
         }}
       />

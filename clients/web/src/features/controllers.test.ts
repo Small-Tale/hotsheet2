@@ -1398,6 +1398,73 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.projectPermissionHistory('a')).toHaveLength(1);
   });
 
+  it('never decides an orchestrator card automatically or sends its Always review (HS2-42WS4Z)', async () => {
+    const projects = signal([project('a')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),
+      posts: { url: string; body: Record<string, unknown> }[] = [];
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === 'POST') {
+        posts.push({ url, body: JSON.parse(init.body as string) as Record<string, unknown> });
+        return json({ connection: 'c', decision: 'allow', persisted: false });
+      }
+      return json([]);
+    });
+    const orchestratorCard = {
+      id: 1,
+      project: 'checkout:launch-1',
+      connection: 'orchestrator:launch-1',
+      tool: 'Orchestrator',
+      action: 'Create or change tickets in API',
+      requester: 'orchestrator' as const,
+      orchestrator: {
+        request_id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        owner_checkout_id: 'launch-1',
+        owner_label: 'Launch',
+        target_id: '01ARZ3NDEKTSV4RRFFQ69G5FAZ',
+        target_label: 'API',
+        action: 'tickets_write',
+        operation_id: 'op-1',
+      },
+    };
+    owner.permissionInbox.reconcile(projects.value[0], [orchestratorCard], []);
+    const card = owner.pendingPermissions()[0];
+    // Auto-allow after 0 s, Auto-allow after a delay with an Always preview (the review path that
+    // would send continue_review), and Auto-deny: none of them touches the orchestrator card.
+    setRememberedPermissionPreview(card.key, 'always', card.action);
+    for (const automation of [
+      { action: 'allow' as const, delayMs: 0 },
+      { action: 'allow' as const, delayMs: 1_000 },
+      { action: 'deny' as const, delayMs: 5_000 },
+    ]) {
+      owner.permissionAutomationByProject.value = { a: automation };
+      owner.updatePermissionTimer();
+      vi.advanceTimersByTime(10_000);
+      owner.updatePermissionTimer();
+      expect(posts).toEqual([]);
+      expect(owner.permissionCountdown).toBeUndefined();
+      expect(owner.reviewAfterAuto.value).toBeUndefined();
+      expect(owner.pendingPermissions().map((item) => item.key)).toEqual([card.key]);
+      expect(String(owner.permissionPopupSurface())).not.toContain('countdown');
+    }
+    setRememberedPermissionPreview(card.key);
+    // An AI tool's request beside it still follows the project's automation.
+    owner.permissionAutomationByProject.value = { a: { action: 'allow', delayMs: 0 } };
+    owner.permissionInbox.reconcile(
+      projects.value[0],
+      [orchestratorCard, { id: 2, connection: 'c', tool: 'Bash', action: 'npm test' }],
+      [],
+    );
+    owner.updatePermissionTimer();
+    await vi.waitFor(() => {
+      expect(posts).toEqual([{ url: '/api/a/permissions/2', body: { decision: 'allow', scope: 'once' } }]);
+    });
+    expect(owner.pendingPermissions().map((item) => item.key)).toEqual([card.key]);
+    // A person's Allow Once on the card is sent as a plain answer, never as a review.
+    await owner.resolvePermission(owner.pendingPermissions()[0], 'allow', 'once');
+    expect(posts[1]).toEqual({ url: '/api/a/permissions/1', body: { decision: 'allow', scope: 'once' } });
+  });
+
   it('leaves ignored requests alone and falls back to the popup without retrying a failed immediate allow', async () => {
     vi.stubGlobal('window', { setInterval, addEventListener: vi.fn() });
     const projects = signal([project('a')]),

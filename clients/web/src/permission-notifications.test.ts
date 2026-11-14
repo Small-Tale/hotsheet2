@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   allowsImmediately,
+  automationDecides,
   formatPermissionCountdown,
   formatPermissionDelay,
   parsePermissionAutomation,
@@ -180,6 +181,21 @@ describe('permission notifications', () => {
     expect(allowsImmediately({ action: 'allow', delayMs: 15_000 })).toBe(false);
     expect(allowsImmediately({ action: 'off', delayMs: 0 })).toBe(false);
     expect(allowsImmediately({ action: 'deny', delayMs: 0 })).toBe(false);
+    // HS2-42WS4Z: an orchestrator request is answered by a person only.
+    expect(automationDecides({})).toBe(true);
+    expect(
+      automationDecides({
+        orchestrator: {
+          request_id: 'r',
+          owner_checkout_id: 'o',
+          owner_label: 'Launch',
+          target_id: 't',
+          target_label: 'API',
+          action: 'tickets_write',
+          operation_id: 'op',
+        },
+      }),
+    ).toBe(false);
     const timer = new VisiblePermissionTimer();
     expect(timer.isCancelled('p:1')).toBe(false);
     timer.cancel('p:1');

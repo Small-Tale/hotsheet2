@@ -155,6 +155,26 @@ async fn hs2_xhq1eh_permission_requests_round_trip_through_the_bridge_cli_and_mc
             "{answer}"
         );
     }
+    // HS2-42WS4Z: a refused review leaves the card waiting for a person, and no rule
+    // review continues from it.
+    assert_eq!(
+        api(router.clone(), "GET", "/permissions", Value::Null, true)
+            .await
+            .1[0]["id"],
+        card_id
+    );
+    assert_eq!(
+        api(
+            router.clone(),
+            "POST",
+            &format!("/permissions/{card_id}/remember"),
+            json!({}),
+            true
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     // Allow Once: the card is settled and the request allowed, not yet used.
     let (status, resolved) = api(
         router.clone(),
