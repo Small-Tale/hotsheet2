@@ -4278,6 +4278,37 @@ fn auth_mismatch_message(base: &str, health: Option<&Value>, fallback: &str) -> 
 mod tests {
     use super::*;
 
+    /// HS2-BKKQ7W: read one whole HTTP/1.1 request (headers and a `Content-Length`
+    /// body) before a synthetic server answers and closes. Closing a socket with
+    /// request bytes still unread resets the connection, and the client then saw a
+    /// transport error instead of the answer whenever the request arrived in more
+    /// than one segment.
+    fn read_whole_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
+        use std::io::Read;
+
+        let mut request = Vec::new();
+        let mut chunk = [0_u8; 2048];
+        loop {
+            if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&request[..end]).to_ascii_lowercase();
+                let length = headers
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length:"))
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                if request.len() >= end + 4 + length {
+                    return request;
+                }
+            }
+            let read = stream.read(&mut chunk).unwrap();
+            assert!(
+                read > 0,
+                "the client closed before its request was complete"
+            );
+            request.extend_from_slice(&chunk[..read]);
+        }
+    }
+
     thread_local! {
         /// The actor environment `call_actor` sees in unit tests; empty unless a test sets it.
         pub(super) static FAKE_ACTOR_ENV: RefCell<std::collections::HashMap<String, String>> =
@@ -4427,7 +4458,7 @@ mod tests {
 
     #[test]
     fn http_backend_probes_health_after_an_auth_failure() {
-        use std::io::{Read, Write};
+        use std::io::Write;
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -4441,8 +4472,7 @@ mod tests {
             ];
             for (status, body) in responses {
                 let (mut stream, _) = listener.accept().unwrap();
-                let mut request = [0_u8; 2048];
-                let _ = stream.read(&mut request).unwrap();
+                read_whole_request(&mut stream);
                 let reason = if status == 200 { "OK" } else { "Forbidden" };
                 write!(
                     stream,
@@ -4463,7 +4493,7 @@ mod tests {
 
     #[test]
     fn hs2_apspvp_a_coded_403_is_a_refusal_not_a_wrong_secret() {
-        use std::io::{Read, Write};
+        use std::io::Write;
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -4471,8 +4501,7 @@ mod tests {
         let server = std::thread::spawn(move || {
             let body = r#"{"error":"a person must allow this","code":"permission_required","request_id":"01SYNTHETICREQUEST000000000"}"#;
             let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 2048];
-            let _ = stream.read(&mut request).unwrap();
+            read_whole_request(&mut stream);
             write!(
                 stream,
                 "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -4499,14 +4528,13 @@ mod tests {
 
     #[test]
     fn hs2_vhwwa6_empty_checkout_route_404_explains_server_mismatch() {
-        use std::io::{Read, Write};
+        use std::io::Write;
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 2048];
-            let _ = stream.read(&mut request).unwrap();
+            read_whole_request(&mut stream);
             stream
                 .write_all(
                     b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -4528,15 +4556,14 @@ mod tests {
     /// tool result while preserving the legacy shape for a complete response.
     #[test]
     fn hs2_9dv32q_http_checkout_query_reports_partial_and_truncated() {
-        use std::io::{Read, Write};
+        use std::io::Write;
 
         for (partial, truncated) in [(false, false), (true, false), (false, true), (true, true)] {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             let server = std::thread::spawn(move || {
                 let (mut stream, _) = listener.accept().unwrap();
-                let mut request = [0_u8; 2048];
-                let _ = stream.read(&mut request).unwrap();
+                read_whole_request(&mut stream);
                 let body = r#"[{"slug":"HS-ONE"}]"#;
                 write!(
                     stream,
