@@ -1050,51 +1050,88 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             };
         }
         // A free session of the target takes the work: idle ones before those that
-        // wait on a gate, which may be called back to their own ticket.
-        let free = sessions
-            .iter()
-            .enumerate()
-            .filter(|(index, session)| {
-                matches!(fates[*index], Fate::Free)
-                    // Work whose resources were not read is not handed to anyone.
-                    && (machine.is_some() || item.resources.is_empty())
-                    && session.target_id == item.target_id
-                    && item.tool.as_ref().is_none_or(|tool| tool == &session.tool)
-                    && item
-                        .model
-                        .as_ref()
-                        .is_none_or(|model| session.model.as_ref() == Some(model))
-            })
-            .min_by_key(|(_, session)| (std::cmp::Reverse(session.activity), &session.session_id))
-            .map(|(index, _)| index);
-        if let Some(index) = free {
+        // wait on a gate, which may be called back to their own ticket. HS2-TH53NN: the
+        // work's tool and model are preferences. A free session that has them takes it
+        // first; a new session of the preferred tool comes next; another free session
+        // of the target takes it only when the preferred tool cannot start.
+        let preferred = |session: &ScheduledSession| {
+            item.tool.as_ref().is_none_or(|tool| tool == &session.tool)
+                && item
+                    .model
+                    .as_ref()
+                    .is_none_or(|model| session.model.as_ref() == Some(model))
+        };
+        let free_where = |fates: &[Fate], wanted: bool| {
+            sessions
+                .iter()
+                .enumerate()
+                .filter(|(index, session)| {
+                    matches!(fates[*index], Fate::Free)
+                        // Work whose resources were not read is not handed to anyone.
+                        && (machine.is_some() || item.resources.is_empty())
+                        && session.target_id == item.target_id
+                        && preferred(session) == wanted
+                })
+                .min_by_key(|(_, session)| {
+                    (std::cmp::Reverse(session.activity), &session.session_id)
+                })
+                .map(|(index, _)| index)
+        };
+        if let Some(index) = free_where(&fates, true) {
             fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
             take!();
             continue;
         }
-        let selection = select(
-            &SelectionRequest {
-                policy,
-                target_id: &item.target_id,
-                tool: item.tool.as_deref(),
-                model: item.model.as_deref(),
-                entries: input.tool_entries,
-                load: &load,
-                now_ms: now,
-            },
-            support,
-        );
+        let other_free = free_where(&fates, false);
+        // A blocked start falls back to another free session of the target.
+        macro_rules! blocked {
+            ($reason:expr, $detail:expr, $retry:expr $(,)?) => {{
+                if let Some(index) = other_free {
+                    fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
+                    take!();
+                } else {
+                    skip($reason, $detail, $retry);
+                }
+                continue;
+            }};
+        }
+        let selection_for = |tool: Option<&str>, model: Option<&str>| {
+            select(
+                &SelectionRequest {
+                    policy,
+                    target_id: &item.target_id,
+                    tool,
+                    model,
+                    entries: input.tool_entries,
+                    load: &load,
+                    now_ms: now,
+                },
+                support,
+            )
+        };
+        let mut selection = selection_for(item.tool.as_deref(), item.model.as_deref());
+        // HS2-TH53NN: a preferred tool or model that leaves nothing to start on is a
+        // preference, not a requirement: any allowed tool account takes the work.
+        if selection.denied.is_none()
+            && selection.candidates.is_empty()
+            && (item.tool.is_some() || item.model.is_some())
+        {
+            if let Some(index) = other_free {
+                fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
+                take!();
+                continue;
+            }
+            selection = selection_for(None, None);
+        }
         if let Some(denied) = selection.denied {
-            skip(Blocker::PolicyDenied, Some(denied.into()), None);
-            continue;
+            blocked!(Blocker::PolicyDenied, Some(denied.into()), None);
         }
         let Some(target) = policy.target(&item.target_id) else {
-            skip(
+            blocked!(
                 Blocker::PolicyDenied,
                 Some(PolicyDenial::TargetNotPermitted.code().into()),
                 None,
             );
-            continue;
         };
         let target_sessions = on_target.get(item.target_id.as_str()).copied().unwrap_or(0)
             + planned_target
@@ -1102,8 +1139,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 .copied()
                 .unwrap_or(0);
         if target_sessions >= target.max_sessions {
-            skip(Blocker::TargetCap, None, None);
-            continue;
+            blocked!(Blocker::TargetCap, None, None);
         }
         // What the policy and the target's cap say stands until a person changes it;
         // a refusal or a cooldown only postpones, so those are named after.
@@ -1118,12 +1154,10 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             let evented = input.capacity_streams.contains(&item.target_id)
                 && reason.as_deref().is_some_and(is_capacity_refusal);
             if evented {
-                skip(Blocker::RefusalBackoff, reason, None);
-            } else {
-                earliest(&mut retry_at, until, now);
-                skip(Blocker::RefusalBackoff, reason, Some(until));
+                blocked!(Blocker::RefusalBackoff, reason, None);
             }
-            continue;
+            earliest(&mut retry_at, until, now);
+            blocked!(Blocker::RefusalBackoff, reason, Some(until));
         }
         if let Some(until) = remembered
             .and_then(|entry| entry.last_wound_down_at_ms)
@@ -1131,15 +1165,14 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .filter(|until| *until > now)
         {
             earliest(&mut retry_at, until, now);
-            skip(Blocker::Cooldown, None, Some(until));
-            continue;
+            blocked!(Blocker::Cooldown, None, Some(until));
         }
         let state = input
             .targets
             .iter()
             .find(|state| state.target_id == item.target_id);
         let Some(snapshot) = state.and_then(|state| state.capacity.as_ref()) else {
-            skip(
+            blocked!(
                 Blocker::TargetUnavailable,
                 Some(
                     state
@@ -1148,7 +1181,6 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 ),
                 None,
             );
-            continue;
         };
         let limits = policy.machine_limits(&item.target_id);
         let on_machine = planned_machine
@@ -1166,13 +1198,31 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 nearest.get_or_insert((Blocker::NoTool, "probe_in_flight".into(), None));
                 continue;
             }
-            let model = item.model.clone().or_else(|| {
-                target
-                    .tools
-                    .iter()
-                    .find(|scope| scope.tool == candidate.tool)
-                    .and_then(|scope| scope.models.first().cloned())
-            });
+            // HS2-TH53NN: the preferred model goes with the preferred tool (or with any
+            // tool when none is preferred); another tool uses its own first model.
+            let model = item
+                .model
+                .clone()
+                .filter(|_| {
+                    item.tool
+                        .as_ref()
+                        .is_none_or(|tool| tool == &candidate.tool)
+                        && target.tools.iter().any(|scope| {
+                            scope.tool == candidate.tool
+                                && (scope.models.is_empty()
+                                    || item
+                                        .model
+                                        .as_ref()
+                                        .is_some_and(|m| scope.models.contains(m)))
+                        })
+                })
+                .or_else(|| {
+                    target
+                        .tools
+                        .iter()
+                        .find(|scope| scope.tool == candidate.tool)
+                        .and_then(|scope| scope.models.first().cloned())
+                });
             let admission = decide_admission(
                 snapshot,
                 &AdmissionConfig::default(),
@@ -1228,6 +1278,21 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             skip(reason, Some(detail), retry);
             continue;
         };
+        // HS2-TH53NN: a start of another tool than the preferred one is no better than
+        // a free session of the target that is already running.
+        if let Some(index) = other_free.filter(|_| {
+            item.tool
+                .as_ref()
+                .is_some_and(|tool| tool != &candidate.tool)
+                || item
+                    .model
+                    .as_ref()
+                    .is_some_and(|wanted| model.as_ref() != Some(wanted))
+        }) {
+            fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
+            take!();
+            continue;
+        }
         let account = candidate.account.as_deref();
         starts.push(Placement {
             action: A::Start,

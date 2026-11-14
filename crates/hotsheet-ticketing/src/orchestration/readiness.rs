@@ -101,9 +101,13 @@ pub struct PlanStep {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceNeed>,
     /// HS2-HCW7MD: the AI tool the planner would prefer for this work, by plugin id.
-    /// A preference only: carrying it into the scheduler is HS2-TH53NN.
+    /// A preference only: the scheduler tries it first (HS2-TH53NN).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
+    /// HS2-TH53NN: the model preferred for this work, with `tool` or any tool that
+    /// offers it. A preference only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// Starts at 1 and grows with every changed definition.
     pub revision: u32,
     pub created_at_ms: u64,
@@ -121,6 +125,8 @@ pub struct NewPlanStep {
     pub resources: Vec<ResourceNeed>,
     /// HS2-HCW7MD: the preferred AI tool, if any.
     pub tool: Option<String>,
+    /// HS2-TH53NN: the preferred model, if any.
+    pub model: Option<String>,
 }
 
 /// A target ticket as of one successful read. Codes and identifiers only.
@@ -837,6 +843,7 @@ impl PlanRegistry {
                 if step.prerequisites == new.prerequisites
                     && step.resources == new.resources
                     && step.tool == new.tool
+                    && step.model == new.model
                 {
                     let step = step.clone();
                     let mut seen = false;
@@ -851,6 +858,7 @@ impl PlanRegistry {
                 step.prerequisites = new.prerequisites;
                 step.resources = new.resources;
                 step.tool = new.tool;
+                step.model = new.model;
                 step.revision = step.revision.saturating_add(1);
                 step.updated_at_ms = now_ms;
                 step.updated_by = actor_id;
@@ -874,6 +882,7 @@ impl PlanRegistry {
                     prerequisites: new.prerequisites,
                     resources: new.resources,
                     tool: new.tool,
+                    model: new.model,
                     revision: 1,
                     created_at_ms: now_ms,
                     updated_at_ms: now_ms,
@@ -1124,6 +1133,9 @@ fn validate_step(step: &PlanStep) -> Result<(), OrchestrationError> {
     validate_needs(&step.resources, MAX_STEP_RESOURCES)?;
     if let Some(tool) = &step.tool {
         valid_identifier(tool)?;
+    }
+    if let Some(model) = &step.model {
+        super::actions::valid_model(model)?;
     }
     if step.prerequisites.len() > MAX_STEP_PLAN_PREREQUISITES {
         return Err(OrchestrationError::Invalid(

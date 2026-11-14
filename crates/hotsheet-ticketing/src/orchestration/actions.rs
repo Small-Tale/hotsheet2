@@ -197,6 +197,11 @@ impl AccessDecision {
     }
 }
 
+/// HS2-TH53NN: a model name as every orchestration record accepts it.
+pub fn validate_model_name(model: &str) -> Result<(), OrchestrationError> {
+    valid_model(model)
+}
+
 pub(crate) fn valid_model(model: &str) -> Result<(), OrchestrationError> {
     if !bounded_text(model, 128) || model.chars().any(char::is_whitespace) {
         return Err(OrchestrationError::Invalid("bounded model name required"));

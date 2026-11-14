@@ -1884,3 +1884,101 @@ fn hs2_awb7bx_a_policy_change_lifts_every_capacity_refusal_of_the_owner() {
     assert_eq!(left[0].target_id, target(2));
     assert!(!store.lift_capacity_refusals(owner).unwrap());
 }
+
+/// HS2-TH53NN: a plan step's preferred tool and model are preferences. Selection tries
+/// them first; one that leaves nothing to start on falls back to any allowed tool; the
+/// preferred model goes with the preferred tool only; a free session that has them
+/// takes the work first, and any other free session of the target otherwise.
+#[test]
+fn hs2_th53nn_a_preferred_tool_and_model_are_tried_first_and_never_required() {
+    let models = |world: &mut World, tool: &str, list: &[&str]| {
+        world.policy.targets[0]
+            .tools
+            .iter_mut()
+            .find(|scope| scope.tool == tool)
+            .unwrap()
+            .models = list.iter().map(|model| (*model).into()).collect();
+    };
+    let started = |schedule: &Schedule| {
+        schedule
+            .placements
+            .iter()
+            .filter(|placement| placement.action == PlacementAction::Start)
+            .map(|placement| (placement.tool.clone(), placement.model.clone()))
+            .collect::<Vec<_>>()
+    };
+    let mut world = World::new(&[(1, 2)]);
+    models(&mut world, "alpha", &["a-1", "a-2"]);
+    models(&mut world, "beta", &["b-1", "b-2"]);
+    world.work = vec![work(1, 1)];
+    // No preference: the policy's preferred tool and its first model.
+    assert_eq!(
+        started(&world.now()),
+        [("alpha".into(), Some("a-1".into()))]
+    );
+    // A preferred tool and model the target allows.
+    world.work[0].tool = Some("beta".into());
+    world.work[0].model = Some("b-2".into());
+    assert_eq!(started(&world.now()), [("beta".into(), Some("b-2".into()))]);
+    // The preferred tool is limited: another tool takes it, with its own first model.
+    world.tools = vec![healthy().remove(0), limited("beta", T0 + HOUR)];
+    assert_eq!(
+        started(&world.now()),
+        [("alpha".into(), Some("a-1".into()))]
+    );
+    world.tools = healthy();
+    // A model no allowed tool offers falls back to any allowed tool account.
+    world.work[0].tool = None;
+    world.work[0].model = Some("unknown-model".into());
+    assert_eq!(
+        started(&world.now()),
+        [("alpha".into(), Some("a-1".into()))]
+    );
+    // A model alone, offered by one tool, picks that model where it is listed.
+    world.work[0].model = Some("b-1".into());
+    let alone = started(&world.now());
+    assert!(
+        alone == [("beta".into(), Some("b-1".into()))]
+            || alone == [("alpha".into(), Some("a-1".into()))],
+        "{alone:?}"
+    );
+    // Repeated passes decide the same.
+    world.work[0].tool = Some("beta".into());
+    world.work[0].model = Some("b-2".into());
+    for _ in 0..3 {
+        assert_eq!(started(&world.now()), [("beta".into(), Some("b-2".into()))]);
+    }
+
+    // Refill: a free session with the preferred tool takes the work before another.
+    let mut world = World::new(&[(1, 2)]);
+    world.work = vec![work(1, 1)];
+    world.work[0].tool = Some("beta".into());
+    let mut other = session("s-alpha", 1, SessionActivity::Idle);
+    other.tool = "alpha".into();
+    let mut wanted = session("s-beta", 1, SessionActivity::Idle);
+    wanted.tool = "beta".into();
+    world.sessions = vec![other.clone(), wanted];
+    let refilled = world.now();
+    assert_eq!(fate(&refilled, "s-beta"), ("keep", "refill"));
+    assert!(starts(&refilled).is_empty());
+    // Only a session of another tool is free: with room, the preferred tool starts.
+    world.sessions = vec![other];
+    let started_beta = world.now();
+    assert_eq!(starts(&started_beta), vec![(id(1), "beta".into())]);
+    // At the target's cap, the free session of another tool takes it instead.
+    world.policy.targets[0].max_sessions = 1;
+    let refilled = world.now();
+    assert_eq!(fate(&refilled, "s-alpha"), ("keep", "refill"));
+    assert!(starts(&refilled).is_empty());
+    // The preferred tool limited, no other candidate left after the fallback: the
+    // free session takes it rather than a second start.
+    world.policy.targets[0].max_sessions = 2;
+    world.tools = vec![healthy().remove(0), limited("beta", T0 + HOUR)];
+    let limited_beta = world.now();
+    assert_eq!(fate(&limited_beta, "s-alpha"), ("keep", "refill"));
+    assert!(starts(&limited_beta).is_empty());
+    // Empty, then refilled: nothing free, the preferred tool starts again.
+    world.tools = healthy();
+    world.sessions.clear();
+    assert_eq!(starts(&world.now()), vec![(id(1), "beta".into())]);
+}

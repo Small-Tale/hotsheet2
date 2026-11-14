@@ -35,7 +35,9 @@ mod tool_capacity;
 mod validation;
 mod workflow;
 
-pub use actions::{AccessDecision, AccessRequest, DenialReason, SessionRequest, TargetAction};
+pub use actions::{
+    AccessDecision, AccessRequest, DenialReason, SessionRequest, TargetAction, validate_model_name,
+};
 pub use assignment::{
     AssignmentDecision, AssignmentInput, AssignmentState, DEFAULT_DISPATCHER_WAIT_MINUTES,
     decide_assignment,

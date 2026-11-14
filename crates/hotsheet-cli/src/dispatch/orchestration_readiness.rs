@@ -59,10 +59,14 @@ enum ReadinessCmd {
         /// start the work while someone holds it and never claims it itself.
         #[arg(long = "resource")]
         resources: Vec<String>,
-        /// HS2-HCW7MD: the AI tool preferred for this work, by plugin id. Recorded
-        /// with the step; the scheduler does not read it yet (HS2-TH53NN).
+        /// HS2-HCW7MD: the AI tool preferred for this work, by plugin id. The
+        /// scheduler tries it first; another allowed tool takes the work when it
+        /// cannot start (HS2-TH53NN).
         #[arg(long)]
         tool: Option<String>,
+        /// HS2-TH53NN: the model preferred for this work, a preference like `--tool`.
+        #[arg(long)]
+        model: Option<String>,
     },
     /// One step's level and the reason for each prerequisite that does not hold.
     /// Answers from this machine's records and contacts nothing.
@@ -125,6 +129,7 @@ pub(super) fn route(
             prerequisites,
             resources,
             tool,
+            model,
         } => {
             let mut needs = Vec::new();
             for spec in &resources {
@@ -154,7 +159,7 @@ pub(super) fn route(
                 format!("{base}/define"),
                 json!({"ticket": {"connection_id": source, "native_id": ticket},
                     "target_id": target, "connection_id": connection, "native_id": id,
-                    "prerequisites": all, "resources": needs, "tool": tool}),
+                    "prerequisites": all, "resources": needs, "tool": tool, "model": model}),
             )
         }
         ReadinessCmd::Show { step_id } => {

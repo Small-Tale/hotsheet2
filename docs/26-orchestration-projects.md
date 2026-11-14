@@ -2748,8 +2748,21 @@ contacted and its work reads `target_unavailable` (`actor_required`). A target w
 machine cannot be read gets no session: nothing is assumed in a snapshot's place.
 
 The resources work names are those its plan step declares and those the policy
-requires of its target (§26.20). A due date, a milestone date and a preferred tool
-or model are inputs of the core that a plan step does not carry yet (HS2-TH53NN).
+requires of its target (§26.20).
+
+**Preferred tool and model (HS2-TH53NN).** A plan step's optional `tool` and `model`
+(§26.25) reach the work as preferences, never as requirements:
+
+- A free session of the target that has them takes the work first.
+- Otherwise a new session of the preferred tool starts.
+- When the preferred tool cannot start (limited, capped, not installed, or the
+  preferred model offered by no allowed tool), another free session of the target
+  takes the work. With none free, any allowed tool account does.
+- The preferred model goes only with the preferred tool, or with any tool when no tool
+  is preferred and that tool offers it. Another tool uses its own first listed model.
+
+A due date and a milestone date are inputs of the core that no ticket provider
+supplies yet: no provider exposes a due date and milestones do not exist (HS2-QY5YRN).
 
 ### Policy section
 
@@ -4331,10 +4344,11 @@ Re-proposing is idempotent by goal ticket and target ticket: target tickets by t
 create operation id and the goal's links, steps by the one-step-per-target-ticket
 rule of §26.15.
 
-**Preferred tool.** A plan step has an optional `tool` (a plugin id), set by
-`readiness define --tool` and shown with the step. Changing it is a new revision; the
-same definition again changes nothing. The scheduler does not read it yet: carrying it
-into placement is HS2-TH53NN.
+**Preferred tool and model.** A plan step has an optional `tool` (a plugin id) and,
+since HS2-TH53NN, an optional `model`, set by `readiness define --tool --model` (MCP
+`readiness_define` `tool`, `model`) and shown with the step and in the ready work.
+Changing either is a new revision; the same definition again changes nothing. The
+scheduler tries them first (§26.17).
 
 **Permissions.** Every action the planner takes on a target goes through the gate of
 the operation it calls (§26.7): reading never asks, and an acting call no remembered

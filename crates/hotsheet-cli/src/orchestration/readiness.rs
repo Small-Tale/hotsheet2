@@ -64,10 +64,13 @@ pub struct DefinePlanStep {
     /// HS2-2FG91X: resources the session working the step must hold.
     #[serde(default)]
     pub resources: Vec<ResourceNeed>,
-    /// HS2-HCW7MD: the AI tool preferred for the work, by plugin id. A preference
-    /// recorded with the step; the scheduler does not read it yet (HS2-TH53NN).
+    /// HS2-HCW7MD: the AI tool preferred for the work, by plugin id. A preference the
+    /// scheduler tries first (HS2-TH53NN).
     #[serde(default)]
     pub tool: Option<String>,
+    /// HS2-TH53NN: the model preferred for the work. A preference.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -155,6 +158,11 @@ pub struct ReadyItem {
     /// policy opts in.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speculation: Option<ProvisionalStanding>,
+    /// HS2-TH53NN: the tool and model the plan step prefers, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// One audit entry of a plan change or an override.
@@ -489,6 +497,8 @@ impl OrchestrationRuntime {
                     .and_then(|record| record.facts.observed.as_ref());
                 ReadyItem {
                     step_id: step.step_id,
+                    tool: step.tool,
+                    model: step.model,
                     ticket: step.ticket,
                     resources: step.resources,
                     priority: read.and_then(|seen| seen.priority.clone()),
@@ -547,6 +557,9 @@ impl OrchestrationRuntime {
         validate_needs(&request.resources, MAX_STEP_RESOURCES)?;
         if let Some(tool) = &request.tool {
             identifier(tool, "bounded tool id required")?;
+        }
+        if let Some(model) = &request.model {
+            hotsheet_ticketing::orchestration::validate_model_name(model)?;
         }
         let (_, source_id, source_connection) =
             self.orchestration_store(owner_id, &request.ticket)?;
@@ -670,6 +683,7 @@ impl OrchestrationRuntime {
                     prerequisites,
                     resources: request.resources.clone(),
                     tool: request.tool.clone(),
+                    model: request.model.clone(),
                 },
                 observed,
                 actor.and_then(|actor| actor.id.clone()),

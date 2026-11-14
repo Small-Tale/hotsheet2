@@ -38,6 +38,7 @@ fn ci(target: &RunTarget) -> Prerequisite {
 }
 fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> PlanStep {
     PlanStep {
+        model: None,
         step_id: id(number),
         owner_checkout_id: "owner-0123456789ab".into(),
         ticket: RunTicket {

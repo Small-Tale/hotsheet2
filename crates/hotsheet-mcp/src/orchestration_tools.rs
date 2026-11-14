@@ -11,9 +11,9 @@ pub(crate) fn definition() -> Value {
         "step_id":{"type":"string","description":"validation_evidence/validation_run/validation_remove/validation_cancel: the step's name within its orchestration ticket; readiness_show/readiness_remove/readiness_reopen (required), readiness_refresh (optional): the plan step's id; scheduler_explain: the plan step to explain, instead of target_id, connection_id and native_id"},
         "prerequisites":{"type":"array","maxItems":16,"items":{"type":"object"},"description":"readiness_define: what must hold first, each {kind:ticket,target_id,connection_id,native_id,gates?,commit?} or {kind:validation,step_id,ticket?}"},
         "override_readiness":{"type":"boolean","description":"run_dispatch: start this operation although its plan step is not ready; from an AI actor it asks a person on the orchestration ticket and answers decision_required until they respond"},
-        "tool":{"type":"string","description":"tool_select: the preferred tool id; omit for any tool the target allows; admission_check: the AI tool a session would run; session_start: the AI tool to launch; plan_propose (required): the AI tool the planner runs in; readiness_define: the AI tool preferred for the step's work"},
+        "tool":{"type":"string","description":"tool_select: the preferred tool id; omit for any tool the target allows; admission_check: the AI tool a session would run; session_start: the AI tool to launch; plan_propose (required): the AI tool the planner runs in; readiness_define: the AI tool preferred for the step's work, which the scheduler tries first (HS2-TH53NN)"},
         "goal":{"type":"object","description":"plan_propose: plan only this goal ticket of the orchestration project, {native_id, connection_id?}; omit for every open goal ticket"},
-        "model":{"type":"string","description":"tool_select: the model the session would use, checked against the target's model list; admission_check/session_start: optional model"},
+        "model":{"type":"string","description":"tool_select: the model the session would use, checked against the target's model list; admission_check/session_start: optional model; readiness_define: the model preferred for the step's work (HS2-TH53NN)"},
         "effort":{"type":"string","description":"session_start/plan_propose: optional effort level the tool's plugin declares"},
         "account":{"type":"string","description":"session_start: the tool account, required when the policy configures accounts for the tool"},
         "session_role":{"type":"string","enum":["worker","dispatcher","integrator"],"description":"session_start: the part the session plays in the target's role model (default worker)"},
@@ -742,6 +742,8 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
                 "resources",
                 // HS2-HCW7MD: the preferred AI tool of the step.
                 "tool",
+                // HS2-TH53NN: and its preferred model.
+                "model",
             ],
             "show" | "remove" | "refresh" => &["step_id"],
             "plan" | "ready" | "speculation" => &[],
@@ -1592,6 +1594,30 @@ mod tests {
         }
         assert!(backend.0.lock_or_recover().is_empty());
     }
+    /// HS2-TH53NN: a definition forwards the preferred tool and model; a plan read does
+    /// not.
+    #[test]
+    fn hs2_th53nn_readiness_define_forwards_the_preferred_tool_and_model() {
+        let backend = Recorded(Mutex::new(Vec::new()));
+        let owner = "owner-0123456789ab";
+        let target = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let ticket = json!({"native_id":"OWN-ABC123"});
+        for arguments in [
+            json!({"action":"readiness_define","target_id":target,"ticket":ticket,
+                "connection_id":"tickets","native_id":"TGT-2","tool":"codex","model":"gpt-5-codex"}),
+            json!({"action":"readiness_plan","tool":"codex","model":"gpt-5-codex"}),
+        ] {
+            let mut arguments = arguments;
+            arguments["actor_role"] = json!("ai");
+            arguments["actor_id"] = json!("scheduler-1");
+            call(&backend, owner, arguments);
+        }
+        let recorded = backend.0.lock_or_recover();
+        assert_eq!(recorded[0].2["tool"], "codex");
+        assert_eq!(recorded[0].2["model"], "gpt-5-codex");
+        assert!(recorded[1].2.get("model").is_none() && recorded[1].2.get("tool").is_none());
+    }
+
     #[test]
     fn hs2_2fg91x_readiness_define_forwards_resources_and_the_schema_names_them() {
         let backend = Recorded(Mutex::new(Vec::new()));

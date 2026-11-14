@@ -55,6 +55,7 @@ fn validated(step: &str) -> Prerequisite {
 }
 fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> PlanStep {
     PlanStep {
+        model: None,
         step_id: id(number),
         owner_checkout_id: OWNER.into(),
         ticket: orchestration_ticket(),
@@ -956,6 +957,7 @@ impl Fixture {
         self.registry.define(
             owner,
             NewPlanStep {
+                model: None,
                 ticket: orchestration_ticket(),
                 target: target.clone(),
                 prerequisites,
@@ -1024,6 +1026,7 @@ fn hs2_42tara_define_is_idempotent_revises_on_change_and_validates() {
     let conflict = fixture.registry.define(
         OWNER,
         NewPlanStep {
+            model: None,
             ticket: RunTicket {
                 connection_id: "plan".into(),
                 native_id: id(901),
@@ -1442,6 +1445,7 @@ fn hs2_e7hr4r_a_definition_and_its_reads_are_one_write() {
         unreachable: Some(None),
     };
     let new = |target: &RunTarget, prerequisites| NewPlanStep {
+        model: None,
         ticket: orchestration_ticket(),
         target: target.clone(),
         prerequisites,
@@ -1520,4 +1524,68 @@ fn hs2_e7hr4r_a_definition_and_its_reads_are_one_write() {
         step.revision
     );
     assert_eq!(facts(&fixture, &a), Some(("completed".into(), 20)));
+}
+
+/// HS2-TH53NN: a plan step keeps a preferred tool and model. Defining it again with the
+/// same preferences changes nothing; a changed, added or removed model is a new revision
+/// in any order; a model that is not a bounded name is refused.
+#[test]
+fn hs2_th53nn_a_plan_step_keeps_its_preferred_tool_and_model() {
+    let mut fixture = Fixture::new();
+    let target = ticket(1, "T-1");
+    let mut define = |tool: Option<&str>, model: Option<&str>| {
+        fixture.clock.0.set(fixture.clock.0.get() + 1);
+        fixture.registry.define(
+            OWNER,
+            NewPlanStep {
+                ticket: orchestration_ticket(),
+                target: target.clone(),
+                prerequisites: Vec::new(),
+                resources: Vec::new(),
+                tool: tool.map(Into::into),
+                model: model.map(Into::into),
+            },
+            Some("worker-1".into()),
+            &mut Transaction {
+                clock: &fixture.clock,
+                rng: &mut fixture.rng,
+            },
+        )
+    };
+    let (first, created) = define(Some("codex"), Some("gpt-5-codex")).unwrap();
+    assert!(created);
+    assert_eq!(
+        (
+            first.tool.as_deref(),
+            first.model.as_deref(),
+            first.revision
+        ),
+        (Some("codex"), Some("gpt-5-codex"), 1)
+    );
+    let (same, changed) = define(Some("codex"), Some("gpt-5-codex")).unwrap();
+    assert!(!changed && same.revision == 1);
+    let mut revision = 1;
+    for (tool, model) in [
+        (Some("codex"), Some("gpt-5")),
+        (Some("codex"), None),
+        (None, Some("gpt-5")),
+        (Some("codex"), Some("gpt-5-codex")),
+    ] {
+        let (step, changed) = define(tool, model).unwrap();
+        revision += 1;
+        assert!(changed);
+        assert_eq!(
+            (step.tool.as_deref(), step.model.as_deref(), step.revision),
+            (tool, model, revision)
+        );
+    }
+    for bad in ["has space", ""] {
+        assert!(matches!(
+            define(Some("codex"), Some(bad)),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    // Stored and read back as written; an absent model is left out.
+    let wire = serde_json::to_value(define(Some("codex"), None).unwrap().0).unwrap();
+    assert!(wire.get("model").is_none());
 }

@@ -153,7 +153,12 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         arguments.extend_from_slice(extra);
         readiness(&arguments)
     };
-    let step_a = define(&first.slug, &[]);
+    // HS2-TH53NN: the CLI records a preferred tool and model with the step.
+    let step_a = define(&first.slug, &["--tool", "codex", "--model", "gpt-5-codex"]);
+    assert_eq!(
+        (&step_a["step"]["tool"], &step_a["step"]["model"]),
+        (&json!("codex"), &json!("gpt-5-codex"))
+    );
     assert_eq!(step_a["level"], "confirmed");
     assert_eq!(step_a["step"]["target"]["native_id"], first.id.to_string());
     let requirement = format!("{TARGET}/{connection}:{}", first.slug);

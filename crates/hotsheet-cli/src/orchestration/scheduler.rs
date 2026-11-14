@@ -378,14 +378,14 @@ impl OrchestrationRuntime {
                 },
                 priority: item.priority,
                 up_next: item.up_next.unwrap_or(false),
-                // Due dates, milestones and a preferred tool are not in a plan step
-                // yet (HS2-TH53NN).
+                // No ticket provider exposes a due or milestone date yet (HS2-QY5YRN).
                 due_at_ms: None,
                 unblocks: u32::try_from(item.unblocks.len()).unwrap_or(u32::MAX),
                 ready_since_ms: item.ready_since_ms,
                 created_at_ms: item.ticket_created_at_ms,
-                tool: None,
-                model: None,
+                // HS2-TH53NN: the plan step's preferences, tried first.
+                tool: item.tool,
+                model: item.model,
                 // HS2-2FG91X: the step's own; the policy's are added per target.
                 resources: item.resources,
                 // HS2-JSF985: decided once the involved targets were read.
@@ -433,8 +433,9 @@ impl OrchestrationRuntime {
                 red_gate_stack: 0,
                 ready_since_ms: Some(run.created_at_ms),
                 created_at_ms: None,
-                tool: None,
-                model: None,
+                // HS2-TH53NN: the plan step's preferences, tried first.
+                tool: step.tool,
+                model: step.model,
                 resources: step.resources,
                 // HS2-JSF985: an orphaned run's step is placed as confirmed work.
                 speculation: None,

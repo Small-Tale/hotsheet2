@@ -21624,13 +21624,19 @@ components:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
         tool:
           description:
-            "`define` only (HS2-HCW7MD). The AI tool preferred for the step's work, by plugin id. Recorded with the step;
-            the scheduler does not read it yet (HS2-TH53NN)."
+            "`define` only (HS2-HCW7MD). The AI tool preferred for the step's work, by plugin id. The scheduler tries
+            it first (HS2-TH53NN)."
           type:
             - string
             - 'null'
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+        model:
+          description: "`define` only (HS2-TH53NN). The model preferred for the step's work; a preference."
+          type:
+            - string
+            - 'null'
+          maxLength: 128
         step_id:
           type:
             - string
@@ -21739,6 +21745,9 @@ components:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
         tool:
           description: The AI tool preferred for the step's work, by plugin id (HS2-HCW7MD).
+          type: string
+        model:
+          description: The model preferred for the step's work (HS2-TH53NN).
           type: string
         revision:
           type: integer
@@ -21918,6 +21927,12 @@ components:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
         speculation:
           $ref: '#/components/schemas/ProvisionalStanding'
+        tool:
+          description: The tool the plan step prefers, which the scheduler tries first (HS2-TH53NN).
+          type: string
+        model:
+          description: The model the plan step prefers (HS2-TH53NN).
+          type: string
       additionalProperties: false
     OrchestrationSessionRole:
       description:

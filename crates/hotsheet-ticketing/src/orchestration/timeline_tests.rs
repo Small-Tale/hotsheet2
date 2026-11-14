@@ -45,6 +45,7 @@ fn step(n: u128, level: ReadinessLevel, after: &[u128]) -> TimelineStep {
     TimelineStep {
         readiness: StepReadiness {
             step: PlanStep {
+                model: None,
                 step_id: format!("step-{n}"),
                 owner_checkout_id: OWNER.into(),
                 ticket: RunTicket {

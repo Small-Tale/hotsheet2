@@ -3667,6 +3667,14 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   halts and resumes to a running router and reads the recorded capacity.
 - `remote_servers/tool_capacity.rs` uses the owned CLI process, the authenticated
   service and the stdio MCP tool on one machine-local registry.
+- HS2-TH53NN: `scheduler_tests.rs # hs2_th53nn` places a preferred tool and model
+  first and never requires them (a limited preferred tool, a model no tool offers, a
+  model alone, refill of a preferred session, a start before another tool's free
+  session, that session at the cap and when the preferred tool is limited, repeated and
+  empty-then-refill passes); `readiness_tests.rs # hs2_th53nn` keeps them on the step
+  with revisions; `tests/scheduler.rs # hs2_th53nn` sees them reach a placed start;
+  `orchestration_tools.rs # hs2_th53nn` forwards them; `remote_servers/readiness.rs`
+  records them through the CLI.
 - HS2-2EKDSM: `orchestration_settings_watch.rs # hs2_2ekdsm` counts changes in flight
   per owner through overlapping, repeated and out-of-order ends; the real-server
   `hs2_shhgc6` test passed 12 of 12 with six copies running at once.

@@ -2153,3 +2153,53 @@ fn hs2_ah8crs_the_scheduler_acts_on_reconciliation_dispositions() {
         1
     );
 }
+
+/// HS2-TH53NN: a plan step's preferred tool and model reach the scheduler's work, and
+/// a placed start uses them; without them the policy's preferred tool starts.
+#[test]
+fn hs2_th53nn_a_planned_tool_and_model_reach_the_placed_start() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let ticket = ops::create(
+        &s.m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: "Prefers claude".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    s.m.runtime
+        .readiness_define(
+            &s.owner(),
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": s.m.owner_connection(),
+                    "native_id": s.orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": s.m.target_connection(),
+                "native_id": ticket.slug, "prerequisites": [],
+                "tool": "claude", "model": "synthetic-model",
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let ready = s.m.runtime.ready_work(&s.owner(), &mut tx).unwrap();
+    assert_eq!(
+        (ready[0].tool.as_deref(), ready[0].model.as_deref()),
+        (Some("claude"), Some("synthetic-model"))
+    );
+    set_policy(&s.m, policy(true), &mut tx);
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let [SessionCall::Start(request)] = &s.sessions.calls()[..] else {
+        panic!("one start");
+    };
+    // The policy prefers codex; the plan step's preference wins.
+    assert_eq!(
+        (request.tool.as_str(), request.model.as_deref()),
+        ("claude", Some("synthetic-model"))
+    );
+}
