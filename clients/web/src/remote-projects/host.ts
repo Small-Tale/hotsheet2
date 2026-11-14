@@ -86,8 +86,9 @@ export function normalizeRemoteAddress(value: string): string {
   } catch {
     throw new Error('Enter an explicit HTTP or HTTPS server address.');
   }
+  // HS2-H4REBS: the port may be omitted (`https://host.ts.net` is 443); the origin drops a default port.
   if (
-    !/^https?:\/\/(?:\[[^\]]+\]|[^/:?#]+):[0-9]{1,5}$/.test(value) ||
+    !/^https?:\/\/(?:\[[^\]]+\]|[^/:?#]+)(?::[0-9]{1,5})?\/?$/.test(value) ||
     !['http:', 'https:'].includes(parsed.protocol) ||
     !parsed.hostname ||
     parsed.username ||
@@ -96,7 +97,7 @@ export function normalizeRemoteAddress(value: string): string {
     parsed.search ||
     parsed.hash
   )
-    throw new Error('Use an explicit protocol, host, and port without a path or credentials.');
+    throw new Error('Use a protocol and host, with an optional port, and no path or credentials.');
   return parsed.origin;
 }
 
@@ -221,16 +222,11 @@ export async function beginRemotePairing(
     : undefined;
   if (reviewId && !review) throw new Error('The server binding is no longer approved.');
   const tls = await readTlsFiles(tlsFiles);
-  if (origin.startsWith('https:') && !tls.ca_pem)
-    throw new Error('Select the host CA certificate before pairing over HTTPS.');
-  const identity = await remoteJson<{ generation: string; protocol: number; server_id: string }>(
-    origin,
-    '/remote-identity',
-    {},
-    tls,
-  );
-  if (identity.generation !== 'hs2' || identity.protocol !== 1 || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(identity.server_id))
-    throw new Error('This server is not a compatible Hot Sheet 2 peer.');
+  // Without a CA path the peer must present a publicly trusted certificate, such as a Tailscale
+  // Serve name; a CA path pins its private authority instead (HS2-H4REBS).
+  // The pairing answer names the server it came from. `/remote-identity` stays behind
+  // authentication (docs/08 §8.2.1): the CLI's registration reads it with the approved session and
+  // refuses a peer whose authenticated id differs from this one (HS2-H4REBS).
   const pairing = await remoteJson<{ id: string; challenge: string; server_id: string; expires_at: number }>(
     origin,
     '/remote-auth/pair',
@@ -241,21 +237,26 @@ export async function beginRemotePairing(
     },
     tls,
   );
-  if (pairing.server_id !== identity.server_id || !pairing.id || !pairing.challenge)
-    throw new Error('The remote server identity changed during pairing.');
+  if (
+    typeof pairing.server_id !== 'string' ||
+    !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(pairing.server_id) ||
+    !pairing.id ||
+    !pairing.challenge
+  )
+    throw new Error('This server is not a compatible Hot Sheet 2 peer.');
   const handle = randomUUID();
   pendingPairs.set(handle, {
     origin,
     browserOrigin,
     label,
     id: pairing.id,
-    expectedServerId: identity.server_id,
+    expectedServerId: pairing.server_id,
     challenge: pairing.challenge,
     expiresAt: pairing.expires_at,
     tls,
     review,
   });
-  return { handle, approvalId: pairing.id, serverId: identity.server_id, origin, label };
+  return { handle, approvalId: pairing.id, serverId: pairing.server_id, origin, label };
 }
 
 export async function finishRemotePairing(handle: string) {

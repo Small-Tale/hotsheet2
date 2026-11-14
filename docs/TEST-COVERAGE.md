@@ -82,6 +82,17 @@ and unpaired origins, a missing CSRF cookie, or a dead session;
 `remote-auth-server-integration.test.ts` repeats the proxied open against the real
 server's paired origin.
 
+HS2-H4REBS: `clients/web/src/remote-projects/host.test.ts` accepts an address without a port, refuses
+paths and credentials, and pairs over HTTPS without a CA or a pre-session identity read.
+`clients/web/src/peer-gateway.test.ts` pins the gateway prefixes to the Rust router, forwards a
+remote-mode peer request with its own session while stripping a smuggled secret, stays out of
+local mode and application paths, and relays a real WebSocket. Rust
+`remote_servers::tests::hs2_h4rebs_*` (ticketing and CLI) cover unpinned HTTPS trust, the
+registry invariant, and public versus pinned roots. The live `remote-auth-server-integration.test.ts` case (`HOTSHEET_LIVE_SERVER=1`, local only) pairs,
+approves and redeems through the real gateway, then reads the authenticated identity and checkouts;
+it stops before CLI registration, which uses the OS keychain. Manual: pair with a second
+machine behind Tailscale Serve.
+
 HS2-HBM3JN: `clients/web/src/remote-auth-bridge.test.ts` admits a local-grant session to
 the remote-mode `/__hotsheet/remotes` registry. Plain, admin-only, cookieless, and rejected
 sessions get 404, and a missing or foreign Origin gets 403.

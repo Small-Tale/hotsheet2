@@ -36,6 +36,7 @@ import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
+import { installPeerWebSocketGateway, peerGateway } from './peer-gateway';
 import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV, remoteBrowserAuthRequired } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
@@ -266,6 +267,7 @@ export function createLocalHostApp(
   distRoot: string,
   bridge: Hono = createDevApp(true),
   desktopStorageDirectory = process.env.HOTSHEET_DESKTOP_STORAGE_DIRECTORY,
+  gateway: MiddlewareHandler = peerGateway(),
 ): Hono {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -275,6 +277,8 @@ export function createLocalHostApp(
   if (desktopStorageDirectory && !remoteBrowserAuthRequired())
     app.route('/', desktopStorageBridge(desktopStorageDirectory));
   app.route('/', bridge);
+  // A paired peer reaches this host's machine server through the same proxy (HS2-H4REBS).
+  app.use('*', gateway);
   app.use('*', async (context, next) => {
     await next();
     if (context.req.method === 'HEAD' || !context.res.headers.get('content-type')?.includes('text/html')) return;
@@ -308,6 +312,7 @@ export function startLocalHost({
     });
   const clientBuild = servedClientBuildId(distRoot);
   installProjectWebSocketBridge({ httpServer: server }, undefined, undefined, undefined, () => clientBuild);
+  installPeerWebSocketGateway(server);
   return new Promise((resolveListen, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {

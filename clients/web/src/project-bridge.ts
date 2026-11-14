@@ -1854,6 +1854,12 @@ export function remoteCsrfCookie(headers: Headers): string | undefined {
  * loopback bearer. A host in local browser mode is the trusted owner and authorizes device
  * management with its secret; a remote-mode host forwards only the browser's own session, which
  * the server accepts for device management only with the admin grant (HS2-DXM0YN). */
+/** This host's own machine server, which answers a paired peer through the gateway (HS2-H4REBS).
+ * Only the URL leaves here; the machine secret never does. */
+export async function bootstrapServerUrl(): Promise<string> {
+  return (await ensureServer(await bootstrapStore())).url;
+}
+
 export async function browserAuthRequest(path: string, request: Request, owner = false): Promise<Response> {
   const store = await bootstrapStore();
   const instance = await ensureServer(store);

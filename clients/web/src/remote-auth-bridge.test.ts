@@ -393,18 +393,18 @@ describe('HS2-85W6BE / HS2-DXM0YN session grants on a remote-mode bridge', () =>
   it('HS2-HBM3JN admits only a local-grant session to the cross-server desktop registry', async () => {
     for (const path of ['/__hotsheet/remotes', '/__hotsheet/remotes/pair', '/__hotsheet/remotes/synthetic/checkouts'])
       expect(remoteRouteKind(path), path).toBe('host');
-    // An address without a port fails before any network or CLI call, so the bridge answers with
+    // An address with a path fails before any network or CLI call, so the bridge answers with
     // its own readable JSON error. Before HS2-HBM3JN every remotes route was a plain-text 404 here.
     const pair = (target: ReturnType<typeof createDevApp>, headers: Record<string, string>) =>
       target.request(`${ORIGIN}/__hotsheet/remotes/pair`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...headers },
-        body: JSON.stringify({ address: 'https://synthetic.example', label: 'Synthetic' }),
+        body: JSON.stringify({ address: 'https://synthetic.example/path', label: 'Synthetic' }),
       });
     const local = await pair(app(grants({ local: true })).app, { cookie, origin: ORIGIN });
     expect(local.status).toBe(400);
     expect(await local.json()).toEqual({
-      error: 'Use an explicit protocol, host, and port without a path or credentials.',
+      error: 'Use a protocol and host, with an optional port, and no path or credentials.',
     });
     // Without the local grant (even with admin), without a session, or without a valid one: hidden.
     for (const [reason, device, headers, ok] of [

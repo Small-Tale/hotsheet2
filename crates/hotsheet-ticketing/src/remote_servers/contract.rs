@@ -98,13 +98,6 @@ impl RemoteCredentials {
             }
             return Ok(None);
         }
-        let ca = self
-            .ca_pem
-            .as_deref()
-            .ok_or(RemoteError::Invalid("CA is required"))?;
-        if ca.is_empty() || ca.len() > 128 * 1024 {
-            return Err(RemoteError::Invalid("bounded CA certificate is required"));
-        }
         let cert = self.client_certificate_pem.as_deref();
         let key = self.client_key_pem.as_deref();
         if cert.is_some() != key.is_some()
@@ -121,6 +114,14 @@ impl RemoteCredentials {
             return Err(RemoteError::Invalid(
                 "HTTPS requires a paired session or device certificate",
             ));
+        }
+        // HS2-H4REBS: without a CA the peer is verified against public web roots (a
+        // Tailscale Serve or other publicly trusted certificate) and nothing is pinned.
+        let Some(ca) = self.ca_pem.as_deref() else {
+            return Ok(None);
+        };
+        if ca.is_empty() || ca.len() > 128 * 1024 {
+            return Err(RemoteError::Invalid("bounded CA certificate is required"));
         }
         let certs = rustls_pemfile::certs(&mut BufReader::new(ca.as_bytes()))
             .collect::<Result<Vec<_>, _>>()

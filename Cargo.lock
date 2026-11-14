@@ -1131,6 +1131,7 @@ dependencies = [
  "toml 0.8.23",
  "ulid",
  "ureq",
+ "webpki-roots 1.0.9",
  "windows-sys 0.61.2",
 ]
 

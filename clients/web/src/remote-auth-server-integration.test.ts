@@ -14,6 +14,7 @@ import { execFileAsync } from './child-process';
 import { createDevApp } from './dev-server';
 import { createLocalHostApp, startLocalHost } from './local-host';
 import { createLocalGitTicketStore, openLocalProject } from './project-bridge';
+import { beginRemotePairing } from './remote-projects/host';
 
 // Built CLI/server binaries run against a private, synthetic machine home and store.
 // Run with HOTSHEET_LIVE_SERVER=1 after building both binaries from this checkout.
@@ -205,6 +206,51 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     ]);
     expect((await bridge.request(url('/checkouts'), { headers })).status).toBe(401);
     expect((await localHost.request(url('/checkouts'), { headers })).status).toBe(401);
+  }, 120_000);
+
+  it('HS2-H4REBS pairs a peer host through the remote-mode gateway with its own session only', async () => {
+    // The peer's browser origin differs from this host's; the gateway serves the machine protocol natively.
+    const peerOrigin = 'http://127.0.0.1:4999';
+    // The identity stays authenticated (docs/08 §8.2.1); the gateway does not open it.
+    expect((await fetch(`${origin}/remote-identity`)).status).toBe(401);
+    // A smuggled machine secret is stripped, so it never authenticates through the gateway.
+    const smuggled = await fetch(`${origin}/remote-checkouts?secret=synthetic-spoof`, {
+      headers: { 'x-hotsheet-secret': 'synthetic-spoof' },
+    });
+    expect(smuggled.status).toBe(401);
+
+    // The desktop pairing start reads only the pair answer through the gateway.
+    const pairing = await beginRemotePairing(origin, 'Synthetic peer', peerOrigin);
+    // Redeem natively, as the peer's host does. The CLI registration that follows in production
+    // stores the credential in the OS keychain, so this test stops before it.
+    const challenge = await fetch(`${origin}/remote-auth/pair`, {
+      method: 'POST',
+      headers: { origin: peerOrigin, 'content-type': 'application/json' },
+      body: JSON.stringify({ label: 'Synthetic peer two' }),
+    });
+    const { id, challenge: proof } = (await challenge.json()) as { id: string; challenge: string };
+    await execFileAsync(cli, ['-C', store, 'remote', 'sessions', 'approve', id, '--role', 'read_write'], {
+      env: { ...process.env, HOTSHEET_HOME: home },
+    });
+    const redeemed = await fetch(`${origin}/remote-auth/redeem`, {
+      method: 'POST',
+      headers: { origin: peerOrigin, 'content-type': 'application/json' },
+      body: JSON.stringify({ id, challenge: proof }),
+    });
+    expect(redeemed.status).toBe(200);
+    const session = redeemed.headers
+      .getSetCookie()
+      .find((line) => line.startsWith('hs2_remote_session='))
+      ?.split(';')[0];
+    expect(session).toBeDefined();
+    const headers = { cookie: session ?? '', origin: peerOrigin };
+    // The authenticated identity and checkouts the CLI probe reads, through the gateway.
+    const identity = await fetch(`${origin}/remote-identity`, { headers });
+    expect(identity.status).toBe(200);
+    expect(((await identity.json()) as { server_id: string }).server_id).toBe(pairing.serverId);
+    const checkouts = await fetch(`${origin}/remote-checkouts`, { headers });
+    expect(checkouts.status).toBe(200);
+    expect(((await checkouts.json()) as Array<{ id: string }>).map((checkout) => checkout.id)).toContain(checkoutId);
   }, 120_000);
 
   it('renders and completes pairing in the shipped browser app at three widths', async () => {

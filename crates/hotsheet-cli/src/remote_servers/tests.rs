@@ -139,6 +139,38 @@ fn hs2_w4jjje_https_client_verifies_server_without_device_certificate() {
 }
 
 #[test]
+fn hs2_h4rebs_https_without_a_reviewed_ca_trusts_only_public_roots() {
+    let mut paired = credentials();
+    paired.bearer_secret = format!("session:{}", "A".repeat(43));
+    // A Tailscale Serve name carries a publicly trusted certificate and no reviewed CA.
+    assert_eq!(
+        paired
+            .trust_fingerprint("https://peer.example.ts.net")
+            .unwrap(),
+        None
+    );
+    let client = client_config(&paired).unwrap();
+    assert_eq!(client.alpn_protocols, vec![b"http/1.1".to_vec()]);
+    let public = remote_roots(None).unwrap();
+    assert_eq!(public.len(), webpki_roots::TLS_SERVER_ROOTS.len());
+    // A reviewed CA pins exactly that authority; public roots are never mixed in.
+    let dir = tempfile::tempdir().unwrap();
+    let paths = hotsheet_tls::Paths::at(dir.path().join("tls"));
+    hotsheet_tls::init_ca(&paths, &[]).unwrap();
+    let ca = std::fs::read_to_string(paths.ca_cert()).unwrap();
+    let pinned = remote_roots(Some(&ca)).unwrap();
+    assert_eq!(pinned.len(), 1);
+    // The private Hot Sheet CA is not a public root, so an unpinned client refuses it.
+    let private = pinned.roots[0].subject.as_ref().to_vec();
+    assert!(
+        !public
+            .roots
+            .iter()
+            .any(|root| root.subject.as_ref() == private.as_slice())
+    );
+}
+
+#[test]
 fn hs2_1y45mz_transport_refuses_redirect_without_forwarding_the_bearer() {
     let destination = TcpListener::bind("127.0.0.1:0").unwrap();
     destination.set_nonblocking(true).unwrap();

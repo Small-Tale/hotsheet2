@@ -21,9 +21,12 @@ describe('HS2-HBM3JN desktop remote client replies', () => {
   });
 
   it('passes the host JSON error through and names the status otherwise', async () => {
-    reply(JSON.stringify({ error: 'Use an explicit protocol, host, and port without a path or credentials.' }), 400);
+    reply(
+      JSON.stringify({ error: 'Use a protocol and host, with an optional port, and no path or credentials.' }),
+      400,
+    );
     await expect(desktopRemoteBeginPair('https://synthetic.example', 'Synthetic')).rejects.toThrow(
-      'Use an explicit protocol, host, and port without a path or credentials.',
+      'Use a protocol and host, with an optional port, and no path or credentials.',
     );
     for (const body of ['', '<html></html>', JSON.stringify({ error: '' }), JSON.stringify(['no'])]) {
       reply(body, 502, 'text/html');

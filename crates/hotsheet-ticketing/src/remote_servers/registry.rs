@@ -228,7 +228,8 @@ fn validate_file(file: &RegistryFile) -> Result<(), RemoteError> {
             || server.history.is_empty()
             || server.history.len() > 64
             || server.revoked != server.credential_ref.is_none()
-            || (server.origin.starts_with("https://") != server.identity.ca_fingerprint.is_some())
+            // HS2-H4REBS: HTTPS may pin a CA or rely on public roots; HTTP never pins one.
+            || (server.origin.starts_with("http://") && server.identity.ca_fingerprint.is_some())
             || !valid_identity(&server.identity)
             || (!server.revoked && !origins.insert(&server.origin))
         {
@@ -248,8 +249,8 @@ fn validate_file(file: &RegistryFile) -> Result<(), RemoteError> {
                 || !valid_identity(&review.identity)
                 || normalize_remote_origin(&review.origin).ok().as_deref()
                     != Some(review.origin.as_str())
-                || (review.origin.starts_with("https://")
-                    != review.identity.ca_fingerprint.is_some())
+                || (review.origin.starts_with("http://")
+                    && review.identity.ca_fingerprint.is_some())
             {
                 return Err(RemoteError::Corrupt);
             }

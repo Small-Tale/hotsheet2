@@ -38,6 +38,7 @@ tempfile.workspace = true
 ureq.workspace = true
 rustls.workspace = true
 rustls-pemfile.workspace = true
+webpki-roots.workspace = true
 rpassword.workspace = true
 regex.workspace = true
 notify.workspace = true

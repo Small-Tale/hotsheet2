@@ -74,6 +74,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 rustls = "0.23"
 tokio-rustls = "0.26"
 rustls-pemfile = "2"
+# Public roots for peers reached through a publicly trusted HTTPS proxy (HS2-H4REBS).
+webpki-roots = "1"
 rcgen = "0.13"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["server", "server-graceful", "service", "tokio"] }

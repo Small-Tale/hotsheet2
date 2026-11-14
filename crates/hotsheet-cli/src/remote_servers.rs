@@ -261,18 +261,26 @@ fn remote_agent(
     Ok(builder.build())
 }
 
-fn client_config(credentials: &RemoteCredentials) -> Result<rustls::ClientConfig, RemoteFailure> {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let ca = credentials
-        .ca_pem
-        .as_deref()
-        .ok_or(RemoteFailure::TrustFailed)?;
+/// A reviewed CA pins the peer to exactly that authority; without one the peer must present a
+/// publicly trusted certificate, such as a Tailscale Serve name (HS2-H4REBS).
+fn remote_roots(ca: Option<&str>) -> Result<rustls::RootCertStore, RemoteFailure> {
+    let Some(ca) = ca else {
+        return Ok(rustls::RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+        });
+    };
     let mut roots = rustls::RootCertStore::empty();
     for certificate in rustls_pemfile::certs(&mut BufReader::new(ca.as_bytes())) {
         roots
             .add(certificate.map_err(|_| RemoteFailure::TrustFailed)?)
             .map_err(|_| RemoteFailure::TrustFailed)?;
     }
+    Ok(roots)
+}
+
+fn client_config(credentials: &RemoteCredentials) -> Result<rustls::ClientConfig, RemoteFailure> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let roots = remote_roots(credentials.ca_pem.as_deref())?;
     if roots.is_empty() {
         return Err(RemoteFailure::TrustFailed);
     }
