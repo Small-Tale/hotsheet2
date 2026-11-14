@@ -525,6 +525,9 @@ impl AppState {
                 for owner in shared.scheduler_owners() {
                     ensure_scheduler_blocking(&state, &owner);
                 }
+                // HS2-HTS89S: validation steps a previous host process left running
+                // are stopped.
+                shared.reap_orphaned_validations();
                 // HS2-XHQ1EH: permission requests still waiting show again.
                 shared.show_waiting_permissions(crate::routes::permissions::now_ms());
             })

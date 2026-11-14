@@ -117,3 +117,34 @@ fn hs2_7btv98_the_record_is_bounded_and_refuses_damage() {
     .unwrap();
     assert!(registry.known(CHECKOUT, &id(0)).is_err());
 }
+
+#[test]
+fn hs2_hts89s_a_running_execution_records_its_group_until_it_ends() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedValidationRegistry::new(home.path());
+    let process = StepProcess {
+        pid: 4_000,
+        started: 11,
+        host_pid: 3_000,
+        host_started: 7,
+    };
+    // Nothing is recorded for an id that was never accepted.
+    registry.launched(CHECKOUT, &id(1), process).unwrap();
+    assert_eq!(registry.record(CHECKOUT, &id(1)).unwrap(), None);
+    registry.accept(CHECKOUT, &id(1), 1).unwrap();
+    registry.launched(CHECKOUT, &id(1), process).unwrap();
+    assert_eq!(registry.with_process().unwrap().len(), 1);
+    // Forgotten when stopped, and set again only while it still runs.
+    registry.process_gone(CHECKOUT, &id(1)).unwrap();
+    assert!(registry.with_process().unwrap().is_empty());
+    registry.launched(CHECKOUT, &id(1), process).unwrap();
+    // An end forgets the group, and a late launch report does not bring it back.
+    registry
+        .finish(CHECKOUT, &id(1), 2, outcome(ExecutionEnd::Exited, Some(0)))
+        .unwrap();
+    registry.launched(CHECKOUT, &id(1), process).unwrap();
+    let ended = registry.record(CHECKOUT, &id(1)).unwrap().unwrap();
+    assert_eq!(ended.process, None);
+    assert!(ended.outcome.is_some());
+    assert!(registry.with_process().unwrap().is_empty());
+}

@@ -20,6 +20,20 @@ use super::*;
 pub const MAX_HOSTED_VALIDATION_RECORDS: usize = 256;
 const MAX_HOSTED_VALIDATION_BYTES: usize = 1024 * 1024;
 
+/// HS2-HTS89S: the process group a running step was launched as, and the hosting
+/// process that launched it, each named by its pid and its start time so a reused pid
+/// is never mistaken for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StepProcess {
+    /// The step's own pid, which is also its process group id.
+    pub pid: u32,
+    /// The step's start time as the operating system reports it.
+    pub started: u64,
+    pub host_pid: u32,
+    pub host_started: u64,
+}
+
 /// One accepted execution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -30,6 +44,9 @@ pub struct HostedValidationRecord {
     /// How it ended; absent while it runs (or ran in a process that is gone).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<ExecutionOutcome>,
+    /// HS2-HTS89S: while it runs, the process group it runs as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process: Option<StepProcess>,
 }
 
 /// What the registry says about one id, for a process that does not run it.
@@ -131,6 +148,72 @@ impl HostedValidationRegistry {
         self.put(checkout_id, execution_id, now_ms, Some(outcome))
     }
 
+    /// HS2-HTS89S: record the process group an accepted execution runs as. Changes
+    /// nothing for an execution that already ended or is not known.
+    pub fn launched(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+        process: StepProcess,
+    ) -> Result<(), OrchestrationError> {
+        self.set_process(checkout_id, execution_id, Some(process), true)
+    }
+
+    /// HS2-HTS89S: the process group is gone (it ended, or was stopped).
+    pub fn process_gone(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+    ) -> Result<(), OrchestrationError> {
+        self.set_process(checkout_id, execution_id, None, false)
+    }
+
+    fn set_process(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+        process: Option<StepProcess>,
+        only_running: bool,
+    ) -> Result<(), OrchestrationError> {
+        valid_identifier(checkout_id)?;
+        valid_identifier(execution_id)?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let Some(record) = file.executions.iter_mut().find(|record| {
+            record.checkout_id == checkout_id && record.execution_id == execution_id
+        }) else {
+            return Ok(());
+        };
+        if (only_running && record.outcome.is_some()) || record.process == process {
+            return Ok(());
+        }
+        record.process = process;
+        self.write_file(&file)
+    }
+
+    /// HS2-HTS89S: one execution's record.
+    pub fn record(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+    ) -> Result<Option<HostedValidationRecord>, OrchestrationError> {
+        valid_identifier(checkout_id)?;
+        valid_identifier(execution_id)?;
+        Ok(self.read_file()?.executions.into_iter().find(|record| {
+            record.checkout_id == checkout_id && record.execution_id == execution_id
+        }))
+    }
+
+    /// HS2-HTS89S: every execution that still records a process group.
+    pub fn with_process(&self) -> Result<Vec<HostedValidationRecord>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .executions
+            .into_iter()
+            .filter(|record| record.process.is_some())
+            .collect())
+    }
+
     fn put(
         &self,
         checkout_id: &str,
@@ -153,6 +236,8 @@ impl HostedValidationRegistry {
             };
             if record.outcome.is_none() && outcome.is_some() {
                 record.outcome = outcome;
+                // An execution that ended no longer runs as a process group.
+                record.process = None;
                 self.write_file(&file)?;
             }
             return Ok(before);
@@ -170,6 +255,7 @@ impl HostedValidationRegistry {
             execution_id: execution_id.into(),
             accepted_at_ms: now_ms,
             outcome,
+            process: None,
         });
         self.write_file(&file)?;
         Ok(HostedValidationKnown::Unknown)

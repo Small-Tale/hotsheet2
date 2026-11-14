@@ -30,6 +30,7 @@ mod scheduler_dispositions;
 mod session_control;
 mod session_executor;
 mod sessions;
+mod step_process;
 mod summary;
 mod target_lines;
 mod ticket_list;

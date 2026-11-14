@@ -34,6 +34,8 @@ mod runs;
 mod scheduler;
 mod session_executor;
 mod sessions;
+#[cfg(unix)]
+mod step_process;
 mod summary;
 mod ticket_list;
 mod tickets;

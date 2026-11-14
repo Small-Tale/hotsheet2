@@ -309,6 +309,7 @@ pub fn validation_environment(
 /// Run one command in `root` and report how it ended. Blocks until it has. Setting
 /// `cancel` stops it; a step that already ended by itself keeps its own end. The step
 /// sees only [`validation_environment`] (HS2-W02PTA).
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)] // HS2-W02PTA: one step's whole launch; grouped by the caller.
 pub(super) fn execute(
     root: &Path,
@@ -320,6 +321,35 @@ pub(super) fn execute(
     cancel: &AtomicBool,
     execution_id: &str,
     retain: Option<&Path>,
+) -> ExecutionOutcome {
+    execute_reporting(
+        root,
+        program,
+        args,
+        timeout,
+        output_limit,
+        started_at_ms,
+        cancel,
+        execution_id,
+        retain,
+        &|_| {},
+    )
+}
+
+/// [`execute`], telling `launched` the step's pid (its process group) once it runs
+/// (HS2-HTS89S).
+#[allow(clippy::too_many_arguments)] // HS2-HTS89S: one step's whole launch; grouped by the caller.
+pub(super) fn execute_reporting(
+    root: &Path,
+    program: &str,
+    args: &[String],
+    timeout: Duration,
+    output_limit: u64,
+    started_at_ms: u64,
+    cancel: &AtomicBool,
+    execution_id: &str,
+    retain: Option<&Path>,
+    launched: &dyn Fn(u32),
 ) -> ExecutionOutcome {
     let started = Instant::now();
     // A relative program with a directory part is the checkout's own script; a bare
@@ -351,6 +381,7 @@ pub(super) fn execute(
         }
         Err(_) => return ended(ExecutionEnd::LaunchFailed, started_at_ms, started),
     };
+    launched(child.id());
     let over = Arc::new(AtomicBool::new(false));
     let (sender, receiver) = mpsc::channel();
     let mut readers = 0;
@@ -487,6 +518,7 @@ impl OrchestrationRuntime {
             ));
         }
         let checkout = self.owner(checkout_id)?;
+        self.reap_once();
         let root = PathBuf::from(&checkout.root);
         let key = self.execution_key(checkout_id, &request.execution_id);
         let started_at_ms = tx.clock.now_ms();
@@ -556,7 +588,15 @@ impl OrchestrationRuntime {
                         let checkout_id = checkout.id.clone();
                         let timeout = Duration::from_secs(u64::from(timeout_seconds));
                         std::thread::spawn(move || {
-                            let outcome = execute(
+                            // HS2-HTS89S: the group is recorded while it runs, so a
+                            // later host can stop it if this process dies first.
+                            let record = |pid| {
+                                if let Some(process) = super::step_process::step_process(pid) {
+                                    let _ =
+                                        registry.launched(&checkout_id, &step_execution, process);
+                                }
+                            };
+                            let outcome = execute_reporting(
                                 &root,
                                 &program,
                                 &args,
@@ -566,6 +606,7 @@ impl OrchestrationRuntime {
                                 &running.cancel,
                                 &step_execution,
                                 Some(&retain),
+                                &record,
                             );
                             // Recorded before it is answered, so a restart right after
                             // still finds how it ended.
@@ -596,6 +637,7 @@ impl OrchestrationRuntime {
         execution_id(id)?;
         let wait_ms = wait(wait_ms)?;
         self.owner(checkout_id)?;
+        self.reap_once();
         let key = self.execution_key(checkout_id, id);
         let execution = executions()
             .iter()
@@ -638,6 +680,7 @@ impl OrchestrationRuntime {
         execution_id(&request.execution_id)?;
         let wait_ms = wait(request.wait_ms)?;
         self.owner(checkout_id)?;
+        self.reap_once();
         let key = self.execution_key(checkout_id, &request.execution_id);
         let execution = {
             let mut known = executions();
@@ -645,8 +688,10 @@ impl OrchestrationRuntime {
                 Some(execution) => execution.clone(),
                 None => {
                     // HS2-7BTV98: a finished execution of a process that is gone keeps
-                    // its own end; one that was running there cannot be stopped from
-                    // here; an id never seen is remembered as cancelled, on disk too.
+                    // its own end; an id never seen is remembered as cancelled, on disk
+                    // too. HS2-HTS89S: one that was running in a process that is gone is
+                    // stopped here, by its recorded process group.
+                    self.stop_orphaned_step(checkout_id, &request.execution_id);
                     let cancelled =
                         ended(ExecutionEnd::Cancelled, tx.clock.now_ms(), Instant::now());
                     match self.hosted_validation_registry().finish(

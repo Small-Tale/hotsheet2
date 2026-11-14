@@ -1545,7 +1545,18 @@ at most `wait_ms` (8,000) for it:
   an id cancelled before it ran stays cancelled. A step still runs inside the hosting
   process, so a headless CLI that hosts a local target must stay until the step
   ends, which is why `validation run` waits by default. Running a step as a detached
-  Job is HS2-M7EV18, and stopping a step orphaned by its host's death is HS2-HTS89S.
+  Job is HS2-M7EV18.
+- A step runs as its own process group. While it runs, the record names that group
+  and the hosting process, each by pid and start time (HS2-HTS89S). When a later
+  host process starts serving (the server at start-up, a CLI host on its first
+  hosted validation request) or is asked to cancel the attempt, it stops a group
+  whose hosting process is gone: when the group's leader is still the recorded
+  process, or when no process has that pid any more (a pid is not reused while a
+  group of that id exists, so the group can only be the step's remaining members). A
+  pid that now names another process is left alone, and a step whose hosting process
+  still runs is left to it. The attempt stays `unverified` (`execution_lost`): what
+  the step would have reported is not known. Only Unix (Linux, macOS) records and
+  stops groups.
 - A step whose prerequisite has not passed is recorded as `skipped` without
   contacting the target and without asking anyone. A later request with a new
   `operation_id` runs it once the prerequisite passes.

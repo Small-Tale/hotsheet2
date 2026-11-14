@@ -67,7 +67,7 @@ pub use gates::{
 };
 pub use hosted_validations::{
     HostedValidationKnown, HostedValidationRecord, HostedValidationRegistry,
-    MAX_HOSTED_VALIDATION_RECORDS,
+    MAX_HOSTED_VALIDATION_RECORDS, StepProcess,
 };
 pub use joining::{
     DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
