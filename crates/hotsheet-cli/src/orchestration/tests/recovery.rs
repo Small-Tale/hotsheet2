@@ -1308,3 +1308,95 @@ fn hs2_ezv83c_a_sync_during_a_handoff_never_records_an_intervention() {
         "the half-done handoff was never published as a released claim"
     );
 }
+
+/// HS2-RZQFG1: a sync that finds the run finished by a concurrent sync (the server's
+/// follower) answers only once that sync has published what it recorded. The record
+/// is written before its events, so an answer taken from the record alone could be
+/// ahead of the event feed and of the readiness the events change.
+#[test]
+fn hs2_rzqfg1_a_sync_of_a_run_finished_meanwhile_answers_after_its_events() {
+    use hotsheet_ticketing::orchestration::{RunEvent, RunEventSource, RunUpdate};
+
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    granted(&m, &mut tx);
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Finished meanwhile");
+    let run = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a", &mut tx);
+    let owner = m.owner.id.clone();
+    let completed = |kinds: &[(RunEventKind, Option<String>)]| {
+        kinds.iter().any(|(kind, reason)| {
+            *kind == RunEventKind::State && reason.as_deref() == Some("target_completed")
+        })
+    };
+    let (answered, answer) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        // The follower's sync is half way: the record says completed, the events
+        // are not published yet.
+        let operation = RunRegistry::new(&m.home)
+            .operation_lock(&owner, &run.run_id)
+            .unwrap();
+        let finished = RunRegistry::new(&m.home)
+            .update(
+                &owner,
+                &run.run_id,
+                RunUpdate {
+                    to: Some(RunState::Completed),
+                    reason: Some("target_completed".into()),
+                    ..RunUpdate::default()
+                },
+                &mut tx,
+            )
+            .unwrap();
+        assert!(!completed(&kinds(&m, &finished)));
+        let (m, owner, run_id) = (&m, &owner, run.run_id.clone());
+        scope.spawn(move || {
+            let mut rng = Rng(900);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            let view = m
+                .runtime
+                .run_sync(owner, &run_id, Some(&worker()), &mut tx)
+                .unwrap();
+            // Whatever the answer says has been published by the time it is given.
+            answered
+                .send((view.run.state, completed(&kinds(m, &view.run))))
+                .unwrap();
+        });
+        // No answer while the follower's sync holds the run. Proving an absence needs
+        // a bound, as a quiet event feed's check does (HS2-7QHWHJ); with the lock the
+        // answer cannot come at all, so the bound only makes the check weaker under
+        // load, never wrong.
+        assert!(matches!(
+            answer.recv_timeout(std::time::Duration::from_millis(300)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        m.runtime.run_event(
+            owner,
+            RunEvent {
+                at_ms: finished.updated_at_ms,
+                run_id: finished.run_id.clone(),
+                kind: RunEventKind::State,
+                source: RunEventSource::Target,
+                state: Some(RunState::Completed),
+                reason: Some("target_completed".into()),
+                actor_id: None,
+                dedupe: Some(format!(
+                    "state-{}-{}",
+                    finished.history.len(),
+                    finished.updated_at_ms
+                )),
+                gate_id: None,
+                gate_state: None,
+            },
+        );
+        drop(operation);
+    });
+    assert_eq!(answer.recv().unwrap(), (RunState::Completed, true));
+}

@@ -1890,7 +1890,11 @@ resume, correct) holds that run's operation lock throughout
 (`RunRegistry::operation_lock`: one of 64 striped lock files under
 `orchestration-run-operations/` in the machine home, shared by every process and
 reentrant on one thread). A sync that waited reads the run again under the lock, so it
-aligns with the finished operation, never with the record it read before. A resume
+aligns with the finished operation, never with the record it read before. It takes
+the lock before it answers for a finished run too: a run's record is written before its
+events, so a sync that found the run completed by the follower's sync answered while
+the `state completed` event and the readiness it moves were still unpublished
+(HS2-RZQFG1). A resume
 releases the lock before its reconciliation, and no locked section takes another
 run's lock.
 

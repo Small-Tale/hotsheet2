@@ -938,6 +938,10 @@ impl OrchestrationRuntime {
         // HS2-EZV83C: read the record and the target, and record what was found, with
         // no other operation on this run in between: a handoff or cancel that is half
         // done is waited for, never recorded as someone else's intervention.
+        // HS2-RZQFG1: the lock comes before the finished-run answer below, so a sync
+        // that finds the run finished by a concurrent one (the server's follower)
+        // answers only after that one published its events and the readiness they
+        // change: the record is written before its events.
         let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {

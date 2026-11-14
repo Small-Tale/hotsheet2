@@ -3527,7 +3527,10 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   release and refuses malformed identifiers. `tests/recovery.rs # hs2_ezv83c` starts
   a sync while a handoff is half done (old claim released) and shows that the sync
   waits and records no intervention; `contracts.spec.ts # HS2-WBREDM` was the load
-  test that exposed it (HS2-EZV83C).
+  test that exposed it (HS2-EZV83C). `tests/recovery.rs # hs2_rzqfg1` holds the run
+  while its record says completed and its events are unpublished, and shows that a
+  sync answers only after the events (HS2-RZQFG1; it failed 3 of 3 with the lock
+  taken after the finished-run answer).
 - `tests/recovery.rs # hs2_wbredm_a_resolution_raced` pins the gate resolving again
   when another resolution of the same target lands in between, which a follower and
   a request otherwise turned into a false `target_unavailable`.
