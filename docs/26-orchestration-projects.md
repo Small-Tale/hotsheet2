@@ -2232,8 +2232,9 @@ set up against the serving store (HS2-MBDKWQ).
 characters of the run id>`, or `<orchestration project>: <role>` when the session
 serves no single run. The label is the saved tab name every client of that server
 already shows ([06](06-clients.md), HS2-89FPV1), so the drawer needs no new component. A Playwright
-test of the real drawer is HS2-KTHJN2; the link from the orchestration workspace is
-HS2-HSMH2Q.
+test reads it in the real drawer at wide and narrow widths, in both color schemes
+(HS2-KTHJN2); the drawer truncates a long label before its run suffix (HS2-8KZF59). The
+link from the orchestration workspace is HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model
 ([05](05-ai-tool-plugins.md) §5.9.1). The `planner` role is not a target role: it is

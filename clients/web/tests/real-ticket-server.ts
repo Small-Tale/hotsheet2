@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,16 @@ export interface RealTicketFixtureContext {
 
 /** Real ticket storage, index, and HTTP mutations, isolated from the developer's registry. */
 export async function realTicketServer(
-  options: { seed?: (fixture: RealTicketFixtureContext) => Promise<void>; autoCommit?: boolean } = {},
+  options: {
+    seed?: (fixture: RealTicketFixtureContext) => Promise<void>;
+    autoCommit?: boolean;
+    /**
+     * Resolve the fixture directory through symlinks (macOS `/var` is `/private/var`), so a path the
+     * server canonicalizes, such as the directory an orchestrator-started session launches in,
+     * still lies under the project root the client opened (HS2-KTHJN2).
+     */
+    canonicalRoot?: boolean;
+  } = {},
 ) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url)),
     target = resolve(repo, process.env.CARGO_TARGET_DIR ?? 'target'),
@@ -40,7 +49,8 @@ export async function realTicketServer(
   // HS2-F6R2HQ: playwright.config.ts turns installed AI-tool probes off for every worker.
   if (process.env.HOTSHEET_AI_TOOL_PROBES !== 'off')
     throw new Error('Run browser fixtures through playwright.config.ts so installed AI tools are never probed.');
-  const directory = await mkdtemp(resolve(tmpdir(), 'hotsheet-browser-')),
+  const created = await mkdtemp(resolve(tmpdir(), 'hotsheet-browser-')),
+    directory = options.canonicalRoot ? await realpath(created) : created,
     store = resolve(directory, 'tickets'),
     root = resolve(directory, 'project'),
     secret = 'isolated-browser-test',

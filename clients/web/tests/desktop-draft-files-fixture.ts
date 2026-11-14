@@ -32,8 +32,12 @@ export async function findFile(directory: string, name: string): Promise<string 
 }
 
 /** A real ticket server, real bridge handlers per launch, and one shared native app-data directory. */
-export async function desktopApp(context: BrowserContext, baseURL: string) {
-  const server = await realTicketServer(),
+export async function desktopApp(
+  context: BrowserContext,
+  baseURL: string,
+  serverOptions: Parameters<typeof realTicketServer>[0] = {},
+) {
+  const server = await realTicketServer(serverOptions),
     appData = await mkdtemp(join(tmpdir(), 'hs2-desktop-drafts-e2e-')),
     preferences = join(appData, 'browser-preferences-v1'),
     drafts = join(preferences, DESKTOP_DRAFT_FILES_DIRECTORY),
