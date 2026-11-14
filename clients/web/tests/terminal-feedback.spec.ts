@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { installTerminalFixture } from './terminal-feedback-fixture';
+import { installTerminalFixture, project } from './terminal-feedback-fixture';
 
 test.use({ deviceScaleFactor: 2 });
 
@@ -44,6 +44,52 @@ test('ellipsizes the project tab before scrolling at medium width with the drawe
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect.poll(geometry).toMatchObject({ ellipsized: false, insideStrip: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-a7qpw4-wide-again.png', animations: 'disabled' });
+});
+
+test('never ellipsizes a remote project tab name (HS2-08P0V5)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page);
+  const remoteName = 'synthetic-studio-workstation · Terminal feedback';
+  // The same fixture project, opened under a remote composite id so the shell renders it as a remote tab.
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
+    route.fulfill({
+      status: 201,
+      json: { ...project, id: 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:terminal-feedback', name: remoteName },
+    }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await page.locator('[data-component="terminal-drawer"]').getByRole('button', { name: 'Project Grid' }).click();
+  const tab = page.locator('[data-component="project-tab-bar"] [data-tab-kind="project"][data-location="remote"]');
+  await expect(tab.locator('.kui-tab-bar-item__name')).toHaveText(remoteName);
+  // Readable means unellipsized AND wholly inside the visible strip, not merely unclipped by its own box.
+  const geometry = () =>
+    tab.evaluate((element) => {
+      const name = element.querySelector<HTMLElement>('.kui-tab-bar-item__name')!;
+      const scroller = element.closest<HTMLElement>('.kui-tab-bar__tabs')!;
+      const nameRect = name.getBoundingClientRect(),
+        stripRect = scroller.getBoundingClientRect();
+      return {
+        ellipsized: name.scrollWidth > name.clientWidth,
+        fullName: name.textContent,
+        nameInsideStrip: nameRect.left >= stripRect.left - 1 && nameRect.right <= stripRect.right + 1,
+        nameWidth: Math.round(nameRect.width),
+        stripWidth: Math.round(stripRect.width),
+      };
+    });
+  await expect.poll(geometry).toMatchObject({ ellipsized: false, fullName: remoteName, nameInsideStrip: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-08p0v5-wide.png', animations: 'disabled' });
+  // The local tab ellipsizes at this width (HS2-A7QPW4); the remote name is never ellipsized. When the one
+  // remote tab is wider than Kerf's whole strip, the strip still clips it: blocked on KF-0M3ZPT, so this
+  // width does not yet assert `nameInsideStrip` (HS2-08P0V5 stays open until it can).
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect.poll(geometry).toMatchObject({ ellipsized: false, fullName: remoteName });
+  await page.screenshot({ path: 'target/visual-captures/hs2-08p0v5-after-1024.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(geometry).toMatchObject({ ellipsized: false, fullName: remoteName, nameInsideStrip: true });
 });
 
 type TerminalFrame = {
