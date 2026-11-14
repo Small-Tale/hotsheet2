@@ -314,13 +314,18 @@ impl OrchestrationRuntime {
     /// and needs none, while a CI or deployment gate of it waits on a provider or a
     /// person, while its target ticket is in `final_testing`, or while a validation
     /// attempt of it runs. Reads this machine's records only.
+    ///
+    /// HS2-N6ZATC: an intervened run waits the same way. A session that dies releases
+    /// its worker's claim, so the run may read `intervened` before reconciliation
+    /// looks; while its gate still waits, the loss is still no missing work.
     pub fn session_need(&self, owner_id: &str, run: &Run, now_ms: u64) -> SessionNeed {
-        if run.state != RunState::Dispatched {
+        if !matches!(run.state, RunState::Dispatched | RunState::Intervened) {
             return SessionNeed::Idle;
         }
         match self.run_waits(owner_id, run, now_ms) {
             Some(note) => SessionNeed::Waiting(note),
-            None => SessionNeed::Working,
+            None if run.state == RunState::Dispatched => SessionNeed::Working,
+            None => SessionNeed::Idle,
         }
     }
 

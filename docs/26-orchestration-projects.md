@@ -1674,8 +1674,10 @@ host is learned. A host that cannot be asked leaves the source `unverifiable` wi
 The run's latest session (in the order they were started) is then judged against
 whether the run needs a live session now. A dispatched run waits, and needs none,
 while one of its CI or deployment gates waits on a provider or a person, while its
-target ticket is in `final_testing`, or while a validation attempt of it runs. A run
-that is queued, requested or taken over is not being worked.
+target ticket is in `final_testing`, or while a validation attempt of it runs. An
+intervened run waits the same way: a session that dies releases its worker's claim, so
+its run may read `intervened` before reconciliation looks (HS2-N6ZATC). A run that is
+queued, requested or taken over and waits on nothing is not being worked.
 
 | The run's latest session                    | The run                         | Finding                                                         |
 | ------------------------------------------- | ------------------------------- | --------------------------------------------------------------- |

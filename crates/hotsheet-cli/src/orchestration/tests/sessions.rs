@@ -2001,6 +2001,34 @@ fn hs2_75q254_reconciliation_reads_adopts_and_winds_down_the_sessions_of_a_run()
         );
         assert_eq!(disposition(&view), Disposition::Continue);
     }
+    // HS2-N6ZATC: the lost session's exit released its worker's claim, so the run reads
+    // intervened. It still waits on CI, so the loss is still no missing work.
+    ops::release(&f.m.target_store, &work.id, NOW.into(), "worker-a", false).unwrap();
+    let released =
+        f.m.runtime
+            .run_sync(&owner, &run.run_id, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(released.run.state, RunState::Intervened);
+    let view = reconcile(&mut tx);
+    assert_eq!(
+        session(&view),
+        (Verification::Verified, Some("waiting_on_gate".into()))
+    );
+    ops::claim_with_eta(
+        &f.m.target_store,
+        &work.id,
+        &NOW.into(),
+        "2030-01-01T00:00:00Z".into(),
+        "worker-a",
+        None,
+        None,
+    )
+    .unwrap();
+    let back =
+        f.m.runtime
+            .run_sync(&owner, &run.run_id, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(back.run.state, RunState::Dispatched);
     // A replacement is the run's again; wound down at a safe point it is never missing
     // work, whether or not the run waits (the case HS2-95SWQ4 found).
     let second = f
