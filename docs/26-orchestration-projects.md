@@ -382,6 +382,25 @@ before producing the new field. A newer manifest version remains readable only
 as an explicit unsupported-version error; it is never overwritten by an older
 client. Removing orchestration configuration does not delete target tickets.
 
+**Fields a newer peer adds (HS2-T2KS8G).** Machines of different versions talk to
+each other, so new fields are additive and the reading side decides what an unknown
+field means:
+
+- An answer read from a peer accepts fields it does not know and ignores them, so a
+  newer host's additive field never breaks an older orchestrator's read. This covers
+  the change-feed page and its events, the hosted speculation setting, the hosted
+  validation, gate and session answers, and the profile check.
+- A request a host reads refuses them, because ignoring a field could change what
+  the request means. A newer request against an older host is reported as
+  unsupported.
+- A machine-local or committed file refuses them, and a newer version is an error that
+  is never overwritten. So does a type that is also part of a request or such a file
+  (machine limits, resource needs, session origins, validation profiles), because an
+  older binary that silently ignored a new limit would loosen what it enforces.
+
+The policy test `hs2_t2ks8g_answers_accept_and_requests_and_files_refuse_unknown_fields`
+pins which types are which.
+
 ## 26.6 Relationship to other work
 
 This design defines explicit _orchestration-run_ membership, not a global

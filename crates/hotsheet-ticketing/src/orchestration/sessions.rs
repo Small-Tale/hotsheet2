@@ -306,7 +306,7 @@ impl SafePointBlocker {
 
 /// Whether a session may be wound down now, and everything that says no.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct SafePoint {
     pub safe: bool,
     /// Every reason at once, in a fixed order, so one answer shows the whole picture.
@@ -966,7 +966,7 @@ pub struct SessionOrigin {
 
 /// One terminal of this machine that an orchestrator started.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct HostedSession {
     pub checkout_id: String,
     pub operation_id: String,
@@ -1039,7 +1039,7 @@ impl RequestKind {
 /// prompt: once now, then on the tool's readiness events, within the same bounds,
 /// counted from `requested_at_ms`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct HostedRequest {
     /// The ticket's canonical id.
     pub ticket: String,

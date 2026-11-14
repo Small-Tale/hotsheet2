@@ -47,7 +47,7 @@ pub struct HostedGateWatch {
 /// What the hosting machine's adapter reads for one gate, with the cursor to wait
 /// from next. Identifiers, codes and counts only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct HostedGate {
     pub state: GateState,
     #[serde(default, skip_serializing_if = "Option::is_none")]

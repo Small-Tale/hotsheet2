@@ -81,7 +81,7 @@ pub enum HostedExecutionState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct HostedValidation {
     pub execution_id: String,
     pub state: HostedExecutionState,

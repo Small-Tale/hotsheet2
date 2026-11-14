@@ -94,7 +94,7 @@ pub struct HostObservation {
 /// HS2-JSF985: a target project's own committed opt-in to provisional readiness
 /// (its shared `speculation` setting, HS2-2SJPCH), as its machine reports it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct TargetSpeculation {
     pub enabled: bool,
     /// How many unconfirmed gates the project lets stack beneath one dependent.

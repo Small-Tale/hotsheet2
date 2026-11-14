@@ -243,7 +243,7 @@ pub struct ValidationStep {
 
 /// An immutable reference to one output stream: what it was, never its content.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct StreamRef {
     pub sha256: String,
     pub bytes: u64,
@@ -268,7 +268,7 @@ pub enum ExecutionEnd {
 
 /// What the host observed. Codes, numbers and digests only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct ExecutionOutcome {
     pub end: ExecutionEnd,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -973,7 +973,7 @@ impl ValidationProfile {
 /// HS2-YYNW9F: one thing wrong with a profile file. Codes and positions only; a name
 /// is echoed only when it is itself a valid profile name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct ProfileProblem {
     pub code: String,
     /// The profile's position in the file, from 0.
@@ -985,7 +985,7 @@ pub struct ProfileProblem {
 
 /// HS2-YYNW9F: what a checkout's profile file offers, and everything wrong with it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct ProfileCheck {
     /// Whether the file exists. An absent file offers no profiles and is valid.
     pub present: bool,

@@ -30,7 +30,7 @@ pub const MAX_TARGET_EVENT_WAIT_MS: u64 = 8_000;
 const REAUTHORIZE_MS: u64 = 10 * 60 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct TargetTicketEvent {
     pub cursor: u64,
     pub connection_id: String,
@@ -40,14 +40,14 @@ pub struct TargetTicketEvent {
 /// HS2-257Q2Z: a session an orchestrator started on the host ended or finished a
 /// turn. `session_id` is the host's id for it (its terminal in that server's drawer).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct TargetSessionEvent {
     pub cursor: u64,
     pub session_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct TargetEventPage {
     /// Pass as `since` to continue.
     pub cursor: u64,
@@ -67,7 +67,7 @@ pub struct TargetEventPage {
 
 /// HS2-FJ6MDW: a hosted project's own speculation setting, alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct HostedSpeculation {
     /// `None`: the project does not opt in.
     pub speculation: Option<hotsheet_ticketing::orchestration::TargetSpeculation>,

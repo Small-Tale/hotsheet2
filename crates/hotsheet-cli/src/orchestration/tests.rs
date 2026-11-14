@@ -42,6 +42,8 @@ mod tool_capacity;
 #[cfg(unix)]
 mod validation;
 mod watch;
+// HS2-T2KS8G: which wire types accept fields a newer peer adds.
+mod wire_compat;
 
 fn id(n: u128) -> String {
     ulid::Ulid::from(n).to_string()

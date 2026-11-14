@@ -113,7 +113,7 @@ impl ArtifactRef {
 
 /// What a provider adapter observed. Identifiers, counts and codes only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// HS2-T2KS8G: an answer read from a peer accepts fields a newer peer adds.
 pub struct GateEvidence {
     pub provider: String,
     /// The provider's own id of the CI run or deployment execution.
