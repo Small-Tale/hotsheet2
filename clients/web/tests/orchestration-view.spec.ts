@@ -22,7 +22,15 @@ async function send(server: Server, method: string, path: string, body?: unknown
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-/** Declare this project as its own target, bind it and grant the scheduler. */
+/** HS2-W27N1D: the Orchestration view is offered for a project whose Project Type is Orchestration. */
+async function asOrchestrationProject(server: Server) {
+  await send(server, 'PUT', `/checkouts/${server.checkoutId}/orchestration/project-type`, {
+    project_type: 'orchestration',
+    actor: { role: 'human' },
+  });
+}
+
+/** Declare this project as its own target, bind it, and remember the scheduler's dispatch rule (HS2-XHQ1EH). */
 async function declareSelf(server: Server) {
   const base = `/checkouts/${server.checkoutId}/orchestration`;
   const added = await send(server, 'POST', `${base}/targets`, {
@@ -40,10 +48,9 @@ async function declareSelf(server: Server) {
     previous_destination: null,
     destination: candidate.destination,
   });
-  await send(server, 'POST', `${base}/targets/${TARGET}/grants`, {
-    actor_id: 'scheduler-1',
-    actions: ['tickets_read', 'work_start'],
-    expires_at_ms: Date.now() + 3_600_000,
+  await send(server, 'POST', `${base}/permission-rules`, {
+    target_id: TARGET,
+    action: 'work_start',
     actor: { role: 'human', id: 'maintainer' },
   });
 }
@@ -163,6 +170,7 @@ test('HS2-J89JC7 an orchestration project with no projects added shows the first
       expected_revision: null,
       targets: [],
     });
+    await asOrchestrationProject(server);
     await page.setViewportSize({ width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     const tab = page.locator('[data-segment-value="orchestration"]').first();
@@ -193,6 +201,7 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
   const server = await realTicketServer();
   try {
     await declareSelf(server);
+    await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
     await page.setViewportSize({ width: 1440, height: 900 });
     await openProject(page, server, 'Launch');

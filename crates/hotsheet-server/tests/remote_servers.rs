@@ -488,13 +488,13 @@ mod e2e_failures;
 mod e2e_loop;
 #[path = "remote_servers/gates.rs"]
 mod gates;
-#[path = "remote_servers/grants.rs"]
-mod grants;
 #[path = "remote_servers/job_monitor.rs"]
 mod job_monitor;
 #[path = "remote_servers/orchestration.rs"]
 mod orchestration;
 // HS2-HCW7MD: Propose Plan starts a real PTY of the Unix fake agent as the planner.
+#[path = "remote_servers/permissions.rs"]
+mod permissions;
 #[cfg(unix)]
 #[path = "remote_servers/planning.rs"]
 mod planning;

@@ -40,7 +40,7 @@ fn target_policy(n: u128, max_sessions: u32, tools: &[&str]) -> TargetPolicy {
     TargetPolicy {
         target_id: target(n),
         enabled: true,
-        actions: vec![TargetAction::SessionsManage],
+        actions: None,
         tools: tools
             .iter()
             .map(|tool| ToolScope {
@@ -932,10 +932,6 @@ fn hs2_ecwg50_a_policy_change_mid_run_stops_starts_and_winds_sessions_down_safel
         (
             "policy_target_not_permitted",
             Box::new(|policy| policy.targets.clear()),
-        ),
-        (
-            "policy_action_not_permitted",
-            Box::new(|policy| policy.targets[0].actions = vec![TargetAction::TicketsRead]),
         ),
         (
             "policy_tool_not_permitted",

@@ -1,0 +1,543 @@
+//! HS2-XHQ1EH: orchestrator permission requests through the real authenticated
+//! service and its permission bridge, the owned CLI process and the stdio MCP tool.
+//! One checkout is both the orchestration project and its own local target, which is a
+//! valid destination and keeps the fixture to one store. Synthetic data only.
+use super::orchestration::api;
+use super::*;
+use hotsheet_ticketing::checkouts::CheckoutRegistry;
+use hotsheet_ticketing::{NewTicket, ops};
+
+const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAZ";
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_xhq1eh_permission_requests_round_trip_through_the_bridge_cli_and_mcp() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, Some("Launch"), None, vec![source.clone()])
+        .unwrap();
+    let connection = checkout.sources[0].connection_id.clone();
+    let store = FsStore::open(&source).unwrap();
+    let orchestration = ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "TST",
+        "2026-10-15T00:00:00Z".into(),
+        NewTicket {
+            title: "Coordinate".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", checkout.id);
+    let added = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets"),
+        json!({"target_id":TARGET,"label":"Self","expected_revision":null}),
+        true,
+    )
+    .await
+    .1;
+    let candidate = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/inspect"),
+        json!({"destination":{"kind":"local","checkout_id":checkout.id}}),
+        true,
+    )
+    .await
+    .1;
+    let bound = api(
+        router.clone(),
+        "PUT",
+        &format!("{base}/targets/{TARGET}/binding"),
+        json!({"target":{"owner_checkout_id":checkout.id,"target_id":TARGET},
+            "expected_manifest_revision":added["revision"],"expected_binding_revision":0,
+            "previous_destination":null,"destination":candidate["destination"]}),
+        true,
+    )
+    .await
+    .1;
+    assert_eq!(bound["usable"], true, "{bound}");
+    // Every permission route requires the bearer.
+    for (method, path) in [
+        ("GET", format!("{base}/permissions")),
+        ("POST", format!("{base}/permissions/{TARGET}")),
+        ("POST", format!("{base}/permission-rules")),
+        ("DELETE", format!("{base}/permission-rules/{TARGET}")),
+        ("GET", "/permissions".to_owned()),
+    ] {
+        assert_eq!(
+            api(router.clone(), method, &path, json!({}), false).await.0,
+            StatusCode::UNAUTHORIZED,
+            "{method} {path}"
+        );
+    }
+    let create = |operation: &str| {
+        json!({"ticket":{"native_id":orchestration.slug},"target_id":TARGET,
+            "connection_id":connection,"operation_id":operation,"title":"Planned work",
+            "actor":{"role":"ai","id":"worker-1"}})
+    };
+    // An AI's write asks a person: a typed refusal names the request, and nothing is
+    // written. Nothing waits on the answer.
+    let (status, refused) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/tickets/create"),
+        create("op-1"),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    assert_eq!(refused["code"], "permission_required");
+    let request_id = refused["request_id"].as_str().unwrap().to_owned();
+    assert_eq!(store.list_tickets().unwrap().len(), 1);
+    // The request is the ordinary permission card, with the orchestrator requester.
+    let pending = api(router.clone(), "GET", "/permissions", Value::Null, true)
+        .await
+        .1;
+    let cards = pending.as_array().unwrap();
+    assert_eq!(cards.len(), 1, "{pending}");
+    let card = &cards[0];
+    assert_eq!(card["requester"], "orchestrator");
+    assert_eq!(card["tool"], "Orchestrator");
+    assert_eq!(card["project"], format!("checkout:{}", checkout.id));
+    assert_eq!(card["action"], "Create or change tickets in Self");
+    assert_eq!(card["always_allow_supported"], true);
+    assert_eq!(card["orchestrator"]["request_id"], request_id.as_str());
+    assert_eq!(card["orchestrator"]["target_label"], "Self");
+    assert_eq!(card["orchestrator"]["owner_label"], "Launch");
+    assert_eq!(card["orchestrator"]["action"], "tickets_write");
+    let card_id = card["id"].as_u64().unwrap();
+    // Asking again shows no second card.
+    api(
+        router.clone(),
+        "POST",
+        &format!("{base}/tickets/create"),
+        create("op-1"),
+        true,
+    )
+    .await;
+    assert_eq!(
+        api(router.clone(), "GET", "/permissions", Value::Null, true)
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    // Answers the orchestrator does not take: this AI session, a session, a review.
+    for answer in [
+        json!({"decision":"allow","scope":"chat"}),
+        json!({"decision":"allow","scope":"session"}),
+        json!({"decision":"allow","scope":"once","continue_review":true}),
+    ] {
+        assert_eq!(
+            api(
+                router.clone(),
+                "POST",
+                &format!("/permissions/{card_id}"),
+                answer.clone(),
+                true
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST,
+            "{answer}"
+        );
+    }
+    // Allow Once: the card is settled and the request allowed, not yet used.
+    let (status, resolved) = api(
+        router.clone(),
+        "POST",
+        &format!("/permissions/{card_id}"),
+        json!({"decision":"allow","scope":"once"}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{resolved}");
+    assert_eq!(resolved["persisted"], false);
+    assert!(
+        api(router.clone(), "GET", "/permissions", Value::Null, true)
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let listed = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/permissions"),
+        Value::Null,
+        true,
+    )
+    .await
+    .1;
+    assert_eq!(listed["requests"][0]["state"], "allowed");
+    assert_eq!(listed["requests"][0]["answered_by"], Value::Null);
+    // The action happens and uses the answer.
+    let (status, created) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/tickets/create"),
+        create("op-1"),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(created["created"], true);
+    let listed = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/permissions"),
+        Value::Null,
+        true,
+    )
+    .await
+    .1;
+    assert_eq!(listed["requests"][0]["state"], "used");
+    // Always Allow: a remembered rule, listed in Settings → Permissions with the
+    // other rules, that answers later operations with the same key.
+    let second = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/tickets/create"),
+        create("op-2"),
+        true,
+    )
+    .await
+    .1;
+    assert_eq!(second["code"], "permission_required");
+    let card_id = api(router.clone(), "GET", "/permissions", Value::Null, true)
+        .await
+        .1[0]["id"]
+        .as_u64()
+        .unwrap();
+    let (status, resolved) = api(
+        router.clone(),
+        "POST",
+        &format!("/permissions/{card_id}"),
+        json!({"decision":"allow","scope":"always"}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{resolved}");
+    assert_eq!(resolved["persisted"], true);
+    let (status, third) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/tickets/create"),
+        create("op-3"),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{third}");
+    let rules = api(
+        router.clone(),
+        "GET",
+        "/permissions/rules",
+        Value::Null,
+        true,
+    )
+    .await
+    .1;
+    let rule = rules
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rule| rule["tool"] == "Orchestrator")
+        .unwrap()
+        .clone();
+    assert_eq!(rule["project"], format!("checkout:{}", checkout.id));
+    assert_eq!(rule["scope"], "always");
+    assert_eq!(rule["decision"], "allow");
+    assert_eq!(rule["exact_action"], "Create or change tickets in Self");
+    assert_eq!(rule["orchestrator"]["target_label"], "Self");
+    assert_eq!(rule["orchestrator"]["owner_label"], "Launch");
+    assert_eq!(rule["orchestrator"]["action"], "tickets_write");
+    // A remembered orchestrator rule is kept or forgotten, nothing else.
+    let slot = json!({"project":rule["project"],"tool":rule["tool"],"action":rule["action"]});
+    let mut change = slot.clone();
+    change["decision"] = json!("deny");
+    assert_eq!(
+        api(router.clone(), "PATCH", "/permissions/rules", change, true)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        api(
+            router.clone(),
+            "DELETE",
+            "/permissions/rules",
+            slot.clone(),
+            true
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert!(
+        api(
+            router.clone(),
+            "GET",
+            "/permissions/rules",
+            Value::Null,
+            true
+        )
+        .await
+        .1
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|rule| rule["tool"] != "Orchestrator")
+    );
+    assert_eq!(
+        api(router.clone(), "DELETE", "/permissions/rules", slot, true)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    // Headless: the owned CLI files a request without a server's bridge, and the
+    // service shows it the next time a client reads the bridge.
+    let cli_prefix = ["-C", source.to_str().unwrap(), "orchestration"];
+    let ai_cli = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "worker-1",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let human_cli = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let failed = cli_failure(
+        &home,
+        &ai_cli,
+        &[
+            "ticket",
+            "create",
+            "--project",
+            &checkout.id,
+            "--ticket",
+            &orchestration.slug,
+            "--target",
+            TARGET,
+            "--connection",
+            &connection,
+            "--operation-id",
+            "op-cli",
+            "--title",
+            "Headless work",
+        ],
+    );
+    assert!(failed.contains("permission_required"), "{failed}");
+    let shown = api(router.clone(), "GET", "/permissions", Value::Null, true)
+        .await
+        .1;
+    assert_eq!(shown.as_array().unwrap().len(), 1, "{shown}");
+    let headless = shown[0]["orchestrator"]["request_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The CLI answers it as a person, never as the AI it governs; the card settles.
+    assert!(
+        cli_failure(
+            &home,
+            &ai_cli,
+            &[
+                "permission",
+                "answer",
+                &headless,
+                "--project",
+                &checkout.id,
+                "--answer",
+                "deny"
+            ]
+        )
+        .contains("forbidden")
+    );
+    let denied = cli_named(
+        &home,
+        &human_cli,
+        &[
+            "permission",
+            "answer",
+            &headless,
+            "--project",
+            &checkout.id,
+            "--answer",
+            "deny",
+        ],
+    );
+    assert_eq!(denied["request"]["state"], "denied");
+    assert!(
+        api(router.clone(), "GET", "/permissions", Value::Null, true)
+            .await
+            .1
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    // A person remembers a rule ahead of any request, and forgets it again.
+    assert!(
+        cli_failure(
+            &home,
+            &ai_cli,
+            &[
+                "permission",
+                "remember",
+                TARGET,
+                "--project",
+                &checkout.id,
+                "--action",
+                "work_start"
+            ]
+        )
+        .contains("forbidden")
+    );
+    let remembered = cli_named(
+        &home,
+        &human_cli,
+        &[
+            "permission",
+            "remember",
+            TARGET,
+            "--project",
+            &checkout.id,
+            "--action",
+            "work_start",
+        ],
+    );
+    assert_eq!(remembered["created"], true);
+    assert_eq!(remembered["summary"], "Start work on a ticket in Self");
+    let listed = cli_named(
+        &home,
+        &cli_prefix,
+        &["permission", "list", "--project", &checkout.id],
+    );
+    assert_eq!(listed["rules"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["requests"].as_array().unwrap().len(), 3);
+    assert_eq!(listed["retired"]["grants_file"], false);
+    let checked = cli_named(
+        &home,
+        &cli_prefix,
+        &[
+            "permission",
+            "check",
+            TARGET,
+            "--project",
+            &checkout.id,
+            "--actor",
+            "worker-1",
+            "--action",
+            "work_start",
+        ],
+    );
+    assert_eq!(checked["allowed"], true);
+    assert_eq!(checked["basis"], "remembered_rule");
+    // The stdio MCP tool reads requests and rules through a live loopback service and
+    // offers no way to answer, remember or forget.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app(host))
+            .with_graceful_shutdown(async move {
+                let _ = stopped.await;
+            })
+            .await
+            .unwrap();
+    });
+    let backend = ["--server", origin.as_str(), "--secret", SECRET];
+    let read = mcp_named(
+        &home,
+        &backend,
+        "hotsheet_targets",
+        json!({"action":"permission_list","checkout":checkout.id}),
+    );
+    assert_eq!(read["rules"][0]["rule_id"], remembered["rule_id"]);
+    for action in [
+        "permission_answer",
+        "permission_remember",
+        "permission_forget",
+        "grant_list",
+        "approval_list",
+    ] {
+        mcp_rejected(
+            &home,
+            &backend,
+            "hotsheet_targets",
+            json!({"action":action,"checkout":checkout.id,"request_id":headless}),
+        );
+    }
+    let forgotten = cli_named(
+        &home,
+        &human_cli,
+        &[
+            "permission",
+            "forget",
+            remembered["rule_id"].as_str().unwrap(),
+            "--project",
+            &checkout.id,
+        ],
+    );
+    assert_eq!(forgotten["rule_id"], remembered["rule_id"]);
+    // Every answer is in the journal, by identifiers only.
+    let journal = cli_named(
+        &home,
+        &cli_prefix,
+        &["audit", "--project", &checkout.id, "--limit", "100"],
+    );
+    let answers: Vec<_> = journal["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"].as_str().unwrap().starts_with("permission_"))
+        .map(|entry| {
+            (
+                entry["action"].as_str().unwrap().to_owned(),
+                entry["outcome"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        answers,
+        [
+            ("permission_answer".to_owned(), "approved".to_owned()),
+            ("permission_answer".to_owned(), "approved".to_owned()),
+            ("permission_remember".to_owned(), "changed".to_owned()),
+            ("permission_forget".to_owned(), "revoked".to_owned()),
+            ("permission_answer".to_owned(), "rejected".to_owned()),
+            ("permission_remember".to_owned(), "changed".to_owned()),
+            ("permission_forget".to_owned(), "revoked".to_owned()),
+        ]
+    );
+    let stored = std::fs::read_to_string(home.join("orchestration-permissions.json")).unwrap();
+    assert!(!stored.contains(SECRET));
+    assert!(!stored.contains("Planned work"));
+    assert!(!stored.contains(project.to_str().unwrap()));
+    let _ = stop.send(());
+    tokio::time::timeout(std::time::Duration::from_secs(10), task)
+        .await
+        .unwrap()
+        .unwrap();
+}

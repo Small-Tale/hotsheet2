@@ -114,25 +114,7 @@ async fn hs2_ecwg50_cli_plans_explains_ticks_and_reads_the_decision_log() {
         store_arg,
         "orchestration",
     ];
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
-            TARGET,
-            "--project",
-            &owner.id,
-            "--actor",
-            "scheduler-1",
-            "--action",
-            "tickets_read",
-            "--action",
-            "gates_observe",
-            "--expires-in",
-            "1h",
-        ],
-    );
+    // HS2-XHQ1EH: reading and observing need no rule.
     let scheduler = |arguments: &[&str]| {
         let mut all = vec!["scheduler"];
         all.extend_from_slice(arguments);
@@ -432,13 +414,11 @@ async fn hs2_ecwg50_server_routes_event_loop_and_stdio_mcp_share_the_scheduler()
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","gates_observe"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     // Every scheduler route needs the bearer.

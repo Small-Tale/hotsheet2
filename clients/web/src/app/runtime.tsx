@@ -3361,7 +3361,8 @@ export async function startHotSheetWebClient() {
     showToast,
     openTicket: openTicketLinkMatch,
     // HS2-W27N1D: the project's type decides the tab; Choose Projects… opens its settings category.
-    orchestrationProject: (id) => orchestrationSurfaceRef.current?.orchestrationProject(id),
+    // Unknown until Settings read the type, so the view's own declaration read decides meanwhile.
+    orchestrationProject: (id) => orchestrationSurfaceRef.current?.knownOrchestrationProject(id),
     openOrchestrationSettings: () => {
       selectedSettingsCategory.value = 'orchestration';
       viewMode.value = 'settings';

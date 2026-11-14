@@ -663,7 +663,7 @@ pub struct SessionSyncSummary {
 
 /// HS2-95SWQ4: how the gate sees a start or a stop the scheduler placed. The
 /// scheduler asked the side-effect-free check under its own operation id, and a
-/// person's approval is for that id, so the act passes the gate under it too.
+/// person's permission answer is for that id, so the act passes the gate under it too.
 pub(super) struct PlacedGate<'a> {
     pub(super) operation_id: &'a str,
     /// The sessions the scheduler counted when it decided a start.
@@ -1606,8 +1606,9 @@ impl OrchestrationRuntime {
         }
     }
 
-    /// The gate for reading or winding down an existing session: grants and policy
-    /// limits apply, nothing new starts, and it carries no load. It is passed under
+    /// The gate for reading or winding down an existing session: it only reduces
+    /// activity, so it never asks and the policy never denies it (HS2-48H57C),
+    /// nothing new starts, and it carries no load. It is passed under
     /// the session's own operation id, or under the scheduler's for a stop it placed.
     pub(super) fn session_gate(
         &self,
@@ -1638,8 +1639,8 @@ impl OrchestrationRuntime {
         Ok((target, authorized))
     }
 
-    /// A person needs no grant to act on a session of their own orchestration
-    /// project. The target is resolved freshly and the act is audited here.
+    /// A person needs no permission request to act on a session of their own
+    /// orchestration project. The target is resolved freshly and the act is audited here.
     fn person_destination(
         &self,
         target: &TargetRef,
@@ -1677,7 +1678,7 @@ impl OrchestrationRuntime {
                     AuditOutcome::Failed
                 },
                 reason: outcome.as_ref().err().map(|error| error.code().into()),
-                grant_id: None,
+                permission_id: None,
             },
         )
     }

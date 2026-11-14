@@ -27,7 +27,7 @@ describe('orchestration timeline response contract (HS2-J89JC7)', () => {
     expect(drifted((value) => (firstItem(value).state = 'sleeping'))).toThrow();
     expect(drifted((value) => (firstItem(value).title = null))).toThrow();
     expect(
-      drifted((value) => (firstItem(value).permission = { kind: 'grant', request_id: 'x', action: 'y' })),
+      drifted((value) => (firstItem(value).permission = { kind: 'approval', request_id: 'x', action: 'y' })),
     ).toThrow();
     expect(drifted((value) => ((value.kick_off as Record<string, unknown>).can_start = 'yes'))).toThrow();
     expect(() => parseOrchestrationTimeline([])).toThrow();

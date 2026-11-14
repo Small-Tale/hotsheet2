@@ -5,16 +5,16 @@ use std::sync::atomic::AtomicBool;
 use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, AuditOutcome, CreateGrant, DenialReason, ExecutionEnd, NewResult, ResultUpdate,
-    RunEventKind, RunTicket, TargetAction, ValidationError, ValidationEvidence, ValidationRegistry,
-    ValidationState,
+    AuditOutcome, DenialReason, ExecutionEnd, NewResult, PermissionAction, PermissionAnswer,
+    ResultUpdate, RunEventKind, RunTicket, TargetAction, ValidationError, ValidationEvidence,
+    ValidationRegistry, ValidationState,
 };
 use hotsheet_ticketing::remote_servers::TargetReply;
 use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
 use serde_json::{Value, json};
 
 use super::tickets::{
-    Machine, NOW, RemotePeer, bind_and_grant, human, machine, unsupported, worker,
+    Machine, NOW, RemotePeer, bind_and_allow, human, machine, unsupported, worker,
 };
 use super::*;
 use crate::orchestration::validation::execute;
@@ -123,7 +123,7 @@ fn hs2_wn0mxz_a_profile_step_runs_in_the_target_and_records_references_only() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
     // The step proves where it ran by writing into the target checkout.
     profiles(
         &m.target.root,
@@ -163,8 +163,8 @@ fn hs2_wn0mxz_a_profile_step_runs_in_the_target_and_records_references_only() {
         .unwrap();
     assert_eq!(
         m.runtime.audit(&m.owner.id, 0, 500).unwrap().entries.len(),
-        audited + 1,
-        "only the gate's own answer"
+        audited,
+        "an identical definition records nothing (HS2-XHQ1EH: it asks no gate)"
     );
     let view = until_finished(&m, &ticket, "smoke", "op-1", &mut tx);
     assert_eq!(view.result.state, ValidationState::Passed);
@@ -266,7 +266,7 @@ fn hs2_wn0mxz_failed_steps_retry_as_allowed_and_expected_evidence_decides() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
     profiles(
         &m.target.root,
         &[
@@ -361,7 +361,7 @@ fn hs2_wn0mxz_a_command_step_waits_for_a_person_and_a_profile_step_does_not() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
     profiles(&m.target.root, &[("smoke", "exit 0")]);
     let ticket = m.orchestration_ticket("Coordinate");
     m.runtime
@@ -386,71 +386,70 @@ fn hs2_wn0mxz_a_command_step_waits_for_a_person_and_a_profile_step_does_not() {
             &mut tx,
         )
         .unwrap();
-    assert!(
+    let requests = |m: &Machine, tx: &mut Transaction<'_>| {
         m.runtime
-            .approvals(&m.owner.id, &mut tx)
+            .permission_list(&m.owner.id, tx)
             .unwrap()
-            .is_empty()
-    );
-    // No policy is stored, and the grant covers validation: a profile runs at once.
+            .requests
+            .into_iter()
+            .map(|view| view.request)
+            .collect::<Vec<_>>()
+    };
+    assert!(requests(&m, &mut tx).is_empty());
+    // No policy is stored, and a remembered rule covers validation: a profile the
+    // target configured runs at once.
     assert_eq!(
         until_finished(&m, &ticket, "smoke", "op-profile", &mut tx)
             .result
             .state,
         ValidationState::Passed
     );
-    assert!(
-        m.runtime
-            .approvals(&m.owner.id, &mut tx)
-            .unwrap()
-            .is_empty()
-    );
-    // A command chosen by the orchestration project is outside that scope.
+    assert!(requests(&m, &mut tx).is_empty());
+    // A command chosen by the orchestration project is outside what the target
+    // configured: a person is asked for each operation, whatever is remembered.
     let custom = |operation: &str| run(&ticket, "custom", operation, MAX_VALIDATION_WAIT_MS);
     let runs = Path::new(&m.target.root).join("custom-runs");
     for _ in 0..2 {
-        assert_eq!(
-            denied(
-                m.runtime
-                    .validation_run(&m.owner.id, custom("op-1"), Some(&worker()), &mut tx)
-            ),
-            DenialReason::ApprovalRequired
-        );
+        permission_request(m.runtime.validation_run(
+            &m.owner.id,
+            custom("op-1"),
+            Some(&worker()),
+            &mut tx,
+        ));
     }
     assert!(!runs.exists());
     assert_eq!(
         evidence(&m, &ticket, "custom", &mut tx).reason.as_deref(),
         Some("not_run")
     );
-    let mut pending = m.runtime.approvals(&m.owner.id, &mut tx).unwrap();
+    let mut pending = requests(&m, &mut tx);
     assert_eq!(pending.len(), 1, "asking again files nothing more");
     let pending = pending.remove(0);
-    assert_eq!(pending.gate, ApprovalGate::ValidationRun);
+    assert_eq!(pending.key.action, PermissionAction::ValidationRun);
     assert_eq!(pending.operation_id, "op-1");
+    assert!(pending.each_time);
     // The AI it governs cannot answer.
     assert!(matches!(
-        m.runtime.decide_approval(
+        m.runtime.permission_answer(
             &m.owner.id,
-            &pending.approval_id,
-            true,
+            &pending.request_id,
+            PermissionAnswer::AllowOnce,
             Some(&worker()),
             &mut tx
         ),
         Err(OrchestrationError::Forbidden(_))
     ));
-    m.runtime
-        .decide_approval(
-            &m.owner.id,
-            &pending.approval_id,
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    answer(
+        &m.runtime,
+        &m.owner.id,
+        &pending.request_id,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     let first = until_finished(&m, &ticket, "custom", "op-1", &mut tx);
     assert_eq!(first.result.state, ValidationState::Failed);
     assert_eq!(first.attempts_left, 1);
-    // The retry continues the approved request; nobody is asked again.
+    // The retry continues the allowed request; nobody is asked again.
     std::fs::write(Path::new(&m.target.root).join("allow"), "").unwrap();
     let second = until_finished(&m, &ticket, "custom", "op-1", &mut tx);
     assert_eq!(
@@ -458,35 +457,27 @@ fn hs2_wn0mxz_a_command_step_waits_for_a_person_and_a_profile_step_does_not() {
         (2, ValidationState::Passed)
     );
     assert_eq!(std::fs::read_to_string(&runs).unwrap().lines().count(), 2);
-    assert_eq!(m.runtime.approvals(&m.owner.id, &mut tx).unwrap().len(), 1);
+    assert_eq!(requests(&m, &mut tx).len(), 1);
     // A new request is a new decision, and a refusal runs nothing.
-    assert_eq!(
-        denied(
-            m.runtime
-                .validation_run(&m.owner.id, custom("op-2"), Some(&worker()), &mut tx)
-        ),
-        DenialReason::ApprovalRequired
+    let asked = permission_request(m.runtime.validation_run(
+        &m.owner.id,
+        custom("op-2"),
+        Some(&worker()),
+        &mut tx,
+    ));
+    answer(
+        &m.runtime,
+        &m.owner.id,
+        &asked,
+        PermissionAnswer::Deny,
+        &mut tx,
     );
-    let asked = m.runtime.approvals(&m.owner.id, &mut tx).unwrap();
-    let asked = asked
-        .iter()
-        .find(|approval| approval.operation_id == "op-2")
-        .unwrap();
-    m.runtime
-        .decide_approval(
-            &m.owner.id,
-            &asked.approval_id,
-            false,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
     assert_eq!(
         denied(
             m.runtime
                 .validation_run(&m.owner.id, custom("op-2"), Some(&worker()), &mut tx)
         ),
-        DenialReason::ApprovalRequired
+        DenialReason::PermissionDenied
     );
     assert_eq!(std::fs::read_to_string(&runs).unwrap().lines().count(), 2);
     assert_eq!(
@@ -496,37 +487,19 @@ fn hs2_wn0mxz_a_command_step_waits_for_a_person_and_a_profile_step_does_not() {
 }
 
 #[test]
-fn hs2_wn0mxz_validation_needs_its_own_grant_and_a_person_can_always_remove_a_step() {
+fn hs2_xhq1eh_running_a_step_asks_and_its_own_records_need_only_an_actor() {
     let m = machine(10, false, unsupported);
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
-    // Dispatch authority is not validation authority.
-    bind_and_grant(
-        &m,
-        1,
-        &[TargetAction::WorkStart, TargetAction::TicketsRead],
-        &mut tx,
-    );
+    // A remembered dispatch rule says nothing about validation.
+    bind_and_allow(&m, 1, &[TargetAction::WorkStart], &mut tx);
     profiles(&m.target.root, &[("smoke", "echo x >> runs")]);
     let ticket = m.orchestration_ticket("Coordinate");
-    assert_eq!(
-        denied(m.runtime.validation_define(
-            &m.owner.id,
-            profile(&ticket, "smoke", "smoke"),
-            Some(&worker()),
-            &mut tx
-        )),
-        DenialReason::ActionNotGranted
-    );
-    assert!(
-        m.runtime
-            .validation_list(&m.owner.id, None, &mut tx)
-            .unwrap()
-            .is_empty()
-    );
+    // HS2-TZT505 / HS2-BJE1C1: defining a step changes only the orchestration
+    // project's own record: it needs an identified actor and asks nobody.
     assert!(matches!(
         m.runtime.validation_define(
             &m.owner.id,
@@ -536,20 +509,6 @@ fn hs2_wn0mxz_validation_needs_its_own_grant_and_a_person_can_always_remove_a_st
         ),
         Err(OrchestrationError::Invalid(_))
     ));
-    m.runtime
-        .grant(
-            &m.reference(1),
-            CreateGrant {
-                grant_id: None,
-                actor_id: "validator".into(),
-                actions: vec![TargetAction::ValidationRun],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
     let validator = MutationActor::parse("ai", Some("validator".into())).unwrap();
     m.runtime
         .validation_define(
@@ -559,25 +518,17 @@ fn hs2_wn0mxz_validation_needs_its_own_grant_and_a_person_can_always_remove_a_st
             &mut tx,
         )
         .unwrap();
-    // The step exists, but the other actor still may not run or remove it.
     assert_eq!(
-        denied(m.runtime.validation_run(
-            &m.owner.id,
-            run(&ticket, "smoke", "op-1", 0),
-            Some(&worker()),
-            &mut tx
-        )),
-        DenialReason::ActionNotGranted
+        m.last_audit(),
+        ("validation_define".into(), AuditOutcome::Changed, None)
     );
-    assert_eq!(
-        denied(m.runtime.validation_remove(
-            &m.owner.id,
-            step_ref(&ticket, "smoke"),
-            Some(&worker()),
-            &mut tx
-        )),
-        DenialReason::ActionNotGranted
-    );
+    // The step exists, but running it asks a person, and nothing runs meanwhile.
+    permission_request(m.runtime.validation_run(
+        &m.owner.id,
+        run(&ticket, "smoke", "op-1", 0),
+        Some(&worker()),
+        &mut tx,
+    ));
     assert!(!Path::new(&m.target.root).join("runs").exists());
     assert_eq!(evidence(&m, &ticket, "smoke", &mut tx).history.len(), 0);
     // Unknown steps, tickets and waits are refused before anything is asked.
@@ -606,7 +557,7 @@ fn hs2_wn0mxz_validation_needs_its_own_grant_and_a_person_can_always_remove_a_st
             .validation_run(&m.owner.id, unknown_run, Some(&validator), &mut tx),
         Err(OrchestrationError::Run(_))
     ));
-    // A person removes a step without any grant, even with the target gone.
+    // A step is removed with the target gone: only the project's own record changes.
     OrchestrationRuntime::unbind_at(
         &m.home,
         UnbindTarget {
@@ -622,15 +573,6 @@ fn hs2_wn0mxz_validation_needs_its_own_grant_and_a_person_can_always_remove_a_st
         &mut tx,
     )
     .unwrap();
-    assert_eq!(
-        denied(m.runtime.validation_remove(
-            &m.owner.id,
-            step_ref(&ticket, "smoke"),
-            Some(&validator),
-            &mut tx
-        )),
-        DenialReason::TargetUnavailable
-    );
     // An unusable target is a denial, never a recorded result.
     assert_eq!(
         denied(m.runtime.validation_run(
@@ -647,7 +589,7 @@ fn hs2_wn0mxz_validation_needs_its_own_grant_and_a_person_can_always_remove_a_st
         .validation_remove(
             &m.owner.id,
             step_ref(&ticket, "smoke"),
-            Some(&human()),
+            Some(&validator),
             &mut tx,
         )
         .unwrap();
@@ -681,7 +623,7 @@ fn hs2_wn0mxz_skipped_unavailable_and_timed_out_are_told_apart() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
     profiles(
         &m.target.root,
         &[("build", "[ -f built ]"), ("deploy", "echo x >> deploys")],
@@ -847,7 +789,7 @@ fn hs2_wn0mxz_a_running_step_is_reattached_reported_to_its_run_and_never_run_twi
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[
@@ -1368,20 +1310,14 @@ fn hs2_wn0mxz_a_remote_target_runs_the_step_and_an_unconfirmed_one_stays_running
             .unwrap()
             .usable
     );
-    runtime
-        .grant(
-            &target,
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::ValidationRun],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    allow_on(
+        &runtime,
+        &target.owner_checkout_id,
+        &target.target_id,
+        &[TargetAction::ValidationRun],
+        &[],
+        &mut tx,
+    );
     let ticket = ops::create(
         &owner_store,
         ulid::Ulid::new(),

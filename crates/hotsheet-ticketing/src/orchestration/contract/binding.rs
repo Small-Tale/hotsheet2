@@ -68,7 +68,7 @@ pub struct TargetResolution {
     pub state: ResolutionState,
     pub reason: Option<TargetFailure>,
     pub stale: bool,
-    /// Fresh selection/identity only. Actions still need their own authorization/grants.
+    /// Fresh selection/identity only. Acting still needs a person's permission or a remembered rule (HS2-XHQ1EH).
     pub usable: bool,
     /// Only the final guarded fresh result may return capabilities.
     pub sources: Option<Vec<TargetSource>>,

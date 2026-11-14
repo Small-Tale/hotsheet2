@@ -5,7 +5,7 @@ use std::cell::Cell;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AccountPolicy, Applied, AuditOutcome, LimitSignal, MachineLimits, PolicyBody, SessionCount,
-    SetPolicy, SignalKind, TargetAction, TargetPolicy, ToolCapacityRegistry, ToolPolicy, ToolScope,
+    SetPolicy, SignalKind, TargetPolicy, ToolCapacityRegistry, ToolPolicy, ToolScope,
 };
 use serde_json::{Value, json};
 
@@ -56,7 +56,7 @@ fn policy() -> PolicyBody {
         targets: vec![TargetPolicy {
             target_id: id(1),
             enabled: true,
-            actions: vec![TargetAction::SessionsManage],
+            actions: None,
             tools: tools
                 .iter()
                 .map(|tool| ToolScope {

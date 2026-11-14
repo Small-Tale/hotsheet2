@@ -148,6 +148,7 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
     policy: {
       machine: { max_sessions: 3 },
       tools: [{ tool: 'codex', max_sessions: 2, weight: 70, accounts: [{ account: 'team', max_sessions: 1 }] }],
+      // Retired members (HS2-XHQ1EH) the form passes through for the server to drop.
       targets: [{ target_id: 'T1', actions: ['tickets_read'] }],
       approval: { required_for: ['work_start'] },
       speculation: { allowed: false, max_depth: 2 },

@@ -538,6 +538,8 @@ impl OrchestrationRuntime {
             ActionRequest::new(TargetAction::WorkStart).operation(request.operation_id.clone()),
             tx,
         )?;
+        // HS2-XHQ1EH: an Allow Once answer for building ahead, used once the run is.
+        let mut ahead = None;
         let outcome = (|| {
             Self::check_source(&authorized, &request.target.connection_id)?;
             let destination = Self::destination(&authorized)?;
@@ -560,7 +562,7 @@ impl OrchestrationRuntime {
                 .to_owned();
             // HS2-42TARA: planned work starts only when it is ready, or when a person
             // overrides that for this exact operation.
-            self.readiness_guard(
+            ahead = self.readiness_guard(
                 owner_id,
                 &super::readiness::GuardedDispatch {
                     target: &RunTarget {
@@ -700,6 +702,9 @@ impl OrchestrationRuntime {
             Ok(RunView::from(run))
         })();
         self.finish(&target, &authorized, &outcome, tx)?;
+        if let (Ok(_), Some(request_id)) = (&outcome, &ahead) {
+            self.permission_ledger().used(request_id, tx)?;
+        }
         outcome
     }
 
@@ -826,7 +831,7 @@ impl OrchestrationRuntime {
                 actor,
                 ActionRequest::new(TargetAction::WorkStart)
                     .operation(run.operation_id.clone())
-                    .continuing(),
+                    .reducing(),
                 tx,
             )
             .and_then(|authorized| {

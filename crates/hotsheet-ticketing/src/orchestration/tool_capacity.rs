@@ -608,9 +608,6 @@ pub fn select(
     if !target.enabled {
         return denied(PolicyDenial::TargetDisabled);
     }
-    if !target.actions.contains(&TargetAction::SessionsManage) {
-        return denied(PolicyDenial::ActionNotPermitted);
-    }
     let mut candidates = Vec::new();
     let mut excluded = Vec::new();
     if let Some(tool) = request.tool {

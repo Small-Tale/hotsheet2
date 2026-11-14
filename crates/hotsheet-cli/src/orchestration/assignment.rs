@@ -266,7 +266,7 @@ impl OrchestrationRuntime {
 
     /// Claim a queued run's ticket for the session's worker id, because nobody in the
     /// target's pool will assign it. Passes the gate as `work_start` continuing the
-    /// run's own dispatch, so a person's approval for it is not asked again. A ticket
+    /// run's own dispatch, so a person is not asked again. A ticket
     /// someone else claimed meanwhile is a conflict; nothing is forced.
     pub(super) fn assignment_claim(
         &self,

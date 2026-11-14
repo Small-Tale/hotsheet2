@@ -6,17 +6,17 @@ use std::cell::Cell;
 
 use hotsheet_model::Ticket;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, CreateGrant, MachineLimits,
-    NewSession, OrchestratedSession, PlacementAction, PlacementPolicy, PolicyBody, ReadinessLevel,
-    RunState, ScheduledSession, SchedulerStore, SessionActivity, SessionIdleStore, SessionLoad,
-    SessionOwner, SessionRegistry, SessionRole, SessionScope, SessionState, SetPolicy,
-    TargetAction, TargetPolicy, ToolPolicy, ToolScope, WindDown,
+    AuditOutcome, MachineLimits, NewSession, OrchestratedSession, PermissionAction,
+    PermissionAnswer, PermissionState, PlacementAction, PlacementPolicy, PolicyBody,
+    ReadinessLevel, RunState, ScheduledSession, SchedulerStore, SessionActivity, SessionIdleStore,
+    SessionLoad, SessionOwner, SessionRegistry, SessionRole, SessionState, SetPolicy, TargetAction,
+    TargetPolicy, ToolPolicy, ToolScope, WindDown,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::json;
 
 use super::sessions::{Probe, ScriptedHost, roomy};
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 
 const MINUTE: u64 = 60_000;
@@ -39,7 +39,7 @@ fn scope(tool: &str) -> ToolScope {
 
 /// Target 1 takes two `codex` sessions. Placement is automatic as `worker-1`, with no
 /// cooldown and the shortest idle time, so a test decides every wait itself.
-fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
+fn policy() -> PolicyBody {
     PolicyBody {
         machine: MachineLimits {
             max_sessions: 4,
@@ -54,12 +54,7 @@ fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
         targets: vec![TargetPolicy {
             target_id: id(1),
             enabled: true,
-            actions: vec![
-                TargetAction::TicketsRead,
-                TargetAction::GatesObserve,
-                TargetAction::SessionsManage,
-                TargetAction::WorkStart,
-            ],
+            actions: None,
             tools: vec![scope("codex")],
             max_sessions: 2,
             machine: None,
@@ -69,7 +64,6 @@ fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
             idle_minutes: 1,
             keep_warm: 0,
         },
-        approval: ApprovalPolicy { required_for },
         placement: PlacementPolicy {
             automatic: true,
             actor: Some("worker-1".into()),
@@ -80,6 +74,9 @@ fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
     }
 }
 
+/// Session starts and dispatch remembered: the scheduler asks nobody.
+const BOTH: [TargetAction; 2] = [TargetAction::SessionsManage, TargetAction::WorkStart];
+
 struct Placed {
     m: Machine,
     host: Arc<ScriptedHost>,
@@ -89,8 +86,10 @@ struct Placed {
 
 impl Placed {
     /// One machine that hosts target 1 in a clean git checkout, a roomy probe, a
-    /// scripted terminal host and the real executor. `worker-1` holds a long grant.
-    fn new(required_for: Vec<ApprovalGate>, tx: &mut Transaction<'_>) -> Self {
+    /// scripted terminal host and the real executor. HS2-XHQ1EH: a person remembered
+    /// rules for `remembered` (codex for session starts), so the scheduler asks
+    /// nobody about them.
+    fn new(remembered: &[TargetAction], tx: &mut Transaction<'_>) -> Self {
         let mut m = machine(10, false, unsupported);
         let host = Arc::new(ScriptedHost::default());
         let probe = Arc::new(Probe::default());
@@ -101,29 +100,8 @@ impl Placed {
             .with_capacity_probe(probe.clone())
             .with_session_host(host.clone())
             .with_session_executor(Arc::new(OwnedSessions));
-        bind_and_grant(&m, 1, &[], tx);
-        m.runtime
-            .grant(
-                &m.reference(1),
-                CreateGrant {
-                    grant_id: None,
-                    actor_id: "worker-1".into(),
-                    actions: vec![
-                        TargetAction::TicketsRead,
-                        TargetAction::GatesObserve,
-                        TargetAction::WorkStart,
-                        TargetAction::SessionsManage,
-                    ],
-                    session_scope: Some(SessionScope {
-                        tools: vec![scope("codex")],
-                        max_concurrency: 8,
-                    }),
-                    expires_at_ms: 1_000_000_000,
-                },
-                Some(&human()),
-                tx,
-            )
-            .unwrap();
+        bind_and_allow(&m, 1, &[], tx);
+        allow_on(&m.runtime, &m.owner.id, &id(1), remembered, &["codex"], tx);
         let orchestration = m.orchestration_ticket("Coordinate");
         let placed = Self {
             m,
@@ -133,7 +111,7 @@ impl Placed {
         };
         // Whether work is uncommitted can only be established in a git checkout.
         placed.git(&["init", "-q"]);
-        placed.set_policy(policy(required_for), tx);
+        placed.set_policy(policy(), tx);
         placed
     }
     fn owner(&self) -> String {
@@ -363,7 +341,7 @@ macro_rules! clocked {
 #[test]
 fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     // Nothing runs yet: the executor answers, with nothing to list.
@@ -412,7 +390,7 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
     // for the policy's actor.
     assert!(f.audited("sessions_manage").contains(&(
         AuditOutcome::Allowed,
-        None,
+        Some("remembered_rule".into()),
         Some(operation.clone())
     )));
     assert_eq!(
@@ -477,10 +455,10 @@ fn hs2_95swq4_an_automatic_pass_starts_one_session_and_later_passes_keep_it() {
 #[test]
 fn hs2_95swq4_a_repeated_operation_id_is_the_same_start() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     // HS2-NPTKS8: the session never joins its role; it is given longer than this
     // test runs, so it is not replaced.
-    let mut patient = policy(Vec::new());
+    let mut patient = policy();
     patient.placement.join_minutes = 60;
     f.set_policy(patient, &mut tx);
     let step = f.ready("First", &mut tx);
@@ -542,7 +520,7 @@ fn hs2_95swq4_a_repeated_operation_id_is_the_same_start() {
 #[test]
 fn hs2_95swq4_the_gate_sees_the_larger_of_the_decided_and_the_recorded_load() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     // The scheduler counted two sessions on the target that these records do not
     // hold (a person's, another owner's): the target's cap of two refuses the start.
@@ -614,7 +592,7 @@ fn hs2_95swq4_the_gate_sees_the_larger_of_the_decided_and_the_recorded_load() {
 #[test]
 fn hs2_95swq4_a_refused_start_is_typed_backed_off_and_then_replaced() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     // The host will not launch the tool.
@@ -678,72 +656,65 @@ fn hs2_95swq4_a_refused_start_is_typed_backed_off_and_then_replaced() {
 }
 
 #[test]
-fn hs2_95swq4_an_approval_given_for_the_schedulers_operation_lets_the_act_through() {
+fn hs2_95swq4_an_answer_given_for_the_schedulers_operation_lets_the_act_through() {
     clocked!(clock, tx);
-    let f = Placed::new(
-        vec![ApprovalGate::SessionStart, ApprovalGate::SessionStop],
-        &mut tx,
-    );
+    // HS2-XHQ1EH: session starts are not remembered, so a person is asked.
+    let f = Placed::new(&[TargetAction::WorkStart], &mut tx);
     let owner = f.owner();
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
-    let approve = |gate: ApprovalGate, tx: &mut Transaction<'_>| {
-        let pending: Vec<_> = f
-            .m
-            .runtime
-            .approvals(&owner, tx)
-            .unwrap()
-            .into_iter()
-            .filter(|approval| approval.gate == gate && approval.state == ApprovalState::Pending)
-            .collect();
-        assert_eq!(pending.len(), 1, "{gate:?}");
+    let requests = |tx: &mut Transaction<'_>| {
         f.m.runtime
-            .decide_approval(&owner, &pending[0].approval_id, true, Some(&human()), tx)
-            .unwrap();
-        pending[0].operation_id.clone()
+            .permission_list(&owner, tx)
+            .unwrap()
+            .requests
+            .into_iter()
+            .map(|view| view.request)
+            .collect::<Vec<_>>()
     };
-    // Asked once, however often a pass runs; nothing starts meanwhile.
+    // Asked once, however often a pass runs; nothing starts meanwhile, and the
+    // decision names the request to answer.
     for _ in 0..2 {
-        assert_eq!(
-            outcomes(&f.tick(&mut tx)),
-            [("approval_required", Some("session_start"))]
-        );
+        let tick = f.tick(&mut tx);
+        assert_eq!(tick.outcomes.len(), 1);
+        assert_eq!(tick.outcomes[0].outcome, "permission_required");
     }
     assert!(f.records().is_empty() && f.host.launches().is_empty());
-    assert_eq!(approve(ApprovalGate::SessionStart, &mut tx), operation);
-    // The executor's own gate uses the approval the person gave for that id.
+    let asked = requests(&mut tx);
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].operation_id, operation);
+    assert_eq!(asked[0].key.action, PermissionAction::SessionStart);
+    answer(
+        &f.m.runtime,
+        &owner,
+        &asked[0].request_id,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    // The executor's own gate uses the answer the person gave for that id.
     assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
     let session = f.record(&operation);
-    let approvals = f.m.runtime.approvals(&owner, &mut tx).unwrap();
-    assert_eq!(approvals.len(), 1);
-    assert_eq!(approvals[0].state, ApprovalState::Consumed);
+    let asked = requests(&mut tx);
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].state, PermissionState::Used);
 
-    // The work goes away and the session idles out: the stop asks a person too.
+    // HS2-48H57C: the work goes away and the session idles out. Winding it down only
+    // reduces activity, so it asks nobody.
     f.gone(&step, &mut tx);
     f.tick(&mut tx);
     f.at(&clock, START + 2 * MINUTE);
-    for _ in 0..2 {
-        assert_eq!(
-            outcomes(&f.tick(&mut tx)),
-            [("approval_required", Some("session_stop"))]
-        );
-    }
-    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
-    assert_eq!(
-        approve(ApprovalGate::SessionStop, &mut tx),
-        format!("sched-stop-{}", session.session_id)
-    );
     assert_eq!(outcomes(&f.tick(&mut tx)), [("wind_down_requested", None)]);
     assert_eq!(f.record(&operation).state, SessionState::Stopped);
     assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
-    // One request per act was ever filed.
-    assert_eq!(f.m.runtime.approvals(&owner, &mut tx).unwrap().len(), 2);
+    let _ = session;
+    // One request was ever filed.
+    assert_eq!(requests(&mut tx).len(), 1);
 }
 
 #[test]
 fn hs2_95swq4_an_idle_session_is_wound_down_only_at_a_safe_point() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     f.tick(&mut tx);
@@ -843,7 +814,7 @@ fn hs2_95swq4_an_idle_session_is_wound_down_only_at_a_safe_point() {
     );
     assert!(f.audited("sessions_manage").contains(&(
         AuditOutcome::Allowed,
-        None,
+        Some("reduces_activity".into()),
         Some(format!("sched-stop-{sid}"))
     )));
     // It is gone: nothing is listed, remembered or asked again.
@@ -865,7 +836,7 @@ fn hs2_95swq4_an_idle_session_is_wound_down_only_at_a_safe_point() {
 #[test]
 fn hs2_95swq4_a_session_a_person_took_over_is_reported_and_never_wound_down() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let owner = f.owner();
     let first = f.ready("First", &mut tx);
     let second = f.ready("Second", &mut tx);
@@ -939,7 +910,7 @@ fn hs2_95swq4_a_session_a_person_took_over_is_reported_and_never_wound_down() {
 #[test]
 fn hs2_95swq4_a_crashed_session_is_lost_and_replaced_each_time() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     f.tick(&mut tx);
@@ -1005,7 +976,7 @@ fn hs2_95swq4_a_crashed_session_is_lost_and_replaced_each_time() {
 #[test]
 fn hs2_95swq4_an_unreachable_host_concludes_nothing_and_stale_starts_are_ended() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     f.tick(&mut tx);
@@ -1081,12 +1052,12 @@ fn hs2_95swq4_an_unreachable_host_concludes_nothing_and_stale_starts_are_ended()
 #[test]
 fn hs2_95swq4_without_a_placement_actor_no_host_is_asked_and_nothing_reads_safe() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     f.tick(&mut tx);
     let session = f.record(&format!("sched-start-{step}"));
     // The policy no longer enables placement and names no actor.
-    let mut manual = policy(Vec::new());
+    let mut manual = policy();
     manual.placement = PlacementPolicy::default();
     f.set_policy(manual, &mut tx);
     f.gone(&step, &mut tx);
@@ -1113,44 +1084,41 @@ fn hs2_95swq4_without_a_placement_actor_no_host_is_asked_and_nothing_reads_safe(
 }
 
 #[test]
-fn hs2_95swq4_a_session_the_policy_no_longer_permits_is_kept_for_a_person_to_stop() {
+fn hs2_48h57c_a_session_the_policy_no_longer_permits_can_always_be_wound_down() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     f.tick(&mut tx);
     let session = f.record(&format!("sched-start-{step}"));
-    // The policy disables the target. The policy's gate then denies every act there,
-    // a read of the session's safe point included (HS2-48H57C), so nothing reads as
-    // safe: the session is kept until a person stops it, and is not stopped unseen.
-    let mut disabled = policy(Vec::new());
+    // HS2-48H57C, HS2-XHQ1EH: the policy disables the target. That limits starting
+    // there, never reading a session's safe point or winding it down: the stop is
+    // never refused on policy grounds.
+    let mut disabled = policy();
     disabled.targets[0].enabled = false;
     f.set_policy(disabled, &mut tx);
     let tick = f.tick(&mut tx);
-    assert!(tick.outcomes.is_empty());
-    assert_eq!(
-        placement(&tick, &session.session_id),
-        (PlacementAction::Keep, "awaiting_safe_point")
+    assert!(
+        tick.outcomes
+            .iter()
+            .all(|outcome| outcome.outcome != "policy_denied"),
+        "{:?}",
+        tick.outcomes
     );
-    // Asked directly, the stop is a typed refusal of the gate.
-    assert_eq!(
-        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&session.session_id), &mut tx),
-        WindDownOutcome::Refused {
-            reason: "policy_denied".into()
-        }
+    let answer =
+        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&session.session_id), &mut tx);
+    assert!(
+        !matches!(&answer, WindDownOutcome::Refused { reason } if reason == "policy_denied"),
+        "{answer:?}"
     );
-    assert_eq!(f.record(&session.operation_id).state, SessionState::Running);
-    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
-    // A person can still stop it.
-    f.m.runtime
-        .session_stop(
-            &f.owner(),
-            &session.session_id,
-            StopSession { force: false },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
-    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+    // A person can stop it.
+    let _ = f.m.runtime.session_stop(
+        &f.owner(),
+        &session.session_id,
+        StopSession { force: false },
+        Some(&human()),
+        &mut tx,
+    );
+    assert!(f.host.stops.load(Ordering::SeqCst) >= 1);
     let _ = clock;
 }
 
@@ -1192,7 +1160,7 @@ impl Placed {
 #[test]
 fn hs2_yc2p7k_a_refused_session_leaves_its_run_and_a_later_session_takes_it() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     f.host.refusing.store(true, Ordering::SeqCst);
     let tick = f.tick(&mut tx);
@@ -1226,23 +1194,54 @@ fn hs2_yc2p7k_a_refused_session_leaves_its_run_and_a_later_session_takes_it() {
     assert_eq!(f.host.launches().len(), 1);
 }
 
-/// HS2-YC2P7K: placing work is starting work. Without `work_start` in the grant or
-/// the policy nothing is dispatched and no session starts.
+/// HS2-YC2P7K: placing work is starting work. HS2-XHQ1EH: without a remembered
+/// `work_start` rule a person is asked, and nothing is dispatched and no session
+/// starts meanwhile.
 #[test]
 fn hs2_yc2p7k_placing_work_needs_work_start() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&[TargetAction::SessionsManage], &mut tx);
+    let owner = f.owner();
     let step = f.ready("First", &mut tx);
-    let mut body = policy(Vec::new());
-    body.targets[0]
-        .actions
-        .retain(|action| *action != TargetAction::WorkStart);
-    f.set_policy(body, &mut tx);
-    let tick = f.tick(&mut tx);
-    assert_eq!(outcomes(&tick), [("refused", Some("policy_denied"))]);
-    assert!(f.m.runtime.run_list(&f.owner(), false).unwrap().is_empty());
+    let requests = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .permission_list(&owner, tx)
+            .unwrap()
+            .requests
+            .into_iter()
+            .map(|view| view.request)
+            .collect::<Vec<_>>()
+    };
+    // The decision log names the request exactly as a start the scheduler's own gate
+    // turned into one: `permission_required` and the request id (HS2-XHQ1EH).
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        let asked = requests(&mut tx);
+        assert_eq!(asked.len(), 1);
+        assert_eq!(
+            (asked[0].key.action, asked[0].operation_id.clone()),
+            (PermissionAction::WorkStart, format!("sched-run-{step}"))
+        );
+        assert_eq!(
+            outcomes(&tick),
+            [("permission_required", Some(asked[0].request_id.as_str()))]
+        );
+    }
+    assert!(f.m.runtime.run_list(&owner, false).unwrap().is_empty());
     assert!(f.records().is_empty() && f.host.launches().is_empty());
     assert_eq!(f.level(&step, &mut tx), ReadinessLevel::Confirmed);
+    // Not backed off: once a person allows it, the next pass dispatches and starts.
+    let asked = requests(&mut tx);
+    answer(
+        &f.m.runtime,
+        &owner,
+        &asked[0].request_id,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
+    assert_eq!(f.m.runtime.run_list(&owner, false).unwrap().len(), 1);
+    assert_eq!(requests(&mut tx)[0].state, PermissionState::Used);
     let _ = clock;
 }
 
@@ -1252,7 +1251,7 @@ fn hs2_yc2p7k_placing_work_needs_work_start() {
 #[test]
 fn hs2_yc2p7k_a_free_session_is_given_the_next_run_and_a_failed_run_is_replaced() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let first = f.ready("First", &mut tx);
     f.tick(&mut tx);
     let session = f.record(&format!("sched-start-{first}"));
@@ -1328,7 +1327,7 @@ fn hs2_yc2p7k_a_free_session_is_given_the_next_run_and_a_failed_run_is_replaced(
 #[test]
 fn hs2_dg0ypa_the_executor_adopts_a_live_holder_and_never_doubles_a_run() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     f.tick(&mut tx);
@@ -1508,7 +1507,7 @@ fn role(id: &str, expires_at: i64) -> crate::coordination::Session {
 #[test]
 fn hs2_t16sk0_a_run_nobody_assigns_is_reported_then_claimed_for_its_session() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     // No pool at all in the target: neither a dispatcher nor an integrator.
     let tick = f.tick(&mut tx);
@@ -1691,7 +1690,7 @@ fn hs2_t16sk0_a_run_nobody_assigns_is_reported_then_claimed_for_its_session() {
 #[test]
 fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_agrees() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     f.tick(&mut tx);
     let run = f.run_of(&step);
@@ -1715,7 +1714,7 @@ fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_a
     assert_eq!(view.assignments[0].claim_at_ms, Some(due));
     assert_eq!(view.schedule.retry_at_ms, Some(due));
     // Automatic placement off: past the time, a pass only reports.
-    let mut manual = policy(Vec::new());
+    let mut manual = policy();
     manual.placement.automatic = false;
     f.set_policy(manual, &mut tx);
     f.at(&clock, due + MINUTE);
@@ -1751,7 +1750,7 @@ fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_a
             .workers
             .insert(worker_id.clone(), role(&worker_id, 4_000_000_000));
     });
-    f.set_policy(policy(Vec::new()), &mut tx);
+    f.set_policy(policy(), &mut tx);
     let tick = f.tick(&mut tx);
     let refused = &tick.view.assignments[0];
     assert_eq!(refused.outcome.as_deref(), Some("refused"));
@@ -1789,7 +1788,7 @@ fn placed(view: &TickView, session_id: &str) -> (PlacementAction, &'static str, 
 #[test]
 fn hs2_nptks8_a_session_that_never_joins_is_replaced_a_bounded_number_of_times() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     f.tick(&mut tx);
@@ -1890,7 +1889,7 @@ fn hs2_nptks8_a_session_that_never_joins_is_replaced_a_bounded_number_of_times()
 #[test]
 fn hs2_nptks8_a_persons_session_is_left_and_a_dry_run_only_shows_it() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let first = f.ready("First", &mut tx);
     let second = f.ready("Second", &mut tx);
     f.tick(&mut tx);
@@ -1905,7 +1904,7 @@ fn hs2_nptks8_a_persons_session_is_left_and_a_dry_run_only_shows_it() {
             &mut tx,
         )
         .unwrap();
-    let mut manual_policy = policy(Vec::new());
+    let mut manual_policy = policy();
     manual_policy.placement.automatic = false;
     manual_policy.targets[0].max_sessions = 3;
     f.set_policy(manual_policy, &mut tx);
@@ -1959,7 +1958,7 @@ impl Placed {
 #[test]
 fn hs2_r7qh35_a_refilled_session_is_told_its_ticket_once_when_its_tool_is_ready() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let first = f.ready("First", &mut tx);
     f.tick(&mut tx);
     let session = f.record(&format!("sched-start-{first}"));
@@ -2050,8 +2049,8 @@ fn hs2_r7qh35_a_refilled_session_is_told_its_ticket_once_when_its_tool_is_ready(
 #[test]
 fn hs2_r7qh35_a_session_given_a_claim_is_told_to_work_it() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
-    let mut at_once = policy(Vec::new());
+    let f = Placed::new(&BOTH, &mut tx);
+    let mut at_once = policy();
     at_once.placement.dispatcher_wait_minutes = 0;
     f.set_policy(at_once, &mut tx);
     let step = f.ready("First", &mut tx);
@@ -2125,7 +2124,7 @@ impl Placed {
 fn hs2_3rexq7_a_run_that_waits_needs_no_session_and_no_refill_with_itself() {
     use hotsheet_model::StartedPhase;
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let operation = format!("sched-start-{step}");
     f.tick(&mut tx);
@@ -2190,7 +2189,7 @@ fn hs2_3rexq7_a_run_that_waits_needs_no_session_and_no_refill_with_itself() {
 #[test]
 fn hs2_7q428z_concurrent_passes_start_and_log_one_session_once() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     let owner = f.owner();
     for round in 0..2u128 {
@@ -2252,7 +2251,7 @@ fn hs2_7q428z_concurrent_passes_start_and_log_one_session_once() {
 fn hs2_hv9ed3_a_persons_cancel_holds_the_step_and_winds_its_session_down() {
     use hotsheet_model::StartedPhase;
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     f.tick(&mut tx);
     let session = f.record(&format!("sched-start-{step}"));
@@ -2416,13 +2415,13 @@ impl Placed {
 
 /// HS2-YFPZFP: removing a planned step withdraws its work. Its scheduler run is
 /// cancelled as `step_removed` (the Up Next mark withdrawn), its session is told and
-/// wound down at its safe point, and nothing is dispatched for it again. A removal
-/// the gate refuses changes nothing; removing again is `step_not_found`; planning the
+/// wound down at its safe point, and nothing is dispatched for it again. A refused
+/// removal changes nothing; removing again is `step_not_found`; planning the
 /// ticket again is new work; a run already cancelled keeps its own reason.
 #[test]
 fn hs2_yfpzfp_removing_a_step_cancels_its_run_and_winds_its_session_down() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
     assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
     let session = f.record(&format!("sched-start-{step}"));
@@ -2432,12 +2431,12 @@ fn hs2_yfpzfp_removing_a_step_cancels_its_run_and_winds_its_session_down() {
     assert_eq!(run.state, RunState::Queued);
     assert!(f.up_next(&slug));
 
-    // An actor the gate refuses cannot withdraw the work: nothing changes.
-    let intruder =
-        hotsheet_ticketing::actor::MutationActor::parse("ai", Some("intruder".into())).unwrap();
+    // HS2-XHQ1EH: cancelling only reduces activity, so the gate never refuses an
+    // identified actor; an unidentified one cannot withdraw the work: nothing changes.
+    let anonymous = hotsheet_ticketing::actor::MutationActor::parse("ai", None).unwrap();
     assert!(matches!(
-        f.remove(&step, &intruder, &mut tx),
-        Err(OrchestrationError::Denied(_))
+        f.remove(&step, &anonymous, &mut tx),
+        Err(OrchestrationError::Invalid(_))
     ));
     assert_eq!(f.run_of(&step).state, RunState::Queued);
     assert!(f.up_next(&slug));
@@ -2517,7 +2516,7 @@ fn hs2_yfpzfp_removing_a_step_cancels_its_run_and_winds_its_session_down() {
 #[test]
 fn hs2_7vv79q_a_changed_choice_ends_an_unconfirmed_start_at_once() {
     clocked!(clock, tx);
-    let f = Placed::new(Vec::new(), &mut tx);
+    let f = Placed::new(&BOTH, &mut tx);
     let start = |request: &PlacementStart, tx: &mut Transaction<'_>| {
         OwnedSessions.start(&f.m.runtime, request, tx)
     };

@@ -153,7 +153,7 @@ fn target_policy(n: u128, speculation: Option<bool>) -> TargetPolicy {
     TargetPolicy {
         target_id: id(n),
         enabled: true,
-        actions: vec![TargetAction::WorkStart],
+        actions: None,
         tools: Vec::new(),
         max_sessions: 1,
         machine: None,

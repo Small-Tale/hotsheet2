@@ -1,13 +1,15 @@
-//! HS2-YCJDEB: the throughput policy, approvals and dry-run over the shared runtime.
-//! Reads make no request and read no secret; `set` and `decide` are a person's acts.
+//! HS2-YCJDEB: the throughput policy and its dry run over the shared runtime. Since
+//! HS2-XHQ1EH the policy holds limits only; what acts on a target asks a person
+//! through a permission request. Reads make no request and read no secret; `set` is
+//! a person's act.
 use std::collections::BTreeSet;
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AccessDecision, AccessRequest, Approval, ApprovalRegistry, AuditOutcome, AuditRecord,
-    DeclarationState, DenialReason, GrantRegistry, PolicyBody, PolicyDenial, PolicyProblem,
-    PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, SessionLoad, SessionRequest, SetPolicy,
-    TargetAction,
+    AccessRequest, AuditOutcome, AuditRecord, DeclarationState, IgnoredField, PermissionAction,
+    PermissionKey, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore,
+    PolicyVerdict, PolicyView, RetiredAuthority, SessionLoad, SessionRequest, SetPolicy,
+    TargetAction, retired_authority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +19,10 @@ use super::*;
 pub struct PolicyValidation {
     pub valid: bool,
     pub problems: Vec<PolicyProblem>,
+    /// HS2-XHQ1EH: retired fields the policy still holds; each is ignored.
+    pub ignored: Vec<IgnoredField>,
+    /// HS2-XHQ1EH: grant and approval files on this machine, never read as authority.
+    pub retired: RetiredAuthority,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -25,9 +31,6 @@ pub struct PolicyProposal {
     /// A proposed policy; omit to examine the stored one.
     #[serde(default)]
     pub policy: Option<PolicyBody>,
-    /// Also report whether this actor's grants cover each permitted action.
-    #[serde(default)]
-    pub actor_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -35,12 +38,15 @@ pub struct DryRunAction {
     pub action: TargetAction,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
-    /// `allowed`, `approval_required` or `denied`.
+    /// `allowed` or `denied` by the policy's limits.
     pub policy: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_detail: Option<&'static str>,
+    /// HS2-XHQ1EH: `not_needed` (reading and observing), `remembered` (a rule allows
+    /// it) or `asks` (a person is asked for each operation).
+    pub permission: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub grant: Option<AccessDecision>,
+    pub rule_id: Option<String>,
     /// The orchestrator could take this action on its own right now.
     pub automatic: bool,
 }
@@ -68,11 +74,10 @@ pub struct DryRun {
     pub targets: Vec<DryRunTarget>,
 }
 
-/// The policy's answer folded into the grant decision's vocabulary.
+/// The policy's limits for one action.
 pub(super) enum PolicyAnswer {
     Allowed,
     Denied(PolicyDenial),
-    Approval(hotsheet_ticketing::orchestration::ApprovalGate),
 }
 
 impl OrchestrationRuntime {
@@ -80,7 +85,7 @@ impl OrchestrationRuntime {
         Ok(PolicyStore::new(Path::new(&self.owner(owner_id)?.root)))
     }
 
-    fn declared(&self, owner_id: &str) -> Result<BTreeSet<String>, OrchestrationError> {
+    pub(super) fn declared(&self, owner_id: &str) -> Result<BTreeSet<String>, OrchestrationError> {
         Ok(self
             .declarations(owner_id)?
             .targets
@@ -95,7 +100,7 @@ impl OrchestrationRuntime {
     }
 
     /// Replace the policy. The session a policy governs must not loosen its own
-    /// bounds, so an AI actor is refused like it is for grants.
+    /// bounds, so an AI actor is refused.
     pub fn set_policy(
         &self,
         owner_id: &str,
@@ -121,7 +126,7 @@ impl OrchestrationRuntime {
                     operation_id: None,
                     outcome: AuditOutcome::Changed,
                     reason: None,
-                    grant_id: None,
+                    permission_id: None,
                 },
             )?;
         }
@@ -145,17 +150,18 @@ impl OrchestrationRuntime {
         Ok(PolicyValidation {
             valid: problems.is_empty(),
             problems,
+            ignored: body.ignored_fields(),
+            retired: retired_authority(&self.home),
         })
     }
 
-    /// What a policy would let the orchestrator do to each declared target, and, for a
-    /// named actor, whether this machine's grants agree. Writes nothing, files no
-    /// approval request and contacts no target.
+    /// What a policy's limits would let the orchestrator do to each declared target,
+    /// and whether a person would be asked or a remembered rule answers. Writes
+    /// nothing, files no permission request and contacts no target.
     pub fn dry_run_policy(
         &self,
         owner_id: &str,
         proposal: PolicyProposal,
-        tx: &mut Transaction<'_>,
     ) -> Result<DryRun, OrchestrationError> {
         let stored = self.policy(owner_id)?.policy;
         let (source, body) = match (proposal.policy, stored) {
@@ -171,7 +177,7 @@ impl OrchestrationRuntime {
             .unwrap_or_default();
         let empty = PolicyBody::default();
         let policy = body.as_ref().unwrap_or(&empty);
-        let now_ms = tx.clock.now_ms();
+        let rules = self.permission_ledger().rules(owner_id)?;
         let mut targets = Vec::new();
         for declaration in manifest
             .targets
@@ -215,7 +221,8 @@ impl OrchestrationRuntime {
                         ..SessionLoad::default()
                     });
                     let verdict = if body.is_none() && action != TargetAction::SessionsManage {
-                        // Without a policy, explicit actions are governed by grants alone.
+                        // Without a policy, explicit actions have no limits; a person
+                        // is asked for them.
                         PolicyVerdict::Allowed
                     } else if body.is_none() {
                         PolicyVerdict::Denied(PolicyDenial::NoPolicy)
@@ -231,22 +238,27 @@ impl OrchestrationRuntime {
                     };
                     let (answer, detail) = match verdict {
                         PolicyVerdict::Allowed => ("allowed", None),
-                        PolicyVerdict::ApprovalRequired(gate) => {
-                            ("approval_required", Some(gate.code()))
-                        }
                         PolicyVerdict::Denied(denial) => ("denied", Some(denial.code())),
                     };
-                    let grant = match &proposal.actor_id {
-                        None => None,
-                        Some(actor_id) => Some(GrantRegistry::new(&self.home).decide(
-                            &target,
-                            binding.destination.as_ref(),
-                            &AccessRequest {
-                                session: session.clone(),
-                                ..AccessRequest::new(actor_id.clone(), action)
-                            },
-                            now_ms,
-                        )?),
+                    let request = AccessRequest {
+                        session: session.clone(),
+                        ..AccessRequest::new("dry-run", action)
+                    };
+                    let rule = PermissionAction::for_request(&request).map(|permission| {
+                        let key = PermissionKey {
+                            target: target.clone(),
+                            action: permission,
+                            tool: permission
+                                .takes_tool()
+                                .then(|| tool.map(str::to_owned))
+                                .flatten(),
+                        };
+                        rules.iter().find(|rule| rule.key == key)
+                    });
+                    let (permission, rule_id) = match rule {
+                        None => ("not_needed", None),
+                        Some(Some(rule)) => ("remembered", Some(rule.rule_id.clone())),
+                        Some(None) => ("asks", None),
                     };
                     actions.push(DryRunAction {
                         action,
@@ -254,9 +266,11 @@ impl OrchestrationRuntime {
                         policy: answer,
                         policy_detail: detail,
                         automatic: answer == "allowed"
-                            && body.is_some()
-                            && grant.as_ref().is_some_and(|grant| grant.allowed),
-                        grant,
+                            && binding.destination.is_some()
+                            && permission != "asks"
+                            && (body.is_some() || action != TargetAction::SessionsManage),
+                        permission,
+                        rule_id,
                     });
                 }
             }
@@ -312,81 +326,6 @@ impl OrchestrationRuntime {
         }) {
             PolicyVerdict::Allowed => PolicyAnswer::Allowed,
             PolicyVerdict::Denied(denial) => PolicyAnswer::Denied(denial),
-            PolicyVerdict::ApprovalRequired(gate) => PolicyAnswer::Approval(gate),
         }
     }
-
-    pub fn approvals(
-        &self,
-        owner_id: &str,
-        tx: &mut Transaction<'_>,
-    ) -> Result<Vec<Approval>, OrchestrationError> {
-        ApprovalRegistry::new(&self.home).list(owner_id, tx.clock.now_ms())
-    }
-
-    /// A person approves or denies one pending request.
-    pub fn decide_approval(
-        &self,
-        owner_id: &str,
-        approval_id: &str,
-        approve: bool,
-        actor: Option<&MutationActor>,
-        tx: &mut Transaction<'_>,
-    ) -> Result<Approval, OrchestrationError> {
-        access::person(actor)?;
-        let (approval, changed) = ApprovalRegistry::new(&self.home).decide(
-            owner_id,
-            approval_id,
-            approve,
-            actor.and_then(|actor| actor.id.clone()),
-            tx,
-        )?;
-        if changed {
-            self.audit_record(
-                owner_id,
-                AuditRecord {
-                    at_ms: tx.clock.now_ms(),
-                    actor_role: access::role_code(actor),
-                    actor_id: actor.and_then(|actor| actor.id.clone()),
-                    target_id: Some(approval.target.target_id.clone()),
-                    action: approval.gate.code().into(),
-                    operation_id: Some(approval.operation_id.clone()),
-                    outcome: if approve {
-                        AuditOutcome::Approved
-                    } else {
-                        AuditOutcome::Rejected
-                    },
-                    reason: None,
-                    grant_id: None,
-                },
-            )?;
-        }
-        Ok(approval)
-    }
-}
-
-/// Fold a policy answer into a grant-allowed decision; `approved` says whether a
-/// required approval is in hand.
-pub(super) fn apply(
-    decision: AccessDecision,
-    answer: PolicyAnswer,
-    approved: impl FnOnce(
-        hotsheet_ticketing::orchestration::ApprovalGate,
-    ) -> Result<bool, OrchestrationError>,
-) -> Result<AccessDecision, OrchestrationError> {
-    if !decision.allowed {
-        return Ok(decision);
-    }
-    Ok(match answer {
-        PolicyAnswer::Allowed => decision,
-        PolicyAnswer::Denied(denial) => AccessDecision {
-            detail: Some(denial.code().into()),
-            ..AccessDecision::denied(DenialReason::PolicyDenied)
-        },
-        PolicyAnswer::Approval(gate) if approved(gate)? => decision,
-        PolicyAnswer::Approval(gate) => AccessDecision {
-            detail: Some(gate.code().into()),
-            ..AccessDecision::denied(DenialReason::ApprovalRequired)
-        },
-    })
 }

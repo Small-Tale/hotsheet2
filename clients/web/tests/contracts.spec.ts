@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(305); // HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(305); // HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(305); // HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy, dry-run and approvals, HS2-SBQ3T8 orchestration grants, access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(305); // HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -1023,7 +1023,7 @@ test('HS2-WBREDM real run reconciliation and control responses match the OpenAPI
     const person = { role: 'human', id: 'maintainer' };
     const scheduler = { role: 'ai', id: 'scheduler-1' };
 
-    // This checkout is its own target: declare it, review it, bind it and grant the scheduler.
+    // This checkout is its own target: declare it, review it and bind it (HS2-XHQ1EH).
     const added = await send('POST', `${base}/targets`, { target_id: target, label: 'Self', expected_revision: null });
     expect(added.status).toBe(200);
     const candidate = await send('POST', `${base}/inspect`, {
@@ -1038,13 +1038,14 @@ test('HS2-WBREDM real run reconciliation and control responses match the OpenAPI
       destination: candidate.body.destination,
     });
     expect(bound.status).toBe(200);
-    const granted = await send('POST', `${base}/targets/${target}/grants`, {
-      actor_id: 'scheduler-1',
-      actions: ['tickets_read', 'work_start'],
-      expires_at_ms: Date.now() + 3_600_000,
+    // HS2-XHQ1EH: reading needs no permission; starting work needs a remembered rule.
+    const remembered = await send('POST', `${base}/permission-rules`, {
+      target_id: target,
+      action: 'work_start',
       actor: person,
     });
-    expect(granted.status).toBe(200);
+    expect(remembered.status).toBe(200);
+    matches('/checkouts/{owner}/orchestration/permission-rules', 'post', '200', remembered.body);
     const orchestration = await server.request<{ id: string }>('/tickets', 'POST', { title: 'Coordinate recovery' });
     const work = await server.request<{ id: string; connection_id: string }>('/tickets', 'POST', {
       title: 'Synthetic work',
@@ -1172,7 +1173,7 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
     const person = { role: 'human', id: 'maintainer' };
     const scheduler = { role: 'ai', id: 'scheduler-1' };
 
-    // This checkout is its own target: declare it, review it, bind it and grant the scheduler.
+    // This checkout is its own target: declare it, review it and bind it (HS2-XHQ1EH).
     const added = await send('POST', `${base}/targets`, { target_id: target, label: 'Self', expected_revision: null });
     expect(added.status).toBe(200);
     const candidate = await send('POST', `${base}/inspect`, {
@@ -1187,13 +1188,14 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
       destination: candidate.body.destination,
     });
     expect(bound.status).toBe(200);
-    const granted = await send('POST', `${base}/targets/${target}/grants`, {
-      actor_id: 'scheduler-1',
-      actions: ['tickets_read', 'work_start'],
-      expires_at_ms: Date.now() + 3_600_000,
+    // HS2-XHQ1EH: reading needs no permission; starting work needs a remembered rule.
+    const remembered = await send('POST', `${base}/permission-rules`, {
+      target_id: target,
+      action: 'work_start',
       actor: person,
     });
-    expect(granted.status).toBe(200);
+    expect(remembered.status).toBe(200);
+    matches('/checkouts/{owner}/orchestration/permission-rules', 'post', '200', remembered.body);
     const orchestration = await server.request<{ id: string }>('/tickets', 'POST', { title: 'Coordinate the plan' });
     const first = await server.request<{ id: string; connection_id: string }>('/tickets', 'POST', {
       title: 'Synthetic prerequisite',
@@ -1263,12 +1265,15 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
     expect(refused.status).toBe(409);
     expect(refused.body.code).toBe('readiness_blocked');
     matches(runs, 'post', 'default', refused.body);
+    // HS2-XHQ1EH: an AI's override is a judgment call, asked as a decision note on the goal ticket.
     const asked = await send('POST', `${base}/runs`, { ...dispatch, override_readiness: true });
     expect(asked.status).toBe(403);
-    expect(asked.body.code).toBe('approval_required');
-    const approvals = await send('GET', `${base}/approvals`);
-    matches('/checkouts/{owner}/orchestration/approvals', 'get', '200', approvals.body);
-    expect(approvals.body).toMatchObject([{ gate: 'readiness_override', state: 'pending' }]);
+    expect(asked.body.code).toBe('decision_required');
+    expect(asked.body.note_id).toEqual(expect.any(String));
+    matches(runs, 'post', 'default', asked.body);
+    const permissions = await send('GET', `${base}/permissions`);
+    matches('/checkouts/{owner}/orchestration/permissions', 'get', '200', permissions.body);
+    expect(permissions.body).toMatchObject({ requests: [], retired: { grants_file: false, approvals_file: false } });
 
     const refreshed = await act('refresh', { step_id: stepId });
     expect((refreshed.body.steps as unknown[]).length).toBe(1);
@@ -1353,13 +1358,20 @@ test('HS2-JSF985 real provisional work responses match the OpenAPI contract', as
       destination: candidate.body.destination,
     });
     expect(bound.status).toBe(200);
-    const granted = await send('POST', `${base}/targets/${target}/grants`, {
-      actor_id: 'scheduler-1',
-      actions: ['tickets_read', 'work_start', 'gates_observe'],
-      expires_at_ms: Date.now() + 3_600_000,
+    // HS2-XHQ1EH: reading needs no permission; starting work needs a remembered rule.
+    const remembered = await send('POST', `${base}/permission-rules`, {
+      target_id: target,
+      action: 'work_start',
       actor: person,
     });
-    expect(granted.status).toBe(200);
+    expect(remembered.status).toBe(200);
+    matches('/checkouts/{owner}/orchestration/permission-rules', 'post', '200', remembered.body);
+    const ahead = await send('POST', `${base}/permission-rules`, {
+      target_id: target,
+      action: 'provisional_dispatch',
+      actor: person,
+    });
+    expect(ahead.status).toBe(200);
     const orchestration = await server.request<{ id: string }>('/tickets', 'POST', { title: 'Coordinate the plan' });
     const first = await server.request<{ id: string; connection_id: string }>('/tickets', 'POST', {
       title: 'Synthetic prerequisite',
@@ -1543,13 +1555,6 @@ test('HS2-ECWG50 real scheduler responses match the OpenAPI contract', async () 
       destination: candidate.body.destination,
     });
     expect(bound.status).toBe(200);
-    const granted = await send('POST', `${base}/targets/${target}/grants`, {
-      actor_id: 'scheduler-1',
-      actions: ['tickets_read', 'gates_observe'],
-      expires_at_ms: Date.now() + 3_600_000,
-      actor: person,
-    });
-    expect(granted.status).toBe(200);
     const orchestration = await server.request<{ id: string }>('/tickets', 'POST', {
       title: 'Coordinate the schedule',
     });
@@ -1698,13 +1703,6 @@ test('HS2-2FG91X real resource requirement and contention responses match the Op
       destination: candidate.body.destination,
     });
     expect(bound.status).toBe(200);
-    const granted = await send('POST', `${base}/targets/${target}/grants`, {
-      actor_id: 'scheduler-1',
-      actions: ['tickets_read', 'gates_observe'],
-      expires_at_ms: Date.now() + 3_600_000,
-      actor: person,
-    });
-    expect(granted.status).toBe(200);
     const orchestration = await server.request<{ id: string }>('/tickets', 'POST', {
       title: 'Coordinate around a resource',
     });

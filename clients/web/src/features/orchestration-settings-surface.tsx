@@ -68,6 +68,11 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
 
   const orchestrationProject = (projectId: string | undefined) =>
     Boolean(projectId && settings.types.value[projectId]?.view?.project_type === 'orchestration');
+  /** The same answer, `undefined` until this project's type was read (the view then reads its own). */
+  const knownOrchestrationProject = (projectId: string): boolean | undefined => {
+    const view = settings.types.value[projectId]?.view;
+    return view ? view.project_type === 'orchestration' : undefined;
+  };
 
   /** The category Settings shows: Orchestration falls back to General once the project is Software. */
   function settingsCategory(): SettingsCategory {
@@ -185,7 +190,16 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     });
   }
 
-  return { settings, settingsCategory, orchestrationProject, changed, projectGeneral, orchestration, inspector };
+  return {
+    settings,
+    settingsCategory,
+    orchestrationProject,
+    knownOrchestrationProject,
+    changed,
+    projectGeneral,
+    orchestration,
+    inspector,
+  };
 }
 
 export type OrchestrationSettingsSurface = ReturnType<typeof createOrchestrationSettingsSurface>;

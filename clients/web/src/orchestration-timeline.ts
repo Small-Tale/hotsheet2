@@ -41,7 +41,8 @@ export interface TimelineRun {
 }
 
 export interface TimelinePermission {
-  kind: 'approval' | 'permission';
+  /** An orchestrator permission request (HS2-XHQ1EH). */
+  kind: 'permission';
   request_id: string;
   action: string;
   operation_id?: string;
@@ -183,7 +184,7 @@ function item(value: unknown): TimelineItem {
   });
   optional(row.permission, (permission) => {
     const entry = record(permission);
-    one(entry.kind, ['approval', 'permission']);
+    one(entry.kind, ['permission']);
     text(entry.request_id);
     text(entry.action);
     return entry;

@@ -12,7 +12,7 @@ fn record(at_ms: u64, action: &str, outcome: AuditOutcome) -> AuditRecord {
         operation_id: Some("op-1".into()),
         outcome,
         reason: None,
-        grant_id: None,
+        permission_id: None,
     }
 }
 fn journal(home: &std::path::Path) -> AuditJournal {

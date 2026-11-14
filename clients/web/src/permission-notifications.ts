@@ -10,6 +10,33 @@ export interface PermissionSecretSuggestion {
   placeholder: 'token' | 'quoted';
 }
 
+/**
+ * HS2-XHQ1EH: what an orchestrator permission request concerns. The orchestration runtime
+ * owns its state and remembered rules; `action` on the request is its one-sentence summary.
+ */
+export interface OrchestratorAsk {
+  request_id: string;
+  owner_checkout_id: string;
+  owner_label: string;
+  target_id: string;
+  target_label: string;
+  action: string;
+  tool?: string;
+  model?: string;
+  operation_id: string;
+  each_time?: boolean;
+}
+/** HS2-XHQ1EH: a remembered orchestrator rule's key, as Settings → Permissions lists it. */
+export interface OrchestratorRule {
+  rule_id: string;
+  owner_checkout_id: string;
+  owner_label: string;
+  target_id: string;
+  target_label: string;
+  action: string;
+  tool?: string;
+}
+
 export interface WirePermissionRequest {
   id: number;
   project?: string;
@@ -19,6 +46,14 @@ export interface WirePermissionRequest {
   agent?: string;
   always_allow_supported?: boolean;
   suggestions?: PermissionSecretSuggestion[];
+  /** HS2-XHQ1EH: `orchestrator` for an orchestration project's request. */
+  requester?: 'orchestrator';
+  orchestrator?: OrchestratorAsk;
+}
+
+/** HS2-XHQ1EH: who asks, for a card's identity line: the orchestrator and its project. */
+export function orchestratorIdentity(orchestrator: OrchestratorAsk): { agent: string; role: string } {
+  return { agent: 'Orchestrator', role: `${orchestrator.owner_label} orchestration` };
 }
 export interface ToolConnection {
   id: string;
@@ -64,6 +99,8 @@ export interface PermissionRule {
   description?: string;
   decision: PermissionDecision;
   scope: 'chat' | 'session' | 'always';
+  /** HS2-XHQ1EH: set for a remembered orchestrator rule; it is kept or forgotten only. */
+  orchestrator?: OrchestratorRule;
 }
 
 export interface PermissionPattern {
@@ -237,6 +274,8 @@ export class PermissionInbox {
       const key = `${project.id}:${request.id}`,
         existing = this.pendingItems.get(key),
         connection = connections.find((item) => item.id === request.connection);
+      // HS2-XHQ1EH: an orchestrator request has no tool connection; it names its project.
+      const identity = request.orchestrator ? orchestratorIdentity(request.orchestrator) : undefined;
       if (!existing) {
         this.pendingItems.set(key, {
           ...request,
@@ -244,8 +283,10 @@ export class PermissionInbox {
           projectId: project.id,
           projectName: project.name,
           projectRoot: project.root,
-          agent: displayAgent(connection?.tool || request.agent),
-          role: connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : '',
+          agent: identity?.agent ?? displayAgent(connection?.tool || request.agent),
+          role:
+            identity?.role ??
+            (connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : ''),
           receivedAt: now,
           ignored: false,
         });
@@ -257,8 +298,10 @@ export class PermissionInbox {
         ...request,
         projectName: project.name,
         projectRoot: project.root,
-        agent: displayAgent(connection?.tool || request.agent || existing.agent),
-        role: connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : '',
+        agent: identity?.agent ?? displayAgent(connection?.tool || request.agent || existing.agent),
+        role:
+          identity?.role ??
+          (connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : ''),
       };
       if (
         existing.connection !== next.connection ||

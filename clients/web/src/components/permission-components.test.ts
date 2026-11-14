@@ -265,6 +265,110 @@ describe('permission presentation components', () => {
   });
 });
 
+describe('orchestrator permission requests (HS2-XHQ1EH)', () => {
+  const ask = {
+    request_id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    owner_checkout_id: 'launch',
+    owner_label: 'Launch',
+    target_id: '01ARZ3NDEKTSV4RRFFQ69G5FAZ',
+    target_label: 'API',
+    action: 'session_start',
+    tool: 'codex',
+    operation_id: 'sched-start-step',
+  };
+  const orchestrated: PermissionItem = {
+    ...pending,
+    id: 9,
+    key: 'launch:9',
+    project: 'checkout:launch',
+    connection: 'orchestrator:launch',
+    tool: 'Orchestrator',
+    action: 'Start a codex session in API',
+    requester: 'orchestrator',
+    orchestrator: ask,
+    agent: 'Orchestrator',
+    role: 'Launch orchestration',
+  };
+
+  it('heads the card with the orchestrator and target project and offers no AI-session scope', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(10);
+    const markup = String(PermissionRequestCard({ item: orchestrated, presentation: 'popup' }));
+    expect(markup).toContain('Orchestrator: Start a codex session in API');
+    expect(markup).toContain('Launch orchestration');
+    expect(markup).toContain('Target project: API · Tool: codex');
+    expect(markup).not.toContain('Allow This AI Session');
+    expect(markup).not.toContain('data-scope="chat"');
+    expect(markup).toContain('Always Allow');
+    expect(markup).toContain('Allow Once');
+    expect(markup).toContain('Deny');
+    expect(markup).toContain('data-allow-count="2"');
+    expect(markup).not.toContain('Wants permission to use Orchestrator');
+  });
+
+  it('offers only Allow Once for a request asked each time', () => {
+    const each = {
+      ...orchestrated,
+      always_allow_supported: false,
+      orchestrator: { ...ask, action: 'deployments_run', tool: undefined, each_time: true },
+    };
+    const markup = String(PermissionRequestCard({ item: each }));
+    expect(markup).not.toContain('Always Allow');
+    expect(markup).toContain('data-allow-count="1"');
+    expect(markup).toContain('>Allow<');
+    expect(markup).toContain('Target project: API');
+    expect(markup).not.toContain('Tool:');
+  });
+
+  it('reviews the remembered rule by orchestrator, target and lifetime, never a match pattern', () => {
+    setRememberedPermissionPreview(orchestrated.key, 'always', orchestrated.action);
+    const markup = String(PermissionRequestCard({ item: orchestrated }));
+    setRememberedPermissionPreview(orchestrated.key);
+    expect(markup).toContain('Review the rule to remember');
+    expect(markup).toContain('The orchestrator of Launch, in API');
+    expect(markup).toContain('Orchestration project: Launch');
+    expect(markup).toContain('Persistent, until revoked');
+    expect(markup).toContain('Confirm Always Allow');
+    expect(markup).not.toContain('Permission rule type');
+    expect(markup).not.toContain('All AI sessions');
+    expect(markup).toContain('data-rule-confirmed="true"');
+  });
+
+  it('names the target project and the orchestrator in the remembered rule row', () => {
+    const rule: PermissionRule = {
+      project: 'checkout:launch',
+      tool: 'Orchestrator',
+      action: 'orchestrator:01ARZ3NDEKTSV4RRFFQ69G5FB0',
+      exact_action: 'Start a codex session in API',
+      match_type: 'exact',
+      description: 'Start a codex session in API',
+      decision: 'allow',
+      scope: 'always',
+      orchestrator: {
+        rule_id: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+        owner_checkout_id: 'launch',
+        owner_label: 'Launch',
+        target_id: ask.target_id,
+        target_label: 'API',
+        action: 'session_start',
+        tool: 'codex',
+      },
+    };
+    const owner = { id: 'launch', name: 'Launch', root: '/code/launch' };
+    for (const props of [
+      { rules: [rule], owner },
+      { rules: [rule], owner, dialog: { query: '', visibleCount: 100 } },
+    ]) {
+      const markup = String(PermissionRulesSettings(props));
+      expect(markup).toContain('Start a codex session in API');
+      expect(markup).toContain('Applies to: The orchestrator of Launch');
+      expect(markup).toContain('Target project: API');
+      expect(markup).not.toContain('All AI sessions');
+      expect(markup).not.toContain('Code project: Launch');
+    }
+    expect(permissionRulesList([rule], 'orchestrator of launch', 100, undefined, owner).rows).toEqual([rule]);
+  });
+});
+
 describe('recent remembered answers (HS2-16XPHH)', () => {
   const rules: PermissionRule[] = Array.from({ length: 12 }, (_, index) => ({
     project: '/p',

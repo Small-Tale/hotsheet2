@@ -75,12 +75,12 @@ pub use model_catalog::{
     discover_ai_tool_descriptors,
 };
 pub use permission::{
-    DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, Outcome as PermissionOutcome,
-    PermissionAsk, PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,
-    Rule as PermissionRule, RuleInfo as PermissionRuleInfo, Scope as PermissionScope,
-    SharedPermissionBridge, StoredRule as StoredPermissionRule,
-    action_key_for as permission_action_key_for, append_rule as append_permission_rule,
-    count_legacy_rules as count_legacy_permission_rules,
+    DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, ORCHESTRATOR_TOOL, OrchestratorAsk,
+    OrchestratorRule, Outcome as PermissionOutcome, PermissionAsk, PermissionBridge,
+    Request as PermissionRequest, Resolved as PermissionResolved, Rule as PermissionRule,
+    RuleInfo as PermissionRuleInfo, Scope as PermissionScope, SharedPermissionBridge,
+    StoredRule as StoredPermissionRule, action_key_for as permission_action_key_for,
+    append_rule as append_permission_rule, count_legacy_rules as count_legacy_permission_rules,
     discard_legacy_rules as discard_legacy_permission_rules,
     ensure_rules_file as ensure_permission_rules_file,
     load_existing_rules_with_key as load_existing_permission_rules_with_key,

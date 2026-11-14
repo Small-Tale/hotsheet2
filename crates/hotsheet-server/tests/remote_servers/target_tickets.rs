@@ -144,29 +144,28 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
         "--priority",
         "high",
     ];
-    // Bound but not granted: refused, and the peer's store is untouched.
-    assert!(cli_failure(&home, &worker, &create).contains("no_grant"));
+    // HS2-XHQ1EH: bound is consented to, but an AI's write asks a person first; the
+    // peer's store is untouched meanwhile.
+    assert!(cli_failure(&home, &worker, &create).contains("permission_required"));
     let peer_store = FsStore::open(&peer_source).unwrap();
     assert!(peer_store.list_tickets().unwrap().is_empty());
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
+    // HS2-XHQ1EH: a person remembers the rules the orchestrator needs.
+    {
+        let (action, tool) = ("tickets_write", None::<&str>);
+        let mut arguments = vec![
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "worker-1",
             "--action",
-            "tickets_read",
-            "--action",
-            "tickets_write",
-            "--expires-in",
-            "1h",
-        ],
-    );
+            action,
+        ];
+        if let Some(tool) = tool {
+            arguments.extend(["--tool", tool]);
+        }
+        cli_named(&home, &human, &arguments);
+    }
     // An unidentified caller is not an actor the grant can cover.
     assert!(
         cli_failure(&home, &["-C", store_arg, "orchestration"], &create)
@@ -512,13 +511,11 @@ async fn hs2_az15ga_stdio_mcp_creates_and_resolves_target_tickets() {
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    let (status, _) = api(
+    let (status, _) = super::orchestration::remember_rules(
         router,
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"worker-1","actions":["tickets_read","tickets_write"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -576,11 +573,8 @@ async fn hs2_az15ga_stdio_mcp_creates_and_resolves_target_tickets() {
     assert_eq!(links[0]["state"], "resolved");
     assert_eq!(links[0]["operation_id"], "op-mcp-1");
     assert_eq!(links[0]["backlink"], true);
-    // Another actor holds no grant, and a call without an identity is malformed.
+    // A call without an identity is malformed.
     for arguments in [
-        json!({"action":"ticket_read","checkout":checkout.id,"target_id":TARGET,
-            "connection_id":connection,"native_id":native_id,
-            "actor_role":"ai","actor_id":"worker-2"}),
         json!({"action":"ticket_read","checkout":checkout.id,"target_id":TARGET,
             "connection_id":connection,"native_id":native_id}),
         json!({"action":"ticket_delete","checkout":checkout.id,"target_id":TARGET}),

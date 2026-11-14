@@ -5,7 +5,12 @@ import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthTh
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import { parseOrchestrationList, parseOrchestrationRecord, parseOrchestrationTimeline } from './orchestration-timeline';
-import type { PermissionAutomation, PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
+import type {
+  OrchestratorAsk,
+  PermissionAutomation,
+  PermissionPattern,
+  PermissionSecretSuggestion,
+} from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -1182,7 +1187,6 @@ export interface OrchestrationPolicyBody {
   tools?: { tool: string; max_sessions: number; weight?: number; accounts?: unknown[] }[];
   targets?: unknown[];
   wind_down?: { idle_minutes?: number; keep_warm?: number };
-  approval?: unknown;
   speculation?: { allowed?: boolean; max_depth?: number; risk_weight?: number; opt_out_tag?: string };
   placement?: {
     automatic?: boolean;
@@ -1245,6 +1249,9 @@ export interface PermissionRequest {
   agent?: string;
   always_allow_supported?: boolean;
   suggestions?: PermissionSecretSuggestion[];
+  /** HS2-XHQ1EH: `orchestrator` for an orchestration project's request. */
+  requester?: 'orchestrator';
+  orchestrator?: OrchestratorAsk;
 }
 export interface AiModelDescriptor {
   id: string;

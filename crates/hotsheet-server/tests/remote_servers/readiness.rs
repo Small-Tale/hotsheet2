@@ -112,25 +112,23 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         store_arg,
         "orchestration",
     ];
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
+    // HS2-XHQ1EH: a person remembers the rules the orchestrator needs.
+    {
+        let (action, tool) = ("work_start", None::<&str>);
+        let mut arguments = vec![
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "scheduler-1",
             "--action",
-            "tickets_read",
-            "--action",
-            "work_start",
-            "--expires-in",
-            "1h",
-        ],
-    );
+            action,
+        ];
+        if let Some(tool) = tool {
+            arguments.extend(["--tool", tool]);
+        }
+        cli_named(&home, &human, &arguments);
+    }
     let readiness = |arguments: &[&str]| {
         let mut all = vec!["readiness"];
         all.extend_from_slice(arguments);
@@ -241,23 +239,47 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
     let refused = cli_failure(&home, &worker, &refs(&dispatch("op-b", &[])));
     assert!(refused.contains("readiness_blocked"), "{refused}");
     assert_eq!(store.read_ticket(&second.id).unwrap().claimed_by, None);
-    // Asking for an override waits for a person; an AI cannot approve it.
+    // HS2-XHQ1EH: the orchestrator's own override is a judgment call. It adds a
+    // FEEDBACK NEEDED note with CHOICE options to the orchestration ticket and waits.
     let asking = dispatch("op-b", &["--override-readiness"]);
     let waiting = cli_failure(&home, &worker, &refs(&asking));
-    assert!(waiting.contains("approval_required"), "{waiting}");
-    let approvals = cli_named(&home, &human, &["approval", "list", "--project", &owner.id]);
-    let pending = approvals
-        .as_array()
+    assert!(waiting.contains("decision_required"), "{waiting}");
+    let decision = store
+        .read_ticket(&orchestration.id)
         .unwrap()
-        .iter()
-        .find(|approval| approval["gate"] == "readiness_override")
+        .notes
+        .into_iter()
+        .find(|note| note.kind == hotsheet_model::NoteKind::FeedbackNeeded)
         .unwrap();
-    assert_eq!(pending["state"], "pending");
-    assert_eq!(pending["operation_id"], "op-b");
-    let approval_id = pending["approval_id"].as_str().unwrap();
-    let approve = ["approval", "approve", approval_id, "--project", &owner.id];
-    assert!(cli_failure(&home, &worker, &approve).contains("forbidden"));
-    cli_named(&home, &human, &approve);
+    assert!(decision.text.contains("CHOICE:") && decision.text.contains("- Start anyway"));
+    assert!(!decision.text.contains("Synthetic"));
+    // Asking again adds no second note, and nothing is claimed meanwhile.
+    cli_failure(&home, &worker, &refs(&asking));
+    assert_eq!(
+        store
+            .read_ticket(&orchestration.id)
+            .unwrap()
+            .notes
+            .iter()
+            .filter(|note| note.kind == hotsheet_model::NoteKind::FeedbackNeeded)
+            .count(),
+        1
+    );
+    assert_eq!(store.read_ticket(&second.id).unwrap().claimed_by, None);
+    // A person responds through the existing feedback flow.
+    ops::add_note_with_metadata(
+        &store,
+        &orchestration.id,
+        hotsheet_model::Ulid::new(),
+        "2026-10-16T00:00:00Z".into(),
+        hotsheet_model::NoteKind::Regular,
+        ops::NoteMetadataInput {
+            response_to: Some(decision.id.to_string()),
+            ..ops::NoteMetadataInput::default()
+        },
+        "- A. Start anyway".into(),
+    )
+    .unwrap();
     let run = cli_named(&home, &worker, &refs(&asking));
     assert_eq!(run["state"], "dispatched");
     assert_eq!(
@@ -277,12 +299,10 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         .iter()
         .filter(|entry| entry["action"] == "readiness_override")
         .collect();
-    // Asked, answered by a person, used: three entries under the one operation.
+    // Asked twice, then decided and used, under the one operation.
     assert_eq!(overrides.len(), 3, "{audit}");
     assert_eq!(overrides[0]["outcome"], "denied");
-    assert_eq!(overrides[0]["reason"], "approval_required");
-    assert_eq!(overrides[1]["outcome"], "approved");
-    assert_eq!(overrides[1]["actor_id"], "maintainer");
+    assert_eq!(overrides[0]["reason"], "decision_required");
     assert_eq!(overrides[2]["outcome"], "allowed");
     assert_eq!(overrides[2]["reason"], "blocked");
     for entry in &overrides {
@@ -294,8 +314,8 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         .iter()
         .find(|note| note.text.starts_with("Readiness override"))
         .unwrap();
-    assert!(note.text.contains(&b) && note.text.contains(approval_id));
-    assert!(note.text.contains("maintainer") && !note.text.contains("Synthetic"));
+    assert!(note.text.contains(&b) && note.text.contains(&decision.id.to_string()));
+    assert!(!note.text.contains("Synthetic"));
 
     // The prerequisite is finished in the target; a refresh confirms it and the
     // stream shows each level exactly once.
@@ -395,13 +415,11 @@ async fn hs2_42tara_server_routes_and_stdio_mcp_share_the_plan() {
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","work_start"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     // Every plan route needs the bearer.

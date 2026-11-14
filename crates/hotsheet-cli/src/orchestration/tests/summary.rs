@@ -8,7 +8,7 @@ use hotsheet_ticketing::orchestration::{
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::{Value, json};
 
-use super::tickets::{Machine, NOW, bind_and_grant, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, machine, unsupported, worker};
 use super::*;
 
 fn target_ticket(m: &Machine) -> Ticket {
@@ -90,7 +90,7 @@ fn hs2_s13719_summary_reads_runs_and_usage_once_per_work_item_across_targets() {
 
     // Two declared targets that are the same checkout, so they share a ticket source.
     for target in [1, 2] {
-        bind_and_grant(
+        bind_and_allow(
             &m,
             target,
             &[TargetAction::TicketsRead, TargetAction::WorkStart],

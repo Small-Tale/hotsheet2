@@ -1,7 +1,7 @@
 //! HS2-5JBYPV: CI and deployment gates of dispatch runs over the shared runtime.
 //!
 //! A gate changes only on a typed reading from a [`GateProvider`] adapter or on a
-//! person's approval. Reads answer from this machine's records and contact nothing.
+//! person's answer to a deployment's permission request. Reads answer from this machine's records and contact nothing.
 //! The GitHub Actions adapter is the watch Job of HS2-3R9V0R: the Job monitor observes
 //! the provider, and this module wakes on the Job store's file changes instead of
 //! polling.
@@ -14,10 +14,10 @@ use hotsheet_jobs::{
 };
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalRegistry, ApprovalState, ArtifactRef, CiScope, Coverage, DenialReason,
-    DeploymentScope, Gate, GateError, GateEvidence, GateFilter, GateKind, GateOutcome, GateReading,
-    GateRegistry, GateState, GateSummary, NewGate, Run, RunEvent, RunEventKind, RunEventSource,
-    TargetAction, summarize, valid_commit, valid_script,
+    ArtifactRef, CiScope, Coverage, DenialReason, DeploymentScope, Gate, GateError, GateEvidence,
+    GateFilter, GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, NewGate,
+    Run, RunEvent, RunEventKind, RunEventSource, TargetAction, summarize, valid_commit,
+    valid_script,
 };
 use serde::{Deserialize, Serialize};
 
@@ -266,9 +266,10 @@ pub struct GateView {
     /// Whether something observes the provider now; absent when that does not apply.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub watching: Option<bool>,
-    /// The pending request a person must answer, for a deployment awaiting approval.
+    /// HS2-XHQ1EH: the permission request a person must answer, for a deployment
+    /// awaiting approval.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub approval_id: Option<String>,
+    pub request_id: Option<String>,
 }
 
 /// The gates of one run after a sync.
@@ -593,7 +594,7 @@ impl OrchestrationRuntime {
                     .map(|gate| gate.gate_id)
                     .collect(),
                 watching,
-                approval_id: None,
+                request_id: None,
             })
         })();
         self.finish(&target, &authorized, &outcome, tx)?;
@@ -671,8 +672,8 @@ impl OrchestrationRuntime {
     /// One step of following an owner's gates: read every gate that still waits on a
     /// provider and, when none moved, wait for the provider's records to change. Call
     /// again while `active`. Acts as whoever linked each gate, and confirms that
-    /// authority when it starts and every ten minutes; a target whose grant no longer
-    /// allows `gates_observe` is left alone.
+    /// authority when it starts and every ten minutes; a target the gate no longer
+    /// allows `gates_observe` on (unbound, removed or unreachable) is left alone.
     pub fn gate_follow_step(
         &self,
         owner_id: &str,
@@ -773,34 +774,15 @@ impl OrchestrationRuntime {
 
     // ---- Deployments ----
 
-    fn deployment_approval(
-        &self,
-        target: &TargetRef,
-        actor_id: &str,
-        operation_id: &str,
-        now_ms: u64,
-    ) -> Result<Option<(String, ApprovalState)>, OrchestrationError> {
-        Ok(ApprovalRegistry::new(&self.home)
-            .list(&target.owner_checkout_id, now_ms)?
-            .into_iter()
-            .rev()
-            .find(|approval| {
-                &approval.target == target
-                    && approval.actor_id == actor_id
-                    && approval.gate == ApprovalGate::Deployment
-                    && approval.operation_id == operation_id
-            })
-            .map(|approval| (approval.approval_id, approval.state)))
-    }
-
     /// Ask for a deployment of the commit the run's CI gate passed, through the
     /// target's checked-in script.
     ///
     /// The request is refused unless every standing CI gate of the run passed for one
-    /// commit. It passes the gate as `deployments_run` under its operation id. A
-    /// production deployment always waits for a person; any other waits when the
-    /// policy lists `deployment`. While waiting the gate is `awaiting_approval`;
-    /// repeating the request after the answer moves it on. A registered deployment
+    /// commit. It passes the gate as `deployments_run` under its operation id, which
+    /// asks a person through a permission request unless a remembered rule allows it
+    /// (HS2-XHQ1EH). A production deployment cannot be undone, so it asks for each
+    /// operation whatever is remembered. While waiting the gate is
+    /// `awaiting_approval`; repeating the request after the answer moves it on. A registered deployment
     /// adapter then runs it and reports typed evidence. Without one the gate is
     /// `unknown` with `deployment_executor_unavailable`: authorized, and not run.
     pub fn gate_deploy(
@@ -821,12 +803,12 @@ impl OrchestrationRuntime {
             .clone()
             .unwrap_or_else(|| TARGET_SCRIPT_PROVIDER.into());
         let registry = self.gate_registry();
-        let view = |gate: Gate, created, approval_id| GateView {
+        let view = |gate: Gate, created, request_id| GateView {
             gate,
             created,
             superseded: Vec::new(),
             watching: None,
-            approval_id,
+            request_id,
         };
         let existing = registry
             .list(owner_id, &GateFilter::default())?
@@ -901,16 +883,18 @@ impl OrchestrationRuntime {
             &target,
             actor,
             ActionRequest {
-                approval: request.production.then_some(ApprovalGate::Deployment),
+                irreversible: request.production,
                 ..ActionRequest::new(TargetAction::DeploymentsRun)
                     .operation(request.operation_id.clone())
             },
             tx,
         );
-        let now_ms = tx.clock.now_ms();
         let authorized = match authorized {
             Ok(authorized) => authorized,
-            Err(OrchestrationError::Denied(DenialReason::ApprovalRequired)) => {
+            Err(
+                error @ (OrchestrationError::PermissionRequired { .. }
+                | OrchestrationError::Denied(DenialReason::PermissionDenied)),
+            ) => {
                 let actor_id = actor.and_then(|actor| actor.id.clone()).unwrap_or_default();
                 let linked = registry.link(
                     owner_id,
@@ -923,25 +907,24 @@ impl OrchestrationRuntime {
                 if linked.created {
                     self.gate_event(&linked.gate, RunEventSource::Orchestrator);
                 }
-                let approval =
-                    self.deployment_approval(&target, &actor_id, &request.operation_id, now_ms)?;
                 let mut gate = linked.gate;
-                if matches!(approval, Some((_, ApprovalState::Denied))) {
-                    let (denied, outcome) = registry.resolve_approval(
-                        owner_id,
-                        &gate.gate_id,
-                        GateState::Failed,
-                        Some("approval_denied"),
-                        tx,
-                    )?;
-                    if outcome == GateOutcome::Changed {
-                        self.gate_event(&denied, RunEventSource::Orchestrator);
+                let pending = match error {
+                    OrchestrationError::PermissionRequired { request_id } => Some(request_id),
+                    _ => {
+                        let (denied, outcome) = registry.resolve_approval(
+                            owner_id,
+                            &gate.gate_id,
+                            GateState::Failed,
+                            Some("permission_denied"),
+                            tx,
+                        )?;
+                        if outcome == GateOutcome::Changed {
+                            self.gate_event(&denied, RunEventSource::Orchestrator);
+                        }
+                        gate = denied;
+                        None
                     }
-                    gate = denied;
-                }
-                let pending = approval
-                    .filter(|(_, state)| *state == ApprovalState::Pending)
-                    .map(|(id, _)| id);
+                };
                 return Ok(view(gate, linked.created, pending));
             }
             Err(error) => return Err(error),

@@ -20,11 +20,10 @@ use hotsheet_model::NoteKind;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, AuditOutcome, AuditRecord, ExecutionEnd, ExecutionOutcome,
-    MAX_STEP_TIMEOUT_SECONDS, NewResult, ResultUpdate, RunEvent, RunEventKind, RunEventSource,
-    RunTicket, StepDefinition, StreamRef, TargetAction, ValidationCheck, ValidationEvidence,
-    ValidationProfileStore, ValidationRegistry, ValidationResult, ValidationState, evaluate,
-    may_retry,
+    AuditOutcome, AuditRecord, ExecutionEnd, ExecutionOutcome, MAX_STEP_TIMEOUT_SECONDS, NewResult,
+    ResultUpdate, RunEvent, RunEventKind, RunEventSource, RunTicket, StepDefinition, StreamRef,
+    TargetAction, ValidationCheck, ValidationEvidence, ValidationProfileStore, ValidationRegistry,
+    ValidationResult, ValidationState, evaluate, may_retry,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -515,7 +514,6 @@ impl OrchestrationRuntime {
         target_id: &str,
         actor: Option<&MutationActor>,
         action: &str,
-        grant_id: Option<String>,
         tx: &mut Transaction<'_>,
     ) -> Result<(), OrchestrationError> {
         self.audit_record(
@@ -529,13 +527,14 @@ impl OrchestrationRuntime {
                 operation_id: None,
                 outcome: AuditOutcome::Changed,
                 reason: None,
-                grant_id,
+                permission_id: None,
             },
         )
     }
 
-    /// Define a step or change its definition. The actor needs a `validation_run`
-    /// grant on the step's target; defining runs nothing and asks nobody.
+    /// Define a step or change its definition. HS2-XHQ1EH: this changes only the
+    /// orchestration project's own record, so it runs nothing, asks nobody and needs
+    /// no reachable target; it needs an identified actor and is audited.
     pub fn validation_define(
         &self,
         owner_id: &str,
@@ -546,37 +545,29 @@ impl OrchestrationRuntime {
         request.step.validate()?;
         let target = Self::target_ref(owner_id, &request.step.target_id)?;
         let ticket = self.validation_ticket(owner_id, &request.ticket)?;
-        let authorized = self.authorize(
-            &target,
-            actor,
-            ActionRequest::new(TargetAction::ValidationRun).continuing(),
-            tx,
-        )?;
+        let Some(actor_id) = actor.and_then(|actor| actor.id.clone()) else {
+            return Err(OrchestrationError::Invalid(
+                "an identified actor is required to change a validation step",
+            ));
+        };
         let step_id = request.step.step_id.clone();
         let (_, changed) = self.validations().define(
             owner_id,
             ticket.clone(),
             request.step,
-            Some(authorized.actor_id.clone()),
+            Some(actor_id),
             tx,
         )?;
         if changed {
-            self.validation_audit(
-                owner_id,
-                &target.target_id,
-                actor,
-                "validation_define",
-                Some(authorized.grant_id),
-                tx,
-            )?;
+            self.validation_audit(owner_id, &target.target_id, actor, "validation_define", tx)?;
         }
         self.validations()
             .evidence(owner_id, &ticket, &step_id, tx.clock.now_ms())
     }
 
-    /// Remove a step and its retained results. A person may always remove one, so a
-    /// step of an unbound or unreachable target can be cleaned up; automation needs
-    /// its `validation_run` grant.
+    /// Remove a step and its retained results. HS2-XHQ1EH: only the orchestration
+    /// project's own record changes, so a step of an unbound or unreachable target can
+    /// always be cleaned up; it needs an identified actor and is audited.
     pub fn validation_remove(
         &self,
         owner_id: &str,
@@ -590,27 +581,14 @@ impl OrchestrationRuntime {
             .validations()
             .evidence(owner_id, &ticket, &request.step_id, now_ms)?;
         let target_id = evidence.step.definition.target_id.clone();
-        let grant_id = if actor.is_some_and(|actor| !actor.is_ai()) {
-            None
-        } else {
-            let authorized = self.authorize(
-                &Self::target_ref(owner_id, &target_id)?,
-                actor,
-                ActionRequest::new(TargetAction::ValidationRun).continuing(),
-                tx,
-            )?;
-            Some(authorized.grant_id)
-        };
+        if actor.and_then(|actor| actor.id.as_ref()).is_none() && !access::is_person(actor) {
+            return Err(OrchestrationError::Invalid(
+                "an identified actor is required to change a validation step",
+            ));
+        }
         self.validations()
             .remove(owner_id, &ticket, &request.step_id, now_ms)?;
-        self.validation_audit(
-            owner_id,
-            &target_id,
-            actor,
-            "validation_remove",
-            grant_id,
-            tx,
-        )?;
+        self.validation_audit(owner_id, &target_id, actor, "validation_remove", tx)?;
         Ok(evidence)
     }
 
@@ -830,13 +808,13 @@ impl OrchestrationRuntime {
                 tx,
             );
         }
-        // A person decided once per request: continuing it does not ask again.
+        // A person decided once per request: continuing it does not ask again. A
+        // command the orchestration project chose is outside what the target
+        // configured, so no remembered rule covers it (HS2-WN0MXZ, HS2-XHQ1EH).
         let mut gate =
             ActionRequest::new(TargetAction::ValidationRun).operation(request.operation_id.clone());
         gate.continuing = previous.is_some();
-        if !definition.check.in_granted_scope() {
-            gate.person_gate = Some(ApprovalGate::ValidationRun);
-        }
+        gate.ask_each_time = !definition.check.in_granted_scope();
         let authorized = self.authorize(&target, actor, gate, tx)?;
         let (result, _) = registry.begin(
             owner_id,

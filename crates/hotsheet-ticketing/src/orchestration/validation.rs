@@ -102,8 +102,9 @@ pub enum ValidationCheck {
 }
 
 impl ValidationCheck {
-    /// A profile is what the target project itself offers, so a `validation_run` grant
-    /// covers it. A command chosen elsewhere is outside that scope and asks a person.
+    /// A profile is what the target project itself offers, so a remembered
+    /// `validation_run` rule covers it (HS2-XHQ1EH). A command chosen elsewhere is
+    /// outside that scope and asks a person for each operation.
     pub fn in_granted_scope(&self) -> bool {
         matches!(self, Self::Profile { .. })
     }

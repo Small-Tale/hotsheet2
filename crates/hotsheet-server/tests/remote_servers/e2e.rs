@@ -166,13 +166,14 @@ pub(super) struct Fleet {
     pub(super) peer_api: axum::Router,
     pub(super) peer: Option<Running>,
     pub(super) peer_address: std::net::SocketAddr,
-    pub(super) grants: HashMap<&'static str, String>,
+    /// HS2-XHQ1EH: the remembered rules a person set up on each target, by id.
+    pub(super) rules: HashMap<&'static str, Vec<String>>,
     /// The policy revision last stored.
     pub(super) revision: Value,
 }
 
 impl Fleet {
-    /// Two servers, both targets declared, bound, granted and allowed by a policy
+    /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
@@ -266,7 +267,7 @@ impl Fleet {
             peer_api,
             peer: Some(peer),
             peer_address,
-            grants: HashMap::new(),
+            rules: HashMap::new(),
             revision: Value::Null,
         };
         fleet.declare().await;
@@ -363,8 +364,8 @@ impl Fleet {
                 )
                 .await;
             assert_eq!(bound["usable"], true, "{bound}");
-            let grant = self.grant(target, now_ms() + 3_600_000).await;
-            self.grants.insert(target, grant);
+            let rules = self.remember(target).await;
+            self.rules.insert(target, rules);
         }
     }
 
@@ -372,31 +373,30 @@ impl Fleet {
         if target == TARGET_A { TOOL_A } else { TOOL_B }
     }
 
-    /// A person grants the scheduler's actor every action the loop needs on a target,
-    /// until `expires_at_ms`. Returns the grant id.
-    pub(super) async fn grant(&self, target: &str, expires_at_ms: u64) -> String {
-        self.grant_tools(target, &[Self::tool(target)], expires_at_ms)
-            .await
+    /// HS2-XHQ1EH: adding and binding the target consented to reading and following
+    /// it; a person remembers a rule for every act the loop needs there (dispatch and
+    /// a session start of the target's tool), so the loop asks nobody. Returns the
+    /// rule ids.
+    pub(super) async fn remember(&self, target: &str) -> Vec<String> {
+        self.remember_tools(target, &[Self::tool(target)]).await
     }
 
-    /// The same grant for the given tools.
-    pub(super) async fn grant_tools(
-        &self,
-        target: &str,
-        tools: &[&str],
-        expires_at_ms: u64,
-    ) -> String {
-        let tools: Vec<Value> = tools.iter().map(|tool| json!({"tool":tool})).collect();
-        let granted = self
-            .ok(
-                "POST",
-                &format!("/targets/{target}/grants"),
-                json!({"actor_id":ACTOR,"actions":ACTIONS,
-                    "session_scope":{"tools":tools,"max_concurrency":2},
-                    "expires_at_ms":expires_at_ms,"actor":Self::person()}),
-            )
-            .await;
-        granted["grant_id"].as_str().unwrap().to_owned()
+    /// The same rules for the given tools.
+    pub(super) async fn remember_tools(&self, target: &str, tools: &[&str]) -> Vec<String> {
+        let mut bodies = vec![json!({"action":"work_start"})];
+        bodies.extend(
+            tools
+                .iter()
+                .map(|tool| json!({"action":"session_start","tool":tool})),
+        );
+        let mut ids = Vec::new();
+        for mut body in bodies {
+            body["target_id"] = json!(target);
+            body["actor"] = Self::person();
+            let remembered = self.ok("POST", "/permission-rules", body).await;
+            ids.push(remembered["rule_id"].as_str().unwrap().to_owned());
+        }
+        ids
     }
 
     /// A person stores the policy: each target runs its own fake tool, one session

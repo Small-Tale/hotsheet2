@@ -1,14 +1,16 @@
 # 26. Orchestration Projects
 
-> **Status: Partial (HS2-4J6V46, HS2-SBQ3T8, HS2-YCJDEB).** Shared declarations,
-> reviewed machine bindings, delegated grants with their audit journal (§26.7), the
-> throughput policy with approvals (§26.8), structured ticket links with target
-> ticket operations (§26.3, HS2-AZ15GA), dispatch runs with status and events (§26.9,
-> HS2-EBHDSB, HS2-7QHWHJ), target capacity and admission (§26.10, HS2-J8PRTV), AI tool
-> capacity states with tool selection (§26.11, HS2-AHG7HW), extra validation steps
-> with immutable result references (§26.12, HS2-WN0MXZ), CI and deployment gates of
-> runs (§26.13, HS2-5JBYPV; deployments are recorded and approved, not yet executed;
-> the Job monitor is started by whoever links or follows a gate, HS2-VVHVF0),
+> **Status: Partial (HS2-4J6V46, HS2-XHQ1EH, HS2-YCJDEB).** Shared declarations,
+> reviewed machine bindings, permission requests answered through the permission
+> bridge with remembered rules and the audit journal (§26.7, HS2-XHQ1EH; the client
+> card and Settings rule row, §26.28), the throughput policy of limits (§26.8),
+> structured ticket links with target ticket operations (§26.3, HS2-AZ15GA),
+> dispatch runs with status and events (§26.9, HS2-EBHDSB, HS2-7QHWHJ), target
+> capacity and admission (§26.10, HS2-J8PRTV), AI tool capacity states with tool
+> selection (§26.11, HS2-AHG7HW), extra validation steps with immutable result
+> references (§26.12, HS2-WN0MXZ), CI and deployment gates of runs (§26.13,
+> HS2-5JBYPV; deployments are recorded and allowed, not yet executed; the Job
+> monitor is started by whoever links or follows a gate, HS2-VVHVF0),
 > recovery with reconciliation, pause, handoff and correction (§26.14, HS2-WBREDM;
 > reconciliation reads the CI runs gating a run, HS2-7QNK7Y, its deployments,
 > HS2-BYEB60, its validation attempts, HS2-G5H9FQ, and its sessions, HS2-75Q254),
@@ -88,7 +90,7 @@ machine-local Hot Sheet registry. The binding records the authenticated pairing
 identity of a remote server (or the local server-instance identity) and the
 checkout identity, never a credential in the shared declaration. A user must
 choose or confirm a binding; matching a label or repository automatically cannot
-grant access. Rebinding to a different server or checkout requires an explicit
+give access. Rebinding to a different server or checkout requires an explicit
 review of the old and new identities and leaves an audit event. An unbound target
 is visible as unbound, not silently removed. If a remote server changes address,
 its existing pairing/registry path updates the origin without changing the logical
@@ -120,7 +122,7 @@ and 64 cached source identifiers per key; the per-key budget is 64 KiB with a
 
 The declaration belongs to the orchestration _checkout_, independently of which
 source holds its tickets. The same target can appear in several orchestration
-projects under different ids and grants. A target checkout can still have its own
+projects under different ids and remembered rules. A target checkout can still have its own
 orchestration declaration. Cycle detection belongs to dispatch planning, not
 target registration; a cycle never triggers recursive work automatically.
 
@@ -190,7 +192,7 @@ The orchestrating side reaches a hosted half that performs the provider operatio
 where the target lives: in process for a local destination, and over the reviewed
 remote registration (pinned origin, mTLS, no redirects, bounded reply) for a remote
 one. The target server still enforces its own device role, so a read-only pairing
-refuses writes whatever a grant says. Target refusals are content-free codes:
+refuses writes whatever a remembered rule says. Target refusals are content-free codes:
 `target_ticket_not_found`, `target_operation_unsupported`, `target_conflict`,
 `target_provider_unauthorized`, `target_rate_limited`, `target_source_disabled`,
 `target_request_invalid`, `target_peer_unsupported` (an older peer without the
@@ -238,7 +240,7 @@ hotsheet-cli -C <configured-host-source> orchestration target inspect <remote-ch
 `inspect` is a fresh machine-local read-confirm-bind step. It uses the existing
 reviewed registry, credential owner and transport, then returns a path-free
 candidate `destination` and `projection`, `stale:false`, `usable:false`, and no
-binding. It writes no manifest, binding, reservation or grant. Copy only the public
+binding. It writes no manifest, binding, reservation or permission. Copy only the public
 candidate destination into an explicit bind request; no credential export or
 manual secret workaround is needed. A later bind probes again and checks its own
 CAS and proof, so a candidate cannot survive a later retarget or revoke as authority.
@@ -282,7 +284,7 @@ HTTP declares the same request/response types:
 | `/checkouts/{owner}/orchestration/targets/{target}`         | PATCH rename; DELETE tombstone                                              |
 | `/checkouts/{owner}/orchestration/targets/{target}/binding` | GET cached machine binding; PUT explicit bind/review; DELETE machine unbind |
 | `/checkouts/{owner}/orchestration/targets/{target}/resolve` | GET fresh target resolution                                                 |
-| `/checkouts/{owner}/orchestration/inspect`                  | POST fresh candidate metadata, no binding/grant write                       |
+| `/checkouts/{owner}/orchestration/inspect`                  | POST fresh candidate metadata, no binding write                             |
 | `/remote-checkouts/{checkout}/resolution`                   | GET bounded path-free hosting metadata                                      |
 
 All endpoints require the normal bearer and retain device-role authorization.
@@ -309,8 +311,9 @@ Requests naming an orchestration ticket identify its owning checkout and source
 explicitly when ambiguous. Target ticket operations route through the target's own
 source with qualified ids and an operation id (§26.3). Dispatch uses the target's
 ordinary exact claim (§26.9).
-Neither declaration nor binding authorizes a target mutation by itself;
-target-scoped grants and their audit journal are §26.7 (HS2-SBQ3T8).
+Declaring and binding a target consents to reading and following it; acting on it
+needs a person's permission or a remembered rule, with the audit journal, in §26.7
+(HS2-XHQ1EH).
 
 ## 26.5 Failure states and compatibility
 
@@ -356,82 +359,120 @@ HS2-2EY9DP owns multi-project failure fixtures. The existing remote-mount and
 git-native self-claim decisions in [08](08-distributed-and-remote.md) remain in
 force.
 
-## 26.7 Delegated grants and audit (HS2-SBQ3T8)
+## 26.7 Permission requests and audit (HS2-XHQ1EH)
 
-A binding selects a destination; a **grant** is what lets an orchestration project
-act there. Every target action passes one gate, `authorize`, which first resolves
-the target freshly and then consults the grants. Anything not provably allowed is
-denied, and the answer is written to the audit journal either way.
+> Replaces the delegated grants of HS2-SBQ3T8 and the approvals of HS2-YCJDEB.
+> Decided with the maintainer on 2026-11-12 ("Yes, as mocked"); it folds in
+> HS2-8NJVXC, HS2-RTX8RJ, HS2-F2DG0J, HS2-BJE1C1, HS2-TZT505 and HS2-48H57C.
 
-### Grants
+A binding selects a destination. Adding a project (declaring the target and binding
+it to a checkout) is the consent to read and follow it, so observation never asks.
+Acting on it is decided per action, the same way an AI tool's permission prompt is
+decided: a person answers a **permission request**, or a remembered rule answers it.
+Every target action passes one gate, `authorize`, which resolves the target freshly
+first. Anything not provably allowed is refused, and the answer is written to the
+audit journal either way.
 
-A grant is a machine-local record in `${HOTSHEET_HOME}/orchestration-grants.json`
-(mode 0600, version 1). It is never written to the shared manifest, a ticket or a
-note, and it holds no bearer, origin, path or other credential: the credential
-stays with the reviewed remote registration, and the target server still enforces
-its own device role. A grant can only narrow what that pairing already allows.
+### What asks and what never asks
 
-| Field             | Meaning                                                                                                                                                                                                                                                      |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `grant_id`        | Canonical ULID. Retain it across retries; an identical retry is a no-op and a different body under the same id conflicts.                                                                                                                                    |
-| `target`          | `(owner_checkout_id, target_id)`. Another owner with the same target id is a different key.                                                                                                                                                                  |
-| `actor_id`        | The one actor the grant covers, such as a worker id. There is no wildcard.                                                                                                                                                                                   |
-| `actions`         | A non-empty set of `tickets_read`, `tickets_write`, `work_start`, `gates_observe`, `validation_run`, `sessions_manage`, `deployments_run`.                                                                                                                   |
-| `session_scope`   | Required with `sessions_manage` and rejected without it: the allowed tools, optionally their models, and the maximum concurrent sessions (1 to 64). A tool listed without models allows any model; a tool listed with models requires a named, listed model. |
-| `expires_at_ms`   | Required, in the future, at most ninety days ahead.                                                                                                                                                                                                          |
-| `destination_key` | SHA-256 of the reviewed destination the grant was issued for.                                                                                                                                                                                                |
+| Kind              | Actions                                                                                                                                                              | Asks a person?                                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Observation       | `tickets_read`, `gates_observe`: reading tickets, gates, capacity, events and runs of a declared, bound target                                                       | Never. Adding the project consented to it.                                                                                       |
+| Reducing activity | Stopping or winding a session down, cancelling a run and releasing its claim or queue mark                                                                           | Never, and the policy never denies it. It needs an identified actor and is audited.                                              |
+| Own records       | The orchestration project's own plan steps, validation step definitions, links and journal                                                                           | Never. They change only the orchestration project.                                                                               |
+| Acting            | `tickets_write`, `work_start`, a session start (`session_start` with its tool), `validation_run`, `deployments_run`, a provisional dispatch (`provisional_dispatch`) | Yes, unless a remembered rule allows it, the actor is a person acting for themselves, or the call continues one already allowed. |
 
-A grant is `active`, `expired`, `revoked`, or `destination_changed`. Rebinding the
-target to another server or checkout, or unbinding it, makes every existing grant
-`destination_changed`: a grant never follows a target to a different destination.
-Reviewing the target back onto the original destination restores it. Revocation is
-final and idempotent; a later retry of the original create returns the revoked
-record and never revives it. A target holds at most 32 grants and the file 1,024.
-When a target is full, the oldest revoked or expired grant makes room; an active
-grant is never dropped, and a target full of active grants refuses a new one.
+A **person's own act** (actor role `human`) needs no further approval: it is the
+person deciding. It still passes the policy's limits and is audited with the basis
+`person`. A call that **continues** a decision already taken, such as renewing or
+releasing the lease a run holds, passes the limits and is not asked again; an
+irreversible act is never continuing.
 
-**Who may grant.** A grant is issued or revoked by a person at the serving machine.
-A request whose actor role is `ai` is refused with 403 `forbidden`, the routes are
-machine-local like bindings, and the MCP tool offers only the read views. Issuing a
-grant requires the target to resolve as usable at that moment, because the grant
-pins that confirmed destination. Like `authorize`, it resolves again when a follower
-resolving the same target wins the race (HS2-YZBCX5). Revoking needs no registered owner, manifest,
-binding or reachable target, so authority can always be withdrawn.
+### Permission requests
 
-The actor id is self-declared, as everywhere in Hot Sheet. Grants scope and record
-what automation on this machine does; they are not a cryptographic boundary between
-processes of the same user. The authenticated target server remains that boundary.
+When an AI session or the orchestrator's own loop wants an acting action that no
+rule allows, `authorize` files one request in the machine-local ledger
+`${HOTSHEET_HOME}/orchestration-permissions.json` (mode 0600) and answers 403
+`permission_required` with its `request_id`. The request is keyed by the
+orchestration project, the target, the action and, for a session start, the tool,
+and is filed once per operation id: asking again adds nothing. It holds identifiers,
+codes and labels only.
+
+The request reaches people through the existing permission bridge
+([05](05-ai-tool-plugins.md) §5.7) with the requester kind `orchestrator` and no
+blocking waiter: the orchestrator is not a process waiting on a prompt. Clients show
+it as the ordinary permission card, headed by the orchestrator and the target
+project, with **Allow Once**, **Always Allow** and **Deny**. There is no "Allow This
+AI Session": the orchestrator is not a session. Answering publishes the ordinary
+`permission_resolved` event and wakes the scheduler, so a waiting step is placed
+again without polling.
+
+| Answer       | Effect                                                                                                                                                                                               |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Allow Once   | Allows that one operation. It is used only when the action succeeds, so a failed attempt can retry under the same operation id; an unused Allow Once lapses after an hour.                           |
+| Always Allow | Remembers a rule for (orchestration project, target, action, tool) and allows every waiting request with the same key. Later actions under that key no longer ask. Listed in Settings → Permissions. |
+| Deny         | Final for that operation. The action is refused `permission_denied`; a new operation asks again.                                                                                                     |
+
+An unanswered request lapses after a day. Only a person answers: an `ai` or `system`
+actor is refused with 403 `forbidden`, and the MCP tool offers only the read view. A
+deployment to production, and a validation step that runs a command the orchestration
+project chose rather than a profile the target defines, ask **each time**: no rule
+covers them and Always Allow is refused for them.
+
+A remembered rule is not tied to an actor: the actor id is self-declared, as
+everywhere in Hot Sheet, so the rule is about what this orchestration project may do
+in that target. Rules are not a cryptographic boundary between processes of the same
+user; the authenticated target server, which still enforces its own device role,
+remains that boundary. Forgetting a rule (Settings → Permissions, or `permission
+forget`) makes the next action ask again. The ledger keeps at most 512 requests,
+1,024 rules and 256 decision records, dropping the oldest settled entries first.
+
+### Judgment calls are decisions on the goal ticket
+
+A choice only a person should judge, such as starting work the plan says is not
+ready (§26.15), is not a permission. When the orchestrator wants it, it adds a
+`FEEDBACK NEEDED` note with `CHOICE` options to the orchestration (goal) ticket, the
+way AI sessions already ask, and refuses the call with 403 `decision_required` and
+the `note_id`. A person's response that names an option decides; one note is added per
+operation, and asking again reads the response. A person making the same choice for
+themselves needs no note.
+
+### Retired grants and approvals
+
+`orchestration-grants.json` and `orchestration-approvals.json` from before this model
+are never read as authority. `permission list` and `policy validate` report them
+(`retired`) so a person can remove them; nothing deletes them automatically. The
+grant and approval routes, CLI commands and MCP actions are gone.
 
 ### Authorization
 
-`authorize(target, actor, action, session?, operation_id?)` requires an identified
-actor, resolves the target freshly, and denies with `target_unavailable` when the
-result is not usable (unbound, removed, unreachable, unauthorized, missing source,
-changed identity, or an unknown owner). It then needs a grant for that exact actor
-that is active for the confirmed destination and covers the action. A
-`sessions_manage` request also names its tool and model; starting a session is
-refused at the concurrency cap, while stopping or winding one down is never blocked
-by the cap. The denial reported is the closest one: `no_grant`,
-`action_not_granted`, `destination_changed`, `grant_revoked`, `grant_expired`,
-`session_scope_required`, `tool_not_granted`, `model_not_granted`,
-`concurrency_exceeded`. A granted action is then put to the throughput policy
-(§26.8), which can answer `policy_denied` or `approval_required` with a `detail`
-code; both the policy and a grant must allow an action.
+`authorize(target, actor, action)` requires an identified actor, resolves the target
+freshly, and denies with `target_unavailable` when the result is not usable (unbound,
+removed, unreachable, unauthorized, missing source, changed identity, or an unknown
+owner). Then, in order: observation and reducing activity are allowed; the policy's
+limits (§26.8) may deny with `policy_denied` and a `detail`; a continuing call or a
+person's own act is allowed; otherwise a remembered rule or the operation's Allow Once
+allows, a pending request answers `permission_required`, and a denied one
+`permission_denied`. Every answer carries a `basis` (`observation`,
+`reduces_activity`, `continuing`, `person`, `remembered_rule`, `allowed_once`) or a
+`reason`, plus the `request_id` or `rule_id` it rests on.
 
-`access` is a side-effect-free check against the cached binding. It makes no
-request, reads no secret, writes no audit entry, and is never authority: the action
-itself confirms the destination again.
+`access` is a side-effect-free check against the cached binding. It files no request,
+uses no Allow Once, reads no secret, writes no audit entry, and is never authority:
+the action itself confirms the destination again.
 
 ### Audit journal
 
 `${HOTSHEET_HOME}/orchestration-audit/<owner-checkout-id>.jsonl` is an append-only
 journal with one JSON object per line: `seq`, `at_ms`, `actor_role`, `actor_id`,
 `target_id`, `action`, `operation_id`, `outcome` (`allowed`, `denied`, `succeeded`,
-`failed`, `granted`, `revoked`), a `reason` code, and `grant_id`. Every field is an
-identifier or a stable code; free text, ticket content, credentials and origins are
-rejected at the journal boundary. Grant creation and revocation, every `authorize`
-answer, and the reported result of an authorized action are recorded under the same
-operation id.
+`failed`, `approved`, `rejected`, `revoked`, `changed`, and `granted` in old
+entries), a `reason` code, and `permission_id` (the request or rule; old entries
+read their `grant_id` here). Every field is an identifier or a stable code; free text,
+ticket content, credentials and origins are rejected at the journal boundary. Every
+`authorize` answer, every answered request (`permission_answer`), remembered and
+forgotten rule (`permission_remember`, `permission_forget`), and the reported result
+of an authorized action are recorded under the same operation id.
 
 A segment rotates at 1 MiB to one retained predecessor, so the journal is bounded
 near 2 MiB per owner. `seq` never restarts. A reader passes `after` and gets later
@@ -442,37 +483,44 @@ rewritten; the next append starts on its own line.
 ### Headless surface
 
 ```sh
-hotsheet-cli -C <configured-host-source> orchestration grant list <target-id> --project <owner-checkout-id>
-hotsheet-cli --actor-role human --actor-id <you> -C <configured-host-source> orchestration grant add <target-id> \
-  --project <owner-checkout-id> --actor <worker-id> --action tickets_read --action tickets_write --expires-in 14d
-hotsheet-cli -C <configured-host-source> orchestration grant add <target-id> --project <owner-checkout-id> \
-  --actor <worker-id> --action sessions_manage --tool claude:<model> --tool codex --max-concurrency 2 --expires-in 8h
-hotsheet-cli -C <configured-host-source> orchestration grant check <target-id> --project <owner-checkout-id> \
-  --actor <worker-id> --action sessions_manage --tool codex --running 1 --starting
-hotsheet-cli -C <configured-host-source> orchestration grant revoke <target-id> <grant-id> --project <owner-checkout-id>
+hotsheet-cli -C <configured-host-source> orchestration permission list --project <owner-checkout-id>
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration permission answer <request-id> \
+  --project <owner-checkout-id> --answer allow_once|always_allow|deny
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration permission remember <target-id> \
+  --project <owner-checkout-id> --action session_start --tool codex
+hotsheet-cli -C <configured-host-source> orchestration permission forget <rule-id> --project <owner-checkout-id>
+hotsheet-cli -C <configured-host-source> orchestration permission check <target-id> --project <owner-checkout-id> \
+  --actor <worker-id> --action sessions_manage --tool codex --starting --target-sessions 0 --machine-sessions 0 --tool-sessions 0
 hotsheet-cli -C <configured-host-source> orchestration audit --project <owner-checkout-id> --after <seq> --limit 100
 ```
 
-`grant add` takes `--expires-in` (`30m`, `8h`, `14d`) or an absolute
-`--expires-at-ms`; use the absolute form with a retained `--grant-id` to retry
-safely. A session launched by Hot Sheet acts as `ai` and cannot run `grant add` or
-`grant revoke`.
+`permission remember` is the headless path for setting up a project ahead of any
+request; it is idempotent by key and needs a declared target. `permission check`
+accepts `--operation-id`, `--model`, `--target-sessions`, `--machine-sessions`,
+`--tool-sessions`, `--account` and `--account-sessions`.
 
-| Route                                                              | Methods and purpose                                    |
-| ------------------------------------------------------------------ | ------------------------------------------------------ |
-| `/checkouts/{owner}/orchestration/targets/{target}/grants`         | GET retained grants with state; POST issue             |
-| `/checkouts/{owner}/orchestration/targets/{target}/grants/{grant}` | DELETE revoke                                          |
-| `/checkouts/{owner}/orchestration/targets/{target}/access`         | POST side-effect-free check against the cached binding |
-| `/checkouts/{owner}/orchestration/audit`                           | GET journal page, `?after=<seq>&limit=<n>`             |
+| Route                                                      | Methods and purpose                                                  |
+| ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/permissions`             | GET requests with their state, remembered rules and retired files    |
+| `/checkouts/{owner}/orchestration/permissions/{request}`   | POST `{answer}`: `allow_once`, `always_allow` or `deny`              |
+| `/checkouts/{owner}/orchestration/permission-rules`        | POST `{target_id, action, tool?}` remember a rule ahead of a request |
+| `/checkouts/{owner}/orchestration/permission-rules/{rule}` | DELETE forget a rule                                                 |
+| `/checkouts/{owner}/orchestration/targets/{target}/access` | POST side-effect-free check against the cached binding               |
+| `/checkouts/{owner}/orchestration/audit`                   | GET journal page, `?after=<seq>&limit=<n>`                           |
 
-All four require the bearer and literal loopback at the serving machine for every
-device role. MCP `hotsheet_targets` adds the read-only actions `grant_list`,
-`access_check` (with `for_actor`, `target_action` and an optional `session`) and
-`audit`. Errors use 403 with the denial code or `forbidden`.
+All require the bearer and literal loopback at the serving machine for every device
+role. The server's own permission routes (`GET /permissions`, `POST
+/permissions/{id}`, `GET` and `DELETE /permissions/rules`) carry the same requests
+and rules, so a client answers an orchestrator request like any other. MCP
+`hotsheet_targets` adds the read-only actions `permission_list`, `access_check` (with
+`for_actor`, `target_action` and an optional `session`) and `audit`. Errors use 403
+with the denial code or `forbidden`; `permission_required` and `permission_denied`
+carry `request_id`, `decision_required` carries `note_id`.
 
 ## 26.8 Orchestrated throughput and its policy (HS2-YCJDEB)
 
-Decided with the maintainer on 2026-11-03 and extended on 2026-11-04.
+Decided with the maintainer on 2026-11-03 and extended on 2026-11-04; since
+HS2-XHQ1EH the policy holds limits only.
 
 ### Design
 
@@ -480,9 +528,10 @@ Decided with the maintainer on 2026-11-03 and extended on 2026-11-04.
   throughput across target projects, balancing priority, urgency, compute, resources
   such as RAM, and AI tool capacity. Tools may be mixed across targets. A started
   session appears in the bottom drawer of the server that hosts it.
-- **Automatic within a policy.** Inside the policy the orchestrator starts, refills
-  and winds down sessions on its own and logs every decision. Anything outside it
-  asks a person first.
+- **Automatic within limits and permission.** Inside the policy's limits, and with a
+  person's permission or a remembered rule (§26.7), the orchestrator starts, refills
+  and winds down sessions on its own and logs every decision. Judgment calls become
+  decision notes on the goal ticket.
 - **Roles are unchanged.** Started sessions join the existing dispatcher, integrator
   and worker roles. The orchestrator decides how many sessions run where; the
   target's dispatcher still assigns each exact ticket, and worktree isolation with
@@ -512,41 +561,41 @@ rather than evaluated. All quantities are integers: megabytes, percent and cents
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                      |
 | `tools[]`     | `tool`, `max_sessions` (1 to 64), `weight` 50 (1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`.      |
-| `targets[]`   | `target_id`, `enabled` true, `actions` (the grant action names), `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides. |
+| `targets[]`   | `target_id`, `enabled` true, `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides.                                     |
 | `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                          |
-| `approval`    | `required_for`: any of `tickets_write`, `work_start`, `validation_run`, `session_start`, `session_stop`, `role_session_start`, `provisional_dispatch`, `deployment`.     |
 | `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`.   |
 | `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults. |
 
-A target the policy does not list, or lists as disabled, is not permitted. A tool
-listed for a target must be configured under `tools`. A tool configured with
-accounts runs only under one of them.
+**Retired fields.** `targets[].actions` and `approval.required_for` are read and
+ignored. `validate` reports each as `target_actions_ignored` or `approval_ignored`
+under `ignored`, and `set` stores the policy without them. Permission to act comes
+from §26.7; a judgment call is a decision note on the goal ticket.
+
+A target a policy lists as disabled is refused every acting action. A session start
+needs the target listed with that tool; a tool listed for a target must be configured
+under `tools`, and a tool configured with accounts runs only under one of them.
 
 `validate` reports every problem at once with a stable code and the tool, account or
 target it concerns. Conflicts are errors: a target cap above its machine cap, an
-account cap above its tool cap, a target tool that is not configured, tools without
-`sessions_manage` or the reverse, duplicates, and a target the manifest does not
-actively declare. `set` refuses an invalid policy, replaces the file at the expected
-revision, and is a no-op for identical content. Like grants, it is a person's act:
-an `ai` actor is refused, because the governed session must not loosen its own
-bounds.
+account cap above its tool cap, a target tool that is not configured, duplicates, and
+a target the manifest does not actively declare. `set` refuses an invalid policy,
+replaces the file at the expected revision, and is a no-op for identical content. It
+is a person's act: an `ai` actor is refused, because the governed session must not
+loosen its own bounds.
 
 ### Place in the authorization gate
 
-`authorize` consults the policy only for an action a grant already allows, so a
-missing grant is always reported as such and no approval request is filed for it.
+`authorize` consults the policy after observation and reducing activity and before a
+person is asked, so a request is never filed for an action the limits refuse.
 
-- **No policy file.** Explicit ticket, gate and validation actions are governed by
-  grants alone, so a project that never enables throughput is unaffected. A
-  validation step that runs a command chosen by the orchestration project still
-  asks a person (§26.12).
-  `sessions_manage` is denied `policy_absent`: nothing automatic runs without a
-  policy. An unreadable or corrupt policy denies everything.
+- **No policy file.** Ticket, gate and validation actions are governed by permission
+  alone, so a project that never enables throughput is unaffected. A session start is
+  denied `policy_absent`: nothing automatic runs without a policy. An unreadable or
+  corrupt policy denies every acting action.
 - **Denials** are `policy_denied` with a `detail`: `policy_target_not_permitted`,
-  `policy_target_disabled`, `policy_action_not_permitted`,
-  `policy_tool_not_permitted`, `policy_model_not_permitted`, `policy_load_unknown`,
-  `policy_target_cap`, `policy_machine_cap`, `policy_tool_cap`,
-  `policy_account_not_permitted`, `policy_account_cap`,
+  `policy_target_disabled`, `policy_tool_not_permitted`, `policy_model_not_permitted`,
+  `policy_load_unknown`, `policy_target_cap`, `policy_machine_cap`,
+  `policy_tool_cap`, `policy_account_not_permitted`, `policy_account_cap`,
   `policy_speculation_not_allowed`. The audit entry records the detail.
 - **Caps.** A session start states the current load (sessions on the target, on its
   machine, on the tool and on the account). A start without it is denied, and each
@@ -555,58 +604,38 @@ missing grant is always reported as such and no approval request is filed for it
   admission check compare them with the target's capacity report (HS2-J8PRTV,
   HS2-ECWG50).
 
-### Approvals
-
-When the policy lists a decision under `approval.required_for`, `authorize` needs an
-operation id and answers `approval_required` until a person approves that exact
-`(target, actor, gate, operation id)`. The first request files one `pending` record
-in `${HOTSHEET_HOME}/orchestration-approvals.json`; asking again adds nothing. An
-approval is consumed by the one call it allows and must be used within an hour; a
-denial is final for that operation; an unanswered request lapses after a day. Reads
-and gate observation never wait for a person. A provisional dispatch asks under
-`provisional_dispatch` first. Answers are audited; an `ai` actor cannot give one.
-A `readiness_override` request (§26.15) is filed per operation by the dispatch guard
-and cannot be listed in a policy (`approval_not_configurable`).
-
 ### Dry run
 
 `dry-run` evaluates a proposed policy, or the stored one, against every actively
-declared target and reports per action whether the policy allows it, needs approval
-or denies it and why. With an actor id it adds that actor's grant decision and an
-`automatic` flag for actions both would allow right now. It writes nothing, files no
-approval request and contacts no target, so "the policy allows it, the grant does
-not" is visible before anything is enabled.
+declared target and reports per action whether the limits allow or deny it and why,
+and whether it needs permission: `not_needed` (observation), `remembered` (with the
+`rule_id`), or `asks`. `automatic` is true for an action the orchestrator could take
+right now without asking anyone. It writes nothing, files no permission request and
+contacts no target.
 
 ### Headless surface
 
 ```sh
 hotsheet-cli -C <configured-host-source> orchestration policy show --project <owner-checkout-id>
 hotsheet-cli -C <configured-host-source> orchestration policy validate --project <owner-checkout-id> --file policy.json
-hotsheet-cli -C <configured-host-source> orchestration policy dry-run --project <owner-checkout-id> --file policy.json --actor <worker-id>
+hotsheet-cli -C <configured-host-source> orchestration policy dry-run --project <owner-checkout-id> --file policy.json
 hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy set --project <owner-checkout-id> --file policy.json
-hotsheet-cli -C <configured-host-source> orchestration approval list --project <owner-checkout-id>
-hotsheet-cli --actor-role human -C <configured-host-source> orchestration approval approve <approval-id> --project <owner-checkout-id>
 ```
 
 `--file` takes a policy body or the output of `policy show`, and `-` reads stdin.
 `policy set` without `--expected-revision` reads the current revision first, so a
 repeated setup run changes nothing while a concurrent edit still conflicts.
-`grant check` accepts `--target-sessions`, `--machine-sessions`, `--tool-sessions`,
-`--account` and `--account-sessions` to state the load of a session check.
 
-| Route                                                   | Methods and purpose                                            |
-| ------------------------------------------------------- | -------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/policy`               | GET stored policy; PUT replace at the expected revision        |
-| `/checkouts/{owner}/orchestration/policy/validate`      | POST every problem in a proposed or the stored policy          |
-| `/checkouts/{owner}/orchestration/policy/dry-run`       | POST per-target outcome; machine-local because it reads grants |
-| `/checkouts/{owner}/orchestration/approvals`            | GET requests with their state; machine-local                   |
-| `/checkouts/{owner}/orchestration/approvals/{approval}` | POST `{approve}`; machine-local                                |
+| Route                                              | Methods and purpose                                                      |
+| -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/policy`          | GET stored policy; PUT replace at the expected revision                  |
+| `/checkouts/{owner}/orchestration/policy/validate` | POST every problem, ignored field and retired file                       |
+| `/checkouts/{owner}/orchestration/policy/dry-run`  | POST per-target outcome; machine-local because it reads remembered rules |
 
 The policy itself is ordinary authenticated project data, like the target
 declarations. MCP `hotsheet_targets` adds the read-only actions `policy_show`,
-`policy_validate`, `policy_dry_run` and `approval_list`; setting the policy and
-answering an approval are a person's CLI or HTTP actions. The workspace editor for
-the same policy is part of HS2-HSMH2Q.
+`policy_validate` and `policy_dry_run`; setting the policy is a person's CLI or HTTP
+action. The workspace editor for the same policy is part of HS2-HSMH2Q.
 
 ## 26.9 Dispatch runs (HS2-EBHDSB)
 
@@ -663,10 +692,10 @@ transition. A person's correction is the one exception to the edges (§26.14).
 - **One active run per target ticket**, whatever the operation or worker
   (`run_target_active`). A worker that already holds an active direct run on a target
   takes no second ticket there (`run_worker_busy`).
-- **Authority.** Dispatch passes the gate as `work_start` with the operation id, so a
-  policy that asks a person first applies. Renewing and cancelling continue that
-  decision: grants and policy limits still apply, but nobody is asked again.
-  Supervising with `sync` needs `tickets_read`.
+- **Authority.** Dispatch passes the gate as `work_start` with the operation id, so
+  it asks a person unless a remembered rule allows it (§26.7). Renewing continues
+  that decision: policy limits still apply, but nobody is asked again. Cancelling
+  reduces activity and never asks. Supervising with `sync` only reads.
 - **Readiness.** A target ticket that a plan step works is dispatched only when that
   step is `confirmed`, or when a person overrides it for the exact operation
   (§26.15). A ticket no step works is not gated.
@@ -679,12 +708,10 @@ transition. A person's correction is the one exception to the edges (§26.14).
   to release; cancelling such a run only lets go of the run. If the target cannot be
   told, the run stays active with `cancel_requested: true` and the answer lists what
   it could not verify (`target_claim` or `target_queue`). A cancel that must tell the
-  target passes the gate as the caller; when the gate refuses the caller (for
-  example a person with no grant of their own, `no_grant`), the answer is that
-  denial and the run records nothing, so no reconciliation repeats it later
-  (HS2-WC3W2G). Only a target that cannot be resolved (`target_unavailable`) is
-  reported as unverified. Whether a person's cancel acts under the run's own grant
-  is HS2-HV9ED3.
+  target passes the gate as the caller, which needs an identified actor and is
+  audited; it reduces activity, so it never asks and the policy never denies it
+  (HS2-XHQ1EH, HS2-48H57C). Only a target that cannot be resolved
+  (`target_unavailable`) is reported as unverified (HS2-WC3W2G).
 - **Sync** reads the target ticket. A completed, verified or archived ticket
   completes the run. A queued run becomes dispatched when the ticket shows a live
   claim, recording that worker. A dispatched run whose claim was released or taken
@@ -920,9 +947,9 @@ of the session cap and the RAM room. The decision is a pure function
 
 On the orchestrating side the question passes the gate (§26.7) as `sessions_manage`
 for the tool and model. It starts nothing, so it carries no load and files no
-approval; grant and policy must still permit the tool and model on the target. The
-start itself passes the gate again with its load and any approval (§26.16).
-Reading capacity passes the gate as `gates_observe`. Both are recorded in the audit
+permission request; the policy must still permit the tool and model on the target.
+The start itself passes the gate again with its load and asks a person unless a
+rule allows it (§26.16). Reading capacity is observation and never asks. Both are recorded in the audit
 journal, including a target's failure code.
 
 ### Headless surface
@@ -1261,29 +1288,26 @@ is HS2-ECWG50.
 
 ### Authority
 
-Validation has its own delegated action. It uses `validation_run` (§26.7), not the
-`work_start` action that dispatch uses, so a grant to dispatch work does not allow
-running checks and the reverse.
+Validation has its own permission action. It uses `validation_run` (§26.7), not the
+`work_start` action that dispatch uses, so a rule that allows dispatching work does
+not allow running checks and the reverse.
 
-- **Define** needs a `validation_run` grant on the step's target. It runs nothing
-  and asks nobody.
-- **Run** passes the gate as `validation_run` with the `operation_id`. A policy that
-  lists `validation_run` under `approval.required_for` (§26.8) asks a person for every
-  run.
-- **A profile is inside the granted automation scope**: the target project chose its
-  command. **A command is outside it.** A `command` step always answers
-  `approval_required` until a person approves that exact operation through the
-  approvals of §26.8, whether or not a policy file exists and whatever it lists.
-  Continuing an approved request, including its retries, does not ask again. Scoping
-  grants to named profiles or reviewed commands is HS2-27ZYX5.
-- **Remove** is a person's without any grant, so a step of an unbound or unreachable
-  target can always be cleaned up; an AI actor needs the grant.
+- **Define** and **remove** change only the orchestration project's own records:
+  they run nothing and ask nobody, and need an identified actor. A step of an unbound
+  or unreachable target can always be cleaned up.
+- **Run** passes the gate as `validation_run` with the `operation_id`, and asks a
+  person unless a remembered `validation_run` rule allows it.
+- **A profile is inside a rule's scope**: the target project chose its command. **A
+  command is outside it.** A `command` step asks a person for that exact operation
+  every time (`permission_required`), whatever rules exist; Always Allow is refused
+  for it. Continuing an allowed request, including its retries, does not ask again.
+  Scoping rules to named profiles or reviewed commands is HS2-27ZYX5.
 - An unusable target is a denial (`target_unavailable`) and records no result.
 - The target's server still enforces its own device role: a read-only pairing cannot
-  start an execution, whatever a grant says. The hosted route gives a read-write
+  start an execution, whatever a rule says. The hosted route gives a read-write
   pairing nothing it did not have: such a caller can already open a terminal on that
-  server. Grants and approvals govern the orchestrating side's automation; they are
-  not a boundary on the target, as §26.7 says of grants in general.
+  server. Permissions govern the orchestrating side's automation; they are not a
+  boundary on the target, as §26.7 says of remembered rules in general.
 
 Every gate answer and every finished attempt is in the audit journal under
 `validation_run`, the latter as `succeeded` for `passed` and `failed` with the state
@@ -1341,7 +1365,7 @@ a prerequisite whose gate is still pending (HS2-2SJPCH, HS2-JSF985).
 ### Evidence comes from adapters only
 
 A gate changes state on exactly two things: a typed reading from a provider adapter,
-or a person's answer to a deployment approval. Nothing a session writes in a note, a
+or a person's answer to a deployment's permission request. Nothing a session writes in a note, a
 ticket or a message is evidence, and no text is parsed for a verdict. A reading holds
 a state, a reason code and, for a verdict, evidence: the provider, its own run or
 execution id, the attempt, the commit it built or deployed, how that commit relates
@@ -1423,8 +1447,9 @@ Every change is published to the run event stream (§26.9) as a `gate` event wit
 gate's id and new state, once however many readers saw it. A server follows the
 gates of an owning checkout that still wait on a provider: one follower holds a
 bounded wait open on the adapter's records and ends when no gate waits. It starts
-with a link, a deployment request, or a subscriber of the event stream, acts under
-the linking actor's `gates_observe` grant, and confirms that every ten minutes. A
+with a link, a deployment request, or a subscriber of the event stream, acts as
+the linking actor, which only observes and never asks, and confirms that every ten
+minutes. A
 headless caller uses `gate sync --wait-seconds`, which waits the same way. Nothing
 polls on a timer. Reads answer from this machine's records and contact nothing.
 
@@ -1464,14 +1489,13 @@ its repository root, and an operation id.
 
 - **Precondition.** Every standing CI gate of the run passed, for one commit.
   Otherwise the request is refused with `gate_not_passed` and nobody is asked.
-- **Authority.** It passes the gate as the grant action `deployments_run` under its
-  operation id.
-- **A person for production.** A request marked `production` always waits for a
-  person, with or without a policy file. Any other request waits when the policy
-  lists `deployment` under `approval.required_for`. While waiting, the gate is
-  `awaiting_approval` and the answer carries the approval id (§26.8). Repeating the
-  request after the answer moves it on; a denial ends it as `failed` with
-  `approval_denied`. An approval is used once.
+- **Authority.** It passes the gate as `deployments_run` under its operation id and
+  asks a person unless a remembered rule allows it (§26.7).
+- **A person for production.** A request marked `production` cannot be undone, so it
+  asks a person every time: no rule covers it and Always Allow is refused for it.
+  While waiting, the gate is `awaiting_approval` and the answer carries the
+  `request_id`. Repeating the request after the answer moves it on; a denial ends it
+  as `failed` with `permission_denied`. An Allow Once is used once.
 - **Idempotent.** The same operation id returns the same gate, asks nobody again
   and starts nothing twice. The same id for other content conflicts. An environment
   with a deployment in progress refuses a second with `gate_deployment_active`.
@@ -1479,7 +1503,7 @@ its repository root, and an operation id.
 
 No deployment adapter ships. This repository has no hosted deployment
 (`AGENTS.md`, HS2-51HMCC), so an authorized deployment is recorded as `unknown` with
-`deployment_executor_unavailable`: approved, and not run. Running the target's script
+`deployment_executor_unavailable`: allowed, and not run. Running the target's script
 on the target's server with target-scoped credentials, after verifying that it is
 tracked at the gated commit, is HS2-G3VAK4. Artifact identity from CI is HS2-3YC577.
 
@@ -1502,7 +1526,8 @@ hotsheet-cli ... orchestration gate deploy <run-id> --project <owner> --environm
 | `/checkouts/{owner}/orchestration/gates/{gate}`           | GET one gate with evidence and history                                     |
 
 MCP `hotsheet_targets` adds `gate_link`, `gate_list`, `gate_show`, `gate_sync` and
-`deployment_request`. Approving a deployment is a person's CLI or HTTP action.
+`deployment_request`. Answering a deployment's permission request is a person's act
+in a client, the CLI or HTTP (§26.7).
 
 The runtime reads other tickets call are
 `OrchestrationRuntime::run_gate_state(owner_id, run_id)` and
@@ -1580,12 +1605,12 @@ operation ids. No deployment executor ships (§26.13, HS2-G3VAK4), so for most
 requests the only thing reconciliation can verify is that nothing was executed, and
 it says so in the finding's reason:
 
-| A standing deployment gate                                  | Finding                                      |
-| ----------------------------------------------------------- | -------------------------------------------- |
-| None requested                                              | `verified`, reason `no_deployment`           |
-| `awaiting_approval`                                         | `verified`, reason `awaiting_approval`       |
-| `unknown` with `deployment_executor_unavailable` (approved) | `verified`, reason `deployment_not_executed` |
-| `passed`, `failed`, or withdrawn                            | `verified`                                   |
+| A standing deployment gate                                 | Finding                                      |
+| ---------------------------------------------------------- | -------------------------------------------- |
+| None requested                                             | `verified`, reason `no_deployment`           |
+| `awaiting_approval`                                        | `verified`, reason `awaiting_approval`       |
+| `unknown` with `deployment_executor_unavailable` (allowed) | `verified`, reason `deployment_not_executed` |
+| `passed`, `failed`, or withdrawn                           | `verified`                                   |
 
 `verified` here means: this machine's records show that no execution was started for
 the operation, and no executor exists on this machine that could have started one. It
@@ -1763,11 +1788,11 @@ or reversed. An action that changes nothing writes nothing.
   machine's record changes, and the next successful read of the target still wins.
 
 Reconciliation and handoff pass the gate (§26.7) as `tickets_read` and a continuing
-`work_start`. Pause, resume and correct change only this machine's record and must
-work while the target is unreachable, so they do not need a fresh target resolution:
-they require an identified actor, are written to the audit journal as `run_pause`,
-`run_resume` and `run_correct`, and a correction is refused for an AI actor. Whether
-they should also need a grant is HS2-BJE1C1.
+`work_start`. Pause, resume and correct change only the orchestration project's own
+record and must work while the target is unreachable, so they do not need a fresh
+target resolution and never ask: they require an identified actor, are written to the
+audit journal as `run_pause`, `run_resume` and `run_correct`, and a correction is
+refused for an AI actor (HS2-BJE1C1, settled by HS2-XHQ1EH).
 
 ### Headless surface
 
@@ -1899,16 +1924,18 @@ confirmed state, and refuses a planned ticket whose step is not `confirmed` with
 step is the one level a policy can let through (§26.22). Repeating a
 dispatch that was already admitted is the same run and is not judged again.
 
-A person can let one exact operation through. A dispatch sent with
-`override_readiness` files a `readiness_override` approval (§26.8) for its
-`(target, actor, operation id)` and answers 403 `approval_required` until someone
-approves it; an AI actor cannot. The approved request then proceeds once, a denial
-answers `readiness_override_denied` from then on, and work that is ready needs and
-files nothing. The audit journal records the request, the person's answer and the
-use under `readiness_override` with the operation id and the level that was
-overridden, and the orchestration ticket gets an activity note naming the step, the
-level, the operation, the approval and who gave it, by identifiers only. The
-scheduler never sets the flag.
+A person can let one exact operation through. A person's dispatch sent with
+`override_readiness` is their own decision and proceeds. When an AI session asks
+for it, the override is a judgment call (§26.7, HS2-XHQ1EH): the orchestration
+ticket gets one `FEEDBACK NEEDED` note with the `CHOICE` options "Start anyway" and
+"Wait until it is ready", and the dispatch answers 403 `decision_required` with its
+`note_id` until a person responds. "Start anyway" lets that operation proceed;
+"Wait until it is ready" answers `readiness_override_denied` from then on. Work that
+is ready needs and asks nothing. The audit journal records each answer under
+`readiness_override` with the operation id and the level that was overridden (or
+`decision_required`, `decision_wait`), and the orchestration ticket gets an activity
+note naming the step, the level, the operation and who decided, by identifiers only.
+The scheduler never sets the flag.
 
 ### Reevaluation and events
 
@@ -1966,11 +1993,11 @@ prerequisite as JSON for what the flags do not say, such as a pinned `commit`.
 
 MCP `hotsheet_targets` adds `readiness_define`, `readiness_show`, `readiness_plan`,
 `readiness_ready`, `readiness_refresh` and `readiness_remove`, and `run_dispatch`
-takes `override_readiness`. Removing a step needs an identified actor and is audited
-(`readiness_remove`). It cancels the step's unfinished scheduler runs first, as the
-remover, and a gate refusal of that cancel refuses the removal (HS2-YFPZFP, §26.24);
-whether plan changes should need a grant of their own is
-HS2-TZT505.
+takes `override_readiness`. Plan steps are the orchestration project's own records: defining, refreshing and
+removing one reads the target at most and never asks. Removing a step needs an
+identified actor and is audited (`readiness_remove`; HS2-TZT505, settled by
+HS2-XHQ1EH). It cancels the step's unfinished scheduler runs first, as the remover;
+cancelling reduces activity and asks no one (HS2-YFPZFP, §26.24).
 
 Milestones and wider cross-project planning stay with their own tickets: the
 milestone model (HS2-8T71YW, HS2-A820C1, HS2-PX50E8, HS2-6E0H3X), cross-project
@@ -2188,7 +2215,7 @@ is refused `session_human_owned` on the orchestrating machine and again by the h
 machine, which keeps its own record of who owns each session.
 
 - These are a person's acts. An AI actor is refused, and MCP has no action for them.
-- A person needs no grant to act on a session of their own orchestration project. The
+- A person needs no permission to act on a session of their own orchestration project. The
   target is resolved freshly and the act is recorded in the audit journal (§26.7) as
   `session_takeover`, `session_pause` or `session_stop` with its outcome.
 - A takeover changes this machine's record first, so it works while the target cannot
@@ -2233,7 +2260,7 @@ reads the sessions of a run from their hosts and judges them (HS2-75Q254);
 | `session_work(owner, run_id)`                                     | `Observed<ExternalWork>` for reconciliation                      |
 
 Reading and syncing pass the gate as `sessions_manage` continuing an existing decision:
-grants and policy limits apply, nothing starts, and nobody is asked.
+policy limits apply, nothing starts, and nobody is asked.
 
 ### Headless surface
 
@@ -2320,7 +2347,7 @@ defaults, so a policy written earlier is unchanged.
 | Field                     | Default | Meaning                                                                                                   |
 | ------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
 | `automatic`               | `false` | When false every pass is a dry run: decisions are computed and logged, nothing applied                    |
-| `actor`                   | none    | The grant holder the server's loop acts as. Required with `automatic`                                     |
+| `actor`                   | none    | The actor id the server's loop acts as. Required with `automatic`                                         |
 | `aging_minutes`           | 60      | Waiting this long raises work by one priority band (1 to 10080)                                           |
 | `cooldown_minutes`        | 5       | A target's session count does not reverse direction within this time (0 to 1440)                          |
 | `dispatcher_wait_minutes` | 2       | How long a placed run waits for a live target dispatcher before its session claims it (0 to 1440, §26.24) |
@@ -2386,7 +2413,7 @@ against the target, machine, tool and account caps before the next is considered
 A start on an account that is not verified available is marked `probe`.
 
 A session is **free** when it is idle with no unfinished run, or when its run waits
-on CI, a deployment or an approval: time spent waiting on an external system is
+on CI, a deployment or a person's answer: time spent waiting on an external system is
 capacity. A session whose run is unfinished is working, between turns or not. Each
 start and each refill dispatches its step's run (§26.19, HS2-YC2P7K), so the step is
 in progress from then on and is no longer ready work.
@@ -2435,16 +2462,16 @@ the side-effect-free `access` check with the load and a stable operation id
 (`sched-start-<step id>`, `sched-stop-<session id>`):
 
 - **Allowed.** The request goes to the executor, whose own gate passes the start
-  with the same load and operation id (§26.10) and uses an approval a person gave.
-  The scheduler does not consume it.
-- **Not allowed.** The action passes `authorize`, which files the approval a policy
-  asks for (`session_start`, `session_stop`) once and audits the denial. The outcome
-  is the gate's code, such as `approval_required`, and nothing is done. A person's
-  approval lets the next pass through; a denial is final for that operation.
+  with the same load and operation id (§26.10) and uses an Allow Once a person gave
+  only when the session starts. The scheduler does not use it.
+- **Not allowed.** The action passes `authorize`, which files one permission request
+  (§26.7) for a session start with no remembered rule and audits the answer. The
+  outcome is the gate's code, such as `permission_required` with the request id, and
+  nothing is done. A person's answer wakes the scheduler and lets the next pass
+  through; a denial is final for that operation.
 
-A session the policy no longer permits is stopped on the strength of the grant
-alone, because the policy gate denies every action on a target it disabled; whether
-the gate itself should allow that stop is HS2-48H57C.
+A wind-down reduces activity, so it never asks and the policy never denies it: a
+session on a target the policy disabled is wound down like any other (HS2-48H57C).
 
 The seam is `SessionExecutor`
 (`crates/hotsheet-cli/src/orchestration/session_control.rs`):
@@ -2665,7 +2692,8 @@ again after its backoff, and a crashed session is replaced by the next pass that
 still finds its work ready.
 
 **The gate.** The start passes the gate under the scheduler's operation id, so an
-approval a person gave for that id is the one used, and a replacement asks again. The
+Allow Once a person gave for that id is the one used, once the session is running,
+and a replacement asks again unless a rule allows it. The
 load the gate checks is, for the target, the machine, the tool and the account, the
 larger of the scheduler's count and the count from this machine's records. The
 scheduler's count includes sessions the records do not hold (other owners' and
@@ -2676,7 +2704,8 @@ counted. Neither undercuts the other.
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | The session is `running`                                | `started` with its session id                                                                                |
 | The host refused, or could not launch                   | `refused` with the host's own reason (`below_ram_floor`, `session_start_failed`, `session_host_unavailable`) |
-| The gate denied it after the scheduler's own check      | `refused` with the gate's code (`policy_denied`, `approval_required`)                                        |
+| The gate denied it after the scheduler's own check      | `refused` with the gate's code (`policy_denied`)                                                             |
+| The start or its step's run waits for a person          | `permission_required` with the request id as the detail; no backoff, the answer wakes the loop (HS2-XHQ1EH)  |
 | The host had launched it earlier and it has ended since | `refused` with how it ended                                                                                  |
 | Anything else, such as a host that did not answer       | `refused` with the error's code; the start stays `requested`                                                 |
 | The acting actor has no id                              | `executor_unavailable`                                                                                       |
@@ -2700,9 +2729,9 @@ believes can interrupt work.
 | A person owns it (known here, or learned from the host) | `refused` with `session_human_owned` |
 | The gate or the target refused                          | `refused` with the code              |
 
-A person's session is refused before its host is asked anything. When the policy asks
-a person before a stop, the approval is used up by a stop the host then refuses as not
-safe (HS2-RTX8RJ).
+A person's session is refused before its host is asked anything. A stop never asks a
+person, so a stop the host refuses as not safe uses up nothing (HS2-RTX8RJ, settled
+by HS2-XHQ1EH).
 
 ### How the loop learns of a session
 
@@ -2733,9 +2762,8 @@ it, under the scheduler's actor:
 
 1. **The run first.** `run_dispatch` (§26.9) in `dispatcher` mode, under operation id
    `sched-run-<step id>`, with the step's orchestration ticket and target ticket. It
-   passes the gate as `work_start`, so the grant and the policy's target must allow
-   `work_start` as well as `sessions_manage`, and a policy that asks a person first
-   applies. The readiness guard (§26.15) applies as to any dispatch. The target ticket
+   passes the gate as `work_start`, so it asks a person unless a remembered
+   `work_start` rule allows it, and the policy's limits apply. The readiness guard (§26.15) applies as to any dispatch. The target ticket
    is marked Up Next for the target's dispatcher, which still assigns it; the
    orchestrator never names the worker. A refused dispatch refuses the start with
    the gate's or the target's code, and no session starts.
@@ -2945,7 +2973,7 @@ One read answers how an owning checkout's runs are going across its targets: lea
 time, queue wait, blocked time, retries, CI and deployment outcomes, and known AI
 cost. It carries identifiers, states, counts, durations and amounts only: no ticket
 title, body, note or command output. It answers from this machine's records,
-contacts no target, takes no grant and writes nothing, like the gate reads of §26.13.
+contacts no target, asks no one and writes nothing, like the gate reads of §26.13.
 
 It is a pure fold (`orchestration/summary.rs`, `summarize_progress`) over the runs
 and their histories and the run event journal (§26.9), validation results (§26.12),
@@ -3115,15 +3143,16 @@ closed is allowed with no base: nothing is pending beneath it.
 `run dispatch` (§26.9) on a provisional step asks the policy. Without the opt-in for
 the step's target the answer is `readiness_provisional`, as before. With it:
 
-1. The own setting of each involved target is read fresh, through the gate as
-   `gates_observe`, and the tickets the step names are read again as `tickets_read`,
+1. The own setting of each involved target is read fresh as `gates_observe`, and the
+   tickets the step names are read again as `tickets_read` (observation never asks),
    so a prerequisite that moved on since the last read is judged as it stands now.
 2. The rule decides. A refusal is 409 `readiness_provisional_refused`, audited as
    `provisional_dispatch` with the rule's code; `readiness show` names it under
    `speculation`.
-3. A policy that lists `provisional_dispatch` under `approval.required_for` asks a
-   person for that exact operation (§26.8): `approval_required` until someone
-   approves it, used once, and a denial is final for that operation.
+3. Building ahead asks a person for that exact operation under
+   `provisional_dispatch` (§26.7) unless a remembered rule allows it:
+   `permission_required` until someone answers, an Allow Once used once the run is
+   dispatched, and a denial is final for that operation.
 4. The work is dispatched and recorded in the ledger with the gates it rests on. The
    orchestration ticket gets one activity note naming the step, the operation, each
    gate and commit, and the depth, by identifiers only.
@@ -3147,7 +3176,7 @@ cap, limit and resource. A start is marked `provisional` with the reason
 - **Real sessions.** A start is applied only when the policy also sets
   `placement.automatic`; otherwise the pass is a dry run that shows the start it
   would make. An applied start passes the policy with the provisional flag, so
-  `speculation` and a listed `provisional_dispatch` approval apply to it, and the
+  `speculation` and the `provisional_dispatch` permission apply to it, and the
   started work is recorded under the start's operation id (`sched-start-<step id>`).
   A later dispatch of the same step keeps that record.
 - **Targets read.** A target with only provisional work is contacted when the policy
@@ -3251,8 +3280,6 @@ The workspace view of provisional state is HS2-0D60T8.
   the target's machine, a dry-run `scheduler plan` stores what it read, and a change
   of the setting is noticed at the next read (HS2-FJ6MDW).
 - Records are never retired from the ledger file (HS2-J3SMMT).
-- A `provisional_dispatch` approval is used before the run is recorded, like a
-  readiness override, so a dispatch that then fails to claim asks again (HS2-8NJVXC).
 - Standing gates about several commits are refused rather than built on (HS2-08F1M8).
 
 ### Headless surface
@@ -3288,14 +3315,18 @@ it at launch). CI evidence comes from a loopback GitHub Actions provider observe
 the Job monitor the server starts. Nothing leaves loopback; no AI tool, provider
 account or GitHub repository is contacted. Where a scenario plays an agent (joining
 the pool, claiming, finishing), it does what the worker skill does, through the
-hosting server's own ticket routes.
+hosting server's own ticket routes. The fleet declares and binds each target, which
+is the consent to read it, and a person remembers the `work_start` and
+`session_start` rules its loop needs ahead of time through `permission-rules`, the
+route behind `permission remember` (§26.7, HS2-XHQ1EH), so no scenario waits on a
+permission card.
 
 | Scenario                                                | What it shows                                                                                                                                                                                                                       |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `e2e_loop` the loop completes a plan across two servers | A readiness plan where B waits on A's ticket and CI; automatic placement starts a session on each server in turn; A's gate goes green through the monitor; both tickets complete through the change feeds; both sessions wound down |
 | a restarted controller resumes the plan                 | Restarts while A's gate waits and while B's remote session works: the gate is observed again, the remote session is adopted, nothing starts twice                                                                                   |
 | a partial target outage                                 | The peer drops off the network: B's run reads `unreachable` and stale, A's work completes meanwhile, nothing replaces B's session, and B completes from the replayed feed when the peer returns                                     |
-| lost access mid-run                                     | A revoked and then an expired grant: typed denials in the answers and the audit journal, nothing started or stopped, and a new grant lets the run finish                                                                            |
+| lost access mid-run                                     | The target unbound mid-run: typed denials in the answers and the audit journal, nothing started or stopped, and binding it again lets the run finish                                                                                |
 | cancelling a remote run                                 | A person's cancel holds the step (§26.24): nothing is dispatched for it, its session is told and wound down once its worker lets go, and a person's new dispatch ends the hold                                                      |
 | duplicate requests                                      | Concurrent passes over HTTP and the stdio MCP tool and replayed scheduler operation ids give one run, one session and one terminal                                                                                                  |
 | out-of-order and replayed events                        | A worker hands the ticket over and it is finished while the controller cannot see the peer; the run settles once from the latest state, and repeated syncs and reconciliations record nothing                                       |
@@ -3397,7 +3428,7 @@ names the same time from the run's records.
 
 **The claim.** An applied pass claims the run's target ticket for the session's own
 worker id (the hosted `/target-claims` claim the direct dispatch uses), through the
-gate as `work_start` continuing the run's own dispatch, so an approval the dispatch
+gate as `work_start` continuing the run's own dispatch, so a permission the dispatch
 needed is not asked again. The run becomes `dispatched` to that worker with reason
 `claimed_for_session`, a note goes on the orchestration ticket, and the act is
 audited as `scheduler_assignment`. A ticket someone else claimed first is refused as
@@ -3650,8 +3681,8 @@ terminal routes; a scripted host in tests), so the planner:
   and gets its prompt at launch or by session push, retried on readiness events with
   the same bounds as a role prompt (HS2-2DPGDY).
 
-The orchestrating half of §26.16 (grants, the session registry, the scheduler's
-caps) is not used, because starting the planner acts on no target. `planner` is a
+The orchestrating half of §26.16 (the permission gate, the session registry, the
+scheduler's caps) is not used, because starting the planner acts on no target. `planner` is a
 role of its own: it joins no coordination pool (`joined` is `null`), `session start`
 refuses it for a target (`invalid_request`), and a hosted planner start must name the
 checkout it runs in as its orchestration project.
@@ -3709,7 +3740,7 @@ uses the existing gated operations only:
 - turns a judgment call it cannot settle into a `FEEDBACK NEEDED` note with `CHOICE`
   options on the goal ticket, once, and plans the rest;
 - never dispatches a run, starts a session, ticks the scheduler, changes the policy
-  or answers an approval, and ends with a `## Proposed plan` note per goal naming the
+  or answers a permission request, and ends with a `## Proposed plan` note per goal naming the
   tickets and steps by identifier.
 
 Re-proposing is idempotent by goal ticket and target ticket: target tickets by the
@@ -3722,10 +3753,10 @@ same definition again changes nothing. The scheduler does not read it yet: carry
 into placement is HS2-TH53NN.
 
 **Permissions.** Every action the planner takes on a target goes through the gate of
-the operation it calls. HS2-XHQ1EH replaces grants with orchestrator permission
-requests through the permission bridge; the planner is written against that model and
-treats `approval_required`, a pending request or a denial as a person's decision, never
-something to retry around. Nothing in Propose Plan itself asks a target anything.
+the operation it calls (§26.7): reading never asks, and an acting call no remembered
+rule allows files an orchestrator permission request. The planner treats
+`permission_required`, `permission_denied` and `decision_required` as a person's
+decision, never something to retry around. Nothing in Propose Plan itself asks a target anything.
 
 **Not yet.** A target's tickets can only be read one by one, so the planner finds
 existing target tickets through what the goal names and what is linked; listing and
@@ -3766,8 +3797,8 @@ was signed off on HS2-HSMH2Q (Design v3).
 hands them to the pure fold `timeline` in
 `crates/hotsheet-ticketing/src/orchestration/timeline.rs`. It reads the plan and its
 readiness (§26.15), the runs (§26.9), the sessions this owner's orchestrator started
-(§26.16), the latest logged scheduler decision per step (§26.17), pending approvals,
-the bindings and the policy. It contacts no target, passes no gate and writes nothing.
+(§26.16), the latest logged scheduler decision per step (§26.17), pending permission
+requests (§26.7), the bindings and the policy. It contacts no target, passes no gate and writes nothing.
 
 | Field          | Meaning                                                                                                    |
 | -------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -3810,20 +3841,20 @@ the plan's last read recorded (§26.15 now keeps it, an identifier) and nothing 
 titles of remote targets are HS2-HDHT5E. Nothing the read finds is written anywhere.
 
 **Waiting for permission, one seam.** The permission a step waits on comes from one
-function: a pending approval of the scheduler's own operation for the step
-(`sched-start-<step>` or `sched-run-<step>`, §26.8) reads as `kind: approval`, and a
-logged start whose outcome is `permission_required` with the request id as its detail
-reads as `kind: permission`. The second is the shape HS2-XHQ1EH's orchestrator requests
-through the permission bridge take; the view needs no change when they land. A judgment
-call (going ahead on an unconfirmed prerequisite) is a decision on the goal ticket, as
-HS2-XHQ1EH puts it.
+function: the scheduler's latest start decision for the step whose outcome is
+`permission_required`, with the orchestrator request id as its detail (§26.7, §26.19),
+reads as `kind: permission` while that request is still pending in the ledger. The
+action is the one asked: `session_start` for `sched-start-<step>`, `work_start` for the
+step's run `sched-run-<step>`. Once a person answers, the step no longer waits, before
+the next pass runs. A judgment call (going ahead on an unconfirmed prerequisite) is a
+decision note on the goal ticket (HS2-XHQ1EH).
 
 **Waiting for a change.** With `after` equal to the current version and `wait_ms` (at most
 20 seconds) the read is a long poll. It watches the owner's run event journal, its
 scheduler decision log, the scheduler's wake marker and, while a decision is pending, the
 owner's ticket store, and answers as soon as the version differs, or with the same
-version at the deadline. Nothing polls on an interval. An answered approval does not wake
-it yet (HS2-ANQXQ4). A read on the server also starts the target followers of §26.9.
+version at the deadline. Nothing polls on an interval. An answered permission request does not
+wake it yet (HS2-ANQXQ4). A read on the server also starts the target followers of §26.9.
 
 ### The view
 
@@ -3905,9 +3936,9 @@ Adding a project declares a target (§26.2) and binds it to an open checkout on 
 machine or on a reviewed remote registration in one step: the checkout is inspected
 first, so an unreachable or unknown one adds nothing; then the target is declared and
 bound with the fresh candidate. Adding is a person's consent to let the orchestration
-project read and follow that project (HS2-XHQ1EH): an AI actor is refused, no grant is
+project read and follow that project (HS2-XHQ1EH): an AI actor is refused, nothing more is
 written, and whatever the orchestrator later does there still passes the authorization
-gate. The project type must be Orchestration and a project cannot orchestrate itself.
+gate, which asks a person for acting actions (§26.7). The project type must be Orchestration and a project cannot orchestrate itself.
 It is idempotent: a project already bound to the same checkout (same kind, remote
 registration and checkout) is returned with `added: false`, and a caller-kept
 `target_id` binds that declared target after an attempt whose bind failed. Audited as
@@ -3942,15 +3973,16 @@ the type changes to Software while it shows.
   that project's tab shows the session's terminal), **Take Over…** and **Stop** (at a safe
   point; mid-turn asks first and then stops with `force`). **Stop Orchestrating…** removes
   the project after the shared confirmation. The app names its person `hotsheet-app` for
-  reads and session actions that need an identified actor; until HS2-XHQ1EH makes adding
-  the consent to read, a capacity read without a grant says the project has not allowed
-  it yet (HS2-Y3N3PH). Show in Drawer for a remote project's session is unverified
+  reads and session actions that need an identified actor; adding the project is the
+  consent to read it, so capacity and admission reads succeed without asking anyone
+  (HS2-XHQ1EH, HS2-Y3N3PH). Show in Drawer for a remote project's session is unverified
   (HS2-6E32N4).
 - **Policy, limits only.** Place sessions automatically, machine defaults, per-tool session
   caps and weights (an empty Sessions field leaves the tool out), wind-down and
   build-ahead, saved with **Apply Policy** at the stored revision. The form never shows
-  the policy's `targets[].actions` or `approval.required_for` (HS2-XHQ1EH removes them);
-  every member it does not show is written back unchanged. Accounts, budgets and
+  the policy's retired `targets[].actions` or `approval.required_for` (HS2-XHQ1EH: the
+  server ignores and drops them); every member it does not show is written back
+  unchanged. Accounts, budgets and
   per-project limits stay headless (HS2-7WF6JD).
 
 A project opened from another server cannot add projects here: the add binds on the
@@ -3982,3 +4014,32 @@ hotsheet-cli -C <host-source> orchestration project remove <target-id> --project
 
 MCP `hotsheet_targets` adds `project_type` and `project_type_set` (with `keep_projects`).
 Adding a project is a person's act and has no MCP action.
+
+## 26.28 Orchestrator permissions in clients (HS2-XHQ1EH)
+
+The permission requests and remembered rules of §26.7 use the client surfaces every
+other AI permission uses ([05](05-ai-tool-plugins.md) §5.7); no orchestration screen
+is needed to answer one.
+
+- **The card.** A request arrives as the ordinary `permission_asked` nudge and
+  permission card. Its status line reads `Orchestrator:` and the action sentence, such
+  as "Create or change tickets in API", and its details name the requester (the
+  orchestrator of the orchestration project), the action, the target project and,
+  for a session start, the tool. The decision row offers Allow Once, Always Allow
+  and Deny only; there is no Allow This AI Session and no chat answer.
+- **Always Allow review.** Always Allow opens the usual confirmation, which names the
+  rule owner (the orchestrator of the orchestration project, in the target project)
+  and its lifetime ("Persistent, until revoked") and offers no rule-type or pattern
+  choice, because the rule is keyed exactly. Confirm Always Allow remembers it.
+- **Settings → Permissions.** A remembered orchestrator rule is listed with the other
+  remembered answers. Its row names the action sentence, "Applies to: The
+  orchestrator of" the orchestration project, and "Target project:" the target. It can
+  be revoked there; editing its match, decision or scope is disabled.
+- **Settling.** A request answered anywhere else (the CLI, another client, a rule
+  remembered ahead) settles the card with `permission_resolved`. A request filed by
+  a headless CLI while no server ran appears when a client next reads the pending
+  permissions.
+
+Remembered orchestrator rules live in the machine-local orchestration ledger, not in
+the encrypted AI permission vault; `GET /permissions/rules` merges them into the
+list it returns.

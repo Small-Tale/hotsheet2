@@ -11,13 +11,12 @@ use hotsheet_model::NoteKind;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalRegistry, ApprovalState, AuditOutcome, AuditRecord, DenialReason,
-    GateFacts, GateFilter, GateRequirement, MAX_STEP_RESOURCES, NewPlanStep, PlanFacts,
-    PlanRegistry, PlanStep, Prerequisite, ProvisionalStanding, ReadinessError, ReadinessLevel,
-    ReadinessReason, ResourceNeed, RunEvent, RunEventJournal, RunEventKind, RunEventSource,
-    RunTarget, RunTicket, RunUnreachable, StepReadiness, TargetAction, TargetOpError, TicketFacts,
-    TicketKey, TicketSeen, TicketUpdate, ValidationRegistry, evaluate_plan, summarize, ticket_key,
-    validate_needs,
+    AuditOutcome, AuditRecord, GateFacts, GateFilter, GateRequirement, MAX_STEP_RESOURCES,
+    NewPlanStep, PlanFacts, PlanRegistry, PlanStep, Prerequisite, ProvisionalStanding,
+    ReadinessError, ReadinessLevel, ReadinessReason, ResourceNeed, RunEvent, RunEventJournal,
+    RunEventKind, RunEventSource, RunTarget, RunTicket, RunUnreachable, StepReadiness,
+    TargetAction, TargetOpError, TicketFacts, TicketKey, TicketSeen, TicketUpdate,
+    ValidationRegistry, evaluate_plan, summarize, ticket_key, validate_needs,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -226,6 +225,10 @@ fn named_tickets(step: &PlanStep) -> impl Iterator<Item = RunTarget> + '_ {
         })
         .chain([step.target.clone()])
 }
+
+/// HS2-XHQ1EH: the options of the decision note the orchestrator adds when it asks
+/// to dispatch work the plan says is not ready. The first starts it.
+pub const OVERRIDE_OPTIONS: [&str; 2] = ["Start anyway", "Wait until it is ready"];
 
 impl OrchestrationRuntime {
     pub(super) fn plan(&self) -> PlanRegistry {
@@ -508,7 +511,7 @@ impl OrchestrationRuntime {
                 operation_id: entry.operation_id.map(Into::into),
                 outcome: entry.outcome,
                 reason: entry.reason.map(Into::into),
-                grant_id: None,
+                permission_id: None,
             },
         )
     }
@@ -693,8 +696,9 @@ impl OrchestrationRuntime {
             ));
         }
         // HS2-YFPZFP: the step's work is withdrawn with it. Its unfinished scheduler
-        // runs are cancelled first, as the remover, so a refusal by the gate leaves
-        // the plan as it was. A target that cannot be told keeps the run
+        // runs are cancelled first, as the remover. A cancel only reduces activity, so
+        // the gate never asks or refuses it on policy grounds (HS2-XHQ1EH); any other
+        // error leaves the plan as it was. A target that cannot be told keeps the run
         // `cancel_requested`, as any cancel does, and the removal goes on.
         let planned = self.plan().get(owner_id, &request.step_id)?;
         for run in self.run_list(owner_id, false)?.into_iter().filter(|run| {
@@ -855,9 +859,15 @@ impl OrchestrationRuntime {
     /// confirmed level. A ticket no step names is not planned and is not gated. The
     /// freshly read target ticket becomes the step's own confirmed state first.
     ///
-    /// With `override_readiness` a person is asked for this exact operation under the
-    /// `readiness_override` approval (§26.8); the answer and its use are audited and
-    /// noted on the orchestration ticket by identifiers only.
+    /// HS2-XHQ1EH: with `override_readiness`, a person's own override is their
+    /// decision and goes ahead. When the orchestrator itself (an AI session or the
+    /// scheduling loop) asks for one, it is a judgment call: a `FEEDBACK NEEDED` note
+    /// with `CHOICE` options goes on the orchestration ticket and the dispatch waits
+    /// (`decision_required`) until a person's response chooses. The override and its
+    /// use are audited and noted on the orchestration ticket by identifiers only.
+    ///
+    /// `Ok(Some(id))` names an Allow Once answer for building ahead, to use once the
+    /// run is recorded.
     pub(super) fn readiness_guard(
         &self,
         owner_id: &str,
@@ -865,7 +875,7 @@ impl OrchestrationRuntime {
         authorized: &Authorized,
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
-    ) -> Result<(), OrchestrationError> {
+    ) -> Result<Option<String>, OrchestrationError> {
         let GuardedDispatch {
             target,
             found,
@@ -873,7 +883,7 @@ impl OrchestrationRuntime {
             override_readiness,
         } = *dispatch;
         let Some(step) = self.plan().find_target(owner_id, target)? else {
-            return Ok(());
+            return Ok(None);
         };
         // Repeating an admitted dispatch continues that decision (§26.9); an override
         // was used once and is not asked for again.
@@ -883,7 +893,7 @@ impl OrchestrationRuntime {
             .iter()
             .any(|run| run.operation_id == operation_id)
         {
-            return Ok(());
+            return Ok(None);
         }
         let now_ms = tx.clock.now_ms();
         self.plan().observe(
@@ -897,7 +907,7 @@ impl OrchestrationRuntime {
         self.readiness_reevaluate(owner_id, now_ms);
         let view = self.readiness(owner_id, &step.step_id, tx)?;
         let Some(refusal) = view.readiness.level.refusal() else {
-            return Ok(());
+            return Ok(None);
         };
         if !override_readiness {
             // HS2-JSF985: a provisional step is the policy's decision. Without its
@@ -915,13 +925,6 @@ impl OrchestrationRuntime {
             return Err(OrchestrationError::Readiness(refusal));
         }
         let reference = Self::target_ref(owner_id, &target.target_id)?;
-        let approvals = ApprovalRegistry::new(&self.home);
-        let asked = |approval: &hotsheet_ticketing::orchestration::Approval| {
-            approval.target == reference
-                && approval.actor_id == authorized.actor_id
-                && approval.gate == ApprovalGate::ReadinessOverride
-                && approval.operation_id == operation_id
-        };
         let level = view.readiness.level.code();
         let audit = |outcome, reason: &str, tx: &mut Transaction<'_>| {
             self.readiness_audit(
@@ -937,35 +940,50 @@ impl OrchestrationRuntime {
                 tx,
             )
         };
-        if approvals
-            .list(owner_id, now_ms)?
-            .iter()
-            .rev()
-            .find(|approval| asked(approval))
-            .is_some_and(|approval| approval.state == ApprovalState::Denied)
-        {
-            audit(AuditOutcome::Denied, "approval_denied", tx)?;
-            return Err(OrchestrationError::Readiness(
-                ReadinessError::OverrideDenied,
-            ));
-        }
-        if !approvals.consume_or_request(
-            &reference,
-            &authorized.actor_id,
-            ApprovalGate::ReadinessOverride,
-            operation_id,
-            tx,
-        )? {
-            audit(AuditOutcome::Denied, "approval_required", tx)?;
-            return Err(OrchestrationError::Denied(DenialReason::ApprovalRequired));
-        }
+        // A person who asks to start anyway has decided; nothing asks again.
+        let decided_by = if access::is_person(actor) {
+            format!(
+                "by `{}`",
+                actor
+                    .and_then(|actor| actor.id.as_deref())
+                    .unwrap_or("a person")
+            )
+        } else {
+            match self.judgment(
+                owner_id,
+                &super::decisions::Judgment {
+                    kind: "readiness_override",
+                    target: &reference,
+                    operation_id,
+                    ticket: &step.ticket,
+                    context: format!(
+                        "The orchestrator wants to dispatch plan step `{}` in target `{}` \
+                         while it is `{level}` (operation `{operation_id}`).",
+                        step.step_id, target.target_id
+                    ),
+                    question: format!("Should plan step `{}` start now?", step.step_id),
+                    options: &OVERRIDE_OPTIONS,
+                },
+                actor,
+                tx,
+            )? {
+                super::decisions::Decided::Chosen { option: 0, note_id } => {
+                    format!("by a person's response to decision note `{note_id}`")
+                }
+                super::decisions::Decided::Chosen { .. } => {
+                    audit(AuditOutcome::Denied, "decision_wait", tx)?;
+                    return Err(OrchestrationError::Readiness(
+                        ReadinessError::OverrideDenied,
+                    ));
+                }
+                super::decisions::Decided::Waiting { note_id } => {
+                    audit(AuditOutcome::Denied, "decision_required", tx)?;
+                    return Err(OrchestrationError::DecisionRequired { note_id });
+                }
+            }
+        };
         // The level that was overridden is the audit reason.
         audit(AuditOutcome::Allowed, level, tx)?;
-        let approval = approvals
-            .list(owner_id, now_ms)?
-            .into_iter()
-            .rev()
-            .find(|approval| asked(approval));
         let ticket = OrchestrationTicket {
             connection_id: step.ticket.connection_id.clone(),
             native_id: step.ticket.native_id.clone(),
@@ -980,18 +998,11 @@ impl OrchestrationRuntime {
                 NoteKind::Activity,
                 format!(
                     "Readiness override: plan step `{}` was `{level}` and is dispatched \
-                     anyway under operation `{operation_id}`. Approval `{}` by `{}`.",
+                     anyway under operation `{operation_id}`, decided {decided_by}.",
                     step.step_id,
-                    approval
-                        .as_ref()
-                        .map_or("unknown", |approval| approval.approval_id.as_str()),
-                    approval
-                        .as_ref()
-                        .and_then(|approval| approval.decided_by.as_deref())
-                        .unwrap_or("unknown"),
                 ),
             );
         }
-        Ok(())
+        Ok(None)
     }
 }

@@ -1,7 +1,7 @@
 //! HS2-J89JC7: the orchestration timeline of an owning checkout.
 //!
 //! A read. It gathers this machine's records (the plan and its readiness, runs,
-//! sessions, the scheduler's decision log, pending approvals, bindings and the
+//! sessions, the scheduler's decision log, pending permission requests, bindings and the
 //! policy), labels tickets from stores on this machine, and hands everything to the
 //! pure fold `hotsheet_ticketing::orchestration::timeline`. It contacts no target,
 //! passes no gate and writes nothing. With a version and `wait_ms` it is a long poll:
@@ -14,8 +14,8 @@ use std::path::PathBuf;
 use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    ApprovalState, BindingRegistry, DecisionJournal, DecisionKind, DecisionRecord, DecisionWait,
-    DeclarationState, MAX_AUDIT_PAGE, PermissionWait, PlacementHint, ReadinessLevel,
+    BindingRegistry, DecisionJournal, DecisionKind, DecisionRecord, DecisionWait, DeclarationState,
+    MAX_AUDIT_PAGE, PermissionState, PermissionWait, PlacementHint, ReadinessLevel,
     RunEventJournal, SessionRegistry, TargetDestination, TargetLocation, TicketKey, TicketLabel,
     Timeline, TimelineInput, TimelinePolicy, TimelineStep, TimelineTarget, ticket_key, timeline,
 };
@@ -116,38 +116,16 @@ impl OrchestrationRuntime {
         }
     }
 
-    /// HS2-J89JC7 seam: the permission request each step waits on. Today a pending
-    /// approval of the scheduler's operation for the step (§26.8); HS2-XHQ1EH's
-    /// permission requests arrive as a logged decision whose outcome is
-    /// `permission_required` with the bridge's request id as its detail.
+    /// HS2-J89JC7 seam: the permission request each step waits on. HS2-XHQ1EH logs a
+    /// start that waits for a person as a decision whose outcome is
+    /// `permission_required` with the orchestrator request id as its detail.
     fn permission_waits(
         &self,
         owner_id: &str,
-        now_ms: u64,
         records: &[DecisionRecord],
+        now_ms: u64,
     ) -> Result<BTreeMap<String, PermissionWait>, OrchestrationError> {
         let mut waits: BTreeMap<String, PermissionWait> = BTreeMap::new();
-        for approval in hotsheet_ticketing::orchestration::ApprovalRegistry::new(&self.home)
-            .list(owner_id, now_ms)?
-            .into_iter()
-            .filter(|approval| approval.state == ApprovalState::Pending)
-        {
-            let step = ["sched-start-", "sched-run-"]
-                .iter()
-                .find_map(|prefix| approval.operation_id.strip_prefix(prefix));
-            if let Some(step) = step {
-                waits.insert(
-                    step.to_owned(),
-                    PermissionWait {
-                        kind: "approval".into(),
-                        request_id: approval.approval_id.clone(),
-                        action: code(&approval.gate).unwrap_or_default(),
-                        operation_id: Some(approval.operation_id.clone()),
-                        requested_at_ms: Some(approval.requested_at_ms),
-                    },
-                );
-            }
-        }
         // The latest decision about a step decides whether it still waits.
         let mut latest: BTreeMap<&str, &DecisionRecord> = BTreeMap::new();
         for record in records
@@ -158,21 +136,39 @@ impl OrchestrationRuntime {
                 latest.insert(step, record);
             }
         }
+        // The ledger names the action asked (a session start, or the step's run as
+        // `work_start`) and whether a person answered since the pass logged it.
+        let ledger = self.permission_ledger().list(owner_id, now_ms)?;
         for (step, record) in latest {
-            if record.outcome.as_deref() == Some(PERMISSION_REQUIRED)
-                && let Some(request) = &record.outcome_detail
-            {
-                waits.insert(
-                    step.to_owned(),
-                    PermissionWait {
-                        kind: "permission".into(),
-                        request_id: request.clone(),
-                        action: "session_start".into(),
-                        operation_id: record.operation_id.clone(),
-                        requested_at_ms: Some(record.at_ms),
-                    },
-                );
+            if record.outcome.as_deref() != Some(PERMISSION_REQUIRED) {
+                continue;
             }
+            let Some(request_id) = &record.outcome_detail else {
+                continue;
+            };
+            let request = ledger
+                .iter()
+                .find(|request| &request.request_id == request_id);
+            if request.is_some_and(|request| request.state != PermissionState::Pending) {
+                continue;
+            }
+            waits.insert(
+                step.to_owned(),
+                PermissionWait {
+                    kind: "permission".into(),
+                    request_id: request_id.clone(),
+                    action: request.map_or_else(
+                        || "session_start".into(),
+                        |request| request.key.action.code().into(),
+                    ),
+                    operation_id: request
+                        .map(|request| request.operation_id.clone())
+                        .or_else(|| record.operation_id.clone()),
+                    requested_at_ms: Some(
+                        request.map_or(record.at_ms, |request| request.requested_at_ms),
+                    ),
+                },
+            );
         }
         Ok(waits)
     }
@@ -328,7 +324,7 @@ impl OrchestrationRuntime {
             runs: &self.run_list(owner_id, false)?,
             sessions: &SessionRegistry::new(&self.home).list(owner_id, false)?,
             hints: &hints(&records),
-            permissions: &self.permission_waits(owner_id, now_ms, &records)?,
+            permissions: &self.permission_waits(owner_id, &records, now_ms)?,
             decisions: &decisions,
             goals: &goals,
             tickets: &tickets,

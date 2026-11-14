@@ -82,25 +82,7 @@ async fn hs2_2fg91x_cli_declares_resources_and_explains_contention() {
         store_arg,
         "orchestration",
     ];
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
-            TARGET,
-            "--project",
-            &owner.id,
-            "--actor",
-            "scheduler-1",
-            "--action",
-            "tickets_read",
-            "--action",
-            "gates_observe",
-            "--expires-in",
-            "1h",
-        ],
-    );
+    // HS2-XHQ1EH: reading and observing need no rule.
     let scheduler = |arguments: &[&str]| {
         let mut all = vec!["scheduler"];
         all.extend_from_slice(arguments);
@@ -360,13 +342,11 @@ async fn hs2_2fg91x_server_loop_defers_held_work_and_wakes_on_release() {
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","gates_observe"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     let actor = json!({"role":"ai","id":"scheduler-1"});

@@ -1,33 +1,14 @@
-//! HS2-YCJDEB: the throughput policy, dry-run and approvals through the real
-//! authenticated service, the owned CLI process and the stdio MCP tool.
+//! HS2-YCJDEB: the throughput policy and its dry run through the real authenticated
+//! service, the owned CLI process and the stdio MCP tool. Since HS2-XHQ1EH the
+//! policy holds limits only; its retired fields read as ignored.
 use super::orchestration::{api, configured_owner, shared_runtime};
 use super::*;
-use hotsheet_ticketing::orchestration::{ApprovalGate, ApprovalRegistry, TargetRef, Transaction};
 use std::path::Path;
 
 const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FC0";
 
-struct Clock;
-impl hotsheet_ticketing::Clock for Clock {
-    fn now_ms(&self) -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            .try_into()
-            .unwrap()
-    }
-}
-struct Rng(u128);
-impl hotsheet_ticketing::Rng for Rng {
-    fn next_u128(&mut self) -> u128 {
-        self.0 += 1;
-        self.0
-    }
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
+async fn hs2_ycjdeb_cli_http_and_mcp_share_the_limits_only_policy_and_its_dry_run() {
     assert!(hotsheet_aitools::test_permission_vault_available());
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
@@ -87,23 +68,18 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
         "orchestration",
     ];
     let plain = ["-C", source.to_str().unwrap(), "orchestration"];
+    // HS2-XHQ1EH: a person remembers tickets_write for the orchestrator.
     cli_named(
         &home,
         &human,
         &[
-            "grant",
-            "add",
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "worker-1",
-            "--action",
-            "tickets_read",
             "--action",
             "tickets_write",
-            "--expires-in",
-            "1h",
         ],
     );
     // Headless setup: an absent policy reads as disabled and creates nothing.
@@ -152,6 +128,14 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
         .map(|problem| problem["code"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(codes, ["account_cap_exceeds_tool", "unconfigured_tool"]);
+    // HS2-XHQ1EH: the retired fields are read, ignored and reported.
+    let ignored: Vec<_> = report["ignored"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|field| field["code"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(ignored, ["approval_ignored", "target_actions_ignored"]);
     for (file, expected) in [(&bad, "invalid_request"), (&malformed, "must be JSON")] {
         let stderr = cli_failure(
             &home,
@@ -188,8 +172,6 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
             &owner.id,
             "--file",
             good.to_str().unwrap(),
-            "--actor",
-            "worker-1",
         ],
     );
     assert_eq!(dry["source"], "proposed");
@@ -203,17 +185,14 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
             .clone()
     };
     assert_eq!(row(&dry, "tickets_read")["automatic"], true);
+    assert_eq!(row(&dry, "tickets_read")["permission"], "not_needed");
     assert_eq!(row(&dry, "sessions_manage")["policy"], "allowed");
-    assert_eq!(
-        row(&dry, "sessions_manage")["grant"]["reason"],
-        "action_not_granted"
-    );
-    assert_eq!(row(&dry, "work_start")["policy"], "approval_required");
-    assert_eq!(
-        row(&dry, "tickets_write")["policy_detail"],
-        "policy_action_not_permitted"
-    );
-    assert_eq!(row(&dry, "tickets_write")["grant"]["allowed"], true);
+    assert_eq!(row(&dry, "sessions_manage")["permission"], "asks");
+    // The old approval list asks nobody: limits only.
+    assert_eq!(row(&dry, "work_start")["policy"], "allowed");
+    assert_eq!(row(&dry, "work_start")["permission"], "asks");
+    assert_eq!(row(&dry, "tickets_write")["permission"], "remembered");
+    assert_eq!(row(&dry, "tickets_write")["automatic"], true);
     assert!(!policy_path.exists());
     // Setting is idempotent: the second run changes neither revision nor bytes.
     let stored = cli_named(&home, &human, &set);
@@ -293,8 +272,7 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(problems["valid"], false);
-    // Both must allow: the grant covers tickets_write, the policy does not list it;
-    // the policy lists work_start, no grant covers it.
+    // Limits and remembered rules: the access check says what each would need.
     let check = |action: &'static str| {
         let router = router.clone();
         let path = format!("{target}/access");
@@ -310,92 +288,12 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
             .1
         }
     };
-    assert_eq!(
-        check("tickets_write").await,
-        json!({"allowed":false,"reason":"policy_denied","detail":"policy_action_not_permitted"})
-    );
+    assert_eq!(check("tickets_write").await["basis"], "remembered_rule");
     assert_eq!(
         check("work_start").await,
-        json!({"allowed":false,"reason":"action_not_granted"})
+        json!({"allowed":false,"reason":"permission_required"})
     );
-    assert_eq!(check("tickets_read").await["allowed"], true);
-    // Approvals: a pending request (filed by the gate) is listed, an AI actor cannot
-    // answer it, a person can, and the answer is audited.
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
-            TARGET,
-            "--project",
-            &owner.id,
-            "--actor",
-            "worker-1",
-            "--action",
-            "work_start",
-            "--expires-in",
-            "1h",
-        ],
-    );
-    assert_eq!(
-        check("work_start").await,
-        json!({"allowed":false,"reason":"approval_required","detail":"work_start"})
-    );
-    let mut rng = Rng(7);
-    ApprovalRegistry::new(&home)
-        .consume_or_request(
-            &TargetRef {
-                owner_checkout_id: owner.id.clone(),
-                target_id: TARGET.into(),
-            },
-            "worker-1",
-            ApprovalGate::WorkStart,
-            "op-1",
-            &mut Transaction {
-                clock: &Clock,
-                rng: &mut rng,
-            },
-        )
-        .unwrap();
-    let listed = cli_named(&home, &plain, &["approval", "list", "--project", &owner.id]);
-    assert_eq!(listed[0]["state"], "pending");
-    assert_eq!(listed[0]["gate"], "work_start");
-    let approval = listed[0]["approval_id"].as_str().unwrap().to_owned();
-    assert!(
-        cli_failure(
-            &home,
-            &ai,
-            &["approval", "approve", &approval, "--project", &owner.id]
-        )
-        .contains("forbidden")
-    );
-    let approved = cli_named(
-        &home,
-        &human,
-        &["approval", "approve", &approval, "--project", &owner.id],
-    );
-    assert_eq!(approved["state"], "approved");
-    assert_eq!(approved["decided_by"], "maintainer");
-    assert_eq!(check("work_start").await["allowed"], true);
-    assert!(
-        cli_failure(
-            &home,
-            &human,
-            &["approval", "deny", &approval, "--project", &owner.id]
-        )
-        .contains("conflict")
-    );
-    let (status, served) = api(
-        router.clone(),
-        "GET",
-        &format!("{base}/approvals"),
-        Value::Null,
-        true,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(served[0]["state"], "approved");
+    assert_eq!(check("tickets_read").await["basis"], "observation");
     // The stdio MCP tool reads the same state and offers no way to change it.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -422,19 +320,15 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
         call(json!({"action":"policy_validate","checkout":owner.id,"policy":conflicting}))["valid"],
         false
     );
-    let dry = call(json!({"action":"policy_dry_run","checkout":owner.id,"for_actor":"worker-1"}));
+    let dry = call(json!({"action":"policy_dry_run","checkout":owner.id}));
     assert_eq!(dry["source"], "stored");
-    assert_eq!(row(&dry, "work_start")["grant"]["allowed"], true);
-    assert_eq!(
-        call(json!({"action":"approval_list","checkout":owner.id}))[0]["approval_id"],
-        approval
-    );
-    for action in ["policy_set", "approval_approve", "approval_decide"] {
+    assert_eq!(row(&dry, "tickets_write")["permission"], "remembered");
+    for action in ["policy_set", "approval_list", "permission_answer"] {
         mcp_rejected(
             &home,
             &backend,
             "hotsheet_targets",
-            json!({"action":action,"checkout":owner.id,"policy":body,"approval_id":approval}),
+            json!({"action":action,"checkout":owner.id,"policy":body}),
         );
     }
     let journal = cli_named(
@@ -457,11 +351,9 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_policy_dry_run_and_approvals() {
     assert_eq!(
         actions,
         [
-            "grant_create:granted",
+            "permission_remember:changed",
             "policy_set:changed",
             "policy_set:changed",
-            "grant_create:granted",
-            "work_start:approved",
         ]
     );
     let _ = stop.send(());

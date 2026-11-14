@@ -383,16 +383,17 @@ mod tests {
             "/checkouts/owner/orchestration/targets/id/binding",
             "/checkouts/owner/orchestration/targets/id/resolve",
             "/checkouts/owner/orchestration/inspect",
-            // HS2-SBQ3T8: delegated authority and its journal never leave the machine.
-            "/checkouts/owner/orchestration/targets/id/grants",
-            "/checkouts/owner/orchestration/targets/id/grants/grant",
+            // HS2-SBQ3T8: the access check and the journal never leave the machine.
             "/checkouts/owner/orchestration/targets/id/access",
             "/checkouts/owner/orchestration/audit",
-            // HS2-YCJDEB: a dry run reads this machine's grants; approvals live here.
+            // HS2-YCJDEB: a dry run reads this machine's bindings and rules.
             "/checkouts/owner/orchestration/policy/dry-run",
-            "/checkouts/owner/orchestration/approvals",
-            "/checkouts/owner/orchestration/approvals/id",
-            // HS2-AZ15GA: orchestrating uses this machine's grants.
+            // HS2-XHQ1EH: permission requests and remembered rules are this machine's.
+            "/checkouts/owner/orchestration/permissions",
+            "/checkouts/owner/orchestration/permissions/id",
+            "/checkouts/owner/orchestration/permission-rules",
+            "/checkouts/owner/orchestration/permission-rules/id",
+            // HS2-AZ15GA: orchestrating uses this machine's gate.
             "/checkouts/owner/orchestration/tickets/create",
             "/checkouts/owner/orchestration/tickets/links",
             // HS2-EBHDSB: run records are this machine's.
@@ -421,7 +422,7 @@ mod tests {
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",
             "/checkouts/owner/orchestration/tool-capacity/select",
-            // HS2-J8PRTV: asking a target's machine passes this machine's grants.
+            // HS2-J8PRTV: asking a target's machine passes this machine's gate.
             "/checkouts/owner/orchestration/targets/id/capacity",
             "/checkouts/owner/orchestration/targets/id/admission",
             // HS2-WN0MXZ: steps, results and the run gate are this machine's.
@@ -439,14 +440,14 @@ mod tests {
             // HS2-JSF985: the provisional ledger is this machine's too.
             "/checkouts/owner/orchestration/readiness/speculation",
             "/checkouts/owner/orchestration/readiness/reopen",
-            // HS2-GDJXGZ: session records, starts and stops pass this machine's grants.
+            // HS2-GDJXGZ: session records, starts and stops pass this machine's gate.
             "/checkouts/owner/orchestration/sessions",
             "/checkouts/owner/orchestration/sessions/id",
             "/checkouts/owner/orchestration/sessions/id/sync",
             "/checkouts/owner/orchestration/sessions/id/safe-point",
             "/checkouts/owner/orchestration/sessions/id/stop",
             "/checkouts/owner/orchestration/sessions/id/takeover",
-            // HS2-R7QH35: telling a session its ticket passes this machine's grants.
+            // HS2-R7QH35: telling a session its ticket passes this machine's gate.
             "/checkouts/owner/orchestration/sessions/id/request",
             "/checkouts/owner/orchestration/session-sync",
             // HS2-ECWG50: scheduling reads and acts on this machine's records.

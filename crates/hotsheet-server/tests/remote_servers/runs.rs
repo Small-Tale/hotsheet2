@@ -125,27 +125,25 @@ async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cl
         store_arg,
         "orchestration",
     ];
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
+    // HS2-XHQ1EH: a person remembers the rules the orchestrator needs.
+    for (action, tool) in [
+        ("tickets_write", None::<&str>),
+        ("work_start", None::<&str>),
+    ] {
+        let mut arguments = vec![
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "scheduler-1",
             "--action",
-            "tickets_read",
-            "--action",
-            "tickets_write",
-            "--action",
-            "work_start",
-            "--expires-in",
-            "1h",
-        ],
-    );
+            action,
+        ];
+        if let Some(tool) = tool {
+            arguments.extend(["--tool", tool]);
+        }
+        cli_named(&home, &human, &arguments);
+    }
     let first_id = first.id.to_string();
     let dispatch = [
         "run",
@@ -417,13 +415,11 @@ async fn hs2_ebhdsb_stdio_mcp_dispatches_and_supervises_a_run() {
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","work_start"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     // The run routes need the bearer like everything else.
@@ -514,8 +510,7 @@ async fn hs2_ebhdsb_stdio_mcp_dispatches_and_supervises_a_run() {
             "actor_role":"ai","actor_id":"scheduler-1"}),
         json!({"action":"run_dispatch","checkout":checkout.id,"target_id":TARGET,
             "ticket":{"native_id":orchestration.slug},"connection_id":connection,
-            "native_id":work.slug,"operation_id":"op-other","worker_id":"mcp-worker",
-            "actor_role":"ai","actor_id":"someone-else"}),
+            "native_id":work.slug,"operation_id":"op-other","worker_id":"mcp-worker"}),
     ] {
         mcp_rejected(&home, &backend, "hotsheet_targets", arguments);
     }
@@ -615,13 +610,11 @@ async fn hs2_7qhwhj_a_remote_run_completes_from_the_peers_change_feed_without_po
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","work_start"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     // Before any run exists a subscriber's wait ends empty at its deadline.

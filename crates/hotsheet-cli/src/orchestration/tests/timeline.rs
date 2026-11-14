@@ -4,13 +4,13 @@
 //! version long poll. Synthetic tickets only.
 use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalRegistry, ItemState, TargetAction, TargetLocation, Timeline,
-    TimelinePhase, WaveKind,
+    DecisionJournal, DecisionRecord, ItemState, PermissionAnswer, TargetAction, TargetLocation,
+    Timeline, TimelinePhase, WaveKind,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::json;
 
-use super::tickets::{Machine, NOW, bind_and_grant, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
@@ -119,7 +119,7 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -214,40 +214,60 @@ fn hs2_j89jc7_permission_seam_and_goal_decision() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
     let goal = m.orchestration_ticket("Coordinate");
     let work = target_ticket(&m, "Work");
     let step = define(&m, &goal, &work, None);
-    // The scheduler's start for the step waits on a person's approval (§26.8): the
-    // seam reports it as the permission request the card links to.
-    let filed = ApprovalRegistry::new(&m.home)
-        .consume_or_request(
-            &m.reference(1),
-            "worker-1",
-            ApprovalGate::SessionStart,
-            &format!("sched-start-{step}"),
-            &mut tx,
-        )
+    // HS2-XHQ1EH: the scheduler's dispatch of the step's run waits on a person: the
+    // gate files a permission request and the pass logs `permission_required` with
+    // its id. The seam reports it as the permission request the card links to.
+    let ask = |operation: &str, tx: &mut Transaction<'_>| match m.runtime.authorize(
+        &m.reference(1),
+        Some(&worker()),
+        ActionRequest::new(TargetAction::WorkStart).operation(operation),
+        tx,
+    ) {
+        Err(OrchestrationError::PermissionRequired { request_id }) => request_id,
+        Err(other) => panic!("expected a permission request, got {other:?}"),
+        Ok(_) => panic!("expected a permission request, the action was allowed"),
+    };
+    let log = |step_id: &str, operation: &str, request_id: &str| {
+        let record: DecisionRecord = serde_json::from_value(json!({
+            "at_ms": 150, "tick_id": id(900), "mode": "applied", "trigger": "event",
+            "kind": "start", "actor_id": "worker-1", "target_id": id(1),
+            "step_id": step_id, "outcome": "permission_required",
+            "outcome_detail": request_id, "operation_id": operation,
+        }))
         .unwrap();
-    assert!(!filed);
+        DecisionJournal::new(&m.home, &m.owner.id)
+            .unwrap()
+            .append(record)
+            .unwrap();
+    };
+    let operation = format!("sched-run-{step}");
+    let request_id = ask(&operation, &mut tx);
+    log(&step, &operation, &request_id);
     let view = read(&m);
     let item = &view.waves[0].items[0];
     assert_eq!(item.state, ItemState::WaitsForPermission);
     let permission = item.permission.as_ref().unwrap();
     assert_eq!(
-        (permission.kind.as_str(), permission.action.as_str()),
-        ("approval", "session_start")
-    );
-    // An approval for another operation is not this step's.
-    ApprovalRegistry::new(&m.home)
-        .consume_or_request(
-            &m.reference(1),
-            "worker-1",
-            ApprovalGate::SessionStart,
-            "sched-start-another",
-            &mut tx,
+        (
+            permission.kind.as_str(),
+            permission.action.as_str(),
+            permission.request_id.as_str(),
+            permission.operation_id.as_deref()
+        ),
+        (
+            "permission",
+            "work_start",
+            request_id.as_str(),
+            Some(operation.as_str())
         )
-        .unwrap();
+    );
+    // A request for another step is not this step's.
+    let other = ask("sched-run-another", &mut tx);
+    log("another", "sched-run-another", &other);
     assert_eq!(read(&m).counts.get("waits_for_permission"), Some(&1));
 
     // An unanswered feedback request on the goal ticket is recorded as the decision a
@@ -264,6 +284,20 @@ fn hs2_j89jc7_permission_seam_and_goal_decision() {
     let view = read(&m);
     assert_eq!(view.waves[0].items[0].state, ItemState::WaitsForPermission);
     assert!(view.waves[0].items[0].decision.is_none());
+
+    // Once a person answers, the step no longer waits, before the next pass runs.
+    m.runtime
+        .permission_answer(
+            &m.owner.id,
+            &request_id,
+            PermissionAnswer::AllowOnce,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let view = read(&m);
+    assert_ne!(view.waves[0].items[0].state, ItemState::WaitsForPermission);
+    assert!(view.waves[0].items[0].permission.is_none());
 }
 
 #[test]
@@ -274,7 +308,7 @@ fn hs2_j89jc7_a_version_waits_for_the_next_change() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],

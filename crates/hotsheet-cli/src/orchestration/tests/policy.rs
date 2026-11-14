@@ -1,10 +1,10 @@
-//! HS2-YCJDEB: the throughput policy, approvals and dry-run through the shared
-//! runtime, and their place in the authorization gate. Synthetic identities only.
+//! HS2-YCJDEB: the throughput policy and its dry run through the shared runtime, and
+//! its place in the authorization gate. Since HS2-XHQ1EH it holds limits only.
+//! Synthetic identities only.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, CreateGrant, DenialReason,
-    MachineLimits, PolicyBody, SessionLoad, SessionRequest, SessionScope, SetPolicy, TargetAction,
-    TargetPolicy, ToolPolicy, ToolScope,
+    AuditOutcome, DenialReason, MachineLimits, PolicyBody, SessionLoad, SessionRequest, SetPolicy,
+    TargetAction, TargetPolicy, ToolPolicy, ToolScope,
 };
 use serde_json::{Value, json};
 
@@ -22,8 +22,7 @@ fn codex() -> ToolScope {
         models: Vec::new(),
     }
 }
-fn policy(actions: &[TargetAction]) -> PolicyBody {
-    let sessions = actions.contains(&TargetAction::SessionsManage);
+fn policy(sessions: bool) -> PolicyBody {
     PolicyBody {
         machine: MachineLimits {
             max_sessions: 2,
@@ -38,7 +37,7 @@ fn policy(actions: &[TargetAction]) -> PolicyBody {
         targets: vec![TargetPolicy {
             target_id: id(1),
             enabled: true,
-            actions: actions.to_vec(),
+            actions: None,
             tools: if sessions { vec![codex()] } else { Vec::new() },
             max_sessions: 1,
             machine: None,
@@ -61,25 +60,8 @@ fn bind_local(f: &Fixture, revision: String, tx: &mut Transaction<'_>) {
             .usable
     );
 }
-fn grant(f: &Fixture, actions: &[TargetAction], tx: &mut Transaction<'_>) {
-    let sessions = actions.contains(&TargetAction::SessionsManage);
-    f.runtime
-        .grant(
-            &reference(f),
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: actions.to_vec(),
-                session_scope: sessions.then(|| SessionScope {
-                    tools: vec![codex()],
-                    max_concurrency: 4,
-                }),
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            tx,
-        )
-        .unwrap();
+fn allow(f: &Fixture, actions: &[TargetAction], tx: &mut Transaction<'_>) {
+    allow_on(&f.runtime, &f.owner.id, &id(1), actions, &["codex"], tx);
 }
 fn set(f: &Fixture, body: PolicyBody, tx: &mut Transaction<'_>) -> Option<String> {
     let expected_revision = f.runtime.policy(&f.owner.id).unwrap().revision;
@@ -119,7 +101,7 @@ fn last_audit(f: &Fixture) -> (String, AuditOutcome, Option<String>) {
 }
 
 #[test]
-fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
+fn hs2_xhq1eh_the_policy_limits_and_a_person_allows() {
     let f = fixture();
     let mut rng = Rng(100);
     let mut tx = Transaction {
@@ -140,16 +122,13 @@ fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
         load,
         ..ActionRequest::new(TargetAction::SessionsManage).operation("op-start")
     };
-    // No policy: an explicit ticket action is governed by its grant alone, while
-    // session management is refused because nothing automatic runs without a policy.
-    grant(
-        &f,
-        &[TargetAction::TicketsWrite, TargetAction::SessionsManage],
-        &mut tx,
+    // No policy: an explicit ticket action has no limits and asks a person, while a
+    // session start is refused because nothing automatic runs without a policy, and
+    // nobody is asked about it.
+    permission_request(
+        f.runtime
+            .authorize(&target, Some(&worker()), write(), &mut tx),
     );
-    f.runtime
-        .authorize(&target, Some(&worker()), write(), &mut tx)
-        .unwrap();
     assert_eq!(
         refused(f.runtime.authorize(
             &target,
@@ -167,33 +146,21 @@ fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
             Some("policy_absent".into())
         )
     );
-    // The policy allows work_start; no grant covers it. The grant decides, and no
-    // approval request is filed for an action the actor was never authorized to take.
-    let mut body = policy(&[
-        TargetAction::TicketsWrite,
-        TargetAction::WorkStart,
-        TargetAction::SessionsManage,
-    ]);
-    body.approval = ApprovalPolicy {
-        required_for: vec![ApprovalGate::WorkStart],
-    };
-    set(&f, body, &mut tx);
     assert_eq!(
-        refused(f.runtime.authorize(
-            &target,
-            Some(&worker()),
-            ActionRequest::new(TargetAction::WorkStart).operation("op-work"),
-            &mut tx
-        )),
-        DenialReason::ActionNotGranted
-    );
-    assert!(
         f.runtime
-            .approvals(&f.owner.id, &mut tx)
+            .permission_list(&f.owner.id, &mut tx)
             .unwrap()
-            .is_empty()
+            .requests
+            .len(),
+        1
     );
-    // Both allow.
+    // Remembered rules and a policy that permits both: both go ahead.
+    allow(
+        &f,
+        &[TargetAction::TicketsWrite, TargetAction::SessionsManage],
+        &mut tx,
+    );
+    set(&f, policy(true), &mut tx);
     f.runtime
         .authorize(&target, Some(&worker()), write(), &mut tx)
         .unwrap();
@@ -205,7 +172,7 @@ fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
             &mut tx,
         )
         .unwrap();
-    // The grant allows four sessions; the policy caps the target at one.
+    // A remembered rule never lifts a limit: the policy caps the target at one.
     assert_eq!(
         refused(f.runtime.authorize(
             &target,
@@ -229,19 +196,17 @@ fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
         DenialReason::PolicyDenied
     );
     assert_eq!(last_audit(&f).2.as_deref(), Some("policy_load_unknown"));
-    // The grant still allows tickets_write; the policy no longer lists it.
-    set(&f, policy(&[TargetAction::TicketsRead]), &mut tx);
-    assert_eq!(
-        refused(
-            f.runtime
-                .authorize(&target, Some(&worker()), write(), &mut tx)
-        ),
-        DenialReason::PolicyDenied
-    );
-    assert_eq!(
-        last_audit(&f).2.as_deref(),
-        Some("policy_action_not_permitted")
-    );
+    // A target the policy disables limits every acting action, even a person's own.
+    let mut disabled = policy(true);
+    disabled.targets[0].enabled = false;
+    set(&f, disabled, &mut tx);
+    for actor in [worker(), human()] {
+        assert_eq!(
+            refused(f.runtime.authorize(&target, Some(&actor), write(), &mut tx)),
+            DenialReason::PolicyDenied
+        );
+        assert_eq!(last_audit(&f).2.as_deref(), Some("policy_target_disabled"));
+    }
     // The dry check gives the same answer without auditing or contacting anything.
     let entries = f.runtime.audit(&f.owner.id, 0, 500).unwrap().entries.len();
     let decision = f
@@ -259,7 +224,7 @@ fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
         .unwrap();
     assert_eq!(
         decision,
-        json!({"allowed":false,"reason":"policy_denied","detail":"policy_action_not_permitted"})
+        json!({"allowed":false,"reason":"policy_denied","detail":"policy_target_disabled"})
     );
     assert_eq!(
         f.runtime.audit(&f.owner.id, 0, 500).unwrap().entries.len(),
@@ -283,155 +248,6 @@ fn hs2_ycjdeb_policy_and_grant_must_both_allow_an_action() {
 }
 
 #[test]
-fn hs2_ycjdeb_a_gated_decision_waits_for_one_persons_approval() {
-    let f = fixture();
-    let mut rng = Rng(100);
-    let mut tx = Transaction {
-        clock: &Clock,
-        rng: &mut rng,
-    };
-    let target = reference(&f);
-    let revision = declaration(&f, &mut tx);
-    bind_local(&f, revision, &mut tx);
-    grant(&f, &[TargetAction::WorkStart], &mut tx);
-    let mut body = policy(&[TargetAction::WorkStart]);
-    body.approval = ApprovalPolicy {
-        required_for: vec![ApprovalGate::WorkStart],
-    };
-    set(&f, body, &mut tx);
-    let work = |operation: &str| ActionRequest::new(TargetAction::WorkStart).operation(operation);
-    // An approval is for one operation id; without one the request is malformed.
-    assert!(matches!(
-        f.runtime.authorize(
-            &target,
-            Some(&worker()),
-            ActionRequest::new(TargetAction::WorkStart),
-            &mut tx
-        ),
-        Err(OrchestrationError::Invalid(_))
-    ));
-    assert_eq!(
-        refused(
-            f.runtime
-                .authorize(&target, Some(&worker()), work("op-1"), &mut tx)
-        ),
-        DenialReason::ApprovalRequired
-    );
-    assert_eq!(
-        last_audit(&f),
-        (
-            "work_start".into(),
-            AuditOutcome::Denied,
-            Some("work_start".into())
-        )
-    );
-    // Asking again does not pile up requests.
-    refused(
-        f.runtime
-            .authorize(&target, Some(&worker()), work("op-1"), &mut tx),
-    );
-    let pending = f.runtime.approvals(&f.owner.id, &mut tx).unwrap();
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].state, ApprovalState::Pending);
-    assert_eq!(pending[0].operation_id, "op-1");
-    // The governed AI cannot approve its own request.
-    assert!(matches!(
-        f.runtime.decide_approval(
-            &f.owner.id,
-            &pending[0].approval_id,
-            true,
-            Some(&worker()),
-            &mut tx
-        ),
-        Err(OrchestrationError::Forbidden(_))
-    ));
-    let approved = f
-        .runtime
-        .decide_approval(
-            &f.owner.id,
-            &pending[0].approval_id,
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
-    assert_eq!(approved.state, ApprovalState::Approved);
-    assert_eq!(
-        last_audit(&f),
-        ("work_start".into(), AuditOutcome::Approved, None)
-    );
-    // Repeating the answer is not audited twice.
-    f.runtime
-        .decide_approval(
-            &f.owner.id,
-            &pending[0].approval_id,
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
-    assert_eq!(last_audit(&f).1, AuditOutcome::Approved);
-    let entries = f.runtime.audit(&f.owner.id, 0, 500).unwrap().entries.len();
-    // The approval does not transfer to another operation, and is used exactly once.
-    assert_eq!(
-        refused(
-            f.runtime
-                .authorize(&target, Some(&worker()), work("op-2"), &mut tx)
-        ),
-        DenialReason::ApprovalRequired
-    );
-    f.runtime
-        .authorize(&target, Some(&worker()), work("op-1"), &mut tx)
-        .unwrap();
-    assert_eq!(
-        refused(
-            f.runtime
-                .authorize(&target, Some(&worker()), work("op-1"), &mut tx)
-        ),
-        DenialReason::ApprovalRequired
-    );
-    assert_eq!(
-        f.runtime.audit(&f.owner.id, 0, 500).unwrap().entries.len(),
-        entries + 3
-    );
-    let states: Vec<_> = f
-        .runtime
-        .approvals(&f.owner.id, &mut tx)
-        .unwrap()
-        .into_iter()
-        .map(|approval| (approval.operation_id, approval.state))
-        .collect();
-    assert_eq!(
-        states,
-        [
-            ("op-1".to_owned(), ApprovalState::Consumed),
-            ("op-2".to_owned(), ApprovalState::Pending),
-            ("op-1".to_owned(), ApprovalState::Pending),
-        ]
-    );
-    // A person's refusal is final for that request and is recorded.
-    let second = f.runtime.approvals(&f.owner.id, &mut tx).unwrap().remove(1);
-    f.runtime
-        .decide_approval(
-            &f.owner.id,
-            &second.approval_id,
-            false,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
-    assert_eq!(last_audit(&f).1, AuditOutcome::Rejected);
-    assert_eq!(
-        refused(
-            f.runtime
-                .authorize(&target, Some(&worker()), work("op-2"), &mut tx)
-        ),
-        DenialReason::ApprovalRequired
-    );
-    assert_eq!(f.runtime.approvals(&f.owner.id, &mut tx).unwrap().len(), 3);
-}
-
-#[test]
 fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
     let f = fixture();
     let mut rng = Rng(100);
@@ -439,7 +255,7 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         clock: &Clock,
         rng: &mut rng,
     };
-    // Two declared targets: the first bound and granted, the second neither.
+    // Two declared targets: the first bound with a remembered rule, the second neither.
     let manifest = f
         .runtime
         .replace(
@@ -460,7 +276,7 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         )
         .unwrap();
     bind_local(&f, manifest.revision.unwrap(), &mut tx);
-    grant(&f, &[TargetAction::TicketsRead], &mut tx);
+    allow(&f, &[TargetAction::WorkStart], &mut tx);
     let base = format!("/checkouts/{}/orchestration", f.owner.id);
     let absent = f
         .runtime
@@ -503,7 +319,12 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         validation,
         json!({"valid":false,"problems":[{"code":"undeclared_target",
             "message":"policy names a target the manifest does not actively declare",
-            "subject":id(3)}]})
+            "subject":id(3)}],
+            // HS2-XHQ1EH: retired fields read, are ignored, and are reported.
+            "ignored":[{"code":"approval_ignored","field":"approval"},
+                {"code":"target_actions_ignored","field":"targets[].actions","subject":id(1)},
+                {"code":"target_actions_ignored","field":"targets[].actions","subject":id(3)}],
+            "retired":{"grants_file":false,"approvals_file":false}})
     );
     // Setting it is refused for the same reason, for an AI actor, and writes nothing.
     let invalid = f
@@ -540,7 +361,7 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         .request(
             "POST",
             &format!("{base}/policy/dry-run"),
-            &json!({"policy": valid, "actor_id": "worker-1"}),
+            &json!({"policy": valid}),
             &mut tx,
         )
         .unwrap();
@@ -562,39 +383,40 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
             .unwrap()
             .clone()
     };
-    // Policy and grant agree.
+    // Reading needs no permission.
     assert_eq!(row(first, "tickets_read")["policy"], "allowed");
-    assert_eq!(row(first, "tickets_read")["grant"]["allowed"], true);
+    assert_eq!(row(first, "tickets_read")["permission"], "not_needed");
     assert_eq!(row(first, "tickets_read")["automatic"], true);
-    // The policy allows a session start; the grant does not cover it.
+    // The policy allows a session start; a person would be asked.
     let sessions = row(first, "sessions_manage");
     assert_eq!(sessions["tool"], "codex");
     assert_eq!(sessions["policy"], "allowed");
-    assert_eq!(sessions["grant"]["reason"], "action_not_granted");
+    assert_eq!(sessions["permission"], "asks");
     assert_eq!(sessions["automatic"], false);
-    // A person is asked first.
-    assert_eq!(row(first, "work_start")["policy"], "approval_required");
-    assert_eq!(row(first, "work_start")["policy_detail"], "work_start");
-    assert_eq!(row(first, "work_start")["automatic"], false);
-    // Not listed by the policy.
-    assert_eq!(row(first, "tickets_write")["policy"], "denied");
-    assert_eq!(
-        row(first, "tickets_write")["policy_detail"],
-        "policy_action_not_permitted"
-    );
+    // A remembered rule answers work_start.
+    assert_eq!(row(first, "work_start")["policy"], "allowed");
+    assert_eq!(row(first, "work_start")["permission"], "remembered");
+    assert!(row(first, "work_start")["rule_id"].is_string());
+    assert_eq!(row(first, "work_start")["automatic"], true);
     let second = &dry["targets"][1];
     assert_eq!(second["bound"], false);
     assert_eq!(second["policy"], "not_listed");
+    // An unlisted target is not limited for ticket actions; it is unbound, so
+    // nothing there is automatic, and a session start needs it listed.
+    assert_eq!(row(second, "tickets_read")["policy"], "allowed");
+    assert_eq!(row(second, "tickets_read")["automatic"], false);
     assert_eq!(
-        row(second, "tickets_read")["policy_detail"],
+        row(second, "sessions_manage")["policy_detail"],
         "policy_target_not_permitted"
     );
-    assert_eq!(
-        row(second, "tickets_read")["grant"]["reason"],
-        "target_unavailable"
-    );
     // Nothing was written, requested or contacted by any of the above.
-    assert!(!f.home.join("orchestration-approvals.json").exists());
+    assert!(
+        f.runtime
+            .permission_list(&f.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
     assert_eq!(f.peer.calls.load(Ordering::SeqCst), 0);
     let stored = f
         .runtime
@@ -647,11 +469,7 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         )
         .unwrap();
     assert_eq!(stored_run["source"], "stored");
-    assert!(
-        row(&stored_run["targets"][0], "tickets_read")
-            .get("grant")
-            .is_none()
-    );
+    // The stored policy no longer holds the retired fields.
     assert_eq!(
         f.runtime
             .request(
@@ -661,7 +479,8 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
                 &mut tx
             )
             .unwrap(),
-        json!({"valid":true,"problems":[]})
+        json!({"valid":true,"problems":[],"ignored":[],
+            "retired":{"grants_file":false,"approvals_file":false}})
     );
     // Removing a declared target later makes the stored policy report the conflict.
     let current = f
@@ -693,17 +512,17 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         (format!("{base}/policy"), false),
         (format!("{base}/policy/validate"), false),
         (format!("{base}/policy/dry-run"), true),
-        (format!("{base}/approvals"), true),
-        (format!("{base}/approvals/{}", id(9)), true),
+        (format!("{base}/permissions"), true),
+        (format!("{base}/permissions/{}", id(9)), true),
     ] {
         assert!(is_path(&path), "{path}");
         assert_eq!(is_machine_path(&path), machine, "{path}");
     }
-    for body in [json!({}), json!({"approve":"yes"})] {
+    for body in [json!({}), json!({"answer":"yes"})] {
         assert!(matches!(
             f.runtime.request(
                 "POST",
-                &format!("{base}/approvals/{}", id(9)),
+                &format!("{base}/permissions/{}", id(9)),
                 &body,
                 &mut tx
             ),

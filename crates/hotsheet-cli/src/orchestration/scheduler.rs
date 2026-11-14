@@ -10,9 +10,10 @@
 //! placement. Otherwise, and for `scheduler_plan`, it is a dry run: computed, and for
 //! a tick logged, with nothing started or wound down.
 //!
-//! Inside the policy the scheduler acts and logs. A decision the gate would not allow
-//! is passed through `authorize`, which files the approval a policy asks for and
-//! records the denial; nothing is done about it until a person answers.
+//! Inside the policy's limits the scheduler acts and logs. A decision the gate would
+//! not allow is passed through `authorize`, which files a permission request shown
+//! through the permission bridge and records the denial (HS2-XHQ1EH); nothing is done
+//! about it until a person answers, and the answer wakes the scheduler.
 //!
 //! Nothing here runs on a timer. [`OrchestrationRuntime::scheduler_follow_step`]
 //! waits on the run event journal and the scheduler's wake marker, and otherwise only
@@ -28,9 +29,9 @@ use hotsheet_ticketing::orchestration::{
     MAX_SCHEDULE_SESSIONS, OfflinePolicy, Placement, PlacementAction, PlacementOutcome, PolicyBody,
     Prerequisite, ProvisionalStanding, ReadinessLevel, ResourceNeed, ResourceStanding,
     RunEventJournal, RunEventKind, Schedule, ScheduleInput, ScheduledSession, SchedulerStore,
-    ScoreParts, SessionActivity, SignalSupport, TargetAction, TargetState, TickInputs,
-    ToolCapacityRegistry, Unplaced, UnreadableClaims, UnreadableReason, WorkItem, WorkLevel,
-    WorkSpeculation, plan, resource_standings, state_at, summarize,
+    ScoreParts, SessionActivity, SignalSupport, TargetState, TickInputs, ToolCapacityRegistry,
+    Unplaced, UnreadableClaims, UnreadableReason, WorkItem, WorkLevel, WorkSpeculation, plan,
+    resource_standings, state_at, summarize,
 };
 use serde::{Deserialize, Serialize};
 
@@ -109,7 +110,8 @@ pub struct DecisionOutcome {
     /// `started`, `adopted` (HS2-DG0YPA), `assigned`, `wind_down_requested`,
     /// `executor_unavailable`, `refused`,
     /// `not_at_safe_point`, `session_not_found`, or the gate's denial code
-    /// (`approval_required`, `policy_denied`, `no_grant` and the others).
+    /// (`permission_required` with the request id as `detail`, `permission_denied`,
+    /// `policy_denied` with its limit, `target_unavailable`).
     pub outcome: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -514,9 +516,9 @@ impl OrchestrationRuntime {
             .filter(|item| places(item))
             .map(|item| item.target_id.as_str())
             .filter(|target_id| {
-                policy.target(target_id).is_some_and(|target| {
-                    target.enabled && target.actions.contains(&TargetAction::SessionsManage)
-                })
+                policy
+                    .target(target_id)
+                    .is_some_and(|target| target.enabled && !target.tools.is_empty())
             })
             .collect();
         let mut targets = Vec::new();

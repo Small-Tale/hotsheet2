@@ -180,7 +180,6 @@ fn hs2_42tara_levels_have_stable_codes_and_only_unready_levels_refuse_dispatch()
         ReadinessError::OverrideDenied.code(),
         "readiness_override_denied"
     );
-    assert_eq!(ApprovalGate::ReadinessOverride.code(), "readiness_override");
 }
 
 #[test]

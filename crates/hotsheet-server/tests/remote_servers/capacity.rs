@@ -139,29 +139,23 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
         store_arg,
         "orchestration",
     ];
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
+    // HS2-XHQ1EH: a person remembers the rules the orchestrator needs.
+    {
+        let (action, tool) = ("session_start", Some("codex"));
+        let mut arguments = vec![
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "scheduler-1",
             "--action",
-            "gates_observe",
-            "--action",
-            "sessions_manage",
-            "--tool",
-            "codex",
-            "--max-concurrency",
-            "3",
-            "--expires-in",
-            "1h",
-        ],
-    );
+            action,
+        ];
+        if let Some(tool) = tool {
+            arguments.extend(["--tool", tool]);
+        }
+        cli_named(&home, &human, &arguments);
+    }
     let policy_file = home.join("policy.json");
     std::fs::write(&policy_file, policy().to_string()).unwrap();
     cli_named(
@@ -304,26 +298,8 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
     );
     assert_eq!(check("codex", "2")["outcome"], "accepted");
 
-    // A tool the grant does not cover never reaches the peer; an ungranted actor is
-    // refused for both questions.
-    let fail = |prefix: &[&str], arguments: &[&str]| cli_failure(&home, prefix, arguments);
-    let ungranted_tool = fail(
-        &scheduler,
-        &[
-            "admission",
-            "check",
-            "--project",
-            &owner.id,
-            "--target",
-            TARGET,
-            "--tool",
-            "claude",
-        ],
-    );
-    assert!(
-        ungranted_tool.contains("tool_not_granted"),
-        "{ungranted_tool}"
-    );
+    // HS2-XHQ1EH: asking starts nothing, so nobody is asked and no rule is needed:
+    // an actor no rule names reads the peer's capacity too.
     let stranger = [
         "--actor-role",
         "ai",
@@ -333,7 +309,7 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
         store_arg,
         "orchestration",
     ];
-    assert!(fail(&stranger, &show).contains("no_grant"));
+    assert!(cli_named(&home, &stranger, &show).is_object());
 
     // Headless on the controller, where no server hosts sessions: every value is
     // unknown and admission fails closed.
@@ -366,6 +342,7 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
         cli_named(&home, &scheduler, &show)["memory"]["free_mb"],
         6000
     );
+    let fail = |prefix: &[&str], arguments: &[&str]| cli_failure(&home, prefix, arguments);
     let refused = fail(
         &scheduler,
         &[
@@ -449,14 +426,12 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
         .as_millis() as u64
         + 3_600_000;
     let person = json!({"role":"human","id":"maintainer"});
-    let granted = api(
+    let granted = super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{target}/grants"),
+        &target.to_string(),
         json!({"actor_id":"scheduler-1","actions":["gates_observe","sessions_manage"],
             "session_scope":{"tools":[{"tool":"codex"}],"max_concurrency":3},
             "expires_at_ms":expires,"actor":person}),
-        true,
     )
     .await;
     assert_eq!(granted.0, StatusCode::OK, "{}", granted.1);
@@ -514,8 +489,8 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
         true,
     )
     .await;
-    assert_eq!(ungranted.0, StatusCode::FORBIDDEN);
-    assert_eq!(ungranted.1["code"], "no_grant");
+    // HS2-XHQ1EH: the question starts nothing and asks no one.
+    assert_eq!(ungranted.0, StatusCode::OK, "{}", ungranted.1);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -557,10 +532,7 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
     assert_eq!(decision["admitted"], 3);
     assert_eq!(decision["reason"], "session_cap_reached");
     for arguments in [
-        json!({"action":"capacity","checkout":checkout.id,"target_id":TARGET,
-            "actor_role":"ai","actor_id":"stranger"}),
-        json!({"action":"admission_check","checkout":checkout.id,"target_id":TARGET,
-            "tool":"claude","actor_role":"ai","actor_id":"scheduler-1"}),
+        json!({"action":"capacity","checkout":checkout.id,"target_id":TARGET}),
         json!({"action":"admission_check","checkout":checkout.id,"target_id":TARGET,
             "tool":"codex","sessions":0,"actor_role":"ai","actor_id":"scheduler-1"}),
     ] {

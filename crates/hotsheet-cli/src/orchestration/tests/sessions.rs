@@ -5,16 +5,16 @@ use std::sync::atomic::AtomicBool;
 use hotsheet_model::Ticket;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, ApprovalRegistry, AuditOutcome, CpuCapacity, CreateGrant,
-    DenialReason, DiskCapacity, ExternalWork, HostObservation, HostedSessionRegistry,
-    MachineLimits, MemoryCapacity, Observed, PolicyBody, RunEventKind, SafePointBlocker,
-    SessionControl, SessionError, SessionOwner, SessionRole, SessionScope, SessionState, SetPolicy,
-    TargetAction, TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
+    AuditOutcome, CpuCapacity, DenialReason, DiskCapacity, ExternalWork, HostObservation,
+    HostedSessionRegistry, MachineLimits, MemoryCapacity, Observed, PermissionAction,
+    PermissionAnswer, PermissionState, PolicyBody, RunEventKind, SafePointBlocker, SessionControl,
+    SessionError, SessionOwner, SessionRole, SessionState, SetPolicy, TargetAction, TargetPolicy,
+    ToolAvailability, ToolPolicy, ToolScope,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::{Value, json};
 
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 
 /// A terminal host the test drives: it launches by remembering, and the test decides
@@ -194,15 +194,11 @@ fn scope(tool: &str) -> ToolScope {
     }
 }
 /// Target 1 runs codex and target 2 runs claude, two sessions each, four per machine.
-fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
+fn policy() -> PolicyBody {
     let target = |n: u128, tool: &str| TargetPolicy {
         target_id: id(n),
         enabled: true,
-        actions: vec![
-            TargetAction::SessionsManage,
-            TargetAction::WorkStart,
-            TargetAction::TicketsRead,
-        ],
+        actions: None,
         tools: vec![scope(tool)],
         max_sessions: 2,
         machine: None,
@@ -222,7 +218,6 @@ fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
             })
             .into(),
         targets: vec![target(1, "codex"), target(2, "claude")],
-        approval: ApprovalPolicy { required_for },
         ..PolicyBody::default()
     }
 }
@@ -234,8 +229,9 @@ struct Fixture {
 }
 impl Fixture {
     /// One machine that hosts both targets, a roomy probe and a scripted terminal host.
-    /// `worker-1` may manage sessions and dispatch on both targets.
-    fn new(required_for: Vec<ApprovalGate>, tx: &mut Transaction<'_>) -> Self {
+    /// HS2-XHQ1EH: a person remembered session starts and dispatch on the targets in
+    /// `remembered`; elsewhere `worker-1` is asked.
+    fn new(remembered: &[u128], tx: &mut Transaction<'_>) -> Self {
         let mut m = machine(10, false, unsupported);
         let host = Arc::new(ScriptedHost::default());
         let probe = Arc::new(Probe::default());
@@ -246,31 +242,20 @@ impl Fixture {
             .with_capacity_probe(probe.clone())
             .with_session_host(host.clone());
         for n in [1, 2] {
-            bind_and_grant(&m, n, &[], tx);
-            m.runtime
-                .grant(
-                    &m.reference(n),
-                    CreateGrant {
-                        grant_id: None,
-                        actor_id: "worker-1".into(),
-                        actions: vec![
-                            TargetAction::SessionsManage,
-                            TargetAction::WorkStart,
-                            TargetAction::TicketsRead,
-                        ],
-                        session_scope: Some(SessionScope {
-                            tools: vec![scope("codex"), scope("claude")],
-                            max_concurrency: 8,
-                        }),
-                        expires_at_ms: 10_000,
-                    },
-                    Some(&human()),
+            bind_and_allow(&m, n, &[], tx);
+            if remembered.contains(&n) {
+                allow_on(
+                    &m.runtime,
+                    &m.owner.id,
+                    &id(n),
+                    &[TargetAction::SessionsManage, TargetAction::WorkStart],
+                    &["codex", "claude"],
                     tx,
-                )
-                .unwrap();
+                );
+            }
         }
         let fixture = Self { m, host, probe };
-        fixture.set_policy(policy(required_for), tx);
+        fixture.set_policy(policy(), tx);
         fixture
     }
     fn set_policy(&self, body: PolicyBody, tx: &mut Transaction<'_>) {
@@ -444,7 +429,7 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     // A run on target 1, so the session is labelled with it.
     let orchestration = f.m.orchestration_ticket("Coordinate");
@@ -631,15 +616,15 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
 }
 
 #[test]
-fn hs2_gdjxgz_grants_policy_caps_and_approvals_govern_a_start() {
+fn hs2_gdjxgz_policy_caps_and_permission_requests_govern_a_start() {
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(vec![ApprovalGate::RoleSessionStart], &mut tx);
+    let f = Fixture::new(&[1], &mut tx);
     let owner = f.m.owner.id.clone();
-    // A tool the policy does not list for the target, and an actor without a grant.
+    // A tool the policy does not list for the target, and an unidentified actor.
     assert_eq!(
         denied(f.start("op-t", 1, "claude", json!({}), &mut tx)),
         DenialReason::PolicyDenied
@@ -648,7 +633,6 @@ fn hs2_gdjxgz_grants_policy_caps_and_approvals_govern_a_start() {
         f.m.last_audit().2.as_deref(),
         Some("policy_tool_not_permitted")
     );
-    let stranger = MutationActor::parse("ai", Some("stranger".into())).unwrap();
     assert!(matches!(
         f.m.runtime.session_start(
             &owner,
@@ -656,10 +640,10 @@ fn hs2_gdjxgz_grants_policy_caps_and_approvals_govern_a_start() {
                 json!({"target_id": id(1), "operation_id": "op-s", "tool": "codex"})
             )
             .unwrap(),
-            Some(&stranger),
+            None,
             &mut tx,
         ),
-        Err(OrchestrationError::Denied(DenialReason::NoGrant))
+        Err(OrchestrationError::Invalid(_))
     ));
     assert!(f.host.launches().is_empty());
     assert!(f.m.runtime.session_list(&owner, false).unwrap().is_empty());
@@ -685,27 +669,40 @@ fn hs2_gdjxgz_grants_policy_caps_and_approvals_govern_a_start() {
     f.started("op-3", 1, "codex", &mut tx);
     assert_eq!(f.host.launches().len(), 3);
 
-    // A role session asks a person first, once, and starts after the approval.
+    // HS2-XHQ1EH: nothing is remembered on target 2, so a start there asks a person
+    // first, once, and starts after the answer.
     let integrator = json!({"role": "integrator"});
+    let mut asked = Vec::new();
     for _ in 0..2 {
-        assert_eq!(
-            denied(f.start("op-i", 2, "claude", integrator.clone(), &mut tx)),
-            DenialReason::ApprovalRequired
-        );
-    }
-    let approvals = f.m.runtime.approvals(&owner, &mut tx).unwrap();
-    assert_eq!(approvals.len(), 1);
-    assert_eq!(approvals[0].gate, ApprovalGate::RoleSessionStart);
-    assert_eq!(f.host.launches().len(), 3);
-    f.m.runtime
-        .decide_approval(
-            &owner,
-            &approvals[0].approval_id,
-            true,
-            Some(&human()),
+        asked.push(permission_request(f.start(
+            "op-i",
+            2,
+            "claude",
+            integrator.clone(),
             &mut tx,
-        )
-        .unwrap();
+        )));
+    }
+    assert_eq!(asked[0], asked[1]);
+    let requests =
+        f.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].request.key.action,
+        PermissionAction::SessionStart
+    );
+    assert_eq!(requests[0].request.key.tool.as_deref(), Some("claude"));
+    assert_eq!(requests[0].summary, "Start a claude session in Target");
+    assert_eq!(f.host.launches().len(), 3);
+    answer(
+        &f.m.runtime,
+        &owner,
+        &asked[0],
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     let started = f
         .start("op-i", 2, "claude", integrator.clone(), &mut tx)
         .unwrap();
@@ -720,14 +717,31 @@ fn hs2_gdjxgz_grants_policy_caps_and_approvals_govern_a_start() {
             .1
             .contains("`hotsheet-integrator`")
     );
-    // A worker on the same target needs no approval.
+    // The start happened, so Allow Once is used; the next start asks again, and
+    // Always Allow remembers the key.
+    assert_eq!(
+        f.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests[0]
+            .request
+            .state,
+        PermissionState::Used
+    );
+    let worker_start = permission_request(f.start("op-w", 2, "claude", json!({}), &mut tx));
+    answer(
+        &f.m.runtime,
+        &owner,
+        &worker_start,
+        PermissionAnswer::AlwaysAllow,
+        &mut tx,
+    );
     f.started("op-w", 2, "claude", &mut tx);
     // A second integrator for the target is refused before anyone is asked.
     assert_eq!(
         session_error(f.start("op-i2", 2, "claude", integrator, &mut tx)),
         SessionError::RoleActive
     );
-    let _ = ApprovalRegistry::new(&f.m.home);
 
     // Without a policy nothing automatic runs.
     std::fs::remove_file(
@@ -750,7 +764,7 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     let reason = |operation: &str| {
         f.m.runtime
@@ -863,7 +877,7 @@ fn hs2_gdjxgz_wind_down_happens_only_at_a_safe_point_the_host_confirms() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     let view = f.started("op-1", 1, "codex", &mut tx);
     let sid = view.session.session_id.clone();
@@ -1020,7 +1034,7 @@ fn hs2_gdjxgz_a_crashed_session_is_lost_and_replaced_by_a_new_one() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     f.git(&["init", "-q"]);
     let first = f.started("op-1", 1, "codex", &mut tx);
@@ -1179,7 +1193,7 @@ fn hs2_gdjxgz_a_person_can_take_over_pause_or_stop_any_session() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     f.git(&["init", "-q"]);
     let taken = f.started("op-1", 1, "codex", &mut tx);
@@ -1352,7 +1366,7 @@ fn hs2_gdjxgz_a_role_session_starts_only_when_the_target_has_none() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     f.git(&["init", "-q"]);
     // The pool already has a live integrator someone else started, and a dispatcher
@@ -1445,7 +1459,7 @@ fn hs2_gdjxgz_a_start_that_never_reached_the_host_can_be_repeated_or_dropped() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     f.git(&["init", "-q"]);
     // The start was recorded here and the host never answered: a damaged admission
@@ -1510,7 +1524,7 @@ fn hs2_wefjv8_a_start_sets_up_the_target_checkout_before_it_launches() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     let view = f.started("op-1", 1, "codex", &mut tx);
     assert_eq!(view.tool_setup, Some(ToolSetup { wrote: 2 }));
@@ -1649,7 +1663,7 @@ fn hs2_2dpgdy_a_role_prompt_is_retried_on_readiness_and_then_settles() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     // Not ready at launch, nor at the first readiness event; ready at the second.
     f.host
@@ -1721,7 +1735,7 @@ fn hs2_2dpgdy_a_prompt_at_launch_or_an_unsupported_tool_asks_nothing_more() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     // The plugin takes the prompt on its command line: nothing is pushed.
     f.host.prompt_at_launch.store(true, Ordering::SeqCst);
     let at_launch = f.started("op-1", 1, "codex", &mut tx);
@@ -1783,7 +1797,7 @@ fn hs2_2dpgdy_joining_is_confirmed_from_the_targets_pool() {
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     let view = f.started("op-1", 1, "codex", &mut tx);
     let session_id = view.session.session_id.clone();
@@ -1883,7 +1897,7 @@ fn hs2_75q254_reconciliation_reads_adopts_and_winds_down_the_sessions_of_a_run()
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     // A clean work tree, so a session between turns is at a safe point.
     f.git(&["init", "-q"]);
     let owner = f.m.owner.id.clone();
@@ -2132,7 +2146,7 @@ fn hs2_dg0ypa_a_second_start_for_a_held_run_is_refused_until_its_holder_is_gone(
         clock: &Clock,
         rng: &mut rng,
     };
-    let f = Fixture::new(Vec::new(), &mut tx);
+    let f = Fixture::new(&[1, 2], &mut tx);
     let owner = f.m.owner.id.clone();
     let run = dispatched_run(&f, "run-1", &mut tx);
     let for_run = json!({"run_id": run.run_id});

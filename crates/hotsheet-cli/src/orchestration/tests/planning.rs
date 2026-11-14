@@ -8,7 +8,7 @@ use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::json;
 
 use super::sessions::{Probe, ScriptedHost, roomy};
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 
 struct Fixture {
@@ -30,7 +30,7 @@ impl Fixture {
             .with_capacity_probe(probe)
             .with_session_host(host.clone());
         for n in 1..=targets {
-            bind_and_grant(&m, n, &[TargetAction::TicketsRead], tx);
+            bind_and_allow(&m, n, &[TargetAction::TicketsRead], tx);
         }
         Self { m, host }
     }

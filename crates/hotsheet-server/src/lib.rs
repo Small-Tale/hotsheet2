@@ -2067,14 +2067,6 @@ pub fn app(state: AppState) -> Router {
             get(routes::orchestration::read),
         )
         .route(
-            "/checkouts/{owner}/orchestration/targets/{target}/grants",
-            get(routes::orchestration::read).post(routes::orchestration::write),
-        )
-        .route(
-            "/checkouts/{owner}/orchestration/targets/{target}/grants/{grant}",
-            axum::routing::delete(routes::orchestration::write),
-        )
-        .route(
             "/checkouts/{owner}/orchestration/targets/{target}/access",
             post(routes::orchestration::write),
         )
@@ -2108,13 +2100,22 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/policy/dry-run",
             post(routes::orchestration::write),
         )
+        // HS2-XHQ1EH: permission requests and remembered rules (machine-local).
         .route(
-            "/checkouts/{owner}/orchestration/approvals",
+            "/checkouts/{owner}/orchestration/permissions",
             get(routes::orchestration::read),
         )
         .route(
-            "/checkouts/{owner}/orchestration/approvals/{approval}",
+            "/checkouts/{owner}/orchestration/permissions/{request}",
             post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/permission-rules",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/permission-rules/{rule}",
+            axum::routing::delete(routes::orchestration::write),
         )
         // HS2-AZ15GA: orchestrating-side ticket operations (machine-local) and the hosted
         // half a local or remote orchestrator reaches (ordinary authenticated data).

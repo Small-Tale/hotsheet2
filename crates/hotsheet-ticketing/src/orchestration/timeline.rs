@@ -120,12 +120,12 @@ pub struct TimelineTarget {
 }
 
 /// The permission request a step waits on. HS2-J89JC7 reads it through one seam:
-/// today a pending approval of the scheduler's operation for the step (§26.8,
-/// `kind: approval`); HS2-XHQ1EH's orchestrator permission request through the
-/// permission bridge arrives as `kind: permission` with the bridge's request id.
+/// the scheduler's latest start decision for the step logged `permission_required`
+/// with the orchestrator request id (HS2-XHQ1EH), still pending in the ledger; the
+/// action is the one asked (`session_start`, or `work_start` for the step's run).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionWait {
-    /// `approval` or `permission`.
+    /// `permission`: an orchestrator permission request (HS2-XHQ1EH).
     pub kind: String,
     pub request_id: String,
     /// The gated action, such as `session_start`.

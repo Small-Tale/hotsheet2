@@ -27,10 +27,13 @@ pub enum AuditOutcome {
     /// The authorized action reported its result.
     Succeeded,
     Failed,
+    /// HS2-SBQ3T8 grant history; retired by HS2-XHQ1EH, kept so old entries read.
     Granted,
+    /// A retired grant was revoked, or (HS2-XHQ1EH) a remembered rule was forgotten.
     Revoked,
-    /// HS2-YCJDEB: a person answered an approval request.
+    /// A person allowed a permission request (HS2-XHQ1EH), or an old approval.
     Approved,
+    /// A person denied a permission request, or an old approval.
     Rejected,
     /// The shared policy was replaced.
     Changed,
@@ -47,7 +50,7 @@ pub struct AuditRecord {
     pub actor_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_id: Option<String>,
-    /// A stable action code such as `tickets_write` or `grant_create`.
+    /// A stable action code such as `tickets_write` or `permission_answer`.
     pub action: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<String>,
@@ -55,8 +58,10 @@ pub struct AuditRecord {
     /// A stable reason code, never free text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub grant_id: Option<String>,
+    /// HS2-XHQ1EH: the permission request or remembered rule behind the answer. Older
+    /// entries carried a retired grant id under `grant_id`, read here unchanged.
+    #[serde(default, alias = "grant_id", skip_serializing_if = "Option::is_none")]
+    pub permission_id: Option<String>,
 }
 
 /// HS2-7QHWHJ: what a journal stores. Each record type has its own directory under the
@@ -268,7 +273,10 @@ fn validate(record: &AuditRecord) -> Result<(), OrchestrationError> {
     if let Some(operation) = &record.operation_id {
         valid_identifier(operation)?;
     }
-    for value in [&record.target_id, &record.grant_id].into_iter().flatten() {
+    for value in [&record.target_id, &record.permission_id]
+        .into_iter()
+        .flatten()
+    {
         valid_token(value)?;
     }
     Ok(())

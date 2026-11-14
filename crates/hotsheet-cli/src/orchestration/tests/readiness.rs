@@ -3,15 +3,16 @@
 //! reevaluation on run, gate and validation changes. Synthetic tickets only.
 use hotsheet_model::{NoteKind, Status, Ticket};
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalState, AuditOutcome, Coverage, DenialReason, GateKind, GateState,
-    Prerequisite, ReadinessError, ReadinessLevel, RunEventKind, RunState, TargetAction,
-    TargetOpError,
+    AuditOutcome, Coverage, GateKind, GateState, Prerequisite, ReadinessError, ReadinessLevel,
+    RunEventKind, RunState, TargetAction, TargetOpError,
 };
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::{Value, json};
 
 use super::gates::{CI, Scripted, link, sha, verdict};
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{
+    Machine, NOW, bind_and_allow, human, machine, rebind, unbind, unsupported, worker,
+};
 use super::*;
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
@@ -119,7 +120,7 @@ fn audited(m: &Machine, action: &str) -> Vec<(AuditOutcome, Option<String>, Opti
 }
 fn setup(actions: &[TargetAction], tx: &mut Transaction<'_>) -> (Machine, Ticket) {
     let m = machine(10, false, unsupported);
-    bind_and_grant(&m, 1, actions, tx);
+    bind_and_allow(&m, 1, actions, tx);
     let orchestration = m.orchestration_ticket("Coordinate");
     (m, orchestration)
 }
@@ -212,8 +213,8 @@ fn hs2_42tara_define_reads_through_the_gate_and_stores_canonical_ids() {
         again.readiness
     );
 
-    // A ticket the target does not have is not planned; nor is one read without a
-    // grant, and neither leaves a step behind.
+    // A ticket the target does not have is not planned, nor is one asked for by an
+    // unidentified caller, and neither leaves a step behind.
     assert!(matches!(
         m.runtime.readiness_define(
             &owner,
@@ -227,17 +228,6 @@ fn hs2_42tara_define_reads_through_the_gate_and_stores_canonical_ids() {
             &mut tx,
         ),
         Err(OrchestrationError::TargetOperation(TargetOpError::NotFound))
-    ));
-    let stranger =
-        hotsheet_ticketing::actor::MutationActor::parse("ai", Some("worker-2".into())).unwrap();
-    assert!(matches!(
-        m.runtime.readiness_define(
-            &owner,
-            define(&m, &orchestration, &a.slug, json!([])),
-            Some(&stranger),
-            &mut tx,
-        ),
-        Err(OrchestrationError::Denied(DenialReason::NoGrant))
     ));
     assert!(matches!(
         m.runtime.readiness_define(
@@ -544,66 +534,73 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
             json!({"override_readiness": true}),
         )
     };
-    // Asking files one pending request under its own gate and starts nothing.
+    // HS2-XHQ1EH: the orchestrator's own override is a judgment call. It adds one
+    // FEEDBACK NEEDED note with CHOICE options to the orchestration ticket, however
+    // often it is asked, and starts nothing.
+    let mut notes = Vec::new();
     for _ in 0..2 {
-        assert!(matches!(
-            m.runtime
-                .run_dispatch(&owner, ask("op-1"), Some(&worker()), &mut tx),
-            Err(OrchestrationError::Denied(DenialReason::ApprovalRequired))
-        ));
+        match m
+            .runtime
+            .run_dispatch(&owner, ask("op-1"), Some(&worker()), &mut tx)
+        {
+            Err(OrchestrationError::DecisionRequired { note_id }) => notes.push(note_id),
+            other => panic!("expected decision_required, got {:?}", other.err()),
+        }
     }
-    let pending = m.runtime.approvals(&owner, &mut tx).unwrap();
-    assert_eq!(pending.len(), 1);
-    assert_eq!(
-        (
-            pending[0].gate,
-            pending[0].state,
-            pending[0].operation_id.as_str()
-        ),
-        (
-            ApprovalGate::ReadinessOverride,
-            ApprovalState::Pending,
-            "op-1"
-        )
-    );
+    assert_eq!(notes[0], notes[1]);
+    let decision = m
+        .owner_store
+        .read_ticket(&orchestration.id)
+        .unwrap()
+        .notes
+        .into_iter()
+        .filter(|note| note.kind == NoteKind::FeedbackNeeded)
+        .collect::<Vec<_>>();
+    assert_eq!(decision.len(), 1);
+    assert_eq!(decision[0].id.to_string(), notes[0]);
+    assert!(decision[0].feedback_request);
+    for part in [
+        step.step_id.as_str(),
+        "`blocked`",
+        "op-1",
+        "CHOICE:",
+        "- Start anyway",
+        "- Wait until it is ready",
+    ] {
+        assert!(decision[0].text.contains(part), "{part}");
+    }
+    assert!(!decision[0].text.contains("Second"));
     assert!(m.runtime.run_list(&owner, false).unwrap().is_empty());
+    assert!(
+        m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
     assert_eq!(
         audited(&m, "readiness_override"),
         [
             (
                 AuditOutcome::Denied,
-                Some("approval_required".into()),
+                Some("decision_required".into()),
                 Some("op-1".into())
             ),
             (
                 AuditOutcome::Denied,
-                Some("approval_required".into()),
+                Some("decision_required".into()),
                 Some("op-1".into())
             ),
         ]
     );
-    // The governed session cannot answer for itself.
-    assert!(matches!(
-        m.runtime.decide_approval(
-            &owner,
-            &pending[0].approval_id,
-            true,
-            Some(&worker()),
-            &mut tx
-        ),
-        Err(OrchestrationError::Forbidden(_))
-    ));
-    // The approval is for that operation only: another id, and a request that does
-    // not ask, are still refused.
-    m.runtime
-        .decide_approval(
-            &owner,
-            &pending[0].approval_id,
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    // A person answers through the existing feedback flow. The answer is for that
+    // operation only: a request that does not ask is still refused.
+    respond(
+        &m,
+        &orchestration,
+        &notes[0],
+        "**Should it start?**\n- A. Start anyway",
+    );
     assert_eq!(
         refusal(m.runtime.run_dispatch(
             &owner,
@@ -627,24 +624,18 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
             Some("op-1".into())
         )
     );
-    // The audit note on the orchestration ticket: identifiers and codes only.
-    let notes = m.owner_store.read_ticket(&orchestration.id).unwrap().notes;
-    let note = notes
+    // The activity note on the orchestration ticket: identifiers and codes only.
+    let all = m.owner_store.read_ticket(&orchestration.id).unwrap().notes;
+    let note = all
         .iter()
         .find(|note| note.text.starts_with("Readiness override"))
         .unwrap();
     assert_eq!(note.kind, NoteKind::Activity);
-    for part in [
-        step.step_id.as_str(),
-        "`blocked`",
-        "op-1",
-        pending[0].approval_id.as_str(),
-        "maintainer",
-    ] {
+    for part in [step.step_id.as_str(), "`blocked`", "op-1"] {
         assert!(note.text.contains(part), "{part}");
     }
     assert!(!note.text.contains("Second"));
-    // Used once: the same request again is the same run, and asks nobody.
+    // Admitted: the same request again is the same run, and asks nobody.
     assert_eq!(
         m.runtime
             .run_dispatch(&owner, ask("op-1"), Some(&worker()), &mut tx)
@@ -653,29 +644,19 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
             .run_id,
         run.run_id
     );
-    let approvals = m.runtime.approvals(&owner, &mut tx).unwrap();
-    assert_eq!(approvals.len(), 1);
-    assert_eq!(approvals[0].state, ApprovalState::Consumed);
-
-    // A person's no is final for that operation.
+    // A person's choice to wait is final for that operation.
     m.runtime
         .run_cancel(&owner, &run.run_id, Some(&worker()), &mut tx)
         .unwrap();
-    assert!(matches!(
-        m.runtime
-            .run_dispatch(&owner, ask("op-2"), Some(&worker()), &mut tx),
-        Err(OrchestrationError::Denied(DenialReason::ApprovalRequired))
-    ));
-    let second = m
+    let second = match m
         .runtime
-        .approvals(&owner, &mut tx)
-        .unwrap()
-        .into_iter()
-        .find(|approval| approval.operation_id == "op-2")
-        .unwrap();
-    m.runtime
-        .decide_approval(&owner, &second.approval_id, false, Some(&human()), &mut tx)
-        .unwrap();
+        .run_dispatch(&owner, ask("op-2"), Some(&worker()), &mut tx)
+    {
+        Err(OrchestrationError::DecisionRequired { note_id }) => note_id,
+        other => panic!("expected decision_required, got {:?}", other.err()),
+    };
+    assert_ne!(second, notes[0]);
+    respond(&m, &orchestration, &second, "- B. Wait until it is ready");
     assert_eq!(
         refusal(
             m.runtime
@@ -687,10 +668,20 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
         audited(&m, "readiness_override").last().unwrap(),
         &(
             AuditOutcome::Denied,
-            Some("approval_denied".into()),
+            Some("decision_wait".into()),
             Some("op-2".into())
         )
     );
+    // A person's own override is their decision: nothing is asked.
+    let person = m
+        .runtime
+        .run_dispatch(&owner, ask("op-person"), Some(&human()), &mut tx)
+        .unwrap()
+        .run;
+    assert_eq!(person.state, RunState::Dispatched);
+    m.runtime
+        .run_cancel(&owner, &person.run_id, Some(&human()), &mut tx)
+        .unwrap();
     // Ready work needs no override and files no request even when one is offered.
     set_status(&m, &a, Status::Completed);
     m.runtime
@@ -709,7 +700,35 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
             .state,
         RunState::Dispatched
     );
-    assert_eq!(m.runtime.approvals(&owner, &mut tx).unwrap().len(), 2);
+    // Nothing more was asked: still two decision notes.
+    assert_eq!(
+        m.owner_store
+            .read_ticket(&orchestration.id)
+            .unwrap()
+            .notes
+            .iter()
+            .filter(|note| note.kind == NoteKind::FeedbackNeeded)
+            .count(),
+        2
+    );
+}
+
+/// A person's response to a decision note, through the existing feedback flow.
+fn respond(m: &Machine, ticket: &Ticket, note_id: &str, text: &str) {
+    ops::add_note_with_metadata(
+        &m.owner_store,
+        &ticket.id,
+        ulid::Ulid::new(),
+        NOW.into(),
+        NoteKind::Regular,
+        ops::NoteMetadataInput {
+            response_to: Some(note_id.into()),
+            actor: Some(human().note_actor()),
+            ..ops::NoteMetadataInput::default()
+        },
+        text.into(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -1001,16 +1020,7 @@ fn hs2_42tara_unconfirmed_tickets_are_stale_and_cycles_are_exposed() {
 
     // The target can no longer be confirmed: every reading is stale, the refresh
     // says what it could not verify, and a dispatch is refused before the claim.
-    let grant = m
-        .runtime
-        .grants(&m.reference(1), &mut tx)
-        .unwrap()
-        .remove(0)
-        .grant
-        .grant_id;
-    m.runtime
-        .revoke(&m.reference(1), &grant, Some(&human()), &mut tx)
-        .unwrap();
+    unbind(&m, 1, &mut tx);
     let refreshed = m
         .runtime
         .readiness_refresh(
@@ -1035,11 +1045,11 @@ fn hs2_42tara_unconfirmed_tickets_are_stale_and_cycles_are_exposed() {
     .unwrap();
     assert!(stored["tickets"].as_array().unwrap().iter().all(|record| {
         record["facts"]["observed"]["status"] == "not_started"
-            && record["facts"]["unreachable"]["reason"] == "grant_revoked"
+            && record["facts"]["unreachable"]["reason"] == "target_unavailable"
     }));
 
     // Confirmed again: one step's refresh reads only what that step names.
-    bind_grant_again(&m, &mut tx);
+    rebind(&m, 1, &mut tx);
     let one = m
         .runtime
         .readiness_refresh(
@@ -1112,23 +1122,6 @@ fn hs2_42tara_unconfirmed_tickets_are_stale_and_cycles_are_exposed() {
     let refilled = plan(&m, &c.slug, &[], &mut tx);
     assert_ne!(refilled.step_id, step_c.step_id);
     assert_eq!(levels(&m, &refilled.step_id), ["confirmed"]);
-}
-
-fn bind_grant_again(m: &Machine, tx: &mut Transaction<'_>) {
-    m.runtime
-        .grant(
-            &m.reference(1),
-            hotsheet_ticketing::orchestration::CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: READ_AND_START.to_vec(),
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            tx,
-        )
-        .unwrap();
 }
 
 #[test]
@@ -1324,7 +1317,7 @@ fn hs2_42tara_routes_are_machine_local_and_share_the_runtime() {
         .unwrap_err();
     assert_eq!(
         (asked.code(), error_status(&asked)),
-        ("approval_required", 403)
+        ("decision_required", 403)
     );
     let refreshed = post("refresh", json!({"step_id": step}), &mut tx).unwrap();
     assert_eq!(refreshed["steps"].as_array().unwrap().len(), 1);

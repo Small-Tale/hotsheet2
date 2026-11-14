@@ -2,13 +2,13 @@
 //! stores: direct claims, dispatcher queueing, duplicates, takeover and cancellation.
 use hotsheet_model::{NoteKind, Status, Ticket};
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, AuditOutcome, CreateGrant, DenialReason, DispatchMode,
-    PolicyBody, RunError, RunState, SetPolicy, TargetAction, TargetOpError, TargetPolicy,
+    AuditOutcome, DenialReason, DispatchMode, PermissionAnswer, PermissionState, PolicyBody,
+    RunError, RunState, SetPolicy, TargetAction, TargetOpError, TargetPolicy,
 };
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::{Value, json};
 
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, op, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, op, unsupported, worker};
 use super::*;
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
@@ -59,7 +59,7 @@ fn hs2_ebhdsb_direct_dispatch_claims_once_and_follows_takeover_to_completion() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -374,12 +374,14 @@ fn hs2_ebhdsb_refused_and_unavailable_dispatches_record_exactly_what_happened() 
             Err(OrchestrationError::Invalid(_))
         ));
     }
-    // An undeclared or unbound target: denied, and no run is recorded.
-    bind_and_grant(&m, 1, &[], &mut tx);
-    assert!(matches!(
-        m.runtime
-            .run_dispatch(&m.owner.id, request("op-1"), Some(&worker()), &mut tx),
-        Err(OrchestrationError::Denied(DenialReason::NoGrant))
+    // HS2-XHQ1EH: a bound target is consented to, but an AI's dispatch asks a person
+    // first, and no run is recorded until one answers.
+    bind_and_allow(&m, 1, &[], &mut tx);
+    permission_request(m.runtime.run_dispatch(
+        &m.owner.id,
+        request("op-1"),
+        Some(&worker()),
+        &mut tx,
     ));
     assert!(m.runtime.run_list(&m.owner.id, false).unwrap().is_empty());
     assert!(
@@ -389,20 +391,14 @@ fn hs2_ebhdsb_refused_and_unavailable_dispatches_record_exactly_what_happened() 
             .claimed_by
             .is_none()
     );
-    m.runtime
-        .grant(
-            &m.reference(1),
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::TicketsRead, TargetAction::WorkStart],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    allow_on(
+        &m.runtime,
+        &m.owner.id,
+        &id(1),
+        &[TargetAction::WorkStart],
+        &[],
+        &mut tx,
+    );
     // A ticket that does not exist is never recorded as a run.
     assert_eq!(
         op(m.runtime.run_dispatch(
@@ -523,7 +519,7 @@ fn hs2_ebhdsb_dispatcher_mode_queues_and_never_assigns_in_the_targets_pool() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[
@@ -683,37 +679,8 @@ fn hs2_ebhdsb_an_approved_dispatch_is_not_asked_again_to_keep_its_lease() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
-        &m,
-        1,
-        &[TargetAction::TicketsRead, TargetAction::WorkStart],
-        &mut tx,
-    );
-    m.runtime
-        .set_policy(
-            &m.owner.id,
-            SetPolicy {
-                expected_revision: None,
-                policy: PolicyBody {
-                    targets: vec![TargetPolicy {
-                        target_id: id(1),
-                        enabled: true,
-                        actions: vec![TargetAction::TicketsRead, TargetAction::WorkStart],
-                        tools: Vec::new(),
-                        max_sessions: 1,
-                        machine: None,
-                        speculation: None,
-                    }],
-                    approval: ApprovalPolicy {
-                        required_for: vec![ApprovalGate::WorkStart],
-                    },
-                    ..PolicyBody::default()
-                },
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    // HS2-XHQ1EH: no rule is remembered, so the dispatch asks a person.
+    bind_and_allow(&m, 1, &[], &mut tx);
     let orchestration = m.orchestration_ticket("Coordinate");
     let ticket = target_ticket(&m, "Needs a person first");
     let request = || {
@@ -725,36 +692,44 @@ fn hs2_ebhdsb_an_approved_dispatch_is_not_asked_again_to_keep_its_lease() {
             json!({"worker_id":"worker-a"}),
         )
     };
-    assert!(matches!(
-        m.runtime
-            .run_dispatch(&m.owner.id, request(), Some(&worker()), &mut tx),
-        Err(OrchestrationError::Denied(DenialReason::ApprovalRequired))
+    let asked = permission_request(m.runtime.run_dispatch(
+        &m.owner.id,
+        request(),
+        Some(&worker()),
+        &mut tx,
     ));
     assert!(m.runtime.run_list(&m.owner.id, false).unwrap().is_empty());
-    let pending = m.runtime.approvals(&m.owner.id, &mut tx).unwrap().remove(0);
-    m.runtime
-        .decide_approval(
-            &m.owner.id,
-            &pending.approval_id,
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    answer(
+        &m.runtime,
+        &m.owner.id,
+        &asked,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     let run = m
         .runtime
         .run_dispatch(&m.owner.id, request(), Some(&worker()), &mut tx)
         .unwrap()
         .run;
     assert_eq!(run.state, RunState::Dispatched);
-    // Keeping and releasing the lease continue that approved decision.
+    // The dispatch happened, so Allow Once is used up.
+    let list = m.runtime.permission_list(&m.owner.id, &mut tx).unwrap();
+    assert_eq!(list.requests[0].request.state, PermissionState::Used);
+    // Keeping and releasing the lease continue that decision and ask nobody.
     m.runtime
         .run_renew(&m.owner.id, &run.run_id, None, Some(&worker()), &mut tx)
         .unwrap();
     m.runtime
         .run_cancel(&m.owner.id, &run.run_id, Some(&worker()), &mut tx)
         .unwrap();
-    assert_eq!(m.runtime.approvals(&m.owner.id, &mut tx).unwrap().len(), 1);
+    assert_eq!(
+        m.runtime
+            .permission_list(&m.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .len(),
+        1
+    );
     // A new dispatch is a new decision.
     let again = dispatch(
         &m,
@@ -763,11 +738,67 @@ fn hs2_ebhdsb_an_approved_dispatch_is_not_asked_again_to_keep_its_lease() {
         "op-2",
         json!({"worker_id":"worker-a"}),
     );
-    assert!(matches!(
-        m.runtime
-            .run_dispatch(&m.owner.id, again, Some(&worker()), &mut tx),
-        Err(OrchestrationError::Denied(DenialReason::ApprovalRequired))
+    let second =
+        permission_request(
+            m.runtime
+                .run_dispatch(&m.owner.id, again, Some(&worker()), &mut tx),
+        );
+    assert_ne!(second, asked);
+}
+
+/// HS2-8NJVXC: a dispatch whose claim the target refuses does not use the Allow Once
+/// answer; repeating the same operation proceeds without asking again.
+#[test]
+fn hs2_8njvxc_a_refused_claim_keeps_the_allow_once_answer() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[], &mut tx);
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Someone else holds it");
+    // Another worker holds the ticket: the claim will be refused.
+    m.runtime
+        .request(
+            "POST",
+            &format!("/checkouts/{}/target-claims", m.target.id),
+            &json!({"connection_id":m.target_connection(),"native_id":ticket.id.to_string(),
+                "worker":"worker-b","lease_minutes":30}),
+            &mut tx,
+        )
+        .unwrap();
+    let request = || {
+        dispatch(
+            &m,
+            &orchestration,
+            &ticket.id.to_string(),
+            "op-held",
+            json!({"worker_id":"worker-a"}),
+        )
+    };
+    let asked = permission_request(m.runtime.run_dispatch(
+        &m.owner.id,
+        request(),
+        Some(&worker()),
+        &mut tx,
     ));
+    answer(
+        &m.runtime,
+        &m.owner.id,
+        &asked,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    assert!(
+        m.runtime
+            .run_dispatch(&m.owner.id, request(), Some(&worker()), &mut tx)
+            .is_err()
+    );
+    let list = m.runtime.permission_list(&m.owner.id, &mut tx).unwrap();
+    assert_eq!(list.requests.len(), 1);
+    assert_eq!(list.requests[0].request.state, PermissionState::Allowed);
 }
 
 #[test]
@@ -900,7 +931,7 @@ fn hs2_2c5n1w_concurrent_syncs_of_a_run_that_finishes_all_answer_the_finished_ru
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -972,29 +1003,21 @@ fn hs2_2c5n1w_concurrent_syncs_of_a_run_that_finishes_all_answer_the_finished_ru
     }
 }
 
-/// HS2-WC3W2G: a cancel the gate refuses is answered as that refusal. A person with no
-/// grant of their own asks to cancel a queued run: the answer is `no_grant`, the run
-/// records nothing (no `cancel_requested`, so reconciliation repeats nothing), the
-/// target keeps its Up Next mark, and the audit journal holds the denial. Asked
-/// again, the answer is the same. The run's own actor then cancels it. A cancel that
-/// needs no target call is not gated, and an unresolvable target is still reported as
-/// unverified (see the direct-run test above).
+/// HS2-WC3W2G, HS2-XHQ1EH: cancelling only reduces activity. A person, or another
+/// identified actor with no remembered rule, cancels a queued run without being asked
+/// and without a policy denial; the mark is withdrawn and nothing is filed.
 #[test]
-fn hs2_wc3w2g_a_denied_cancel_answers_the_denial_and_records_nothing() {
+fn hs2_xhq1eh_a_cancel_never_asks_and_is_never_denied_by_the_policy() {
     let m = machine(10, false, unsupported);
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
-        &[
-            TargetAction::TicketsRead,
-            TargetAction::TicketsWrite,
-            TargetAction::WorkStart,
-        ],
+        &[TargetAction::TicketsWrite, TargetAction::WorkStart],
         &mut tx,
     );
     let orchestration = m.orchestration_ticket("Coordinate");
@@ -1016,47 +1039,53 @@ fn hs2_wc3w2g_a_denied_cancel_answers_the_denial_and_records_nothing() {
         .unwrap()
         .run;
     assert_eq!(queued.state, RunState::Queued);
-    for _ in 0..2 {
-        assert!(matches!(
-            m.runtime
-                .run_cancel(&m.owner.id, &queued.run_id, Some(&human()), &mut tx),
-            Err(OrchestrationError::Denied(DenialReason::NoGrant))
-        ));
-        let run = m.runtime.run(&m.owner.id, &queued.run_id).unwrap();
-        assert_eq!(run, queued, "a denied cancel records nothing");
-        assert!(m.target_store.read_ticket(&ticket.id).unwrap().up_next);
-    }
-    let denials: Vec<_> = m
-        .runtime
-        .audit(&m.owner.id, 0, 500)
-        .unwrap()
-        .entries
-        .into_iter()
-        .filter(|entry| {
-            entry.record.actor_id.as_deref() == Some("maintainer")
-                && entry.record.outcome == AuditOutcome::Denied
-        })
-        .map(|entry| (entry.record.action, entry.record.reason))
-        .collect();
-    assert_eq!(
-        denials,
-        vec![("work_start".to_owned(), Some("no_grant".to_owned())); 2]
-    );
-    // Reconciliation finds no cancel to repeat.
-    let reconciled = m
-        .runtime
-        .run_reconcile(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+    // A policy that disables the target limits acting there, never cancelling.
+    m.runtime
+        .set_policy(
+            &m.owner.id,
+            SetPolicy {
+                expected_revision: None,
+                policy: PolicyBody {
+                    targets: vec![TargetPolicy {
+                        target_id: id(1),
+                        enabled: false,
+                        actions: None,
+                        tools: Vec::new(),
+                        max_sessions: 1,
+                        machine: None,
+                        speculation: None,
+                    }],
+                    ..PolicyBody::default()
+                },
+            },
+            Some(&human()),
+            &mut tx,
+        )
         .unwrap();
-    assert_eq!(reconciled.run.state, RunState::Queued);
-    assert!(!reconciled.run.cancel_requested);
-    // The run's own actor may cancel it: the mark is withdrawn and the run ends.
+    let other =
+        hotsheet_ticketing::actor::MutationActor::parse("ai", Some("other-ai".into())).unwrap();
     let cancelled = m
         .runtime
-        .run_cancel(&m.owner.id, &queued.run_id, Some(&worker()), &mut tx)
+        .run_cancel(&m.owner.id, &queued.run_id, Some(&other), &mut tx)
         .unwrap();
     assert_eq!(cancelled.run.state, RunState::Cancelled);
     assert!(cancelled.unverified.is_empty());
     assert!(!m.target_store.read_ticket(&ticket.id).unwrap().up_next);
+    assert!(
+        m.runtime
+            .permission_list(&m.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+    assert!(
+        m.runtime
+            .audit(&m.owner.id, 0, 500)
+            .unwrap()
+            .entries
+            .iter()
+            .all(|entry| entry.record.outcome != AuditOutcome::Denied)
+    );
 }
 
 /// HS2-68DWAM: `run status` never shows an outcome assessed on an earlier state. A
@@ -1072,7 +1101,7 @@ fn hs2_68dwam_a_sync_that_moves_the_run_on_drops_the_shown_reconciliation() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[

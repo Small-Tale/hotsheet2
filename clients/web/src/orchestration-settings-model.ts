@@ -317,8 +317,10 @@ function whole(value: string, label: string, minimum: number, maximum?: number):
 }
 
 /**
- * The policy to store: the stored body with only the limits replaced. Targets, approvals, accounts
- * and every other member round-trip unchanged, so this form never edits what it does not show.
+ * The policy to store: the stored body with only the limits replaced. Targets, accounts and every
+ * other member round-trip unchanged, so this form never edits what it does not show. Retired members
+ * (`targets[].actions`, `approval`) pass through untouched; the server ignores and drops them
+ * (HS2-XHQ1EH).
  */
 export function policyFromDraft(
   view: OrchestrationPolicyView | undefined,

@@ -19,11 +19,11 @@ use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalRegistry, ApprovalState, AuditOutcome, AuditRecord, DenialReason, Gate,
-    GateFacts, GateFilter, GateKind, GateRegistry, GateState, PlanFacts, PlanStep, PolicyBody,
-    Prerequisite, ProvisionalBasis, ProvisionalStanding, ProvisionalStore, ReadinessError,
-    ReadinessLevel, RunEvent, RunEventJournal, RunEventKind, RunEventSource, RunTarget, RunTicket,
-    SpeculationInputs, StepReadiness, TargetSpeculation, TicketKey, gate_observation,
+    AuditOutcome, AuditRecord, DenialReason, Gate, GateFacts, GateFilter, GateKind, GateRegistry,
+    GateState, PlanFacts, PlanStep, PolicyBody, Prerequisite, ProvisionalBasis,
+    ProvisionalStanding, ProvisionalStore, ReadinessError, ReadinessLevel, RunEvent,
+    RunEventJournal, RunEventKind, RunEventSource, RunTarget, RunTicket, SpeculationInputs,
+    StepReadiness, TargetAction, TargetSpeculation, TicketKey, gate_observation,
     provisional_standings, summarize, ticket_key,
 };
 use hotsheet_ticketing::provisional::{GateObservation, GateResult, IntegrationRule};
@@ -308,7 +308,7 @@ impl OrchestrationRuntime {
                 operation_id: entry.operation_id.map(Into::into),
                 outcome: entry.outcome,
                 reason: Some(entry.reason.into()),
-                grant_id: None,
+                permission_id: None,
             },
         )
     }
@@ -570,8 +570,10 @@ impl OrchestrationRuntime {
     /// The provisional half of the dispatch guard. Without the policy's opt-in for
     /// the step's target this is exactly the refusal it always was. With it, the
     /// involved targets' own settings are read fresh, the rule decides, a person is
-    /// asked under `provisional_dispatch` when the policy lists it, and admitted work
-    /// is recorded with the gates it rests on.
+    /// asked through a `provisional_dispatch` permission request unless it is their
+    /// own act or a remembered rule allows it (HS2-XHQ1EH), and admitted work is
+    /// recorded with the gates it rests on. `Ok(Some(id))` names the Allow Once
+    /// answer to use once the run is recorded.
     pub(super) fn provisional_admit(
         &self,
         owner_id: &str,
@@ -580,14 +582,14 @@ impl OrchestrationRuntime {
         authorized: &Authorized,
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
-    ) -> Result<(), OrchestrationError> {
+    ) -> Result<Option<String>, OrchestrationError> {
         let target_id = step.target.target_id.clone();
-        let Some(policy) = self
+        if !self
             .speculating(owner_id)
-            .filter(|policy| policy.speculation_allowed(&target_id))
-        else {
+            .is_some_and(|policy| policy.speculation_allowed(&target_id))
+        {
             return Err(OrchestrationError::Readiness(ReadinessError::Provisional));
-        };
+        }
         self.provisional_targets_read(owner_id, &Self::provisional_targets_of(step), actor, tx)?;
         // The tickets the step names are read again before anything is built on them:
         // their tags decide the opt-out (a plan defined before the opt-in never read
@@ -603,7 +605,7 @@ impl OrchestrationRuntime {
         let view = self.readiness(owner_id, &step.step_id, tx)?;
         if view.readiness.level != ReadinessLevel::Provisional {
             return match view.readiness.level.refusal() {
-                None => Ok(()),
+                None => Ok(None),
                 Some(refusal) => Err(OrchestrationError::Readiness(refusal)),
             };
         }
@@ -634,41 +636,28 @@ impl OrchestrationRuntime {
                 ReadinessError::ProvisionalRefused,
             ));
         }
-        if policy
-            .approval
-            .required_for
-            .contains(&ApprovalGate::ProvisionalDispatch)
-        {
-            let reference = Self::target_ref(owner_id, &target_id)?;
-            let approvals = ApprovalRegistry::new(&self.home);
-            let denied = approvals
-                .list(owner_id, tx.clock.now_ms())?
-                .iter()
-                .rev()
-                .find(|approval| {
-                    approval.target == reference
-                        && approval.actor_id == authorized.actor_id
-                        && approval.gate == ApprovalGate::ProvisionalDispatch
-                        && approval.operation_id == operation_id
-                })
-                .is_some_and(|approval| approval.state == ApprovalState::Denied);
-            if denied {
-                audit(AuditOutcome::Denied, "approval_denied", tx)?;
+        let reference = Self::target_ref(owner_id, &target_id)?;
+        let permission = match self.permission_gate(
+            &reference,
+            actor,
+            &ActionRequest {
+                provisional: true,
+                ..ActionRequest::new(TargetAction::WorkStart).operation(operation_id)
+            },
+            tx,
+        ) {
+            Ok(permission) => permission,
+            Err(OrchestrationError::Denied(DenialReason::PermissionDenied)) => {
+                audit(AuditOutcome::Denied, "permission_denied", tx)?;
                 return Err(OrchestrationError::Readiness(
                     ReadinessError::ProvisionalRefused,
                 ));
             }
-            if !approvals.consume_or_request(
-                &reference,
-                &authorized.actor_id,
-                ApprovalGate::ProvisionalDispatch,
-                operation_id,
-                tx,
-            )? {
-                audit(AuditOutcome::Denied, "approval_required", tx)?;
-                return Err(OrchestrationError::Denied(DenialReason::ApprovalRequired));
+            Err(error) => {
+                audit(AuditOutcome::Denied, error.code(), tx)?;
+                return Err(error);
             }
-        }
+        };
         audit(AuditOutcome::Allowed, "provisional", tx)?;
         let recorded = self.provisional_record(
             owner_id,
@@ -705,7 +694,7 @@ impl OrchestrationRuntime {
                 tx,
             );
         }
-        Ok(())
+        Ok(permission)
     }
 
     // ---- Gate results ----

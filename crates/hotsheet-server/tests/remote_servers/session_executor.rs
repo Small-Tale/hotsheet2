@@ -171,15 +171,13 @@ async fn hs2_95swq4_an_automatic_policy_starts_a_session_for_ready_work_and_wind
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    let granted = api(
+    let granted = super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1",
             "actions":["tickets_read","gates_observe","sessions_manage","work_start"],
             "session_scope":{"tools":[{"tool":IDLE_TOOL}],"max_concurrency":2},
             "expires_at_ms":expires,"actor":person}),
-        true,
     )
     .await;
     assert_eq!(granted.0, StatusCode::OK, "{}", granted.1);
@@ -519,21 +517,16 @@ async fn hs2_km9ctg_a_stopped_server_places_nothing_and_its_successor_runs_the_l
             "previous_destination":null,"destination":candidate["destination"]}),
     )
     .await;
-    let expires = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
-        + 3_600_000;
-    call(
-        &router,
-        "POST",
-        &format!("/targets/{TARGET}/grants"),
-        json!({"actor_id":"scheduler-1",
-            "actions":["tickets_read","gates_observe","sessions_manage","work_start"],
-            "session_scope":{"tools":[{"tool":IDLE_TOOL}],"max_concurrency":2},
-            "expires_at_ms":expires,"actor":person}),
-    )
-    .await;
+    // HS2-XHQ1EH: a person remembers dispatch and the tool's session starts.
+    for rule in [
+        json!({"action":"work_start"}),
+        json!({"action":"session_start","tool":IDLE_TOOL}),
+    ] {
+        let mut body = rule;
+        body["target_id"] = json!(TARGET);
+        body["actor"] = person.clone();
+        call(&router, "POST", "/permission-rules", body).await;
+    }
     let defined = call(
         &router,
         "POST",

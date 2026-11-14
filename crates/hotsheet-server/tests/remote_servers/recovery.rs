@@ -100,27 +100,25 @@ async fn hs2_wbredm_cli_controls_a_run_and_a_starting_server_reconciles_what_was
         store_arg,
         "orchestration",
     ];
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
+    // HS2-XHQ1EH: a person remembers the rules the orchestrator needs.
+    for (action, tool) in [
+        ("tickets_write", None::<&str>),
+        ("work_start", None::<&str>),
+    ] {
+        let mut arguments = vec![
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "scheduler-1",
             "--action",
-            "tickets_read",
-            "--action",
-            "tickets_write",
-            "--action",
-            "work_start",
-            "--expires-in",
-            "1h",
-        ],
-    );
+            action,
+        ];
+        if let Some(tool) = tool {
+            arguments.extend(["--tool", tool]);
+        }
+        cli_named(&home, &human, &arguments);
+    }
     let dispatch = |ticket: &str, operation: &str, extra: &[&str]| {
         let mut arguments = vec![
             "run",
@@ -378,13 +376,11 @@ async fn hs2_wbredm_stdio_mcp_reconciles_and_controls_a_run() {
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","work_start"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     // The recovery routes need the bearer like everything else.
