@@ -2195,6 +2195,23 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/orchestration/runs/${encodeURIComponent(run)}/${operation}`,
       { method: 'POST', body: JSON.stringify({ ...body, actor: { role: 'human', id: actorId } }) },
     );
+  /**
+   * HS2-HDHT5E: read one target ticket through the orchestration project's gate (§26.3), for a remote
+   * target's label on the timeline. Adding the project was the consent to read it, so this never asks;
+   * it runs in the background and never reads as the server being busy.
+   */
+  orchestrationTicketRead = (
+    checkout: string,
+    target: { target_id: string; connection_id: string; native_id: string },
+    actorId: string,
+    signal?: AbortSignal,
+  ) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/tickets/read`,
+      { method: 'POST', body: JSON.stringify({ ...target, actor: { role: 'human', id: actorId } }), signal },
+      false,
+    );
   /** The standing gates of one run (HS2-5JBYPV), from this machine's records. */
   orchestrationRunGates = (checkout: string, run: string) =>
     this.parsed(

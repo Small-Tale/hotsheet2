@@ -3914,8 +3914,19 @@ on (`waits_on`, each prerequisite ticket with the step that works it), and its *
 
 A target ticket's slug, title, status, priority and category are read from its store when
 the target is a checkout on this machine. For a remote target the timeline has the slug
-the plan's last read recorded (§26.15 now keeps it, an identifier) and nothing more;
-titles of remote targets are HS2-HDHT5E. Nothing the read finds is written anywhere.
+the plan's last read recorded (§26.15 now keeps it, an identifier) and nothing more.
+Nothing the read finds is written anywhere.
+
+**Remote titles (HS2-HDHT5E).** While the view is open, the web client reads each remote
+target ticket that has no title once through the orchestration project's gated ticket
+read (`POST /checkouts/{owner}/orchestration/tickets/read`, §26.3; adding the project
+was the consent to read it, so it never asks), as this browser's person. At most four
+reads run at a time and 24 per timeline version. The titles live in the view's memory
+only: they are never written to this machine's records, a refused or failed read is
+not retried while the view stays open and the card keeps its slug with "<slug> in
+<project>", and switching project or closing the view forgets them. Each read is
+audited in the owner's journal (identifiers only), like any target ticket read. A title
+changed on the remote shows the next time the view opens.
 
 **Waiting for permission, one seam.** The permission a step waits on comes from one
 function: the scheduler's latest start decision for the step whose outcome is

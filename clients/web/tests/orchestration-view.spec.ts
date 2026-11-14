@@ -603,3 +603,87 @@ test('HS2-S3FKJ7 a target project’s List and Columns show the orchestration li
     await server.stop();
   }
 });
+
+test('HS2-HDHT5E remote target tickets show their titles, read once through the gate while the view is open', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    // The real timeline, with both target tickets placed on a paired server: the read on this machine has
+    // only their slugs, never their titles (HS2-J89JC7).
+    const remote = new Set([plan.first.id, plan.second.id]);
+    await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
+      const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
+        incoming = new URL(route.request().url());
+      try {
+        const response = await route.fetch({
+          url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 60_000,
+        });
+        const body = (await response.json()) as {
+          waves: Array<{ items: Array<Record<string, unknown> & { target: { native_id: string } }> }>;
+        };
+        for (const wave of body.waves)
+          for (const item of wave.items)
+            if (remote.has(item.target.native_id)) {
+              item.location = 'remote';
+              item.machine_label = 'Build host';
+              delete item.title;
+            }
+        await route.fulfill({ response, json: body });
+      } catch {
+        // A long poll still open when the page or the server goes away.
+        await route.abort().catch(() => undefined);
+      }
+    });
+    // The label read goes to the real gated route; the second ticket's target refuses it.
+    const reads: string[] = [];
+    await page.route(/\/orchestration\/tickets\/read$/, async (route) => {
+      const native = (route.request().postDataJSON() as { native_id: string }).native_id;
+      reads.push(native);
+      if (native === plan.second.id)
+        return route.fulfill({
+          status: 404,
+          json: { error: 'target ticket not found', code: 'target_ticket_not_found' },
+        });
+      return route.fallback();
+    });
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const view = page.locator('[data-orchestration-view="true"]');
+    const first = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    await expect(first).toContainText('Add the synthetic token endpoint', { timeout: 30_000 });
+    await expect(first.locator('[data-orchestration-part="placement"]')).toHaveText('Build host');
+    // A refused read keeps the slug and the fallback title.
+    const second = view.locator(`[data-ticket-slug="${plan.second.slug}"]`);
+    await expect(second).toContainText(`${plan.second.slug} in Self`);
+    await capture(page, 'remote-1440', 'hs2-hdht5e');
+    // The inspector shows the read title too.
+    await first.click();
+    await expect(page.locator('[data-orchestration-inspector]')).toContainText('Add the synthetic token endpoint');
+    // A new timeline version reads nothing again: each ticket was asked once.
+    await plan.dispatch();
+    await expect(view).toHaveAttribute('data-phase', 'paused', { timeout: 30_000 });
+    await expect(first).toContainText('Add the synthetic token endpoint');
+    expect(reads.sort()).toEqual([plan.first.id, plan.second.id].sort());
+    for (const width of [1100, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await expect(view).toHaveAttribute('data-layout', width === 390 ? 'paged' : 'grid');
+      await capture(page, `remote-${width}`, 'hs2-hdht5e');
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(first).toContainText('Add the synthetic token endpoint');
+    await capture(page, 'remote-1440-after-narrow', 'hs2-hdht5e');
+    // Nothing the read found was written to this machine's records.
+    const timeline = await send(server, 'GET', `/checkouts/${server.checkoutId}/orchestration/timeline`);
+    expect(JSON.stringify(timeline)).not.toContain('"location":"remote"');
+  } finally {
+    await server.stop();
+  }
+});

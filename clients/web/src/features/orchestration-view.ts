@@ -5,7 +5,7 @@
  * switcher offers the tab. Selection, the inspector's run details, kick-off and run controls live
  * here; the shell renders from these signals.
  */
-import { batch, effect, type Signal, signal } from 'kerfjs';
+import { batch, computed, effect, type Signal, signal } from 'kerfjs';
 
 import { Api } from '../api';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
@@ -13,6 +13,7 @@ import type { OrchestrationProposeAvailability } from '../components/orchestrati
 import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
 import type { Project } from '../interactions/types';
+import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
@@ -196,6 +197,10 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   /** Per project: whether it declares targets. Absent until read; false when the read failed too. */
   const declared = signal<Partial<Record<string, boolean>>>({});
   const timeline = signal<OrchestrationTimeline | undefined>(undefined);
+  /** HS2-HDHT5E: remote target tickets' labels, read while the view is open and kept in memory only. */
+  const remoteLabels = signal<Readonly<Record<string, RemoteTicketLabel>>>({});
+  const labelled = computed(() => withRemoteLabels(timeline.value, remoteLabels.value));
+  let labelReader: ReturnType<typeof createRemoteLabelReader> | undefined;
   const loading = signal(false);
   const error = signal<string | undefined>(undefined);
   const selectedStep = signal<string | undefined>(undefined);
@@ -255,10 +260,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       if (key === streamKey) return;
       streamStop?.();
       streamStop = undefined;
+      labelReader?.reset();
+      labelReader = undefined;
       streamKey = key;
       const run = ++generation;
       batch(() => {
         timeline.value = undefined;
+        remoteLabels.value = {};
         error.value = undefined;
         selectedStep.value = undefined;
         details.value = undefined;
@@ -266,6 +274,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         planning.value = undefined;
       });
       if (!key || !current) return;
+      const reader = createRemoteLabelReader({
+        read: (ref, signal) =>
+          clientFor(current).orchestrationTicketRead(current.id, ref, dependencies.personId(), signal),
+        onLabels: (labels) => {
+          if (run === generation) remoteLabels.value = labels;
+        },
+      });
+      labelReader = reader;
       streamStop = startOrchestrationTimelineStream({
         client: clientFor(current),
         checkout: current.id,
@@ -278,6 +294,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
             error.value = undefined;
             if (selectedStep.value && !findTimelineItem(view, selectedStep.value)) selectedStep.value = undefined;
           });
+          reader.fill(view);
           placeTimeline();
           void refreshDetails();
           void refreshPlanning(current, run);
@@ -368,7 +385,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
-  const selected = () => findTimelineItem(timeline.value, selectedStep.value)?.item;
+  const selected = () => findTimelineItem(labelled.value, selectedStep.value)?.item;
 
   let detailsRequest = 0;
   async function refreshDetails() {
@@ -534,7 +551,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
 
   return {
     declared,
-    timeline,
+    /** The timeline as shown: remote target tickets carry the labels read for them (HS2-HDHT5E). */
+    timeline: labelled,
     loading,
     error,
     selectedStep,
@@ -565,6 +583,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     placeTimeline,
     dispose() {
       streamStop?.();
+      labelReader?.reset();
       cancelAnimationFrame(frame);
       observed?.observer.disconnect();
       for (const dispose of disposers.splice(0)) dispose();
