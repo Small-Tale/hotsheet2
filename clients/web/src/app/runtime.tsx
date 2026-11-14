@@ -6281,10 +6281,11 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     ticketGroups,
     orchestrationView: {
-      select: (stepId) => {
+      select: (stepId, moved) => {
         orchestrationView.select(stepId);
-        // A phone shows the inspector over the board when a card is chosen, as the ticket views do.
-        if (viewportMobile.value) setInspectorVisible(true);
+        // A phone shows the inspector over the board when a card is chosen, as the ticket views do;
+        // an arrow-key move keeps the board in view so the next arrow continues from it (HS2-T4V1TX).
+        if (viewportMobile.value && !moved) setInspectorVisible(true);
       },
       toggleGroup: (group) => {
         orchestrationView.toggleGroup(group);

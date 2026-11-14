@@ -202,3 +202,93 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     ]);
   });
 });
+
+describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
+  // Later (empty), Then, Next (empty: its group collapsed), Working Now, Done.
+  const board = [[], ['t1', 't2', 't3'], [], ['w1'], ['d1', 'd2']] as const;
+
+  it.each([
+    ['ArrowDown', 't1', 't2'],
+    ['ArrowDown', 't3', 't3'],
+    ['ArrowUp', 't2', 't1'],
+    ['ArrowUp', 't1', 't1'],
+    // Across an empty column, at the same position or the column's last card.
+    ['ArrowRight', 't1', 'w1'],
+    ['ArrowRight', 't3', 'w1'],
+    ['ArrowRight', 'w1', 'd1'],
+    ['ArrowLeft', 'd2', 'w1'],
+    ['ArrowLeft', 'w1', 't1'],
+    // The board's edges stop the move; the empty Later column is skipped.
+    ['ArrowLeft', 't2', 't2'],
+    ['ArrowRight', 'd2', 'd2'],
+    // A card the board does not draw (its group was collapsed, or it moved away) starts at the first.
+    ['ArrowDown', 'gone', 't1'],
+    ['ArrowRight', undefined, 't1'],
+  ] as const)('%s from %s reaches %s', async (key, current, expected) => {
+    const { adjacentOrchestrationCard } = await import('./orchestration-timeline-interactions');
+    expect(adjacentOrchestrationCard(board, current, key)).toBe(expected);
+  });
+
+  it('walks repeatedly, out and back, and reads an empty board as nothing to move to', async () => {
+    const { adjacentOrchestrationCard } = await import('./orchestration-timeline-interactions');
+    let at: string | undefined = 't1';
+    for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowRight', 'ArrowDown'] as const)
+      at = adjacentOrchestrationCard(board, at, key);
+    expect(at).toBe('d2');
+    for (const key of ['ArrowLeft', 'ArrowLeft', 'ArrowUp'] as const) at = adjacentOrchestrationCard(board, at, key);
+    // Done's second card returns to Working Now's only card, then to Then's first.
+    expect(at).toBe('t1');
+    expect(adjacentOrchestrationCard([], 't1', 'ArrowDown')).toBeUndefined();
+    expect(adjacentOrchestrationCard([[], []], undefined, 'ArrowLeft')).toBeUndefined();
+    // Empty, then refilled: the same read works on the new board.
+    expect(adjacentOrchestrationCard([['n1'], ['n2']], 't1', 'ArrowRight')).toBe('n1');
+  });
+
+  it('focuses and selects the next card, and leaves modified arrows and other views alone', async () => {
+    registrations.length = 0;
+    const { wireOrchestrationTimeline } = await import('./orchestration-timeline-interactions');
+    const selected: string[] = [];
+    const noop = () => undefined;
+    wireOrchestrationTimeline({} as HTMLElement, {
+      select: (step, moved) => selected.push(`${step}${moved ? ' moved' : ''}`),
+      toggleGroup: noop,
+      start: noop,
+      pause: noop,
+      propose: noop,
+      chooseProjects: noop,
+      runControl: noop,
+      showRequest: noop,
+      openGoal: noop,
+    });
+    const focused: string[] = [];
+    const column = { scrollIntoView: noop };
+    const card = (id: string) => {
+      const node = {
+        dataset: { ticketQualifiedId: `orchestration:${id}` },
+        focus: () => focused.push(id),
+        scrollIntoView: noop,
+        closest: (selector: string) =>
+          selector.includes('orchestration-view') ? view : selector.includes('board-column') ? column : null,
+      };
+      return node as unknown as HTMLElement;
+    };
+    const columns = [[card('a1'), card('a2')], [card('b1')]];
+    const view = {
+      dataset: { orchestrationView: 'true' },
+      querySelectorAll: () => columns.map((cards) => ({ querySelectorAll: () => cards })),
+    };
+    const keydown = registrations.find((item) => item.event === 'keydown')!;
+    let prevented = 0;
+    const press = (target: HTMLElement, key: string, init: Partial<KeyboardEvent> = {}) =>
+      keydown.handle({ key, preventDefault: () => (prevented += 1), ...init } as unknown as Event, target);
+    press(columns[0][0], 'ArrowDown');
+    press(columns[0][1], 'ArrowRight');
+    press(columns[1][0], 'ArrowRight');
+    press(columns[1][0], 'ArrowLeft', { shiftKey: true });
+    press(columns[1][0], 'Enter');
+    expect(focused).toEqual(['a2', 'b1']);
+    expect(selected).toEqual(['a2 moved', 'b1 moved', 'b1']);
+    // The edge press is consumed (no page scroll) but moves nothing; the Shift press is not consumed.
+    expect(prevented).toBe(4);
+  });
+});

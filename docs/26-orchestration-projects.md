@@ -3969,7 +3969,12 @@ wake it yet (HS2-ANQXQ4). A read on the server also starts the target followers 
 - **Empty.** A declared project with no target shows _No Projects to Orchestrate Yet_
   with **Choose Projects…**, which opens Settings until the Orchestration category of
   HS2-W27N1D exists (HS2-QFS6SG). Keyboard: cards are reachable with Tab and selected
-  with Enter or Space; arrow keys are HS2-T4V1TX.
+  with Enter or Space. Up and Down move to the card above or below in the same column
+  and Left and Right to the nearest column that has cards (at the same position or its
+  last card), each selecting that card's plan step (HS2-T4V1TX). Moves stop at the
+  board's edges, a collapsed project group is skipped, and the column comes fully into
+  view; a modified arrow is left alone. On a phone an arrow move does not open the
+  inspector sheet over the board, as Enter, Space and a tap do.
 
 ### Headless surface
 

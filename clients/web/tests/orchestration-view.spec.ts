@@ -428,3 +428,107 @@ test('HS2-DBQSWB Show Request opens that exact orchestrator request in Pending a
     await server.stop();
   }
 });
+
+test('HS2-T4V1TX arrow keys move between cards within and across columns and select their steps', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    // A third step with nothing before it shares First with the first one.
+    const third = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
+      title: 'Add the synthetic audit log',
+    });
+    await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/readiness/define`, {
+      ticket: { native_id: plan.goal.id },
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: third.id,
+      prerequisites: [],
+      actor: scheduler,
+    });
+    const titles: Record<string, string> = {
+      [plan.first.slug]: 'Add the synthetic token endpoint',
+      [plan.second.slug]: 'Add the synthetic login page',
+      [third.slug]: 'Add the synthetic audit log',
+    };
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const view = page.locator('[data-orchestration-view="true"]');
+    await expect(view).toHaveAttribute('data-phase', 'proposed');
+    const inspector = page.locator('[data-orchestration-inspector]');
+    const column = (label: string) => view.locator(`[aria-label="${label}"] [data-ticket-slug]`);
+    const firstColumn = await column('First · On Start Column').evaluateAll((cards) =>
+      cards.map((card) => card.getAttribute('data-ticket-slug') ?? ''),
+    );
+    expect(firstColumn).toHaveLength(2);
+    const [top, bottom] = firstColumn as [string, string];
+    const card = (slug: string) => view.locator(`[data-ticket-slug="${slug}"]`);
+    const expectAt = async (slug: string) => {
+      await expect(card(slug)).toBeFocused();
+      await expect(card(slug)).toHaveAttribute('aria-selected', 'true');
+      await expect(inspector).toContainText(titles[slug]);
+    };
+
+    for (const width of [1440, 1100]) {
+      await page.setViewportSize({ width, height: 900 });
+      await card(top).click();
+      await expectAt(top);
+      await page.keyboard.press('ArrowDown');
+      await expectAt(bottom);
+      await page.keyboard.press('ArrowDown');
+      await expectAt(bottom);
+      await page.keyboard.press('ArrowUp');
+      await expectAt(top);
+      // Left reaches Second (newer work is on the left); its only card.
+      await page.keyboard.press('ArrowLeft');
+      await expectAt(plan.second.slug);
+      await expect(card(plan.second.slug)).toBeInViewport();
+      await page.keyboard.press('ArrowLeft');
+      await expectAt(plan.second.slug);
+      await page.keyboard.press('ArrowRight');
+      await expectAt(top);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('ArrowLeft');
+      await expectAt(plan.second.slug);
+      await capture(page, `arrows-${width}`, 'hs2-t4v1tx');
+    }
+
+    // A phone pages one column at a time: Left and Right bring the card's column into view.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(view).toHaveAttribute('data-layout', 'paged');
+    await card(top).focus({ timeout: 10_000 });
+    await page.keyboard.press('ArrowLeft');
+    await expect(card(plan.second.slug)).toBeFocused();
+    await expect.poll(() => visibleShare(page, 'Second · About +1 h Column')).toBeGreaterThan(0.85);
+    await capture(page, 'arrows-390', 'hs2-t4v1tx');
+    await page.keyboard.press('ArrowRight');
+    await expect(card(top)).toBeFocused();
+    await expect.poll(() => visibleShare(page, 'First · On Start Column')).toBeGreaterThan(0.85);
+
+    // Wide again: the focused card stays focused and in view.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(view).toHaveAttribute('data-layout', 'grid');
+    await card(top).focus({ timeout: 10_000 });
+    await page.keyboard.press('ArrowLeft');
+    await expectAt(plan.second.slug);
+    await expect(card(plan.second.slug)).toBeInViewport();
+    await capture(page, 'arrows-1440-after-narrow', 'hs2-t4v1tx');
+
+    // A collapsed project group draws no cards in any column; expanding it again restores the walk.
+    const group = view.locator('[data-ticket-group]').first();
+    await group.locator('[data-action="toggle-ticket-group"]').first().click({ timeout: 10_000 });
+    await expect(view.locator('[data-ticket-slug]')).toHaveCount(0);
+    await view.locator('[data-ticket-group]').first().locator('[data-action="toggle-ticket-group"]').first().click({
+      timeout: 10_000,
+    });
+    await card(top).click({ timeout: 10_000 });
+    await expectAt(top);
+    await page.keyboard.press('ArrowLeft');
+    await expectAt(plan.second.slug);
+  } finally {
+    await server.stop();
+  }
+});
