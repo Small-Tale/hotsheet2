@@ -95,6 +95,11 @@ pub struct Coordinator {
 /// current assignment authority is verified: the state and any replayed operation.
 pub type ReservationCheck<'a> = Box<dyn FnOnce(&State, Option<&Assignment>) -> Result<()> + 'a>;
 
+/// HS2-26JAEN: what a reservation records beside the pool, run under the same lock as
+/// the reservation itself (also for a replay), so no reader sees one without the other.
+pub type ReservationRecord<'a> =
+    Box<dyn FnOnce(&Coordinator, &State, &Assignment) -> Result<()> + 'a>;
+
 fn valid_full_sha(sha: &str) -> bool {
     sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
@@ -637,6 +642,27 @@ impl Coordinator {
         assignment: Assignment,
         check: ReservationCheck<'_>,
     ) -> Result<Assignment> {
+        self.assign_recorded(
+            authority,
+            generation,
+            clock,
+            assignment,
+            check,
+            Box::new(|_, _, _| Ok(())),
+        )
+    }
+
+    /// [`Self::assign_verified`] that also writes `record` inside the reservation's own
+    /// lock session, after the assignment is in the pool and before it is persisted.
+    pub fn assign_recorded(
+        &self,
+        authority: &str,
+        generation: &str,
+        clock: &dyn Fn() -> i64,
+        assignment: Assignment,
+        check: ReservationCheck<'_>,
+        record: ReservationRecord<'_>,
+    ) -> Result<Assignment> {
         ensure!(
             assignment.base.len() == 40 && assignment.base.bytes().all(|c| c.is_ascii_hexdigit()),
             "base must be a full shipping SHA"
@@ -693,7 +719,9 @@ impl Coordinator {
                             && existing.scope == assignment.scope,
                         "operation id already refers to a different assignment"
                     );
-                    return Ok(existing.clone());
+                    let existing = existing.clone();
+                    record(self, state, &existing)?;
+                    return Ok(existing);
                 }
                 Self::dispatch_rules(state, &assignment)?;
                 Self::preference_rules(state, local_store.as_ref(), &assignment)?;
@@ -738,6 +766,7 @@ impl Coordinator {
                     session.preferences.request = None;
                     session.preferences.refusal = None;
                 }
+                record(self, state, &offered)?;
                 Ok(offered)
             })
         };

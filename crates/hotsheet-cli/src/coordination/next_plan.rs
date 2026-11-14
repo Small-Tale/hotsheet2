@@ -333,7 +333,26 @@ impl Coordinator {
             }
             Ok(())
         });
-        let assigned = self.assign_verified(
+        // HS2-26JAEN: the ledger record is written in the reservation's own lock
+        // session, so no reader sees the reservation without it.
+        let integration = speculation.integration;
+        let record: super::ReservationRecord<'_> = Box::new(move |c, state, assigned| {
+            if let Some(reservation) = reserved_at.borrow().as_ref() {
+                c.speculation_locked(state, |state, ledger| {
+                    Self::record_reservation(
+                        state,
+                        ledger,
+                        &assigned.id,
+                        reservation.depth,
+                        integration,
+                        reservation.gates.clone(),
+                        clock(),
+                    )
+                })?;
+            }
+            Ok(())
+        });
+        let assigned = self.assign_recorded(
             authority,
             generation,
             clock,
@@ -359,16 +378,10 @@ impl Coordinator {
                 retirement_note: None,
             },
             check,
+            record,
         )?;
         if let Some(reservation) = reserved.into_inner() {
-            let gates = reservation.gates.clone();
-            self.speculation_record(
-                &assigned.id,
-                reservation.depth,
-                speculation.integration,
-                reservation.gates,
-                clock(),
-            )?;
+            let gates = reservation.gates;
             // HS2-X6FB9V: follow the pending gates from now on.
             self.speculation_watch_reserved(&speculation, &assigned.ticket.connection_id, &gates);
         }

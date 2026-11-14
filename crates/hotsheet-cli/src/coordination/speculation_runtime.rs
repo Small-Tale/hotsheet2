@@ -297,6 +297,30 @@ impl Coordinator {
         }
     }
 
+    /// HS2-26JAEN: write the record of `reservation` for `assigned` while the caller
+    /// holds the pool lock (a [`super::ReservationRecord`]).
+    pub fn record_reserved(
+        &self,
+        state: &State,
+        assigned: &Assignment,
+        reservation: &ProvisionalReservation,
+        integration: hotsheet_ticketing::provisional::IntegrationRule,
+        now: i64,
+    ) -> Result<()> {
+        self.speculation_locked(state, |state, ledger| {
+            Self::record_reservation(
+                state,
+                ledger,
+                &assigned.id,
+                reservation.depth,
+                integration,
+                reservation.gates.clone(),
+                now,
+            )
+        })
+        .map(|_| ())
+    }
+
     /// HS2-J77XJA: the open Up Next tickets whose open dependencies an enabled policy
     /// satisfies provisionally now, as `coordination assign` would decide them. Empty
     /// when the policy is off, and while a recorded base gate is red, because the
@@ -306,13 +330,10 @@ impl Coordinator {
         policy: &SpeculationPolicy,
         probe: &dyn GateProbe,
         tickets: &[Ticket],
+        ledger: Option<&speculation::SpeculationLedger>,
     ) -> Result<std::collections::BTreeSet<Ulid>> {
         let mut ready = std::collections::BTreeSet::new();
-        if !policy.enabled
-            || self
-                .speculation_ledger()?
-                .is_some_and(|ledger| !ledger.repair_first().is_empty())
-        {
+        if !policy.enabled || ledger.is_some_and(|ledger| !ledger.repair_first().is_empty()) {
             return Ok(ready);
         }
         for ticket in tickets {

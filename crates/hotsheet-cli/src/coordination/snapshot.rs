@@ -14,8 +14,15 @@ impl Coordinator {
         now: i64,
         probe: Option<&dyn super::speculation_runtime::BaseProbe>,
     ) -> Result<Snapshot> {
-        let (state, ledger) =
-            self.change_batches(|state, ledger| Ok((state.clone(), ledger.clone())))?;
+        // HS2-26JAEN: the pool, its batch ledger and its speculation ledger are read in
+        // one lock session, so a reservation is never seen without its record.
+        let (state, ledger, speculation_ledger) = self.change_batches(|state, ledger| {
+            Ok((
+                state.clone(),
+                ledger.clone(),
+                self.speculation_ledger_locked()?,
+            ))
+        })?;
         let settings = hotsheet_ticketing::Settings::for_project(&self.project);
         let policy = super::development_strategy::DevelopmentPolicy::read(&settings)?;
         let integration = super::strategy::StrategyPolicy::read(&settings)?;
@@ -188,19 +195,25 @@ impl Coordinator {
             hotsheet_ticketing::provisional::SpeculationPolicy::read(&settings)?;
         let provisional = match (&selected_tickets, speculation_policy.enabled) {
             (Some(tickets), true) => match probe {
-                Some(probe) => self.provisional_ready(&speculation_policy, probe, tickets)?,
+                Some(probe) => self.provisional_ready(
+                    &speculation_policy,
+                    probe,
+                    tickets,
+                    speculation_ledger.as_ref(),
+                )?,
                 None => self.provisional_ready(
                     &speculation_policy,
                     &self.speculation_probe(&speculation_policy),
                     tickets,
+                    speculation_ledger.as_ref(),
                 )?,
             },
             _ => std::collections::BTreeSet::new(),
         };
         // HS2-X6FB9V: a red base gate's repair is offered first. Only a pool with a
         // speculation ledger can have one.
-        let urgent: std::collections::BTreeSet<String> = self
-            .speculation_ledger()?
+        let urgent: std::collections::BTreeSet<String> = speculation_ledger
+            .as_ref()
             .map(|ledger| ledger.repair_first().into_iter().collect())
             .unwrap_or_default();
         let planned = state
@@ -263,7 +276,7 @@ impl Coordinator {
         }
         // HS2-2SJPCH: a gate result wakes waiters; a pool without provisional work keeps
         // its cursor and its serialized snapshot.
-        let speculation = self.speculation_ledger()?.map(|ledger| ledger.status());
+        let speculation = speculation_ledger.as_ref().map(|ledger| ledger.status());
         if let Some(speculation) = &speculation {
             digest.update(serde_json::to_vec(speculation)?);
         }

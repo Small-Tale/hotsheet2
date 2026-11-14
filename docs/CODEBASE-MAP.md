@@ -1329,7 +1329,7 @@ idempotent `record`/`apply`/`rebase`/`reopen`, the integration rule that `mark`
 enforces (and, since HS2-CK4S3F, `batch_open_unit` and `batch-plan` for every batch member), the `SpeculationStatus` projected into the snapshot and worker view, and
 the timer-free `follow` wait. `speculation_runtime.rs` is its I/O: `LiveGateProbe`
 (Git reachability and the HS2-3R9V0R watch Jobs), the reservation check
-`speculation_reservation`, HS2-X6FB9V `GateWatch`/`LiveGateWatch`, `speculation_watcher`, `speculation_watch_reserved` and `speculation_sync_watching` (watches started by reservations and syncs, `repairs` and automatic replacement of landed work's gate, repair-first ordering in worker matches), HS2-J77XJA `provisional_ready` (the snapshot's plan rows and worker candidates, and `dispatch_next_plan_probed` recording the reservation), `speculation_explain`, `speculation_sync`,
+`speculation_reservation`, HS2-26JAEN `record_reserved` (written inside `Coordinator::assign_recorded`'s lock session) and `speculation_locked`, HS2-X6FB9V `GateWatch`/`LiveGateWatch`, `speculation_watcher`, `speculation_watch_reserved` and `speculation_sync_watching` (watches started by reservations and syncs, `repairs` and automatic replacement of landed work's gate, repair-first ordering in worker matches), HS2-J77XJA `provisional_ready` (the snapshot's plan rows and worker candidates, and `dispatch_next_plan_probed` recording the reservation), `speculation_explain`, `speculation_sync`,
 `speculation_result`, at-risk and reopen ticket notes, and the worktree branch
 record. The rule itself is `crates/hotsheet-ticketing/src/provisional.rs`
 (`SpeculationPolicy` in the shared `speculation` setting, `blocker_readiness`,

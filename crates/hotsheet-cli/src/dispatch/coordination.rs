@@ -1240,7 +1240,17 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     .map(|assignment| assignment.return_route.clone())
                     .unwrap_or(default_route)
             });
-            coordinator.assign_verified(
+            // HS2-26JAEN: the ledger record is written in the reservation's own lock
+            // session, so no reader sees the reservation without it.
+            let integration = speculation.integration;
+            let record: hotsheet_cli::coordination::ReservationRecord<'_> =
+                Box::new(move |c, state, assigned| {
+                    if let Some(reservation) = reserved_at.borrow().as_ref() {
+                        c.record_reserved(state, assigned, reservation, integration, now)?;
+                    }
+                    Ok(())
+                });
+            coordinator.assign_recorded(
                 &i.id,
                 &i.session,
                 &|| time::OffsetDateTime::now_utc().unix_timestamp(),
@@ -1266,16 +1276,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     retirement_note: None,
                 },
                 check,
+                record,
             )?;
             if let Some(reservation) = reserved.into_inner() {
-                let gates = reservation.gates.clone();
-                coordinator.speculation_record(
-                    &operation,
-                    reservation.depth,
-                    speculation.integration,
-                    reservation.gates,
-                    now,
-                )?;
+                let gates = reservation.gates;
                 // HS2-X6FB9V: follow the pending gates from now on.
                 coordinator.speculation_watch_reserved(&speculation, &connection_for_watch, &gates);
             }

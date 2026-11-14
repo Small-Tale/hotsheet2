@@ -1617,3 +1617,63 @@ fn hs2_x6fb9v_the_live_watch_creates_one_job_from_origin_and_the_policy() {
         GateResult::Pending
     );
 }
+
+/// HS2-26JAEN: a reservation and its ledger record are one lock session. The record
+/// sees the reservation it belongs to; a failing record leaves neither behind; a replay
+/// keeps the one record; and the snapshot reads both together.
+#[test]
+fn hs2_26jaen_a_reservation_and_its_record_are_written_together() {
+    let (_root, c) = fixture();
+    let store = store_of(&c);
+    let policy = enabled(IntegrationRule::PushPerTicket);
+    let facts = Facts::default();
+    let blocker = awaiting_ci(&store, "blocker", GATE_A);
+    let dependent = ticket(&store, "dependent", vec![blocker.id]);
+    facts.push(GATE_A, BASE, GateResult::Pending, None);
+    register(&c, Role::Integrator, "i", GEN, NOW);
+    register(&c, Role::Worker, "w", GEN, NOW);
+    let tickets = store.list_tickets().unwrap();
+    let reservation = c
+        .speculation_reservation(&policy, &facts, &dependent, &tickets, BASE)
+        .unwrap()
+        .unwrap();
+    let mut a = assignment("op", "w", &dependent.id.to_string());
+    a.ticket.connection_id = git_connection_id(&store);
+    a.slug = dependent.slug.clone();
+    a.base = BASE.into();
+    let assign = |record: ReservationRecord<'_>| {
+        c.assign_recorded(
+            "i",
+            GEN,
+            &|| NOW,
+            a.clone(),
+            Box::new(|_, _| Ok(())),
+            record,
+        )
+    };
+    // A record that fails takes the reservation with it.
+    let failed = assign(Box::new(|_, state, assigned| {
+        assert!(state.assignments.contains_key(&assigned.id));
+        anyhow::bail!("synthetic record failure")
+    }));
+    assert!(failed.is_err());
+    assert!(c.state().unwrap().assignments.is_empty());
+    assert!(c.speculation_ledger().unwrap().is_none());
+    // The record is written inside the reservation's session: while it runs, the
+    // reservation is in the pool it is given but not yet on disk.
+    let on_disk_during_record = Cell::new(None);
+    let record = |c: &Coordinator, state: &State, assigned: &Assignment| {
+        let persisted: State =
+            serde_json::from_slice(&fs::read(c.directory.join("state.json")).unwrap()).unwrap();
+        on_disk_during_record.set(Some(persisted.assignments.contains_key(&assigned.id)));
+        c.record_reserved(state, assigned, &reservation, policy.integration, NOW)
+    };
+    assign(Box::new(record)).unwrap();
+    assert_eq!(on_disk_during_record.get(), Some(false));
+    let snapshot = c.snapshot_probed(NOW, Some(&facts)).unwrap();
+    assert!(snapshot.state.assignments.contains_key("op"));
+    assert_eq!(snapshot.speculation.unwrap().records[0].assignment, "op");
+    // A replay records nothing new.
+    assign(Box::new(record)).unwrap();
+    assert_eq!(c.speculation_ledger().unwrap().unwrap().records.len(), 1);
+}

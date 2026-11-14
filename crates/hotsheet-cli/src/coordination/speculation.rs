@@ -814,20 +814,28 @@ impl Coordinator {
         &self,
         update: impl FnOnce(&State, &mut SpeculationLedger) -> Result<T>,
     ) -> Result<T> {
+        self.change(|state| self.speculation_locked(state, update))
+    }
+
+    /// Change the speculation ledger while the caller holds the pool lock (inside
+    /// `change`). Written only when it changed.
+    pub(super) fn speculation_locked<T>(
+        &self,
+        state: &State,
+        update: impl FnOnce(&State, &mut SpeculationLedger) -> Result<T>,
+    ) -> Result<T> {
         let path = self.speculation_path();
-        self.change(|state| {
-            let mut ledger = Self::read_speculation(&path)?;
-            let before = ledger.clone();
-            let result = update(state, &mut ledger)?;
-            if ledger != before {
-                let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?;
-                serde_json::to_writer_pretty(&mut temporary, &ledger)?;
-                temporary.write_all(b"\n")?;
-                temporary.as_file().sync_all()?;
-                temporary.persist(&path)?;
-            }
-            Ok(result)
-        })
+        let mut ledger = Self::read_speculation(&path)?;
+        let before = ledger.clone();
+        let result = update(state, &mut ledger)?;
+        if ledger != before {
+            let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?;
+            serde_json::to_writer_pretty(&mut temporary, &ledger)?;
+            temporary.write_all(b"\n")?;
+            temporary.as_file().sync_all()?;
+            temporary.persist(&path)?;
+        }
+        Ok(result)
     }
 
     /// The ledger, or `None` when this pool never reserved provisional work.
@@ -849,6 +857,22 @@ impl Coordinator {
         now: i64,
     ) -> Result<SpeculativeRecord> {
         self.change_speculation(|state, ledger| {
+            Self::record_reservation(state, ledger, assignment, depth, integration, gates, now)
+        })
+    }
+
+    /// The record of an existing reservation, written into `ledger`. A replayed
+    /// reservation keeps its first record.
+    pub(super) fn record_reservation(
+        state: &State,
+        ledger: &mut SpeculationLedger,
+        assignment: &str,
+        depth: u32,
+        integration: IntegrationRule,
+        gates: Vec<PendingGate>,
+        now: i64,
+    ) -> Result<SpeculativeRecord> {
+        {
             let reserved = state
                 .assignments
                 .get(assignment)
@@ -871,7 +895,7 @@ impl Coordinator {
                 now,
             )?;
             Ok(ledger.records[assignment].clone())
-        })
+        }
     }
 
     fn landed(state: &State, assignment: &str) -> bool {

@@ -3214,7 +3214,10 @@ pool's `state.lock`, with its own `version`; like the batch ledger it needs no p
 schema bump, because only an opted-in project ever creates it. The record holds the
 assignment, the speculative base SHA, the depth, the integration rule in force and
 each pending gate (prerequisite, commit, result, run). A replayed reservation keeps
-the first record. `coordination speculation-branch` writes the same facts to the
+the first record. The record is written in the reservation's own lock session
+(`assign_recorded`), and the snapshot reads the pool and both ledgers in one session,
+so no `status`, `workers` or `next` reader ever sees the reservation without its
+record (HS2-26JAEN). A record that cannot be written refuses the reservation. `coordination speculation-branch` writes the same facts to the
 worker's branch as Git config (`branch.<name>.hotsheet-speculative-base`,
 `hotsheet-pending-gate`, `hotsheet-speculation-state`).
 
