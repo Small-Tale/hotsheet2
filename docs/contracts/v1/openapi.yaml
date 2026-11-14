@@ -23634,6 +23634,87 @@ components:
             $ref: '#/components/schemas/OrchestrationRunProgress'
         utilization:
           $ref: '#/components/schemas/OrchestrationUtilization'
+        external_wait:
+          $ref: '#/components/schemas/OrchestrationExternalWait'
+    OrchestrationExternalWait:
+      description: What the whole owning checkout's work waited on outside the orchestrator, not narrowed by `ticket`
+        (HS2-9FXASE). Gate waits are unknown with `no_gate_linked` or `no_deployment_requested` when no gate of that
+        kind exists and `history_truncated` when a gate's bounded history lost its start; journal measures are
+        `decisions_trimmed` after retention; provisional counts are `history_truncated` when the ledger is at its bound.
+      type: object
+      required:
+        - ci
+        - deployments
+        - reviews
+        - provider_limits
+        - idle_waiting_ms
+        - provisional
+      properties:
+        ci:
+          description: Time CI gates were `pending`, joined per run.
+          $ref: '#/components/schemas/OrchestrationSystemWait'
+        deployments:
+          description: Time deployment gates were `pending`, joined per run.
+          $ref: '#/components/schemas/OrchestrationSystemWait'
+        reviews:
+          description: Time deployment gates were `awaiting_approval` by a person, joined per run.
+          $ref: '#/components/schemas/OrchestrationSystemWait'
+        provider_limits:
+          description: Time plan steps stayed unplaced because every usable tool account was limited.
+          $ref: '#/components/schemas/OrchestrationSystemWait'
+        idle_waiting_ms:
+          description: Session time kept with nothing to do but wait on a gate (`waiting_on_gate`).
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+        provisional:
+          $ref: '#/components/schemas/OrchestrationProvisionalWork'
+      additionalProperties: false
+    OrchestrationSystemWait:
+      description: The time work waited on one external system (HS2-9FXASE).
+      type: object
+      required:
+        - wait_ms
+        - waited
+      properties:
+        wait_ms:
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+        waited:
+          description: Runs (for gates) or plan steps (for provider limits) that waited at all.
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    OrchestrationProvisionalWork:
+      description: Provisional work counted from the provisional ledger (HS2-9FXASE, §26.22).
+      type: object
+      required:
+        - started
+        - rebased
+        - reopened
+      properties:
+        started:
+          $ref: '#/components/schemas/OrchestrationCountMetric'
+        rebased:
+          description: Told to rebase onto a fix after a red gate.
+          $ref: '#/components/schemas/OrchestrationCountMetric'
+        reopened:
+          description: Reopened after a red gate.
+          $ref: '#/components/schemas/OrchestrationCountMetric'
+      additionalProperties: false
+    OrchestrationCountMetric:
+      description: A count when `known`, otherwise the `reason` it is unknown (HS2-9FXASE).
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          enum:
+            - known
+            - unknown
+        value:
+          type: integer
+          minimum: 0
+        reason:
+          $ref: '#/components/schemas/OrchestrationUnknownReason'
+      additionalProperties: false
     OrchestrationUtilization:
       description:
         Throughput and utilization of the whole owning checkout, not narrowed by `ticket` (HS2-XK7TJS). Session time

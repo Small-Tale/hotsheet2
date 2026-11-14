@@ -18,8 +18,8 @@ use hotsheet_ticketing::orchestration::{
     ValidationRegistry, WorkItemKey, summarize_progress,
 };
 use hotsheet_ticketing::orchestration::{
-    DecisionJournal, DecisionKind, OrchestratedSession, Utilization, UtilizationInput,
-    summarize_utilization,
+    DecisionJournal, DecisionKind, DecisionRecord, ExternalWaitInput, OrchestratedSession,
+    Utilization, UtilizationInput, summarize_external_wait, summarize_utilization,
 };
 
 use super::tickets::{identifier, native};
@@ -210,29 +210,39 @@ impl OrchestrationRuntime {
         }
         let (events, events_trimmed) = self.retained_run_events(owner_id)?;
         let sessions = SessionRegistry::new(&self.home).list(owner_id, false)?;
+        let gates = GateRegistry::new(&self.home).list(owner_id, &GateFilter::default())?;
         let mut summary = summarize_progress(&ProgressInput {
             owner_checkout_id: owner_id,
             now_ms,
             runs: &runs,
-            gates: &GateRegistry::new(&self.home).list(owner_id, &GateFilter::default())?,
+            gates: &gates,
             validations: &ValidationRegistry::new(&self.home).steps(owner_id, None, now_ms)?,
             sessions: &sessions,
             events: &events,
             events_trimmed,
             costs: &costs,
         });
-        summary.utilization = self.utilization(owner_id, &sessions, now_ms)?;
+        let (decisions, decisions_trimmed) = self.summary_decisions(owner_id)?;
+        summary.utilization =
+            self.utilization(owner_id, &sessions, &decisions, decisions_trimmed, now_ms);
+        // HS2-9FXASE: what the owner's work waited on outside the orchestrator.
+        summary.external_wait = summarize_external_wait(&ExternalWaitInput {
+            owner_checkout_id: owner_id,
+            now_ms,
+            gates: &gates,
+            decisions: &decisions,
+            decisions_trimmed,
+            provisional: self.provisional_tally(owner_id)?,
+        });
         Ok(summary)
     }
 
-    /// HS2-XK7TJS: throughput and utilization of the whole owner, from its session
-    /// records, the scheduler's decision journal and the policy's caps.
-    fn utilization(
+    /// The owner's retained scheduler decisions the summary's measures read (starts,
+    /// keeps, wind-downs and unplaced work), and whether retention removed older ones.
+    fn summary_decisions(
         &self,
         owner_id: &str,
-        sessions: &[OrchestratedSession],
-        now_ms: u64,
-    ) -> Result<Utilization, OrchestrationError> {
+    ) -> Result<(Vec<DecisionRecord>, bool), OrchestrationError> {
         let journal = DecisionJournal::new(&self.home, owner_id)?;
         let (mut decisions, mut after, mut trimmed) = (Vec::new(), 0, false);
         loop {
@@ -255,6 +265,19 @@ impl OrchestrationRuntime {
                 break;
             }
         }
+        Ok((decisions, trimmed))
+    }
+
+    /// HS2-XK7TJS: throughput and utilization of the whole owner, from its session
+    /// records, the scheduler's decision journal and the policy's caps.
+    fn utilization(
+        &self,
+        owner_id: &str,
+        sessions: &[OrchestratedSession],
+        decisions: &[DecisionRecord],
+        decisions_trimmed: bool,
+        now_ms: u64,
+    ) -> Utilization {
         let policy = self.policy(owner_id).ok().and_then(|view| view.policy);
         let tool_caps: BTreeMap<String, u32> = policy
             .iter()
@@ -275,14 +298,14 @@ impl OrchestrationRuntime {
                     .or_insert(cap);
             }
         }
-        Ok(summarize_utilization(&UtilizationInput {
+        summarize_utilization(&UtilizationInput {
             owner_checkout_id: owner_id,
             now_ms,
             sessions,
-            decisions: &decisions,
-            decisions_trimmed: trimmed,
+            decisions,
+            decisions_trimmed,
             tool_caps: &tool_caps,
             machine_caps: &machine_caps,
-        }))
+        })
     }
 }

@@ -1225,6 +1225,32 @@ impl OrchestrationRuntime {
         Ok(stacked)
     }
 
+    /// HS2-9FXASE: how much work the owner started provisionally, and how much of it
+    /// was rebased onto a fix or reopened after a red gate. A ledger at its bound may
+    /// have forgotten settled work, so its counts are not complete.
+    pub(super) fn provisional_tally(
+        &self,
+        owner_id: &str,
+    ) -> Result<hotsheet_ticketing::orchestration::ProvisionalTally, OrchestrationError> {
+        let mut tally = hotsheet_ticketing::orchestration::ProvisionalTally::default();
+        let Some(document) = self.provisional_store().read::<Document>(owner_id)? else {
+            return Ok(tally);
+        };
+        let records = &document.ledger.records;
+        tally.trimmed = records.len() >= crate::coordination::speculation::MAX_LEDGER_RECORDS;
+        for record in records.values() {
+            let happened =
+                |kind: SpeculationEventKind| record.events.iter().any(|event| event.kind == kind);
+            tally.started += 1;
+            tally.rebased += u64::from(happened(SpeculationEventKind::Rebased));
+            tally.reopened += u64::from(
+                record.state == SpeculationState::Reopened
+                    || happened(SpeculationEventKind::Reopened),
+            );
+        }
+        Ok(tally)
+    }
+
     /// Which work is provisional on which gate, from this machine's records. It
     /// contacts nothing and writes nothing.
     pub fn provisional_status(

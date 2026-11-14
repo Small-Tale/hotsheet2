@@ -3626,10 +3626,40 @@ until the next recorded decision about its subject. When retention removed decis
 idle and limited time are `decisions_trimmed` rather than a lower figure. The panel
 that shows these measures waits on design sign-off (HS2-2XJSJK).
 
+### Waiting on external systems (HS2-9FXASE)
+
+`external_wait` is owner-wide like `utilization`. It is a third pure fold
+(`orchestration/summary_wait.rs`, `summarize_external_wait`) over the gates (§26.13),
+the scheduler's decision journal (§26.17) and a tally of the provisional ledger
+(§26.22). Each system reports `wait_ms` and `waited`, the number of runs (for gates)
+or plan steps (for provider limits) that waited at all.
+
+- **CI** (`ci`) and **deployments** (`deployments`): the time gates of that kind were
+  `pending`, from each transition into it to the transition out, or to `as_of_ms`. The
+  gates of one run and kind are joined, so a gate that supersedes another does not
+  count the same wait twice. With no gate of that kind the wait is
+  `no_gate_linked` or `no_deployment_requested`. A gate whose bounded history (32
+  entries) no longer holds its first transition makes the wait `history_truncated`.
+- **Reviews** (`reviews`): the time deployment gates were `awaiting_approval`, waiting
+  for a person to approve the deployment, joined the same way. Code review is not
+  recorded by the orchestrator, so it is not measured.
+- **Provider limits** (`provider_limits`): the time a plan step stayed unplaced
+  because every tool account it could use was rate- or quota-limited
+  (`no_tool_available` with detail `limited`, §26.11), until its next other decision.
+  A step held back by a local cap is limited time of HS2-XK7TJS, not a provider wait.
+- **Idle while waiting** (`idle_waiting_ms`): the time the scheduler kept sessions
+  whose only work was to wait on their ticket's gate (`waiting_on_gate`).
+- **Provisional work** (`provisional`): records started provisionally, those rebased
+  onto a fix after a red gate, and those reopened after one. The ledger keeps at most
+  1024 records and forgets settled ones first, so at that bound the counts are
+  `history_truncated`.
+
+Journal measures are `decisions_trimmed` when retention removed decisions.
+
 ### Not measured yet
 
-Time spent waiting on external systems and provisional work started or redone are
-HS2-9FXASE. The workspace view is HS2-XJEH08.
+The workspace view is HS2-XJEH08; the summary panel waits on design sign-off
+(HS2-2XJSJK).
 
 ### Headless surface
 

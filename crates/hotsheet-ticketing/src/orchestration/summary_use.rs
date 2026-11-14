@@ -203,7 +203,7 @@ fn usage(
 
 /// Episodes in one subject's decisions, oldest first: each opens at a decision `opens`
 /// accepts while none is open and closes at the next one it does not, or at `now_ms`.
-fn episodes(
+pub(super) fn episodes(
     decisions: &[&DecisionRecord],
     opens: &dyn Fn(&DecisionRecord) -> bool,
     now_ms: u64,
@@ -228,7 +228,7 @@ fn episodes(
 
 /// The decisions about each subject, by `key`, oldest first; a decision given twice
 /// counts once.
-fn by_subject<'a>(
+pub(super) fn by_subject<'a>(
     decisions: &[&'a DecisionRecord],
     key: &dyn Fn(&DecisionRecord) -> Option<String>,
 ) -> BTreeMap<String, Vec<&'a DecisionRecord>> {

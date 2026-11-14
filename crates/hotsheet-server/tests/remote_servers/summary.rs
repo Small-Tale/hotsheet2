@@ -65,6 +65,15 @@ async fn hs2_s13719_http_mcp_and_cli_read_the_same_progress_and_cost_summary() {
             "limited":{"tool_capacity_ms":{"status":"known","value":0},"steps_tool_limited":0,
                 "resources_ms":{"status":"known","value":0},"steps_resource_limited":0}})
     );
+    // HS2-9FXASE: no gate yet, so CI and deployment waits are unknown, not zero.
+    assert_eq!(
+        empty["external_wait"]["ci"],
+        json!({"wait_ms":{"status":"unknown","reason":"no_gate_linked"},"waited":0})
+    );
+    assert_eq!(
+        empty["external_wait"]["provisional"]["started"],
+        json!({"status":"known","value":0})
+    );
 
     let added = api(
         router.clone(),

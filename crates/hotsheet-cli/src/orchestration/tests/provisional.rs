@@ -6,10 +6,11 @@
 use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::orchestration::{
     AuditOutcome, BindTarget, Coverage, CpuCapacity, DeclarationState, DiskCapacity, GateKind,
-    GateRegistry, GateState, HostObservation, MachineLimits, MemoryCapacity, PermissionAction,
-    PermissionAnswer, PermissionState, PlacementPolicy, PolicyBody, ReadinessError, ReadinessLevel,
-    ReplaceTargets, RunEventKind, SetPolicy, Speculation, TargetAction, TargetDeclaration,
-    TargetDestination, TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
+    GateRegistry, GateState, HostObservation, MachineLimits, MemoryCapacity, Metric,
+    PermissionAction, PermissionAnswer, PermissionState, PlacementPolicy, PolicyBody,
+    ReadinessError, ReadinessLevel, ReplaceTargets, RunEventKind, SetPolicy, Speculation,
+    TargetAction, TargetDeclaration, TargetDestination, TargetPolicy, ToolAvailability, ToolPolicy,
+    ToolScope, UnknownReason,
 };
 use hotsheet_ticketing::provisional::{GateResult, SpeculationPolicy};
 use hotsheet_ticketing::{FsStore, NewTicket, Settings, StoreMetadata, TicketPatch, ops};
@@ -872,6 +873,30 @@ fn hs2_jsf985_a_red_gate_puts_the_work_at_risk_and_its_fix_rebases_it() {
     assert_eq!(t.notes("Provisional work at risk").len(), 2);
     // Nothing was discarded: one record, with its whole history.
     assert_eq!(t.status().work.len(), 1);
+    // HS2-9FXASE: the summary counts the work once, rebased after its red gate, and
+    // the CI gates' wait is known from their whole histories.
+    let wait =
+        t.m.runtime
+            .progress_summary(&owner, None, &mut tx)
+            .unwrap()
+            .external_wait;
+    assert_eq!(
+        (
+            wait.provisional.started,
+            wait.provisional.rebased,
+            wait.provisional.reopened
+        ),
+        (
+            Metric::Known { value: 1 },
+            Metric::Known { value: 1 },
+            Metric::Known { value: 0 }
+        )
+    );
+    assert!(wait.ci.wait_ms.known().is_some());
+    assert_eq!(
+        wait.deployments.wait_ms.reason(),
+        Some(UnknownReason::NoDeploymentRequested)
+    );
 }
 
 #[test]
@@ -1674,6 +1699,17 @@ fn hs2_jsf985_reopening_keeps_the_record_and_is_audited() {
     t.ci_says(&t.run_a, &sha('a'), GateState::Passed, 2, &mut tx);
     assert_eq!(t.only().state, SpeculationState::Reopened);
     assert_eq!(t.states(&t.step_b).len(), 3);
+    // HS2-9FXASE: the summary counts it as reopened after its red gate.
+    let provisional =
+        t.m.runtime
+            .progress_summary(&t.owner(), None, &mut tx)
+            .unwrap()
+            .external_wait
+            .provisional;
+    assert_eq!(
+        (provisional.started, provisional.reopened),
+        (Metric::Known { value: 1 }, Metric::Known { value: 1 })
+    );
 
     // Confirmed work cannot be reopened: a confirmed base invalidates nothing.
     let u = two(Some(&Opt::on()), &mut tx);

@@ -30,6 +30,7 @@ mod sessions;
 mod storage;
 mod summary;
 mod summary_use;
+mod summary_wait;
 mod target_lines;
 mod timeline;
 mod tool_capacity;
@@ -160,6 +161,10 @@ pub use summary::{
 };
 pub use summary_use::{
     CapacityUse, LimitedTime, Utilization, UtilizationInput, summarize_utilization,
+};
+pub use summary_wait::{
+    ExternalWait, ExternalWaitInput, ProvisionalTally, ProvisionalWork, SystemWait,
+    summarize_external_wait,
 };
 pub use target_lines::{TargetLine, TargetLineSource, TargetLines, target_lines};
 pub use timeline::{
@@ -409,6 +414,8 @@ mod session_tests;
 mod summary_tests;
 #[cfg(test)]
 mod summary_use_tests;
+#[cfg(test)]
+mod summary_wait_tests;
 #[cfg(test)]
 mod target_lines_tests;
 #[cfg(test)]

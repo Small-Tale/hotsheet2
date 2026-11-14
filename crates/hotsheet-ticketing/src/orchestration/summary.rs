@@ -392,6 +392,10 @@ pub struct ProgressSummary {
     /// decision journal and the policy (`summarize_utilization`).
     #[serde(default)]
     pub utilization: super::Utilization,
+    /// HS2-9FXASE: what the whole owner's work waited on outside the orchestrator,
+    /// never narrowed to one orchestration ticket (`summarize_external_wait`).
+    #[serde(default)]
+    pub external_wait: super::ExternalWait,
 }
 
 /// Everything a summary is computed from. Records of other owners are ignored.
@@ -792,5 +796,6 @@ pub fn summarize_progress(input: &ProgressInput<'_>) -> ProgressSummary {
         work_items: items.into_values().collect(),
         runs,
         utilization: super::Utilization::default(),
+        external_wait: super::ExternalWait::default(),
     }
 }
