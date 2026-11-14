@@ -12,5 +12,8 @@ export const ORCHESTRATION_SETTINGS_ACTIONS = {
   takeOverSession: action('take-over-orchestration-session'),
   stopSession: action('stop-orchestration-session'),
   applyPolicy: action('apply-orchestration-policy'),
+  addPolicyAccount: action('add-orchestration-policy-account'),
+  removePolicyAccount: action('remove-orchestration-policy-account'),
+  applyProjectLimits: action('apply-orchestration-project-limits'),
   closeProjectDetail: action('close-orchestration-project'),
 } as const;

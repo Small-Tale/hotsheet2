@@ -382,6 +382,162 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
   }
 });
 
+/**
+ * HS2-7WF6JD: a project's own limits in its detail and a tool's accounts in the policy form, applied
+ * through the real policy route; only that project's entry and that tool's accounts change.
+ */
+test('HS2-7WF6JD edits a project limits and a tool account through the real policy route', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(240_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Web'],
+      [docs, 'Docs'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    // Docs is listed with Codex; Web is not listed yet.
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'codex', max_sessions: 2 }],
+        targets: [{ target_id: targets.Docs, tools: [{ tool: 'codex' }], max_sessions: 1 }],
+      },
+      actor: { role: 'human' },
+    });
+    type Stored = {
+      policy: {
+        tools: {
+          tool: string;
+          accounts?: { account: string; max_sessions: number; budget_cents_per_day?: number }[];
+        }[];
+        targets: {
+          target_id: string;
+          tools: { tool: string }[];
+          max_sessions: number;
+          machine?: { max_sessions: number };
+        }[];
+      };
+    };
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await showProjectSettings(page, 'General');
+    await expect(page.locator('[data-component="project-general-settings"]')).toHaveAttribute(
+      'data-project-type',
+      'orchestration',
+    );
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    await settings
+      .locator('[data-orchestration-project]')
+      .filter({ hasText: 'Web' })
+      .getByRole('button', { name: /Web/ })
+      .first()
+      .click();
+    const limits = page.locator('[data-component="orchestration-project-limits"]');
+    await expect(limits).toContainText('The policy does not list this project yet');
+    const capacity = page.getByRole('region', { name: 'Capacity and Admission' });
+    await expect(capacity).toContainText('No AI tool is allowed here yet');
+    // Allow Codex here with its own machine limits, and apply.
+    await limits.getByRole('checkbox', { name: 'Codex' }).check();
+    await limits.getByRole('checkbox', { name: 'Use Different Machine Limits' }).check();
+    const machineSessions = limits.getByLabel('Sessions per Machine');
+    await machineSessions.fill('3');
+    await machineSessions.blur();
+    const directory = join('target', 'visual-captures', 'hs2-7wf6jd');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `hs2-7wf6jd-${name}-${browserName}.png`), animations: 'disabled' });
+    await limits.scrollIntoViewIfNeeded();
+    await capture('limits-draft-1440');
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    await expect(settings.getByRole('status')).toContainText('Limits for Web saved.');
+    let stored = await server.request<Stored>(`${base}/policy`);
+    expect(stored.policy.targets.map((entry) => entry.target_id)).toEqual([targets.Docs, targets.Web]);
+    expect(stored.policy.targets[1]).toMatchObject({
+      tools: [{ tool: 'codex' }],
+      max_sessions: 1,
+      machine: { max_sessions: 3 },
+    });
+    // Admission is now asked for Codex here.
+    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    await expect(limits).not.toContainText('does not list this project');
+
+    // A tool account with a daily budget in the policy form.
+    const policy = page.locator('[data-component="orchestration-policy-settings"]');
+    await policy.getByRole('button', { name: 'Add Account' }).first().click();
+    const account = policy.locator('[data-policy-account]').first();
+    await account.getByRole('textbox', { name: 'Account', exact: true }).fill('team');
+    await account.getByRole('textbox', { name: 'Account', exact: true }).blur();
+    await account.getByLabel('Daily Budget ($)').fill('12.50');
+    await account.getByLabel('Daily Budget ($)').blur();
+    await account.scrollIntoViewIfNeeded();
+    await capture('policy-account-1440');
+    await policy.getByRole('button', { name: 'Apply Policy' }).click();
+    await expect(settings.getByRole('status')).toContainText('Policy saved.');
+    stored = await server.request<Stored>(`${base}/policy`);
+    expect(stored.policy.tools[0].accounts).toEqual([{ account: 'team', max_sessions: 1, budget_cents_per_day: 1250 }]);
+    // The project entries the policy form does not show are unchanged.
+    expect(stored.policy.targets.map((entry) => entry.target_id)).toEqual([targets.Docs, targets.Web]);
+
+    for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+        if (await show.isVisible()) await show.click();
+      }
+      await limits.scrollIntoViewIfNeeded();
+      await expect(limits.getByRole('button', { name: 'Apply Limits' })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await capture(`limits-${String(size.width)}${index === 3 ? '-after-390' : ''}`);
+    }
+    // The policy form's accounts at the medium and narrow widths.
+    for (const size of [
+      { width: 1100, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Project Detail', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+      }
+      await account.scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      // The tool rows hold their content, whatever wraps inside them: nothing spills into the next row.
+      const rows = policy.locator('.kui-framed-list__row');
+      await expect
+        .poll(() => rows.evaluateAll((elements) => elements.every((row) => row.scrollHeight <= row.clientHeight + 1)))
+        .toBe(true);
+      await capture(`policy-account-${String(size.width)}`);
+    }
+    // Both schemes on the real backdrop, wide.
+    await page.setViewportSize(wide);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await account.scrollIntoViewIfNeeded();
+    await capture('policy-account-1440-dark');
+    await limits.scrollIntoViewIfNeeded();
+    await capture('limits-1440-dark');
+  } finally {
+    await server.stop();
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

@@ -50,7 +50,8 @@
 > the OpenAPI contract describes them. Project Type and the Orchestration settings
 > category with its projects, project detail and limits-only policy ship in the web client
 > (§26.27, HS2-W27N1D); a Software project places and dispatches nothing (HS2-J3ZF27), and Start Orchestration
-> needs no placement actor (HS2-XYAHB4).
+> needs no placement actor (HS2-XYAHB4); per-project limits and tool accounts are edited in
+> Settings (HS2-7WF6JD).
 
 ## 26.1 Boundary and existing foundations
 
@@ -4107,12 +4108,25 @@ the type changes to Software while it shows.
   request), never "not allowed yet". Show in Drawer for a remote project's session is unverified
   (HS2-6E32N4).
 - **Policy, limits only.** Place sessions automatically, machine defaults, per-tool session
-  caps and weights (an empty Sessions field leaves the tool out), wind-down and
-  build-ahead, saved with **Apply Policy** at the stored revision. The form never shows
-  the policy's retired `targets[].actions` or `approval.required_for` (HS2-XHQ1EH: the
-  server ignores and drops them); every member it does not show is written back
-  unchanged. Accounts, budgets and
-  per-project limits stay headless (HS2-7WF6JD).
+  caps and weights (an empty Sessions field leaves the tool out), each tool's
+  **accounts** with their sessions and daily budget (HS2-7WF6JD: + Add Account and a
+  remove button per row; a row without a name is dropped; the budget is typed in dollars
+  and stored as whole cents, and more than two decimals is refused, never rounded),
+  wind-down and build-ahead, saved with **Apply Policy** at the stored revision. The form
+  never shows the policy's retired `targets[].actions` or `approval.required_for`
+  (HS2-XHQ1EH: the server ignores and drops them); every member it does not show is
+  written back unchanged.
+- **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
+  and Capacity and Admission, edits that project's entry in the policy (`targets[]`):
+  Orchestrate in This Project (`enabled`), AI Tools Here (the policy's configured tools;
+  the models a kept tool lists stay), Sessions Here (`max_sessions`, at most the
+  machine's limit), Build Ahead (as the policy says, on or never: `speculation`) and Use
+  Different Machine Limits (`machine`, the four machine fields). A project the policy
+  does not list yet says so, since no session may start there. **Apply Limits** stores
+  the policy at the stored revision with only that entry replaced, or appended; every
+  other project and member is unchanged. An edit in progress survives a reload from
+  `orchestration_changed`; a saved one follows the stored policy again, and admission
+  is read again for the new tools.
 
 A project opened from another server cannot add projects here: the add binds on the
 serving machine. The category says so and disables + Add Project (HS2-92FJXM).

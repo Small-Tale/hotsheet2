@@ -11,6 +11,7 @@ const SESSION_ROW = '[data-orchestration-session]';
 const ROW_MENU = '[data-component="popup-menu"]';
 const PROJECT_TYPE = '[data-component="project-general-settings"] [name="project-type"]';
 const POLICY_FIELD = '[data-component="orchestration-policy-settings"] [name]';
+const LIMITS_FIELD = '[data-component="orchestration-project-limits"] [name]';
 
 export interface OrchestrationSettingsWiring {
   /** The project whose settings show: the orchestration project. */
@@ -114,6 +115,42 @@ export function wireOrchestrationSettings(
   lifetime.add(
     delegate(root, 'click', ACTIONS.applyPolicy.selector, () => {
       withProject((projectId) => void settings.applyPolicy(projectId));
+    }),
+  );
+  // HS2-7WF6JD: tool accounts in the policy form, and the selected project's Limits.
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.addPolicyAccount.selector, (_event, target) => {
+      const tool = attribute(target, 'data-tool');
+      if (tool)
+        withProject((projectId) => {
+          settings.addAccount(projectId, tool);
+        });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.removePolicyAccount.selector, (_event, target) => {
+      const tool = attribute(target, 'data-tool'),
+        index = Number(attribute(target, 'data-index'));
+      if (tool && Number.isInteger(index))
+        withProject((projectId) => {
+          settings.removeAccount(projectId, tool, index);
+        });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', LIMITS_FIELD, (_event, target) => {
+      const control = target as HTMLInputElement;
+      withProject((projectId) => {
+        if (control.name === 'limits.tools')
+          settings.changeLimits(projectId, control.name, control.value, control.checked);
+        else
+          settings.changeLimits(projectId, control.name, control.type === 'checkbox' ? control.checked : control.value);
+      });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.applyProjectLimits.selector, () => {
+      withProject((projectId) => void settings.applyLimits(projectId));
     }),
   );
   return () => {

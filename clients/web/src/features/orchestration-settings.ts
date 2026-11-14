@@ -17,13 +17,19 @@ import { ApiHttpError } from '../api';
 import type { Confirm } from '../confirmation';
 import {
   type AddDestination,
+  addPolicyAccount,
   changePolicyDraft,
+  changeTargetLimits,
   destinationOf,
   newUlid,
   type PolicyDraft,
   policyDraftFrom,
   policyFromDraft,
+  policyWithTargetLimits,
+  removePolicyAccount,
   tabProjectIdOf,
+  type TargetLimitsDraft,
+  targetLimitsDraftFrom,
 } from '../orchestration-settings-model';
 
 /** The orchestration reads and writes the settings use; `Api` satisfies it, and tests fake it. */
@@ -92,6 +98,12 @@ export interface OrchestrationDetailState {
   sessions?: OrchestrationSession[];
   sessionsError?: string;
   loading: boolean;
+  /** The project's Limits form (HS2-7WF6JD); kept while the person edits it. */
+  limits?: TargetLimitsDraft;
+  limitsDirty?: boolean;
+  limitsSaving?: boolean;
+  /** The last Limits failure, shown beside the form until the next change. */
+  limitsMessage?: string;
 }
 
 export interface OrchestrationSettingsDependencies {
@@ -253,6 +265,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       });
       const target = selected.value[projectId];
       if (target && active.every((item) => item.target_id !== target)) closeDetail(projectId);
+      else if (target) syncLimits(projectId, target);
     } catch (reason) {
       if (current(`settings:${projectId}`, generation))
         put(projectId, { loading: false, message: `Could not read the orchestration settings. ${messageOf(reason)}` });
@@ -367,9 +380,17 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     };
   };
 
+  /** The Limits form follows the stored policy unless the person is editing it. */
+  function syncLimits(projectId: string, targetId: string) {
+    const detail = details.value[detailKey(projectId, targetId)];
+    if (detail?.limitsDirty) return;
+    putDetail(projectId, targetId, { limits: targetLimitsDraftFrom(stateOf(projectId).policy, targetId) });
+  }
+
   /** A row opens its project's detail in the inspector. */
   function openDetail(projectId: string, targetId: string) {
     selected.value = { ...selected.value, [projectId]: targetId };
+    syncLimits(projectId, targetId);
     dependencies.showInspector();
     void loadDetail(projectId, targetId);
   }
@@ -538,6 +559,67 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     put(projectId, { draft: changePolicyDraft(state.draft, field, value), draftDirty: true, message: '', status: '' });
   }
 
+  /** + Add Account and an account row's remove button on a tool of the policy form (HS2-7WF6JD). */
+  function addAccount(projectId: string, tool: string) {
+    const state = stateOf(projectId);
+    if (!state.draft) return;
+    put(projectId, { draft: addPolicyAccount(state.draft, tool), draftDirty: true, message: '', status: '' });
+  }
+  function removeAccount(projectId: string, tool: string, index: number) {
+    const state = stateOf(projectId);
+    if (!state.draft) return;
+    put(projectId, { draft: removePolicyAccount(state.draft, tool, index), draftDirty: true, message: '', status: '' });
+  }
+
+  /** One control of the selected project's Limits form. */
+  function changeLimits(projectId: string, field: string, value: string | boolean, checked?: boolean) {
+    const target = selected.value[projectId],
+      limits = target ? details.value[detailKey(projectId, target)]?.limits : undefined;
+    if (!target || !limits) return;
+    putDetail(projectId, target, {
+      limits: changeTargetLimits(limits, field, value, checked),
+      limitsDirty: true,
+      limitsMessage: undefined,
+    });
+  }
+
+  /** Apply Limits: store the policy with only this project's entry replaced, at the stored revision. */
+  async function applyLimits(projectId: string) {
+    const api = dependencies.api(projectId),
+      target = selected.value[projectId],
+      detail = target ? details.value[detailKey(projectId, target)] : undefined,
+      state = stateOf(projectId);
+    if (!api || !target || !detail?.limits || detail.limitsSaving) return;
+    const built = policyWithTargetLimits(state.policy, detail.limits);
+    if ('error' in built) {
+      putDetail(projectId, target, { limitsMessage: built.error });
+      return;
+    }
+    putDetail(projectId, target, { limitsSaving: true, limitsMessage: undefined });
+    try {
+      const policy = await api.setOrchestrationPolicy(projectId, state.policy?.revision ?? null, built.policy);
+      const label = state.manifest?.targets.find((item) => item.target_id === target)?.label ?? 'project';
+      put(projectId, {
+        policy,
+        // A clean policy draft follows the stored policy; one being edited stays.
+        draft: state.draftDirty ? state.draft : policyDraftFrom(policy, dependencies.knownTools()),
+        status: `Limits for ${label} saved.`,
+        message: '',
+      });
+      putDetail(projectId, target, {
+        limits: targetLimitsDraftFrom(policy, target),
+        limitsDirty: false,
+        limitsSaving: false,
+      });
+      void loadDetail(projectId, target);
+    } catch (reason) {
+      putDetail(projectId, target, {
+        limitsSaving: false,
+        limitsMessage: `Could not save the limits. ${messageOf(reason)}`,
+      });
+    }
+  }
+
   async function applyPolicy(projectId: string) {
     const api = dependencies.api(projectId),
       state = stateOf(projectId);
@@ -557,6 +639,8 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
         draftDirty: false,
         status: 'Policy saved.',
       });
+      const target = selected.value[projectId];
+      if (target) syncLimits(projectId, target);
     } catch (reason) {
       put(projectId, { message: `Could not save the policy. ${messageOf(reason)}` });
     } finally {
@@ -597,6 +681,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     takeOverSession,
     changePolicy,
     applyPolicy,
+    addAccount,
+    removeAccount,
+    changeLimits,
+    applyLimits,
     changed,
   };
 }

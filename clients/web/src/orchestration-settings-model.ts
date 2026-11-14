@@ -11,6 +11,7 @@ import type {
   OrchestrationPolicyView,
   OrchestrationResolution,
   OrchestrationSession,
+  OrchestrationTargetPolicy,
 } from './api';
 import { parseRemoteProjectId, remoteProjectId } from './remote-projects/identity';
 
@@ -228,11 +229,20 @@ export const POLICY_DEFAULTS = {
   wind_down: { idle_minutes: 15, keep_warm: 0 },
 } as const;
 
+/** One tool account (HS2-7WF6JD). An empty account name drops the row; an empty budget sets none. */
+export interface PolicyAccountDraft {
+  account: string;
+  max_sessions: string;
+  /** Dollars per day, as typed. */
+  budget: string;
+}
+
 export interface PolicyToolDraft {
   tool: string;
   /** Empty: the orchestrator does not start this tool. */
   max_sessions: string;
   weight: string;
+  accounts: PolicyAccountDraft[];
 }
 
 export interface PolicyDraft {
@@ -270,6 +280,11 @@ export function policyDraftFrom(view: OrchestrationPolicyView | undefined, known
         tool: name,
         max_sessions: tool ? String(tool.max_sessions) : '',
         weight: String(tool?.weight ?? POLICY_DEFAULTS.tool.weight),
+        accounts: accountsOf(tool?.accounts).map((account) => ({
+          account: account.account,
+          max_sessions: String(account.max_sessions),
+          budget: account.budget_cents_per_day === undefined ? '' : formatCents(account.budget_cents_per_day),
+        })),
       };
     }),
     idle_minutes: String(body.wind_down?.idle_minutes ?? POLICY_DEFAULTS.wind_down.idle_minutes),
@@ -293,7 +308,76 @@ export function changePolicyDraft(draft: PolicyDraft, field: string, value: stri
       ...draft,
       tools: draft.tools.map((item) => (item.tool === tool[1] ? { ...item, [tool[2]]: value } : item)),
     };
+  const account = /^account\.(.+)\.(\d+)\.(account|max_sessions|budget)$/u.exec(field);
+  if (account)
+    return {
+      ...draft,
+      tools: draft.tools.map((item) =>
+        item.tool === account[1]
+          ? {
+              ...item,
+              accounts: item.accounts.map((row, index) =>
+                index === Number(account[2]) ? { ...row, [account[3]]: value } : row,
+              ),
+            }
+          : item,
+      ),
+    };
   return draft;
+}
+
+/** + Add Account on a tool row (HS2-7WF6JD). */
+export function addPolicyAccount(draft: PolicyDraft, tool: string): PolicyDraft {
+  return {
+    ...draft,
+    tools: draft.tools.map((item) =>
+      item.tool === tool
+        ? { ...item, accounts: [...item.accounts, { account: '', max_sessions: '1', budget: '' }] }
+        : item,
+    ),
+  };
+}
+
+/** Remove one account row of a tool. */
+export function removePolicyAccount(draft: PolicyDraft, tool: string, index: number): PolicyDraft {
+  return {
+    ...draft,
+    tools: draft.tools.map((item) =>
+      item.tool === tool ? { ...item, accounts: item.accounts.filter((_row, at) => at !== index) } : item,
+    ),
+  };
+}
+
+interface StoredAccount {
+  account: string;
+  max_sessions: number;
+  budget_cents_per_day?: number;
+}
+
+/** The stored accounts of a tool, skipping anything that is not an account entry. */
+function accountsOf(value: unknown[] | undefined): StoredAccount[] {
+  return (value ?? []).filter(
+    (item): item is StoredAccount =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as StoredAccount).account === 'string' &&
+      typeof (item as StoredAccount).max_sessions === 'number',
+  );
+}
+
+/** Whole cents as dollars, exactly: 250 → "2.50", 300 → "3". */
+export function formatCents(cents: number): string {
+  const whole = Math.floor(cents / 100),
+    rest = cents % 100;
+  return rest === 0 ? String(whole) : `${String(whole)}.${String(rest).padStart(2, '0')}`;
+}
+
+/** Dollars as typed to whole cents, exactly; more than two decimals is refused, never rounded. */
+export function parseDollars(value: string, label: string): number | string {
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/u.exec(value.trim());
+  if (!match) return `${label} must be an amount in dollars, such as 12.50.`;
+  const [, dollars, cents] = match as unknown as [string, string, string | undefined];
+  return Number(dollars) * 100 + Number((cents ?? '').padEnd(2, '0'));
 }
 
 const LABELS: Readonly<Record<string, string>> = {
@@ -351,12 +435,165 @@ export function policyFromDraft(
     if (typeof sessions === 'string') return { error: sessions };
     if (typeof weight === 'string') return { error: weight };
     const previous = stored.find((tool) => tool.tool === row.tool);
-    tools.push({ ...previous, tool: row.tool, max_sessions: sessions, weight });
+    const accounts: StoredAccount[] = [];
+    for (const entry of row.accounts) {
+      const name = entry.account.trim();
+      if (!name) continue;
+      const label = `${row.tool} account ${name}`,
+        cap = whole(entry.max_sessions, `${label} sessions`, 1, sessions);
+      if (typeof cap === 'string') return { error: cap };
+      if (accounts.some((item) => item.account === name)) return { error: `${label} is listed twice.` };
+      const budget = entry.budget.trim() ? parseDollars(entry.budget, `${label} daily budget`) : undefined;
+      if (typeof budget === 'string') return { error: budget };
+      accounts.push(
+        budget === undefined
+          ? { account: name, max_sessions: cap }
+          : { account: name, max_sessions: cap, budget_cents_per_day: budget },
+      );
+    }
+    const next: NonNullable<OrchestrationPolicyBody['tools']>[number] = {
+      ...previous,
+      tool: row.tool,
+      max_sessions: sessions,
+      weight,
+    };
+    if (accounts.length) next.accounts = accounts;
+    else delete next.accounts;
+    tools.push(next);
   }
   body.machine = { ...body.machine, ...machine };
   body.tools = tools;
   body.wind_down = { ...body.wind_down, idle_minutes: idle, keep_warm: warm };
   body.speculation = { ...body.speculation, allowed: draft.build_ahead };
   body.placement = { ...body.placement, automatic: draft.automatic };
+  return { policy: body };
+}
+
+/* ---- One project's limits (HS2-7WF6JD) ------------------------------------------------- */
+
+export type BuildAheadChoice = 'default' | 'on' | 'off';
+
+/** A project's entry in the policy as the detail's Limits form edits it. */
+export interface TargetLimitsDraft {
+  targetId: string;
+  /** The policy lists this project; until then no session may start there. */
+  listed: boolean;
+  enabled: boolean;
+  /** The tools sessions here may use, in the policy's tool order. */
+  tools: string[];
+  max_sessions: string;
+  machineOverride: boolean;
+  machine: { max_sessions: string; min_free_ram_mb: string; max_cpu_percent: string; min_free_disk_mb: string };
+  buildAhead: BuildAheadChoice;
+}
+
+const targetOf = (body: OrchestrationPolicyBody | null | undefined, targetId: string) =>
+  body?.targets?.find((entry) => entry.target_id === targetId);
+
+/** The Limits draft of one project, from its entry or the defaults the server applies. */
+export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined, targetId: string): TargetLimitsDraft {
+  const body = view?.policy,
+    entry = targetOf(body, targetId),
+    defaults = { ...POLICY_DEFAULTS.machine, ...body?.machine },
+    machine = { ...defaults, ...entry?.machine };
+  return {
+    targetId,
+    listed: Boolean(entry),
+    enabled: entry?.enabled ?? true,
+    tools: (entry?.tools ?? []).map((scope) => scope.tool),
+    max_sessions: String(entry?.max_sessions ?? 1),
+    machineOverride: Boolean(entry?.machine),
+    machine: {
+      max_sessions: String(machine.max_sessions),
+      min_free_ram_mb: String(machine.min_free_ram_mb),
+      max_cpu_percent: String(machine.max_cpu_percent),
+      min_free_disk_mb: String(machine.min_free_disk_mb),
+    },
+    buildAhead: entry?.speculation === undefined ? 'default' : entry.speculation ? 'on' : 'off',
+  };
+}
+
+/**
+ * One Limits control's change. Field names are the controls' `name` attributes; a tool checkbox
+ * passes its tool as `value` and whether it is now checked.
+ */
+export function changeTargetLimits(
+  draft: TargetLimitsDraft,
+  field: string,
+  value: string | boolean,
+  checked?: boolean,
+): TargetLimitsDraft {
+  if (field === 'limits.enabled' && typeof value === 'boolean') return { ...draft, enabled: value };
+  if (field === 'limits.machine_override' && typeof value === 'boolean') return { ...draft, machineOverride: value };
+  if (field === 'limits.tools' && typeof value === 'string' && checked !== undefined)
+    return {
+      ...draft,
+      tools: checked
+        ? draft.tools.includes(value)
+          ? draft.tools
+          : [...draft.tools, value]
+        : draft.tools.filter((tool) => tool !== value),
+    };
+  if (typeof value !== 'string') return draft;
+  if (field === 'limits.max_sessions') return { ...draft, max_sessions: value };
+  if (field === 'limits.build_ahead' && (value === 'default' || value === 'on' || value === 'off'))
+    return { ...draft, buildAhead: value };
+  const machineField = /^limits\.machine\.(.+)$/u.exec(field)?.[1];
+  if (machineField && (MACHINE_FIELDS as readonly string[]).includes(machineField))
+    return { ...draft, machine: { ...draft.machine, [machineField]: value } };
+  return draft;
+}
+
+/**
+ * The policy to store with one project's entry replaced: every other project and member, and the
+ * models this project lists for a tool it keeps, round-trip unchanged. The project's tools must be
+ * configured under the policy's tools, and its session cap may not exceed its machine's.
+ */
+export function policyWithTargetLimits(
+  view: OrchestrationPolicyView | undefined,
+  draft: TargetLimitsDraft,
+): { policy: OrchestrationPolicyBody } | { error: string } {
+  const body: OrchestrationPolicyBody = structuredClone(view?.policy ?? {}),
+    previous = targetOf(body, draft.targetId),
+    configured = new Set((body.tools ?? []).map((tool) => tool.tool));
+  const sessions = whole(draft.max_sessions, 'Sessions Here', 1, 64);
+  if (typeof sessions === 'string') return { error: sessions };
+  const unknown = draft.tools.find((tool) => !configured.has(tool));
+  if (unknown) return { error: `${unknown} is not set up in the policy's tools.` };
+  let machine: OrchestrationTargetPolicy['machine'];
+  if (draft.machineOverride) {
+    const limits: Record<string, number> = {};
+    for (const field of MACHINE_FIELDS) {
+      const parsed = whole(
+        draft.machine[field],
+        LABELS[field],
+        field === 'max_sessions' || field === 'max_cpu_percent' ? 1 : 0,
+        field === 'max_sessions' ? 64 : field === 'max_cpu_percent' ? 100 : undefined,
+      );
+      if (typeof parsed === 'string') return { error: parsed };
+      limits[field] = parsed;
+    }
+    machine = limits;
+  }
+  const machineCap = machine?.max_sessions ?? body.machine?.max_sessions ?? POLICY_DEFAULTS.machine.max_sessions;
+  if (sessions > machineCap)
+    return { error: `Sessions Here must be at most ${String(machineCap)}, the machine's session limit.` };
+  const entry: OrchestrationTargetPolicy = {
+    ...previous,
+    target_id: draft.targetId,
+    enabled: draft.enabled,
+    tools: draft.tools.map((tool) => previous?.tools?.find((scope) => scope.tool === tool) ?? { tool }),
+    max_sessions: sessions,
+  };
+  if (machine) entry.machine = machine;
+  else delete entry.machine;
+  if (draft.buildAhead === 'default') delete entry.speculation;
+  else entry.speculation = draft.buildAhead === 'on';
+  // The retired actions list is never written back (HS2-XHQ1EH).
+  delete entry.actions;
+  const targets = body.targets ?? [];
+  body.targets = previous
+    ? targets.map((item) => (item.target_id === draft.targetId ? entry : item))
+    : [...targets, entry];
   return { policy: body };
 }

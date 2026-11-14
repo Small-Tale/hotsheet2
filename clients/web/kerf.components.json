@@ -8661,7 +8661,7 @@
       "id": "orchestration-policy-settings",
       "name": "OrchestrationPolicySettings",
       "kind": "component",
-      "purpose": "The limits-only orchestration policy form: Place sessions automatically, machine defaults, per-tool session caps and weights, wind-down, build-ahead, and Apply Policy. It never shows the policy's action or approval lists (HS2-W27N1D, HS2-XHQ1EH).",
+      "purpose": "The limits-only orchestration policy form: Place sessions automatically, machine defaults, per-tool session caps and weights with each tool's accounts and daily budgets (HS2-7WF6JD), wind-down, build-ahead, and Apply Policy. It never shows the policy's action or approval lists (HS2-W27N1D, HS2-XHQ1EH).",
       "source": "src/components/orchestration-policy-settings.tsx",
       "publicExports": [
         {
@@ -8726,7 +8726,7 @@
       "id": "orchestration-project-detail",
       "name": "OrchestrationProjectDetail",
       "kind": "component",
-      "purpose": "One orchestrated project's detail in the inspector: binding and connection, capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
+      "purpose": "One orchestrated project's detail in the inspector: binding and connection, the project's own limits with Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
       "source": "src/components/orchestration-project-detail.tsx",
       "publicExports": [
         {

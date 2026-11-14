@@ -1155,7 +1155,10 @@ Project Settings → General (Project Type) and Settings → Orchestration (HS2-
 `orchestration-settings-interactions.ts`, the controller `features/orchestration-settings.ts`,
 its application wiring `features/orchestration-settings-surface.tsx`, the pure helpers
 `orchestration-settings-model.ts`, and the catalog fixtures
-`ux-demo/orchestration-settings-fixtures.ts`.
+`ux-demo/orchestration-settings-fixtures.ts`. HS2-7WF6JD added the project detail's Limits
+section (`targetLimitsDraftFrom`, `changeTargetLimits`, `policyWithTargetLimits`) and tool
+accounts with daily budgets in the policy form (`addPolicyAccount`, `removePolicyAccount`,
+`parseDollars`, `formatCents`).
 
 ## Where do I look for X?
 

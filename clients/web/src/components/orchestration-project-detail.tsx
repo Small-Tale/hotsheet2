@@ -1,11 +1,17 @@
 import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
+import { CheckboxGroup } from '@kerfjs/ui/checkbox-group';
 import { rem } from '@kerfjs/ui/css-values';
+import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { Bot, CircleStop, Hand, MoreHorizontal, PanelBottomOpen, Trash2 } from 'lucide';
@@ -39,6 +45,8 @@ export interface OrchestrationProjectDetailProps {
   sessions?: readonly OrchestrationProjectDetailSession[];
   /** Resource namespaces the policy requires on this project. */
   claimNamespaces?: readonly string[];
+  /** The AI tools the policy sets up, which the Limits form offers (HS2-7WF6JD). */
+  policyTools?: readonly string[];
   removing?: boolean;
   toolLabel?: (tool: string) => string;
   /** Formats a time in milliseconds; the catalog passes a fixed clock. */
@@ -99,6 +107,7 @@ export function OrchestrationProjectDetail({
   detail,
   sessions = [],
   claimNamespaces = [],
+  policyTools = [],
   removing = false,
   toolLabel = (tool) => tool,
   formatTime = defaultTime,
@@ -120,6 +129,7 @@ export function OrchestrationProjectDetail({
           </ValueTable>
           {detail?.resolutionError ? unreadable('The connection', detail.resolutionError) : null}
         </section>
+        {limitsSection({ detail, policyTools, toolLabel })}
         <section aria-label="Capacity and Admission">
           <ListHeader label="Capacity and Admission" />
           {capacity ? (
@@ -278,6 +288,128 @@ export function OrchestrationProjectDetail({
         </section>
       </List>
     </div>
+  );
+}
+
+interface LimitsSectionProps {
+  detail?: OrchestrationDetailState;
+  policyTools: readonly string[];
+  toolLabel: (tool: string) => string;
+}
+
+/**
+ * The project's own limits in the policy (HS2-7WF6JD): whether the orchestrator acts here, the AI
+ * tools sessions here may use, the session cap, a machine override and build-ahead. Applied with
+ * Apply Limits, which writes only this project's entry; the policy stays limits only.
+ */
+function limitsSection({ detail, policyTools, toolLabel }: LimitsSectionProps) {
+  const limits = detail?.limits,
+    saving = Boolean(detail?.limitsSaving),
+    disabled = saving || !limits;
+  return (
+    <section aria-label="Limits" data-component="orchestration-project-limits">
+      <ListHeader label="Limits" />
+      <List gap="m" textInsets="rl">
+        {limits && !limits.listed ? (
+          <Text tone="quiet" size="compact" flush>
+            The policy does not list this project yet, so no session starts here. Apply Limits to add it.
+          </Text>
+        ) : null}
+        <Checkbox
+          name="limits.enabled"
+          label="Orchestrate in This Project"
+          hint="Off: the orchestrator starts nothing here. It can still stop sessions."
+          checked={limits?.enabled ?? true}
+          disabled={disabled}
+        />
+        {policyTools.length ? (
+          <CheckboxGroup
+            name="limits.tools"
+            label="AI Tools Here"
+            hint="Sessions here may use these tools."
+            choices={policyTools.map((tool) => ({ value: tool, label: toolLabel(tool) }))}
+            value={(limits?.tools ?? []).filter((tool) => policyTools.includes(tool))}
+            disabled={disabled}
+          />
+        ) : (
+          <Text tone="quiet" size="compact" flush>
+            Set up AI tools in the policy first; then choose which ones may run here.
+          </Text>
+        )}
+        <TextField
+          name="limits.max_sessions"
+          label="Sessions Here"
+          type="number"
+          inputMode="numeric"
+          value={limits?.max_sessions ?? ''}
+          disabled={disabled}
+        />
+        <Select
+          name="limits.build_ahead"
+          label="Build Ahead"
+          value={limits?.buildAhead ?? 'default'}
+          disabled={disabled}
+          choices={[
+            { value: 'default', label: 'As the Policy Says' },
+            { value: 'on', label: 'Build Ahead Here' },
+            { value: 'off', label: 'Never Build Ahead Here' },
+          ]}
+        />
+        <Checkbox
+          name="limits.machine_override"
+          label="Use Different Machine Limits"
+          hint="Off: this project's machine uses the policy's machine defaults."
+          checked={limits?.machineOverride ?? false}
+          disabled={disabled}
+        />
+        {limits?.machineOverride ? (
+          <Grid minColumnWidth={rem(10)} gap="m">
+            <TextField
+              name="limits.machine.max_sessions"
+              label="Sessions per Machine"
+              type="number"
+              inputMode="numeric"
+              value={limits.machine.max_sessions}
+              disabled={disabled}
+            />
+            <TextField
+              name="limits.machine.min_free_ram_mb"
+              label="Free Memory Floor (MB)"
+              type="number"
+              inputMode="numeric"
+              value={limits.machine.min_free_ram_mb}
+              disabled={disabled}
+            />
+            <TextField
+              name="limits.machine.max_cpu_percent"
+              label="CPU Ceiling (%)"
+              type="number"
+              inputMode="numeric"
+              value={limits.machine.max_cpu_percent}
+              disabled={disabled}
+            />
+            <TextField
+              name="limits.machine.min_free_disk_mb"
+              label="Free Disk Floor (MB)"
+              type="number"
+              inputMode="numeric"
+              value={limits.machine.min_free_disk_mb}
+              disabled={disabled}
+            />
+          </Grid>
+        ) : null}
+        {detail?.limitsMessage ? (
+          <Text tone="danger" size="compact" flush>
+            {detail.limitsMessage}
+          </Text>
+        ) : null}
+        <Row gap="xs">
+          <Button emphasis="secondary" action={ACTIONS.applyProjectLimits.value} disabled={disabled} loading={saving}>
+            Apply Limits
+          </Button>
+        </Row>
+      </List>
+    </section>
   );
 }
 

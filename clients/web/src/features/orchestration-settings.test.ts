@@ -302,3 +302,78 @@ describe('live updates (HS2-W27N1D)', () => {
     expect(t.api.orchestrationTargets).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("a project's limits and tool accounts (HS2-7WF6JD)", () => {
+  it('applies only the selected project entry, and keeps an edit in progress across a reload', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.api);
+    // The policy does not list API yet: the form starts from the defaults.
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits).toMatchObject({ listed: false, tools: [] });
+    t.settings.changeLimits(DEMO_OWNER, 'limits.tools', 'claude', true);
+    t.settings.changeLimits(DEMO_OWNER, 'limits.max_sessions', '2');
+    // An announcement reloads the settings; the edit in progress stays.
+    await t.settings.loadSettings(DEMO_OWNER);
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits).toMatchObject({ tools: ['claude'], max_sessions: '2' });
+    await t.settings.applyLimits(DEMO_OWNER);
+    const [, revision, body] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[0];
+    expect(revision).toBe('01JSYNTHREVISION0000000002');
+    expect(body.targets?.map((entry) => entry.target_id)).toEqual([
+      DEMO_TARGETS.web,
+      DEMO_TARGETS.docs,
+      DEMO_TARGETS.api,
+    ]);
+    expect(body.targets?.[2]).toEqual({
+      target_id: DEMO_TARGETS.api,
+      enabled: true,
+      tools: [{ tool: 'claude' }],
+      max_sessions: 2,
+    });
+    expect(state(t).status).toBe('Limits for API saved.');
+    // Saved: the form follows the stored policy again, and admission is asked for the new tool.
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.admissionTools).toEqual(['claude']);
+    });
+    expect(t.settings.detailOf(DEMO_OWNER)).toMatchObject({ limitsDirty: false, limits: { listed: true } });
+  });
+
+  it('says why limits are refused, locally or by the server, and keeps the draft', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.web);
+    t.settings.changeLimits(DEMO_OWNER, 'limits.max_sessions', '9');
+    await t.settings.applyLimits(DEMO_OWNER);
+    expect(t.settings.detailOf(DEMO_OWNER)?.limitsMessage).toBe(
+      "Sessions Here must be at most 2, the machine's session limit.",
+    );
+    expect(t.api.setOrchestrationPolicy).not.toHaveBeenCalled();
+    t.settings.changeLimits(DEMO_OWNER, 'limits.max_sessions', '1');
+    expect(t.settings.detailOf(DEMO_OWNER)?.limitsMessage).toBeUndefined();
+    vi.mocked(t.api.setOrchestrationPolicy).mockRejectedValueOnce(new ApiHttpError('state changed', 409, 'conflict'));
+    await t.settings.applyLimits(DEMO_OWNER);
+    expect(t.settings.detailOf(DEMO_OWNER)).toMatchObject({
+      limitsSaving: false,
+      limitsDirty: true,
+      limitsMessage: 'Could not save the limits. state changed',
+      limits: { max_sessions: '1' },
+    });
+  });
+
+  it('adds, edits and removes a tool account in the policy form', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.addAccount(DEMO_OWNER, 'codex');
+    t.settings.changePolicy(DEMO_OWNER, 'account.codex.0.account', 'team');
+    t.settings.changePolicy(DEMO_OWNER, 'account.codex.0.budget', '12.50');
+    t.settings.addAccount(DEMO_OWNER, 'codex');
+    t.settings.removeAccount(DEMO_OWNER, 'codex', 1);
+    await t.settings.applyPolicy(DEMO_OWNER);
+    const [, , body] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[0];
+    expect(body.tools?.find((tool) => tool.tool === 'codex')?.accounts).toEqual([
+      { account: 'team', max_sessions: 1, budget_cents_per_day: 1250 },
+    ]);
+    expect(state(t).draft?.tools.find((tool) => tool.tool === 'codex')?.accounts).toEqual([
+      { account: 'team', max_sessions: '1', budget: '12.50' },
+    ]);
+  });
+});

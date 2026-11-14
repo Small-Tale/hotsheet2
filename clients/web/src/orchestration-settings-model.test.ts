@@ -3,16 +3,23 @@ import { describe, expect, it } from 'vitest';
 import type { OrchestrationBinding, OrchestrationManifest, OrchestrationPolicyView } from './api';
 import {
   addChoices,
+  addPolicyAccount,
   changePolicyDraft,
+  changeTargetLimits,
   connectionStatus,
   destinationOf,
+  formatCents,
   formatMegabytes,
   newUlid,
+  parseDollars,
   policyDraftFrom,
   policyFromDraft,
+  policyWithTargetLimits,
   projectRows,
+  removePolicyAccount,
   sessionStatus,
   tabProjectIdOf,
+  targetLimitsDraftFrom,
 } from './orchestration-settings-model';
 
 const REMOTE = '01JSYNTHREMTE0000000000001';
@@ -165,8 +172,13 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
       min_free_disk_mb: '5120',
     });
     expect(draft.tools).toEqual([
-      { tool: 'codex', max_sessions: '2', weight: '70' },
-      { tool: 'claude', max_sessions: '', weight: '50' },
+      {
+        tool: 'codex',
+        max_sessions: '2',
+        weight: '70',
+        accounts: [{ account: 'team', max_sessions: '1', budget: '' }],
+      },
+      { tool: 'claude', max_sessions: '', weight: '50', accounts: [] },
     ]);
     expect(policyDraftFrom(undefined, [])).toMatchObject({ automatic: false, idle_minutes: '15', keep_warm: '0' });
   });
@@ -223,5 +235,210 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
       '0',
     );
     expect(policyFromDraft(undefined, weight)).toEqual({ error: 'claude weight must be 1 to 100.' });
+  });
+});
+
+describe('tool accounts and daily budgets (HS2-7WF6JD)', () => {
+  const stored: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: {
+      tools: [
+        {
+          tool: 'codex',
+          max_sessions: 3,
+          weight: 60,
+          accounts: [{ account: 'team', max_sessions: 2, budget_cents_per_day: 1250 }],
+        },
+      ],
+    },
+  };
+
+  it('converts budgets between dollars and whole cents exactly, never rounding', () => {
+    for (const [cents, text] of [
+      [0, '0'],
+      [5, '0.05'],
+      [250, '2.50'],
+      [300, '3'],
+      [123_456, '1234.56'],
+    ] as const) {
+      expect(formatCents(cents)).toBe(text);
+      expect(parseDollars(text, 'Budget')).toBe(cents);
+    }
+    expect(parseDollars('2.5', 'Budget')).toBe(250);
+    for (const bad of ['1.005', '-1', '1e3', '$4', '', '.5'])
+      expect(parseDollars(bad, 'Budget')).toBe('Budget must be an amount in dollars, such as 12.50.');
+  });
+
+  it('round-trips accounts, and adds, edits and removes rows in any order', () => {
+    let draft = policyDraftFrom(stored, ['codex']);
+    expect(draft.tools[0].accounts).toEqual([{ account: 'team', max_sessions: '2', budget: '12.50' }]);
+    // Unchanged: stored exactly as it was.
+    const same = policyFromDraft(stored, draft);
+    expect('policy' in same && same.policy.tools).toEqual(stored.policy!.tools);
+    // Add two, edit the second, remove the first: the edited one keeps its values.
+    draft = addPolicyAccount(addPolicyAccount(draft, 'codex'), 'codex');
+    draft = changePolicyDraft(draft, 'account.codex.2.account', 'night');
+    draft = changePolicyDraft(draft, 'account.codex.2.budget', '3');
+    draft = removePolicyAccount(draft, 'codex', 0);
+    // The empty row (index 0 now) is dropped when stored; the budget is in cents.
+    const built = policyFromDraft(stored, draft);
+    expect('policy' in built && built.policy.tools?.[0].accounts).toEqual([
+      { account: 'night', max_sessions: 1, budget_cents_per_day: 300 },
+    ]);
+    // Removing every row stores the tool without accounts; adding one back refills it.
+    let emptied = removePolicyAccount(removePolicyAccount(draft, 'codex', 1), 'codex', 0);
+    const none = policyFromDraft(stored, emptied);
+    expect('policy' in none && none.policy.tools?.[0]).toEqual({ tool: 'codex', max_sessions: 3, weight: 60 });
+    emptied = changePolicyDraft(addPolicyAccount(emptied, 'codex'), 'account.codex.0.account', 'team');
+    const refilled = policyFromDraft(stored, emptied);
+    expect('policy' in refilled && refilled.policy.tools?.[0].accounts).toEqual([{ account: 'team', max_sessions: 1 }]);
+    // Unknown tools or rows change nothing.
+    expect(addPolicyAccount(draft, 'nope')).toEqual(draft);
+    expect(changePolicyDraft(draft, 'account.codex.9.account', 'x')).toEqual(draft);
+  });
+
+  it('refuses accounts the server would refuse', () => {
+    const draft = policyDraftFrom(stored, ['codex']);
+    expect(policyFromDraft(stored, changePolicyDraft(draft, 'account.codex.0.max_sessions', '4'))).toEqual({
+      error: 'codex account team sessions must be 1 to 3.',
+    });
+    expect(policyFromDraft(stored, changePolicyDraft(draft, 'account.codex.0.budget', '1.234'))).toEqual({
+      error: 'codex account team daily budget must be an amount in dollars, such as 12.50.',
+    });
+    const twice = changePolicyDraft(addPolicyAccount(draft, 'codex'), 'account.codex.1.account', 'team');
+    expect(policyFromDraft(stored, twice)).toEqual({ error: 'codex account team is listed twice.' });
+  });
+});
+
+describe("one project's limits (HS2-7WF6JD)", () => {
+  const stored: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: {
+      machine: { max_sessions: 3 },
+      tools: [
+        { tool: 'codex', max_sessions: 3 },
+        { tool: 'claude', max_sessions: 2 },
+      ],
+      targets: [
+        { target_id: 'T1', tools: [{ tool: 'codex', models: ['gpt-x'] }], max_sessions: 2, actions: ['tickets_read'] },
+        { target_id: 'T2', enabled: false, tools: [{ tool: 'claude' }], max_sessions: 1, speculation: true },
+      ],
+      placement: { automatic: true },
+    },
+  };
+
+  it('starts from the entry, or from the defaults for a project the policy does not list', () => {
+    expect(targetLimitsDraftFrom(stored, 'T2')).toEqual({
+      targetId: 'T2',
+      listed: true,
+      enabled: false,
+      tools: ['claude'],
+      max_sessions: '1',
+      machineOverride: false,
+      machine: { max_sessions: '3', min_free_ram_mb: '2048', max_cpu_percent: '90', min_free_disk_mb: '5120' },
+      buildAhead: 'on',
+    });
+    expect(targetLimitsDraftFrom(stored, 'T9')).toMatchObject({
+      listed: false,
+      enabled: true,
+      tools: [],
+      max_sessions: '1',
+      buildAhead: 'default',
+    });
+  });
+
+  it('replaces only its own entry, keeping models, other projects and every other member', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    draft = changeTargetLimits(draft, 'limits.tools', 'claude', true);
+    draft = changeTargetLimits(draft, 'limits.max_sessions', '3');
+    draft = changeTargetLimits(draft, 'limits.build_ahead', 'off');
+    const built = policyWithTargetLimits(stored, draft);
+    if (!('policy' in built)) throw new Error(built.error);
+    expect(built.policy.targets).toEqual([
+      {
+        target_id: 'T1',
+        enabled: true,
+        tools: [{ tool: 'codex', models: ['gpt-x'] }, { tool: 'claude' }],
+        max_sessions: 3,
+        speculation: false,
+      },
+      stored.policy!.targets![1],
+    ]);
+    expect(built.policy.placement).toEqual({ automatic: true });
+    expect(built.policy.tools).toEqual(stored.policy!.tools);
+    expect(stored.policy!.targets![0].actions).toEqual(['tickets_read']);
+    // A project the policy does not list is appended.
+    const added = policyWithTargetLimits(
+      stored,
+      changeTargetLimits(targetLimitsDraftFrom(stored, 'T3'), 'limits.tools', 'codex', true),
+    );
+    expect('policy' in added && added.policy.targets?.map((entry) => entry.target_id)).toEqual(['T1', 'T2', 'T3']);
+  });
+
+  it('walks tool, override and build-ahead transitions in any order', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    // Repeated and out-of-order tool toggles converge.
+    for (const [tool, checked] of [
+      ['claude', true],
+      ['claude', true],
+      ['codex', false],
+      ['codex', false],
+      ['codex', true],
+    ] as const)
+      draft = changeTargetLimits(draft, 'limits.tools', tool, checked);
+    expect(draft.tools).toEqual(['claude', 'codex']);
+    // Empty, then refilled.
+    draft = changeTargetLimits(
+      changeTargetLimits(draft, 'limits.tools', 'claude', false),
+      'limits.tools',
+      'codex',
+      false,
+    );
+    expect(draft.tools).toEqual([]);
+    draft = changeTargetLimits(draft, 'limits.tools', 'codex', true);
+    // The machine override on, edited, off (dropped), on again (kept values).
+    draft = changeTargetLimits(draft, 'limits.machine_override', true);
+    draft = changeTargetLimits(draft, 'limits.machine.max_sessions', '4');
+    let built = policyWithTargetLimits(stored, draft);
+    expect('policy' in built && built.policy.targets?.[0].machine).toEqual({
+      max_sessions: 4,
+      min_free_ram_mb: 2048,
+      max_cpu_percent: 90,
+      min_free_disk_mb: 5120,
+    });
+    draft = changeTargetLimits(draft, 'limits.machine_override', false);
+    built = policyWithTargetLimits(stored, draft);
+    expect('policy' in built && 'machine' in built.policy.targets![0]).toBe(false);
+    draft = changeTargetLimits(draft, 'limits.machine_override', true);
+    expect(draft.machine.max_sessions).toBe('4');
+    // Build ahead back to the policy default drops the override.
+    draft = changeTargetLimits(changeTargetLimits(draft, 'limits.build_ahead', 'on'), 'limits.build_ahead', 'default');
+    built = policyWithTargetLimits(stored, draft);
+    expect('policy' in built && 'speculation' in built.policy.targets![0]).toBe(false);
+    // Unknown fields and values change nothing.
+    expect(changeTargetLimits(draft, 'limits.build_ahead', 'maybe')).toBe(draft);
+    expect(changeTargetLimits(draft, 'limits.unknown', '1')).toBe(draft);
+    expect(changeTargetLimits(draft, 'limits.enabled', 'yes')).toBe(draft);
+  });
+
+  it('refuses limits the server would refuse', () => {
+    const draft = targetLimitsDraftFrom(stored, 'T1');
+    expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.max_sessions', '0'))).toEqual({
+      error: 'Sessions Here must be 1 to 64.',
+    });
+    expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.max_sessions', '4'))).toEqual({
+      error: "Sessions Here must be at most 3, the machine's session limit.",
+    });
+    expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.tools', 'gemini', true))).toEqual({
+      error: "gemini is not set up in the policy's tools.",
+    });
+    const override = changeTargetLimits(
+      changeTargetLimits(draft, 'limits.machine_override', true),
+      'limits.machine.max_cpu_percent',
+      '0',
+    );
+    expect(policyWithTargetLimits(stored, override)).toEqual({ error: 'CPU Ceiling must be 1 to 100.' });
   });
 });

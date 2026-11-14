@@ -186,6 +186,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
         ),
       ],
       removing: Boolean(state?.busy.includes(target)),
+      policyTools: (policy?.tools ?? []).map((tool) => tool.tool),
       toolLabel: dependencies.toolLabel,
     });
   }
