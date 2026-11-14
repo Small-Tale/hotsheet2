@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const roles = ['dispatcher', 'integrator', 'worker'];
+const roles = ['dispatcher', 'integrator', 'worker', 'planner'];
 const write = process.argv.slice(2).includes('--write');
 if (process.argv.slice(2).some((argument) => !['--write', '--check'].includes(argument))) {
   throw new Error('Use --write or --check');

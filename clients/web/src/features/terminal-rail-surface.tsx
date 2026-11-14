@@ -150,6 +150,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
             return 'board';
           case 'settings':
           case 'workers':
+          case 'orchestration':
           case 'list':
             return 'list';
           default:

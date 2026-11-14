@@ -47,6 +47,7 @@ fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> P
         target: target.clone(),
         prerequisites,
         resources: Vec::new(),
+        tool: None,
         revision: 1,
         created_at_ms: 1,
         updated_at_ms: 1,
@@ -63,6 +64,7 @@ fn seen(status: &str, opted_out: Option<bool>) -> TicketFacts {
             up_next: None,
             created_at_ms: None,
             opted_out,
+            slug: None,
         }),
         unreachable: None,
     }

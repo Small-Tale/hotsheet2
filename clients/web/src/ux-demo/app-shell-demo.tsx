@@ -19,6 +19,7 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
 import { AppShell } from '../components/app-shell';
 import { type ConnectionState, ConnectionStateBanner } from '../components/connection-state-banner';
+import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import { projectSidebarPanel } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { PROJECT_TAB_BAR_ID } from '../components/project-tab-bar';
@@ -48,6 +49,7 @@ import { type DemoModule, type FormControl, listen } from './demo-module';
 import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
 import { GRID_SIDEBAR_DEMO_ALL, GRID_SIDEBAR_DEMO_PROJECTS, gridSidebarDemoSettings } from './grid-sidebar-demo';
 import { DEMO_LIVE_NOW_MS, demoHostHealth, demoLiveState } from './live-section-fixtures';
+import { demoClock, demoTimeline } from './orchestration-fixtures';
 import {
   collapsedCommandGroups,
   commandGroupExpanded,
@@ -493,6 +495,8 @@ export function AppShellDemo() {
         return <TicketBoard columns={workspaceColumns()} label="Project board" />;
       case 'workers':
         return <DemoWorkerColumns />;
+      case 'orchestration':
+        return <OrchestrationTimelineView timeline={demoTimeline('running')} clock={demoClock} />;
       case 'notifications':
       case 'list':
         return <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />;

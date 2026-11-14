@@ -1,0 +1,257 @@
+/**
+ * HS2-J89JC7: the orchestration timeline read model, as `GET /checkouts/{owner}/orchestration/timeline`
+ * answers it (docs/26 and the OpenAPI `OrchestrationTimeline` schema). Members the Rust DTO skips when
+ * unset are optional here and never `null`.
+ */
+import { ServerResponseShapeError } from './server-response-parsers';
+
+export type TimelinePhase = 'no_projects' | 'no_plan' | 'proposed' | 'running' | 'paused';
+export type WaveKind = 'done' | 'working_now' | 'next' | 'then' | 'later' | 'planned';
+export type EstimateBasis = 'started' | 'measured' | 'default';
+export type TimelineItemState =
+  | 'running'
+  | 'provisional'
+  | 'ready'
+  | 'waits_for_prerequisite'
+  | 'waits_for_permission'
+  | 'waits_for_decision'
+  | 'done';
+export type TargetLocation = 'local' | 'remote' | 'unbound';
+export type StartBlocked = 'no_projects' | 'no_plan' | 'policy_absent' | 'placement_actor_missing' | 'running';
+
+export interface TimelineTarget {
+  target_id: string;
+  label: string;
+  location: TargetLocation;
+  machine_label?: string;
+  checkout_id?: string;
+}
+
+export interface TimelineRun {
+  run_id: string;
+  state: string;
+  worker_id?: string;
+  lease_expires_at_ms?: number;
+  paused: boolean;
+  cancel_requested: boolean;
+  unreachable_since_ms?: number;
+  last_confirmed_at_ms?: number;
+  created_at_ms: number;
+  finished_at_ms?: number;
+}
+
+export interface TimelinePermission {
+  kind: 'approval' | 'permission';
+  request_id: string;
+  action: string;
+  operation_id?: string;
+  requested_at_ms?: number;
+}
+
+export interface TimelineWaitsOn {
+  target_id: string;
+  connection_id: string;
+  native_id: string;
+  slug?: string;
+  step_id?: string;
+  reason: string;
+}
+
+export interface TimelinePlacement {
+  at_ms: number;
+  decision: 'start' | 'keep' | 'unplaced';
+  reason?: string;
+  tool?: string;
+  model?: string;
+  session_id?: string;
+  outcome?: string;
+}
+
+export interface TimelineItem {
+  step_id: string;
+  goal: { connection_id: string; native_id: string };
+  goal_slug?: string;
+  goal_title?: string;
+  target: { target_id: string; connection_id: string; native_id: string };
+  slug?: string;
+  title?: string;
+  status?: string;
+  priority?: string;
+  category?: string;
+  project_label: string;
+  location: TargetLocation;
+  machine_label?: string;
+  tool?: string;
+  model?: string;
+  session_id?: string;
+  session_state?: string;
+  state: TimelineItemState;
+  level: string;
+  reasons?: string[];
+  waits_on?: TimelineWaitsOn[];
+  run?: TimelineRun;
+  permission?: TimelinePermission;
+  decision?: { note_id?: string };
+  placement?: TimelinePlacement;
+  started_at_ms?: number;
+  finished_at_ms?: number;
+  estimated_start_ms?: number;
+}
+
+export interface TimelineWave {
+  kind: WaveKind;
+  ordinal: number;
+  estimated_start_ms?: number;
+  estimate?: EstimateBasis;
+  items: TimelineItem[];
+}
+
+export interface OrchestrationTimeline {
+  version: string;
+  now_ms: number;
+  declared: boolean;
+  phase: TimelinePhase;
+  automatic: boolean;
+  kick_off: { can_start: boolean; start_blocked?: StartBlocked; can_pause: boolean; policy_revision?: string };
+  running_since_ms?: number;
+  sessions: number;
+  targets: TimelineTarget[];
+  waves: TimelineWave[];
+  counts: Record<string, number>;
+  wave_minutes: number;
+  estimate: EstimateBasis;
+}
+
+const PHASES: readonly TimelinePhase[] = ['no_projects', 'no_plan', 'proposed', 'running', 'paused'];
+const WAVES: readonly WaveKind[] = ['done', 'working_now', 'next', 'then', 'later', 'planned'];
+const STATES: readonly TimelineItemState[] = [
+  'running',
+  'provisional',
+  'ready',
+  'waits_for_prerequisite',
+  'waits_for_permission',
+  'waits_for_decision',
+  'done',
+];
+const LOCATIONS: readonly TargetLocation[] = ['local', 'remote', 'unbound'];
+
+function fail(): never {
+  throw new ServerResponseShapeError('orchestration timeline');
+}
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : fail();
+}
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : fail();
+}
+function count(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fail();
+}
+function one<T extends string>(value: unknown, choices: readonly T[]): T {
+  return typeof value === 'string' && (choices as readonly string[]).includes(value) ? (value as T) : fail();
+}
+/** An optional member: absent, or the stated type (never `null`). */
+function optional<T>(value: unknown, parse: (value: unknown) => T): T | undefined {
+  return value === undefined ? undefined : parse(value);
+}
+function list<T>(value: unknown, parse: (value: unknown) => T): T[] {
+  return Array.isArray(value) ? value.map(parse) : fail();
+}
+
+function item(value: unknown): TimelineItem {
+  const row = record(value),
+    goal = record(row.goal),
+    target = record(row.target);
+  for (const key of ['goal_slug', 'goal_title', 'slug', 'title', 'status', 'priority', 'category', 'tool'] as const)
+    optional(row[key], text);
+  optional(row.reasons, (reasons) => list(reasons, text));
+  optional(row.waits_on, (waits) =>
+    list(waits, (wait) => {
+      const entry = record(wait);
+      text(entry.target_id);
+      text(entry.native_id);
+      text(entry.reason);
+      return entry;
+    }),
+  );
+  optional(row.run, (run) => {
+    const entry = record(run);
+    text(entry.run_id);
+    text(entry.state);
+    count(entry.created_at_ms);
+    return entry;
+  });
+  optional(row.permission, (permission) => {
+    const entry = record(permission);
+    one(entry.kind, ['approval', 'permission']);
+    text(entry.request_id);
+    text(entry.action);
+    return entry;
+  });
+  for (const key of ['started_at_ms', 'finished_at_ms', 'estimated_start_ms'] as const) optional(row[key], count);
+  text(row.step_id);
+  text(goal.native_id);
+  text(target.target_id);
+  text(target.native_id);
+  text(row.project_label);
+  one(row.location, LOCATIONS);
+  one(row.state, STATES);
+  text(row.level);
+  return row as unknown as TimelineItem;
+}
+
+/** Validate the timeline's shape; a drifted response throws instead of rendering half a view. */
+export function parseOrchestrationTimeline(value: unknown): OrchestrationTimeline {
+  const view = record(value),
+    kickOff = record(view.kick_off);
+  text(view.version);
+  count(view.now_ms);
+  if (typeof view.declared !== 'boolean' || typeof view.automatic !== 'boolean') fail();
+  one(view.phase, PHASES);
+  if (typeof kickOff.can_start !== 'boolean' || typeof kickOff.can_pause !== 'boolean') fail();
+  optional(view.running_since_ms, count);
+  count(view.sessions);
+  list(view.targets, (target) => {
+    const entry = record(target);
+    text(entry.target_id);
+    text(entry.label);
+    one(entry.location, LOCATIONS);
+    return entry;
+  });
+  list(view.waves, (wave) => {
+    const entry = record(wave);
+    one(entry.kind, WAVES);
+    count(entry.ordinal);
+    optional(entry.estimated_start_ms, count);
+    list(entry.items, item);
+    return entry;
+  });
+  record(view.counts);
+  count(view.wave_minutes);
+  return view as unknown as OrchestrationTimeline;
+}
+
+/** The stored orchestration policy (HS2-YCJDEB): absent `policy` when the project has none. */
+export interface OrchestrationPolicyView {
+  enabled: boolean;
+  revision: string | null;
+  policy: (Record<string, unknown> & { placement?: Record<string, unknown> }) | null;
+}
+
+export function parseOrchestrationPolicy(value: unknown): OrchestrationPolicyView {
+  const view = record(value);
+  if (typeof view.enabled !== 'boolean') fail();
+  if (view.revision !== null && typeof view.revision !== 'string') fail();
+  if (view.policy !== null) record(view.policy);
+  return view as unknown as OrchestrationPolicyView;
+}
+
+/** An orchestration answer the inspector reads a few members of (gates, run events, control results). */
+export function parseOrchestrationRecord(value: unknown): Record<string, unknown> {
+  return record(value);
+}
+
+/** An orchestration list answer (validation evidence). */
+export function parseOrchestrationList(value: unknown): Array<Record<string, unknown>> {
+  return list(value, record);
+}

@@ -4,6 +4,7 @@ use hotsheet_ticketing::orchestration::{AccessRequest, CreateGrant, SetPolicy};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use super::tickets::identifier;
 use super::*;
 
 pub fn is_path(path: &str) -> bool {
@@ -38,6 +39,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "run-reconcile"]
             // HS2-S13719: the progress and cost summary of the owner's runs.
             | ["checkouts", _, "orchestration", "summary"]
+            // HS2-J89JC7: the plan as dependency waves, a long poll by version.
+            | ["checkouts", _, "orchestration", "timeline"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -64,6 +67,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "target-sessions"]
             // HS2-ECWG50: the scheduler's plan, explanation, decision log and tick.
             | ["checkouts", _, "orchestration", "scheduler", _]
+            // HS2-HCW7MD: Propose Plan and where planning stands.
+            | ["checkouts", _, "orchestration", "planning", _]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -112,6 +117,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "run-reconcile"]
             // HS2-S13719: computed from this machine's records.
             | ["checkouts", _, "orchestration", "summary"]
+            // HS2-J89JC7: computed from this machine's records.
+            | ["checkouts", _, "orchestration", "timeline"]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -136,6 +143,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "session-sync"]
             // HS2-ECWG50: scheduling reads and writes this machine's records.
             | ["checkouts", _, "orchestration", "scheduler", _]
+            // HS2-HCW7MD: the planner runs on this machine, in the project itself.
+            | ["checkouts", _, "orchestration", "planning", _]
     )
 }
 
@@ -696,6 +705,21 @@ impl OrchestrationRuntime {
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }
+            // HS2-HCW7MD: Propose Plan starts the project's planner; `show` reads
+            // where planning stands.
+            ("POST", ["checkouts", owner, "orchestration", "planning", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "propose" => {
+                        value(self.plan_propose(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "show" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.plan_status(owner, tx)?)
+                    }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
             // HS2-ECWG50: the scheduler. `plan` and `explain` change nothing.
             ("POST", ["checkouts", owner, "orchestration", "scheduler", operation]) => {
                 let actor = actor(body)?;
@@ -877,6 +901,20 @@ impl OrchestrationRuntime {
             }
             ("POST", ["checkouts", owner, "orchestration", "run-reconcile"]) => {
                 value(self.runs_reconcile(owner, actor(body)?.as_ref(), tx)?)
+            }
+            // HS2-J89JC7: answers from this machine's records alone; `after` (a version)
+            // with `wait_ms` waits for the next change.
+            ("GET", ["checkouts", owner, "orchestration", "timeline"]) => {
+                let after = query_text(path, "after")?;
+                if let Some(after) = &after {
+                    identifier(after, "bounded timeline version required")?;
+                }
+                value(self.orchestration_timeline(
+                    owner,
+                    after.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
+                    tx,
+                )?)
             }
             // HS2-S13719: answers from this machine's records alone.
             ("GET", ["checkouts", owner, "orchestration", "summary"]) => {

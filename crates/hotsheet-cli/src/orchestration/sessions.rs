@@ -188,6 +188,26 @@ pub fn role_prompt_text(role: SessionRole, worker_id: &str, request: Option<&str
     text
 }
 
+/// HS2-HCW7MD: the message that asks a planning session to propose the plan. It
+/// names the skill, the orchestration project's checkout id every orchestration
+/// command takes, the proposal's id, and the one goal ticket when only one was asked
+/// for. Nothing in it is content: identifiers only.
+pub fn planner_prompt_text(
+    owner_checkout_id: &str,
+    worker_id: &str,
+    proposal_id: &str,
+    goal: Option<&str>,
+) -> String {
+    let goals = goal.map_or_else(
+        || "every open goal ticket of this project".to_owned(),
+        |goal| format!("the goal ticket `{goal}`"),
+    );
+    format!(
+        "Hot Sheet orchestration started this session as the planner of this orchestration project (`{owner_checkout_id}`). Run the `{}` skill and follow its workflow to propose the dry-run plan for {goals}, as the worker `{worker_id}`, for the proposal `{proposal_id}`. Do not dispatch runs, start sessions or change the policy.",
+        SessionRole::Planner.skill()
+    )
+}
+
 /// HS2-R7QH35: the message that tells a running session which exact ticket its new
 /// run is for. `ticket` is the slug where the host can read it.
 pub fn request_prompt_text(kind: RequestKind, worker_id: &str, ticket: &str) -> String {
@@ -219,6 +239,8 @@ pub fn pool_joined(
         SessionRole::Worker => state.workers.get(worker_id).is_some_and(live),
         SessionRole::Dispatcher => state.dispatcher.as_ref().is_some_and(live),
         SessionRole::Integrator => state.integrator.as_ref().is_some_and(live),
+        // HS2-HCW7MD: the planner joins no pool.
+        SessionRole::Planner => false,
     }
 }
 
@@ -837,7 +859,8 @@ impl OrchestrationRuntime {
         });
         let now_ms = tx.clock.now_ms();
         let joined = match coordination_state(Path::new(&checkout.root)) {
-            _ if !session.started => None,
+            // HS2-HCW7MD: a planner joins no pool, so there is nothing to confirm.
+            _ if !session.started || session.role == SessionRole::Planner => None,
             Ok(Some(state)) => Some(pool_joined(
                 &state,
                 session.role,
@@ -937,6 +960,14 @@ impl OrchestrationRuntime {
     ) -> Result<HostedStartReply, OrchestrationError> {
         request.session.validate()?;
         let checkout = self.owner(checkout_id)?;
+        // HS2-HCW7MD: a planner runs only in the orchestration project it plans for.
+        if request.session.role == SessionRole::Planner
+            && request.session.origin.owner_checkout_id != checkout.id
+        {
+            return Err(OrchestrationError::Invalid(
+                "a planner runs in its own orchestration project",
+            ));
+        }
         let registry = self.hosted_sessions_registry();
         let (reserved, _) = registry.reserve(&checkout.id, &request.session, tx)?;
         let live = self.sessions.sessions(&checkout);
@@ -967,7 +998,8 @@ impl OrchestrationRuntime {
             let taken = match reserved.role {
                 SessionRole::Integrator => roles.integrator_live,
                 SessionRole::Dispatcher => roles.dispatcher_live,
-                SessionRole::Worker => Some(false),
+                // HS2-HCW7MD: only this machine's own records hold a planner.
+                SessionRole::Worker | SessionRole::Planner => Some(false),
             };
             let ours = registry.list(&checkout.id)?.into_iter().any(|other| {
                 other.role == reserved.role
@@ -1083,6 +1115,15 @@ impl OrchestrationRuntime {
         let request = session.origin.ticket.as_deref().map(|native| {
             Self::ticket_label(checkout, native).unwrap_or_else(|| native.to_owned())
         });
+        // HS2-HCW7MD: a planner's ticket is the one goal it was asked to plan.
+        if session.role == SessionRole::Planner {
+            return planner_prompt_text(
+                &checkout.id,
+                &worker,
+                &session.operation_id,
+                request.as_deref(),
+            );
+        }
         role_prompt_text(session.role, &worker, request.as_deref())
     }
 
@@ -2493,7 +2534,7 @@ fn server_of(destination: &TargetDestination) -> &str {
 }
 
 /// The orchestration project's display name, bounded for a tab label.
-fn project_name(owner: &Checkout) -> String {
+pub(super) fn project_name(owner: &Checkout) -> String {
     let name: String = owner
         .alias
         .chars()

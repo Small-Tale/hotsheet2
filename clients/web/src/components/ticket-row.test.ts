@@ -14,6 +14,60 @@ import {
 import type { TicketSourceIdentity } from './ticket-source-icon';
 
 describe('TicketRow', () => {
+  it('HS2-J89JC7 carries the orchestration line in list rows and column cards, each part only when known', () => {
+    const ticket: TicketRowProps = {
+      slug: 'API-15',
+      title: 'Move API to the new toolchain',
+      status: 'not_started',
+      priority: 'default',
+      category: 'task',
+      tags: ['toolchain'],
+      orchestration: {
+        state: 'Waits for permission',
+        stateTone: 'warning',
+        placement: 'Build host · Codex',
+        goal: 'LCH-3',
+        goalTitle: 'Upgrade the build toolchain',
+      },
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const markup = String(TicketRow({ ...ticket, presentation }));
+      expect(markup).toContain('data-row-orchestration="true"');
+      expect(markup).toMatch(/data-orchestration-part="state"[^>]*>|data-tone="warning"/);
+      expect(markup).toContain('Waits for permission');
+      expect(markup).toContain('Build host · Codex');
+      expect(markup).toContain('title="Goal LCH-3: Upgrade the build toolchain"');
+      expect(markup).toContain('data-lucide="goal"');
+      // The line follows the row's other metadata and sits before its tags.
+      expect(markup.indexOf('data-row-orchestration')).toBeLessThan(markup.indexOf('data-row-tags'));
+    }
+    const partial = String(TicketRow({ ...ticket, orchestration: { placement: 'This machine' } }));
+    expect(partial).toContain('data-orchestration-part="placement"');
+    expect(partial).not.toContain('data-orchestration-part="state"');
+    expect(partial).not.toContain('data-orchestration-part="goal"');
+    expect(String(TicketRow({ ...ticket, orchestration: undefined }))).not.toContain('data-row-orchestration');
+  });
+  it('HS2-J89JC7 gives the orchestration line its own full-width line that wraps at narrow card widths', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    const rule = /\.ticket-list-row__orchestration \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toContain('flex: 1 0 100%');
+    expect(rule).toContain('min-width: 0');
+    const markup = String(
+      TicketRow({
+        slug: 'WEB-30',
+        title: 'Add the single sign-on login page',
+        status: 'not_started',
+        priority: 'high',
+        category: 'feature',
+        tags: [],
+        presentation: 'column',
+        orchestration: { state: 'Waits for your decision on LCH-1', placement: 'This machine · Claude', goal: 'LCH-1' },
+      }),
+    );
+    // Long parts truncate inside their badges rather than widening a narrow card.
+    expect(markup).toContain('data-wrap="true"');
+    expect(markup.match(/data-truncate/g)?.length).toBeGreaterThanOrEqual(2);
+  });
   it('shows the testing-phase estimate beside the phase chip in list rows and column cards (HS2-YDGM04)', () => {
     const ticket: TicketRowProps = {
       slug: 'HS2-PHASE',

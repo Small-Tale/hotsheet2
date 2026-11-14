@@ -26,6 +26,7 @@ additional = [
   { target = ".agents/skills/hotsheet-dispatcher/SKILL.md", source = "hotsheet-dispatcher.md" },
   { target = ".agents/skills/hotsheet-integrator/SKILL.md", source = "hotsheet-integrator.md" },
   { target = ".agents/skills/hotsheet-worker/SKILL.md", source = "hotsheet-worker.md" },
+  { target = ".agents/skills/hotsheet-planner/SKILL.md", source = "hotsheet-planner.md" },
   { target = ".agents/skills/note-repair/SKILL.md", source = "note-repair.md" },
   { target = ".agents/skills/hotsheet-design-review/SKILL.md", source = "hotsheet-design-review.md" },
 ]

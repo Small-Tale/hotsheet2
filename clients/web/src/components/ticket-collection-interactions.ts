@@ -3,6 +3,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { viewportSafePointerPosition } from '../context-menu-position';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import { insideOrchestrationView } from './orchestration-timeline-interactions';
 import { adjacentTicketSlug, type TicketSelectionIntent } from './ticket-selection';
 
 /** The ticket a row context menu was opened for, and where. */
@@ -60,6 +61,8 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
   lifetime.add(
     delegate(root, 'click', rowSelector, (event, target) => {
       if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
+      // HS2-J89JC7: Orchestration view cards are other projects' tickets; that view selects them.
+      if (insideOrchestrationView(target)) return;
       const pointer = event as MouseEvent,
         row = target as HTMLElement;
       bindings.select(
@@ -74,6 +77,7 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
   lifetime.add(
     delegate(root, 'click', TICKET_SELECTION_ACTIONS.selectTicketColumn.selector, (event, target) => {
       event.stopImmediatePropagation();
+      if (insideOrchestrationView(target)) return;
       const column = target.closest<HTMLElement>('[data-component="ticket-board-column"]');
       if (!column?.dataset.columnId) return;
       bindings.selectColumn([...column.querySelectorAll<HTMLElement>(rowSelector)].map(slugOf));
@@ -81,6 +85,7 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
   );
   lifetime.add(
     delegate(root, 'dblclick', rowSelector, (event, target) => {
+      if (insideOrchestrationView(target)) return;
       if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
       const row = target as HTMLElement;
       bindings.openReader(slugOf(row), bindings.selectionOrder(row), row);
@@ -88,7 +93,7 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
   );
   lifetime.add(
     delegate(root, 'contextmenu', rowSelector, (event, target) => {
-      if (target.closest('[data-worker-view]')) return;
+      if (target.closest('[data-worker-view]') || insideOrchestrationView(target)) return;
       event.preventDefault();
       const pointer = event as MouseEvent,
         row = target as HTMLElement,
@@ -138,6 +143,7 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
   );
   lifetime.add(
     delegate(root, 'keydown', rowSelector, (event, target) => {
+      if (insideOrchestrationView(target)) return;
       const keyboard = event as KeyboardEvent,
         row = target as HTMLElement,
         slug = slugOf(row);

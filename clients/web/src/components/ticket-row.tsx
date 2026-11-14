@@ -1,10 +1,11 @@
 import './ticket-row.css';
 
-import { Badge } from '@kerfjs/ui/badge';
+import { Badge, type SemanticTone } from '@kerfjs/ui/badge';
+import { px } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SummaryRow } from '@kerfjs/ui/summary-row';
-import { Bot, CircleAlert, Cloud, Star } from 'lucide';
+import { Bot, CircleAlert, Cloud, Goal, Star } from 'lucide';
 
 import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
@@ -86,6 +87,25 @@ export interface TicketRowProps {
   group?: string;
   /** The group's display name from the project's group registry (HS2-9KZSD4). */
   groupName?: string;
+  /** HS2-J89JC7: the orchestration line; absent for a ticket no orchestration plans. */
+  orchestration?: TicketRowOrchestration;
+}
+
+/**
+ * HS2-J89JC7: the orchestration line of a ticket an orchestration project plans: its state in words
+ * with a tone, where it runs, and the goal ticket it serves. The Orchestration view's cards set it;
+ * List and Columns rows take the same prop, so the one ticket-summary contract carries it everywhere.
+ */
+export interface TicketRowOrchestration {
+  /** State words, such as "Waits for permission"; absent when the status badge already says it. */
+  state?: string;
+  stateTone?: SemanticTone;
+  /** Where it runs, such as "Build host · Claude". */
+  placement?: string;
+  /** The goal ticket's slug, such as "LCH-1". */
+  goal?: string;
+  /** The goal ticket's title, for the goal chip's tooltip. */
+  goalTitle?: string;
 }
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
@@ -115,6 +135,49 @@ function RowClaimIndicator({ agentName = 'AI', claimEta }: { agentName?: string;
   return (
     <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
       <ActiveClaimIndicator label={label} eta={claimEta} />
+    </span>
+  );
+}
+
+function OrchestrationLine({ line }: { line: TicketRowOrchestration }) {
+  const { state, placement, goal } = line;
+  return (
+    <span class="ticket-list-row__orchestration" data-row-orchestration="true">
+      <Row wrap gap="xs" vAlign="middle">
+        {state ? (
+          <Badge
+            tone={line.stateTone ?? 'neutral'}
+            size="compact"
+            rootAttributes={{ 'data-orchestration-part': 'state' }}
+          >
+            {state}
+          </Badge>
+        ) : undefined}
+        {placement ? (
+          <Badge
+            tone="neutral"
+            appearance="quiet"
+            size="compact"
+            maxWidth={px(220)}
+            rootAttributes={{ 'data-orchestration-part': 'placement' }}
+          >
+            {placement}
+          </Badge>
+        ) : undefined}
+        {goal ? (
+          <Badge
+            tone="neutral"
+            appearance="outline"
+            size="compact"
+            maxWidth={px(160)}
+            title={line.goalTitle ? `Goal ${goal}: ${line.goalTitle}` : `Goal ${goal}`}
+            icon={<LucideIcon icon={Goal} name="goal" />}
+            rootAttributes={{ 'data-orchestration-part': 'goal' }}
+          >
+            {goal}
+          </Badge>
+        ) : undefined}
+      </Row>
     </span>
   );
 }
@@ -319,6 +382,7 @@ export function TicketRow(raw: TicketRowProps) {
               ))}
             {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
             {confidence !== undefined && <ConfidenceBadge value={confidence} />}
+            {props.orchestration && <OrchestrationLine line={props.orchestration} />}
             {props.tags.length > 0 ? (
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-row-tags': 'true' }}>
                 {aiCreator}

@@ -36,7 +36,14 @@ export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
 };
 
 const STORAGE_KEY = 'hotsheet.layout.workspace-preferences.v1';
-const viewModes: readonly WorkspaceViewMode[] = ['list', 'board', 'workers', 'notifications', 'settings'];
+const viewModes: readonly WorkspaceViewMode[] = [
+  'list',
+  'board',
+  'workers',
+  'orchestration',
+  'notifications',
+  'settings',
+];
 const sorts: readonly WorkspaceSort[] = ['updated', 'priority', 'title', 'status'];
 const directions: readonly WorkspaceSortDirection[] = ['ascending', 'descending'];
 

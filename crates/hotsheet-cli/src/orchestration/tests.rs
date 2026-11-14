@@ -22,6 +22,7 @@ mod access;
 mod capacity;
 mod gates;
 mod job_monitor;
+mod planning;
 mod policy;
 mod provisional;
 mod readiness;
@@ -33,6 +34,7 @@ mod session_executor;
 mod sessions;
 mod summary;
 mod tickets;
+mod timeline;
 mod tool_capacity;
 #[cfg(unix)]
 mod validation;

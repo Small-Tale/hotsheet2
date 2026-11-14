@@ -415,6 +415,8 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id/correct",
             // HS2-S13719: the summary is computed from this machine's records.
             "/checkouts/owner/orchestration/summary",
+            // HS2-J89JC7: the timeline is computed from this machine's records.
+            "/checkouts/owner/orchestration/timeline",
             // HS2-AHG7HW: observed tool capacity is this machine's.
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",
@@ -452,6 +454,9 @@ mod tests {
             "/checkouts/owner/orchestration/scheduler/explain",
             "/checkouts/owner/orchestration/scheduler/decisions",
             "/checkouts/owner/orchestration/scheduler/tick",
+            // HS2-HCW7MD: the planner runs on this machine.
+            "/checkouts/owner/orchestration/planning/propose",
+            "/checkouts/owner/orchestration/planning/show",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

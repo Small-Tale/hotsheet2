@@ -4549,6 +4549,214 @@
       }
     },
     {
+      "key": "hotsheet-web:orchestration-inspector",
+      "package": "hotsheet-web",
+      "id": "orchestration-inspector",
+      "name": "OrchestrationInspector",
+      "kind": "composition",
+      "purpose": "The inspector of one Orchestration view card: where it runs, its run and controls, what it waits on, gates, validation and events.",
+      "publicExports": [
+        {
+          "name": "OrchestrationInspector"
+        },
+        {
+          "name": "orchestrationInspectorPanel"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/orchestration-inspector.tsx"
+      ],
+      "source": "src/components/orchestration-inspector.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The right rail positions it; List and ValueTable own the insets."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-inspector.tsx",
+        "composition": "src/components/orchestration-inspector.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:orchestration-timeline-view",
+      "package": "hotsheet-web",
+      "id": "orchestration-timeline-view",
+      "name": "OrchestrationTimelineView",
+      "kind": "composition",
+      "purpose": "The Orchestration view: the plan as dependency waves on the ticket board, newest left and Done right, cards grouped by project.",
+      "publicExports": [
+        {
+          "name": "OrchestrationTimelineView"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/orchestration-timeline-view.tsx"
+      ],
+      "source": "src/components/orchestration-timeline-view.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The Workbench positions the view; TicketBoard and ColumnTrack own horizontal scrolling and paging."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "orchestration-timeline-view"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "orchestration-timeline-view"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-timeline-view.tsx",
+        "composition": "src/components/orchestration-timeline-view.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:orchestration-toolbar",
+      "package": "hotsheet-web",
+      "id": "orchestration-toolbar",
+      "name": "OrchestrationToolbar",
+      "kind": "composition",
+      "purpose": "The Orchestration view's page header: where orchestration stands and its one kick-off action (Propose Plan, Start Orchestration or Pause).",
+      "publicExports": [
+        {
+          "name": "OrchestrationToolbar"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/orchestration-toolbar.tsx"
+      ],
+      "source": "src/components/orchestration-toolbar.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The shell page header positions it; Toolbar owns its insets."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-toolbar.tsx",
+        "composition": "src/components/orchestration-toolbar.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:pending-attachment-picker",
       "package": "hotsheet-web",
       "id": "pending-attachment-picker",

@@ -11,6 +11,7 @@ mod gates;
 mod grants;
 mod joining;
 mod manifest;
+mod planning;
 mod policy;
 mod provisional;
 mod readiness;
@@ -25,6 +26,7 @@ mod session_idle;
 mod sessions;
 mod storage;
 mod summary;
+mod timeline;
 mod tool_capacity;
 mod validation;
 mod workflow;
@@ -65,6 +67,9 @@ pub use joining::{
     DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
 };
 pub use manifest::ManifestStore;
+pub use planning::{
+    PlannerFacts, PlanningState, ProposeDecision, current_planner, decide_propose, planning_state,
+};
 pub use policy::{
     AccountPolicy, ApprovalGate, ApprovalPolicy, MAX_POLICY_ACCOUNTS, MAX_POLICY_SESSIONS,
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PlacementPolicy, PolicyBody,
@@ -132,6 +137,12 @@ pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,
     PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,
     RunRetries, TargetProgress, UnknownReason, WorkItemKey, WorkItemProgress, summarize_progress,
+};
+pub use timeline::{
+    DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
+    PlacementHint, TargetLocation, TicketLabel, Timeline, TimelineInput, TimelineItem,
+    TimelinePhase, TimelinePolicy, TimelineRun, TimelineStep, TimelineTarget, WaitsOn, Wave,
+    WaveKind, timeline,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,
@@ -319,6 +330,8 @@ mod grant_tests;
 #[cfg(test)]
 mod joining_tests;
 #[cfg(test)]
+mod planning_tests;
+#[cfg(test)]
 mod policy_tests;
 #[cfg(test)]
 mod provisional_tests;
@@ -346,6 +359,8 @@ mod session_tests;
 mod summary_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod timeline_tests;
 #[cfg(test)]
 mod tool_capacity_tests;
 #[cfg(test)]

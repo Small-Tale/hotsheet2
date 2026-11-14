@@ -4,6 +4,12 @@ import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
+import {
+  parseOrchestrationList,
+  parseOrchestrationPolicy,
+  parseOrchestrationRecord,
+  parseOrchestrationTimeline,
+} from './orchestration-timeline';
 import type { PermissionAutomation, PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
@@ -1951,6 +1957,91 @@ export class Api {
       false,
     );
   };
+  /**
+   * HS2-J89JC7: the orchestration timeline of an owning checkout. With `after` (a version) it is a genuine
+   * long poll that answers when what the timeline shows changes, with no idle busy state.
+   */
+  orchestrationTimeline = (checkout: string, after?: string, signal?: AbortSignal) => {
+    const query = after ? `?${new URLSearchParams({ after, wait_ms: '20000' })}` : '';
+    return this.parsed(
+      parseOrchestrationTimeline,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/timeline${query}`,
+      { signal },
+      false,
+    );
+  };
+  /**
+   * HS2-HCW7MD: start the orchestration project's planning AI session (Propose Plan) in the tool the person
+   * chose, or answer with the live one. The same `operation_id` never launches twice.
+   */
+  proposeOrchestrationPlan = (
+    checkout: string,
+    request: { tool: string; model?: string; effort?: string; operation_id: string },
+    actorId: string,
+  ) =>
+    this.parsed(parseOrchestrationRecord, `/checkouts/${encodeURIComponent(checkout)}/orchestration/planning/propose`, {
+      method: 'POST',
+      body: JSON.stringify({ ...request, actor: { role: 'human', id: actorId } }),
+    });
+  /** HS2-HCW7MD: where planning stands (`idle`, `planning` or `ended`); starts nothing. */
+  orchestrationPlanning = (checkout: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/planning/show`,
+      { method: 'POST', body: '{}' },
+      false,
+    );
+  /** The checked-in orchestration policy as stored (HS2-YCJDEB): its revision and body. */
+  orchestrationPolicy = (checkout: string) =>
+    this.parsed(parseOrchestrationPolicy, `/checkouts/${encodeURIComponent(checkout)}/orchestration/policy`);
+  /** Replace the orchestration policy at its expected revision, as a person (HS2-J89JC7 kick-off). */
+  setOrchestrationPolicy = (
+    checkout: string,
+    expectedRevision: string | null,
+    policy: Record<string, unknown>,
+    actorId: string,
+  ) =>
+    this.parsed(parseOrchestrationPolicy, `/checkouts/${encodeURIComponent(checkout)}/orchestration/policy`, {
+      method: 'PUT',
+      body: JSON.stringify({ expected_revision: expectedRevision, policy, actor: { role: 'human', id: actorId } }),
+    });
+  /** A person's run control (HS2-WBREDM, HS2-EBHDSB): pause, resume, handoff, correct or cancel. */
+  orchestrationRunControl = (
+    checkout: string,
+    run: string,
+    operation: 'pause' | 'resume' | 'handoff' | 'correct' | 'cancel',
+    actorId: string,
+    body: Record<string, unknown> = {},
+  ) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/runs/${encodeURIComponent(run)}/${operation}`,
+      { method: 'POST', body: JSON.stringify({ ...body, actor: { role: 'human', id: actorId } }) },
+    );
+  /** The standing gates of one run (HS2-5JBYPV), from this machine's records. */
+  orchestrationRunGates = (checkout: string, run: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/gates?${new URLSearchParams({ run })}`,
+      {},
+      false,
+    );
+  /** One run's events (HS2-7QHWHJ), oldest first. */
+  orchestrationRunEvents = (checkout: string, run: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/run-events?${new URLSearchParams({ run, after: '0', limit: '200' })}`,
+      {},
+      false,
+    );
+  /** The validation steps of one orchestration ticket with their latest evidence (HS2-WN0MXZ). */
+  orchestrationValidations = (checkout: string, ticket: { connection_id: string; native_id: string }) =>
+    this.parsed(
+      parseOrchestrationList,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/validations/list`,
+      { method: 'POST', body: JSON.stringify({ ticket }) },
+      false,
+    );
   developmentStrategy = (checkout: string, overrides: { session?: string; ticket?: string } = {}) => {
     const params = new URLSearchParams();
     if (overrides.session) params.set('session', overrides.session);

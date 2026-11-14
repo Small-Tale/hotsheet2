@@ -3,6 +3,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { viewportSafePointerPosition } from '../context-menu-position';
 import { TICKET_GROUP_ACTIONS, TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
+import { insideOrchestrationView } from './orchestration-timeline-interactions';
 
 /**
  * Side effects for ticket group headers, the group header menu, and the group name dialog
@@ -35,6 +36,8 @@ export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBinding
   lifetime.add(
     delegate(root, 'click', TICKET_GROUP_ACTIONS.toggleTicketGroup.selector, (event, target) => {
       event.stopPropagation();
+      // HS2-J89JC7: the Orchestration view collapses its project groups in its own scope.
+      if (insideOrchestrationView(target)) return;
       const group = groupOf(target);
       if (group) bindings.toggle(group);
     }),
@@ -42,7 +45,7 @@ export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBinding
   lifetime.add(
     delegate(root, 'contextmenu', `${groupSelector} [data-component="list-header"]`, (event, target) => {
       const group = groupOf(target);
-      if (!group) return;
+      if (!group || insideOrchestrationView(target)) return;
       event.preventDefault();
       event.stopPropagation();
       const pointer = event as MouseEvent,

@@ -65,6 +65,10 @@ pub struct DefinePlanStep {
     /// HS2-2FG91X: resources the session working the step must hold.
     #[serde(default)]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-HCW7MD: the AI tool preferred for the work, by plugin id. A preference
+    /// recorded with the step; the scheduler does not read it yet (HS2-TH53NN).
+    #[serde(default)]
+    pub tool: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -192,6 +196,7 @@ fn seen(ticket: &Value, now_ms: u64, opt_out_tag: Option<&str>) -> TicketSeen {
         priority: text(ticket, "priority").map(Into::into),
         up_next: ticket.get("up_next").and_then(Value::as_bool),
         created_at_ms: field_ms(ticket, "created_at"),
+        slug: text(ticket, "slug").map(Into::into),
     }
 }
 
@@ -223,7 +228,7 @@ fn named_tickets(step: &PlanStep) -> impl Iterator<Item = RunTarget> + '_ {
 }
 
 impl OrchestrationRuntime {
-    fn plan(&self) -> PlanRegistry {
+    pub(super) fn plan(&self) -> PlanRegistry {
         PlanRegistry::new(&self.home)
     }
 
@@ -275,6 +280,7 @@ impl OrchestrationRuntime {
                         up_next: None,
                         created_at_ms: None,
                         opted_out: None,
+                        slug: None,
                     }),
                     unreachable: run.unreachable.clone(),
                 });
@@ -323,7 +329,7 @@ impl OrchestrationRuntime {
         Ok(facts)
     }
 
-    fn plan_evaluate(
+    pub(super) fn plan_evaluate(
         &self,
         owner_id: &str,
         now_ms: u64,
@@ -520,6 +526,9 @@ impl OrchestrationRuntime {
     ) -> Result<StepView, OrchestrationError> {
         // HS2-2FG91X: a malformed requirement is refused before any target is read.
         validate_needs(&request.resources, MAX_STEP_RESOURCES)?;
+        if let Some(tool) = &request.tool {
+            identifier(tool, "bounded tool id required")?;
+        }
         let (_, source_id, source_connection) =
             self.orchestration_store(owner_id, &request.ticket)?;
         let ticket = RunTicket {
@@ -626,6 +635,7 @@ impl OrchestrationRuntime {
                     target,
                     prerequisites,
                     resources: request.resources.clone(),
+                    tool: request.tool.clone(),
                 },
                 actor.and_then(|actor| actor.id.clone()),
                 tx,
@@ -807,6 +817,7 @@ impl OrchestrationRuntime {
                                     up_next: None,
                                     created_at_ms: None,
                                     opted_out: None,
+                                    slug: None,
                                 },
                             }),
                             unreachable: Some(None),

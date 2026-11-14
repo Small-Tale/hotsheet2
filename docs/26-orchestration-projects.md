@@ -34,11 +34,15 @@
 > its role wound down and replaced a bounded number of times (§26.24, HS2-NPTKS8),
 > and a refilled session told its exact ticket through its host's session push
 > (§26.24, HS2-R7QH35),
+> Propose Plan, which starts the orchestration project's planning AI session to
+> propose the dry-run plan from its goal tickets (§26.25, HS2-HCW7MD),
+> the Orchestration view with its dependency-wave timeline, the orchestration line on
+> ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
-> the OpenAPI contract describes them. Workspace UI remains design work under its
-> separate implementation tickets.
+> the OpenAPI contract describes them. Orchestration settings remain design work under
+> HS2-W27N1D.
 
 ## 26.1 Boundary and existing foundations
 
@@ -2083,7 +2087,8 @@ test of the real drawer is HS2-KTHJN2; the link from the orchestration workspace
 HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model
-([05](05-ai-tool-plugins.md) §5.9.1). The host refuses a `dispatcher` or
+([05](05-ai-tool-plugins.md) §5.9.1). The `planner` role is not a target role: it is
+the orchestration project's own planning session (§26.25). The host refuses a `dispatcher` or
 `integrator` start while the target's coordination pool shows a live session in that
 role, whoever started it. The target's dispatcher still assigns each exact ticket.
 
@@ -3618,3 +3623,249 @@ it is still refused. The race the five-minute bound guarded against remains in a
 shorter window: a start request still in transit that reaches the host after the stop
 would launch under an operation the orchestrator ended. Fencing a withdrawn operation
 on its host is HS2-WHR4GS.
+
+## 26.25 Proposing the plan from goal tickets (HS2-HCW7MD)
+
+The maintainer's decision on the workspace design (HS2-HSMH2Q, Design v3): "On Start
+(or Propose Plan), an orchestrator AI session reads the goal tickets and proposes
+target tickets, prerequisites and placement as the dry-run plan". The orchestration
+project's own tickets are its **goal tickets**. **Propose Plan** starts one AI
+session, the **planner**, that turns the open goal tickets into the plan of §26.15
+with the existing operations. Nothing is placed: the plan stays a dry run until a
+person presses Start Orchestration (the policy's `placement.automatic`, §26.17).
+
+### Where the planner runs
+
+The planner runs in the orchestration project itself, on this machine, through the
+hosted half of the orchestrator-owned sessions (§26.16) with the project as its own
+checkout. That is the drawer's ordinary AI terminal launch through the injected
+session host (the server in process; a headless process through the local server's
+terminal routes; a scripted host in tests), so the planner:
+
+- is set up for its tool in the project with the project's own headless setup
+  (HS2-WEFJV8) and passes this machine's admission (§26.10);
+- shows in the drawer as `<orchestration project>: planner`;
+- carries `HOTSHEET_SESSION_ROLE=planner` and `HOTSHEET_ROLE_SKILL=hotsheet-planner`
+  and gets its prompt at launch or by session push, retried on readiness events with
+  the same bounds as a role prompt (HS2-2DPGDY).
+
+The orchestrating half of §26.16 (grants, the session registry, the scheduler's
+caps) is not used, because starting the planner acts on no target. `planner` is a
+role of its own: it joins no coordination pool (`joined` is `null`), `session start`
+refuses it for a target (`invalid_request`), and a hosted planner start must name the
+checkout it runs in as its orchestration project.
+
+### Propose and show
+
+| Request                                                                   | What it does                                                                                     |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `propose` with `tool`, optional `model`, `effort`, `goal`, `operation_id` | Starts the planner, or answers with the one already there                                        |
+| `show`                                                                    | Where planning stands: `idle`, `planning` or `ended`, the live or latest planner, the open goals |
+
+A press is decided by `decide_propose`, a pure function of this machine's planner
+records and what the terminal host says now
+(`crates/hotsheet-ticketing/src/orchestration/planning.rs`):
+
+1. A retained `operation_id` this machine knows is that planner, whatever became of
+   it. The same id never launches twice.
+2. Otherwise a live planner, or one reserved and never launched, answers the press
+   (`outcome: existing`). A planner whose host cannot be asked counts as live, so
+   it is never doubled. One planner per orchestration project runs at a time; a press
+   naming another goal while one works answers with that one.
+3. Otherwise a new planner starts (`outcome: started`) under the caller's id or a
+   fresh one, which is the `proposal_id` its prompt names.
+
+Before anything launches the press is refused with `plan_no_targets` (the project
+declares no target), `plan_no_goals` (no open goal ticket) or `plan_goal_not_open`
+(the named goal is closed), all HTTP 409. A host that cannot launch answers as a
+session start does (`session_host_unavailable`, `session_start_failed`,
+`session_admission_refused`) and leaves nothing reserved, so the same press can be
+repeated. A press needs an identified actor and is audited as `plan_propose` with its
+operation id and `plan_started`, `plan_existing` or the refusal code.
+
+`goal` names one goal ticket (slug or id, with its `connection_id` when the project
+has several git sources); without it every open goal ticket is planned. The answer
+lists the goals oldest first with the plan steps this machine holds for each (at most
+256 listed; `goal_count` counts all), the number of declared targets, the planner's
+hosted session, and how its prompt was delivered. `show` adds the plan's step count
+and `placement_automatic`, so a view can say the plan is a dry run.
+
+### What the planner does
+
+The `hotsheet-planner` role skill (`plugins/shared/role-skills/hotsheet-planner.md`,
+mirrored by `scripts/sync-role-skills.mjs` and installed by Claude and Codex setup)
+uses the existing gated operations only:
+
+- reads the declared targets (`list`, `resolve`), the goal tickets, each goal's links
+  (`ticket links --resolve`), the plan (`readiness plan`) and every target ticket a
+  goal names (`ticket show`);
+- reuses a linked target ticket, links an existing one (`ticket link`, `observed`),
+  or creates one (`ticket create`) under the operation id
+  `plan-<goal-slug>-<work-key>`, so proposing again returns the ticket created before;
+- defines one step per target ticket (`readiness define`) with its prerequisites,
+  up to four resources (§26.20) and a preferred `tool`; defining a step again changes
+  it, so a re-proposal updates the plan in place;
+- turns a judgment call it cannot settle into a `FEEDBACK NEEDED` note with `CHOICE`
+  options on the goal ticket, once, and plans the rest;
+- never dispatches a run, starts a session, ticks the scheduler, changes the policy
+  or answers an approval, and ends with a `## Proposed plan` note per goal naming the
+  tickets and steps by identifier.
+
+Re-proposing is idempotent by goal ticket and target ticket: target tickets by the
+create operation id and the goal's links, steps by the one-step-per-target-ticket
+rule of §26.15.
+
+**Preferred tool.** A plan step has an optional `tool` (a plugin id), set by
+`readiness define --tool` and shown with the step. Changing it is a new revision; the
+same definition again changes nothing. The scheduler does not read it yet: carrying it
+into placement is HS2-TH53NN.
+
+**Permissions.** Every action the planner takes on a target goes through the gate of
+the operation it calls. HS2-XHQ1EH replaces grants with orchestrator permission
+requests through the permission bridge; the planner is written against that model and
+treats `approval_required`, a pending request or a denial as a person's decision, never
+something to retry around. Nothing in Propose Plan itself asks a target anything.
+
+**Not yet.** A target's tickets can only be read one by one, so the planner finds
+existing target tickets through what the goal names and what is linked; listing and
+searching a target's tickets through the gate is HS2-D85G19. The workspace's Propose
+Plan button is HS2-J89JC7.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration plan propose --project <owner> --tool <tool> \
+  [--model <model>] [--effort <effort>] [--goal <ticket>] [--source <connection>] \
+  [--operation-id <retained-id>]
+hotsheet-cli ... orchestration plan show --project <owner>
+hotsheet-cli ... orchestration readiness define ... --tool <tool>
+```
+
+| Route                                                      | Methods and purpose                                        |
+| ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/planning/{propose,show}` | POST Propose Plan and where planning stands; machine-local |
+
+MCP `hotsheet_targets` adds `plan_propose` (with `tool`, `model`, `effort`, `goal` and
+`operation_id`) and `plan_show`, and `readiness_define` takes `tool`. The runtime
+functions are `OrchestrationRuntime::plan_propose(owner, ProposePlan, actor, tx)` and
+`plan_status(owner, tx)` in `crates/hotsheet-cli/src/orchestration/planning.rs`.
+
+## 26.26 The Orchestration view and its timeline (HS2-J89JC7)
+
+An orchestration project's main view gains an **Orchestration** tab after Workers
+(Lucide `workflow`). It shows the plan of §26.15 as a timeline of **dependency waves**
+from the newest work on the left to the oldest on the right, as the maintainer asked
+("oldest (like done) should be rightmost and newest should be leftmost"). The design
+was signed off on HS2-HSMH2Q (Design v3).
+
+### The timeline read
+
+`OrchestrationRuntime::orchestration_timeline(owner, after, wait_ms, tx)`
+(`crates/hotsheet-cli/src/orchestration/timeline.rs`) gathers this machine's records and
+hands them to the pure fold `timeline` in
+`crates/hotsheet-ticketing/src/orchestration/timeline.rs`. It reads the plan and its
+readiness (§26.15), the runs (§26.9), the sessions this owner's orchestrator started
+(§26.16), the latest logged scheduler decision per step (§26.17), pending approvals,
+the bindings and the policy. It contacts no target, passes no gate and writes nothing.
+
+| Field          | Meaning                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `declared`     | The owner has a target declaration: it is an orchestration project, even with no target yet                |
+| `phase`        | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`    |
+| `kick_off`     | `can_start`, `can_pause`, the policy revision, and why Start is refused (`start_blocked`)                  |
+| `waves`        | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on |
+| `version`      | Changes exactly when what the timeline shows changes; time alone does not change it                        |
+| `wave_minutes` | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes     |
+
+**Waves.** Finished steps are **Done**. Once orchestration was kicked off, a step with an
+unfinished run is **Working Now**; every other step's wave is its depth over the
+unfinished plan steps it waits on: nothing unfinished before it, or only work that is
+running, is **Next**, one step deeper is **Then**, and anything deeper, and every step of
+a cycle, is **Later**. Before kick-off the waves are numbered from the steps with nothing
+unfinished before them (**First**, **Second**, …), after a Done wave when something is
+finished. Working Now's estimate is when its earliest work started; Next starts when that
+work should end (its start plus one wave length) or now, and each later wave one wave
+length after the one before. A proposed plan's First starts on kick-off.
+
+**Items.** Each item names its step, its goal (orchestration) ticket with slug and title,
+its target project and ticket, the target's location (`local`, `remote` with the paired
+server's label, or `unbound`), its tool (the live session's, else the scheduler's last
+decision's, else the plan step's preferred tool of §26.25), its run summary, what it waits
+on (`waits_on`, each prerequisite ticket with the step that works it), and its **state**:
+
+| State                    | When                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------- |
+| `done`                   | Its ticket is confirmed finished                                                        |
+| `running`                | An unfinished run stands on it                                                          |
+| `provisional`            | An unfinished run stands on it ahead of a pending gate (§26.22)                         |
+| `waits_for_permission`   | The orchestrator's action on it waits for a person (see below)                          |
+| `waits_for_decision`     | It is provisional or stale and its goal ticket has an unanswered `FEEDBACK NEEDED` note |
+| `ready`                  | Confirmed and nothing waits                                                             |
+| `waits_for_prerequisite` | Provisional, blocked, stale or cyclic otherwise                                         |
+
+A target ticket's slug, title, status, priority and category are read from its store when
+the target is a checkout on this machine. For a remote target the timeline has the slug
+the plan's last read recorded (§26.15 now keeps it, an identifier) and nothing more;
+titles of remote targets are HS2-HDHT5E. Nothing the read finds is written anywhere.
+
+**Waiting for permission, one seam.** The permission a step waits on comes from one
+function: a pending approval of the scheduler's own operation for the step
+(`sched-start-<step>` or `sched-run-<step>`, §26.8) reads as `kind: approval`, and a
+logged start whose outcome is `permission_required` with the request id as its detail
+reads as `kind: permission`. The second is the shape HS2-XHQ1EH's orchestrator requests
+through the permission bridge take; the view needs no change when they land. A judgment
+call (going ahead on an unconfirmed prerequisite) is a decision on the goal ticket, as
+HS2-XHQ1EH puts it.
+
+**Waiting for a change.** With `after` equal to the current version and `wait_ms` (at most
+20 seconds) the read is a long poll. It watches the owner's run event journal, its
+scheduler decision log, the scheduler's wake marker and, while a decision is pending, the
+owner's ticket store, and answers as soon as the version differs, or with the same
+version at the deadline. Nothing polls on an interval. An answered approval does not wake
+it yet (HS2-ANQXQ4). A read on the server also starts the target followers of §26.9.
+
+### The view
+
+- **Tab.** The view switcher offers Orchestration only for a project whose timeline reads
+  `declared` (HS2-W27N1D's Project Type creates the declaration), and never in the
+  terminal rail. A project that is not one falls back to its ticket view.
+- **Board.** The production ticket board (`TicketBoard`, Kerf `ColumnTrack`) with the
+  waves reversed: Later, Then, Next, Working Now, Done; before kick-off Fourth … First.
+  It opens scrolled to its right end with Working Now in view; on a phone (paged) it
+  opens on Working Now. In each column the cards are grouped by project, and a project
+  group collapses in the view's own scope. Kerf has no start-at-end option, so the app
+  wiring sets the scroll position once per board layout and when the board's width
+  changes (KF-QHJKA4).
+- **Cards** are the shared `TicketRow` with its new **orchestration line**: the state in
+  words with a tone (Ready, Waits on API-12, Waits for permission, Waits for your
+  decision on LCH-1, Provisional on WEB-33; running and done say it through the status
+  badge), where it runs (machine · tool) and the goal ticket. List and Columns take the
+  same prop; showing it on target tickets in their own project is HS2-S3FKJ7.
+- **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
+  Request, which opens Notifications, HS2-DBQSWB; Open <goal>, which opens the goal
+  ticket; or its prerequisites), then its Run with the person's controls (Pause or
+  Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
+  §26.14, each a person's act with a confirmation where undo cannot help), then the
+  run's gates, validation steps and latest events.
+- **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
+  the tool the person drives with in this project. A proposed or paused plan has
+  **Start Orchestration**, which turns `placement.automatic` on through the policy route
+  of §26.8; it is disabled, with the reason, while there is no policy or the policy names
+  no placement actor (HS2-XYAHB4). While running, **Pause** turns it off; running work
+  continues. A proposed plan is labeled as the dry run it is.
+- **Empty.** A declared project with no target shows _No Projects to Orchestrate Yet_
+  with **Choose Projects…**, which opens Settings until the Orchestration category of
+  HS2-W27N1D exists (HS2-QFS6SG). Keyboard: cards are reachable with Tab and selected
+  with Enter or Space; arrow keys are HS2-T4V1TX.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration timeline --project <owner> [--after <version> --wait-seconds 20]
+```
+
+| Route                                       | Methods and purpose                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/timeline` | GET the timeline; `after` and `wait_ms` wait for a change; machine-local |
+
+MCP `hotsheet_targets` adds `timeline` (with `version` and `wait_ms`).

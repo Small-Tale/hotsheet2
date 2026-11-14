@@ -41,6 +41,17 @@ does not fork Kerf's guidance.
   summary and inspector activation. See [06-clients.md](06-clients.md) §6.3 for
   the accepted design and implementation owners.
 
+- The Orchestration view (HS2-J89JC7, signed off on HS2-HSMH2Q) is the production ticket
+  board read as a timeline of dependency waves, newest on the left and Done on the right,
+  with each column's cards grouped by project. Its cards are other projects' tickets: they
+  keep the shared ticket summary, gain its orchestration line (state, placement, goal),
+  and select plan steps rather than tickets of this project, so the ticket collection's
+  context menus and group menus stay out of the view. Interim decision waiting on Kerf
+  `KF-QHJKA4`: Kerf ColumnTrack cannot open at its end or at a named column, so the view's
+  wiring sets the scroll position once per board layout and on a width change (no app
+  CSS); remove it when that option ships. See
+  [26-orchestration-projects.md](26-orchestration-projects.md) §26.26.
+
 - Browser-native `window.prompt` dialogs are unsupported in the desktop shell. Use in-app
   input flows; the terminal drawer's unnecessary message action was removed (HS2-JVSFES).
   The remaining filename, command-group, and AI-launch prompts use controlled in-app inputs

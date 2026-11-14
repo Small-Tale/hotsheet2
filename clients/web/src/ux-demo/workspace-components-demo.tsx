@@ -15,6 +15,7 @@ import type { CodeReview, DuplicateBacklink } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { AdvisoryClaimNotice } from '../components/advisory-claim-notice';
 import { NotificationCenter } from '../components/notification-center';
+import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import {
   QuickTicketComposer,
   QuickTicketLauncher,
@@ -74,6 +75,7 @@ import {
 import { DEMO_ACTIONS, DEMO_FIELDS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
+import { demoClock, demoTimeline } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 import { collectionEvent, collectionTickets, recordCollectionEvent } from './ticket-collections-demo';
 import { statusMenuDemoStartedPhase, statusMenuDemoStatus } from './ticket-metadata-demo';
@@ -99,6 +101,8 @@ function workspaceHeadingTitle(mode: WorkspaceViewMode): string {
       return 'Notifications';
     case 'workers':
       return 'Workers';
+    case 'orchestration':
+      return 'Orchestration';
     case 'board':
     case 'list':
       return 'Queue';
@@ -273,6 +277,7 @@ export function TerminalTicketRailDemo() {
         return 'board';
       case 'settings':
       case 'workers':
+      case 'orchestration':
       case 'list':
         return 'list';
       default:
@@ -449,6 +454,8 @@ function WorkspaceContent() {
       </DemoSettingsPreview>
     );
   if (workspaceMode.value === 'workers') return <DemoWorkerColumns />;
+  if (workspaceMode.value === 'orchestration')
+    return <OrchestrationTimelineView timeline={demoTimeline('running')} clock={demoClock} />;
   return workspaceMode.value === 'list' ? (
     <TicketList tickets={tickets} label="Workspace tickets" />
   ) : (

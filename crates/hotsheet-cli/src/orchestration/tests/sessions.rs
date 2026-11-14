@@ -64,6 +64,13 @@ impl ScriptedHost {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
+    /// HS2-HCW7MD: every setup asked for, as (checkout root, tool), in order.
+    pub(super) fn prepared(&self) -> Vec<(String, String)> {
+        self.prepared
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
     pub(super) fn crash(&self, session_id: &str) {
         self.live().retain(|state| state.session_id != session_id);
     }

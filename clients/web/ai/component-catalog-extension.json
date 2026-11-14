@@ -1504,6 +1504,80 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "orchestration-inspector",
+      "name": "OrchestrationInspector",
+      "kind": "composition",
+      "purpose": "The inspector of one Orchestration view card: where it runs, its run and controls, what it waits on, gates, validation and events.",
+      "useWhen": [
+        "A card on the Orchestration view is selected (HS2-J89JC7)."
+      ],
+      "avoidWhen": [
+        "The selection is a ticket of this project; use the ticket inspector."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-inspector.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The right rail positions it; List and ValueTable own the insets."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "orchestration-timeline-view",
+      "name": "OrchestrationTimelineView",
+      "kind": "composition",
+      "purpose": "The Orchestration view: the plan as dependency waves on the ticket board, newest left and Done right, cards grouped by project.",
+      "useWhen": [
+        "An orchestration project shows where and when its planned work runs (HS2-J89JC7)."
+      ],
+      "avoidWhen": [
+        "The project is not an orchestration project, or the surface is an ordinary ticket board."
+      ],
+      "publicClasses": [
+        "orchestration-timeline-view"
+      ],
+      "publicTokens": [],
+      "source": "src/components/orchestration-timeline-view.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The Workbench positions the view; TicketBoard and ColumnTrack own horizontal scrolling and paging."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "orchestration-toolbar",
+      "name": "OrchestrationToolbar",
+      "kind": "composition",
+      "purpose": "The Orchestration view's page header: where orchestration stands and its one kick-off action (Propose Plan, Start Orchestration or Pause).",
+      "useWhen": [
+        "The Orchestration view needs its status and kick-off action (HS2-J89JC7)."
+      ],
+      "avoidWhen": [
+        "Another view needs a page action; use the shell heading action instead."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-toolbar.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The shell page header positions it; Toolbar owns its insets."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "pending-attachment-picker",
       "name": "PendingAttachmentPicker",
       "kind": "component",

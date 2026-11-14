@@ -753,6 +753,57 @@ fn hs2_hm9frv_role_skills_pin_optional_addressed_assignment_routes() {
     }
 }
 
+/// HS2-HCW7MD: the planner proposes the dry-run plan only through the gated actions,
+/// keeps re-proposal idempotent by goal and work, turns judgment calls into feedback on
+/// the goal ticket, and never places, dispatches or changes the policy.
+#[test]
+fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let planner = flatten(include_str!(
+        "../../../plugins/shared/role-skills/hotsheet-planner.md"
+    ));
+    assert!(planner.starts_with("--- name: hotsheet-planner "));
+    for phrase in [
+        // Reads the goals, the targets and what is already planned.
+        "Read the open goal tickets of this project",
+        "`ticket_links` with `resolve: true`",
+        "`readiness_plan`",
+        "`ticket_read`",
+        // Proposes through the existing actions only.
+        "`ticket_link` with `relation: observed`",
+        "`ticket_create`",
+        "`readiness_define`",
+        "`prerequisites`",
+        "`resources`",
+        "`tool`: the AI tool you would prefer",
+        // Idempotent by goal and target ticket.
+        "the operation id `plan-<goal-slug>-<work-key>`",
+        "never a second one",
+        "One step per target ticket",
+        "a re-proposal updates the plan in place",
+        // Permissions stay the person's.
+        "asks the orchestrator's permission first (HS2-XHQ1EH)",
+        "do not retry around it",
+        // Judgment calls become feedback on the goal ticket.
+        "`FEEDBACK NEEDED` note to that goal ticket with `CHOICE` options",
+        "Never add the same question twice",
+        // Placement stays off.
+        "Never dispatch a run (`run_dispatch`), start or stop a session (`session_*`), run a scheduling pass (`scheduler_tick`), set or loosen the policy, or answer an approval.",
+        "until a person presses **Start Orchestration**",
+        "Never poll on a timer.",
+        "Identifiers and counts only.",
+    ] {
+        assert!(planner.contains(phrase), "planner missing {phrase}");
+    }
+    for forbidden in [
+        "placement.automatic: true",
+        "--override-readiness",
+        "run dispatch",
+    ] {
+        assert!(!planner.contains(forbidden), "planner names {forbidden}");
+    }
+}
+
 #[test]
 fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
     let codex = find_in("codex", &[]).unwrap();
@@ -775,6 +826,13 @@ fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
             include_str!("../../../plugins/shared/role-skills/hotsheet-worker.md"),
             include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
             include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+        ),
+        // HS2-HCW7MD: the planner of an orchestration project.
+        (
+            "hotsheet-planner",
+            include_str!("../../../plugins/shared/role-skills/hotsheet-planner.md"),
+            include_str!("../../../.agents/skills/hotsheet-planner/SKILL.md"),
+            include_str!("../../../.claude/skills/hotsheet-planner/SKILL.md"),
         ),
     ];
     // HS2-5E8Y9R note repair and HS2-C679CZ design review.

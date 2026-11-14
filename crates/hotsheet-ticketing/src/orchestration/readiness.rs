@@ -100,6 +100,10 @@ pub struct PlanStep {
     /// are not prerequisites: readiness ignores them and the scheduler waits on them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-HCW7MD: the AI tool the planner would prefer for this work, by plugin id.
+    /// A preference only: carrying it into the scheduler is HS2-TH53NN.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
     /// Starts at 1 and grows with every changed definition.
     pub revision: u32,
     pub created_at_ms: u64,
@@ -115,6 +119,8 @@ pub struct NewPlanStep {
     pub target: RunTarget,
     pub prerequisites: Vec<Prerequisite>,
     pub resources: Vec<ResourceNeed>,
+    /// HS2-HCW7MD: the preferred AI tool, if any.
+    pub tool: Option<String>,
 }
 
 /// A target ticket as of one successful read. Codes and identifiers only.
@@ -136,6 +142,10 @@ pub struct TicketSeen {
     /// when the read did not say, which never counts as "not opted out".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opted_out: Option<bool>,
+    /// HS2-J89JC7: the ticket's display slug, an identifier for the timeline. Absent
+    /// when the read did not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
 }
 
 /// The last confirmed state of one target ticket and whether it can still be trusted.
@@ -164,6 +174,7 @@ impl TicketFacts {
                     newer.up_next = newer.up_next.or(older.up_next);
                     newer.created_at_ms = newer.created_at_ms.or(older.created_at_ms);
                     newer.opted_out = newer.opted_out.or(older.opted_out);
+                    newer.slug = newer.slug.or(older.slug);
                 }
                 Some(newer)
             }
@@ -356,6 +367,12 @@ pub enum ReadinessError {
     ProvisionalRefused,
     /// HS2-JSF985: the step has no provisional work that could be reopened.
     NotProvisional,
+    /// HS2-HCW7MD: Propose Plan found no declared project to plan work in.
+    NoTargets,
+    /// HS2-HCW7MD: Propose Plan found no open goal ticket to plan.
+    NoGoals,
+    /// HS2-HCW7MD: the goal ticket named for Propose Plan is not open.
+    GoalNotOpen,
 }
 
 impl ReadinessError {
@@ -369,6 +386,9 @@ impl ReadinessError {
             Self::OverrideDenied => "readiness_override_denied",
             Self::ProvisionalRefused => "readiness_provisional_refused",
             Self::NotProvisional => "readiness_not_provisional",
+            Self::NoTargets => "plan_no_targets",
+            Self::NoGoals => "plan_no_goals",
+            Self::GoalNotOpen => "plan_goal_not_open",
         }
     }
 }
@@ -795,11 +815,15 @@ impl PlanRegistry {
                 if step.ticket != new.ticket {
                     return Err(OrchestrationError::Conflict);
                 }
-                if step.prerequisites == new.prerequisites && step.resources == new.resources {
+                if step.prerequisites == new.prerequisites
+                    && step.resources == new.resources
+                    && step.tool == new.tool
+                {
                     return Ok((step.clone(), false));
                 }
                 step.prerequisites = new.prerequisites;
                 step.resources = new.resources;
+                step.tool = new.tool;
                 step.revision = step.revision.saturating_add(1);
                 step.updated_at_ms = now_ms;
                 step.updated_by = actor_id;
@@ -822,6 +846,7 @@ impl PlanRegistry {
                     target: new.target,
                     prerequisites: new.prerequisites,
                     resources: new.resources,
+                    tool: new.tool,
                     revision: 1,
                     created_at_ms: now_ms,
                     updated_at_ms: now_ms,
@@ -1051,6 +1076,9 @@ fn validate_step(step: &PlanStep) -> Result<(), OrchestrationError> {
         valid_identifier(actor)?;
     }
     validate_needs(&step.resources, MAX_STEP_RESOURCES)?;
+    if let Some(tool) = &step.tool {
+        valid_identifier(tool)?;
+    }
     if step.prerequisites.len() > MAX_STEP_PLAN_PREREQUISITES {
         return Err(OrchestrationError::Invalid(
             "a step has at most 16 prerequisites",

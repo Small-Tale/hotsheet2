@@ -3167,6 +3167,113 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/planning/{operation}:
+    description:
+      Machine-local Propose Plan (HS2-HCW7MD). The orchestration project's planning AI session runs in that project
+      itself, through this machine's ordinary AI terminal launch, and proposes the dry-run plan from the open goal
+      tickets with the existing ticket and readiness operations. Nothing is placed until the policy places sessions.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestratePlanning
+      description:
+        '`propose` starts the planner, or answers with the live one (outcome `existing`); the same `operation_id` never
+        launches twice. It needs an identified actor, is audited as `plan_propose`, and is refused with
+        `plan_no_targets`, `plan_no_goals` or `plan_goal_not_open` before anything launches. `show` reads where
+        planning stands and starts nothing.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanningOperation'
+      responses:
+        '200':
+          description: The press (`propose`) or where planning stands (`show`).
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - $ref: '#/components/schemas/PlanProposal'
+                  - $ref: '#/components/schemas/PlanningView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - propose
+            - show
+  /checkouts/{owner}/orchestration/timeline:
+    description:
+      Machine-local orchestration timeline of an owning checkout (HS2-J89JC7). The plan as dependency waves with where
+      each piece of work runs and what it waits on. Answers from this machine's records and local ticket stores;
+      contacts no target and writes nothing. With `after` equal to the current version and `wait_ms`, waits for the
+      next change.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationTimeline
+      parameters:
+        - name: after
+          in: query
+          description: The timeline version already seen.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+            pattern: ^[A-Za-z0-9._-]+$
+        - name: wait_ms
+          in: query
+          description: With `after`, wait this long (at most 20000) for the version to change.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: The timeline, oldest wave first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationTimeline'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -20429,6 +20536,15 @@ components:
           maxItems: 4
           items:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
+        tool:
+          description:
+            "`define` only (HS2-HCW7MD). The AI tool preferred for the step's work, by plugin id. Recorded with the step;
+            the scheduler does not read it yet (HS2-TH53NN)."
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
         step_id:
           type:
             - string
@@ -20535,6 +20651,9 @@ components:
           maxItems: 4
           items:
             $ref: '#/components/schemas/OrchestrationResourceNeed'
+        tool:
+          description: The AI tool preferred for the step's work, by plugin id (HS2-HCW7MD).
+          type: string
         revision:
           type: integer
           minimum: 1
@@ -20715,11 +20834,14 @@ components:
           $ref: '#/components/schemas/ProvisionalStanding'
       additionalProperties: false
     OrchestrationSessionRole:
-      description: The part a started session plays in its target's existing role model (HS2-GDJXGZ).
+      description:
+        The part a started session plays in its target's existing role model (HS2-GDJXGZ). `planner` is the planning
+        session of an orchestration project, which runs only in that project (HS2-HCW7MD).
       enum:
         - worker
         - dispatcher
         - integrator
+        - planner
     OrchestrationSessionOwner:
       description: Who decides about the session now. Ownership only ever moves to a person.
       enum:
@@ -22666,6 +22788,489 @@ components:
         - assigned
         - claimed
         - cancelled
+    PlanningOperation:
+      description:
+        Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one `goal`
+        and a retained `operation_id`; `show` takes nothing.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        tool:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        model:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        effort:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        goal:
+          description: Plan only this goal ticket of the orchestration project; every open goal ticket when omitted.
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationTicketRef'
+            - type: 'null'
+        operation_id:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      additionalProperties: false
+    PlanningGoal:
+      description: An open goal ticket of the orchestration project, with the plan steps this machine holds for it.
+      type: object
+      required:
+        - connection_id
+        - native_id
+        - slug
+        - steps
+      properties:
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        slug:
+          type: string
+        steps:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    PlanProposal:
+      description: What a press of Propose Plan did (HS2-HCW7MD).
+      type: object
+      required:
+        - outcome
+        - proposal_id
+        - goals
+        - goal_count
+        - targets
+        - session
+      properties:
+        outcome:
+          enum:
+            - started
+            - existing
+        proposal_id:
+          description: The planner's operation id, which its prompt names.
+          type: string
+        goals:
+          description: The goal tickets planned, oldest first, at most 256.
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningGoal'
+        goal_count:
+          type: integer
+          minimum: 0
+        targets:
+          type: integer
+          minimum: 0
+        session:
+          $ref: '#/components/schemas/HostedTargetSession'
+        role_prompt:
+          $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
+        tool_setup:
+          type: object
+          properties:
+            wrote:
+              type: integer
+              minimum: 0
+      additionalProperties: false
+    PlanningView:
+      description: Where planning stands for an orchestration project (HS2-HCW7MD).
+      type: object
+      required:
+        - state
+        - goals
+        - goal_count
+        - steps
+        - placement_automatic
+      properties:
+        state:
+          enum:
+            - idle
+            - planning
+            - ended
+        proposal_id:
+          type: string
+        session:
+          $ref: '#/components/schemas/HostedTargetSession'
+        goals:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningGoal'
+        goal_count:
+          type: integer
+          minimum: 0
+        steps:
+          type: integer
+          minimum: 0
+        placement_automatic:
+          description: Whether the policy places sessions. While false the plan is a dry run.
+          type: boolean
+      additionalProperties: false
+    OrchestrationTimeline:
+      description:
+        The plan of an owning checkout as dependency waves (HS2-J89JC7). `version` changes exactly when what it shows
+        changes; estimates that move with the clock alone do not change it.
+      type: object
+      required:
+        - version
+        - now_ms
+        - declared
+        - phase
+        - automatic
+        - kick_off
+        - sessions
+        - targets
+        - waves
+        - counts
+        - wave_minutes
+        - estimate
+      properties:
+        version:
+          type: string
+        now_ms:
+          type: integer
+          minimum: 0
+        declared:
+          description: The owner declares targets, so it is an orchestration project even with none yet.
+          type: boolean
+        phase:
+          enum:
+            - no_projects
+            - no_plan
+            - proposed
+            - running
+            - paused
+        automatic:
+          description: The policy places sessions automatically.
+          type: boolean
+        kick_off:
+          $ref: '#/components/schemas/OrchestrationKickOff'
+        running_since_ms:
+          description: When the earliest unfinished run started.
+          type: integer
+          minimum: 0
+        sessions:
+          description: Unfinished sessions this owner's orchestrator started.
+          type: integer
+          minimum: 0
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationTimelineTarget'
+        waves:
+          description: Oldest first. Done, working_now, next, then and later once kicked off; planned waves otherwise.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationTimelineWave'
+        counts:
+          description: Items per state.
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        wave_minutes:
+          description: The wave length estimates use.
+          type: integer
+          minimum: 1
+        estimate:
+          $ref: '#/components/schemas/OrchestrationEstimateBasis'
+    OrchestrationEstimateBasis:
+      description:
+        What an estimated start rests on. `started` - the work started then; `measured` - the median lead time of
+        finished runs; `default` - sixty minutes per wave until a run finishes.
+      enum:
+        - started
+        - measured
+        - default
+    OrchestrationKickOff:
+      description: Whether Start Orchestration or Pause applies, and why not (HS2-J89JC7).
+      type: object
+      required:
+        - can_start
+        - can_pause
+      properties:
+        can_start:
+          type: boolean
+        start_blocked:
+          enum:
+            - no_projects
+            - no_plan
+            - policy_absent
+            - placement_actor_missing
+            - running
+        can_pause:
+          type: boolean
+        policy_revision:
+          type: string
+    OrchestrationTimelineTarget:
+      type: object
+      required:
+        - target_id
+        - label
+        - location
+      properties:
+        target_id:
+          type: string
+        label:
+          type: string
+        location:
+          enum:
+            - local
+            - remote
+            - unbound
+        machine_label:
+          description: The label of the paired server a remote target lives on.
+          type: string
+        checkout_id:
+          type: string
+    OrchestrationTimelineWave:
+      type: object
+      required:
+        - kind
+        - ordinal
+        - items
+      properties:
+        kind:
+          enum:
+            - done
+            - working_now
+            - next
+            - then
+            - later
+            - planned
+        ordinal:
+          description: The position of a planned wave, 0 for the first.
+          type: integer
+          minimum: 0
+        estimated_start_ms:
+          type: integer
+          minimum: 0
+        estimate:
+          $ref: '#/components/schemas/OrchestrationEstimateBasis'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationTimelineItem'
+    OrchestrationTimelineItem:
+      description: One plan step on the timeline.
+      type: object
+      required:
+        - step_id
+        - goal
+        - target
+        - project_label
+        - location
+        - state
+        - level
+      properties:
+        step_id:
+          type: string
+        goal:
+          description: The orchestration (goal) ticket the step is for.
+          type: object
+          required:
+            - connection_id
+            - native_id
+          properties:
+            connection_id:
+              type: string
+            native_id:
+              type: string
+        goal_slug:
+          type: string
+        goal_title:
+          type: string
+        target:
+          description: The exact target ticket the step works.
+          type: object
+          required:
+            - target_id
+            - connection_id
+            - native_id
+          properties:
+            target_id:
+              type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+        slug:
+          type: string
+        title:
+          description: Read from the target's store when it is a checkout on this machine.
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        category:
+          type: string
+        project_label:
+          type: string
+        location:
+          enum:
+            - local
+            - remote
+            - unbound
+        machine_label:
+          type: string
+        tool:
+          type: string
+        model:
+          type: string
+        session_id:
+          type: string
+        session_state:
+          type: string
+        state:
+          enum:
+            - running
+            - provisional
+            - ready
+            - waits_for_prerequisite
+            - waits_for_permission
+            - waits_for_decision
+            - done
+        level:
+          type: string
+        reasons:
+          type: array
+          items:
+            type: string
+        waits_on:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationWaitsOn'
+        run:
+          $ref: '#/components/schemas/OrchestrationTimelineRun'
+        permission:
+          $ref: '#/components/schemas/OrchestrationPermissionWait'
+        decision:
+          type: object
+          properties:
+            note_id:
+              type: string
+        placement:
+          $ref: '#/components/schemas/OrchestrationPlacementHint'
+        started_at_ms:
+          type: integer
+          minimum: 0
+        finished_at_ms:
+          type: integer
+          minimum: 0
+        estimated_start_ms:
+          type: integer
+          minimum: 0
+    OrchestrationWaitsOn:
+      type: object
+      required:
+        - target_id
+        - connection_id
+        - native_id
+        - reason
+      properties:
+        target_id:
+          type: string
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        slug:
+          type: string
+        step_id:
+          type: string
+        reason:
+          type: string
+    OrchestrationTimelineRun:
+      type: object
+      required:
+        - run_id
+        - state
+        - paused
+        - cancel_requested
+        - created_at_ms
+      properties:
+        run_id:
+          type: string
+        state:
+          type: string
+        worker_id:
+          type: string
+        lease_expires_at_ms:
+          type: integer
+          minimum: 0
+        paused:
+          type: boolean
+        cancel_requested:
+          type: boolean
+        unreachable_since_ms:
+          type: integer
+          minimum: 0
+        last_confirmed_at_ms:
+          type: integer
+          minimum: 0
+        created_at_ms:
+          type: integer
+          minimum: 0
+        finished_at_ms:
+          type: integer
+          minimum: 0
+    OrchestrationPermissionWait:
+      description:
+        The request a step waits on. `approval` - a pending approval of the scheduler's operation (HS2-YCJDEB);
+        `permission` - an orchestrator permission request through the permission bridge (HS2-XHQ1EH).
+      type: object
+      required:
+        - kind
+        - request_id
+        - action
+      properties:
+        kind:
+          enum:
+            - approval
+            - permission
+        request_id:
+          type: string
+        action:
+          type: string
+        operation_id:
+          type: string
+        requested_at_ms:
+          type: integer
+          minimum: 0
+    OrchestrationPlacementHint:
+      description: The scheduler's latest logged decision about a step.
+      type: object
+      required:
+        - at_ms
+        - decision
+      properties:
+        at_ms:
+          type: integer
+          minimum: 0
+        decision:
+          enum:
+            - start
+            - keep
+            - unplaced
+        reason:
+          type: string
+        tool:
+          type: string
+        model:
+          type: string
+        session_id:
+          type: string
+        outcome:
+          type: string
     RemoteIdentity:
       type: object
       required:
@@ -28549,12 +29154,15 @@ components:
             - type: string
             - type: 'null'
         session_role:
-          description: An orchestrator-started session's role, named in its environment (HS2-2DPGDY).
+          description:
+            An orchestrator-started session's role, named in its environment (HS2-2DPGDY), or `planner` for an
+            orchestration project's planning session (HS2-HCW7MD).
           anyOf:
             - enum:
                 - worker
                 - dispatcher
                 - integrator
+                - planner
             - type: 'null'
         initial_prompt:
           description: The tool's first prompt, used only when its plugin declares launch prompt_args (HS2-2DPGDY).
