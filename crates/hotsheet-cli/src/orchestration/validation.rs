@@ -21,10 +21,11 @@ use hotsheet_model::NoteKind;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, AuditRecord, ExecutionEnd, ExecutionOutcome, MAX_STEP_TIMEOUT_SECONDS, NewResult,
-    ProfileCheck, ResultUpdate, RunEvent, RunEventKind, RunEventSource, RunTicket, StepDefinition,
-    StreamRef, TargetAction, ValidationCheck, ValidationEvidence, ValidationProfileStore,
-    ValidationRegistry, ValidationResult, ValidationState, evaluate, may_retry,
+    AuditOutcome, AuditRecord, ExecutionEnd, ExecutionOutcome, HostedValidationKnown,
+    HostedValidationRegistry, MAX_STEP_TIMEOUT_SECONDS, NewResult, ProfileCheck, ResultUpdate,
+    RunEvent, RunEventKind, RunEventSource, RunTicket, StepDefinition, StreamRef, TargetAction,
+    ValidationCheck, ValidationEvidence, ValidationProfileStore, ValidationRegistry,
+    ValidationResult, ValidationState, evaluate, may_retry,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -137,6 +138,13 @@ fn executions() -> std::sync::MutexGuard<'static, Vec<Arc<Execution>>> {
         .get_or_init(Default::default)
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// HS2-7BTV98: a test stands in for a restart of the hosting process: every execution
+/// it held in memory is gone, and only what the machine recorded remains.
+#[cfg(test)]
+pub(super) fn forget_executions() {
+    executions().clear();
 }
 
 fn new_execution(key: String) -> Arc<Execution> {
@@ -420,6 +428,14 @@ fn hosted_reply(execution_id: &str, outcome: Option<ExecutionOutcome>) -> Hosted
     }
 }
 
+fn unknown_reply(execution_id: &str) -> HostedValidation {
+    HostedValidation {
+        execution_id: execution_id.into(),
+        state: HostedExecutionState::Unknown,
+        outcome: None,
+    }
+}
+
 fn wait(wait_ms: u64) -> Result<u64, OrchestrationError> {
     if wait_ms > MAX_VALIDATION_WAIT_MS {
         return Err(OrchestrationError::Invalid("wait_ms must be at most 8000"));
@@ -443,6 +459,11 @@ fn execution_id(value: &str) -> Result<(), OrchestrationError> {
 }
 
 impl OrchestrationRuntime {
+    /// HS2-7BTV98: what this machine recorded about the executions it accepted.
+    fn hosted_validation_registry(&self) -> HostedValidationRegistry {
+        HostedValidationRegistry::new(&self.home)
+    }
+
     fn execution_key(&self, checkout_id: &str, execution_id: &str) -> String {
         format!("{}|{checkout_id}|{execution_id}", self.home.display())
     }
@@ -498,21 +519,44 @@ impl OrchestrationRuntime {
                 {
                     return Err(OrchestrationError::Capacity);
                 }
+                // HS2-7BTV98: this machine may already know the id from a process that
+                // is gone. A finished one is answered from its record; one that was
+                // accepted is never started again.
+                let registry = self.hosted_validation_registry();
+                match registry.accept(&checkout.id, &request.execution_id, started_at_ms)? {
+                    HostedValidationKnown::Unknown => {}
+                    HostedValidationKnown::Finished(outcome) => {
+                        return Ok(hosted_reply(&request.execution_id, Some(outcome)));
+                    }
+                    HostedValidationKnown::Accepted => {
+                        return Ok(unknown_reply(&request.execution_id));
+                    }
+                }
                 let execution = new_execution(key);
                 known.push(execution.clone());
                 match command {
-                    None => execution.finish(ended(
-                        ExecutionEnd::ProfileNotDefined,
-                        started_at_ms,
-                        Instant::now(),
-                    )),
+                    None => {
+                        let outcome = ended(
+                            ExecutionEnd::ProfileNotDefined,
+                            started_at_ms,
+                            Instant::now(),
+                        );
+                        let _ = registry.finish(
+                            &checkout.id,
+                            &request.execution_id,
+                            started_at_ms,
+                            outcome.clone(),
+                        );
+                        execution.finish(outcome);
+                    }
                     Some((program, args, timeout_seconds)) => {
                         let running = execution.clone();
                         let step_execution = request.execution_id.clone();
                         let retain = self.validation_output_dir(&checkout.id);
+                        let checkout_id = checkout.id.clone();
                         let timeout = Duration::from_secs(u64::from(timeout_seconds));
                         std::thread::spawn(move || {
-                            running.finish(execute(
+                            let outcome = execute(
                                 &root,
                                 &program,
                                 &args,
@@ -522,7 +566,16 @@ impl OrchestrationRuntime {
                                 &running.cancel,
                                 &step_execution,
                                 Some(&retain),
-                            ));
+                            );
+                            // Recorded before it is answered, so a restart right after
+                            // still finds how it ended.
+                            let _ = registry.finish(
+                                &checkout_id,
+                                &step_execution,
+                                started_at_ms,
+                                outcome.clone(),
+                            );
+                            running.finish(outcome);
                         });
                     }
                 }
@@ -550,10 +603,12 @@ impl OrchestrationRuntime {
             .cloned();
         Ok(match execution {
             Some(execution) => hosted_reply(id, execution.wait(wait_ms)),
-            None => HostedValidation {
-                execution_id: id.into(),
-                state: HostedExecutionState::Unknown,
-                outcome: None,
+            // HS2-7BTV98: not in this process; what the machine recorded decides.
+            None => match self.hosted_validation_registry().known(checkout_id, id)? {
+                HostedValidationKnown::Finished(outcome) => hosted_reply(id, Some(outcome)),
+                HostedValidationKnown::Unknown | HostedValidationKnown::Accepted => {
+                    unknown_reply(id)
+                }
             },
         })
     }
@@ -589,19 +644,30 @@ impl OrchestrationRuntime {
             match known.iter().find(|execution| execution.key == key) {
                 Some(execution) => execution.clone(),
                 None => {
+                    // HS2-7BTV98: a finished execution of a process that is gone keeps
+                    // its own end; one that was running there cannot be stopped from
+                    // here; an id never seen is remembered as cancelled, on disk too.
+                    let cancelled =
+                        ended(ExecutionEnd::Cancelled, tx.clock.now_ms(), Instant::now());
+                    match self.hosted_validation_registry().finish(
+                        checkout_id,
+                        &request.execution_id,
+                        tx.clock.now_ms(),
+                        cancelled.clone(),
+                    )? {
+                        HostedValidationKnown::Finished(outcome) => {
+                            return Ok(hosted_reply(&request.execution_id, Some(outcome)));
+                        }
+                        HostedValidationKnown::Accepted => {
+                            return Ok(unknown_reply(&request.execution_id));
+                        }
+                        HostedValidationKnown::Unknown => {}
+                    }
                     make_room(&mut known)?;
                     let tombstone = new_execution(key);
-                    tombstone.finish(ended(
-                        ExecutionEnd::Cancelled,
-                        tx.clock.now_ms(),
-                        Instant::now(),
-                    ));
+                    tombstone.finish(cancelled);
                     known.push(tombstone);
-                    return Ok(HostedValidation {
-                        execution_id: request.execution_id,
-                        state: HostedExecutionState::Unknown,
-                        outcome: None,
-                    });
+                    return Ok(unknown_reply(&request.execution_id));
                 }
             }
         };

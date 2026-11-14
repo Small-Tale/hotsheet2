@@ -1501,12 +1501,19 @@ at most `wait_ms` (8,000) for it:
   accepted, the attempt stays `running` and the answer lists `target_execution` under
   `unverified`. Nothing is concluded from silence. If the target refuses to start the
   step at all, the result is `unavailable` with the target's code.
-- The host identifies an execution by the result id and never runs one id twice. It
-  remembers executions in memory only: at most 64, four of them running, and a fifth
-  is refused with `capacity_reached`. After the hosting process restarts it answers
-  `unknown` and the attempt becomes `unverified`, never a second run (HS2-7BTV98). A
-  headless CLI that hosts a local target itself must therefore stay until the step
-  ends, which is why `validation run` waits by default.
+- The host identifies an execution by the result id and never runs one id twice. A
+  running execution lives in the hosting process: at most 64 are remembered, four of
+  them running, and a fifth is refused with `capacity_reached`. The machine also
+  records each execution it accepted, before it launches, and how it ended, in
+  `${HOTSHEET_HOME}/orchestration-hosted-validations.json` (0600, at most 256, the
+  oldest finished forgotten first; HS2-7BTV98). After the hosting process restarts, a
+  finished execution is answered from that record, so its result is still collected;
+  one that was running when the process died answers `unknown` (the attempt becomes
+  `unverified`, `execution_lost`) and a start of it that arrives later runs nothing;
+  an id cancelled before it ran stays cancelled. A step still runs inside the hosting
+  process, so a headless CLI that hosts a local target must stay until the step
+  ends, which is why `validation run` waits by default. Running a step as a detached
+  Job is HS2-M7EV18, and stopping a step orphaned by its host's death is HS2-HTS89S.
 - A step whose prerequisite has not passed is recorded as `skipped` without
   contacting the target and without asking anyone. A later request with a new
   `operation_id` runs it once the prerequisite passes.

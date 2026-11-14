@@ -8,6 +8,7 @@ mod bindings;
 mod capacity;
 pub(crate) mod contract;
 mod gates;
+mod hosted_validations;
 mod joining;
 mod manifest;
 mod permissions;
@@ -59,6 +60,10 @@ pub use gates::{
     ArtifactRef, CiScope, Coverage, DeploymentScope, Gate, GateError, GateEvidence, GateFilter,
     GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, GateTransition,
     Linked, MAX_GATE_HISTORY, MAX_GATES, NewGate, summarize, valid_commit, valid_script,
+};
+pub use hosted_validations::{
+    HostedValidationKnown, HostedValidationRecord, HostedValidationRegistry,
+    MAX_HOSTED_VALIDATION_RECORDS,
 };
 pub use joining::{
     DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
@@ -358,6 +363,8 @@ mod binding_tests;
 mod capacity_tests;
 #[cfg(test)]
 mod gate_tests;
+#[cfg(test)]
+mod hosted_validation_tests;
 #[cfg(test)]
 mod joining_tests;
 #[cfg(test)]

@@ -17,7 +17,9 @@ use super::tickets::{
     Machine, NOW, RemotePeer, bind_and_allow, human, machine, unsupported, worker,
 };
 use super::*;
-use crate::orchestration::validation::{STEP_EXECUTION_VARIABLE, execute, validation_environment};
+use crate::orchestration::validation::{
+    STEP_EXECUTION_VARIABLE, execute, forget_executions, validation_environment,
+};
 
 /// SHA-256 of the two bytes `ok`.
 const OK_SHA256: &str = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df";
@@ -1417,6 +1419,127 @@ fn hs2_zcr3y7_small_output_is_kept_on_the_host_and_read_back_by_digest() {
     crate::orchestration::validation_output::prune(&root, now);
     let remaining = copies(&filler).len() + copies(&directory).len();
     assert_eq!(remaining, MAX_RETAINED_COPIES);
+}
+
+/// HS2-7BTV98: after the hosting process restarts, a finished execution is answered
+/// from the machine's record, one that was running then is never started again, and a
+/// cancelled id stays cancelled.
+#[test]
+fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let start = |n: u128, line: &str, wait_ms: u64| HostedValidationStart {
+        execution_id: id(n),
+        check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), line.into()],
+        },
+        timeout_seconds: 20,
+        wait_ms,
+    };
+    let runs = Path::new(&m.target.root).join("runs");
+    // One finishes; one is still running when the "process" goes away.
+    let finished = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            start(50, "echo x >> runs; exit 3", 8_000),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(finished.outcome.as_ref().unwrap().exit_code, Some(3));
+    let gate = Path::new(&m.target.root).join("gate");
+    let running = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            start(
+                51,
+                "echo y >> runs; while [ ! -f gate ]; do sleep 0.05; done",
+                0,
+            ),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(running.state, HostedExecutionState::Running);
+    forget_executions();
+    // Finished: answered from the record, by read and by a repeated start.
+    for answer in [
+        m.runtime
+            .hosted_validation(&m.target.id, &id(50), 0)
+            .unwrap(),
+        m.runtime
+            .hosted_validation_start(
+                &m.target.id,
+                start(50, "echo x >> runs; exit 3", 0),
+                &mut tx,
+            )
+            .unwrap(),
+    ] {
+        assert_eq!(answer.state, HostedExecutionState::Finished);
+        assert_eq!(answer.outcome.unwrap().exit_code, Some(3));
+    }
+    // Running when the process went: unknown, and a late start runs nothing.
+    assert_eq!(
+        m.runtime
+            .hosted_validation(&m.target.id, &id(51), 0)
+            .unwrap()
+            .state,
+        HostedExecutionState::Unknown
+    );
+    let late = m
+        .runtime
+        .hosted_validation_start(&m.target.id, start(51, "echo z >> runs", 8_000), &mut tx)
+        .unwrap();
+    assert_eq!(late.state, HostedExecutionState::Unknown);
+    std::fs::write(&gate, "").unwrap();
+    // A cancel of an id never seen is remembered across the restart too.
+    let cancel = HostedValidationCancel {
+        execution_id: id(52),
+        wait_ms: 0,
+    };
+    assert_eq!(
+        m.runtime
+            .hosted_validation_cancel(&m.target.id, cancel.clone(), &mut tx)
+            .unwrap()
+            .state,
+        HostedExecutionState::Unknown
+    );
+    forget_executions();
+    let after = m
+        .runtime
+        .hosted_validation_start(&m.target.id, start(52, "echo c >> runs", 8_000), &mut tx)
+        .unwrap();
+    assert_eq!(after.state, HostedExecutionState::Finished);
+    assert_eq!(after.outcome.unwrap().end, ExecutionEnd::Cancelled);
+    // A cancel of an execution that finished before the restart keeps its own end.
+    let kept = m
+        .runtime
+        .hosted_validation_cancel(
+            &m.target.id,
+            HostedValidationCancel {
+                execution_id: id(50),
+                wait_ms: 0,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(kept.outcome.unwrap().exit_code, Some(3));
+    // Each step ran exactly once: x and y; never z or c, and never x twice.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let lines = loop {
+        let lines = std::fs::read_to_string(&runs).unwrap_or_default();
+        if lines.lines().count() >= 2 || std::time::Instant::now() > deadline {
+            break lines;
+        }
+    };
+    let mut sorted: Vec<&str> = lines.lines().collect();
+    sorted.sort_unstable();
+    assert_eq!(sorted, ["x", "y"]);
 }
 
 /// A remote peer whose transport can be made to fail or to refuse.
