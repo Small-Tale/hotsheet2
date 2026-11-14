@@ -160,7 +160,17 @@ impl OrchestrationRuntime {
         owner_id: &str,
         record: AuditRecord,
     ) -> Result<(), OrchestrationError> {
-        self.journal(owner_id)?.append(record).map(|_| ())
+        let journal = self.journal(owner_id)?;
+        if !hotsheet_ticketing::orchestration::coalescible(&record) {
+            return journal.append(record).map(|_| ());
+        }
+        // HS2-SV4SMY: an observation read that repeats the newest entry of its subject
+        // within the window is not written again, so a busy scheduling loop does not
+        // rotate decisions out of the bounded journal. Decided under the journal lock.
+        let check = hotsheet_ticketing::orchestration::RepeatCheck::new(&record);
+        journal
+            .append_unless(record.clone(), |previous| check.sees(previous))
+            .map(|_| ())
     }
 
     /// A fresh resolution that survives contention on this machine. Every resolution

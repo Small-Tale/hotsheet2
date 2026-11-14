@@ -525,6 +525,21 @@ ticket content, credentials and origins are rejected at the journal boundary. Ev
 forgotten rule (`permission_remember`, `permission_forget`), and the reported result
 of an authorized action are recorded under the same operation id.
 
+**Repeated observation reads (HS2-SV4SMY).** An observation (`gates_observe`) outside
+any operation that was allowed or succeeded is written only when it says something the
+journal does not already say about its subject (the same actor's same action on the
+same target) within 10 minutes (`AUDIT_COALESCE_MS`): a success is skipped when the
+newest entry of its subject is the same success, and an allowance when that newest
+entry is a success inside the window and the decision before it is the same allowance.
+A denial, a failure, a different reason, permission or role, an operation id, a clock
+that went back, or the window passing writes the entry. Every action that acts on a
+target, and every decision a person makes, is always written. The check is made under
+the journal lock. Without it each scheduling pass wrote an allowed and a succeeded entry
+per target it read (about 200 bytes each), so a loop that runs a pass a minute over
+three targets wrote 360 entries an hour and rotated older decisions out of the 2 MiB
+journal within a day; now such reads write at most two entries per target and window,
+whatever the pass rate.
+
 A segment rotates at 1 MiB to one retained predecessor, so the journal is bounded
 near 2 MiB per owner. `seq` never restarts. A reader passes `after` and gets later
 entries, a `cursor` to continue from, `more`, and `gap: true` when retention removed
@@ -2650,8 +2665,8 @@ refusal backoff stays the fallback wherever no event can arrive: a one-shot `pla
 answers without waiting, a gate refusal, or after 24 hours. The follow then ends, wakes
 the loop once so the retry time applies again, and the target is not followed again
 until a read sees a version. The pass that first records a refusal still sets its retry
-time, because the follow starts after it. Each capacity read is audited, which a busy
-loop makes numerous (HS2-SV4SMY).
+time, because the follow starts after it. Identical capacity reads are recorded once per
+target and 10-minute window (HS2-SV4SMY, §26.7).
 
 ### Headless surface
 

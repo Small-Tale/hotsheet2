@@ -1823,3 +1823,71 @@ fn hs2_awb7bx_a_follow_ends_without_an_event_and_keeps_the_backoff() {
     ));
     assert_eq!(s.probe.asked(), asked);
 }
+
+/// HS2-SV4SMY: the capacity reads of a busy scheduling loop leave one pair of audit
+/// entries per target and window, not one pair per pass, and anything that is not an
+/// identical observation is still recorded every time.
+#[test]
+fn hs2_sv4smy_scheduler_capacity_reads_are_audited_once_per_window() {
+    let clock = super::job_monitor::At(std::sync::atomic::AtomicU64::new(1_000));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
+    let observed = |s: &Setup| s.audited("gates_observe");
+    let before = observed(&s).len();
+    let tick = |tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .scheduler_tick(&s.owner(), &TickRequest::default(), Some(&worker()), tx)
+            .unwrap()
+    };
+    // Twenty passes inside the window: one allowed and one succeeded read.
+    for _ in 0..20 {
+        tick(&mut tx);
+        clock.0.fetch_add(1_000, Ordering::SeqCst);
+    }
+    let after = observed(&s);
+    assert_eq!(after.len() - before, 2, "{after:?}");
+    // The audit journal still answers every decision of the window.
+    assert_eq!(
+        after[after.len() - 2..]
+            .iter()
+            .map(|entry| entry.0)
+            .collect::<Vec<_>>(),
+        [AuditOutcome::Allowed, AuditOutcome::Succeeded]
+    );
+    // Past the window the next read is recorded again, once.
+    clock.0.fetch_add(
+        hotsheet_ticketing::orchestration::AUDIT_COALESCE_MS,
+        Ordering::SeqCst,
+    );
+    tick(&mut tx);
+    tick(&mut tx);
+    assert_eq!(observed(&s).len() - before, 4);
+    // A refused read is recorded, and so is the next allowed one after it, even inside
+    // the window: the newest entry of the subject is what a repeat must match.
+    super::tickets::unbind(&s.m, 1, &mut tx);
+    tick(&mut tx);
+    let refused = observed(&s);
+    assert_eq!(refused.last().unwrap().0, AuditOutcome::Denied);
+    tick(&mut tx);
+    assert_eq!(
+        observed(&s).len(),
+        refused.len() + 1,
+        "every denial is recorded"
+    );
+    super::tickets::rebind(&s.m, 1, &mut tx);
+    tick(&mut tx);
+    let back = observed(&s);
+    assert_eq!(
+        back[refused.len() + 1..]
+            .iter()
+            .map(|entry| entry.0)
+            .collect::<Vec<_>>(),
+        [AuditOutcome::Allowed, AuditOutcome::Succeeded]
+    );
+}

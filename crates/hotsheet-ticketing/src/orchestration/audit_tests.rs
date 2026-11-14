@@ -213,3 +213,75 @@ fn hs2_sbq3t8_journal_refuses_symlinked_storage() {
             .is_none()
     );
 }
+
+/// HS2-SV4SMY: which observation reads repeat what the journal already says.
+#[test]
+fn hs2_sv4smy_an_identical_observation_read_repeats_only_within_the_window() {
+    let read = |at_ms, outcome| {
+        let mut entry = record(at_ms, "gates_observe", outcome);
+        entry.operation_id = None;
+        entry
+    };
+    use AuditOutcome::{Allowed, Denied, Failed, Succeeded};
+    // The journal after one read: allowed, then succeeded (newest first below).
+    let pair = [read(1_000, Succeeded), read(1_000, Allowed)];
+    let inside = 1_000 + AUDIT_COALESCE_MS - 1;
+    // Empty journal: nothing to repeat.
+    assert!(!repeats(&[], &read(1_000, Allowed)));
+    // The next read's allowance and success repeat the pair inside the window.
+    assert!(repeats(&pair, &read(inside, Allowed)));
+    assert!(repeats(&pair, &read(inside, Succeeded)));
+    // Past the window, or with a clock that went back, they are written again.
+    for at in [1_000 + AUDIT_COALESCE_MS, 999] {
+        assert!(!repeats(&pair, &read(at, Allowed)), "{at}");
+        assert!(!repeats(&pair, &read(at, Succeeded)), "{at}");
+    }
+    // A denial or a failure newest: the next allowance or success is written.
+    let denied = [
+        read(1_100, Denied),
+        read(1_000, Succeeded),
+        read(1_000, Allowed),
+    ];
+    assert!(!repeats(&denied, &read(1_200, Allowed)));
+    let failed = [
+        read(1_100, Failed),
+        read(1_100, Allowed),
+        read(1_000, Succeeded),
+    ];
+    assert!(!repeats(&failed, &read(1_200, Succeeded)));
+    assert!(!repeats(&failed, &read(1_200, Allowed)));
+    // Right after a newly written allowance its success is written too.
+    let fresh = [read(1_200, Allowed), read(1_100, Denied)];
+    assert!(!repeats(&fresh, &read(1_200, Succeeded)));
+    // Another subject's entries are passed over; the subject's own pair decides.
+    let mut other = read(1_150, Denied);
+    other.target_id = Some("t2".into());
+    let mixed = [other, read(1_000, Succeeded), read(1_000, Allowed)];
+    assert!(repeats(&mixed, &read(1_200, Allowed)));
+    // Any difference in what is said is written.
+    type Change = fn(&mut AuditRecord);
+    let differs: [(&str, Change); 5] = [
+        ("another role", |r| r.actor_role = Some("human".into())),
+        ("another reason", |r| {
+            r.reason = Some("observation_never_asks".into())
+        }),
+        ("another permission", |r| {
+            r.permission_id = Some("rule-1".into())
+        }),
+        ("an operation", |r| r.operation_id = Some("op-1".into())),
+        ("another action", |r| r.action = "tickets_read".into()),
+    ];
+    for (name, change) in differs {
+        for outcome in [Allowed, Succeeded] {
+            let mut next = read(1_100, outcome);
+            change(&mut next);
+            assert!(!repeats(&pair, &next), "{name}");
+        }
+    }
+    // Only allowed or succeeded observations outside an operation coalesce.
+    assert!(coalescible(&read(1, Succeeded)));
+    for outcome in [Denied, Failed] {
+        assert!(!coalescible(&read(1, outcome)));
+    }
+    assert!(!coalescible(&record(1, "tickets_write", Allowed)));
+}

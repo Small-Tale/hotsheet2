@@ -40,8 +40,9 @@ pub use assignment::{
     decide_assignment,
 };
 pub use audit::{
-    AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, Journal, JournalEntry,
-    JournalPage, JournalRecord, MAX_AUDIT_PAGE, MAX_AUDIT_SEGMENT_BYTES,
+    AUDIT_COALESCE_MS, AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, Journal,
+    JournalEntry, JournalPage, JournalRecord, MAX_AUDIT_PAGE, MAX_AUDIT_SEGMENT_BYTES, RepeatCheck,
+    coalescible, repeats,
 };
 pub use bindings::BindingRegistry;
 pub use capacity::{

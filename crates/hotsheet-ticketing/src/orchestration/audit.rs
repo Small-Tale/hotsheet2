@@ -64,6 +64,97 @@ pub struct AuditRecord {
     pub permission_id: Option<String>,
 }
 
+/// HS2-SV4SMY: how long an identical observation read is recorded only once.
+pub const AUDIT_COALESCE_MS: u64 = 10 * 60 * 1000;
+
+/// HS2-SV4SMY: whether a record may be folded into an identical earlier one: an
+/// observation (`gates_observe`) that was allowed or succeeded, outside any operation.
+/// Denials, failures and every action that acts on a target are always recorded.
+pub fn coalescible(record: &AuditRecord) -> bool {
+    record.action == "gates_observe"
+        && record.operation_id.is_none()
+        && matches!(
+            record.outcome,
+            AuditOutcome::Allowed | AuditOutcome::Succeeded
+        )
+}
+
+/// The same actor's same action on the same target.
+fn same_key(a: &AuditRecord, b: &AuditRecord) -> bool {
+    a.actor_id == b.actor_id && a.target_id == b.target_id && a.action == b.action
+}
+
+/// `next` says what `previous` said, within [`AUDIT_COALESCE_MS`] of it.
+fn identical(previous: &AuditRecord, next: &AuditRecord) -> bool {
+    previous.outcome == next.outcome
+        && previous.actor_role == next.actor_role
+        && previous.reason == next.reason
+        && previous.permission_id == next.permission_id
+        && previous.operation_id == next.operation_id
+        && next.at_ms >= previous.at_ms
+        && next.at_ms - previous.at_ms < AUDIT_COALESCE_MS
+}
+
+/// HS2-SV4SMY: decides, entry by entry from the newest, whether a coalescible record
+/// repeats what the journal already says about its subject. A success repeats when the
+/// newest entry of its subject is the same success. An allowance repeats when the
+/// newest entry of its subject is a success inside the window and the newest decision
+/// before it is the same allowance. Anything else in between (a denial, a failure, a
+/// different reason) means the record is written.
+pub struct RepeatCheck<'a> {
+    next: &'a AuditRecord,
+    /// 0: looking for the newest entry of the subject; 1: an allowance looks for the
+    /// newest decision; 2: decided.
+    stage: std::cell::Cell<u8>,
+}
+
+impl<'a> RepeatCheck<'a> {
+    pub fn new(next: &'a AuditRecord) -> Self {
+        Self {
+            next,
+            stage: std::cell::Cell::new(if coalescible(next) { 0 } else { 2 }),
+        }
+    }
+
+    /// True once the entries seen so far, newest first, make `next` a repeat.
+    pub fn sees(&self, previous: &AuditRecord) -> bool {
+        let next = self.next;
+        if self.stage.get() == 2 || !same_key(previous, next) {
+            return false;
+        }
+        let decided = |repeat: bool| {
+            self.stage.set(2);
+            repeat
+        };
+        match (self.stage.get(), next.outcome) {
+            (0, AuditOutcome::Succeeded) => decided(identical(previous, next)),
+            (0, AuditOutcome::Allowed) => {
+                let succeeded = previous.outcome == AuditOutcome::Succeeded
+                    && previous.operation_id.is_none()
+                    && next.at_ms >= previous.at_ms
+                    && next.at_ms - previous.at_ms < AUDIT_COALESCE_MS;
+                if succeeded {
+                    self.stage.set(1);
+                    false
+                } else {
+                    decided(false)
+                }
+            }
+            (1, _) => match previous.outcome {
+                AuditOutcome::Succeeded | AuditOutcome::Failed => false,
+                _ => decided(identical(previous, next)),
+            },
+            _ => decided(false),
+        }
+    }
+}
+
+/// HS2-SV4SMY: whether `next` repeats the journal, given its entries newest first.
+pub fn repeats(newest_first: &[AuditRecord], next: &AuditRecord) -> bool {
+    let check = RepeatCheck::new(next);
+    newest_first.iter().any(|previous| check.sees(previous))
+}
+
 /// HS2-7QHWHJ: what a journal stores. Each record type has its own directory under the
 /// machine home and validates itself as identifiers and codes only.
 pub trait JournalRecord: Serialize + serde::de::DeserializeOwned + Clone {
