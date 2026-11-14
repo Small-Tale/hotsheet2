@@ -2785,6 +2785,69 @@ describe('remembered-rule refresh after a saved reviewed match (HS2-9YVX6Q)', ()
     owner.dispose();
   });
 
+  it('keeps orchestrator answers listed and revocable while the vault is locked (HS2-4K43DK)', async () => {
+    const orchestratorRule = {
+      ...rule('Create or change tickets in API'),
+      project: 'checkout:a',
+      tool: 'Orchestrator',
+      action: 'orchestrator:01ARZ3NDEKTSV4RRFFQ69G5FB0',
+      orchestrator: {
+        rule_id: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+        owner_checkout_id: 'a',
+        owner_label: 'A',
+        target_id: '01ARZ3NDEKTSV4RRFFQ69G5FAZ',
+        target_label: 'API',
+        action: 'tickets_write',
+      },
+    };
+    const urls: string[] = [];
+    let listed: unknown[] = [orchestratorRule];
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      urls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url === '/api/a/permissions/rules' && init?.method === 'DELETE') {
+        listed = [];
+        return new Response(null, { status: 204 });
+      }
+      if (url === '/api/a/permissions/rules') return failure(503);
+      if (url === '/api/a/permissions/rules?source=orchestrator') return json(listed);
+      return json([]);
+    });
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    let shown: string[] = [];
+    const stop = effect(() => {
+      shown = owner.permissionRules('a').map((value) => value.action);
+    });
+    await flush();
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(true);
+    expect(shown).toEqual([orchestratorRule.action]);
+    expect(owner.permissionRulesMessage.value).toMatch(/^Remembered answers are locked\./);
+    // Revoking it reloads the locked list without calling the refresh a failure.
+    owner.selectPermissionRuleRow('a', permissionRuleKey(orchestratorRule), { toggle: false, range: false }, 'preview');
+    owner.requestDeleteSelectedPermissionRules('a', true, 'preview');
+    await owner.applySelectedPermissionRules('a', 'delete', 'preview');
+    await flush();
+    expect(urls).toContain('DELETE /api/a/permissions/rules');
+    expect(shown).toEqual([]);
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(true);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(owner.permissionRulesMessage.value).not.toContain('Could not refresh');
+    // A failed subset read is the plain locked state, never a request loop.
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return url === '/api/a/permissions/rules' ? failure(503) : failure(500);
+    });
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(shown).toEqual([]);
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(true);
+    const before = fetchMock.mock.calls.length;
+    await flush();
+    expect(fetchMock.mock.calls.length).toBe(before);
+    stop();
+    owner.dispose();
+  });
+
   it('waits for a load that started after the save instead of an overlapping older one', async () => {
     const { owner, stop, shown } = await loaded([rule('npm test')]);
     const key = permissionRuleKey(rule('npm test'));

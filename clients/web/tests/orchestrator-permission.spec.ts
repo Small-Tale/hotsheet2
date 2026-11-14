@@ -160,3 +160,76 @@ test('keeps an orchestrator card out of the project auto-allow (HS2-42WS4Z)', as
     await app.stop();
   }
 });
+
+// HS2-4K43DK: while the AI permission vault is locked, the full rule list answers 503 and
+// Settings shows "Remembered Answers Locked". The orchestrator's rules are stored in the
+// orchestration ledger, so they stay listed below that notice and can still be revoked.
+test('keeps orchestrator answers listed and revocable while the vault is locked (HS2-4K43DK)', async ({
+  context,
+  baseURL,
+}) => {
+  test.setTimeout(120_000);
+  const app = await desktopApp(context, baseURL!);
+  try {
+    const page = await app.launch();
+    // The vault lock as the server reports it: only the full list, not the orchestrator subset.
+    await page.route(
+      (url) => url.pathname.endsWith('/permissions/rules') && url.search === '',
+      (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ status: 503, json: { error: 'permission-rule store locked or unavailable' } })
+          : route.continue(),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
+    await orchestratorRequest(app.server, 'op-locked-1');
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await popup.getByRole('button', { name: 'Always Allow' }).click();
+    await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
+    await expect(popup).toHaveCount(0);
+    await openPermissionSettings(page);
+    const remembered = page.locator('[data-component="permission-rules-settings"]');
+    await expect(remembered).toContainText('Remembered Answers Locked');
+    await expect(remembered).toContainText('The orchestrator answers below are stored separately and still apply.');
+    const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
+    await expect(preview).toContainText('Create or change tickets in API');
+    await expect(preview).toContainText('Target project: API');
+    for (const width of [1440, 1100, 390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      if (width === 390) {
+        const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+        if (await hideSidebar.isVisible()) await hideSidebar.click();
+      }
+      await remembered.getByText('Remembered Answers Locked').evaluate((element) => {
+        element.scrollIntoView({ block: 'start' });
+      });
+      // Panels slide when the width changes; capture once the list is fully on screen.
+      await expect(preview).toBeInViewport({ ratio: 1 });
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => animation.playState !== 'running'),
+      );
+      await expect
+        .poll(() => remembered.evaluate((element) => element.getBoundingClientRect().right))
+        .toBeLessThanOrEqual(width);
+      await page.screenshot({ path: `target/visual-captures/hs2-4k43dk-locked-${width}.png` });
+    }
+    const row = preview.locator('[data-permission-rule]').first();
+    await row.locator('[data-action="select-permission-rule-row"]').click();
+    await page
+      .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
+      .getByRole('button', { name: 'Selected Answer Actions' })
+      .click();
+    await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+    await page.getByRole('button', { name: 'Confirm Delete' }).click();
+    await expect(preview).toHaveCount(0);
+    await expect(remembered).toContainText('Remembered Answers Locked');
+    await expect(remembered).not.toContainText('Could not refresh');
+    const left = await app.server.request<unknown[]>('/permissions/rules?source=orchestrator');
+    expect(left).toEqual([]);
+  } finally {
+    await app.stop();
+  }
+});

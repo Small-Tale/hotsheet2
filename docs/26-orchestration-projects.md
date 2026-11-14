@@ -4268,3 +4268,10 @@ hotsheet-cli ... orchestration target-lines --project <target> [--after <version
 
 MCP `hotsheet_targets` adds `target_lines` (with `version` and `wait_ms`), called with
 the target project as `checkout`.
+
+- **A locked vault** (HS2-4K43DK). While the AI permission vault is locked or still
+  loading, the full list answers 503 and Settings shows "Remembered Answers Locked".
+  The orchestrator's rules do not depend on the vault: `GET
+/permissions/rules?source=orchestrator` lists them alone, and Settings shows them
+  below the locked notice, which says they still apply. Always Allow on an
+  orchestrator card and revoking an orchestrator rule work in both states.

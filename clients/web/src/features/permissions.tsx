@@ -777,8 +777,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         [projectId]: projectPermissionRules(refreshed, project),
       };
       freshPermissionRules.value = new Set([...freshPermissionRules.value, projectId]);
-    } catch {
-      refreshFailed = true;
+    } catch (reason) {
+      // HS2-4K43DK: a locked vault is not a failed refresh; the reload shows the locked list.
+      refreshFailed = !(reason instanceof ApiHttpError && reason.status === 503);
       markPermissionRulesStale(projectId);
     }
     function finishSelection() {
@@ -859,10 +860,21 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     try {
       rules = await new Api(project.apiPath, '', { trackBusy: false }).permissionRules();
     } catch (reason) {
+      const locked = reason instanceof ApiHttpError && reason.status === 503;
+      // HS2-4K43DK: the orchestrator's rules stay listed and revocable under the locked notice.
+      // Read while this load is still the in-flight one, so a later load cannot be overwritten.
+      const orchestratorRules = locked
+        ? await new Api(project.apiPath, '', { trackBusy: false })
+            .orchestratorPermissionRules()
+            .catch((): PermissionRule[] => [])
+        : [];
       loadingPermissionRules.delete(project.id);
       let outcome: PermissionRulesLoad;
-      if (reason instanceof ApiHttpError && reason.status === 503) {
-        permissionRulesByProject.value = { ...permissionRulesByProject.value, [project.id]: [] };
+      if (locked) {
+        permissionRulesByProject.value = {
+          ...permissionRulesByProject.value,
+          [project.id]: projectPermissionRules(orchestratorRules, project),
+        };
         lockedPermissionRules.value = new Set([...lockedPermissionRules.value, project.id]);
         setUnrefreshedPermissionRules(project.id, false);
         outcome = { status: 'locked' };

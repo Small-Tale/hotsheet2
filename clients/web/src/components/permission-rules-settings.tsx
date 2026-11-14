@@ -394,13 +394,18 @@ export function PermissionRulesSettings({
     >
       <List gap="xs">
         <ListHeader label="Remembered Answers" headingLevel={3} density="compact" />
-        {locked ? (
+        {locked && (
           <EmptyState
             icon={<LucideIcon size="xl" icon={ShieldX} name="shield-x" />}
             title="Remembered Answers Locked"
-            detail="The permission key or encrypted rule data is unavailable. Saved rules cannot approve requests until access is restored."
+            detail={
+              rules.length === 0
+                ? 'The permission key or encrypted rule data is unavailable. Saved rules cannot approve requests until access is restored.'
+                : 'The permission key or encrypted rule data is unavailable. Saved AI tool rules cannot approve requests until access is restored. The orchestrator answers below are stored separately and still apply.'
+            }
           />
-        ) : rules.length === 0 ? (
+        )}
+        {locked && rules.length === 0 ? null : rules.length === 0 ? (
           <EmptyState
             icon={<LucideIcon size="xl" icon={ShieldCheck} name="shield-check" />}
             title="No Remembered Answers"

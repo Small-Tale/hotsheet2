@@ -1463,7 +1463,9 @@ shows no countdown on it (HS2-42WS4Z). `POST /permissions/{id}` routes the answe
 records it, remembers an Always Allow as a rule keyed (orchestration project, target
 project, action, tool), wakes the scheduler, and settles the card with the ordinary
 `permission_resolved` event. Those rules live in the orchestration ledger rather than
-the encrypted vault; `GET /permissions/rules` merges them in, `DELETE
+the encrypted vault; `GET /permissions/rules` merges them in (and
+`?source=orchestrator` lists them alone, also while the vault is locked or loading,
+HS2-4K43DK), `DELETE
 /permissions/rules` forgets one, and editing one is refused with 400. Pending
 orchestrator requests are brought in line with the ledger whenever a client reads
 `GET /permissions`, so one filed by a headless CLI appears then.

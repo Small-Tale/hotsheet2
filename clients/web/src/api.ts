@@ -3149,6 +3149,11 @@ export class Api {
     });
   /** Remembered permission answers: chat, session, and durable rules (HS2-JNHAYB). */
   permissionRules = () => this.parsed(parsePermissionRule.list, '/permissions/rules');
+  /**
+   * HS2-4K43DK: the orchestrator's remembered rules alone. They live outside the AI permission
+   * vault, so they are listed while the full list answers 503 for a locked or loading vault.
+   */
+  orchestratorPermissionRules = () => this.parsed(parsePermissionRule.list, '/permissions/rules?source=orchestrator');
   updatePermissionRule = (
     rule: { project: string; connection?: string; tool: string; action: string },
     decision: 'allow' | 'deny',

@@ -1539,11 +1539,36 @@ pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
 /// are omitted.
 pub(crate) async fn list_permission_rules(
     State(state): State<AppState>,
+    Query(query): Query<PermissionRulesQuery>,
 ) -> Result<Json<Vec<hotsheet_aitools::PermissionRuleInfo>>, ApiError> {
+    // HS2-4K43DK: the orchestrator's rules live in its own ledger, so they stay listed
+    // (and forgettable) while the AI permission vault is locked or still loading, when
+    // the full list below answers 503.
+    match query.source.as_deref() {
+        None => {}
+        Some("orchestrator") => {
+            return Ok(Json(
+                crate::routes::orchestration_permissions::rules(&state).await,
+            ));
+        }
+        Some(_) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "source must be orchestrator",
+            ));
+        }
+    }
     let mut rules = bridge_permission_rules(&state)?;
     // HS2-XHQ1EH: remembered orchestrator rules are listed with the other rules.
     rules.extend(crate::routes::orchestration_permissions::rules(&state).await);
     Ok(Json(rules))
+}
+
+/// `GET /permissions/rules?source=orchestrator` lists only the orchestrator's rules.
+#[derive(Deserialize)]
+pub(crate) struct PermissionRulesQuery {
+    #[serde(default)]
+    source: Option<String>,
 }
 
 fn bridge_permission_rules(

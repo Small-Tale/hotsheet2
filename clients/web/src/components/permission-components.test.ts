@@ -386,6 +386,17 @@ describe('orchestrator permission requests (HS2-XHQ1EH)', () => {
       expect(markup).not.toContain('Code project: Launch');
     }
     expect(permissionRulesList([rule], 'orchestrator of launch', 100, undefined, owner).rows).toEqual([rule]);
+    // HS2-4K43DK: a locked vault keeps the orchestrator rows listed below the locked notice.
+    const locked = String(PermissionRulesSettings({ rules: [rule], owner, locked: true }));
+    expect(locked).toContain('Remembered Answers Locked');
+    expect(locked).toContain('The orchestrator answers below are stored separately and still apply.');
+    expect(locked).toContain('Start a codex session in API');
+    expect(locked).toContain('data-permission-rule-menu=');
+    expect(locked).not.toContain('No Remembered Answers');
+    const empty = String(PermissionRulesSettings({ rules: [], owner, locked: true }));
+    expect(empty).toContain('Remembered Answers Locked');
+    expect(empty).not.toContain('still apply');
+    expect(empty).not.toContain('No Remembered Answers');
   });
 });
 

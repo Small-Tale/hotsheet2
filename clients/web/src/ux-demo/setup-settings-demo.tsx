@@ -310,6 +310,24 @@ function applyTrashDemo(state: TrashDemoState, value: string): TrashDemoState {
     : { ...state, message: 'Enter a positive whole number of days.' };
 }
 
+const PERMISSION_RULES_DEMO_ORCHESTRATOR: PermissionRule = {
+  project: 'checkout:demo',
+  tool: 'Orchestrator',
+  action: 'orchestrator:01ARZ3NDEKTSV4RRFFQ69G5FB0',
+  exact_action: 'Create or change tickets in API',
+  match_type: 'exact',
+  description: 'Create or change tickets in API',
+  decision: 'allow',
+  scope: 'always',
+  orchestrator: {
+    rule_id: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+    owner_checkout_id: 'demo',
+    owner_label: 'Demo Code Project',
+    target_id: '01ARZ3NDEKTSV4RRFFQ69G5FAZ',
+    target_label: 'API',
+    action: 'tickets_write',
+  },
+};
 const PERMISSION_RULES_DEMO = [
   {
     project: 'checkout:demo',
@@ -447,6 +465,15 @@ export function PermissionRulesSettingsDemo() {
           owner={{ id: 'demo', name: 'Demo Code Project', root: '/work/demo-code' }}
           message="Reviewed match updated, but the list could not be refreshed. The server is unavailable."
           refreshFailed
+        />
+      </CatalogExample>
+      {/* HS2-4K43DK: the orchestrator's rules are stored outside the locked vault. */}
+      <CatalogExample label="Locked, with Orchestrator Answers">
+        <PermissionRulesSettings
+          rules={[PERMISSION_RULES_DEMO_ORCHESTRATOR]}
+          owner={{ id: 'demo', name: 'Demo Code Project', root: '/work/demo-code' }}
+          message="Remembered answers are locked. Restore the host credential store and encrypted rule file, then reload this page to retry."
+          locked
         />
       </CatalogExample>
       <CatalogExample label="Discard Legacy Permission Answers">

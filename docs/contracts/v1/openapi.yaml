@@ -11171,6 +11171,17 @@ paths:
   /permissions/rules:
     get:
       operationId: list_permission_rules
+      parameters:
+        - name: source
+          in: query
+          description: >-
+            HS2-4K43DK. orchestrator lists only the orchestrator's remembered rules, which
+            are stored outside the AI permission vault and stay listed while it is locked or
+            loading.
+          schema:
+            type: string
+            enum:
+              - orchestrator
       responses:
         '200':
           description: Server-owned response.
