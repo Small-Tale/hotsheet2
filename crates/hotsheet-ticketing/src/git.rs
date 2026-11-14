@@ -119,6 +119,47 @@ pub fn remove_repository_env(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
+/// HS2-NKD80S: the absolute Git directory of the work tree at `root`, from a
+/// process-wide cache. Each store write asked Git for it, or for a path inside it, six
+/// times; a work tree's Git directory does not change while its path does not, so it
+/// is asked once per root. A cached directory that no longer exists is asked again.
+/// `Ok(None)` when Git finds no repository at `root`.
+pub fn absolute_git_dir(root: &Path) -> std::io::Result<Option<std::path::PathBuf>> {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
+    static KNOWN: OnceLock<Mutex<HashMap<PathBuf, PathBuf>>> = OnceLock::new();
+    // One key per directory however it is spelled (`/var` and `/private/var` on macOS).
+    let key = std::fs::canonicalize(root).or_else(|_| std::path::absolute(root))?;
+    let known = KNOWN.get_or_init(Default::default);
+    if let Some(dir) = known
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&key)
+        .filter(|dir| dir.is_dir())
+    {
+        return Ok(Some(dir.clone()));
+    }
+    let out = command()
+        .arg("-C")
+        .arg(&key)
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()?;
+    if !out.status.success() {
+        return Ok(None);
+    }
+    let dir = PathBuf::from(
+        String::from_utf8_lossy(&out.stdout)
+            .trim_end_matches(['\n', '\r'])
+            .to_string(),
+    );
+    known
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(key, dir.clone());
+    Ok(Some(dir))
+}
+
 /// [`command`] run in `dir`: sets both the working directory and `-C <dir>`.
 ///
 /// A relative `dir` is made absolute first, so `-C` cannot resolve it a second time
@@ -160,6 +201,43 @@ mod tests {
         // HS2-726EXJ: one initial branch on every git version, matching CI.
         assert_eq!(get("init.defaultBranch"), "master");
         assert_eq!(get("user.email"), "test@example.invalid");
+    }
+
+    /// HS2-NKD80S: the Git directory is answered from the cache once known, a
+    /// directory that went away is asked again, and a path outside any repository is
+    /// `None`.
+    #[test]
+    fn hs2_nkd80s_the_git_directory_is_cached_per_root_and_asked_again_when_gone() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = root.path().join("repo");
+        std::fs::create_dir(&repo).unwrap();
+        assert!(
+            command_in(&repo)
+                .arg("init")
+                .arg("-q")
+                .status()
+                .unwrap()
+                .success()
+        );
+        let first = absolute_git_dir(&repo).unwrap().unwrap();
+        assert_eq!(first, std::fs::canonicalize(repo.join(".git")).unwrap());
+        // The same directory spelled differently is the same answer.
+        let spelled = repo.join(".").join("..").join("repo");
+        assert_eq!(absolute_git_dir(&spelled).unwrap().unwrap(), first);
+        // Gone, then a new repository at the same path: asked again.
+        std::fs::remove_dir_all(repo.join(".git")).unwrap();
+        assert!(
+            command_in(&repo)
+                .arg("init")
+                .arg("-q")
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert_eq!(absolute_git_dir(&repo).unwrap().unwrap(), first);
+        let outside = root.path().join("plain");
+        std::fs::create_dir(&outside).unwrap();
+        assert_eq!(absolute_git_dir(&outside).unwrap(), None);
     }
 
     #[test]

@@ -2340,22 +2340,10 @@ pub(crate) fn lock_sync_ai(root: &Path) -> Result<FileLock, StoreError> {
 }
 
 fn lock_git_coordination(root: &Path, filename: &str) -> Result<FileLock, StoreError> {
-    let out = crate::git::command()
-        .arg("-C")
-        .arg(root)
-        .args(["rev-parse", "--absolute-git-dir"])
-        .output()?;
-    if !out.status.success() {
-        return Err(StoreError::Git(format!(
-            "`git rev-parse --absolute-git-dir` failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
-    }
-    let git_dir = PathBuf::from(
-        String::from_utf8_lossy(&out.stdout)
-            .trim_end_matches(['\n', '\r'])
-            .to_string(),
-    );
+    // HS2-NKD80S: the Git directory is asked once per root.
+    let git_dir = crate::git::absolute_git_dir(root)?.ok_or_else(|| {
+        StoreError::Git("`git rev-parse --absolute-git-dir` failed: not a Git work tree".into())
+    })?;
     let git_dir = fs::canonicalize(&git_dir).map_err(|source| StoreError::IoAt {
         operation: "resolving Git directory",
         path: git_dir,

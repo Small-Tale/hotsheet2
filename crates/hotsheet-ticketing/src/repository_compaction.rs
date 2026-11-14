@@ -87,21 +87,14 @@ pub struct CompactionResult {
 /// The original checkout must not resume writing after its remote history was
 /// replaced. Keep this guard in Git's private directory so it survives a server
 /// restart without making the working tree dirty (HS2-RFJ1GN).
+///
+/// The marker is a name Git does not share between work trees, so `--git-path` puts it
+/// in the work tree's own Git directory; that directory is cached (HS2-NKD80S).
 pub fn recovery_marker_path(root: &Path) -> Result<PathBuf, CompactionError> {
-    let path = git(
-        root,
-        &[
-            "rev-parse",
-            "--git-path",
-            "hotsheet-compaction-recovery.json",
-        ],
-    )?;
-    let path = PathBuf::from(path);
-    Ok(if path.is_absolute() {
-        path
-    } else {
-        root.join(path)
-    })
+    let git_dir = crate::git::absolute_git_dir(root)?.ok_or_else(|| {
+        CompactionError::Invalid("git rev-parse failed: not a Git work tree".into())
+    })?;
+    Ok(git_dir.join("hotsheet-compaction-recovery.json"))
 }
 
 pub fn recovery_required(root: &Path) -> bool {

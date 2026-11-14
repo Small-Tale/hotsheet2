@@ -125,8 +125,8 @@ pub struct Stall {
 }
 
 fn git_dir(store: &Path) -> Option<PathBuf> {
-    git_stdout(store, &["rev-parse", "--absolute-git-dir"])
-        .map(|dir| PathBuf::from(dir.trim_end_matches(['\n', '\r'])))
+    // HS2-NKD80S: asked once per root.
+    crate::git::absolute_git_dir(store).ok().flatten()
 }
 
 fn first_line(path: &Path) -> Option<String> {

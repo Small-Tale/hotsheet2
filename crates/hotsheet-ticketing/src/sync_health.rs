@@ -529,19 +529,8 @@ fn write_record(store_path: &Path, record: &SyncRecord) -> std::io::Result<()> {
 }
 
 fn git_dir(store_path: &Path) -> Option<PathBuf> {
-    let out = crate::git::command()
-        .arg("-C")
-        .arg(store_path)
-        .args(["rev-parse", "--absolute-git-dir"])
-        .output()
-        .ok()?;
-    out.status.success().then(|| {
-        PathBuf::from(
-            String::from_utf8_lossy(&out.stdout)
-                .trim_end_matches(['\n', '\r'])
-                .to_string(),
-        )
-    })
+    // HS2-NKD80S: asked once per root.
+    crate::git::absolute_git_dir(store_path).ok().flatten()
 }
 
 /// Which history integration is in progress (or was abandoned) in the store, if any.
