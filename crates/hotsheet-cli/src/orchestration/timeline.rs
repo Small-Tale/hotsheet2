@@ -356,19 +356,33 @@ impl OrchestrationRuntime {
         if wait_ms == 0 || after.is_none() {
             return Ok(self.timeline_now(&owner.id, tx)?.0);
         }
-        // Watch before reading, so a change in between is not missed.
         let runs = RunEventJournal::new(&self.home, &owner.id)?;
         let decisions = DecisionJournal::new(&self.home, &owner.id)?;
         let wake = self.home.join(WAKE_DIRECTORY);
+        // HS2-ANQXQ4: a person's answer to a permission request ends the wait, whether
+        // or not the owner's policy runs a scheduler to wake.
+        let permissions = self.permission_signal_dir();
         let (first, stores) = self.timeline_now(&owner.id, tx)?;
         if after != Some(first.version.as_str()) {
             return Ok(first);
         }
-        let mut dirs = vec![runs.directory(), decisions.directory(), wake.as_path()];
+        let mut dirs = vec![
+            runs.directory(),
+            decisions.directory(),
+            wake.as_path(),
+            permissions.as_path(),
+        ];
         dirs.extend(stores.iter().map(PathBuf::as_path));
         let Ok(waiter) = hotsheet_jobs::ChangeWaiter::watching(&dirs) else {
             return Ok(first);
         };
+        // HS2-ANQXQ4: the stores to watch are known only after the first read, so the
+        // watcher starts after it. Read once more now that it runs: a change made in
+        // between (an answer given while the first read ran) is not missed.
+        let (current, _) = self.timeline_now(&owner.id, tx)?;
+        if current.version != first.version {
+            return Ok(current);
+        }
         let deadline = std::time::Instant::now()
             + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
         loop {

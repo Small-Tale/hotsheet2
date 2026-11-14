@@ -3950,10 +3950,13 @@ decision note on the goal ticket (HS2-XHQ1EH).
 
 **Waiting for a change.** With `after` equal to the current version and `wait_ms` (at most
 20 seconds) the read is a long poll. It watches the owner's run event journal, its
-scheduler decision log, the scheduler's wake marker and, while a decision is pending, the
-owner's ticket store, and answers as soon as the version differs, or with the same
-version at the deadline. Nothing polls on an interval. An answered permission request does not
-wake it yet (HS2-ANQXQ4). A read on the server also starts the target followers of §26.9.
+scheduler decision log, the scheduler's wake marker, the permission signal of §26.28 and,
+while a decision is pending, the owner's ticket store, and answers as soon as the version
+differs, or with the same version at the deadline. Nothing polls on an interval. A person's
+answer therefore ends the wait at once (HS2-ANQXQ4): an answer to the permission request a
+step waits on changes the permission ledger, and a response to the goal ticket's decision
+note changes the owner's store, without waiting for the next run event or scheduler pass.
+A read on the server also starts the target followers of §26.9.
 
 ### The view
 

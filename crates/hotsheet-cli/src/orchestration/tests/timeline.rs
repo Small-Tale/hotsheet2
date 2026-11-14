@@ -517,3 +517,166 @@ fn hs2_s3fkj7_target_lines_read_the_owner_plan_from_the_target_side() {
             .is_err()
     );
 }
+
+/// Wait on the timeline at `version` while `change` runs on another thread after a
+/// short delay; answers the version the wait returned and how long it took.
+fn wait_through(
+    m: &Machine,
+    version: &str,
+    change: impl FnOnce() + Send + 'static,
+) -> (Timeline, std::time::Duration) {
+    let mut rng = Rng(700);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        change();
+    });
+    let started = std::time::Instant::now();
+    let view = m
+        .runtime
+        .orchestration_timeline(&m.owner.id, Some(version), MAX_TIMELINE_WAIT_MS, &mut tx)
+        .unwrap();
+    writer.join().unwrap();
+    (view, started.elapsed())
+}
+
+/// Well before the wait's deadline, so a read that was not woken (and answered only at
+/// its deadline) fails, while a loaded machine still passes (HS2-ANQXQ4).
+const WOKEN_WITHIN: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// HS2-ANQXQ4: a person's answer ends a waiting timeline read at once, without a run
+/// event or a scheduler decision: the answer to the permission request a step waits
+/// on (the ledger's permission signal), and the response to the goal ticket's
+/// decision note a step waits on (the owner's ticket store).
+#[test]
+fn hs2_anqxq4_a_persons_answer_wakes_a_waiting_timeline() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let goal = m.orchestration_ticket("Coordinate");
+    let work = target_ticket(&m, "Work");
+    let step = define(&m, &goal, &work, None);
+    let operation = format!("sched-run-{step}");
+    let request_id = match m.runtime.authorize(
+        &m.reference(1),
+        Some(&worker()),
+        ActionRequest::new(TargetAction::WorkStart).operation(&operation),
+        &mut tx,
+    ) {
+        Err(OrchestrationError::PermissionRequired { request_id }) => request_id,
+        Err(other) => panic!("expected a permission request, got {other:?}"),
+        Ok(_) => panic!("expected a permission request, the action was allowed"),
+    };
+    let record: DecisionRecord = serde_json::from_value(json!({
+        "at_ms": 150, "tick_id": id(900), "mode": "applied", "trigger": "event",
+        "kind": "start", "actor_id": "worker-1", "target_id": id(1),
+        "step_id": step, "outcome": "permission_required",
+        "outcome_detail": request_id, "operation_id": operation,
+    }))
+    .unwrap();
+    DecisionJournal::new(&m.home, &m.owner.id)
+        .unwrap()
+        .append(record)
+        .unwrap();
+    let waiting = read(&m);
+    assert_eq!(
+        waiting.waves[0].items[0].state,
+        ItemState::WaitsForPermission
+    );
+    // The owner's policy runs no scheduler, so nothing else would wake the read.
+    let (runtime, owner, request) = (m.runtime.clone(), m.owner.id.clone(), request_id.clone());
+    let (answered, took) = wait_through(&m, &waiting.version, move || {
+        let mut rng = Rng(800);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        runtime
+            .permission_answer(
+                &owner,
+                &request,
+                PermissionAnswer::AllowOnce,
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+    });
+    assert_ne!(answered.version, waiting.version);
+    assert_ne!(
+        answered.waves[0].items[0].state,
+        ItemState::WaitsForPermission
+    );
+    assert!(took < WOKEN_WITHIN, "{took:?}");
+
+    // A step whose readiness can no longer be confirmed (its target unbound) waits on
+    // the goal ticket's decision while a feedback request is unanswered there.
+    let request = ops::add_note(
+        &m.owner_store,
+        &goal.id,
+        ulid::Ulid::new(),
+        NOW.into(),
+        NoteKind::FeedbackNeeded,
+        "CHOICE: synthetic decision".into(),
+    )
+    .unwrap()
+    .notes
+    .last()
+    .unwrap()
+    .id;
+    super::tickets::unbind(&m, 1, &mut tx);
+    m.runtime
+        .readiness_refresh(
+            &m.owner.id,
+            &RefreshReadiness::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let later_step = step.clone();
+    let deciding = read(&m);
+    let item = deciding
+        .waves
+        .iter()
+        .flat_map(|wave| wave.items.iter())
+        .find(|item| item.step_id == later_step)
+        .unwrap();
+    assert_eq!(item.state, ItemState::WaitsForDecision, "{:?}", item.state);
+    assert_eq!(
+        item.decision.as_ref().unwrap().note_id.as_deref(),
+        Some(request.to_string().as_str())
+    );
+    let (store, goal_id) = (m.owner_store.clone(), goal.id);
+    let (decided, took) = wait_through(&m, &deciding.version, move || {
+        ops::add_note_with_metadata(
+            &store,
+            &goal_id,
+            ulid::Ulid::new(),
+            NOW.into(),
+            NoteKind::Regular,
+            ops::NoteMetadataInput {
+                kind_explicit: true,
+                response_to: Some(request.to_string()),
+                ..Default::default()
+            },
+            "Go ahead".into(),
+        )
+        .unwrap();
+    });
+    assert_ne!(decided.version, deciding.version);
+    let item = decided
+        .waves
+        .iter()
+        .flat_map(|wave| wave.items.iter())
+        .find(|item| item.step_id == later_step)
+        .unwrap();
+    assert_ne!(item.state, ItemState::WaitsForDecision);
+    assert!(item.decision.is_none());
+    assert!(took < WOKEN_WITHIN, "{took:?}");
+}
