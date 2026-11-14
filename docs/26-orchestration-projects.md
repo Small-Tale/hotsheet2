@@ -3415,6 +3415,13 @@ locked, atomically replaced, version 1, never created by a read) with what the
 ledger does not hold: the step, the targets, and the gate ids. The file also keeps
 each target's own setting as last read, so reads answer without contacting a target.
 
+**Retention (HS2-J3SMMT).** The ledger holds at most 1024 records
+(`MAX_LEDGER_RECORDS`). Every write that changes the file first forgets the oldest
+`confirmed` and `reopened` records beyond that bound, by their latest event, together
+with their step and target entries, as the gate registry forgets settled gates.
+`provisional` and `at_risk` work is never forgotten, so the file can exceed the bound
+only while that much work is still open.
+
 `provisional_reconcile` brings the ledger in line with this machine's gate records.
 For each gate commit a record still waits on, it reads what §26.15 would read for
 that prerequisite now, the standing CI gates of the latest run on its ticket or of
@@ -3503,7 +3510,6 @@ The workspace view of provisional state is HS2-0D60T8.
 - A target's own setting is learned from a capacity read, so each decision samples
   the target's machine, a dry-run `scheduler plan` stores what it read, and a change
   of the setting is noticed at the next read (HS2-FJ6MDW).
-- Records are never retired from the ledger file (HS2-J3SMMT).
 - Standing gates about several commits are refused rather than built on (HS2-08F1M8).
 
 ### Headless surface

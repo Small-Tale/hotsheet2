@@ -70,6 +70,21 @@ struct Document {
     targets: BTreeMap<String, TargetSeen>,
 }
 
+/// HS2-J3SMMT: the ledger keeps at most `MAX_LEDGER_RECORDS`, forgetting the oldest
+/// confirmed and reopened work first and never provisional or at-risk work, as the
+/// gate registry forgets settled gates. A forgotten record's work entry goes with it.
+impl hotsheet_ticketing::orchestration::Retiring for Document {
+    fn retire(&mut self) -> bool {
+        let retired = self
+            .ledger
+            .retire_settled(crate::coordination::speculation::MAX_LEDGER_RECORDS);
+        for key in &retired {
+            self.work.remove(key);
+        }
+        !retired.is_empty()
+    }
+}
+
 /// One gate provisional work rests on.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProvisionalGate {

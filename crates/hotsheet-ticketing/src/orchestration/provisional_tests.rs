@@ -665,6 +665,15 @@ struct Document {
     entries: Vec<String>,
 }
 
+/// HS2-J3SMMT: this test document keeps its newest three entries.
+impl Retiring for Document {
+    fn retire(&mut self) -> bool {
+        let excess = self.entries.len().saturating_sub(3);
+        self.entries.drain(..excess);
+        excess > 0
+    }
+}
+
 #[test]
 fn hs2_jsf985_the_provisional_store_is_created_only_by_a_change() {
     let home = tempfile::tempdir().unwrap();
@@ -800,4 +809,37 @@ fn hs2_jsf985_new_fields_are_absent_until_they_say_something() {
         serde_json::to_value(RunEventKind::Provisional).unwrap(),
         "provisional"
     );
+}
+
+/// HS2-J3SMMT: the store asks a changed document to retire what is beyond its bound
+/// before it is written, so many changes never reach the file's limit; an unchanged
+/// document is neither retired nor written.
+#[test]
+fn hs2_j3smmt_a_changed_document_retires_before_it_is_written() {
+    let home = tempfile::tempdir().unwrap();
+    let store = ProvisionalStore::new(home.path());
+    let owner = "owner-0123456789ab";
+    for n in 0..1_000 {
+        store
+            .update::<Document, _>(owner, |document| {
+                document.entries.push(format!("entry-{n}"));
+                Ok(((), true))
+            })
+            .unwrap();
+    }
+    assert_eq!(
+        store.read::<Document>(owner).unwrap().unwrap().entries,
+        ["entry-997", "entry-998", "entry-999"]
+    );
+    // A change that says nothing changed is not retired or written, even beyond the
+    // bound in memory.
+    let path = home.path().join("orchestration-provisional.json");
+    let before = std::fs::read(&path).unwrap();
+    store
+        .update::<Document, _>(owner, |document| {
+            document.entries.push("not kept".into());
+            Ok(((), false))
+        })
+        .unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), before);
 }

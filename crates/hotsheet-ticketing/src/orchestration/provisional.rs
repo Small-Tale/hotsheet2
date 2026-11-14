@@ -438,6 +438,13 @@ struct ProvisionalFile {
     owners: BTreeMap<String, serde_json::Value>,
 }
 
+/// HS2-J3SMMT: a document that bounds itself. After every change the store asks it to
+/// retire what it no longer needs, so the file stays within its limit.
+pub trait Retiring {
+    /// Retire settled entries beyond the document's bound. True when anything went.
+    fn retire(&mut self) -> bool;
+}
+
 /// `${HOTSHEET_HOME}/orchestration-provisional.json`: one document per owning
 /// checkout (private, locked, atomically replaced, version 1). A read never creates
 /// it, and damaged or newer data is an error that is never overwritten. The document
@@ -482,7 +489,7 @@ impl ProvisionalStore {
         change: impl FnOnce(&mut T) -> Result<(R, bool), OrchestrationError>,
     ) -> Result<R, OrchestrationError>
     where
-        T: DeserializeOwned + Serialize + Default,
+        T: DeserializeOwned + Serialize + Default + Retiring,
     {
         valid_identifier(owner_checkout_id)?;
         let _lock = self.storage.lock()?;
@@ -498,6 +505,8 @@ impl ProvisionalStore {
         };
         let (answer, changed) = change(&mut document)?;
         if changed {
+            // HS2-J3SMMT: settled entries beyond the document's bound go with the change.
+            document.retire();
             file.owners.insert(
                 owner_checkout_id.into(),
                 serde_json::to_value(&document).map_err(|_| OrchestrationError::Corrupt)?,

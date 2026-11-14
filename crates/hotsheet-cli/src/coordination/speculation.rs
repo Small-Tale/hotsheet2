@@ -45,6 +45,52 @@ pub struct SpeculationLedger {
     pub records: BTreeMap<String, SpeculativeRecord>,
 }
 
+/// HS2-J3SMMT: the most records one ledger keeps; settled ones go first beyond it.
+pub const MAX_LEDGER_RECORDS: usize = 1024;
+
+impl SpeculationLedger {
+    /// Forget the oldest confirmed and reopened records until at most `max` remain.
+    /// Provisional and at-risk work is never forgotten, however many there are. A
+    /// record's age is its latest event, then its key. Returns the keys forgotten.
+    pub fn retire_settled(&mut self, max: usize) -> Vec<String> {
+        if self.records.len() <= max {
+            return Vec::new();
+        }
+        let mut settled: Vec<(i64, String)> = self
+            .records
+            .iter()
+            .filter(|(_, record)| {
+                matches!(
+                    record.state,
+                    SpeculationState::Confirmed | SpeculationState::Reopened
+                )
+            })
+            .map(|(key, record)| {
+                (
+                    record
+                        .events
+                        .iter()
+                        .map(|event| event.at)
+                        .max()
+                        .unwrap_or(0),
+                    key.clone(),
+                )
+            })
+            .collect();
+        settled.sort();
+        let excess = self.records.len() - max;
+        let retired: Vec<String> = settled
+            .into_iter()
+            .take(excess)
+            .map(|(_, key)| key)
+            .collect();
+        for key in &retired {
+            self.records.remove(key);
+        }
+        retired
+    }
+}
+
 impl Default for SpeculationLedger {
     fn default() -> Self {
         Self {

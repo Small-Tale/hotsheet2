@@ -86,8 +86,8 @@ pub use project_type::{
     TypeChange, TypeState, plan_type_change,
 };
 pub use provisional::{
-    ProvisionalBasis, ProvisionalStanding, ProvisionalStore, SpeculationInputs, gate_observation,
-    provisional_standings,
+    ProvisionalBasis, ProvisionalStanding, ProvisionalStore, Retiring, SpeculationInputs,
+    gate_observation, provisional_standings,
 };
 pub use readiness::{
     GateFacts, GateRequirement, LevelChange, MAX_PLAN_STEPS, MAX_STEP_PLAN_PREREQUISITES,

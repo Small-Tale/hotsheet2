@@ -1119,3 +1119,51 @@ fn hs2_2sjpch_live_probe_reads_git_and_the_ci_watch_store_without_requests() {
     assert_eq!(config(BRANCH_GATE_KEY), "");
     assert_eq!(config(BRANCH_BASE_KEY), unpushed);
 }
+
+/// HS2-J3SMMT: a ledger past its bound forgets the oldest confirmed and reopened
+/// records first and never provisional or at-risk work.
+#[test]
+fn hs2_j3smmt_retiring_forgets_settled_records_oldest_first() {
+    use super::speculation::{SpeculationEvent, SpeculationEventKind};
+    let with = |op: &str, state: SpeculationState, at: i64| {
+        let mut entry = record(op, &[("g", GateResult::Pending)]);
+        entry.state = state;
+        entry.events = vec![SpeculationEvent {
+            at,
+            kind: SpeculationEventKind::Recorded,
+            gate_commit: None,
+            result: None,
+            run: None,
+            actor: None,
+        }];
+        (op.to_owned(), entry)
+    };
+    let mut ledger = SpeculationLedger::default();
+    // Empty, or within the bound: nothing goes.
+    assert!(ledger.retire_settled(2).is_empty());
+    ledger.records = [
+        with("a-confirmed-old", SpeculationState::Confirmed, 10),
+        with("b-reopened-mid", SpeculationState::Reopened, 20),
+        with("c-confirmed-new", SpeculationState::Confirmed, 30),
+        with("d-provisional-oldest", SpeculationState::Provisional, 1),
+        with("e-at-risk-oldest", SpeculationState::AtRisk, 2),
+    ]
+    .into_iter()
+    .collect();
+    assert!(ledger.retire_settled(5).is_empty());
+    // Two over the bound: the two oldest settled records go, not the older open work.
+    assert_eq!(
+        ledger.retire_settled(3),
+        ["a-confirmed-old", "b-reopened-mid"]
+    );
+    assert_eq!(ledger.records.len(), 3);
+    // However tight the bound, open work stays.
+    assert_eq!(ledger.retire_settled(0), ["c-confirmed-new"]);
+    let left: Vec<_> = ledger.records.keys().cloned().collect();
+    assert_eq!(left, ["d-provisional-oldest", "e-at-risk-oldest"]);
+    // Repeating changes nothing; a refill retires again.
+    assert!(ledger.retire_settled(0).is_empty());
+    let (key, entry) = with("f-confirmed", SpeculationState::Confirmed, 5);
+    ledger.records.insert(key, entry);
+    assert_eq!(ledger.retire_settled(2), ["f-confirmed"]);
+}
