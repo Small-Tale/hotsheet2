@@ -385,3 +385,58 @@ test.describe('quiet hours follow the device', () => {
     }
   });
 });
+
+// HS2-XCZY10: a schema-generated choice setting (ntfy Priority) is a controlled Kerf Select, so the dialog's
+// wide-narrow-wide re-renders must keep the person's choice rather than the stored or default value.
+test('keeps a notifier choice setting across wide-narrow-wide re-renders', async ({ page }) => {
+  const server = await realTicketServer();
+  try {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await installTerminalFixture(page);
+    await routeNotifierApi(page, server);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Notifications', exact: true }).click();
+    const settings = page.locator('[data-component="notification-settings"]');
+    await settings.getByRole('button', { name: 'Add Channel…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add Channel' });
+    await choose(page, 'notification-channel-notifier', 'ntfy');
+    const priority = page.locator('kui-select[name="setting:priority"]');
+    await expect(priority).toHaveJSProperty('value', 'auto');
+    await dialog.getByLabel('Name').fill('Pocket Push');
+    await dialog.getByLabel('Topic').fill('hs-browser-choice');
+    await choose(page, 'setting:priority', 'urgent');
+    for (const width of [1280, 420, 1280]) {
+      await page.setViewportSize({ width, height: 860 });
+      await settled(page);
+      await expect(priority).toHaveJSProperty('value', 'urgent');
+      await expect(priority).toContainText('urgent');
+    }
+    await dialog.getByRole('button', { name: 'Add Channel' }).click();
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(async () => (await server.request<Config>('/notification-config')).channels[0]?.settings.priority)
+      .toBe('urgent');
+
+    // Editing starts from the saved choice and keeps a new one through the same re-renders.
+    await rowMenu(page, 'Pocket Push', 'Edit…');
+    const edit = page.getByRole('dialog', { name: 'Edit Channel' });
+    await expect(priority).toHaveJSProperty('value', 'urgent');
+    await choose(page, 'setting:priority', 'low');
+    for (const width of [1280, 420, 1280]) {
+      await page.setViewportSize({ width, height: 860 });
+      await settled(page);
+      await expect(priority).toHaveJSProperty('value', 'low');
+    }
+    await edit.getByRole('button', { name: 'Save Channel' }).click();
+    await expect(edit).toBeHidden();
+    await expect
+      .poll(async () => (await server.request<Config>('/notification-config')).channels[0]?.settings.priority)
+      .toBe('low');
+  } finally {
+    await server.stop();
+  }
+});

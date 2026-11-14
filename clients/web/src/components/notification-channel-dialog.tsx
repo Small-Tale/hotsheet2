@@ -18,6 +18,7 @@ import {
 } from '../interaction-attrs/notifications-and-links';
 import {
   CHANNEL_FIELD,
+  channelChoiceValue,
   type ChannelFormField,
   channelFormFields,
   deviceTimeZone,
@@ -33,8 +34,11 @@ export interface NotificationChannelDialogProps {
   channel?: NotificationChannel;
 }
 
-/** One generated control for a schema field. */
-function settingControl(field: ChannelFormField) {
+/**
+ * One generated control for a schema field. `chosen` holds the controlled select choices made in the open
+ * dialog, so a re-render keeps a choice setting's value (HS2-XCZY10).
+ */
+function settingControl(field: ChannelFormField, chosen: Readonly<Record<string, string>> | undefined) {
   if (field.type === 'bool')
     return <Switch name={field.name} label={field.label} checked={field.checked} hint={field.hint} />;
   if (field.type === 'choice')
@@ -43,8 +47,9 @@ function settingControl(field: ChannelFormField) {
         name={field.name}
         label={field.label}
         hint={field.hint}
-        value={field.value || field.choices[0] || ''}
+        value={channelChoiceValue(field, chosen?.[field.name])}
         choices={field.choices.map((choice) => ({ value: choice, label: choice }))}
+        rootAttributes={NOTIFICATIONS_AND_LINKS_ACTIONS.chooseNotificationChannelField.attrs}
       />
     );
   if (field.type === 'secret')
@@ -127,7 +132,7 @@ export function NotificationChannelDialog({ editor, notifiers, channel }: Notifi
           value={channel?.label ?? ''}
           placeholder={descriptor?.display_name ?? ''}
         />
-        {fields.map(settingControl)}
+        {fields.map((field) => settingControl(field, editor.fields))}
         <ListHeader label="Quiet Hours and Limits" />
         <Select
           name={CHANNEL_FIELD.quietMode}
