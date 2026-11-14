@@ -73,6 +73,20 @@ async function chooseProjectType(page: Page, label: 'Software' | 'Orchestration'
 const orchestrationNav = (page: Page) =>
   page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'Orchestration' });
 
+/**
+ * Open the Launch project that is already an orchestration project. The shell learns the type
+ * asynchronously and then inserts Orchestration View into the view-mode group, shifting the
+ * buttons after it; a click aimed at Settings View before that lands on Notifications View
+ * (HS2-NDN2NT). Wait for the settled group before any toolbar click.
+ */
+async function openOrchestrationProject(page: Page) {
+  await page.goto('/');
+  await page.getByRole('tab', { name: /Launch/ }).click();
+  await expect(
+    page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Orchestration View' }),
+  ).toBeVisible();
+}
+
 test('HS2-W27N1D Project Type adds the Orchestration category, which adds, details and removes projects through the real workflows', async ({
   page,
 }) => {
@@ -215,8 +229,7 @@ test('HS2-W27N1D captures Project Type, Orchestration, the Add Project menu and 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     };
     await page.setViewportSize(wide);
-    await page.goto('/');
-    await page.getByRole('tab', { name: /Launch/ }).click();
+    await openOrchestrationProject(page);
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       // Each state is set up wide, then shown wide, medium and narrow, and wide again.
@@ -319,8 +332,7 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
     });
     const wide = { width: 1440, height: 900 };
     await page.setViewportSize(wide);
-    await page.goto('/');
-    await page.getByRole('tab', { name: /Launch/ }).click();
+    await openOrchestrationProject(page);
     await showProjectSettings(page, 'General');
     await expect(page.locator('[data-component="project-general-settings"]')).toHaveAttribute(
       'data-project-type',
@@ -433,8 +445,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     };
     const wide = { width: 1440, height: 900 };
     await page.setViewportSize(wide);
-    await page.goto('/');
-    await page.getByRole('tab', { name: /Launch/ }).click();
+    await openOrchestrationProject(page);
     await showProjectSettings(page, 'General');
     await expect(page.locator('[data-component="project-general-settings"]')).toHaveAttribute(
       'data-project-type',
