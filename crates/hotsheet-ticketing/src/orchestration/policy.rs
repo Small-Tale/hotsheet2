@@ -205,8 +205,10 @@ pub struct PlacementPolicy {
     /// logged, and no session is started or wound down.
     #[serde(default)]
     pub automatic: bool,
-    /// The grant holder the server's scheduling loop acts as. Required with
-    /// `automatic`; a one-shot pass acts as whoever asked for it.
+    /// Who the server's scheduling loop acts as, when a project names one. Optional
+    /// since HS2-XYAHB4: without it the orchestrator acts as the orchestration project
+    /// itself ([`PlacementPolicy::acting_actor`]). A one-shot pass acts as whoever
+    /// asked for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<String>,
     /// Waiting this long raises work by one priority band, so nothing starves.
@@ -238,6 +240,28 @@ pub struct PlacementPolicy {
         skip_serializing_if = "is_default_join"
     )]
     pub join_minutes: u32,
+}
+
+/// HS2-XYAHB4: the actor id prefix of an orchestration project's own orchestrator.
+pub const ORCHESTRATOR_ACTOR_PREFIX: &str = "orchestrator.";
+
+impl PlacementPolicy {
+    /// HS2-XYAHB4: who the scheduling loop acts as. Adding a project is the consent
+    /// to read it and acting asks through a permission request (HS2-XHQ1EH), so no
+    /// grant holder needs naming: the orchestrator acts as the orchestration project,
+    /// `orchestrator.<owner checkout id>`, unless the policy names an actor. An owner
+    /// id that would not make a bounded identifier falls back to `orchestrator`.
+    pub fn acting_actor(&self, owner_id: &str) -> String {
+        if let Some(actor) = &self.actor {
+            return actor.clone();
+        }
+        let own = format!("{ORCHESTRATOR_ACTOR_PREFIX}{owner_id}");
+        if valid_identifier(&own).is_ok() {
+            own
+        } else {
+            "orchestrator".into()
+        }
+    }
 }
 fn default_join_minutes() -> u32 {
     super::DEFAULT_JOIN_MINUTES
@@ -633,11 +657,6 @@ impl PolicyBody {
                 "invalid_placement_actor",
                 "placement actor needs a bounded identifier",
                 Some(actor),
-            ),
-            None if placement.automatic => report(
-                "automatic_without_actor",
-                "automatic placement names the grant holder it acts as",
-                None,
             ),
             _ => {}
         }

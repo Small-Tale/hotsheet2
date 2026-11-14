@@ -17,7 +17,8 @@ export type TimelineItemState =
   | 'waits_for_decision'
   | 'done';
 export type TargetLocation = 'local' | 'remote' | 'unbound';
-export type StartBlocked = 'no_projects' | 'no_plan' | 'policy_absent' | 'placement_actor_missing' | 'running';
+/** HS2-XYAHB4: no placement actor is needed; HS2-J3ZF27: a Software project cannot start. */
+export type StartBlocked = 'no_projects' | 'no_plan' | 'project_software' | 'policy_absent' | 'running';
 
 export interface TimelineTarget {
   target_id: string;

@@ -180,7 +180,7 @@ impl Fixture {
                 present: true,
                 revision: Some("rev-1".into()),
                 automatic: true,
-                actor: Some("scheduler-1".into()),
+                software: false,
             },
             now_ms: NOW,
             ..Self::default()
@@ -298,8 +298,10 @@ fn hs2_j89jc7_kick_off_says_why_start_is_refused() {
     let one = || vec![step(2, L::Confirmed, &[])];
     let mut absent = Fixture::new(one()).proposed();
     absent.policy.present = false;
-    let mut actorless = Fixture::new(one()).proposed();
-    actorless.policy.actor = None;
+    // HS2-XYAHB4: no placement actor is needed; HS2-J3ZF27: a Software project
+    // cannot start, and its kept automatic policy reads as not running.
+    let mut software = Fixture::new(one()).proposed();
+    software.policy.software = true;
     let cases = [
         (
             "no projects",
@@ -314,12 +316,7 @@ fn hs2_j89jc7_kick_off_says_why_start_is_refused() {
             false,
         ),
         ("policy absent", absent, Some("policy_absent"), false),
-        (
-            "no actor",
-            actorless,
-            Some("placement_actor_missing"),
-            false,
-        ),
+        ("software", software, Some("project_software"), false),
         ("running", Fixture::new(one()), Some("running"), true),
         ("ready", Fixture::new(one()).proposed(), None, false),
     ];

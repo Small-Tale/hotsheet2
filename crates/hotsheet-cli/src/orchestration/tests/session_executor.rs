@@ -1049,8 +1049,11 @@ fn hs2_95swq4_an_unreachable_host_concludes_nothing_and_stale_starts_are_ended()
     assert_eq!(f.host.launches().len(), 1, "it was never launched");
 }
 
+/// HS2-XYAHB4 (replacing the HS2-95SWQ4 rule that a policy without a placement actor
+/// read no host): the orchestrator acts as the orchestration project, so hosts are
+/// read as it, a crash is learned, and a dry-run policy still starts and stops nothing.
 #[test]
-fn hs2_95swq4_without_a_placement_actor_no_host_is_asked_and_nothing_reads_safe() {
+fn hs2_xyahb4_without_a_placement_actor_hosts_are_read_as_the_orchestration_project() {
     clocked!(clock, tx);
     let f = Placed::new(&BOTH, &mut tx);
     let step = f.ready("First", &mut tx);
@@ -1065,21 +1068,22 @@ fn hs2_95swq4_without_a_placement_actor_no_host_is_asked_and_nothing_reads_safe(
     f.at(&clock, START + 30 * MINUTE);
     let reads = f.audited("sessions_manage").len();
     let listed = f.listed(&mut tx);
-    // The record is listed as it stands: the crash is not learned, nothing is safe.
-    assert_eq!(listed.len(), 1);
-    assert_eq!(
-        (
-            listed[0].activity,
-            listed[0].safe_point,
-            listed[0].idle_since_ms
-        ),
-        (SessionActivity::Busy, false, None)
+    // The host was asked, as the project's orchestrator, and the crash is learned.
+    assert!(f.audited("sessions_manage").len() > reads);
+    let actor = format!("orchestrator.{}", f.owner());
+    let journal = f.m.runtime.audit(&f.owner(), 0, 500).unwrap().entries;
+    assert!(
+        journal
+            .iter()
+            .rev()
+            .take_while(|entry| entry.record.action == "sessions_manage")
+            .all(|entry| entry.record.actor_id.as_deref() == Some(actor.as_str()))
     );
-    assert_eq!(f.audited("sessions_manage").len(), reads);
+    assert!(listed.is_empty(), "a lost session is not capacity");
+    assert_eq!(f.record(&session.operation_id).state, SessionState::Lost);
     // Every pass is a dry run, and it starts and stops nothing.
     let tick = f.tick(&mut tx);
     assert!(tick.outcomes.is_empty());
-    assert_eq!(f.record(&session.operation_id).state, SessionState::Running);
     assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
 }
 

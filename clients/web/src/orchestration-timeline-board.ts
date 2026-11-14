@@ -301,8 +301,8 @@ export function startBlockedReason(timeline: OrchestrationTimeline): string | un
       return 'There is no plan to start yet';
     case 'policy_absent':
       return 'Set the orchestration limits in Orchestration settings first';
-    case 'placement_actor_missing':
-      return 'The orchestration policy does not name who the orchestrator acts as';
+    case 'project_software':
+      return 'Change the Project Type to Orchestration in General settings first';
     default:
       return timeline.kick_off.start_blocked satisfies never;
   }

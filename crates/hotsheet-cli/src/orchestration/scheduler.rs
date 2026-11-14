@@ -1400,11 +1400,12 @@ impl OrchestrationRuntime {
         if !self.orchestrating(owner_id)? {
             return Ok(None);
         }
+        // HS2-XYAHB4: without a named actor the orchestrator acts as the project.
         Ok(self
             .policy(owner_id)?
             .policy
             .filter(|policy| policy.placement.automatic)
-            .and_then(|policy| policy.placement.actor)
+            .map(|policy| policy.placement.acting_actor(owner_id))
             .and_then(|actor| MutationActor::parse("system", Some(actor)).ok()))
     }
 

@@ -1510,10 +1510,8 @@ fn hs2_ecwg50_placement_policy_defaults_validates_and_stays_out_of_old_files() {
             .collect::<Vec<_>>()
     };
     assert_eq!(codes(&|_| {}), [""; 0]);
-    assert_eq!(
-        codes(&|placement| placement.automatic = true),
-        ["automatic_without_actor"]
-    );
+    // HS2-XYAHB4: automatic placement needs no named actor.
+    assert_eq!(codes(&|placement| placement.automatic = true), [""; 0]);
     assert_eq!(
         codes(&|placement| {
             placement.automatic = true;
@@ -1713,4 +1711,43 @@ fn hs2_ecwg50_a_session_view_is_identifiers_only() {
     );
     json["command_line"] = "x".into();
     assert!(serde_json::from_value::<ScheduledSession>(json).is_err());
+}
+
+/// HS2-XYAHB4: who the loop acts as. A named actor wins; otherwise the orchestrator
+/// acts as the orchestration project; an owner id that would not make a bounded
+/// identifier falls back to a fixed one. Validation never asks for an actor.
+#[test]
+fn hs2_xyahb4_the_loop_acts_as_the_orchestration_project_without_a_named_actor() {
+    let long = "x".repeat(200);
+    let cases: [(Option<&str>, &str, String); 4] = [
+        (Some("scheduler"), "launch-0123456789ab", "scheduler".into()),
+        (
+            None,
+            "launch-0123456789ab",
+            "orchestrator.launch-0123456789ab".into(),
+        ),
+        (None, long.as_str(), "orchestrator".into()),
+        (None, "has space", "orchestrator".into()),
+    ];
+    for (actor, owner, expected) in cases {
+        for automatic in [false, true] {
+            let placement = PlacementPolicy {
+                automatic,
+                actor: actor.map(Into::into),
+                ..PlacementPolicy::default()
+            };
+            assert_eq!(placement.acting_actor(owner), expected, "{actor:?} {owner}");
+            let mut body = policy(&[(1, 1)]);
+            body.placement = placement;
+            assert!(
+                body.problems(None).is_empty(),
+                "{actor:?} automatic={automatic}"
+            );
+        }
+    }
+    assert!(
+        PlacementPolicy::default()
+            .acting_actor("owner")
+            .starts_with(ORCHESTRATOR_ACTOR_PREFIX)
+    );
 }

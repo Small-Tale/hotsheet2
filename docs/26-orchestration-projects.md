@@ -49,7 +49,8 @@
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
 > the OpenAPI contract describes them. Project Type and the Orchestration settings
 > category with its projects, project detail and limits-only policy ship in the web client
-> (§26.27, HS2-W27N1D); a Software project places and dispatches nothing (HS2-J3ZF27).
+> (§26.27, HS2-W27N1D); a Software project places and dispatches nothing (HS2-J3ZF27), and Start Orchestration
+> needs no placement actor (HS2-XYAHB4).
 
 ## 26.1 Boundary and existing foundations
 
@@ -2374,13 +2375,19 @@ defaults, so a policy written earlier is unchanged.
 | Field                     | Default | Meaning                                                                                                   |
 | ------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
 | `automatic`               | `false` | When false every pass is a dry run: decisions are computed and logged, nothing applied                    |
-| `actor`                   | none    | The actor id the server's loop acts as. Required with `automatic`                                         |
+| `actor`                   | none    | The actor id the server's loop acts as. Optional: without it the orchestrator acts as the project (below) |
 | `aging_minutes`           | 60      | Waiting this long raises work by one priority band (1 to 10080)                                           |
 | `cooldown_minutes`        | 5       | A target's session count does not reverse direction within this time (0 to 1440)                          |
 | `dispatcher_wait_minutes` | 2       | How long a placed run waits for a live target dispatcher before its session claims it (0 to 1440, §26.24) |
 | `join_minutes`            | 10      | How long a placed session has to join its role before it is wound down and replaced (1 to 1440, §26.24)   |
 
-Validation adds `automatic_without_actor`, `invalid_placement_actor`,
+**Who the loop acts as (HS2-XYAHB4).** Adding a project is the consent to read it and
+acting asks a person (§26.7), so no grant holder needs naming: without `actor` the
+orchestrator acts as the orchestration project, `orchestrator.<owner checkout id>`
+(`PlacementPolicy::acting_actor`; an owner id that is not a bounded identifier falls
+back to `orchestrator`). Its reads, starts and stops are audited under that id.
+
+Validation adds `invalid_placement_actor`,
 `invalid_aging_minutes`, `invalid_cooldown_minutes`,
 `invalid_dispatcher_wait_minutes` and `invalid_join_minutes`.
 `dispatcher_wait_minutes` and `join_minutes` are written only when they differ from
@@ -2674,10 +2681,11 @@ scheduler decides anything.
 | `human_takeover` | A person owns it, whether they took it here or at the host                                                       |
 | `winding_down`   | Never set: a stop is immediate at a safe point and refused away from one                                         |
 
-- **Who asks.** The hosts are read as the policy's `placement.actor`, through the gate
-  as `sessions_manage` continuing a decision. A policy that names no actor reads no
-  host: each record is listed as it stands, busy and not safe, so a dry run never
-  shows a wind-down it could not verify.
+- **Who asks.** The hosts are read as the policy's `placement.actor`, else as the
+  orchestration project's orchestrator (§26.17, HS2-XYAHB4), through the gate as
+  `sessions_manage` continuing a decision. Without a policy no host is read: each
+  record is listed as it stands, busy and not safe, so a dry run never shows a
+  wind-down it could not verify.
 - **A host that cannot be read.** The record stays as it is and still counts. It reads
   as busy and not safe, and keeps the idle time already seen. A policy that disabled
   the target denies the read too, so its sessions are kept for a person to stop
@@ -3978,8 +3986,10 @@ wake it yet (HS2-ANQXQ4). A read on the server also starts the target followers 
 - **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route
-  of §26.8; it is disabled, with the reason, while there is no policy or the policy names
-  no placement actor (HS2-XYAHB4). While running, **Pause** turns it off; running work
+  of §26.8; it is disabled, with the reason, while there is no policy or the project's
+  type is Software (`project_software`, HS2-J3ZF27). No placement actor is needed: the
+  orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
+  automatic policy does not read as running. While running, **Pause** turns it off; running work
   continues. A proposed plan is labeled as the dry run it is.
 - **Empty.** A declared project with no target shows _No Projects to Orchestrate Yet_
   with **Choose Projects…**, which opens Settings until the Orchestration category of

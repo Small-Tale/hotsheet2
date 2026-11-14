@@ -160,7 +160,7 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
         kick_off: { can_start: false, can_pause: false, start_blocked },
       });
     expect(blocked('policy_absent')).toMatch(/Orchestration settings first/);
-    expect(blocked('placement_actor_missing')).toMatch(/acts as/);
+    expect(blocked('project_software')).toMatch(/Project Type to Orchestration/);
     expect(blocked('no_plan')).toMatch(/no plan/);
     expect(blocked('no_projects')).toMatch(/Add projects/);
     expect(blocked('running')).toBeUndefined();

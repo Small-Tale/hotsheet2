@@ -315,6 +315,7 @@ impl OrchestrationRuntime {
         let records = self.retained_decisions(owner_id)?;
         let policy = self.policy(owner_id)?;
         let body = policy.policy.as_ref();
+        let orchestrating = self.orchestrating(owner_id)?;
         let input = TimelineInput {
             owner_checkout_id: owner_id,
             now_ms,
@@ -331,8 +332,10 @@ impl OrchestrationRuntime {
             policy: &TimelinePolicy {
                 present: policy.enabled && body.is_some(),
                 revision: policy.revision.clone(),
-                automatic: body.is_some_and(|body| body.placement.automatic),
-                actor: body.and_then(|body| body.placement.actor.clone()),
+                // HS2-J3ZF27: a Software project's kept automatic policy places
+                // nothing, so it does not read as running.
+                automatic: orchestrating && body.is_some_and(|body| body.placement.automatic),
+                software: !orchestrating,
             },
         };
         Ok((timeline(&input), watched))

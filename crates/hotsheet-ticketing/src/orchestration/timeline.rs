@@ -189,8 +189,9 @@ pub struct TimelineStep {
 pub struct KickOff {
     /// Turning automatic placement on would be accepted by the policy route.
     pub can_start: bool,
-    /// `no_projects`, `no_plan`, `policy_absent`, `placement_actor_missing` or
-    /// `running`; absent when it can start.
+    /// `no_projects`, `no_plan`, `project_software` (HS2-J3ZF27), `policy_absent` or
+    /// `running`; absent when it can start. No placement actor is needed: the
+    /// orchestrator acts as the orchestration project (HS2-XYAHB4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_blocked: Option<String>,
     /// Placement is automatic, so it can be paused.
@@ -206,7 +207,9 @@ pub struct TimelinePolicy {
     pub present: bool,
     pub revision: Option<String>,
     pub automatic: bool,
-    pub actor: Option<String>,
+    /// HS2-J3ZF27: the project's type is Software, so nothing is placed and Start
+    /// would do nothing.
+    pub software: bool,
 }
 
 pub struct TimelineInput<'a> {
@@ -510,8 +513,8 @@ fn kick_off(input: &TimelineInput<'_>, phase: TimelinePhase) -> KickOff {
         TimelinePhase::NoProjects => Some("no_projects"),
         TimelinePhase::NoPlan => Some("no_plan"),
         TimelinePhase::Running => Some("running"),
+        _ if input.policy.software => Some("project_software"),
         _ if !input.policy.present => Some("policy_absent"),
-        _ if input.policy.actor.is_none() => Some("placement_actor_missing"),
         _ => None,
     };
     KickOff {

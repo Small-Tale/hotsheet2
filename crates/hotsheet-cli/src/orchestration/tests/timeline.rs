@@ -168,16 +168,14 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
         Some(first.slug.as_str())
     );
 
-    // A policy without the placement actor cannot be started; with one it can.
+    // HS2-XYAHB4: a policy without a placement actor can be started, and so can one
+    // that names one.
     set_policy(&m, false, None);
-    assert_eq!(
-        read(&m).kick_off.start_blocked.as_deref(),
-        Some("placement_actor_missing")
-    );
-    set_policy(&m, false, Some("worker-1"));
     let ready = read(&m).kick_off;
     assert!(ready.can_start && !ready.can_pause);
     assert!(ready.policy_revision.is_some());
+    set_policy(&m, false, Some("worker-1"));
+    assert!(read(&m).kick_off.can_start);
 
     // Dispatching the first step: work exists, placement is off, so it reads paused.
     let dispatch: DispatchRun = serde_json::from_value(json!({
@@ -198,12 +196,40 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
     assert!(running.run.is_some());
     assert_eq!(paused.running_since_ms, Some(200));
 
-    // Turning placement on is the running phase, which can be paused.
-    set_policy(&m, true, Some("worker-1"));
+    // Turning placement on, without naming an actor, is the running phase, which can
+    // be paused (HS2-XYAHB4).
+    set_policy(&m, true, None);
     let started = read(&m);
     assert_eq!(started.phase, TimelinePhase::Running);
     assert!(started.kick_off.can_pause && !started.kick_off.can_start);
     assert_eq!(started.kick_off.start_blocked.as_deref(), Some("running"));
+
+    // HS2-J3ZF27: back to Software, the kept automatic policy does not read as running
+    // and Start says why; forward again, it runs.
+    let switch = |kind: &str, tx: &mut Transaction<'_>| {
+        m.runtime
+            .set_project_type(
+                &m.owner.id,
+                serde_json::from_value(json!({"project_type": kind, "keep_projects": true}))
+                    .unwrap(),
+                Some(&super::tickets::human()),
+                tx,
+            )
+            .unwrap();
+    };
+    switch("software", &mut tx);
+    let software = read(&m);
+    assert_eq!(software.phase, TimelinePhase::Paused);
+    assert_eq!(
+        (
+            software.kick_off.can_start,
+            software.kick_off.can_pause,
+            software.kick_off.start_blocked.as_deref()
+        ),
+        (false, false, Some("project_software"))
+    );
+    switch("orchestration", &mut tx);
+    assert_eq!(read(&m).phase, TimelinePhase::Running);
 }
 
 #[test]

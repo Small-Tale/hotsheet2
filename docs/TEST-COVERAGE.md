@@ -2957,6 +2957,12 @@ production persistence defect.
   `access` and the dry run agree, reading and winding down stay allowed, and a switch
   back places again; `remote_servers/projects.rs` reads the same refusal through HTTP,
   the CLI and MCP.
+- HS2-XYAHB4: `scheduler_tests.rs # hs2_xyahb4` tables who the loop acts as (a named
+  actor, the orchestration project, the fallback) and that validation never asks for an
+  actor; `tests/session_executor.rs # hs2_xyahb4` reads hosts as the project's
+  orchestrator without a named actor; `tests/timeline.rs # hs2_j89jc7` starts and runs a
+  plan whose policy names no actor and reads `project_software` for a Software project;
+  `timeline_tests.rs` and `orchestration-timeline-board.test.ts` pin the kick-off reasons.
 - Not covered: Show in Drawer for a remote project's session (HS2-6E32N4).
 
 ### Orchestration progress and cost summary (HS2-S13719)

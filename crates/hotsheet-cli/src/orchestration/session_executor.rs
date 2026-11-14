@@ -5,7 +5,8 @@
 //! - **List.** This machine's unfinished session records, each brought in line with
 //!   its host first, so a crashed session is `lost` and a session a person took over
 //!   at the host is theirs before the scheduler looks. Hosts are asked as the policy's
-//!   `placement.actor`; without one no host is asked and nothing reads as idle or safe.
+//!   `placement.actor`, else as the orchestration project's orchestrator (HS2-XYAHB4);
+//!   without a policy no host is asked and nothing reads as idle or safe.
 //! - **Start.** The scheduler's operation id is stable for a piece of work, the session
 //!   runtime's is one session's for good. While the session the id started is
 //!   unfinished the same id is the same start; once it is finished (refused, wound
@@ -138,15 +139,17 @@ fn ended_as(session: &OrchestratedSession) -> String {
 
 impl OrchestrationRuntime {
     /// Who the scheduler's reads of a host act as: the actor the policy names for
-    /// placement. A policy without one reads no host.
+    /// placement, else the orchestration project's own orchestrator (HS2-XYAHB4).
+    /// Without a policy no host is read.
     fn placement_reader(&self, owner_id: &str) -> Option<MutationActor> {
-        self.policy(owner_id)
-            .ok()?
-            .policy?
-            .placement
-            .actor
-            .as_deref()
-            .and_then(orchestrator)
+        orchestrator(
+            &self
+                .policy(owner_id)
+                .ok()?
+                .policy?
+                .placement
+                .acting_actor(owner_id),
+        )
     }
 
     /// The owner's running sessions as the scheduler sees them. A start its host never
