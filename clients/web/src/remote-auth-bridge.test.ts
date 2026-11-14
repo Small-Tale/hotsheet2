@@ -390,9 +390,37 @@ describe('HS2-85W6BE / HS2-DXM0YN session grants on a remote-mode bridge', () =>
     expect(check).not.toHaveBeenCalled();
   });
 
-  it('keeps the cross-server desktop registry off a remote-mode host even for a local session', async () => {
-    const { app: target } = app(grants({ local: true, admin: true }));
-    expect((await target.request(`${ORIGIN}/__hotsheet/remotes`, { headers: { cookie } })).status).toBe(404);
+  it('HS2-HBM3JN admits only a local-grant session to the cross-server desktop registry', async () => {
+    for (const path of ['/__hotsheet/remotes', '/__hotsheet/remotes/pair', '/__hotsheet/remotes/synthetic/checkouts'])
+      expect(remoteRouteKind(path), path).toBe('host');
+    // An address without a port fails before any network or CLI call, so the bridge answers with
+    // its own readable JSON error. Before HS2-HBM3JN every remotes route was a plain-text 404 here.
+    const pair = (target: ReturnType<typeof createDevApp>, headers: Record<string, string>) =>
+      target.request(`${ORIGIN}/__hotsheet/remotes/pair`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: JSON.stringify({ address: 'https://synthetic.example', label: 'Synthetic' }),
+      });
+    const local = await pair(app(grants({ local: true })).app, { cookie, origin: ORIGIN });
+    expect(local.status).toBe(400);
+    expect(await local.json()).toEqual({
+      error: 'Use an explicit protocol, host, and port without a path or credentials.',
+    });
+    // Without the local grant (even with admin), without a session, or without a valid one: hidden.
+    for (const [reason, device, headers, ok] of [
+      ['plain session', {}, { cookie, origin: ORIGIN }, true],
+      ['admin only', { admin: true }, { cookie, origin: ORIGIN }, true],
+      ['no cookie', { local: true }, { origin: ORIGIN }, true],
+      ['rejected session', { local: true }, { cookie, origin: ORIGIN }, false],
+    ] as const) {
+      const response = await pair(app(grants(device, ok)).app, headers);
+      expect(response.status, reason).toBe(404);
+    }
+    // A local session's change still proves its paired Origin.
+    expect((await pair(app(grants({ local: true })).app, { cookie })).status).toBe(403);
+    expect((await pair(app(grants({ local: true })).app, { cookie, origin: 'https://foreign.example' })).status).toBe(
+      403,
+    );
   });
 
   it('lets only an admin session reach device management', async () => {

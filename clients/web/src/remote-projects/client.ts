@@ -39,9 +39,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers,
   });
-  const value = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Error(value.error || `Remote request failed (${response.status}).`);
-  return value;
+  // Parse defensively: a plain-text or HTML reply must never surface a parser message such as
+  // WebKit's "The string did not match the expected pattern." (HS2-HBM3JN).
+  const text = await response.text();
+  let value: unknown;
+  try {
+    value = text ? JSON.parse(text) : undefined;
+  } catch {
+    value = undefined;
+  }
+  if (!response.ok) {
+    const error = isRecord(value) && typeof value.error === 'string' ? value.error : '';
+    throw new Error(error || remoteRequestFailure(response.status));
+  }
+  if (value === undefined) throw new Error('This Hot Sheet host sent an unexpected reply. Reload and try again.');
+  return value as T;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** A readable message when the host's error has no JSON body. */
+export function remoteRequestFailure(status: number): string {
+  if (status === 404) return 'This Hot Sheet host does not let this browser manage remote servers.';
+  if (status === 401) return 'Sign in to this Hot Sheet host again, then retry.';
+  if (status === 403) return 'This Hot Sheet host refused the request. Reload and try again.';
+  return `Remote request failed (${status}).`;
 }
 
 export const desktopRemoteServers = () => request<DesktopRemoteServer[]>('');

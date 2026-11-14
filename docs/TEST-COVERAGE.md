@@ -82,6 +82,13 @@ and unpaired origins, a missing CSRF cookie, or a dead session;
 `remote-auth-server-integration.test.ts` repeats the proxied open against the real
 server's paired origin.
 
+HS2-HBM3JN: `clients/web/src/remote-auth-bridge.test.ts` admits a local-grant session to
+the remote-mode `/__hotsheet/remotes` registry. Plain, admin-only, cookieless, and rejected
+sessions get 404, and a missing or foreign Origin gets 403.
+`clients/web/src/remote-projects/client.test.ts` turns plain-text, HTML, and empty replies into
+readable errors rather than parser messages. Manual: Safari on a remote-mode host, Remote
+Project → Add Server shows the bridge's readable error.
+
 HS2-3HC9HT: `clients/web/src/remote-auth-bridge.test.ts` covers registered-only
 remote project open (by root or id, the checkout's own store, unregistered and
 empty roots refused, 201/403/400 answers, session required, local open route
