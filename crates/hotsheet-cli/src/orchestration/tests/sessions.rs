@@ -31,6 +31,8 @@ pub(super) struct ScriptedHost {
     pub(super) stops: AtomicUsize,
     pub(super) down: AtomicBool,
     pub(super) refusing: AtomicBool,
+    /// HS2-VRC0CQ: the hosting server is shutting down.
+    pub(super) stopping: AtomicBool,
     /// HS2-WEFJV8: every setup asked for, as (checkout root, tool), in order with the
     /// launches, and whether setup fails.
     prepared: Mutex<Vec<(String, String)>>,
@@ -162,6 +164,9 @@ impl SessionHost for ScriptedHost {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .pop_front()
             .unwrap_or(PushAttempt::Delivered)
+    }
+    fn stopping(&self) -> bool {
+        self.stopping.load(Ordering::SeqCst)
     }
 }
 

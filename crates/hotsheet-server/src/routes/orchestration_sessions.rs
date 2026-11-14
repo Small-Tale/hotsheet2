@@ -102,6 +102,10 @@ impl SessionHost for ServerSessions {
         )
     }
 
+    fn stopping(&self) -> bool {
+        self.state.is_stopping()
+    }
+
     fn stop(&self, _: &Checkout, session_id: &str) -> Result<(), SessionHostError> {
         self.runtime
             .block_on(crate::kill_terminal(

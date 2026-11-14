@@ -144,6 +144,13 @@ pub trait SessionHost: Send + Sync {
     /// is not ready yet answers `NotReady`, and the host tries again on its next
     /// readiness event.
     fn join_role(&self, checkout: &Checkout, session_id: &str, text: &str) -> PushAttempt;
+
+    /// HS2-VRC0CQ: the process that hosts these sessions is shutting down. Its
+    /// scheduler places nothing more, including from a step that was already under
+    /// way when the shutdown began.
+    fn stopping(&self) -> bool {
+        false
+    }
 }
 
 /// No terminal host is reachable from this process.

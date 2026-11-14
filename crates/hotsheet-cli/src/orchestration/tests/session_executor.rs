@@ -2617,3 +2617,66 @@ fn hs2_7vv79q_a_changed_choice_ends_an_unconfirmed_start_at_once() {
     assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
     assert_eq!(f.records().len(), 3);
 }
+
+/// HS2-VRC0CQ: a server that begins stopping places nothing more, not even from a step
+/// of its loop that was already waiting. That step is woken by writes to the shared
+/// home (a successor's, or new work) and once ran one last pass, whose start its own
+/// stopping host refused and which failed the start in the successor's place. A loop
+/// over a host that is not stopping (the successor) places the work as usual.
+#[test]
+fn hs2_vrc0cq_a_stopping_hosts_scheduler_runs_no_pass() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let owner = f.owner();
+    f.ready("First", &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let started =
+        f.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!(started.trigger, Some("start"));
+    assert_eq!(f.host.launches().len(), 1);
+    let decided = |f: &Placed| {
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries
+            .len()
+    };
+    let logged = decided(&f);
+    let sessions = f.records().len();
+
+    // The loop waits; the server begins stopping; new work arrives in the home.
+    let stepped = std::thread::scope(|scope| {
+        let waiting = scope.spawn(|| {
+            let mut rng = Rng(900);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            f.m.runtime
+                .scheduler_follow_step(&owner, &mut state, 20_000, &mut tx)
+        });
+        f.host.stopping.store(true, Ordering::SeqCst);
+        f.ready("Second", &mut tx);
+        waiting.join().unwrap()
+    });
+    assert_eq!((stepped.active, stepped.trigger), (false, None));
+    // Its next step ends at once, too.
+    let again =
+        f.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!((again.active, again.trigger), (false, None));
+    assert_eq!(f.host.launches().len(), 1, "nothing was launched");
+    assert_eq!(f.records().len(), sessions, "no start was recorded");
+    assert_eq!(decided(&f), logged, "no pass was logged");
+
+    // A loop over a host that is not stopping places the new work.
+    f.host.stopping.store(false, Ordering::SeqCst);
+    let mut successor = SchedulerFollowState::default();
+    let placed =
+        f.m.runtime
+            .scheduler_follow_step(&owner, &mut successor, 0, &mut tx);
+    assert_eq!(placed.trigger, Some("start"));
+    assert_eq!(f.host.launches().len(), 2);
+    let _ = &clock;
+}

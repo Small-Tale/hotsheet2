@@ -3108,6 +3108,10 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   twice over and not replaced once the work is gone; an unreachable host concluding
   nothing; a stale unconfirmed start ended as never started; a policy without a
   placement actor reading no host; and a disabled target's session kept for a person.
+- `tests/session_executor.rs # hs2_vrc0cq` lets a loop step wait, stops its host and
+  plans new work: the step ends with no pass, launch, session record or log entry, and
+  a loop over a host that is not stopping places the work (HS2-VRC0CQ; it failed 2 of 2
+  before the fix).
 - `remote_servers/session_executor.rs` is one real server with real PTYs running the
   workspace fake agent: a dry tick starts nothing; enabling automatic placement
   starts one session for the confirmed step in the drawer; the terminal is killed and

@@ -2646,7 +2646,12 @@ at server start and when a policy or scheduler request arrives, and ended when t
 policy no longer enables it or the server begins stopping. A stopping server's
 followers end the same way, it launches no session (the start stays requested), and
 it reports nothing about its terminals as they go down, so a server started after it
-over the same home runs its own loop and followers at once (HS2-KM9CTG). A step runs a pass:
+over the same home runs its own loop and followers at once (HS2-KM9CTG). A loop step that
+was already waiting when its server began stopping runs no pass either (HS2-VRC0CQ): the
+session host reports `stopping`, and the step ends before its pass. Woken by the
+successor's writes to the same home, it once placed a start that its own stopping host
+refused, which failed that start in the successor's place and moved the replacement to a
+later operation generation. A step runs a pass:
 
 - when the loop starts;
 - when the owner's run event stream (§26.9) has something new: run, readiness, gate,

@@ -1432,6 +1432,10 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> SchedulerStep {
         let mut step = SchedulerStep::default();
+        // HS2-VRC0CQ: a stopping server's loop ends here, not one pass later.
+        if self.sessions.stopping() {
+            return step;
+        }
         match self.scheduler_actor(owner_id) {
             Ok(Some(_)) => {}
             Ok(None) => return step,
@@ -1490,6 +1494,14 @@ impl OrchestrationRuntime {
                 trigger = trigger.or(Some("retry"));
             }
             if let Some(trigger) = trigger {
+                // HS2-VRC0CQ: a step that waited while its server began stopping is
+                // woken by the successor's writes to the same home. It must not run
+                // that pass: its host refuses every start, and the start it placed
+                // was failed in the successor's place.
+                if self.sessions.stopping() {
+                    step.active = false;
+                    return step;
+                }
                 state.started = true;
                 // The policy may have changed since the step began: read it again.
                 let actor = match self.scheduler_actor(owner_id) {
