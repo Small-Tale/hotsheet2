@@ -64,6 +64,8 @@ export const PEER_GATEWAY_PREFIXES = [
   'remote-identity',
   'remotes',
   'resolve',
+  'resource-claim-token',
+  'resource-claims',
   'setup',
   'standby-settings',
   'stores',
