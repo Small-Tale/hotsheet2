@@ -86,6 +86,12 @@ does not fork Kerf's guidance.
   app container query to stay aligned with the ticket type icons (`KF-J8GMA2`);
   remove the query when Kerf offers a public alignment (HS2-8CDFKR, HS2-WZ3JGZ).
 
+- Controlled dialogs (`src/controlled-open.ts`) carry one interim decision that waits on
+  Kerf: when `openDialog` runs after a DialogSurface's exit motion has closed it but
+  before its native `close` event, Kerf leaves it closed (`KF-2BTVSN`), which lost a
+  quick Add Project click. The sync arms one reopen on that `close` event while the app
+  still wants the dialog open; remove it when the fix ships (HS2-HQPFGS).
+
 ## Hot Sheet ticket lessons
 
 Kerf's house grammar carries the general rules. These ticket clusters explain

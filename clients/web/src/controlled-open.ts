@@ -22,6 +22,26 @@ export const CONTROLLED_OPEN_ATTRIBUTE = 'data-controlled-open';
 
 type OpenableElement = Element & { open?: boolean };
 
+/**
+ * Interim for KF-2BTVSN (HS2-HQPFGS): `openDialog` called after an exit motion has closed the dialog but
+ * before its native `close` event settles Kerf's state reads as "reopen during the exit" and never calls
+ * `showModal`, so a click that reopens the dialog is lost. Once that `close` event has run, sync again.
+ * Remove when the Kerf release with KF-2BTVSN ships.
+ */
+const reopenAfterClose = new WeakSet<HTMLDialogElement>();
+function retryOpenAfterSettledClose(dialog: HTMLDialogElement): void {
+  if (dialog.open || reopenAfterClose.has(dialog)) return;
+  reopenAfterClose.add(dialog);
+  dialog.addEventListener(
+    'close',
+    () => {
+      reopenAfterClose.delete(dialog);
+      if (dialog.isConnected && dialog.getAttribute(CONTROLLED_OPEN_ATTRIBUTE) === 'true') openDialog(dialog);
+    },
+    { once: true },
+  );
+}
+
 const isDialogSurface = (element: Element): element is HTMLDialogElement =>
   element.localName === 'dialog' && element.classList.contains('kui-dialog-surface');
 
@@ -34,6 +54,7 @@ export function syncControlledOpen(root: ParentNode): void {
       if (!desired) closeDialog(element);
       else if (element.isConnected) {
         openDialog(element);
+        retryOpenAfterSettledClose(element);
         // App morphs can remove Kerf's live aria-value* attributes from an unchanged resize
         // handle. Replacing that handle makes Kerf's own child observer rewire and restore them.
         if (element.getAttribute('data-presentation') === 'bottom-sheet' && element.hasAttribute('data-resizable')) {
