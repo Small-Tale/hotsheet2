@@ -832,7 +832,6 @@ async fn hs2_e16fwj_a_cli_filed_request_reaches_clients_without_a_read() {
     let home = fixture.root_path.join("home");
     let source = fixture.root_path.join("store");
     let mut events = fixture.host.subscribe();
-    fixture.host.spawn_permission_follower();
     let orchestrator_cards = || {
         fixture
             .host
@@ -842,9 +841,7 @@ async fn hs2_e16fwj_a_cli_filed_request_reaches_clients_without_a_read() {
             .filter(|request| request.orchestrator.is_some())
             .collect::<Vec<_>>()
     };
-    // Idle: nothing is published.
     let quiet = std::time::Duration::from_millis(1_500);
-    assert_eq!(next_permission_event(&mut events, quiet).await, None);
     let ai_cli = [
         "--actor-role",
         "ai",
@@ -886,6 +883,38 @@ async fn hs2_e16fwj_a_cli_filed_request_reaches_clients_without_a_read() {
         )
     };
     let wait = std::time::Duration::from_secs(15);
+    let deny = |request_id: &str| {
+        cli_named(
+            &home,
+            &human_cli,
+            &[
+                "permission",
+                "answer",
+                request_id,
+                "--project",
+                &fixture.checkout_id,
+                "--answer",
+                "deny",
+            ],
+        )
+    };
+    // Filed before the follower starts: shown once its watch runs.
+    assert!(file("op-cli-0").contains("permission_required"));
+    assert!(orchestrator_cards().is_empty());
+    fixture.host.spawn_permission_follower();
+    assert_eq!(
+        next_permission_event(&mut events, wait).await.as_deref(),
+        Some("permission_asked")
+    );
+    let early = orchestrator_cards();
+    assert_eq!(early.len(), 1);
+    deny(&early[0].orchestrator.as_ref().unwrap().request_id);
+    assert_eq!(
+        next_permission_event(&mut events, wait).await.as_deref(),
+        Some("permission_resolved")
+    );
+    // Idle: nothing is published.
+    assert_eq!(next_permission_event(&mut events, quiet).await, None);
     assert!(file("op-cli-1").contains("permission_required"));
     assert_eq!(
         next_permission_event(&mut events, wait).await.as_deref(),
@@ -899,19 +928,7 @@ async fn hs2_e16fwj_a_cli_filed_request_reaches_clients_without_a_read() {
     assert_eq!(next_permission_event(&mut events, quiet).await, None);
     assert_eq!(orchestrator_cards().len(), 1);
     // A CLI answer settles the card on its own.
-    cli_named(
-        &home,
-        &human_cli,
-        &[
-            "permission",
-            "answer",
-            &request_id,
-            "--project",
-            &fixture.checkout_id,
-            "--answer",
-            "deny",
-        ],
-    );
+    deny(&request_id);
     assert_eq!(
         next_permission_event(&mut events, wait).await.as_deref(),
         Some("permission_resolved")

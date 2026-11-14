@@ -160,6 +160,11 @@ impl AppState {
                 let Ok(mut waiter) = runtime.permission_signal_waiter() else {
                     return;
                 };
+                // Catch up once the watch runs: a request filed while this thread was
+                // starting changed the signal before the waiter first read it.
+                if wake_tx.try_send(()).is_err() {
+                    return;
+                }
                 // Short waits, so a stopping server ends the thread promptly.
                 while !watcher.is_stopping() && !wake_tx.is_closed() {
                     if !waiter.wait(std::time::Duration::from_secs(1)) {
