@@ -688,8 +688,8 @@ async fn hs2_2ey9dp_out_of_order_and_replayed_events_settle_a_run_once() {
     fleet.shut_down().await;
 }
 
-/// HS2-2EY9DP: a remote session whose work ends without any run event (its run was
-/// cancelled and its step removed, then its worker let go) idles and is wound down.
+/// HS2-2EY9DP: a remote session whose work ends without any run event (its step was
+/// removed, which cancels its run, HS2-YFPZFP, then its worker let go) is wound down.
 /// HS2-257Q2Z: the peer's claim release and turn end reach the controller on the
 /// target change feed its follower holds open, which wakes the owner's loop.
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
@@ -703,12 +703,9 @@ async fn hs2_2ey9dp_a_remote_session_freed_without_a_run_event_is_wound_down() {
             json!({"actor":Fleet::person(),"step_id":step}),
         )
         .await;
+    // HS2-YFPZFP: the removal cancelled the step's scheduler run.
     let cancelled = fleet
-        .ok(
-            "POST",
-            &format!("/runs/{}/cancel", b.run_id),
-            json!({"actor":Fleet::ai()}),
-        )
+        .ok("GET", &format!("/runs/{}", b.run_id), Value::Null)
         .await;
     assert_eq!(cancelled["state"], "cancelled", "{cancelled}");
     // HS2-257Q2Z: the peer's hosted feed, read as the controller's follower reads it.
@@ -729,7 +726,8 @@ async fn hs2_2ey9dp_a_remote_session_freed_without_a_run_event_is_wound_down() {
             3 * MINUTE,
         )
         .await;
-    assert_eq!(stop["reason"], "idle", "{stop}");
+    // HS2-YFPZFP: the session was busy with the withdrawn run, never refilled.
+    assert_eq!(stop["reason"], "run_cancelled", "{stop}");
     // The wound-down terminal's exit is published on the peer's feed for its checkout,
     // naming the host's terminal and nothing else.
     let deadline = std::time::Instant::now() + MINUTE;

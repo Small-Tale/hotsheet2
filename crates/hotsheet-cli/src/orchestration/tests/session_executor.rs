@@ -2369,3 +2369,142 @@ fn hs2_hv9ed3_a_persons_cancel_holds_the_step_and_winds_its_session_down() {
         format!("sched-run-{again}.2")
     );
 }
+
+impl Placed {
+    /// HS2-YFPZFP: remove a step from the plan as `actor`.
+    fn remove(
+        &self,
+        step_id: &str,
+        actor: &hotsheet_ticketing::actor::MutationActor,
+        tx: &mut Transaction<'_>,
+    ) -> Result<hotsheet_ticketing::orchestration::PlanStep, OrchestrationError> {
+        self.m.runtime.readiness_remove(
+            &self.owner(),
+            &serde_json::from_value(json!({ "step_id": step_id })).unwrap(),
+            Some(actor),
+            tx,
+        )
+    }
+    /// HS2-YFPZFP: plan an existing target ticket again.
+    fn plan_again(&self, slug: &str, tx: &mut Transaction<'_>) -> String {
+        self.m
+            .runtime
+            .readiness_define(
+                &self.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": self.m.owner_connection(),
+                        "native_id": self.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": self.m.target_connection(),
+                    "native_id": slug, "prerequisites": [],
+                }))
+                .unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+            .readiness
+            .step
+            .step_id
+    }
+    fn up_next(&self, slug: &str) -> bool {
+        ops::resolve(&self.m.target_store, slug)
+            .unwrap()
+            .unwrap()
+            .up_next
+    }
+}
+
+/// HS2-YFPZFP: removing a planned step withdraws its work. Its scheduler run is
+/// cancelled as `step_removed` (the Up Next mark withdrawn), its session is told and
+/// wound down at its safe point, and nothing is dispatched for it again. A removal
+/// the gate refuses changes nothing; removing again is `step_not_found`; planning the
+/// ticket again is new work; a run already cancelled keeps its own reason.
+#[test]
+fn hs2_yfpzfp_removing_a_step_cancels_its_run_and_winds_its_session_down() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let step = f.ready("First", &mut tx);
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
+    let session = f.record(&format!("sched-start-{step}"));
+    let terminal = f.terminal(&session);
+    let run = f.run_of(&step);
+    let slug = f.slug(&run);
+    assert_eq!(run.state, RunState::Queued);
+    assert!(f.up_next(&slug));
+
+    // An actor the gate refuses cannot withdraw the work: nothing changes.
+    let intruder =
+        hotsheet_ticketing::actor::MutationActor::parse("ai", Some("intruder".into())).unwrap();
+    assert!(matches!(
+        f.remove(&step, &intruder, &mut tx),
+        Err(OrchestrationError::Denied(_))
+    ));
+    assert_eq!(f.run_of(&step).state, RunState::Queued);
+    assert!(f.up_next(&slug));
+    assert!(f.m.runtime.plan_step(&f.owner(), &step).is_ok());
+
+    // Removed: the run is cancelled as the step's removal and its mark withdrawn.
+    f.remove(&step, &worker(), &mut tx).unwrap();
+    let cancelled = f.run_of(&step);
+    assert_eq!(
+        (
+            cancelled.state,
+            cancelled.history.last().unwrap().reason.as_deref()
+        ),
+        (RunState::Cancelled, Some("step_removed"))
+    );
+    assert!(!f.up_next(&slug));
+    // The session is still busy with it, told once, and wound down at its safe point.
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &session.session_id),
+        (PlacementAction::WindDown, "run_cancelled", None)
+    );
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    assert_eq!(f.record(&session.operation_id).state, SessionState::Stopped);
+    let told = f.requests(&terminal);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].contains(&format!("`{slug}`")) && told[0].contains("cancelled"),
+        "{told:?}"
+    );
+    // Nothing is dispatched or started for it again, however often a pass runs.
+    for _ in 0..2 {
+        assert!(f.tick(&mut tx).outcomes.is_empty());
+    }
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+    // Removing it again: there is no such step, and nothing more is cancelled.
+    assert!(matches!(
+        f.remove(&step, &worker(), &mut tx),
+        Err(OrchestrationError::Readiness(
+            hotsheet_ticketing::orchestration::ReadinessError::StepNotFound
+        ))
+    ));
+
+    // Planned again into the emptied plan: new work, a new run and session.
+    let again = f.plan_again(&slug, &mut tx);
+    assert_ne!(again, step);
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
+    let second = f.run_of(&again);
+    assert_eq!(second.operation_id, format!("sched-run-{again}"));
+    assert!(f.up_next(&slug));
+    assert_eq!(f.host.launches().len(), 2);
+    // Out of order: an AI actor cancelled the run before the step is removed. The
+    // removal withdraws nothing more and the run keeps its own reason.
+    f.m.runtime
+        .run_cancel(&f.owner(), &second.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    f.remove(&again, &worker(), &mut tx).unwrap();
+    assert_eq!(
+        f.run_of(&again).history.last().unwrap().reason.as_deref(),
+        Some("cancelled")
+    );
+    assert!(
+        f.m.runtime
+            .readiness_plan(&f.owner(), &mut tx)
+            .unwrap()
+            .steps
+            .is_empty()
+    );
+}

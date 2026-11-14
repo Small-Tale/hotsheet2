@@ -773,10 +773,6 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<RunView, OrchestrationError> {
-        let run = self.run(owner_id, run_id)?;
-        if run.state.is_terminal() {
-            return Err(OrchestrationError::Run(RunError::NotActive));
-        }
         // HS2-HV9ED3: a person's cancel is recorded as theirs; the scheduler respects it.
         let reason = if actor
             .is_some_and(|actor| actor.role == hotsheet_ticketing::actor::ActorRole::Human)
@@ -785,6 +781,23 @@ impl OrchestrationRuntime {
         } else {
             "cancelled"
         };
+        self.run_cancel_as(owner_id, run_id, reason, actor, tx)
+    }
+
+    /// [`Self::run_cancel`] recording `reason` as the run's reason (HS2-YFPZFP: a
+    /// removed plan step cancels its scheduler run as `step_removed`).
+    pub(super) fn run_cancel_as(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        reason: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<RunView, OrchestrationError> {
+        let run = self.run(owner_id, run_id)?;
+        if run.state.is_terminal() {
+            return Err(OrchestrationError::Run(RunError::NotActive));
+        }
         let cancelled = |tx: &mut Transaction<'_>| {
             self.run_apply(
                 owner_id,

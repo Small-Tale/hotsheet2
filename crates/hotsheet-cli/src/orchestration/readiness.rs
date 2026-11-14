@@ -29,6 +29,9 @@ use super::*;
 /// HS2-SQS266: the `reason` of the `readiness` event that publishes a step's removal.
 pub const STEP_REMOVED: &str = "removed";
 
+/// HS2-YFPZFP: the reason of a scheduler run cancelled because its step was removed.
+pub const STEP_REMOVED_RUN: &str = "step_removed";
+
 /// A prerequisite as a caller names it. Native ids may be slugs; the plan stores the
 /// provider's canonical id.
 #[derive(Debug, Clone, Deserialize)]
@@ -678,6 +681,24 @@ impl OrchestrationRuntime {
             return Err(OrchestrationError::Invalid(
                 "an identified actor is required to change the plan",
             ));
+        }
+        // HS2-YFPZFP: the step's work is withdrawn with it. Its unfinished scheduler
+        // runs are cancelled first, as the remover, so a refusal by the gate leaves
+        // the plan as it was. A target that cannot be told keeps the run
+        // `cancel_requested`, as any cancel does, and the removal goes on.
+        let planned = self.plan().get(owner_id, &request.step_id)?;
+        for run in self.run_list(owner_id, false)?.into_iter().filter(|run| {
+            !run.state.is_terminal()
+                && super::session_executor::scheduled_run_of(run, &planned.step_id)
+        }) {
+            match self.run_cancel_as(owner_id, &run.run_id, STEP_REMOVED_RUN, actor, tx) {
+                // It finished in between: nothing is left to withdraw.
+                Ok(_)
+                | Err(OrchestrationError::Run(
+                    hotsheet_ticketing::orchestration::RunError::NotActive,
+                )) => {}
+                Err(error) => return Err(error),
+            }
         }
         let step = self.plan().remove(owner_id, &request.step_id)?;
         self.readiness_audit(

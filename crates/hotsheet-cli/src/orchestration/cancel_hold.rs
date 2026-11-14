@@ -50,22 +50,32 @@ pub(super) fn held_by<'a>(step: &PlanStep, runs: &'a [Run]) -> Option<&'a Run> {
     (step.updated_at_ms <= cancelled_at && !dispatched_since).then_some(latest)
 }
 
+/// HS2-YFPZFP: whether the run's work was withdrawn: a person cancelled it, or its
+/// plan step was removed. A session working such a run is told and wound down.
+pub(super) fn withdrawn(run: &Run) -> bool {
+    person_cancelled(run)
+        || (run.state == RunState::Cancelled
+            && run.history.last().and_then(|entry| entry.reason.as_deref())
+                == Some(super::readiness::STEP_REMOVED_RUN))
+}
+
 impl OrchestrationRuntime {
-    /// Runs of the owner a person cancelled, by id.
-    pub(super) fn person_cancelled_runs(&self, owner_id: &str) -> BTreeSet<String> {
+    /// Runs of the owner whose work was withdrawn ([`withdrawn`]), by id.
+    pub(super) fn withdrawn_runs(&self, owner_id: &str) -> BTreeSet<String> {
         self.run_list(owner_id, false)
             .unwrap_or_default()
             .into_iter()
-            .filter(person_cancelled)
+            .filter(withdrawn)
             .map(|run| run.run_id)
             .collect()
     }
 
     /// Rewrite a computed schedule so each running session the orchestrator owns
-    /// whose run a person cancelled is wound down (`run_cancelled`) at its next safe
-    /// point. A person's session is left alone.
+    /// whose run's work was withdrawn (a person's cancel, or its step removed,
+    /// HS2-YFPZFP) is wound down (`run_cancelled`) at its next safe point. A person's
+    /// session is left alone.
     pub(super) fn scheduler_cancelled(&self, owner_id: &str, schedule: &mut Schedule) {
-        let cancelled = self.person_cancelled_runs(owner_id);
+        let cancelled = self.withdrawn_runs(owner_id);
         if cancelled.is_empty() {
             return;
         }

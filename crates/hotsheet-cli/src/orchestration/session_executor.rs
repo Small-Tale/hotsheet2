@@ -163,7 +163,7 @@ impl OrchestrationRuntime {
             .filter(|run| run.state.is_terminal())
             .map(|run| run.run_id)
             .collect();
-        let cancelled = self.person_cancelled_runs(owner_id);
+        let cancelled = self.withdrawn_runs(owner_id);
         let mut listed = Vec::new();
         let mut seen = Vec::new();
         for record in self.session_list(owner_id, true)? {
@@ -202,7 +202,8 @@ impl OrchestrationRuntime {
             // HS2-YC2P7K: a session works its run while the run is unfinished, idle
             // between turns or not; one whose run finished is free again.
             // HS2-HV9ED3: a session whose run a person cancelled stays busy with it
-            // until it is wound down, so it is never refilled meanwhile.
+            // until it is wound down, so it is never refilled meanwhile. So does one
+            // whose run's step was removed (HS2-YFPZFP).
             let run_id = session
                 .run_id
                 .clone()

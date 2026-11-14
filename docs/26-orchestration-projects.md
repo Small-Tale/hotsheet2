@@ -1962,7 +1962,9 @@ prerequisite as JSON for what the flags do not say, such as a pinned `commit`.
 MCP `hotsheet_targets` adds `readiness_define`, `readiness_show`, `readiness_plan`,
 `readiness_ready`, `readiness_refresh` and `readiness_remove`, and `run_dispatch`
 takes `override_readiness`. Removing a step needs an identified actor and is audited
-(`readiness_remove`); whether plan changes should need a grant of their own is
+(`readiness_remove`). It cancels the step's unfinished scheduler runs first, as the
+remover, and a gate refusal of that cancel refuses the removal (HS2-YFPZFP, §26.24);
+whether plan changes should need a grant of their own is
 HS2-TZT505.
 
 Milestones and wider cross-project planning stay with their own tickets: the
@@ -2734,13 +2736,14 @@ it, under the scheduler's actor:
    exact ticket. A start being repeated keeps the run it named, or is linked to the
    run once it runs.
 
-| The latest scheduler run of the step | The dispatch                                     |
-| ------------------------------------ | ------------------------------------------------ |
-| None                                 | A new run under `sched-run-<step id>`            |
-| Unfinished                           | The same run: nothing is dispatched twice        |
-| Failed, or cancelled by an AI actor  | A new run under `<id>.<n>` (`.2`, `.3`, …)       |
-| Cancelled by a person                | None: the step is held (HS2-HV9ED3, §26.24)      |
-| Completed                            | None: the step is finished and is not ready work |
+| The latest scheduler run of the step   | The dispatch                                     |
+| -------------------------------------- | ------------------------------------------------ |
+| None                                   | A new run under `sched-run-<step id>`            |
+| Unfinished                             | The same run: nothing is dispatched twice        |
+| Failed, or cancelled by an AI actor    | A new run under `<id>.<n>` (`.2`, `.3`, …)       |
+| Cancelled by a person                  | None: the step is held (HS2-HV9ED3, §26.24)      |
+| Cancelled because the step was removed | None: the step is gone (HS2-YFPZFP, §26.24)      |
+| Completed                              | None: the step is finished and is not ready work |
 
 **Repeats and replacements.** From the dispatch on, the step is `in_progress`, so
 later passes start nothing for it. A step whose scheduler run is unfinished and that
@@ -3549,6 +3552,33 @@ behaviour: the step is dispatched again.
   until the worker lets go, and the session's turn end wakes the loop. Such a
   wind-down starts no cooldown. A person's session is left alone.
 - The Up Next mark a dispatched dispatcher-mode run set is not withdrawn by this.
+
+### Removing a step withdraws its run (HS2-YFPZFP)
+
+**Decision.** Removing a planned step withdraws its work. Before, the step's
+scheduler run (`sched-run-<step>`) stayed queued in the target, Up Next marked, and
+the session working it stayed busy with it, so it was never wound down until a
+person cancelled the run.
+
+- **The run.** `readiness remove` cancels each unfinished scheduler run of the step
+  (`sched-run-<step>` and its `.n` generations) before the step is removed, as the
+  remover, through the ordinary cancel: a queued dispatcher-mode run withdraws its
+  Up Next mark, a direct run releases its claim, and an already assigned run is
+  recorded cancelled. The run's reason is `step_removed`. A run someone dispatched
+  by hand for the same ticket is not the scheduler's and is left alone; a run that
+  is already finished keeps its own reason.
+- **Refused or unreachable.** A gate refusal of a cancel refuses the removal with
+  that typed denial, and the plan, the run and the target are unchanged. A target
+  that cannot be told leaves the run `cancel_requested`, as any cancel does, for a
+  later cancel or reconciliation to finish, and the removal goes on.
+- **The session.** A session linked to a `step_removed` run is treated like one whose
+  run a person cancelled (above): it stays busy with the run, so it is never refilled
+  while its worker may still hold the ticket, is told with a `cancelled` request, and
+  its placement becomes `wind_down` `run_cancelled`, at a safe point its host
+  confirms and without a cooldown. A person's session is left alone.
+- **Again.** Removing the step again is `readiness_step_not_found` and cancels
+  nothing. Planning the ticket again is a new step whose first run is
+  `sched-run-<new step>`.
 
 ### Removing a step is an event (HS2-SQS266)
 
