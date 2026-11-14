@@ -233,3 +233,49 @@ test('keeps orchestrator answers listed and revocable while the vault is locked 
     await app.stop();
   }
 });
+
+// HS2-7NGC69: a remembered orchestrator rule's action is a sentence, set in body type in
+// Settings → Permissions; a command keeps code type. Light and dark alike.
+test('sets an orchestrator rule sentence in body type (HS2-7NGC69)', async ({ context, baseURL }) => {
+  test.setTimeout(120_000);
+  const app = await desktopApp(context, baseURL!);
+  try {
+    const page = await app.launch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
+    await orchestratorRequest(app.server, 'op-type-1');
+    await app.server.request(`/checkouts/${app.server.checkoutId}/orchestration/permission-rules`, 'POST', {
+      target_id: TARGET,
+      action: 'tickets_write',
+      actor: { role: 'human', id: 'maintainer' },
+    });
+    await openPermissionSettings(page);
+    const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
+    const sentence = preview.locator('[data-exact-action]').first();
+    await expect(sentence).toHaveText('Create or change tickets in API');
+    await expect(sentence.locator('code')).toHaveCount(0);
+    const family = await sentence.evaluate((element) => getComputedStyle(element).fontFamily);
+    expect(family).not.toMatch(/mono/iu);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const width of [1440, 1100, 390, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        if (width === 390) {
+          const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+          if (await hideSidebar.isVisible()) await hideSidebar.click();
+        }
+        await preview.scrollIntoViewIfNeeded();
+        await expect(preview).toBeInViewport({ ratio: 1 });
+        await page.waitForFunction(() =>
+          document.getAnimations().every((animation) => animation.playState !== 'running'),
+        );
+        await preview.screenshot({ path: `target/visual-captures/hs2-7ngc69-rule-${scheme}-${width}.png` });
+      }
+    }
+  } finally {
+    await app.stop();
+  }
+});

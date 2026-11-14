@@ -4224,8 +4224,9 @@ is needed to answer one.
   choice, because the rule is keyed exactly. Confirm Always Allow remembers it.
 - **Settings → Permissions.** A remembered orchestrator rule is listed with the other
   remembered answers. Its row names the action sentence, "Applies to: The
-  orchestrator of" the orchestration project, and "Target project:" the target. It can
-  be revoked there; editing its match, decision or scope is disabled.
+  orchestrator of" the orchestration project, and "Target project:" the target. The
+  action sentence is set in body type, not the code type of a command (HS2-7NGC69). It
+  can be revoked there; editing its match, decision or scope is disabled.
 - **Settling.** A request answered anywhere else (the CLI, another client, a rule
   remembered ahead) settles the card with `permission_resolved`. A request filed by
   a headless CLI while no server ran appears when the server starts or a client next

@@ -221,18 +221,26 @@ export function PermissionRulesSettings({
               icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
               multiline
               label={
-                <Text
-                  variant="span"
-                  font="monospace"
-                  border="none"
-                  wrap="anywhere"
-                  maxLines={expanded ? undefined : 2}
-                  data-exact-action
-                >
-                  <code class="permission-rules-settings__command">
+                // HS2-7NGC69: an orchestrator rule's action is a sentence, set in body type;
+                // commands and file actions keep code type.
+                rule.orchestrator ? (
+                  <Text variant="span" wrap="anywhere" maxLines={expanded ? undefined : 2} data-exact-action>
                     {rule.exact_action ?? 'Action unavailable — revoke and review again'}
-                  </code>
-                </Text>
+                  </Text>
+                ) : (
+                  <Text
+                    variant="span"
+                    font="monospace"
+                    border="none"
+                    wrap="anywhere"
+                    maxLines={expanded ? undefined : 2}
+                    data-exact-action
+                  >
+                    <code class="permission-rules-settings__command">
+                      {rule.exact_action ?? 'Action unavailable — revoke and review again'}
+                    </code>
+                  </Text>
+                )
               }
               description={allowed ? undefined : 'Denied'}
               title={label}

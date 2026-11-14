@@ -384,8 +384,19 @@ describe('orchestrator permission requests (HS2-XHQ1EH)', () => {
       expect(markup).toContain('Target project: API');
       expect(markup).not.toContain('All AI sessions');
       expect(markup).not.toContain('Code project: Launch');
+      // HS2-7NGC69: a sentence in body type, never code type.
+      expect(markup).not.toMatch(/<code class="permission-rules-settings__command">Start a codex session/u);
     }
     expect(permissionRulesList([rule], 'orchestrator of launch', 100, undefined, owner).rows).toEqual([rule]);
+    // HS2-7NGC69: a command rule keeps code type.
+    const command = String(
+      PermissionRulesSettings({
+        rules: [
+          { project: '/p', tool: 'Bash', action: 'x', exact_action: 'npm test', decision: 'allow', scope: 'always' },
+        ],
+      }),
+    );
+    expect(command).toMatch(/<code class="permission-rules-settings__command">npm test/u);
     // HS2-4K43DK: a locked vault keeps the orchestrator rows listed below the locked notice.
     const locked = String(PermissionRulesSettings({ rules: [rule], owner, locked: true }));
     expect(locked).toContain('Remembered Answers Locked');
