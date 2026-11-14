@@ -171,9 +171,16 @@ pub(super) struct Waiting {
 
 impl Waiting {
     pub(super) fn exit_output(&mut self) -> std::process::Output {
+        self.exit_output_within(Duration::ZERO)
+    }
+
+    /// [`Self::exit_output`] for a wait that is due only after `due` (a known deadline,
+    /// such as a claim expiry): the usual wake bound starts when the deadline passes
+    /// (HS2-2982P2).
+    pub(super) fn exit_output_within(&mut self, due: Duration) -> std::process::Output {
         let stdout = self
             .output
-            .recv_timeout(Duration::from_secs(10))
+            .recv_timeout(due + Duration::from_secs(10))
             .expect("event-backed wait did not wake");
         let status = self.child.wait().unwrap();
         let stderr = self
@@ -189,6 +196,17 @@ impl Waiting {
 
     pub(super) fn result(&mut self) -> Snapshot {
         let output = self.exit_output();
+        Self::snapshot_of(output)
+    }
+
+    /// [`Self::result`] for a wait that is due only after `due`.
+    #[allow(dead_code)] // HS2-2982P2: only the claim-expiry wake test knows its deadline.
+    pub(super) fn result_within(&mut self, due: Duration) -> Snapshot {
+        let output = self.exit_output_within(due);
+        Self::snapshot_of(output)
+    }
+
+    fn snapshot_of(output: std::process::Output) -> Snapshot {
         assert!(
             output.status.success(),
             "coordination waiter failed ({}): {}",

@@ -961,7 +961,14 @@ fn hs2_76vmyg_known_claim_expiry_wakes_integrator_without_a_file_write() {
         "--after",
         &initial.cursor,
     ]);
-    let after = waiting.result();
+    // HS2-2982P2: the claim is due `lease` seconds after `at`, and the lease grows with
+    // the host's round trip; the wake bound starts when it is due, not when the wait
+    // started. A fixed 10 s bound failed whenever the lease outgrew it (16 s at a 4 s
+    // round trip).
+    let due = (at + time::Duration::seconds(lease + 1) - time::OffsetDateTime::now_utc())
+        .try_into()
+        .unwrap_or(std::time::Duration::ZERO);
+    let after = waiting.result_within(due);
     assert!(after.local_queue.unwrap()[0].claimed_by.is_none());
 }
 
