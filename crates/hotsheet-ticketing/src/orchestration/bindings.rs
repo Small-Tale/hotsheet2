@@ -125,6 +125,24 @@ impl BindingRegistry {
         self.storage.write(&bytes, MAX_BINDING_BYTES)
     }
 
+    /// HS2-S3FKJ7: the targets whose reviewed binding on this machine names the local
+    /// checkout `checkout_id`, in the file's order. Remote destinations are another
+    /// machine's checkouts and never match.
+    pub fn bound_here(&self, checkout_id: &str) -> Result<Vec<TargetRef>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .bindings
+            .into_iter()
+            .filter(|binding| {
+                matches!(
+                    &binding.destination,
+                    Some(TargetDestination::Local { checkout_id: bound, .. }) if bound == checkout_id
+                )
+            })
+            .map(|binding| binding.target)
+            .collect())
+    }
+
     pub fn get(&self, target: &TargetRef) -> Result<BindingView, OrchestrationError> {
         target.validate()?;
         Ok(self

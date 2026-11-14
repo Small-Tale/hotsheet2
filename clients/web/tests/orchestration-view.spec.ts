@@ -532,3 +532,74 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     await server.stop();
   }
 });
+
+test('HS2-S3FKJ7 a target project’s List and Columns show the orchestration line of planned tickets', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    // The project is its own target ("Self"), so its List shows the tickets the plan works.
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    const unplanned = await server.request<{ slug: string }>('/tickets', 'POST', { title: 'Unplanned synthetic work' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    await page.locator('[data-segment-value="list"]').first().click();
+    const row = (slug: string) => page.locator(`[data-ticket-slug="${slug}"]`).first();
+    const line = (slug: string) => row(slug).locator('[data-row-orchestration="true"]');
+    // A proposed plan: the first step is ready, the second comes after it, both from the same goal.
+    await expect(line(plan.first.slug).locator('[data-orchestration-part="state"]')).toHaveText('Ready', {
+      timeout: 30_000,
+    });
+    await expect(line(plan.first.slug).locator('[data-orchestration-part="placement"]')).toHaveText('This machine');
+    await expect(line(plan.first.slug).locator('[data-orchestration-part="goal"]')).toHaveText(plan.goal.slug);
+    await expect(line(plan.first.slug).locator('[data-orchestration-part="goal"]')).toHaveAttribute(
+      'title',
+      // The orchestration project's name as this machine registered it (the fixture's folder).
+      `Goal ${plan.goal.slug}: Ship the synthetic sign-on, in project`,
+    );
+    await expect(line(plan.second.slug).locator('[data-orchestration-part="state"]')).toHaveText(
+      `After ${plan.first.slug}`,
+    );
+    // Tickets no plan works, the goal ticket included, have no line.
+    await expect(line(unplanned.slug)).toHaveCount(0);
+    await expect(line(plan.goal.slug)).toHaveCount(0);
+    await capture(page, 'list-1440', 'hs2-s3fkj7');
+
+    // A dispatch reaches the open List through the long poll: the line now waits on nothing and the
+    // second step waits on the running one.
+    await plan.dispatch();
+    await expect(line(plan.second.slug).locator('[data-orchestration-part="state"]')).toHaveText(
+      `Waits on ${plan.first.slug}`,
+      { timeout: 30_000 },
+    );
+    await expect(line(plan.first.slug).locator('[data-orchestration-part="state"]')).toHaveCount(0);
+    await expect(line(plan.first.slug).locator('[data-orchestration-part="placement"]')).toHaveText('This machine');
+
+    for (const width of [1100, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await expect(line(plan.second.slug)).toBeVisible();
+      await capture(page, `list-${width}`, 'hs2-s3fkj7');
+    }
+    // Columns, narrow then wide again.
+    await page.locator('[data-segment-value="board"]').first().click();
+    await expect(line(plan.second.slug).locator('[data-orchestration-part="state"]')).toHaveText(
+      `Waits on ${plan.first.slug}`,
+    );
+    await capture(page, 'columns-390', 'hs2-s3fkj7');
+    for (const width of [1100, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(line(plan.second.slug)).toBeVisible();
+      await capture(page, `columns-${width}`, 'hs2-s3fkj7');
+    }
+    await page.locator('[data-segment-value="list"]').first().click();
+    await expect(line(plan.second.slug)).toBeVisible();
+    await capture(page, 'list-1440-after-narrow', 'hs2-s3fkj7');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture(page, 'list-1440-dark', 'hs2-s3fkj7');
+  } finally {
+    await server.stop();
+  }
+});

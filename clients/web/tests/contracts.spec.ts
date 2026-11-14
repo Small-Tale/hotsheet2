@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(308); // HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(309); // HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(308); // HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(309); // HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -1246,6 +1246,22 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
     const malformed = await send('GET', `${base}/timeline?after=a%2Fb`);
     expect(malformed.status).toBe(400);
     matches(timelinePath, 'get', 'default', malformed.body);
+    // HS2-S3FKJ7: the same plan read from the target side, one line per planned ticket.
+    const linesPath = '/checkouts/{owner}/orchestration/target-lines';
+    const lines = await send('GET', `${base}/target-lines`);
+    matches(linesPath, 'get', '200', lines.body);
+    expect(lines.body).toMatchObject({ orchestrated: true });
+    expect(
+      (lines.body.lines as { item: { target: { native_id: string } } }[])
+        .map((line) => line.item.target.native_id)
+        .sort(),
+    ).toEqual([first.id, second.id].sort());
+    const linesWaited = await send('GET', `${base}/target-lines?after=${String(lines.body.version)}&wait_ms=50`);
+    matches(linesPath, 'get', '200', linesWaited.body);
+    expect(linesWaited.body.version).toBe(lines.body.version);
+    const linesMalformed = await send('GET', `${base}/target-lines?after=a%2Fb`);
+    expect(linesMalformed.status).toBe(400);
+    matches(linesPath, 'get', 'default', linesMalformed.body);
     const ready = await send('POST', `${base}/readiness/ready`, {});
     matches(readiness, 'post', '200', ready.body);
     expect(ready.body).toMatchObject([{ level: 'confirmed', unblocks: [stepId], priority: 'default' }]);

@@ -123,6 +123,25 @@ export interface OrchestrationTimeline {
   estimate: EstimateBasis;
 }
 
+/** HS2-S3FKJ7: one target ticket's line, read from the target project's side. */
+export interface OrchestrationTargetLine {
+  owner_checkout_id: string;
+  /** The orchestration project's name. */
+  owner_label: string;
+  /** The owner's plan was never started, so the line reads as a dry run. */
+  proposed: boolean;
+  /** Other plan steps that also work this ticket. */
+  also_planned?: number;
+  item: TimelineItem;
+}
+
+export interface OrchestrationTargetLines {
+  version: string;
+  /** An orchestration project on this machine binds the project at all. */
+  orchestrated: boolean;
+  lines: OrchestrationTargetLine[];
+}
+
 const PHASES: readonly TimelinePhase[] = ['no_projects', 'no_plan', 'proposed', 'running', 'paused'];
 const WAVES: readonly WaveKind[] = ['done', 'working_now', 'next', 'then', 'later', 'planned'];
 const STATES: readonly TimelineItemState[] = [
@@ -230,6 +249,23 @@ export function parseOrchestrationTimeline(value: unknown): OrchestrationTimelin
   record(view.counts);
   count(view.wave_minutes);
   return view as unknown as OrchestrationTimeline;
+}
+
+/** HS2-S3FKJ7: validate a target project's orchestration lines; a drifted response throws. */
+export function parseOrchestrationTargetLines(value: unknown): OrchestrationTargetLines {
+  const view = record(value);
+  text(view.version);
+  if (typeof view.orchestrated !== 'boolean') fail();
+  list(view.lines, (line) => {
+    const entry = record(line);
+    text(entry.owner_checkout_id);
+    text(entry.owner_label);
+    if (typeof entry.proposed !== 'boolean') fail();
+    optional(entry.also_planned, count);
+    item(entry.item);
+    return entry;
+  });
+  return view as unknown as OrchestrationTargetLines;
 }
 
 /** An orchestration answer the inspector reads a few members of (gates, run events, control results). */

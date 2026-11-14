@@ -49,6 +49,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "summary"]
             // HS2-J89JC7: the plan as dependency waves, a long poll by version.
             | ["checkouts", _, "orchestration", "timeline"]
+            // HS2-S3FKJ7: the orchestration lines of a target checkout's tickets.
+            | ["checkouts", _, "orchestration", "target-lines"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -128,6 +130,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "summary"]
             // HS2-J89JC7: computed from this machine's records.
             | ["checkouts", _, "orchestration", "timeline"]
+            // HS2-S3FKJ7: computed from this machine's bindings and timelines.
+            | ["checkouts", _, "orchestration", "target-lines"]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -934,6 +938,19 @@ impl OrchestrationRuntime {
                 }
                 value(self.orchestration_timeline(
                     owner,
+                    after.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
+                    tx,
+                )?)
+            }
+            // HS2-S3FKJ7: from the target side, the same records as the timeline.
+            ("GET", ["checkouts", checkout, "orchestration", "target-lines"]) => {
+                let after = query_text(path, "after")?;
+                if let Some(after) = &after {
+                    identifier(after, "bounded target lines version required")?;
+                }
+                value(self.orchestration_target_lines(
+                    checkout,
                     after.as_deref(),
                     query_number(path, "wait_ms", 0)?,
                     tx,

@@ -28,6 +28,7 @@ mod session_idle;
 mod sessions;
 mod storage;
 mod summary;
+mod target_lines;
 mod timeline;
 mod tool_capacity;
 mod validation;
@@ -145,6 +146,7 @@ pub use summary::{
     PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,
     RunRetries, TargetProgress, UnknownReason, WorkItemKey, WorkItemProgress, summarize_progress,
 };
+pub use target_lines::{TargetLine, TargetLineSource, TargetLines, target_lines};
 pub use timeline::{
     DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
     PlacementHint, TargetLocation, TicketLabel, Timeline, TimelineInput, TimelineItem,
@@ -387,6 +389,8 @@ mod session_idle_tests;
 mod session_tests;
 #[cfg(test)]
 mod summary_tests;
+#[cfg(test)]
+mod target_lines_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

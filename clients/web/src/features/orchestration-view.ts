@@ -17,6 +17,7 @@ import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
 import type { TicketLinkMatch } from '../ticket-link-resolution';
+import { startVersionedLongPoll } from '../versioned-long-poll';
 
 /** The collapse scope of the Orchestration view's project groups (HS2-WZ3JGZ storage). */
 export const ORCHESTRATION_GROUP_SCOPE = 'orchestration';
@@ -105,44 +106,12 @@ export function startOrchestrationTimelineStream(options: {
   onError: (error: unknown) => void;
   delay?: (ms: number, signal: AbortSignal) => Promise<void>;
 }): () => void {
-  const controller = new AbortController();
-  const stopped = () => controller.signal.aborted;
-  const wait =
-    options.delay ??
-    ((ms: number, abort: AbortSignal) =>
-      new Promise<void>((resolve) => {
-        const timer = window.setTimeout(resolve, ms);
-        abort.addEventListener(
-          'abort',
-          () => {
-            window.clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-      }));
-  void (async () => {
-    let version: string | undefined;
-    let failures = 0;
-    while (!stopped()) {
-      try {
-        const timeline = await options.client.orchestrationTimeline(options.checkout, version, controller.signal);
-        if (stopped()) break;
-        failures = 0;
-        if (timeline.version !== version) options.onTimeline(timeline);
-        version = timeline.version;
-      } catch (error) {
-        if (stopped()) break;
-        options.onError(error);
-        version = undefined;
-        failures += 1;
-        await wait(Math.min(30_000, 1_000 * 2 ** Math.min(failures - 1, 5)), controller.signal);
-      }
-    }
-  })();
-  return () => {
-    controller.abort();
-  };
+  return startVersionedLongPoll({
+    read: (after, signal) => options.client.orchestrationTimeline(options.checkout, after, signal),
+    onValue: options.onTimeline,
+    onError: options.onError,
+    delay: options.delay,
+  });
 }
 
 export interface OrchestrationViewDependencies {

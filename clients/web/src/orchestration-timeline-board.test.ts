@@ -5,10 +5,14 @@ import {
   cardTime,
   findTimelineItem,
   machineLabel,
+  orchestrationLine,
   startBlockedReason,
   startColumnId,
   stateWords,
   stepOfCard,
+  targetLineKey,
+  targetLineMap,
+  targetLineOrchestration,
   timelineCard,
   timelineColumns,
   timelineStatus,
@@ -163,5 +167,37 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
     expect(startBlockedReason(demoTimeline('proposed'))).toBeUndefined();
     expect(findTimelineItem(undefined, 'step-1')).toBeUndefined();
     expect(findTimelineItem(demoTimeline('running'), 'step-404')).toBeUndefined();
+  });
+});
+
+describe('a target ticket’s orchestration line in its own project (HS2-S3FKJ7)', () => {
+  it('reuses the card’s line and names the orchestration project on the goal', () => {
+    const waiting = item('step-6');
+    const line = { owner_checkout_id: 'launch-0123', owner_label: 'Launch', proposed: false, item: waiting };
+    const shown = targetLineOrchestration(line);
+    expect(shown).toEqual({ ...orchestrationLine(waiting, false), goalTitle: `${waiting.goal_title!}, in Launch` });
+    expect(shown.state).toBe('Waits for permission');
+    // A proposed plan reads as a dry run, as on the timeline.
+    const after = item('step-9', 'proposed');
+    expect(targetLineOrchestration({ ...line, proposed: true, item: after }).state).toMatch(/^After /);
+    expect(targetLineOrchestration({ ...line, item: { ...waiting, goal_title: undefined } }).goalTitle).toBe(
+      'In Launch',
+    );
+    // The timeline card carries the same line.
+    const timeline = demoTimeline('running');
+    expect(timelineCard(waiting, timeline, undefined).orchestration).toEqual(orchestrationLine(waiting, false));
+  });
+
+  it('keys lines by connection and native id', () => {
+    const first = item('step-6'),
+      second = item('step-7');
+    const map = targetLineMap([
+      { owner_checkout_id: 'a', owner_label: 'A', proposed: false, item: first },
+      { owner_checkout_id: 'a', owner_label: 'A', proposed: false, item: second },
+    ]);
+    expect(map.size).toBe(2);
+    expect(map.get(targetLineKey(first.target.connection_id, first.target.native_id))?.goalTitle).toMatch(/in A$/);
+    expect(map.get(targetLineKey('other', first.target.native_id))).toBeUndefined();
+    expect(targetLineMap([]).size).toBe(0);
   });
 });

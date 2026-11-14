@@ -106,6 +106,21 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 0, requires = "after")]
         wait_seconds: u64,
     },
+    /// HS2-S3FKJ7: from a target project's side, the orchestration line of each of its
+    /// tickets an orchestration project on this machine plans (state, where it runs,
+    /// goal ticket), one per ticket. Answers from this machine's records and contacts
+    /// no target. With --after <version> and --wait-seconds, waits for the next change.
+    TargetLines {
+        /// Registered target checkout id.
+        #[arg(long)]
+        project: Option<String>,
+        /// The version of the lines already seen.
+        #[arg(long)]
+        after: Option<String>,
+        /// With --after: wait this long for a change (at most 20).
+        #[arg(long, default_value_t = 0, requires = "after")]
+        wait_seconds: u64,
+    },
 }
 #[derive(Args)]
 struct GateArgs {
@@ -1329,6 +1344,19 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 path = format!("{path}?after={after}&wait_ms={wait_ms}");
             }
             (owner_id, ("GET", path, Value::Null))
+        }
+        OrchestrationCmd::TargetLines {
+            project,
+            after,
+            wait_seconds,
+        } => {
+            let checkout_id = required(project)?;
+            let mut path = format!("/checkouts/{checkout_id}/orchestration/target-lines");
+            if let Some(after) = after {
+                let wait_ms = wait_seconds.min(20) * 1000;
+                path = format!("{path}?after={after}&wait_ms={wait_ms}");
+            }
+            (checkout_id, ("GET", path, Value::Null))
         }
     };
     // HS2-SBQ3T8: authority decisions record who acted; the runtime strips this again

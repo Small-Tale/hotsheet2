@@ -3558,6 +3558,37 @@ paths:
                   free:
                     type: boolean
                 additionalProperties: false
+  /checkouts/{owner}/orchestration/target-lines:
+    description:
+      Machine-local orchestration lines of a target checkout's tickets (HS2-S3FKJ7). From the target side, the
+      timeline item of each of its tickets that an orchestration project on this machine plans through a reviewed local
+      binding, one per ticket. Answers from this machine's records and local ticket stores; contacts no target and
+      writes nothing. With `after` equal to the current version and `wait_ms`, waits for the next change.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationTargetLines
+      parameters:
+        - name: after
+          in: query
+          description: The lines version already seen.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+            pattern: ^[A-Za-z0-9._-]+$
+        - name: wait_ms
+          in: query
+          description: With `after`, wait this long (at most 20000) for the version to change.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: The lines, ordered by ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationTargetLines'
         default:
           description:
             Stable content-free error code; authentication/device-role/locality denial may return a fixed text
@@ -3573,6 +3604,10 @@ paths:
       - name: checkout
         in: path
         required: true
+      - name: owner
+        in: path
+        required: true
+        description: The target checkout.
         schema:
           type: string
           minLength: 1
@@ -23786,6 +23821,48 @@ components:
         next_cursor:
           description: Absent on the last page.
           type: string
+    OrchestrationTargetLines:
+      description:
+        The orchestration lines of a target checkout's tickets (HS2-S3FKJ7). `version` changes exactly when the lines
+        change; `orchestrated` says whether an orchestration project on this machine binds the checkout at all.
+      type: object
+      required:
+        - version
+        - orchestrated
+        - lines
+      properties:
+        version:
+          type: string
+        orchestrated:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationTargetLine'
+    OrchestrationTargetLine:
+      description:
+        One target ticket's line. When several plan steps work the ticket, the most pressing one, with the others counted
+        in `also_planned`.
+      type: object
+      required:
+        - owner_checkout_id
+        - owner_label
+        - proposed
+        - item
+      properties:
+        owner_checkout_id:
+          type: string
+        owner_label:
+          description: The orchestration project's name.
+          type: string
+        proposed:
+          description: The owner's plan was never started.
+          type: boolean
+        also_planned:
+          type: integer
+          minimum: 0
+        item:
+          $ref: '#/components/schemas/OrchestrationTimelineItem'
     RemoteIdentity:
       type: object
       required:

@@ -4,7 +4,12 @@ import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
-import { parseOrchestrationList, parseOrchestrationRecord, parseOrchestrationTimeline } from './orchestration-timeline';
+import {
+  parseOrchestrationList,
+  parseOrchestrationRecord,
+  parseOrchestrationTargetLines,
+  parseOrchestrationTimeline,
+} from './orchestration-timeline';
 import type {
   OrchestratorAsk,
   PermissionAutomation,
@@ -2139,6 +2144,19 @@ export class Api {
     return this.parsed(
       parseOrchestrationTimeline,
       `/checkouts/${encodeURIComponent(checkout)}/orchestration/timeline${query}`,
+      { signal },
+      false,
+    );
+  };
+  /**
+   * HS2-S3FKJ7: from a target project's side, the orchestration line of each of its tickets an orchestration
+   * project on this machine plans. With `after` (a version) it is a genuine long poll like the timeline.
+   */
+  orchestrationTargetLines = (checkout: string, after?: string, signal?: AbortSignal) => {
+    const query = after ? `?${new URLSearchParams({ after, wait_ms: '20000' })}` : '';
+    return this.parsed(
+      parseOrchestrationTargetLines,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/target-lines${query}`,
       { signal },
       false,
     );

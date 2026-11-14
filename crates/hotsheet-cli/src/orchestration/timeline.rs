@@ -236,7 +236,7 @@ impl OrchestrationRuntime {
 
     /// One timeline from the records as they are now, and the ticket stores whose
     /// change could clear a pending decision.
-    fn timeline_now(
+    pub(super) fn timeline_now(
         &self,
         owner_id: &str,
         tx: &mut Transaction<'_>,

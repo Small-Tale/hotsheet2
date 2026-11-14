@@ -379,3 +379,115 @@ fn hs2_j89jc7_a_version_waits_for_the_next_change() {
             .is_err()
     );
 }
+
+fn lines(m: &Machine, checkout: &str) -> hotsheet_ticketing::orchestration::TargetLines {
+    let mut rng = Rng(600);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    m.runtime
+        .orchestration_target_lines(checkout, None, 0, &mut tx)
+        .unwrap()
+}
+
+#[test]
+fn hs2_s3fkj7_target_lines_read_the_owner_plan_from_the_target_side() {
+    let m = machine(10, false, unsupported);
+    // Nothing binds the target checkout yet; the owner itself is not a target either.
+    let none = lines(&m, &m.target.id);
+    assert!(!none.orchestrated && none.lines.is_empty());
+    assert!(!lines(&m, &m.owner.id).orchestrated);
+
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let bound = lines(&m, &m.target.id);
+    assert!(bound.orchestrated && bound.lines.is_empty());
+    assert_ne!(bound.version, none.version);
+    // The owner is still not a target of itself.
+    assert!(!lines(&m, &m.owner.id).orchestrated);
+
+    let goal = m.orchestration_ticket("Ship single sign-on");
+    let (first, second) = (
+        target_ticket(&m, "Add the token endpoint"),
+        target_ticket(&m, "Add the login page"),
+    );
+    let a = define(&m, &goal, &first, None);
+    let b = define(&m, &goal, &second, Some(&first));
+    let planned = lines(&m, &m.target.id);
+    assert_eq!(planned.lines.len(), 2);
+    let by_step = |step: &str| {
+        planned
+            .lines
+            .iter()
+            .find(|line| line.item.step_id == step)
+            .unwrap()
+    };
+    let line = by_step(&a);
+    assert_eq!(line.owner_checkout_id, m.owner.id);
+    assert!(line.proposed);
+    assert_eq!(line.item.target.native_id, first.id.to_string());
+    assert_eq!(line.item.goal_slug.as_deref(), Some(goal.slug.as_str()));
+    assert_eq!(line.item.state, ItemState::Ready);
+    assert_eq!(by_step(&b).item.state, ItemState::WaitsForPrerequisite);
+    assert_eq!(by_step(&b).also_planned, 0);
+    // The same answer as the owner's timeline, item for item.
+    let view = read(&m);
+    for wave in &view.waves {
+        for item in &wave.items {
+            assert_eq!(&by_step(&item.step_id).item, item);
+        }
+    }
+
+    // A dispatch moves the line; a read with the old version answers at once.
+    let stale = planned.version.clone();
+    let dispatch: DispatchRun = serde_json::from_value(json!({
+        "ticket": {"connection_id": m.owner_connection(), "native_id": goal.id.to_string()},
+        "target_id": id(1), "connection_id": m.target_connection(),
+        "native_id": first.id.to_string(), "operation_id": "op-1", "worker_id": "worker-1",
+    }))
+    .unwrap();
+    m.runtime
+        .run_dispatch(&m.owner.id, dispatch, Some(&worker()), &mut tx)
+        .unwrap();
+    let mut rng = Rng(700);
+    let mut waiting = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let moved = m
+        .runtime
+        .orchestration_target_lines(&m.target.id, Some(&stale), 5_000, &mut waiting)
+        .unwrap();
+    assert_ne!(moved.version, stale);
+    let running = moved
+        .lines
+        .iter()
+        .find(|line| line.item.step_id == a)
+        .unwrap();
+    assert_eq!(running.item.state, ItemState::Running);
+    assert!(!running.proposed);
+    // The current version waits to its deadline and answers the same lines.
+    let started = std::time::Instant::now();
+    let same = m
+        .runtime
+        .orchestration_target_lines(&m.target.id, Some(&moved.version), 300, &mut waiting)
+        .unwrap();
+    assert_eq!(same.version, moved.version);
+    assert!(started.elapsed() >= std::time::Duration::from_millis(250));
+    // An unregistered checkout is refused, not read as unbound.
+    assert!(
+        m.runtime
+            .orchestration_target_lines("unknown-0123456789ab", None, 0, &mut waiting)
+            .is_err()
+    );
+}

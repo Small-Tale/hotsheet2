@@ -280,3 +280,180 @@ async fn hs2_j89jc7_http_mcp_and_cli_read_the_same_timeline_and_wait_by_version(
         .unwrap()
         .unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_s3fkj7_http_mcp_and_cli_read_the_same_target_lines_and_wait_by_version() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let connection = checkout.sources[0].connection_id.clone();
+    let store = FsStore::open(&source).unwrap();
+    let goal = ticket(&store, "Coordinate the synthetic release");
+    let first = ticket(&store, "First synthetic work");
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", checkout.id);
+    let lines = format!("{base}/target-lines");
+    assert_eq!(
+        api(router.clone(), "GET", &lines, Value::Null, false)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, none) = api(router.clone(), "GET", &lines, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(none["orchestrated"], false);
+    assert_eq!(none["lines"], json!([]));
+
+    // The project is its own target: declared, reviewed and bound on this machine.
+    let added = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets"),
+        json!({"target_id":TARGET,"label":"Self","expected_revision":null}),
+        true,
+    )
+    .await
+    .1;
+    let candidate = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/inspect"),
+        json!({"destination":{"kind":"local","checkout_id":checkout.id}}),
+        true,
+    )
+    .await
+    .1;
+    api(
+        router.clone(),
+        "PUT",
+        &format!("{base}/targets/{TARGET}/binding"),
+        json!({"target":{"owner_checkout_id":checkout.id,"target_id":TARGET},
+            "expected_manifest_revision":added["revision"],"expected_binding_revision":0,
+            "previous_destination":null,"destination":candidate["destination"]}),
+        true,
+    )
+    .await;
+    api(
+        router.clone(),
+        "POST",
+        &format!("{base}/permission-rules"),
+        json!({"action":"work_start","target_id":TARGET,
+            "actor":{"role":"human","id":"maintainer"}}),
+        true,
+    )
+    .await;
+    let (_, bound) = api(router.clone(), "GET", &lines, Value::Null, true).await;
+    assert_eq!(bound["orchestrated"], true);
+    assert_eq!(bound["lines"], json!([]));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app(host))
+            .with_graceful_shutdown(async move {
+                let _ = stopped.await;
+            })
+            .await
+            .unwrap();
+    });
+    let backend = ["--server", origin.as_str(), "--secret", SECRET];
+    let arguments = |mut arguments: Value| {
+        arguments["checkout"] = json!(checkout.id);
+        arguments["actor_role"] = json!("ai");
+        arguments["actor_id"] = json!("scheduler-1");
+        arguments
+    };
+    let call = |body: Value| mcp_named(&home, &backend, "hotsheet_targets", arguments(body));
+    let step = call(json!({"action":"readiness_define","target_id":TARGET,
+        "ticket":{"native_id":goal.id.to_string(),"connection_id":connection},
+        "connection_id":connection,"native_id":first.id.to_string(),"prerequisites":[]}))["step"]
+        ["step_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (_, planned) = api(router.clone(), "GET", &lines, Value::Null, true).await;
+    assert_eq!(planned["lines"][0]["item"]["step_id"], step);
+    assert_eq!(planned["lines"][0]["item"]["slug"], first.slug);
+    assert_eq!(planned["lines"][0]["item"]["goal_slug"], goal.slug);
+    assert_eq!(planned["lines"][0]["item"]["state"], "ready");
+    assert_eq!(planned["lines"][0]["proposed"], true);
+    assert_eq!(planned["lines"][0]["owner_checkout_id"], checkout.id);
+    let version = planned["version"].as_str().unwrap().to_owned();
+
+    // MCP and the bare CLI answer the same version and lines.
+    let over_mcp = call(json!({"action":"target_lines"}));
+    let plain = ["-C", source.to_str().unwrap(), "orchestration"];
+    let over_cli = cli_named(&home, &plain, &["target-lines", "--project", &checkout.id]);
+    for other in [&over_mcp, &over_cli] {
+        assert_eq!(other["version"], planned["version"]);
+        assert_eq!(other["lines"][0]["item"]["step_id"], step);
+    }
+    // A dispatch ends a waiting read with the new version: the work is running.
+    let waiting = {
+        let router = router.clone();
+        let path = format!("{lines}?after={version}&wait_ms=15000");
+        tokio::spawn(async move { api(router, "GET", &path, Value::Null, true).await })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let run = call(json!({"action":"run_dispatch","target_id":TARGET,
+        "ticket":{"native_id":goal.slug},"connection_id":connection,
+        "native_id":first.slug,"operation_id":"op-lines","worker_id":"mcp-worker"}));
+    assert_eq!(run["state"], "dispatched");
+    let (status, changed) = tokio::time::timeout(std::time::Duration::from_secs(14), waiting)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(changed["version"], planned["version"]);
+    assert_eq!(changed["lines"][0]["item"]["state"], "running");
+    assert_eq!(changed["lines"][0]["proposed"], false);
+    // MCP and the CLI wait the same way and answer at once for an older version.
+    let over_mcp = call(json!({"action":"target_lines","version":version,"wait_ms":15000}));
+    assert_ne!(over_mcp["version"].as_str(), Some(version.as_str()));
+    let over_cli = cli_named(
+        &home,
+        &plain,
+        &[
+            "target-lines",
+            "--project",
+            &checkout.id,
+            "--after",
+            &version,
+            "--wait-seconds",
+            "15",
+        ],
+    );
+    assert_eq!(over_cli["lines"][0]["item"]["state"], "running");
+    mcp_rejected(
+        &home,
+        &backend,
+        "hotsheet_targets",
+        arguments(json!({"action":"target_lines","version":"a/b"})),
+    );
+    assert_eq!(
+        api(
+            router.clone(),
+            "GET",
+            &format!("{lines}?after=a%2Fb&wait_ms=10"),
+            Value::Null,
+            true
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let _ = stop.send(());
+    tokio::time::timeout(std::time::Duration::from_secs(10), task)
+        .await
+        .unwrap()
+        .unwrap();
+}

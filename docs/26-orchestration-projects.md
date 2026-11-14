@@ -41,6 +41,7 @@
 > late start launches nothing (§26.24, HS2-WHR4GS),
 > Propose Plan, which starts the orchestration project's planning AI session to
 > propose the dry-run plan from its goal tickets (§26.25, HS2-HCW7MD),
+> the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7),
 > and the headless CLI,
@@ -3948,7 +3949,8 @@ wake it yet (HS2-ANQXQ4). A read on the server also starts the target followers 
   words with a tone (Ready, Waits on API-12, Waits for permission, Waits for your
   decision on LCH-1, Provisional on WEB-33; running and done say it through the status
   badge), where it runs (machine · tool) and the goal ticket. List and Columns take the
-  same prop; showing it on target tickets in their own project is HS2-S3FKJ7.
+  same prop, and a target project's own List and Columns show it on its planned
+  tickets (§26.29, HS2-S3FKJ7).
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
@@ -4129,3 +4131,65 @@ is needed to answer one.
 Remembered orchestrator rules live in the machine-local orchestration ledger, not in
 the encrypted AI permission vault; `GET /permissions/rules` merges them into the
 list it returns.
+
+## 26.29 The orchestration line in a target project (HS2-S3FKJ7)
+
+A project that an orchestration project on this machine orchestrates shows, in its own
+List and Columns, the orchestration line of each ticket the plan works: the same line
+the Orchestration view's cards carry (§26.26), built by the same mapping. The goal's
+tooltip names the orchestration project the goal ticket belongs to ("Goal LCH-1: Ship
+sign-on, in Launch"). Tickets no plan works have no line.
+
+### The target-side read
+
+`OrchestrationRuntime::orchestration_target_lines(checkout, after, wait_ms, tx)`
+(`crates/hotsheet-cli/src/orchestration/target_lines.rs`) finds the orchestration
+projects whose reviewed binding on this machine names the checkout as a local
+destination (`BindingRegistry::bound_here`, at most 16 owners), reads each one's
+timeline (§26.26), and keeps one line per target ticket through the pure fold
+`target_lines` (`crates/hotsheet-ticketing/src/orchestration/target_lines.rs`). Like the
+timeline it passes no gate, contacts no target and writes nothing; adding the project
+was the consent to read it.
+
+| Field          | Meaning                                                                                        |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| `orchestrated` | Some orchestration project on this machine binds the checkout, even with no planned ticket yet |
+| `lines`        | One per target ticket, by connection and native id                                             |
+| `version`      | Changes exactly when the lines change; estimates moving with the clock do not change it        |
+
+Each line has the owner's checkout id and name, `proposed` (that plan was never
+started, so the state reads as a dry run: "After API-12" rather than "Waits on API-12"),
+and the timeline `item`. When several plan steps work one ticket, in one orchestration
+project or several, the line shows the most pressing: running or provisional work, then
+a wait for a person (permission or decision), then ready or waiting work, and finished
+work last; ties go to the owner bound first, then the step id. `also_planned` counts
+the others.
+
+With `after` equal to the current version and `wait_ms` (at most 20 seconds) the read is
+a long poll on the same records the timeline watches; a checkout nothing orchestrates
+still waits to the deadline, so a reader that keeps asking never spins.
+
+### The client
+
+The web client reads the lines once when a project's List or Columns shows. While the
+answer says `orchestrated`, a cursor long poll keeps them current with bounded backoff
+on failure; a project nothing orchestrates holds no request open and is read again
+when its ticket views show again (for example after adding it in the orchestration
+project's settings and returning to its tab). Leaving the ticket views stops the read
+and clears the lines.
+
+A target opened from a remote server, or bound remotely by an orchestration project on
+another machine, has no line yet (HS2-3D8D6V).
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration target-lines --project <target> [--after <version> --wait-seconds 20]
+```
+
+| Route                                              | Methods and purpose                                                   |
+| -------------------------------------------------- | --------------------------------------------------------------------- |
+| `/checkouts/{checkout}/orchestration/target-lines` | GET the lines; `after` and `wait_ms` wait for a change; machine-local |
+
+MCP `hotsheet_targets` adds `target_lines` (with `version` and `wait_ms`), called with
+the target project as `checkout`.

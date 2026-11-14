@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseOrchestrationTimeline } from './orchestration-timeline';
+import { parseOrchestrationTargetLines, parseOrchestrationTimeline } from './orchestration-timeline';
 import { demoTimeline } from './ux-demo/orchestration-fixtures';
 
 describe('orchestration timeline response contract (HS2-J89JC7)', () => {
@@ -31,5 +31,37 @@ describe('orchestration timeline response contract (HS2-J89JC7)', () => {
     ).toThrow();
     expect(drifted((value) => ((value.kick_off as Record<string, unknown>).can_start = 'yes'))).toThrow();
     expect(() => parseOrchestrationTimeline([])).toThrow();
+  });
+});
+
+describe('orchestration target lines response contract (HS2-S3FKJ7)', () => {
+  const item = () => JSON.parse(JSON.stringify(demoTimeline('running').waves[1].items[0])) as Record<string, unknown>;
+  const valid = () => ({
+    version: 'v1',
+    orchestrated: true,
+    lines: [{ owner_checkout_id: 'launch-0123', owner_label: 'Launch', proposed: false, item: item() }],
+  });
+
+  it('accepts lines, an orchestrated project with none, and one nothing orchestrates', () => {
+    expect(parseOrchestrationTargetLines(valid())).toEqual(valid());
+    expect(parseOrchestrationTargetLines({ version: 'v', orchestrated: true, lines: [] }).lines).toEqual([]);
+    expect(parseOrchestrationTargetLines({ version: 'v', orchestrated: false, lines: [] }).orchestrated).toBe(false);
+    const counted = valid();
+    (counted.lines[0] as Record<string, unknown>).also_planned = 2;
+    expect(parseOrchestrationTargetLines(counted).lines[0].also_planned).toBe(2);
+  });
+
+  it('refuses a drifted response', () => {
+    const drifted = (change: (value: ReturnType<typeof valid>) => void) => {
+      const copy = valid();
+      change(copy);
+      return () => parseOrchestrationTargetLines(copy);
+    };
+    expect(drifted((value) => delete (value as Partial<typeof value>).orchestrated)).toThrow(/orchestration timeline/);
+    expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).proposed = 'no'))).toThrow();
+    expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).owner_label = null))).toThrow();
+    expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).also_planned = -1))).toThrow();
+    expect(drifted((value) => (value.lines[0].item.state = 'sleeping'))).toThrow();
+    expect(() => parseOrchestrationTargetLines({ version: 'v', orchestrated: true })).toThrow();
   });
 });

@@ -2170,6 +2170,12 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/timeline",
             get(routes::orchestration::read),
         )
+        // HS2-S3FKJ7: the orchestration lines of a target checkout's tickets, a long
+        // poll by version (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/target-lines",
+            get(routes::orchestration::read),
+        )
         // HS2-AHG7HW: observed AI tool capacity (machine-local).
         .route(
             "/checkouts/{owner}/orchestration/tool-capacity",

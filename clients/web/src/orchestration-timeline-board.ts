@@ -9,7 +9,12 @@ import type { SemanticTone } from '@kerfjs/ui/badge';
 import type { TicketStatus } from './components/status-badge';
 import type { TicketBoardColumnProps } from './components/ticket-board-column';
 import type { TicketRowOrchestration, TicketRowProps } from './components/ticket-row';
-import type { OrchestrationTimeline, TimelineItem, TimelineWave } from './orchestration-timeline';
+import type {
+  OrchestrationTargetLine,
+  OrchestrationTimeline,
+  TimelineItem,
+  TimelineWave,
+} from './orchestration-timeline';
 import { priorityFromWire } from './priority-wire';
 
 /** Formats a time of day, such as "15:00". Injected so tests are independent of the locale. */
@@ -137,6 +142,46 @@ function cardStatus(item: TimelineItem): TicketStatus {
   return known === 'completed' || known === 'verified' ? 'not_started' : (known ?? 'not_started');
 }
 
+/**
+ * The orchestration line of an item, as every ticket row shows it: the state in words with a tone,
+ * where it runs (machine · tool) and the goal ticket. Shared by the timeline's cards and, through
+ * {@link targetLineOrchestration}, a target project's List and Columns (HS2-S3FKJ7).
+ */
+export function orchestrationLine(item: TimelineItem, proposed: boolean): TicketRowOrchestration {
+  const words = stateWords(item, proposed),
+    tool = toolLabel(item.tool);
+  return {
+    state: words?.label,
+    stateTone: words?.tone,
+    placement: tool ? `${machineLabel(item)} · ${tool}` : machineLabel(item),
+    goal: item.goal_slug,
+    goalTitle: item.goal_title,
+  };
+}
+
+/** HS2-S3FKJ7: the key of a target ticket in its own project, `connection_id:native_id`. */
+export const targetLineKey = (connectionId: string, nativeId: string) => `${connectionId}:${nativeId}`;
+
+/**
+ * HS2-S3FKJ7: a target ticket's orchestration line in its own project. The goal ticket belongs to the
+ * orchestration project, so its tooltip names that project.
+ */
+export function targetLineOrchestration(line: OrchestrationTargetLine): TicketRowOrchestration {
+  const base = orchestrationLine(line.item, line.proposed),
+    goalTitle = line.item.goal_title ? `${line.item.goal_title}, in ${line.owner_label}` : `In ${line.owner_label}`;
+  return { ...base, goalTitle };
+}
+
+/** HS2-S3FKJ7: a target project's lines by ticket key. */
+export function targetLineMap(lines: readonly OrchestrationTargetLine[]): ReadonlyMap<string, TicketRowOrchestration> {
+  return new Map(
+    lines.map((line) => [
+      targetLineKey(line.item.target.connection_id, line.item.target.native_id),
+      targetLineOrchestration(line),
+    ]),
+  );
+}
+
 /** The card's trailing time: when it started or finished, or when it is expected to start. */
 export function cardTime(item: TimelineItem, timeline: OrchestrationTimeline, clock: ClockFormat = clockTime): string {
   if (item.state === 'done') return item.finished_at_ms === undefined ? 'Done' : `Done ${clock(item.finished_at_ms)}`;
@@ -156,16 +201,9 @@ export function timelineCard(
   clock: ClockFormat = clockTime,
 ): TicketRowProps {
   const working = item.state === 'running' || item.state === 'provisional',
-    words = stateWords(item, timeline.phase === 'proposed'),
     tool = toolLabel(item.tool),
     slug = itemSlug(item),
-    orchestration: TicketRowOrchestration = {
-      state: words?.label,
-      stateTone: words?.tone,
-      placement: tool ? `${machineLabel(item)} · ${tool}` : machineLabel(item),
-      goal: item.goal_slug,
-      goalTitle: item.goal_title,
-    };
+    orchestration = orchestrationLine(item, timeline.phase === 'proposed');
   return {
     slug,
     qualifiedId: orchestrationCardId(item.step_id),

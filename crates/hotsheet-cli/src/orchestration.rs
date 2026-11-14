@@ -27,6 +27,7 @@ mod session_control;
 mod session_executor;
 mod sessions;
 mod summary;
+mod target_lines;
 mod ticket_list;
 mod tickets;
 mod timeline;
@@ -91,6 +92,7 @@ pub use sessions::{
     ToolSetup, planner_prompt_text, plugin_role_paths, pool_joined, role_prompt_text, setup_store,
     target_tool_setup,
 };
+pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
     TargetTicketRow, TargetTicketSearch,

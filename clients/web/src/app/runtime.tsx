@@ -5,7 +5,7 @@ import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
-import { batch, effect, mount, signal } from 'kerfjs';
+import { batch, computed, effect, mount, signal } from 'kerfjs';
 
 import {
   claimEtaPresentation,
@@ -142,6 +142,7 @@ import {
   createOrchestrationSettingsSurface,
   type OrchestrationSettingsSurface,
 } from '../features/orchestration-settings-surface';
+import { createOrchestrationTargetLines } from '../features/orchestration-target-lines';
 import {
   createOrchestrationViewController,
   createServerPlanner,
@@ -3398,6 +3399,16 @@ export async function startHotSheetWebClient() {
       personId: () => orchestrationPersonId(localStorage),
     }),
   });
+  // HS2-S3FKJ7: a target project's List and Columns show the orchestration line of the tickets an
+  // orchestration project on this machine plans.
+  const orchestrationTargetLines = createOrchestrationTargetLines({
+    shown: computed(() =>
+      shellMode.value === 'project' && (viewMode.value === 'list' || viewMode.value === 'board')
+        ? project()
+        : undefined,
+    ),
+    client: (current) => new Api(current.apiPath),
+  });
   /**
    * HS2-DBQSWB: open one orchestrator permission request where every request is answered, the
    * project's Pending notifications, and move focus to its card. A request this browser has not
@@ -3527,6 +3538,7 @@ export async function startHotSheetWebClient() {
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
     aiCreatorLabel: aiCreatorLabel(ticket.created_by),
+    orchestration: orchestrationTargetLines.lineFor(project()?.id, ticket),
     pendingOperationCount: ticket.pending_operation_ids?.length ?? 0,
     pendingSyncState: pendingOperations(ticket.pending_operation_ids).some((item) => item.state === 'needs_attention')
       ? 'needs_attention'
@@ -7191,6 +7203,7 @@ export async function startHotSheetWebClient() {
       workerStreamStop?.();
       workerDetailRefresh?.dispose();
       orchestrationView.dispose();
+      orchestrationTargetLines.dispose();
       disposeProjectChangeStreams();
       statsGlance.dispose();
       hostCpu.stop();
