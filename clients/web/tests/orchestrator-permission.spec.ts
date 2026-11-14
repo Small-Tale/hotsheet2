@@ -61,56 +61,65 @@ async function openPermissionSettings(page: Page) {
 // headed by the orchestrator and the target project, with Allow Once, Always Allow and
 // Deny only. Always Allow is reviewed and remembered as a rule that Settings → Permissions
 // lists beside the other answers, naming the target project and the orchestrator.
-for (const width of [1440, 1100, 390]) {
-  test(`shows an orchestrator permission request and its remembered rule at ${width}px (HS2-XHQ1EH)`, async ({
-    context,
-    baseURL,
-  }) => {
-    test.setTimeout(120_000);
-    const app = await desktopApp(context, baseURL!);
-    try {
-      const page = await app.launch();
-      await page.setViewportSize({ width, height: 900 });
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-      await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
-      await orchestratorRequest(app.server, 'op-browser-1');
-      const popup = page.locator('[data-component="permission-request-popup"]');
-      await expect(popup).toContainText('Orchestrator: Create or change tickets in API');
-      await expect(popup).toContainText('orchestration');
-      await expect(popup).toContainText('Target project: API');
-      await expect(popup.getByRole('button', { name: 'Allow This AI Session' })).toHaveCount(0);
-      await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeVisible();
-      await expect(popup.getByRole('button', { name: 'Deny' })).toBeVisible();
-      await popup.screenshot({ path: `target/visual-captures/hs2-xhq1eh-card-${width}.png` });
-      if (width === 1440) {
-        // Wide to narrow to wide: the decision row keeps every button visible.
-        await page.setViewportSize({ width: 390, height: 900 });
-        await expect(popup.getByRole('button', { name: 'Always Allow' })).toBeVisible();
-        await page.setViewportSize({ width: 1440, height: 900 });
-        await expect(popup.getByRole('button', { name: 'Always Allow' })).toBeVisible();
+// HS2-W4VB4Z: the same states in the dark scheme, on the real backdrop.
+const capturePath = (state: string, width: number, scheme: 'light' | 'dark') =>
+  scheme === 'light'
+    ? `target/visual-captures/hs2-xhq1eh-${state}-${width}.png`
+    : `target/visual-captures/hs2-w4vb4z-${state}-${width}-dark.png`;
+for (const scheme of ['light', 'dark'] as const)
+  for (const width of [1440, 1100, 390]) {
+    test(`shows an orchestrator permission request and its remembered rule at ${width}px${scheme === 'dark' ? ' in the dark scheme (HS2-W4VB4Z)' : ''} (HS2-XHQ1EH)`, async ({
+      context,
+      baseURL,
+    }) => {
+      test.setTimeout(120_000);
+      const app = await desktopApp(context, baseURL!);
+      try {
+        const page = await app.launch();
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.setViewportSize({ width, height: 900 });
+        await page.getByRole('button', { name: 'Open Project' }).click();
+        await page.getByRole('button', { name: 'Local Project' }).click();
+        await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+        await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
+        await orchestratorRequest(app.server, 'op-browser-1');
+        const popup = page.locator('[data-component="permission-request-popup"]');
+        await expect(popup).toContainText('Orchestrator: Create or change tickets in API');
+        await expect(popup).toContainText('orchestration');
+        await expect(popup).toContainText('Target project: API');
+        await expect(popup.getByRole('button', { name: 'Allow This AI Session' })).toHaveCount(0);
+        await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeVisible();
+        await expect(popup.getByRole('button', { name: 'Deny' })).toBeVisible();
+        await popup.screenshot({ path: capturePath('card', width, scheme) });
+        // The card over the real workspace backdrop it floats on.
+        await page.screenshot({ path: capturePath('card-page', width, scheme) });
+        if (width === 1440) {
+          // Wide to narrow to wide: the decision row keeps every button visible.
+          await page.setViewportSize({ width: 390, height: 900 });
+          await expect(popup.getByRole('button', { name: 'Always Allow' })).toBeVisible();
+          await page.setViewportSize({ width: 1440, height: 900 });
+          await expect(popup.getByRole('button', { name: 'Always Allow' })).toBeVisible();
+        }
+        await popup.getByRole('button', { name: 'Always Allow' }).click();
+        await expect(popup).toContainText('The orchestrator of');
+        await expect(popup).toContainText('Persistent, until revoked');
+        await expect(popup.getByLabel('Permission rule type')).toHaveCount(0);
+        await popup.screenshot({ path: capturePath('review', width, scheme) });
+        await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
+        await expect(popup).toHaveCount(0);
+        await openPermissionSettings(page);
+        const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
+        await expect(preview).toContainText('Create or change tickets in API');
+        await expect(preview).toContainText('Applies to: The orchestrator of');
+        await expect(preview).toContainText('Target project: API');
+        await expect(preview).not.toContainText('All AI sessions');
+        await preview.scrollIntoViewIfNeeded();
+        // The settings sidebar slides away; capture once the list is fully on screen.
+        await expect(preview).toBeInViewport({ ratio: 1 });
+        await preview.screenshot({ path: capturePath('rule', width, scheme) });
+        await page.screenshot({ path: capturePath('settings', width, scheme) });
+      } finally {
+        await app.stop();
       }
-      await popup.getByRole('button', { name: 'Always Allow' }).click();
-      await expect(popup).toContainText('The orchestrator of');
-      await expect(popup).toContainText('Persistent, until revoked');
-      await expect(popup.getByLabel('Permission rule type')).toHaveCount(0);
-      await popup.screenshot({ path: `target/visual-captures/hs2-xhq1eh-review-${width}.png` });
-      await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
-      await expect(popup).toHaveCount(0);
-      await openPermissionSettings(page);
-      const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
-      await expect(preview).toContainText('Create or change tickets in API');
-      await expect(preview).toContainText('Applies to: The orchestrator of');
-      await expect(preview).toContainText('Target project: API');
-      await expect(preview).not.toContainText('All AI sessions');
-      await preview.scrollIntoViewIfNeeded();
-      // The settings sidebar slides away; capture once the list is fully on screen.
-      await expect(preview).toBeInViewport({ ratio: 1 });
-      await preview.screenshot({ path: `target/visual-captures/hs2-xhq1eh-rule-${width}.png` });
-      await page.screenshot({ path: `target/visual-captures/hs2-xhq1eh-settings-${width}.png` });
-    } finally {
-      await app.stop();
-    }
-  });
-}
+    });
+  }
