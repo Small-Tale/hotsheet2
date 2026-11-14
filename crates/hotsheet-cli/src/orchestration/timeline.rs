@@ -390,9 +390,12 @@ impl OrchestrationRuntime {
             if remaining.is_zero() {
                 return self.timeline_now(&owner.id, tx).map(|(view, _)| view);
             }
-            if !waiter.wait(remaining) {
-                continue;
-            }
+            // HS2-1C77XH: read again whether the waiter saw a change or reached its
+            // safety re-check. A change no watched directory reported (an event the
+            // platform watcher dropped, or a record written without one) is then found
+            // within the re-check interval instead of at the deadline. Each read is
+            // local files only.
+            let _ = waiter.wait(remaining);
             let (view, _) = self.timeline_now(&owner.id, tx)?;
             if view.version != first.version {
                 return Ok(view);

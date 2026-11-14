@@ -4090,6 +4090,9 @@ differs, or with the same version at the deadline. Nothing polls on an interval.
 answer therefore ends the wait at once (HS2-ANQXQ4): an answer to the permission request a
 step waits on changes the permission ledger, and a response to the goal ticket's decision
 note changes the owner's store, without waiting for the next run event or scheduler pass.
+The waiter's one-second safety re-check reads the timeline again too, from local files
+only, so a change no watched directory reported (an event the platform watcher dropped)
+ends the wait within a second instead of at the deadline (HS2-1C77XH).
 A read on the server also starts the target followers of §26.9.
 
 ### The view

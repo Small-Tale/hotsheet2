@@ -3873,7 +3873,9 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
   labels from the local target store, policy kick-off answers, a dispatch reading as
   paused and placement turned on reading as running; the approval seam and a goal
   decision; a stale version answering at once, the current one waiting to its deadline
-  and a dispatch from another thread ending the wait; a malformed version refused.
+  and a dispatch from another thread ending the wait; a malformed version refused;
+  `# hs2_1c77xh` a run record written with no event, which ends the wait at the safety
+  re-check rather than the deadline (it waited the full 15 seconds before HS2-1C77XH).
 - `remote_servers/timeline.rs` drives HTTP, the stdio MCP tool and the CLI process over
   the same plan, including a waiting HTTP read woken by an MCP dispatch.
 - Web: the board mapping, the response parser, the long poll with backoff and abort,
