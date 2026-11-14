@@ -24,6 +24,7 @@ import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor'
 import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
+import { wireOrchestrationSettings } from '../components/orchestration-settings-interactions';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { TERMINAL_LIMIT_FIELDS } from '../components/terminal-memory-settings';
@@ -37,6 +38,7 @@ import { syncControlledOpen } from '../controlled-open';
 import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
+import type { OrchestrationSettings } from '../features/orchestration-settings';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
@@ -193,6 +195,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly viewMode: Signal<WorkspaceViewMode>;
   readonly refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
+  /** Project Type and Settings → Orchestration (HS2-W27N1D). */
+  readonly orchestrationSettings?: OrchestrationSettings;
+  readonly selectProjectTab: (next: string) => void;
   readonly updateDevelopmentStrategyField?: (field: string, value: string | boolean) => void;
   readonly saveDevelopmentStrategy?: () => Promise<void>;
   readonly previewDevelopmentStrategy?: () => Promise<void>;
@@ -356,6 +361,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     viewMode,
     refreshProject,
     setSettingsCategory,
+    orchestrationSettings,
+    selectProjectTab,
     updateDevelopmentStrategyField,
     saveDevelopmentStrategy,
     previewDevelopmentStrategy,
@@ -1005,6 +1012,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
           setTrashMessage(current.id, reason instanceof Error ? reason.message : String(reason));
       });
   }
+  // Project Type, Settings → Orchestration and a project's detail share the demos' wire helper (HS2-W27N1D).
+  if (orchestrationSettings)
+    lifetime.add(
+      wireOrchestrationSettings(document.body, orchestrationSettings, {
+        projectId: () => project()?.id,
+        activateProject: selectProjectTab,
+      }),
+    );
   // The Trash retention gestures share the UX demo's wire helper (HS2-WFFDAA).
   lifetime.add(
     wireTrashSettings(document.body, {

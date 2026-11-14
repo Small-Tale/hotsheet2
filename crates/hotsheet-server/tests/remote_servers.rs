@@ -496,6 +496,8 @@ mod job_monitor;
 mod orchestration;
 #[path = "remote_servers/policy.rs"]
 mod policy;
+#[path = "remote_servers/projects.rs"]
+mod projects;
 #[path = "remote_servers/provisional.rs"]
 mod provisional;
 #[path = "remote_servers/readiness.rs"]

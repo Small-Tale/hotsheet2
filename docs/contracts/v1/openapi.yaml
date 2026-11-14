@@ -3167,6 +3167,164 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/project-type:
+    description:
+      The project type of a code project (HS2-W27N1D), the checked-in `project_type` setting. `software` is the
+      default; `orchestration` makes the project plan work across the projects it adds. Ordinary project data, not
+      machine-local.
+    get:
+      operationId: readProjectType
+      responses:
+        '200':
+          description: The type, whether the target declaration exists, and how many projects it holds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTypeView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    put:
+      operationId: setProjectType
+      description:
+        Switch the type. Orchestration creates the empty target declaration on first use. Software while projects are
+        added is refused with 400 unless `keep_projects` is true; the projects, bindings and policy are then kept for a
+        later switch back. A repeated request changes nothing and reports `changed` false. Clients following the
+        owner receive an `orchestration_changed` change event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetProjectType'
+      responses:
+        '200':
+          description: The type after the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTypeView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/projects:
+    description:
+      Add an open project to an orchestration project in one step (HS2-W27N1D) - declare a target and bind it to the
+      checkout on this machine or on a reviewed remote registration. Adding is a person's consent to read and follow
+      it; an `ai` actor is refused with 403 `forbidden`. The project type must be orchestration. Idempotent - a project
+      already bound to the same checkout is returned with `added` false, and a retained `target_id` binds that
+      declared target after a failed attempt.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: addOrchestrationProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddOrchestrationProject'
+      responses:
+        '200':
+          description: The added project and the fresh resolution of its binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationProjectView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/projects/{target}:
+    description:
+      Stop orchestrating one project (HS2-W27N1D) - remove this machine's binding, then tombstone the declaration. Its
+      id is never reused. Sessions already running there keep running until stopped. Repeating it changes nothing.
+    x-hotsheet-machine-local: true
+    delete:
+      operationId: removeOrchestrationProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: An empty object; the current revisions are read under the same request.
+              properties:
+                actor:
+                  type: object
+      responses:
+        '200':
+          description: What this request removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemovedOrchestrationProject'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -22666,6 +22824,105 @@ components:
         - assigned
         - claimed
         - cancelled
+    ProjectType:
+      description: A project's type (HS2-W27N1D). `software` is the default.
+      enum:
+        - software
+        - orchestration
+    ProjectTypeView:
+      type: object
+      required:
+        - project_type
+        - declared
+        - active_projects
+        - changed
+      properties:
+        project_type:
+          $ref: '#/components/schemas/ProjectType'
+        declared:
+          description: The target declaration file exists.
+          type: boolean
+        active_projects:
+          description: Active targets in the declaration, whatever the type.
+          type: integer
+          minimum: 0
+        changed:
+          description: This request changed the setting or created the declaration.
+          type: boolean
+    SetProjectType:
+      type: object
+      required:
+        - project_type
+      properties:
+        project_type:
+          $ref: '#/components/schemas/ProjectType'
+        keep_projects:
+          description: Required to switch to software while projects are added; they stay declared.
+          type: boolean
+        actor:
+          type: object
+    AddOrchestrationProject:
+      type: object
+      required:
+        - destination
+      properties:
+        destination:
+          description: The open checkout, `{kind - local, checkout_id}` or `{kind - remote, registration_id, checkout_id}`.
+          type: object
+          required:
+            - kind
+            - checkout_id
+          properties:
+            kind:
+              enum:
+                - local
+                - remote
+            checkout_id:
+              type: string
+            registration_id:
+              type: string
+        label:
+          description: The name to show; defaults to the checkout id.
+          type: string
+          maxLength: 256
+        target_id:
+          description: A canonical ULID kept across retries of this add.
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+        actor:
+          type: object
+    OrchestrationProjectView:
+      type: object
+      required:
+        - target_id
+        - label
+        - added
+        - resolution
+      properties:
+        target_id:
+          type: string
+        label:
+          type: string
+        added:
+          description: False when the project was already added and bound to this checkout.
+          type: boolean
+        resolution:
+          $ref: '#/components/schemas/TargetResolution'
+    RemovedOrchestrationProject:
+      type: object
+      required:
+        - target_id
+        - unbound
+        - removed
+      properties:
+        target_id:
+          type: string
+        unbound:
+          description: This machine's binding was removed by this request.
+          type: boolean
+        removed:
+          description: The declaration was tombstoned by this request.
+          type: boolean
     RemoteIdentity:
       type: object
       required:

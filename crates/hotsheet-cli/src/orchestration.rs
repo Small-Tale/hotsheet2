@@ -10,6 +10,7 @@ mod job_monitor;
 mod joining;
 mod observer;
 mod policy;
+mod projects;
 mod provisional;
 mod readiness;
 mod reconcile_sources;
@@ -40,6 +41,7 @@ pub use gates::{
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use joining::REPLACEMENTS_EXHAUSTED;
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
+pub use projects::{AddProject, ProjectView, RemoveProject, RemovedProject};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
 };

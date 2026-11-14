@@ -92,6 +92,7 @@ const registrations = new Set([
   'wireAttachmentGalleryControls',
   'wireTicketAttachmentActions',
   'wireQuickTicketComposer',
+  'wireOrchestrationSettings',
   'wireTrashSettings',
   'wireContextMenuDismissal',
   'wireTicketRowUpNextToggle',

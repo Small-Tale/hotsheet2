@@ -14,6 +14,7 @@ import type { LiveStateStore } from '../live-state';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { parsePermissionResolution } from '../permission-notifications';
 import {
+  containsOrchestrationChange,
   containsRepositoryChange,
   containsRepositorySizeChange,
   containsTicketChange,
@@ -65,6 +66,12 @@ export interface ProjectChangeStreamsDependencies {
   loadRepositorySize: (target: Project) => Promise<unknown>;
   /** Reload a project's ticket-store sync health after a `ticket_store_sync` event (HS2-ADHFKZ). */
   loadTicketStoreSync?: (target: Project) => Promise<unknown>;
+  /**
+   * HS2-W27N1D: the project's orchestration changed (`orchestration_changed`), a session an
+   * orchestrator started changed (`orchestration_session`), or the stream resynchronized. Settings
+   * reads what it shows again; nothing is polled.
+   */
+  orchestrationChanged?: (target: Project) => void;
   /**
    * Per-store live state for glance surfaces (HS2-JTTQMY): `live_state` events apply to it,
    * and each stream resync re-reads `GET /live-state` once. No timer reads it.
@@ -251,6 +258,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     onActivity,
     loadRepositorySize,
     loadTicketStoreSync,
+    orchestrationChanged,
     liveStates,
     hostHealth,
     standbySettings,
@@ -382,6 +390,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           onResync: contained(async (reason, cursor) => {
             if (reason === 'initial') handshakeGap.handshake(cursor);
             onStreamHealth?.(current.id, true);
+            if (reason !== 'initial') orchestrationChanged?.(current);
             await Promise.all([
               refreshPermissions(current.id),
               ...(refreshAdvisoryClaim ? [refreshAdvisoryClaim(current)] : []),
@@ -491,6 +500,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             // A sync changed a ticket store's publication state: reload its health (HS2-ADHFKZ).
             if (loadTicketStoreSync && containsTicketStoreSyncChange(response, current.id))
               void loadTicketStoreSync(current);
+            if (orchestrationChanged && containsOrchestrationChange(response, current.id))
+              orchestrationChanged(current);
           }),
         });
         projectChangeStreams.set(current.id, () => {

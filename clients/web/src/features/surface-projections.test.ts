@@ -60,7 +60,7 @@ function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDepen
 
 describe('sidebar surface projection (HS2-BSSWGV)', () => {
   it('projects the settings and notifications navigations', () => {
-    expect(sidebar('settings')).toEqual({ kind: 'settings', selected: 'ai' });
+    expect(sidebar('settings')).toEqual({ kind: 'settings', selected: 'ai', orchestration: false });
     expect(sidebar('notifications')).toMatchObject({
       kind: 'notifications',
       selected: 'pending',

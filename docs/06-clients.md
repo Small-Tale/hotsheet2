@@ -986,6 +986,11 @@ preview/download, server directory browser) are separate design work.
   project (`DELETE /checkouts/{reference}`, `hotsheet-cli checkout remove`) stays headless.
   Ticket sources, Commands, Lifecycle, Permissions, Column view, and Development strategy each render as a
   separate workspace so unrelated controls do not become one long settings page.
+  The project-scoped **General** category comes first and holds **Project Type**
+  (Software or Orchestration). For an Orchestration project, **Orchestration** follows it
+  with the projects it orchestrates, + Add Project, each project's detail in the inspector
+  and the limits-only policy; it is absent for a Software project (HS2-W27N1D, see
+  [26-orchestration-projects.md](26-orchestration-projects.md) §26.25).
   Ticket sources are never global (HS2-SM9PM8, see
   [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
   **Project Settings → Ticket sources** shows only the sources this project owns, with its
@@ -1070,6 +1075,8 @@ preview/download, server directory browser) are separate design work.
 
   | Group   | Category             | Stored in                                                                                                | Scope                   |
   | ------- | -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------- |
+  | Project | General              | `/checkouts/{id}/orchestration/project-type` (`project_type`, `Scope::Shared`)                           | this project, committed |
+  | Project | Orchestration        | `/checkouts/{id}/orchestration/{targets,projects,policy}` (`.hotsheet2/orchestration*.json`, bindings)   | this project, committed |
   | Project | Ticket sources       | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source`         | this project, machine   |
   | Project | AI tools             | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                             | this project, machine   |
   | Project | Commands             | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                           | this project, machine   |

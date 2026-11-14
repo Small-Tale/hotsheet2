@@ -452,6 +452,9 @@ mod tests {
             "/checkouts/owner/orchestration/scheduler/explain",
             "/checkouts/owner/orchestration/scheduler/decisions",
             "/checkouts/owner/orchestration/scheduler/tick",
+            // HS2-W27N1D: adding binds here and removing unbinds here.
+            "/checkouts/owner/orchestration/projects",
+            "/checkouts/owner/orchestration/projects/id",
         ] {
             for role in [
                 hotsheet_tls::DeviceRole::ReadWrite,

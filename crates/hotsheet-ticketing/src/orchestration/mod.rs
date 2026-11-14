@@ -12,6 +12,7 @@ mod grants;
 mod joining;
 mod manifest;
 mod policy;
+mod project_type;
 mod provisional;
 mod readiness;
 mod reconcile;
@@ -70,6 +71,10 @@ pub use policy::{
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PlacementPolicy, PolicyBody,
     PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView,
     SessionLoad, SetPolicy, Speculation, TargetPolicy, ToolPolicy, WindDown,
+};
+pub use project_type::{
+    PROJECT_TYPE_SETTING, PROJECTS_RETAINED, ProjectType, ProjectTypeView, SetProjectType,
+    TypeChange, TypeState, plan_type_change,
 };
 pub use provisional::{
     ProvisionalBasis, ProvisionalStanding, ProvisionalStore, SpeculationInputs, gate_observation,
@@ -320,6 +325,8 @@ mod grant_tests;
 mod joining_tests;
 #[cfg(test)]
 mod policy_tests;
+#[cfg(test)]
+mod project_type_tests;
 #[cfg(test)]
 mod provisional_tests;
 #[cfg(test)]

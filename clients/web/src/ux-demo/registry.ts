@@ -35,8 +35,12 @@ import { demoModule as notWorkingDialog } from './not-working-dialog-demo';
 import { demoModule as notificationCard } from './notification-card-demo';
 import { demoModule as notificationSettings } from './notification-settings-demo';
 import { demoModule as orchestrationMock } from './orchestration-mock-demo';
+import { demoModule as orchestrationPolicySettings } from './orchestration-policy-settings-demo';
+import { demoModule as orchestrationProjectDetail } from './orchestration-project-detail-demo';
+import { demoModule as orchestrationSettings } from './orchestration-settings-demo';
 import { demoModule as permissionComponents } from './permission-components-demo';
 import { demoModule as projectDialog } from './project-dialog-demo';
+import { demoModule as projectGeneralSettings } from './project-general-settings-demo';
 import { demoModule as projectLiveSection } from './project-live-section-demo';
 import { demoModule as projectSidebar } from './project-sidebar-demo';
 import { demoModule as providerIcon } from './provider-icon-demo';
@@ -102,6 +106,10 @@ export const demoModules: readonly DemoModule[] = [
   setupSettings,
   notificationSettings,
   remoteDevicesSettings,
+  projectGeneralSettings,
+  orchestrationSettings,
+  orchestrationPolicySettings,
+  orchestrationProjectDetail,
   tagChip,
   statusBadge,
   confidenceCalibration,

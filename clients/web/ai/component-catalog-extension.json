@@ -1504,6 +1504,69 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "orchestration-policy-settings",
+      "name": "OrchestrationPolicySettings",
+      "kind": "component",
+      "purpose": "The limits-only orchestration policy form: Place sessions automatically, machine defaults, per-tool session caps and weights, wind-down, build-ahead, and Apply Policy. It never shows the policy's action or approval lists (HS2-W27N1D, HS2-XHQ1EH).",
+      "useWhen": [
+        "Hot Sheet needs to edit the limits of an orchestration project's throughput policy."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific OrchestrationPolicySettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-policy-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "orchestration-project-detail",
+      "name": "OrchestrationProjectDetail",
+      "kind": "component",
+      "purpose": "One orchestrated project's detail in the inspector: binding and connection, capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
+      "useWhen": [
+        "Hot Sheet needs to show one orchestrated project's binding, capacity and sessions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific OrchestrationProjectDetail behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-project-detail.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "orchestration-settings",
+      "name": "OrchestrationSettings",
+      "kind": "component",
+      "purpose": "Project Settings → Orchestration for an Orchestration project: the projects it orchestrates as rows with place, connection badge and a menu (Show Project Tab, Stop Orchestrating…), the + Add Project menu of other open projects with Open Another Project…, an empty state, and the limits-only policy (HS2-W27N1D, HS2-XHQ1EH).",
+      "useWhen": [
+        "Hot Sheet needs the settings that choose the projects an orchestration project orchestrates."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific OrchestrationSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "pending-attachment-picker",
       "name": "PendingAttachmentPicker",
       "kind": "component",
@@ -1630,6 +1693,27 @@
       ],
       "publicTokens": [],
       "source": "src/components/project-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-general-settings",
+      "name": "ProjectGeneralSettings",
+      "kind": "component",
+      "purpose": "Project Settings → General: the project-scoped settings that come first, starting with the Project Type select (Software or Orchestration), with a hint that says what the type means and that added projects stay while the type is Software (HS2-W27N1D).",
+      "useWhen": [
+        "Hot Sheet needs the project-scoped General settings with Project Type."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectGeneralSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/project-general-settings.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",

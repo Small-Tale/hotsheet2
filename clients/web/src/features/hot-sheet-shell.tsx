@@ -41,6 +41,7 @@ import { RepositorySizeBanner } from '../components/repository-size-banner';
 import { SearchScopeToolbar } from '../components/search-scope-toolbar';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
+import type { SidebarPanelParts } from '../components/sidebar-panel';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { TerminalDrawerProps } from '../components/terminal-drawer';
@@ -165,6 +166,8 @@ export interface HotSheetShellDependencies {
   selectedTicketSlugs: Signal<string[]>;
   selectedView: Signal<TicketView>;
   settingsCategory: () => SettingsCategory;
+  /** Settings → Orchestration's selected project detail, shown in the inspector (HS2-W27N1D). */
+  settingsInspector?: (current: Project) => SidebarPanelParts | undefined;
   shellMode: Signal<ProjectStripMode>;
   statsProjectId: Signal<string | undefined>;
   sidebarCollapsed: Signal<boolean>;
@@ -263,6 +266,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     selectedTicketSlugs,
     selectedView,
     settingsCategory,
+    settingsInspector,
     shellMode,
     statsProjectId,
     sidebarCollapsed,
@@ -554,7 +558,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         case 'notifications':
           return notificationInspectorSurfacePanel();
         case 'settings':
-          return inspectorPlaceholderPanel({ selectionCount: 0 });
+          return settingsInspector?.(current) ?? inspectorPlaceholderPanel({ selectionCount: 0 });
         case 'workers':
         case 'board':
         case 'list':

@@ -34,7 +34,7 @@ type TicketBoardProps = Parameters<typeof TicketBoard>[0];
 type TicketListProps = Parameters<typeof TicketList>[0];
 
 export type SidebarSurfaceProps =
-  | { kind: 'settings'; selected: SettingsCategory }
+  | { kind: 'settings'; selected: SettingsCategory; orchestration?: boolean }
   | {
       kind: 'notifications';
       selected: NotificationView;
@@ -45,7 +45,8 @@ export type SidebarSurfaceProps =
   | { kind: 'project'; sidebar: ProjectSidebarProps };
 
 export function SidebarSurface(props: SidebarSurfaceProps) {
-  if (props.kind === 'settings') return <SettingsNavigation selected={props.selected} collapseControl />;
+  if (props.kind === 'settings')
+    return <SettingsNavigation selected={props.selected} orchestration={props.orchestration} collapseControl />;
   if (props.kind === 'notifications')
     return (
       <NotificationNavigation selected={props.selected} counts={props.counts} paused={props.paused} collapseControl />
@@ -55,7 +56,8 @@ export function SidebarSurface(props: SidebarSurfaceProps) {
 
 /** The shell's left-rail panel for the same routing, composed by the Workbench (HS2-RWGQWN). */
 export function sidebarSurfacePanel(props: SidebarSurfaceProps): SidebarPanelParts {
-  if (props.kind === 'settings') return settingsNavigationPanel({ selected: props.selected });
+  if (props.kind === 'settings')
+    return settingsNavigationPanel({ selected: props.selected, orchestration: props.orchestration });
   if (props.kind === 'notifications')
     return notificationNavigationPanel({ selected: props.selected, counts: props.counts, paused: props.paused });
   return projectSidebarPanel(props.sidebar);

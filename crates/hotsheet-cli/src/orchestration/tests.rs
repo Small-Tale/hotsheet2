@@ -23,6 +23,7 @@ mod capacity;
 mod gates;
 mod job_monitor;
 mod policy;
+mod projects;
 mod provisional;
 mod readiness;
 mod reconcile_sources;

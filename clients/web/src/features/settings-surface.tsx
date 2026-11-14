@@ -50,6 +50,10 @@ export interface SettingsSurfaceDependencies {
   /** App Settings → Devices (HS2-DXM0YN). */
   remoteDevices?: () => Props['devices'];
   developmentStrategy?: (projectId: string) => Props['developmentStrategy'];
+  /** Project Settings → General: Project Type (HS2-W27N1D). */
+  projectGeneral?: (projectId: string) => Props['projectGeneral'];
+  /** Project Settings → Orchestration (HS2-W27N1D). */
+  orchestration?: (current: Project) => Props['orchestration'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
   permissionRuleEditorFor: (projectId: string, visible: boolean) => Props['permissions']['editor'];
@@ -113,6 +117,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     notificationSettings,
     remoteDevices,
     developmentStrategy,
+    projectGeneral,
+    orchestration,
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
@@ -164,6 +170,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
       <SettingsWorkspace
         category={settingsCategory()}
         developmentStrategy={developmentStrategy?.(current.id)}
+        projectGeneral={projectGeneral?.(current.id)}
+        orchestration={settingsCategory() === 'orchestration' ? orchestration?.(current) : undefined}
         sources={projectSourcesSettings(current)}
         accounts={{
           accounts: providerAccounts.value,

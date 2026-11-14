@@ -2086,6 +2086,20 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/policy",
             get(routes::orchestration::read).put(routes::orchestration::write),
         )
+        // HS2-W27N1D: the project type (checked-in setting) and adding or removing a
+        // project in one step (declaration plus this machine's binding).
+        .route(
+            "/checkouts/{owner}/orchestration/project-type",
+            get(routes::orchestration::read).put(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/projects",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/projects/{target}",
+            axum::routing::delete(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/policy/validate",
             post(routes::orchestration::write),

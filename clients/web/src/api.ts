@@ -64,17 +64,28 @@ import {
   parseNotificationProjectTiming,
   parseNotificationRule,
   parseNotifierList,
+  parseOrchestrationAdmission,
+  parseOrchestrationBinding,
+  parseOrchestrationCapacity,
+  parseOrchestrationManifest,
+  parseOrchestrationPolicyView,
+  parseOrchestrationProjectView,
+  parseOrchestrationResolution,
+  parseOrchestrationSession,
+  parseOrchestrationToolCapacity,
   parsePermissionAutomationSettings,
   parsePermissionDecision,
   parsePermissionRequest,
   parsePermissionRule,
   parsePhaseReport,
   parsePollResponse,
+  parseProjectTypeView,
   parseProviderAccount,
   parseProviderConnection,
   parseProviderDescriptor,
   parseProviderOutboxOperation,
   parseQueuedProviderResult,
+  parseRemovedOrchestrationProject,
   parseRepositoryCommitPage,
   parseRepositoryFilePage,
   parseRepositorySizeReport,
@@ -1042,6 +1053,149 @@ export interface CodeReviewFile {
   change: Exclude<RepositoryFileChange, 'unmerged' | 'untracked'>;
   category: 'docs' | 'tests' | 'source' | 'other';
 }
+/** A project's type (HS2-W27N1D): `software` by default, or an orchestration project. */
+export type ProjectType = 'software' | 'orchestration';
+/** `GET/PUT /checkouts/{owner}/orchestration/project-type` (HS2-W27N1D). */
+export interface ProjectTypeView {
+  project_type: ProjectType;
+  /** The target declaration exists. */
+  declared: boolean;
+  /** Active projects in the declaration, whatever the type. */
+  active_projects: number;
+  changed: boolean;
+}
+/** One declared target of an orchestration project (docs/26 §26.2). */
+export interface OrchestrationTargetDeclaration {
+  target_id: string;
+  state: 'active' | 'removed';
+  label: string;
+  expected_repository_identity?: string;
+}
+/** `GET /checkouts/{owner}/orchestration/targets`. */
+export interface OrchestrationManifest {
+  enabled: boolean;
+  revision: string | null;
+  targets: OrchestrationTargetDeclaration[];
+}
+/** Where a target is bound on this machine: a local checkout or one on a reviewed remote server. */
+export type OrchestrationDestination =
+  | { kind: 'local'; server_id: string; checkout_id: string; checkout_authority: string }
+  | {
+      kind: 'remote';
+      registration_id: string;
+      identity: { server_id: string; ca_fingerprint?: string | null };
+      checkout_id: string;
+      checkout_authority: string;
+    };
+/** `GET /checkouts/{owner}/orchestration/targets/{target}/binding`: this machine's cached binding. */
+export interface OrchestrationBinding {
+  revision: number;
+  destination: OrchestrationDestination | null;
+  checked_at_ms: number | null;
+  confirmed_at_ms: number | null;
+  /** A stable failure code (`unreachable`, `revoked`, ...). */
+  last_failure: string | null;
+  stale: boolean;
+}
+/** `GET .../targets/{target}/resolve`: a fresh check of the binding. */
+export interface OrchestrationResolution {
+  declaration: OrchestrationTargetDeclaration;
+  binding: OrchestrationBinding;
+  state:
+    'unbound' | 'connecting' | 'reachable' | 'unreachable' | 'unauthorized' | 'source_missing' | 'identity_changed';
+  reason: string | null;
+  stale: boolean;
+  usable: boolean;
+}
+/** `POST /checkouts/{owner}/orchestration/projects` (HS2-W27N1D). */
+export interface OrchestrationProjectView {
+  target_id: string;
+  label: string;
+  added: boolean;
+  resolution: OrchestrationResolution;
+}
+/** `DELETE /checkouts/{owner}/orchestration/projects/{target}` (HS2-W27N1D). */
+export interface RemovedOrchestrationProject {
+  target_id: string;
+  unbound: boolean;
+  removed: boolean;
+}
+/** `GET .../targets/{target}/capacity` (HS2-J8PRTV): measurements are null when unknown. */
+export interface OrchestrationCapacity {
+  sampled_at_ms: number | null;
+  memory: { free_mb: number | null; total_mb: number | null };
+  cpu: { load_percent: number | null; logical_cpus: number | null };
+  disk: { free_mb: number | null; total_mb: number | null };
+  tools: { tool: string; installed: boolean; configured: boolean }[] | null;
+  sessions: { session_id: string; tool: string | null; busy: boolean }[] | null;
+  /** Live claims in the namespaces asked for; null when none were asked or they could not be read. */
+  claims: { namespace: string; resource: string; expires_at_ms: number }[] | null;
+  claim_namespaces: string[];
+}
+/** `POST .../targets/{target}/admission` (HS2-J8PRTV). */
+export interface OrchestrationAdmission {
+  outcome: 'accepted' | 'reduced' | 'refused';
+  tool: string;
+  requested: number;
+  admitted: number;
+  reason: string | null;
+}
+/** One row of `GET /checkouts/{owner}/orchestration/tool-capacity` (HS2-AHG7HW). */
+export interface OrchestrationToolCapacityRow {
+  tool: string;
+  account?: string;
+  state: 'available' | 'limited' | 'degraded' | 'unknown';
+  until_ms?: number;
+  verified: boolean;
+  max_sessions: number;
+  weight: number;
+  budget_cents_per_day?: number;
+  spent_cents_today?: number;
+}
+export interface OrchestrationToolCapacity {
+  enabled: boolean;
+  now_ms: number;
+  tools: OrchestrationToolCapacityRow[];
+}
+/** One orchestrator-owned session (HS2-GDJXGZ), `GET /checkouts/{owner}/orchestration/sessions`. */
+export interface OrchestrationSession {
+  session_id: string;
+  target_id: string;
+  role: 'worker' | 'dispatcher' | 'integrator';
+  tool: string;
+  model?: string;
+  run_id?: string;
+  state: 'requested' | 'running' | 'stopped' | 'failed' | 'lost';
+  owner: 'orchestrator' | 'human';
+  paused: boolean;
+  /** The host's id: its terminal in that server's drawer. */
+  hosted?: { server_id: string; session_id: string; worker_id: string };
+  label?: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+/** The checked-in throughput policy (HS2-YCJDEB). The settings form edits limits only; every other
+ * member round-trips unchanged. */
+export interface OrchestrationPolicyBody {
+  machine?: { max_sessions?: number; min_free_ram_mb?: number; max_cpu_percent?: number; min_free_disk_mb?: number };
+  tools?: { tool: string; max_sessions: number; weight?: number; accounts?: unknown[] }[];
+  targets?: unknown[];
+  wind_down?: { idle_minutes?: number; keep_warm?: number };
+  approval?: unknown;
+  speculation?: { allowed?: boolean; max_depth?: number; risk_weight?: number; opt_out_tag?: string };
+  placement?: {
+    automatic?: boolean;
+    actor?: string;
+    resources?: { target_id: string; resources: { namespace: string; resource: string }[] }[];
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+export interface OrchestrationPolicyView {
+  enabled: boolean;
+  revision: string | null;
+  policy: OrchestrationPolicyBody | null;
+}
 /** One target ticket an orchestration ticket refers to (HS2-AZ15GA). */
 export interface OrchestrationLink {
   target_id: string;
@@ -1686,6 +1840,13 @@ export function withHumanActor(path: string, init: RequestInit): RequestInit {
 }
 
 type HostParsedRequest = <T>(parse: ResponseParser<T>, path: string, requested?: RequestInit) => Promise<T>;
+
+/**
+ * HS2-W27N1D: the actor id the app gives the person at this machine for orchestration actions that
+ * need an identified actor (a target capacity read, a session stop or takeover). Authority still comes
+ * from what the orchestration project allows; this only names who asked.
+ */
+export const ORCHESTRATION_APP_ACTOR = 'hotsheet-app';
 
 export class ApiHttpError extends Error {
   constructor(
@@ -2571,6 +2732,90 @@ export class Api {
     this.parsed(parseNotificationProjectTiming, '/notification-project-timing', {
       method: 'PUT',
       body: JSON.stringify(timing),
+    });
+  /** HS2-W27N1D: Project Settings → General → Project Type and Settings → Orchestration. Every write
+   * names a person as its actor; adding a project is that person's consent. */
+  projectType = (owner: string) =>
+    this.parsed(parseProjectTypeView, `/checkouts/${encodeURIComponent(owner)}/orchestration/project-type`);
+  setProjectType = (owner: string, projectType: ProjectType, keepProjects = false) =>
+    this.parsed(parseProjectTypeView, `/checkouts/${encodeURIComponent(owner)}/orchestration/project-type`, {
+      method: 'PUT',
+      body: JSON.stringify({ project_type: projectType, keep_projects: keepProjects, actor: { role: 'human' } }),
+    });
+  orchestrationTargets = (owner: string) =>
+    this.parsed(parseOrchestrationManifest, `/checkouts/${encodeURIComponent(owner)}/orchestration/targets`);
+  orchestrationBinding = (owner: string, target: string) =>
+    this.parsed(
+      parseOrchestrationBinding,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/binding`,
+    );
+  orchestrationResolve = (owner: string, target: string) =>
+    this.parsed(
+      parseOrchestrationResolution,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/resolve`,
+    );
+  addOrchestrationProject = (
+    owner: string,
+    request: {
+      destination:
+        { kind: 'local'; checkout_id: string } | { kind: 'remote'; registration_id: string; checkout_id: string };
+      label: string;
+      target_id: string;
+    },
+  ) =>
+    this.parsed(parseOrchestrationProjectView, `/checkouts/${encodeURIComponent(owner)}/orchestration/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ ...request, actor: { role: 'human' } }),
+    });
+  removeOrchestrationProject = (owner: string, target: string) =>
+    this.parsed(
+      parseRemovedOrchestrationProject,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/projects/${encodeURIComponent(target)}`,
+      { method: 'DELETE', body: JSON.stringify({ actor: { role: 'human' } }) },
+    );
+  /** A read that passes the authorization gate names the app's person (`ORCHESTRATION_APP_ACTOR`). */
+  orchestrationCapacity = (owner: string, target: string, claimNamespaces: readonly string[]) => {
+    const query = new URLSearchParams({ actor_role: 'human', actor_id: ORCHESTRATION_APP_ACTOR });
+    if (claimNamespaces.length) query.set('claim_namespaces', claimNamespaces.join(','));
+    return this.parsed(
+      parseOrchestrationCapacity,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/capacity?${query}`,
+    );
+  };
+  orchestrationAdmission = (owner: string, target: string, tool: string) =>
+    this.parsed(
+      parseOrchestrationAdmission,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/admission`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ tool, actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR } }),
+      },
+    );
+  orchestrationToolCapacity = (owner: string) =>
+    this.parsed(parseOrchestrationToolCapacity, `/checkouts/${encodeURIComponent(owner)}/orchestration/tool-capacity`);
+  orchestrationSessions = (owner: string) =>
+    this.parsed(
+      parseOrchestrationSession.list,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/sessions?active=true`,
+    );
+  stopOrchestrationSession = (owner: string, session: string, force: boolean) =>
+    this.parsed(
+      parseOrchestrationSession,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/sessions/${encodeURIComponent(session)}/stop`,
+      { method: 'POST', body: JSON.stringify({ force, actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR } }) },
+    );
+  takeOverOrchestrationSession = (owner: string, session: string) =>
+    this.parsed(
+      parseOrchestrationSession,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/sessions/${encodeURIComponent(session)}/takeover`,
+      { method: 'POST', body: JSON.stringify({ pause: false, actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR } }) },
+    );
+  orchestrationPolicy = (owner: string) =>
+    this.parsed(parseOrchestrationPolicyView, `/checkouts/${encodeURIComponent(owner)}/orchestration/policy`);
+  setOrchestrationPolicy = (owner: string, expectedRevision: string | null, policy: OrchestrationPolicyBody) =>
+    this.parsed(parseOrchestrationPolicyView, `/checkouts/${encodeURIComponent(owner)}/orchestration/policy`, {
+      method: 'PUT',
+      body: JSON.stringify({ expected_revision: expectedRevision, policy, actor: { role: 'human' } }),
     });
   trashSettings = (checkoutId: string) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
