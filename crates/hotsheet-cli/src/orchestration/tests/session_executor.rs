@@ -2508,3 +2508,109 @@ fn hs2_yfpzfp_removing_a_step_cancels_its_run_and_winds_its_session_down() {
             .is_empty()
     );
 }
+
+/// HS2-7VV79Q: a start its host never confirmed is repeated while the scheduler's
+/// choice stands; once the choice changes it is ended at once through its host as
+/// `never_started` (no five-minute wait) and the new choice starts under the next
+/// operation, replacing it. A confirmed session is never ended this way: a changed
+/// choice for it is refused.
+#[test]
+fn hs2_7vv79q_a_changed_choice_ends_an_unconfirmed_start_at_once() {
+    clocked!(clock, tx);
+    let f = Placed::new(Vec::new(), &mut tx);
+    let start = |request: &PlacementStart, tx: &mut Transaction<'_>| {
+        OwnedSessions.start(&f.m.runtime, request, tx)
+    };
+    // A start recorded here whose request never reached its host.
+    let unconfirmed = |step: &str, tx: &mut Transaction<'_>| {
+        SessionRegistry::new(&f.m.home)
+            .begin(
+                &f.owner(),
+                NewSession {
+                    operation_id: format!("sched-start-{step}"),
+                    target_id: id(1),
+                    role: SessionRole::Worker,
+                    tool: "codex".into(),
+                    model: None,
+                    effort: None,
+                    account: None,
+                    run_id: None,
+                    replaces: None,
+                },
+                Some("worker-1".into()),
+                tx,
+            )
+            .unwrap()
+            .0
+    };
+
+    // The same choice: the start is asked again under its own operation id.
+    let same = f.ready("Same", &mut tx);
+    let begun = unconfirmed(&same, &mut tx);
+    let StartOutcome::Started { session_id, .. } =
+        start(&f.start_request(&same, no_load()), &mut tx)
+    else {
+        panic!("the same start");
+    };
+    assert_eq!(session_id, begun.session_id);
+    assert_eq!(f.host.launches().len(), 1);
+
+    // A changed choice (another model), well within five minutes: the unconfirmed
+    // start is ended through its host and the new choice starts at once.
+    let step = f.ready("Changed", &mut tx);
+    let operation = format!("sched-start-{step}");
+    let earlier = unconfirmed(&step, &mut tx);
+    f.at(&clock, START + 1_000);
+    let first = f.start_request(&step, no_load());
+    let changed = PlacementStart {
+        model: Some("fast-1".into()),
+        ..first.clone()
+    };
+    let StartOutcome::Started { session_id, run_id } = start(&changed, &mut tx) else {
+        panic!("the changed choice starts");
+    };
+    let ended = f.record(&operation);
+    assert_eq!(
+        (ended.state, ended.history.last().unwrap().reason.as_deref()),
+        (SessionState::Stopped, Some("never_started"))
+    );
+    let replacement = f.record(&format!("{operation}.2"));
+    assert_eq!(replacement.session_id, session_id);
+    assert_eq!(
+        (
+            replacement.state,
+            replacement.model.as_deref(),
+            replacement.replaces.as_deref(),
+            replacement.run_id.as_deref()
+        ),
+        (
+            SessionState::Running,
+            Some("fast-1"),
+            Some(earlier.session_id.as_str()),
+            run_id.as_deref()
+        )
+    );
+    assert_eq!(run_id, Some(f.run_of(&step).run_id));
+    assert_eq!(f.host.launches().len(), 2);
+    // Asked again: the same session.
+    assert_eq!(
+        start(&changed, &mut tx),
+        StartOutcome::Started {
+            session_id: session_id.clone(),
+            run_id: run_id.clone()
+        }
+    );
+    // The earlier choice again, now that a confirmed session runs: it is refused and
+    // nothing is stopped or launched.
+    assert!(matches!(
+        start(&first, &mut tx),
+        StartOutcome::Refused { .. }
+    ));
+    assert_eq!(
+        f.record(&format!("{operation}.2")).state,
+        SessionState::Running
+    );
+    assert_eq!(f.host.launches().len(), 2);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+    assert_eq!(f.records().len(), 3);
+}

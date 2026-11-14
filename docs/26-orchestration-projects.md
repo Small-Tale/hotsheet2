@@ -2626,7 +2626,8 @@ scheduler decides anything.
   session is not a session and is not listed. The next start for its work repeats it.
   One that is five minutes old (`UNCONFIRMED_START_MS`, longer than any one request
   to a host) and still unknown to its host is ended as `never_started`. Nothing ran,
-  so nothing is interrupted.
+  so nothing is interrupted. A start for a changed tool, model or account ends it at
+  once instead (HS2-7VV79Q, below).
 - **Idle time.** A host says whether a session is mid-turn, not since when. This
   machine keeps the first listing that saw each session idle in
   `${HOTSHEET_HOME}/orchestration-session-idle.json` (private, version 1). A listing
@@ -2675,7 +2676,8 @@ counted. Neither undercuts the other.
 | The acting actor has no id                              | `executor_unavailable`                                                                                       |
 
 A different tool, model or account for work whose earlier start is still unconfirmed
-is a `conflict` until that start is ended (HS2-7VV79Q).
+ends that start at once through its host and starts the new choice (HS2-7VV79Q,
+§26.24).
 
 ### Winding down
 
@@ -3592,3 +3594,27 @@ dedupe key is `removed-<step id>`. It is the step's last event, so
 the loop above all, is woken by it like by any level change. A step id is never
 reused: removing it again is `readiness_step_not_found` and publishes nothing, and
 planning the same target ticket again is a new step whose levels start afresh.
+
+### A changed choice ends an unconfirmed start (HS2-7VV79Q)
+
+**Decision.** A start the host never confirmed stays `requested` and is repeated
+under its own operation id while the scheduler's choice stands. When the scheduler
+meanwhile chose another tool, model or account for the same work, the repeat used to
+be a `conflict`, refused on every pass until the five-minute rule ended the old start
+(`UNCONFIRMED_START_MS`). Now `placed_start` ends it at once through its host, with
+the same stop the five-minute rule uses (no force, as the placement actor), and only
+on the host's word:
+
+| The host, asked to stop the unconfirmed start           | Then                                                                         |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Has no record of it, or a reservation it never launched | Ended `never_started`; the new choice starts under `<op>.<n>`, `replaces` it |
+| Launched it after all, at a safe point                  | Wound down; the new choice starts the same way                               |
+| Launched it, not at a safe point                        | `refused` with the stop's code; nothing else changes                         |
+| Cannot be asked                                         | `refused` with the error's code; the five-minute rule still applies          |
+
+The new session works the same run: a scheduler run is dispatched once per step
+(§26.19). A session its host confirmed is never ended this way: a changed choice for
+it is still refused. The race the five-minute bound guarded against remains in a
+shorter window: a start request still in transit that reaches the host after the stop
+would launch under an operation the orchestrator ended. Fencing a withdrawn operation
+on its host is HS2-WHR4GS.

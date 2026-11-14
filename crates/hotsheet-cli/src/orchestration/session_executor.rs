@@ -9,7 +9,9 @@
 //! - **Start.** The scheduler's operation id is stable for a piece of work, the session
 //!   runtime's is one session's for good. While the session the id started is
 //!   unfinished the same id is the same start; once it is finished (refused, wound
-//!   down, lost) the next start for that work is a new session that replaces it.
+//!   down, lost) the next start for that work is a new session that replaces it. A
+//!   start never confirmed whose tool, model or account the scheduler has since
+//!   changed is ended through its host first (HS2-7VV79Q).
 //! - **Dispatch (HS2-YC2P7K).** A start for a plan step first dispatches the step's run
 //!   in dispatcher mode under `sched-run-<step id>`, through `run_dispatch` with its
 //!   readiness guard, and starts the session linked to that run. The step is then in
@@ -257,17 +259,48 @@ impl OrchestrationRuntime {
         let refused = |error: &OrchestrationError| StartOutcome::Refused {
             reason: error.code().into(),
         };
-        let records = match self.session_list(owner_id, false) {
-            Ok(records) => records,
+        let latest_of = |records: Vec<OrchestratedSession>| {
+            records
+                .into_iter()
+                .filter(|session| session.target_id == request.target_id)
+                .filter_map(|session| {
+                    generation(&request.operation_id, &session.operation_id).map(|n| (n, session))
+                })
+                .max_by_key(|(n, _)| *n)
+        };
+        let mut latest = match self.session_list(owner_id, false) {
+            Ok(records) => latest_of(records),
             Err(error) => return refused(&error),
         };
-        let latest = records
-            .iter()
-            .filter(|session| session.target_id == request.target_id)
-            .filter_map(|session| {
-                generation(&request.operation_id, &session.operation_id).map(|n| (n, session))
-            })
-            .max_by_key(|(n, _)| *n);
+        // HS2-7VV79Q: a start its host never confirmed, for a choice the scheduler has
+        // since changed (another tool, model or account), cannot be asked again under
+        // its operation id. It is ended at once through its host rather than refused
+        // until it is old: the host releases a reservation it never launched, or has
+        // no record of it, and either way it ends as `never_started`. A host that
+        // cannot be asked concludes nothing, and the start is refused as before.
+        if let Some((_, session)) = &latest
+            && session.state == SessionState::Requested
+            && (session.tool != request.tool
+                || session.model != request.model
+                || session.account != request.account)
+        {
+            match self.session_stop(
+                owner_id,
+                &session.session_id,
+                StopSession { force: false },
+                Some(&actor),
+                tx,
+            ) {
+                Ok(view) if view.session.state.is_terminal() => {}
+                Ok(_) => return refused(&OrchestrationError::Conflict),
+                Err(error) => return refused(&error),
+            }
+            latest = match self.session_list(owner_id, false) {
+                Ok(records) => latest_of(records),
+                Err(error) => return refused(&error),
+            };
+        }
+        let latest = latest.as_ref().map(|(n, session)| (*n, session));
         let (operation_id, replaces, earlier_run) = match latest {
             None => (request.operation_id.clone(), None, None),
             // Still on its way or running: the same start, asked again.
