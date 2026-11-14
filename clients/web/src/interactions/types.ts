@@ -36,6 +36,12 @@ export interface Project {
   serverBuildNotice?: string;
   /** The user dismissed that notice for this open; the next open re-evaluates it (HS2-46BKH7). */
   serverBuildNoticeDismissed?: boolean;
+  /**
+   * The project's type as read while it opened, before its first paint (HS2-AMCSKS), so the view toolbar
+   * and the Settings categories render the Orchestration entries in place instead of inserting them
+   * later. Absent when the server could not say; a later type read or change event supersedes it.
+   */
+  projectType?: 'software' | 'orchestration';
   /** The repository size level whose banner the user dismissed for this open (HS2-P1GYWH). */
   repositorySizeWarningDismissed?: 'warning' | 'critical';
 }

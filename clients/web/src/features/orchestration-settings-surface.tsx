@@ -66,13 +66,18 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     showInspector: dependencies.showInspector,
   });
 
-  const orchestrationProject = (projectId: string | undefined) =>
-    Boolean(projectId && settings.types.value[projectId]?.view?.project_type === 'orchestration');
-  /** The same answer, `undefined` until this project's type was read (the view then reads its own). */
+  /**
+   * The project's type: the latest read here, else the one read while the project opened (HS2-AMCSKS),
+   * so the Orchestration category and view are in place on the first paint. `undefined` when neither.
+   */
   const knownOrchestrationProject = (projectId: string): boolean | undefined => {
-    const view = settings.types.value[projectId]?.view;
-    return view ? view.project_type === 'orchestration' : undefined;
+    const type =
+      settings.types.value[projectId]?.view?.project_type ??
+      projects.value.find((item) => item.id === projectId)?.projectType;
+    return type ? type === 'orchestration' : undefined;
   };
+  const orchestrationProject = (projectId: string | undefined) =>
+    Boolean(projectId && knownOrchestrationProject(projectId));
 
   /** The category Settings shows: Orchestration falls back to General once the project is Software. */
   function settingsCategory(): SettingsCategory {

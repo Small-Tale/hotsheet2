@@ -699,3 +699,76 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
     await server.stop();
   }
 });
+
+test('HS2-AMCSKS an orchestration project shows its Orchestration entries on the first paint', async ({
+  browser,
+  baseURL,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await asOrchestrationProject(server);
+    // Record each view-mode group and settings category list as first painted, and every later
+    // insertion of an Orchestration entry, so a late insertion under the pointer fails the test.
+    const firstPaint = () => {
+      const state = window as unknown as {
+        __firstViewModes?: string[];
+        __firstCategories?: string[];
+        __late: string[];
+      };
+      state.__late = [];
+      const labels = (root: Element, selector: string) =>
+        [...root.querySelectorAll(selector)].map((node) => node.getAttribute('aria-label') ?? node.textContent.trim());
+      const containers = '[role="group"][aria-label="View mode"], nav[aria-label="Project Settings"]';
+      const painted = new WeakSet<Element>();
+      new MutationObserver((records) => {
+        // An Orchestration entry added inside a container painted in an earlier batch arrived late.
+        for (const record of records)
+          for (const node of record.addedNodes) {
+            if (!(node instanceof Element)) continue;
+            const container = node.closest(containers);
+            if (container && painted.has(container) && /Orchestration/.test(node.textContent))
+              state.__late.push(node.outerHTML.slice(0, 80));
+          }
+        const group = document.querySelector('[role="group"][aria-label="View mode"]');
+        if (group && !state.__firstViewModes) state.__firstViewModes = labels(group, 'button');
+        const nav = document.querySelector('nav[aria-label="Project Settings"]');
+        if (nav && !state.__firstCategories) state.__firstCategories = labels(nav, 'button');
+        for (const container of document.querySelectorAll(containers)) painted.add(container);
+      }).observe(document, { childList: true, subtree: true });
+    };
+    for (const width of [1440, 1100, 390]) {
+      // A fresh browser each time, so the first paint is the project's first paint.
+      const context = await browser.newContext({ baseURL, viewport: { width, height: width === 390 ? 844 : 900 } });
+      await context.addInitScript(firstPaint);
+      const page = await context.newPage();
+      await openProject(page, server, 'Launch');
+      const group = page.getByRole('group', { name: 'View mode' });
+      await expect(group.getByRole('button', { name: 'Orchestration View' })).toBeVisible();
+      const first = await page.evaluate(() => (window as unknown as { __firstViewModes?: string[] }).__firstViewModes);
+      expect(first).toContain('Orchestration View');
+      await capture(page, `toolbar-${width}`, 'hs2-amcsks');
+      await group.getByRole('button', { name: 'Settings View' }).click();
+      // A phone keeps the settings sidebar closed until asked.
+      const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(page.getByRole('navigation', { name: 'Project Settings' })).toBeVisible();
+      const categories = await page.evaluate(
+        () => (window as unknown as { __firstCategories?: string[] }).__firstCategories,
+      );
+      expect(categories?.some((label) => /Orchestration/.test(label))).toBe(true);
+      await capture(page, `settings-${width}`, 'hs2-amcsks');
+      expect(await page.evaluate(() => (window as unknown as { __late: string[] }).__late)).toEqual([]);
+      if (width === 1440) {
+        // Wide, narrow and wide again: nothing is inserted on a resize either.
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await capture(page, 'settings-1440-after-narrow', 'hs2-amcsks');
+        expect(await page.evaluate(() => (window as unknown as { __late: string[] }).__late)).toEqual([]);
+      }
+      await context.close();
+    }
+  } finally {
+    await server.stop();
+  }
+});

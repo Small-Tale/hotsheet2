@@ -15,13 +15,21 @@ export async function openProjectFetch(
   request: typeof fetch = fetch,
   providers: (project: Project) => Promise<ProviderDescriptor[]> = (project) => new Api(project.apiPath).providers(),
   remote: boolean = opensProjectsRemotely(),
+  projectType: (project: Project) => Promise<Project['projectType']> = async (project) =>
+    (await new Api(project.apiPath).projectType(project.id)).project_type,
 ): Promise<ProjectOpenResult> {
   try {
     // A remote browser may only open a checkout the host registered; it never names a ticket store (HS2-3HC9HT).
     const project = remote
       ? await localBridge.openRemoteProject(root, 'Could not open project.', request)
       : await localBridge.openProject(root, 'Could not open project.', request, ticketStore);
-    return { ok: true, project, providers: await providers(project).catch(() => []) };
+    // HS2-AMCSKS: the type is read with the providers, before the project's first paint, so the toolbar
+    // and Settings never insert Orchestration entries under the pointer. A failed read leaves it unknown.
+    const [sources, type] = await Promise.all([
+      providers(project).catch(() => []),
+      projectType(project).catch(() => undefined),
+    ]);
+    return { ok: true, project: type ? { ...project, projectType: type } : project, providers: sources };
   } catch (reason) {
     if (reason instanceof LocalBridgeHttpError) {
       const recovery = isRecord(reason.body) ? parseUnhealthyServerRecovery(reason.body.recovery) : undefined;

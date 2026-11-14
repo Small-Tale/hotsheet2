@@ -45,6 +45,35 @@ describe('project open preparation', () => {
     });
     expect(providers).toHaveBeenCalledWith(value);
   });
+  it('reads the project type with the providers, before the project is wired (HS2-AMCSKS)', async () => {
+    const value = project('alpha');
+    const request = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(value, { status: 201 }));
+    let typed!: () => void;
+    const typeRead = new Promise<'orchestration'>((resolve) => {
+      typed = () => {
+        resolve('orchestration');
+      };
+    });
+    const providers = vi.fn(async () => []);
+    const pending = openProjectFetch('alpha', undefined, request, providers, false, () => typeRead);
+    // Both reads start together; the open result waits for the type.
+    await Promise.resolve();
+    let settled = false;
+    void pending.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    typed();
+    expect(await pending).toEqual({ ok: true, project: { ...value, projectType: 'orchestration' }, providers: [] });
+    // A server that cannot say leaves the type unknown, and the open still succeeds.
+    expect(
+      await openProjectFetch('alpha', undefined, request, providers, false, () => Promise.reject(new Error('404'))),
+    ).toEqual(success('alpha'));
+    expect(await openProjectFetch('alpha', undefined, request, providers, false, async () => 'software')).toEqual({
+      ok: true,
+      project: { ...value, projectType: 'software' },
+      providers: [],
+    });
+  });
   it('opens through the remote route on a remote client and never sends a ticket store (HS2-3HC9HT)', async () => {
     const value = project('alpha');
     const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json(value, { status: 201 }));

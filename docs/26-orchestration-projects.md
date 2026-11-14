@@ -4481,9 +4481,14 @@ A read on the server also starts the target followers of §26.9.
 
 ### The view
 
-- **Tab.** The view switcher offers Orchestration only for a project whose timeline reads
-  `declared` (HS2-W27N1D's Project Type creates the declaration), and never in the
-  terminal rail. A project that is not one falls back to its ticket view.
+- **Tab.** The view switcher offers Orchestration only for an Orchestration project
+  (HS2-W27N1D's Project Type creates the declaration), and never in the terminal rail. A
+  project that is not one falls back to its ticket view. The client reads the project
+  type together with the ticket sources while the project opens, before its first paint,
+  so the Orchestration View button and the Orchestration settings category are in place
+  from the start rather than inserted under the pointer later (HS2-AMCSKS). A type read
+  in Settings or a type change supersedes it; a server that cannot say leaves it unknown
+  and the view's own declaration read decides, as before.
 - **Board.** The production ticket board (`TicketBoard`, Kerf `ColumnTrack`) with the
   waves reversed: Later, Then, Next, Working Now, Done; before kick-off Fourth … First.
   It opens scrolled to its right end with Working Now in view; on a phone (paged) it
