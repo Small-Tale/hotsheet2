@@ -1259,6 +1259,25 @@ prompt; that is unverified. With a real, signed-in install:
    `role_prompt` is `at_launch` and the tool shows the role prompt. If none passes,
    record the version and keep `prompt_args` undeclared.
 
+## Codex bootstrap role prompt (HS2-N1GZFE)
+
+A newly spawned Codex TUI gets the orchestrator's role prompt by a one-shot bracketed
+paste into its terminal right after launch (`codex-pty-bootstrap`), which reports
+`delivered` without confirmation. Whether Codex keeps a paste that arrives before its
+TUI has drawn its composer is unverified. With a real, signed-in `codex`:
+
+1. In a scratch project Codex already trusts, open a Codex AI terminal from the drawer
+   and, within a second of it appearing, paste a short prompt ("Reply with the single
+   word READY") and press Return.
+2. Record whether the prompt appears in the composer and is answered, is lost, or lands
+   in a start-up dialog (trust, sign-in or update notice). Repeat three times, and once
+   in a directory Codex does not trust yet.
+3. Start an orchestrated Codex session (HS2-WEFJV8 steps) and confirm the role prompt
+   naming `hotsheet-worker` is shown and acted on.
+4. If an early paste is ever lost or answers a dialog, the bootstrap prompt must wait
+   for the first idle observation or the SessionStart report; record the outcome on
+   HS2-N1GZFE.
+
 ## Orchestration end to end with real tools and hosts (HS2-2EY9DP)
 
 The end-to-end scenarios (§26.23) run fake AI tools, a loopback GitHub Actions
