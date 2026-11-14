@@ -3591,6 +3591,26 @@ paths:
                   free:
                     type: boolean
                 additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/target-lines:
     description:
       Machine-local orchestration lines of a target checkout's tickets (HS2-S3FKJ7). From the target side, the
@@ -3622,6 +3642,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrchestrationTargetLines'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        description: The target checkout.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/retired-permissions:
     description: Machine-local retired grant and approval files (HS2-JWV5S1). Never authority.
     x-hotsheet-machine-local: true
@@ -3680,13 +3721,6 @@ paths:
               schema:
                 type: string
     parameters:
-      - name: checkout
-        in: path
-        required: true
-      - name: owner
-        in: path
-        required: true
-        description: The target checkout.
       - name: owner
         in: path
         required: true
