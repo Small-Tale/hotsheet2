@@ -136,3 +136,9 @@
 .ticket-list-row__up-next--active {
   color: var(--hs-ticket-state-up-next);
 }
+/* HS2-J89JC7: the orchestration line takes a line of its own below the row's other metadata. */
+.ticket-list-row__orchestration {
+  display: block;
+  flex: 1 0 100%;
+  min-width: 0;
+}

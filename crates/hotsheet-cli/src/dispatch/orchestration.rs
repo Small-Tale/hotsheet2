@@ -86,6 +86,21 @@ enum OrchestrationCmd {
         #[arg(long, requires = "ticket")]
         connection_id: Option<String>,
     },
+    /// HS2-J89JC7: the plan as dependency waves (Done, Working Now, Next, Then, Later;
+    /// First, Second, ... before kick-off), each item with its project, machine, tool,
+    /// state and what it waits on. Answers from this machine's records and contacts no
+    /// target. With --after <version> and --wait-seconds, waits for the next change.
+    Timeline {
+        /// Registered owning checkout id.
+        #[arg(long)]
+        project: Option<String>,
+        /// The version of the timeline already seen.
+        #[arg(long)]
+        after: Option<String>,
+        /// With --after: wait this long for a change (at most 20).
+        #[arg(long, default_value_t = 0, requires = "after")]
+        wait_seconds: u64,
+    },
 }
 #[derive(Args)]
 struct GateArgs {
@@ -1345,6 +1360,19 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let mut path = format!("/checkouts/{owner_id}/orchestration/summary");
             if !query.is_empty() {
                 path = format!("{path}?{}", query.join("&"));
+            }
+            (owner_id, ("GET", path, Value::Null))
+        }
+        OrchestrationCmd::Timeline {
+            project,
+            after,
+            wait_seconds,
+        } => {
+            let owner_id = required(project)?;
+            let mut path = format!("/checkouts/{owner_id}/orchestration/timeline");
+            if let Some(after) = after {
+                let wait_ms = wait_seconds.min(20) * 1000;
+                path = format!("{path}?after={after}&wait_ms={wait_ms}");
             }
             (owner_id, ("GET", path, Value::Null))
         }

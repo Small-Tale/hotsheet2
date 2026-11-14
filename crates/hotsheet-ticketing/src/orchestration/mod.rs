@@ -26,6 +26,7 @@ mod session_idle;
 mod sessions;
 mod storage;
 mod summary;
+mod timeline;
 mod tool_capacity;
 mod validation;
 mod workflow;
@@ -136,6 +137,12 @@ pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,
     PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,
     RunRetries, TargetProgress, UnknownReason, WorkItemKey, WorkItemProgress, summarize_progress,
+};
+pub use timeline::{
+    DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
+    PlacementHint, TargetLocation, TicketLabel, Timeline, TimelineInput, TimelineItem,
+    TimelinePhase, TimelinePolicy, TimelineRun, TimelineStep, TimelineTarget, WaitsOn, Wave,
+    WaveKind, timeline,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,
@@ -352,6 +359,8 @@ mod session_tests;
 mod summary_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod timeline_tests;
 #[cfg(test)]
 mod tool_capacity_tests;
 #[cfg(test)]

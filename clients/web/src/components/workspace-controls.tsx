@@ -33,6 +33,7 @@ import {
   Trash2,
   UsersRound,
   WandSparkles,
+  Workflow,
 } from 'lucide';
 
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -42,7 +43,7 @@ import { createTicketSearchModel } from '../ticket-search-model';
 import { QuickTicketLauncher } from './quick-ticket-composer';
 import { TicketSearchField } from './ticket-search-field';
 
-export type WorkspaceViewMode = 'list' | 'board' | 'workers' | 'notifications' | 'settings';
+export type WorkspaceViewMode = 'list' | 'board' | 'workers' | 'orchestration' | 'notifications' | 'settings';
 export type WorkspaceControlsPresentation = 'toolbar' | 'rail';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 export type WorkspaceSortDirection = 'ascending' | 'descending';
@@ -125,6 +126,8 @@ export interface WorkspaceHeaderProps {
    * visible count badge waits on Kerf KF-170258.
    */
   workers?: WorkersLive;
+  /** HS2-J89JC7: the project is an orchestration project, so the switcher offers Orchestration after Workers. */
+  orchestration?: boolean;
   selectedTicketCount?: number;
   selectedTicketsUpNext?: WorkspaceUpNextState;
   selectedTicketsUpNextEligible?: boolean;
@@ -235,11 +238,13 @@ function workspaceModeChoices(
   count: number,
   presentation: WorkspaceControlsPresentation,
   workers?: WorkersLive,
+  orchestration = false,
 ): ReadonlyArray<SegmentedControlChoice<WorkspaceViewMode>> {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'List', icon: List, iconName: 'list' },
     { value: 'board', label: 'Columns', icon: Columns3, iconName: 'columns-3' },
     { value: 'workers', label: 'Workers', icon: UsersRound, iconName: 'users-round' },
+    { value: 'orchestration', label: 'Orchestration', icon: Workflow, iconName: 'workflow' },
     { value: 'notifications', label: 'Notifications', icon: Bell, iconName: 'bell' },
     { value: 'settings', label: 'Settings', icon: Settings, iconName: 'settings' },
   ];
@@ -247,6 +252,8 @@ function workspaceModeChoices(
     modes
       // The rail offers list, columns (paged), and notifications; settings stay in the main workspace (HS2-656Q43).
       .filter(({ value }) => presentation !== 'rail' || value !== 'settings')
+      // Only an orchestration project has an Orchestration view, and the rail has none (HS2-J89JC7).
+      .filter(({ value }) => value !== 'orchestration' || (orchestration && presentation !== 'rail'))
       .map(({ value, label, icon, iconName }) => {
         const badge = value === 'notifications' ? count : 0,
           live = value === 'workers' ? workers : undefined;
@@ -332,7 +339,9 @@ function WorkspaceOverflowControls({
   selectedTicketsUpNext,
   selectedTicketsUpNextEligible,
   presentation,
+  orchestration,
 }: {
+  orchestration: boolean;
   mode: WorkspaceViewMode;
   projectActionsDisabled: boolean;
   searchDisabled: boolean;
@@ -353,6 +362,9 @@ function WorkspaceOverflowControls({
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
     { value: 'board', label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' },
     { value: 'workers', label: 'Show Workers View', icon: UsersRound, iconName: 'users-round' },
+    ...(orchestration && presentation !== 'rail'
+      ? [{ value: 'orchestration' as const, label: 'Show Orchestration View', icon: Workflow, iconName: 'workflow' }]
+      : []),
     {
       value: 'notifications',
       label: `Show Notifications${notificationCount ? ` (${notificationCount} pending)` : ''}`,
@@ -485,13 +497,15 @@ export function WorkspaceControls({
   sortDirection = defaultWorkspaceSortDirection(sort),
   notificationCount = 0,
   workers,
+  orchestration = false,
   selectedTicketCount = 0,
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
-  const projectActionsDisabled = mode === 'settings' || mode === 'notifications' || mode === 'workers';
-  const searchDisabled = (projectActionsDisabled && !guidanceSearch) || mode === 'workers';
+  const projectActionsDisabled =
+    mode === 'settings' || mode === 'notifications' || mode === 'workers' || mode === 'orchestration';
+  const searchDisabled = (projectActionsDisabled && !guidanceSearch) || mode === 'workers' || mode === 'orchestration';
   const visibleSearchOpen = searchOpen && !searchDisabled;
   const selectedActionsDisabled = projectActionsDisabled || selectedTicketCount === 0;
   const ticketActionsDisabled = selectedActionsDisabled || !selectedTicketsMutable;
@@ -515,7 +529,7 @@ export function WorkspaceControls({
         id="workspace-view-mode"
         label="View mode"
         value={mode}
-        choices={workspaceModeChoices(notificationCount, presentation, workers)}
+        choices={workspaceModeChoices(notificationCount, presentation, workers, orchestration)}
         action="set-view-mode"
         appearance="toolbar"
         shape={rail ? 'rounded' : 'pill'}
@@ -594,6 +608,7 @@ export function WorkspaceControls({
       selectedTicketsUpNext={selectedTicketsUpNext}
       selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
       presentation={presentation}
+      orchestration={orchestration}
     />
   );
   return (

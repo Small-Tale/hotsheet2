@@ -41,6 +41,7 @@ import { RepositorySizeBanner } from '../components/repository-size-banner';
 import { SearchScopeToolbar } from '../components/search-scope-toolbar';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
+import type { SidebarPanelParts } from '../components/sidebar-panel';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { TerminalDrawerProps } from '../components/terminal-drawer';
@@ -139,6 +140,12 @@ export interface HotSheetShellDependencies {
   permissionCount: (projectId?: string) => number;
   /** Live AI workers for the Workers view choice's name and title (HS2-6B9S7P). */
   workersLive?: (projectId: string) => WorkersLive | undefined;
+  /** HS2-J89JC7: the Orchestration view's tab, page header and inspector for the current project. */
+  orchestration?: {
+    available: (projectId: string) => boolean;
+    pageHeader: () => SafeHtml | undefined;
+    inspector: () => SidebarPanelParts;
+  };
   permissionPopupSurface: (layer?: 'flow' | 'top') => SafeHtml | undefined;
   project: () => Project | undefined;
   projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
@@ -239,6 +246,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     pendingRestoreEntries,
     permissionCount,
     workersLive,
+    orchestration,
     permissionPopupSurface,
     project,
     projectRestoreFailures,
@@ -505,6 +513,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return settingsCategoryTitle(settingsCategory());
         case 'workers':
           return 'Workers';
+        case 'orchestration':
+          return 'Orchestration';
         case 'board':
         case 'list':
           // Searching filters the selected view; the heading keeps that view's title (HS2-18Y67S) unless
@@ -524,7 +534,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           : settingsCategory() === 'commands'
             ? { kind: 'command-settings', size: viewportMobile.value ? 'compact' : 'default' }
             : undefined;
-    const headingAction = !['settings', 'notifications', 'workers'].includes(viewMode.value)
+    const headingAction = !['settings', 'notifications', 'workers', 'orchestration'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)
       : settingsAction;
     // Heading Toolbars render the view action as literal `trailing` content: Kerf Toolbar accepts one
@@ -540,14 +550,19 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       ticketWorkspace = viewMode.value === 'list' || viewMode.value === 'board';
     // The phone view picker names sidebar views only; All Tickets shows its title header instead.
     const mobileView: AppShellMobileView | undefined =
-        viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value) && !allTickets
+        viewportMobile.value && !['settings', 'notifications', 'orchestration'].includes(viewMode.value) && !allTickets
           ? {
               value: selectedView.value,
               choices: mobileChoices,
               action: ticketViewActionSpec(selectedView.value, canCreate),
             }
           : undefined,
-      pageHeader = viewportMobile.value && !mobileView ? secondaryPageHeader : undefined;
+      pageHeader =
+        viewMode.value === 'orchestration'
+          ? orchestration?.pageHeader()
+          : viewportMobile.value && !mobileView
+            ? secondaryPageHeader
+            : undefined;
     const drawerViewAllowed = !['settings', 'notifications'].includes(viewMode.value);
     const inspectorContent = (() => {
       switch (viewMode.value) {
@@ -555,6 +570,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return notificationInspectorSurfacePanel();
         case 'settings':
           return inspectorPlaceholderPanel({ selectionCount: 0 });
+        case 'orchestration':
+          return orchestration?.inspector() ?? inspectorPlaceholderPanel({ selectionCount: 0 });
         case 'workers':
         case 'board':
         case 'list':
@@ -612,6 +629,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             sortDirection={sortDirection.value}
             notificationCount={permissionCount(current.id)}
             workers={workersLive?.(current.id)}
+            orchestration={orchestration?.available(current.id) ?? false}
             selectedTicketCount={selection.length}
             selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}
             selectedTicketsUpNextEligible={
@@ -687,7 +705,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           ) : undefined
         }
         workspacePresentation={
-          (viewMode.value === 'board' && selectedView.value !== 'errors') || viewMode.value === 'workers'
+          (viewMode.value === 'board' && selectedView.value !== 'errors') ||
+          viewMode.value === 'workers' ||
+          viewMode.value === 'orchestration'
             ? 'edge-to-edge'
             : viewMode.value === 'settings' && settingsCategory() === 'guidance'
               ? 'guidance'

@@ -9,17 +9,42 @@
       "kind": "component",
       "purpose": "Ask the trusted desktop whether a project is local or hosted on a reviewed remote server (HS2-BT4KN6).",
       "source": "src/components/project-source-choice-dialog.tsx",
-      "publicExports": [{ "name": "ProjectSourceChoiceDialog" }],
+      "publicExports": [
+        {
+          "name": "ProjectSourceChoiceDialog"
+        }
+      ],
       "sourceLinks": ["src/components/project-source-choice-dialog.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "component", "behaviors": ["single-column-card"] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "self", "padding": "self" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "component",
+          "behaviors": ["single-column-card"]
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "self",
+            "padding": "self"
+          }
+        }
       },
       "boundaries": {
         "rootClass": "project-source-choice-dialog",
@@ -27,7 +52,9 @@
         "publicTokens": [],
         "placeableClasses": ["project-source-choice-dialog"]
       },
-      "accessibility": { "obligations": ["Keep local and remote choices labeled and keyboard reachable."] },
+      "accessibility": {
+        "obligations": ["Keep local and remote choices labeled and keyboard reachable."]
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/project-source-choice-dialog.tsx",
@@ -45,17 +72,42 @@
       "kind": "component",
       "purpose": "Pair, discover, review and remove machine-local remote server bindings (HS2-BT4KN6).",
       "source": "src/components/desktop-remote-dialog.tsx",
-      "publicExports": [{ "name": "DesktopRemoteDialog" }],
+      "publicExports": [
+        {
+          "name": "DesktopRemoteDialog"
+        }
+      ],
       "sourceLinks": ["src/components/desktop-remote-dialog.tsx", "src/components/desktop-remote-dialog.css"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
-        "wiring": { "required": false, "helpers": [], "obligations": [] },
-        "responsive": { "owner": "component", "behaviors": ["single-column-card"] },
-        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "self", "padding": "self" } }
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "component",
+          "behaviors": ["single-column-card"]
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "self",
+            "padding": "self"
+          }
+        }
       },
       "boundaries": {
         "rootClass": "desktop-remote-dialog",
@@ -2016,6 +2068,203 @@
       "selection": {
         "useWhen": ["Hot Sheet needs worker activity and next-plan visibility in the project workspace."],
         "avoidWhen": ["The surface is a status board or ordinary ticket list."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "orchestration-timeline-view",
+      "name": "OrchestrationTimelineView",
+      "kind": "composition",
+      "purpose": "The Orchestration view: the plan as dependency waves on the ticket board, newest left and Done right, cards grouped by project.",
+      "source": "src/components/orchestration-timeline-view.tsx",
+      "publicExports": [
+        {
+          "name": "OrchestrationTimelineView"
+        }
+      ],
+      "sourceLinks": ["src/components/orchestration-timeline-view.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["structure"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child",
+            "notes": [
+              "The Workbench positions the view; TicketBoard and ColumnTrack own horizontal scrolling and paging."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["orchestration-timeline-view"],
+        "publicTokens": [],
+        "placeableClasses": ["orchestration-timeline-view"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-timeline-view.tsx",
+        "composition": "src/components/orchestration-timeline-view.tsx"
+      },
+      "selection": {
+        "useWhen": ["An orchestration project shows where and when its planned work runs (HS2-J89JC7)."],
+        "avoidWhen": ["The project is not an orchestration project, or the surface is an ordinary ticket board."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "orchestration-toolbar",
+      "name": "OrchestrationToolbar",
+      "kind": "composition",
+      "purpose": "The Orchestration view's page header: where orchestration stands and its one kick-off action (Propose Plan, Start Orchestration or Pause).",
+      "source": "src/components/orchestration-toolbar.tsx",
+      "publicExports": [
+        {
+          "name": "OrchestrationToolbar"
+        }
+      ],
+      "sourceLinks": ["src/components/orchestration-toolbar.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["structure"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child",
+            "notes": ["The shell page header positions it; Toolbar owns its insets."]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-toolbar.tsx",
+        "composition": "src/components/orchestration-toolbar.tsx"
+      },
+      "selection": {
+        "useWhen": ["The Orchestration view needs its status and kick-off action (HS2-J89JC7)."],
+        "avoidWhen": ["Another view needs a page action; use the shell heading action instead."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "orchestration-inspector",
+      "name": "OrchestrationInspector",
+      "kind": "composition",
+      "purpose": "The inspector of one Orchestration view card: where it runs, its run and controls, what it waits on, gates, validation and events.",
+      "source": "src/components/orchestration-inspector.tsx",
+      "publicExports": [
+        {
+          "name": "OrchestrationInspector"
+        },
+        {
+          "name": "orchestrationInspectorPanel"
+        }
+      ],
+      "sourceLinks": ["src/components/orchestration-inspector.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["structure"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child",
+            "notes": ["The right rail positions it; List and ValueTable own the insets."]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-inspector.tsx",
+        "composition": "src/components/orchestration-inspector.tsx"
+      },
+      "selection": {
+        "useWhen": ["A card on the Orchestration view is selected (HS2-J89JC7)."],
+        "avoidWhen": ["The selection is a ticket of this project; use the ticket inspector."],
         "documentation": "../../docs/ux-components.md"
       }
     },
@@ -5914,7 +6163,7 @@
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
       "kind": "component",
-      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and a More row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and a More row with Copy/Paste, F1\u2013F12, and Home/End/PgUp/PgDn.",
       "source": "src/components/terminal-key-bar.tsx",
       "publicExports": [
         {
@@ -5969,7 +6218,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and a More row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
+          "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and a More row with Copy/Paste, F1\u2013F12, and Home/End/PgUp/PgDn."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -6174,7 +6423,7 @@
       "id": "terminal-edit-menu",
       "name": "TerminalEditMenu",
       "kind": "component",
-      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
+      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text\u2026 opens the Copy sheet, and Paste sends the clipboard.",
       "source": "src/components/terminal-clipboard-dialogs.tsx",
       "publicExports": [
         {
@@ -6229,7 +6478,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard."
+          "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text\u2026 opens the Copy sheet, and Paste sends the clipboard."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -7638,7 +7887,7 @@
       "id": "accounts-settings",
       "name": "AccountsSettings",
       "kind": "component",
-      "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).",
+      "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings \u2192 Accounts).",
       "source": "src/components/ticket-sources-settings.tsx",
       "publicExports": [
         {
@@ -7693,7 +7942,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts)."
+          "Hot Sheet needs machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings \u2192 Accounts)."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific AccountsSettings behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -8209,7 +8458,7 @@
       "id": "remote-devices-settings",
       "name": "RemoteDevicesSettings",
       "kind": "component",
-      "purpose": "App Settings → Devices: this host's pairing requests and paired browsers, with approve, reject, revoke, read role, administrator, and host-access commands in each row's menu, and an administrator-required state for other sessions (HS2-DXM0YN, HS2-85W6BE).",
+      "purpose": "App Settings \u2192 Devices: this host's pairing requests and paired browsers, with approve, reject, revoke, read role, administrator, and host-access commands in each row's menu, and an administrator-required state for other sessions (HS2-DXM0YN, HS2-85W6BE).",
       "source": "src/components/remote-devices-settings.tsx",
       "publicExports": [
         {
@@ -8746,7 +8995,7 @@
         "publicTokens": []
       },
       "accessibility": {
-        "obligations": ["Inherits the rendered button’s visible label."]
+        "obligations": ["Inherits the rendered button\u2019s visible label."]
       },
       "diagnostics": [],
       "provenance": {
@@ -9393,7 +9642,7 @@
       "id": "standby-settings",
       "name": "StandbySettings",
       "kind": "component",
-      "purpose": "Machine-wide standby idle entry switch and threshold in App Settings → General (HS2-EQVZTZ).",
+      "purpose": "Machine-wide standby idle entry switch and threshold in App Settings \u2192 General (HS2-EQVZTZ).",
       "source": "src/components/standby-settings.tsx",
       "publicExports": [
         {
@@ -9456,7 +9705,7 @@
       "id": "host-disk-settings",
       "name": "HostDiskSettings",
       "kind": "component",
-      "purpose": "Machine-wide list of the disks host health monitors, with a Monitor switch, Forget, and Add Disk by path in App Settings → General (HS2-KBVZV1).",
+      "purpose": "Machine-wide list of the disks host health monitors, with a Monitor switch, Forget, and Add Disk by path in App Settings \u2192 General (HS2-KBVZV1).",
       "source": "src/components/host-disk-settings.tsx",
       "publicExports": [
         {
@@ -9582,7 +9831,7 @@
       "id": "theme-picker",
       "name": "ThemePicker",
       "kind": "component",
-      "purpose": "Auto, Light, or Dark theme choice with a stylized preview of each scheme in App Settings → General (HS2-EFTHS6).",
+      "purpose": "Auto, Light, or Dark theme choice with a stylized preview of each scheme in App Settings \u2192 General (HS2-EFTHS6).",
       "source": "src/components/theme-picker.tsx",
       "publicExports": [
         {

@@ -1,0 +1,309 @@
+/**
+ * HS2-J89JC7: deterministic, synthetic orchestration timelines for the UX catalog. An orchestration
+ * project "Launch" plans work in "API" (remote, on "Build host"), "Web" and "Docs" (on this machine).
+ * Every name, id and time is invented; nothing is read from a server or a real project.
+ */
+import type {
+  OrchestrationTimeline,
+  TimelineItem,
+  TimelinePhase,
+  TimelineTarget,
+  TimelineWave,
+} from '../orchestration-timeline';
+
+/** 14:00 on a fixed day, so captures and tests read the same times. */
+export const DEMO_NOW = Date.UTC(2026, 10, 14, 14, 0);
+const MINUTE = 60_000;
+
+export const DEMO_TARGETS: TimelineTarget[] = [
+  { target_id: 'api', label: 'API', location: 'remote', machine_label: 'Build host', checkout_id: 'api-0123456789ab' },
+  { target_id: 'web', label: 'Web', location: 'local', checkout_id: 'web-0123456789ab' },
+  { target_id: 'docs', label: 'Docs', location: 'local', checkout_id: 'docs-0123456789ab' },
+];
+
+const GOALS = {
+  'LCH-1': 'Ship single sign-on',
+  'LCH-2': 'Publish export format version 2',
+  'LCH-3': 'Upgrade the build toolchain',
+} as const;
+
+function card(
+  step: number,
+  target: 'api' | 'web' | 'docs',
+  slug: string,
+  title: string,
+  goal: keyof typeof GOALS,
+  rest: Partial<TimelineItem> & Pick<TimelineItem, 'state' | 'level'>,
+): TimelineItem {
+  const project = DEMO_TARGETS.find((item) => item.target_id === target)!;
+  return {
+    step_id: `step-${step}`,
+    goal: { connection_id: 'launch-tickets', native_id: `goal-${goal}` },
+    goal_slug: goal,
+    goal_title: GOALS[goal],
+    target: { target_id: target, connection_id: `${target}-tickets`, native_id: `ticket-${slug}` },
+    slug,
+    title,
+    status: 'not_started',
+    priority: 'default',
+    category: 'feature',
+    project_label: project.label,
+    location: project.location,
+    machine_label: project.machine_label,
+    tool: 'claude',
+    ...rest,
+  };
+}
+
+const run = (id: string, started: number, extra: Partial<NonNullable<TimelineItem['run']>> = {}) => ({
+  run_id: id,
+  state: 'dispatched',
+  worker_id: 'worker-1',
+  lease_expires_at_ms: DEMO_NOW + 22 * MINUTE,
+  paused: false,
+  cancel_requested: false,
+  last_confirmed_at_ms: DEMO_NOW - MINUTE,
+  created_at_ms: started,
+  ...extra,
+});
+
+/** The running timeline of the signed-off design (HS2-HSMH2Q Design v3). */
+function runningWaves(): TimelineWave[] {
+  return [
+    {
+      kind: 'done',
+      ordinal: 0,
+      items: [
+        card(1, 'api', 'API-11', 'Store single sign-on client settings', 'LCH-1', {
+          state: 'done',
+          level: 'finished',
+          status: 'completed',
+          started_at_ms: DEMO_NOW - 240 * MINUTE,
+          finished_at_ms: DEMO_NOW - 160 * MINUTE,
+          run: run('run-1', DEMO_NOW - 240 * MINUTE, { state: 'completed', finished_at_ms: DEMO_NOW - 160 * MINUTE }),
+        }),
+        card(2, 'api', 'API-14', 'Accept export schema version 2', 'LCH-2', {
+          state: 'done',
+          level: 'finished',
+          status: 'completed',
+          tool: 'codex',
+          started_at_ms: DEMO_NOW - 200 * MINUTE,
+          finished_at_ms: DEMO_NOW - 75 * MINUTE,
+          run: run('run-2', DEMO_NOW - 200 * MINUTE, { state: 'completed', finished_at_ms: DEMO_NOW - 75 * MINUTE }),
+        }),
+      ],
+    },
+    {
+      kind: 'working_now',
+      ordinal: 0,
+      estimated_start_ms: DEMO_NOW - 8 * MINUTE,
+      estimate: 'started',
+      items: [
+        card(3, 'api', 'API-12', 'Add the single sign-on token endpoint', 'LCH-1', {
+          state: 'running',
+          level: 'in_progress',
+          status: 'started',
+          priority: 'high',
+          session_id: 'session-3',
+          session_state: 'running',
+          started_at_ms: DEMO_NOW - 5 * MINUTE,
+          run: run('run-3', DEMO_NOW - 5 * MINUTE),
+        }),
+        card(4, 'web', 'WEB-33', 'Read export schema version 2', 'LCH-2', {
+          state: 'running',
+          level: 'in_progress',
+          status: 'started',
+          tool: 'codex',
+          session_id: 'session-4',
+          session_state: 'running',
+          started_at_ms: DEMO_NOW - 8 * MINUTE,
+          run: run('run-4', DEMO_NOW - 8 * MINUTE),
+        }),
+        card(5, 'docs', 'DOC-7', 'Document export schema version 2', 'LCH-2', {
+          state: 'provisional',
+          level: 'in_progress',
+          status: 'started',
+          category: 'task',
+          session_id: 'session-5',
+          session_state: 'running',
+          waits_on: [
+            {
+              target_id: 'web',
+              connection_id: 'web-tickets',
+              native_id: 'ticket-WEB-33',
+              slug: 'WEB-33',
+              step_id: 'step-4',
+              reason: 'gate_pending',
+            },
+          ],
+          started_at_ms: DEMO_NOW - 2 * MINUTE,
+          run: run('run-5', DEMO_NOW - 2 * MINUTE),
+        }),
+      ],
+    },
+    {
+      kind: 'next',
+      ordinal: 0,
+      estimated_start_ms: DEMO_NOW + 60 * MINUTE,
+      estimate: 'measured',
+      items: [
+        card(6, 'api', 'API-15', 'Move API to the new toolchain', 'LCH-3', {
+          state: 'waits_for_permission',
+          level: 'confirmed',
+          category: 'task',
+          tool: 'codex',
+          estimated_start_ms: DEMO_NOW + 60 * MINUTE,
+          permission: {
+            kind: 'permission',
+            request_id: 'request-6',
+            action: 'session_start',
+            requested_at_ms: DEMO_NOW + 6 * MINUTE,
+          },
+        }),
+        card(7, 'web', 'WEB-30', 'Add the single sign-on login page', 'LCH-1', {
+          state: 'waits_for_decision',
+          level: 'provisional',
+          priority: 'high',
+          estimated_start_ms: DEMO_NOW + 70 * MINUTE,
+          decision: { note_id: 'note-7' },
+          waits_on: [
+            {
+              target_id: 'api',
+              connection_id: 'api-tickets',
+              native_id: 'ticket-API-12',
+              slug: 'API-12',
+              step_id: 'step-3',
+              reason: 'gate_pending',
+            },
+          ],
+        }),
+        card(8, 'docs', 'DOC-9', 'Describe the single sign-on settings', 'LCH-1', {
+          state: 'ready',
+          level: 'confirmed',
+          category: 'task',
+          estimated_start_ms: DEMO_NOW + 60 * MINUTE,
+          placement: { at_ms: DEMO_NOW, decision: 'unplaced', reason: 'target_cap', tool: 'claude' },
+        }),
+      ],
+    },
+    {
+      kind: 'then',
+      ordinal: 0,
+      estimated_start_ms: DEMO_NOW + 150 * MINUTE,
+      estimate: 'measured',
+      items: [
+        card(9, 'web', 'WEB-35', 'Move Web to the new toolchain', 'LCH-3', {
+          state: 'waits_for_prerequisite',
+          level: 'blocked',
+          category: 'task',
+          estimated_start_ms: DEMO_NOW + 150 * MINUTE,
+          reasons: ['prerequisite_not_finished'],
+          waits_on: [
+            {
+              target_id: 'api',
+              connection_id: 'api-tickets',
+              native_id: 'ticket-API-15',
+              slug: 'API-15',
+              step_id: 'step-6',
+              reason: 'prerequisite_not_finished',
+            },
+          ],
+        }),
+      ],
+    },
+    {
+      kind: 'later',
+      ordinal: 0,
+      estimated_start_ms: DEMO_NOW + 240 * MINUTE,
+      estimate: 'measured',
+      items: [
+        card(10, 'docs', 'DOC-11', 'Announce the new build toolchain', 'LCH-3', {
+          state: 'waits_for_prerequisite',
+          level: 'blocked',
+          category: 'task',
+          estimated_start_ms: DEMO_NOW + 240 * MINUTE,
+          waits_on: [
+            {
+              target_id: 'web',
+              connection_id: 'web-tickets',
+              native_id: 'ticket-WEB-35',
+              slug: 'WEB-35',
+              step_id: 'step-9',
+              reason: 'prerequisite_not_finished',
+            },
+          ],
+        }),
+      ],
+    },
+  ];
+}
+
+/** The same plan before kick-off: waves First, Second, … from the dependency order. */
+function proposedWaves(): TimelineWave[] {
+  const all = runningWaves().flatMap((wave) => wave.items),
+    planned = (ordinal: number, steps: number[]): TimelineWave => ({
+      kind: 'planned',
+      ordinal,
+      estimated_start_ms: DEMO_NOW + ordinal * 90 * MINUTE,
+      estimate: 'default',
+      items: steps.map((step) => {
+        const item = all.find((candidate) => candidate.step_id === `step-${step}`)!;
+        return {
+          ...item,
+          state: item.waits_on ? 'waits_for_prerequisite' : 'ready',
+          level: item.waits_on ? 'blocked' : 'confirmed',
+          status: 'not_started',
+          run: undefined,
+          session_id: undefined,
+          session_state: undefined,
+          permission: undefined,
+          decision: undefined,
+          started_at_ms: undefined,
+          finished_at_ms: undefined,
+          estimated_start_ms: DEMO_NOW + ordinal * 90 * MINUTE,
+        };
+      }),
+    });
+  return [planned(0, [1, 2, 3, 4, 6, 8]), planned(1, [5, 7, 9]), planned(2, [10])];
+}
+
+/** A synthetic timeline in one phase. */
+export function demoTimeline(phase: TimelinePhase): OrchestrationTimeline {
+  const waves =
+    phase === 'running' || phase === 'paused' ? runningWaves() : phase === 'proposed' ? proposedWaves() : [];
+  const counts: Record<string, number> = {};
+  for (const item of waves.flatMap((wave) => wave.items)) counts[item.state] = (counts[item.state] ?? 0) + 1;
+  return {
+    version: `demo-${phase}`,
+    now_ms: DEMO_NOW,
+    declared: true,
+    phase,
+    automatic: phase === 'running',
+    kick_off: {
+      can_start: phase === 'proposed' || phase === 'paused',
+      start_blocked:
+        phase === 'running'
+          ? 'running'
+          : phase === 'no_projects'
+            ? 'no_projects'
+            : phase === 'no_plan'
+              ? 'no_plan'
+              : undefined,
+      can_pause: phase === 'running',
+      policy_revision: 'demo-revision',
+    },
+    running_since_ms: phase === 'running' || phase === 'paused' ? DEMO_NOW - 118 * MINUTE : undefined,
+    sessions: phase === 'running' ? 3 : phase === 'paused' ? 2 : 0,
+    targets: phase === 'no_projects' ? [] : DEMO_TARGETS,
+    waves,
+    counts,
+    wave_minutes: 90,
+    estimate: phase === 'running' ? 'measured' : 'default',
+  };
+}
+
+/** A fixed 24-hour clock for demo captures, independent of the viewer's locale and time zone. */
+export const demoClock = (ms: number) => {
+  const date = new Date(ms);
+  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+};

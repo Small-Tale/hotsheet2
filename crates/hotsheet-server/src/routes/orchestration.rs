@@ -478,7 +478,9 @@ fn watched_owner(method: &Method, path: &str) -> Option<String> {
                 "gates" | "deployments",
             ],
         )
-        | ("GET", ["checkouts", owner, "orchestration", "run-events"]) => Some((*owner).to_owned()),
+        | ("GET", ["checkouts", owner, "orchestration", "run-events"])
+        // HS2-J89JC7: a timeline reader waits on the same run events.
+        | ("GET", ["checkouts", owner, "orchestration", "timeline"]) => Some((*owner).to_owned()),
         // HS2-WBREDM: a run that was resumed, handed off or corrected back to life, or
         // an explicit reconciliation, is followed from then on.
         ("POST", ["checkouts", owner, "orchestration", "run-reconcile"])

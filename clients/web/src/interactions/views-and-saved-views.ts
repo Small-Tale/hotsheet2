@@ -2,6 +2,10 @@ import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type FullTicket } from '../api';
+import {
+  type OrchestrationTimelineBindings,
+  wireOrchestrationTimeline,
+} from '../components/orchestration-timeline-interactions';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createCoalescedInput } from '../debounced-autosave';
@@ -33,6 +37,8 @@ export interface ViewAndSavedViewInteractionsDependencies {
   readonly deleteSavedView: () => Promise<void>;
   readonly closeSavedViewDelete: () => void;
   readonly savedViewDeleteBusy: Signal<boolean>;
+  /** HS2-J89JC7: the Orchestration view's cards, groups, kick-off, and inspector actions. */
+  readonly orchestrationView: OrchestrationTimelineBindings;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -56,7 +62,9 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     deleteSavedView,
     closeSavedViewDelete,
     savedViewDeleteBusy,
+    orchestrationView,
   } = dependencies;
+  lifetime.add(wireOrchestrationTimeline(document.body, orchestrationView));
   const savedViewNameInput = createCoalescedInput<string>((name) => {
     savedViewName.value = name;
   });

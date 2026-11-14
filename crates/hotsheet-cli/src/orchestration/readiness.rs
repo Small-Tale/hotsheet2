@@ -190,6 +190,7 @@ fn seen(ticket: &Value, now_ms: u64, opt_out_tag: Option<&str>) -> TicketSeen {
         priority: text(ticket, "priority").map(Into::into),
         up_next: ticket.get("up_next").and_then(Value::as_bool),
         created_at_ms: field_ms(ticket, "created_at"),
+        slug: text(ticket, "slug").map(Into::into),
     }
 }
 
@@ -273,6 +274,7 @@ impl OrchestrationRuntime {
                         up_next: None,
                         created_at_ms: None,
                         opted_out: None,
+                        slug: None,
                     }),
                     unreachable: run.unreachable.clone(),
                 });
@@ -321,7 +323,7 @@ impl OrchestrationRuntime {
         Ok(facts)
     }
 
-    fn plan_evaluate(
+    pub(super) fn plan_evaluate(
         &self,
         owner_id: &str,
         now_ms: u64,
@@ -767,6 +769,7 @@ impl OrchestrationRuntime {
                                     up_next: None,
                                     created_at_ms: None,
                                     opted_out: None,
+                                    slug: None,
                                 },
                             }),
                             unreachable: Some(None),

@@ -142,6 +142,10 @@ pub struct TicketSeen {
     /// when the read did not say, which never counts as "not opted out".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opted_out: Option<bool>,
+    /// HS2-J89JC7: the ticket's display slug, an identifier for the timeline. Absent
+    /// when the read did not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
 }
 
 /// The last confirmed state of one target ticket and whether it can still be trusted.
@@ -170,6 +174,7 @@ impl TicketFacts {
                     newer.up_next = newer.up_next.or(older.up_next);
                     newer.created_at_ms = newer.created_at_ms.or(older.created_at_ms);
                     newer.opted_out = newer.opted_out.or(older.opted_out);
+                    newer.slug = newer.slug.or(older.slug);
                 }
                 Some(newer)
             }

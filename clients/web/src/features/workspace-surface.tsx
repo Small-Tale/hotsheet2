@@ -6,6 +6,7 @@ import { boardColumnHasMore, type BoardColumnPage, boardColumnStatus, isPerColum
 import type { createClientNotifications } from '../client-notifications';
 import type { CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
 import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
+import type { OrchestrationTimelineViewProps } from '../components/orchestration-timeline-view';
 import { type TicketEmptyStateProps } from '../components/ticket-empty-state';
 import { TicketPageMore } from '../components/ticket-page-more';
 import { type TicketRowProps } from '../components/ticket-row';
@@ -66,6 +67,8 @@ export interface WorkspaceSurfaceDependencies {
   selectedTicketQualifiedId: () => string | undefined;
   /** The search's scope: the selected view, or All Tickets (HS2-4J6764). */
   searchScope: () => TicketScope;
+  /** HS2-J89JC7: the Orchestration view's timeline, selection and planner availability. */
+  orchestrationView: () => OrchestrationTimelineViewProps;
 }
 
 /**
@@ -115,6 +118,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     workerLoading,
     selectedTicketQualifiedId,
     searchScope,
+    orchestrationView,
   } = dependencies;
   function workspaceEmptyState(): TicketEmptyStateProps | undefined {
     if (loading.value) return { kind: 'loading' };
@@ -183,6 +187,8 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
             layout: viewportMobile.value ? 'paged' : 'grid',
           },
         };
+      case 'orchestration':
+        return { kind: 'orchestration', orchestration: orchestrationView() };
       case 'board':
       case 'list':
         break;

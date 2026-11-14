@@ -77,6 +77,7 @@ fn seen(status: &str, at_ms: u64) -> TicketSeen {
         up_next: None,
         created_at_ms: None,
         opted_out: None,
+        slug: None,
     }
 }
 fn down(since_ms: u64) -> RunUnreachable {

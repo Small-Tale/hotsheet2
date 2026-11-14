@@ -1,0 +1,389 @@
+//! HS2-J89JC7: the orchestration timeline of an owning checkout.
+//!
+//! A read. It gathers this machine's records (the plan and its readiness, runs,
+//! sessions, the scheduler's decision log, pending approvals, bindings and the
+//! policy), labels tickets from stores on this machine, and hands everything to the
+//! pure fold `hotsheet_ticketing::orchestration::timeline`. It contacts no target,
+//! passes no gate and writes nothing. With a version and `wait_ms` it is a long poll:
+//! it waits on the run event journal, the decision log and the scheduler's wake
+//! marker, never on a timer, and answers as soon as what it shows changed.
+
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+use hotsheet_model::{NoteKind, Ticket};
+use hotsheet_ticketing::ops;
+use hotsheet_ticketing::orchestration::{
+    ApprovalState, BindingRegistry, DecisionJournal, DecisionKind, DecisionRecord, DecisionWait,
+    DeclarationState, MAX_AUDIT_PAGE, PermissionWait, PlacementHint, ReadinessLevel,
+    RunEventJournal, SessionRegistry, TargetDestination, TargetLocation, TicketKey, TicketLabel,
+    Timeline, TimelineInput, TimelinePolicy, TimelineStep, TimelineTarget, ticket_key, timeline,
+};
+
+use super::scheduler::WAKE_DIRECTORY;
+use super::tickets::OrchestrationTicket;
+use super::*;
+
+/// The longest a timeline read waits for a change.
+pub const MAX_TIMELINE_WAIT_MS: u64 = 20_000;
+
+/// HS2-XHQ1EH's outcome for an action that waits on a permission request through the
+/// permission bridge; its `outcome_detail` names the request.
+pub const PERMISSION_REQUIRED: &str = "permission_required";
+
+fn code<T: serde::Serialize>(value: &T) -> Option<String> {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|value| value.as_str().map(Into::into))
+}
+
+fn label(ticket: &Ticket) -> TicketLabel {
+    TicketLabel {
+        slug: Some(ticket.slug.clone()),
+        title: Some(ticket.title.clone()),
+        status: code(&ticket.status),
+        priority: code(&ticket.priority),
+        category: Some(ticket.category.clone()).filter(|category| !category.is_empty()),
+    }
+}
+
+/// The goal ticket's unanswered feedback request, when it has one.
+fn pending_decision(ticket: &Ticket) -> Option<DecisionWait> {
+    if !ticket.feedback_needed() {
+        return None;
+    }
+    let note = ticket
+        .notes
+        .iter()
+        .filter(|note| {
+            note.kind == NoteKind::FeedbackNeeded
+                && !ticket
+                    .notes
+                    .iter()
+                    .any(|reply| reply.response_to == Some(note.id))
+        })
+        .max_by_key(|note| note.id);
+    Some(DecisionWait {
+        note_id: note.map(|note| note.id.to_string()),
+    })
+}
+
+/// What the scheduler last said about each step, from its decision log.
+fn hints(records: &[DecisionRecord]) -> BTreeMap<String, PlacementHint> {
+    let mut hints: BTreeMap<String, PlacementHint> = BTreeMap::new();
+    for record in records {
+        let decision = match record.kind {
+            DecisionKind::Start => "start",
+            DecisionKind::Keep => "keep",
+            DecisionKind::Unplaced => "unplaced",
+            DecisionKind::Tick | DecisionKind::WindDown | DecisionKind::Assignment => continue,
+        };
+        let Some(step_id) = &record.step_id else {
+            continue;
+        };
+        hints.insert(
+            step_id.clone(),
+            PlacementHint {
+                at_ms: record.at_ms,
+                decision: decision.into(),
+                reason: record.reason.clone(),
+                tool: record.tool.clone(),
+                model: record.model.clone(),
+                session_id: record.session_id.clone(),
+                outcome: record.outcome.clone(),
+            },
+        );
+    }
+    hints
+}
+
+impl OrchestrationRuntime {
+    /// Every retained scheduler decision of the owner, oldest first.
+    fn retained_decisions(
+        &self,
+        owner_id: &str,
+    ) -> Result<Vec<DecisionRecord>, OrchestrationError> {
+        let journal = DecisionJournal::new(&self.home, owner_id)?;
+        let (mut records, mut after) = (Vec::new(), 0);
+        loop {
+            let page = journal.read(after, MAX_AUDIT_PAGE)?;
+            let done = !page.more || page.cursor == after;
+            after = page.cursor;
+            records.extend(page.entries.into_iter().map(|entry| entry.record));
+            if done {
+                return Ok(records);
+            }
+        }
+    }
+
+    /// HS2-J89JC7 seam: the permission request each step waits on. Today a pending
+    /// approval of the scheduler's operation for the step (§26.8); HS2-XHQ1EH's
+    /// permission requests arrive as a logged decision whose outcome is
+    /// `permission_required` with the bridge's request id as its detail.
+    fn permission_waits(
+        &self,
+        owner_id: &str,
+        now_ms: u64,
+        records: &[DecisionRecord],
+    ) -> Result<BTreeMap<String, PermissionWait>, OrchestrationError> {
+        let mut waits: BTreeMap<String, PermissionWait> = BTreeMap::new();
+        for approval in hotsheet_ticketing::orchestration::ApprovalRegistry::new(&self.home)
+            .list(owner_id, now_ms)?
+            .into_iter()
+            .filter(|approval| approval.state == ApprovalState::Pending)
+        {
+            let step = ["sched-start-", "sched-run-"]
+                .iter()
+                .find_map(|prefix| approval.operation_id.strip_prefix(prefix));
+            if let Some(step) = step {
+                waits.insert(
+                    step.to_owned(),
+                    PermissionWait {
+                        kind: "approval".into(),
+                        request_id: approval.approval_id.clone(),
+                        action: code(&approval.gate).unwrap_or_default(),
+                        operation_id: Some(approval.operation_id.clone()),
+                        requested_at_ms: Some(approval.requested_at_ms),
+                    },
+                );
+            }
+        }
+        // The latest decision about a step decides whether it still waits.
+        let mut latest: BTreeMap<&str, &DecisionRecord> = BTreeMap::new();
+        for record in records
+            .iter()
+            .filter(|record| record.kind == DecisionKind::Start)
+        {
+            if let Some(step) = &record.step_id {
+                latest.insert(step, record);
+            }
+        }
+        for (step, record) in latest {
+            if record.outcome.as_deref() == Some(PERMISSION_REQUIRED)
+                && let Some(request) = &record.outcome_detail
+            {
+                waits.insert(
+                    step.to_owned(),
+                    PermissionWait {
+                        kind: "permission".into(),
+                        request_id: request.clone(),
+                        action: "session_start".into(),
+                        operation_id: record.operation_id.clone(),
+                        requested_at_ms: Some(record.at_ms),
+                    },
+                );
+            }
+        }
+        Ok(waits)
+    }
+
+    /// Declared targets with where this machine's binding puts them.
+    fn timeline_targets(
+        &self,
+        owner_id: &str,
+    ) -> Result<(bool, Vec<TimelineTarget>), OrchestrationError> {
+        let declarations = self.declarations(owner_id)?;
+        let remotes = self.remotes.list().unwrap_or_default();
+        let bindings = BindingRegistry::new(&self.home);
+        let targets = declarations
+            .targets
+            .into_iter()
+            .filter(|target| target.state == DeclarationState::Active)
+            .map(|target| {
+                let destination = Self::target_ref(owner_id, &target.target_id)
+                    .ok()
+                    .and_then(|reference| bindings.get(&reference).ok())
+                    .and_then(|binding| binding.destination);
+                let (location, machine_label) = match &destination {
+                    Some(TargetDestination::Local { .. }) => (TargetLocation::Local, None),
+                    Some(TargetDestination::Remote {
+                        registration_id, ..
+                    }) => (
+                        TargetLocation::Remote,
+                        remotes
+                            .iter()
+                            .find(|remote| remote.id == *registration_id)
+                            .map(|remote| remote.label.clone()),
+                    ),
+                    None => (TargetLocation::Unbound, None),
+                };
+                TimelineTarget {
+                    checkout_id: destination
+                        .as_ref()
+                        .map(|destination| destination.checkout_id().to_owned()),
+                    target_id: target.target_id,
+                    label: target.label,
+                    location,
+                    machine_label,
+                }
+            })
+            .collect();
+        Ok((declarations.enabled, targets))
+    }
+
+    /// A target ticket's label from its store when the target is a checkout on this
+    /// machine; `None` otherwise.
+    fn local_ticket_label(&self, target: &TimelineTarget, key: &TicketKey) -> Option<TicketLabel> {
+        if target.location != TargetLocation::Local {
+            return None;
+        }
+        let checkout = self
+            .checkouts
+            .describe(target.checkout_id.as_deref()?)
+            .ok()?;
+        let store = checkout.verified_git_source(&key.1).ok()?;
+        ops::resolve(&store, &key.2)
+            .ok()
+            .flatten()
+            .map(|ticket| label(&ticket))
+    }
+
+    /// One timeline from the records as they are now, and the ticket stores whose
+    /// change could clear a pending decision.
+    fn timeline_now(
+        &self,
+        owner_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(Timeline, Vec<PathBuf>), OrchestrationError> {
+        let now_ms = tx.clock.now_ms();
+        let (declared, targets) = self.timeline_targets(owner_id)?;
+        let views = if declared {
+            self.plan_evaluate(owner_id, now_ms)?
+        } else {
+            Vec::new()
+        };
+        let steps: Vec<TimelineStep> = views
+            .into_iter()
+            .map(|view| TimelineStep {
+                provisional_work: view.readiness.level == ReadinessLevel::InProgress
+                    && view.provisional.is_some(),
+                readiness: view.readiness,
+            })
+            .collect();
+        // Labels: the plan's last read of each ticket, and the store itself for a
+        // target on this machine.
+        let mut tickets: BTreeMap<TicketKey, TicketLabel> = BTreeMap::new();
+        for record in self.plan().tickets(owner_id)? {
+            if let Some(seen) = record.facts.observed.filter(|seen| seen.exists) {
+                tickets.insert(
+                    ticket_key(&record.target),
+                    TicketLabel {
+                        slug: seen.slug,
+                        title: None,
+                        status: Some(seen.status),
+                        priority: seen.priority,
+                        category: None,
+                    },
+                );
+            }
+        }
+        for step in &steps {
+            let key = ticket_key(&step.readiness.step.target);
+            if let Some(target) = targets.iter().find(|target| target.target_id == key.0)
+                && let Some(local) = self.local_ticket_label(target, &key)
+            {
+                tickets.insert(key, local);
+            }
+        }
+        let mut goals: BTreeMap<(String, String), TicketLabel> = BTreeMap::new();
+        let mut decisions: BTreeMap<(String, String), DecisionWait> = BTreeMap::new();
+        let mut watched: Vec<PathBuf> = Vec::new();
+        for step in &steps {
+            let goal = &step.readiness.step.ticket;
+            let key = (goal.connection_id.clone(), goal.native_id.clone());
+            if goals.contains_key(&key) {
+                continue;
+            }
+            let Ok((store, id, _)) = self.orchestration_store(
+                owner_id,
+                &OrchestrationTicket {
+                    connection_id: goal.connection_id.clone(),
+                    native_id: goal.native_id.clone(),
+                },
+            ) else {
+                goals.insert(key, TicketLabel::default());
+                continue;
+            };
+            let Ok(ticket) = store.read_ticket(&id) else {
+                goals.insert(key, TicketLabel::default());
+                continue;
+            };
+            if let Some(decision) = pending_decision(&ticket) {
+                decisions.insert(key.clone(), decision);
+                if !watched.iter().any(|path| path == store.root()) {
+                    watched.push(store.root().to_path_buf());
+                }
+            }
+            goals.insert(key, label(&ticket));
+        }
+        let records = self.retained_decisions(owner_id)?;
+        let policy = self.policy(owner_id)?;
+        let body = policy.policy.as_ref();
+        let input = TimelineInput {
+            owner_checkout_id: owner_id,
+            now_ms,
+            declared,
+            targets: &targets,
+            steps: &steps,
+            runs: &self.run_list(owner_id, false)?,
+            sessions: &SessionRegistry::new(&self.home).list(owner_id, false)?,
+            hints: &hints(&records),
+            permissions: &self.permission_waits(owner_id, now_ms, &records)?,
+            decisions: &decisions,
+            goals: &goals,
+            tickets: &tickets,
+            policy: &TimelinePolicy {
+                present: policy.enabled && body.is_some(),
+                revision: policy.revision.clone(),
+                automatic: body.is_some_and(|body| body.placement.automatic),
+                actor: body.and_then(|body| body.placement.actor.clone()),
+            },
+        };
+        Ok((timeline(&input), watched))
+    }
+
+    /// HS2-J89JC7: the owner's plan as dependency waves with where each piece of work
+    /// runs and what it waits on. With `after` equal to the current version and a
+    /// `wait_ms`, waits for what the timeline shows to change, woken by the records it
+    /// reads changing, and answers the same version at the deadline.
+    pub fn orchestration_timeline(
+        &self,
+        owner_id: &str,
+        after: Option<&str>,
+        wait_ms: u64,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Timeline, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        if wait_ms == 0 || after.is_none() {
+            return Ok(self.timeline_now(&owner.id, tx)?.0);
+        }
+        // Watch before reading, so a change in between is not missed.
+        let runs = RunEventJournal::new(&self.home, &owner.id)?;
+        let decisions = DecisionJournal::new(&self.home, &owner.id)?;
+        let wake = self.home.join(WAKE_DIRECTORY);
+        let (first, stores) = self.timeline_now(&owner.id, tx)?;
+        if after != Some(first.version.as_str()) {
+            return Ok(first);
+        }
+        let mut dirs = vec![runs.directory(), decisions.directory(), wake.as_path()];
+        dirs.extend(stores.iter().map(PathBuf::as_path));
+        let Ok(waiter) = hotsheet_jobs::ChangeWaiter::watching(&dirs) else {
+            return Ok(first);
+        };
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return self.timeline_now(&owner.id, tx).map(|(view, _)| view);
+            }
+            if !waiter.wait(remaining) {
+                continue;
+            }
+            let (view, _) = self.timeline_now(&owner.id, tx)?;
+            if view.version != first.version {
+                return Ok(view);
+            }
+        }
+    }
+}

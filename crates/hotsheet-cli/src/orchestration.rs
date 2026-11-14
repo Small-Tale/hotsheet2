@@ -25,6 +25,7 @@ mod session_executor;
 mod sessions;
 mod summary;
 mod tickets;
+mod timeline;
 mod tool_capacity;
 mod validation;
 mod watch;
@@ -83,6 +84,7 @@ pub use tickets::{
     LinkTargetTicket, LinkView, ListLinks, OrchestrationTicket, ReadTargetTicket, TargetTicket,
     TargetTicketFields, TargetTicketResult, UnlinkTargetTicket, UpdateTargetTicket,
 };
+pub use timeline::{MAX_TIMELINE_WAIT_MS, PERMISSION_REQUIRED};
 pub use tool_capacity::{
     SelectTool, SignalResult, ToolCapacityRow, ToolCapacityView, ToolSelection,
 };

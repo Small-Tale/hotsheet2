@@ -92,6 +92,9 @@ describe('UX demo catalog', () => {
       'ticket-board',
       'ticket-board-column',
       'worker-columns',
+      'orchestration-timeline-view',
+      'orchestration-toolbar',
+      'orchestration-inspector',
       'ticket-inspector',
       'ticket-inspector-skeleton',
       'advisory-claim-notice',
@@ -210,9 +213,6 @@ describe('UX demo catalog', () => {
       'notification-rule-dialog',
       'remote-devices-settings',
       'permission-rules-settings',
-      'orchestration-mock-workspace',
-      'orchestration-mock-panels',
-      'orchestration-mock-policy',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('list-item')).toMatchObject({ name: 'ListItem' });

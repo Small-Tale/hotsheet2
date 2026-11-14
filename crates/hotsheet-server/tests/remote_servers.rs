@@ -533,6 +533,8 @@ mod sessions;
 mod summary;
 #[path = "remote_servers/target_tickets.rs"]
 mod target_tickets;
+#[path = "remote_servers/timeline.rs"]
+mod timeline;
 #[path = "remote_servers/tool_capacity.rs"]
 mod tool_capacity;
 #[cfg(unix)]

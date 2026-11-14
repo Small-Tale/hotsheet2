@@ -71,11 +71,35 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('role="heading" aria-level="1"');
     expect(markup).toContain('>Queue</span>');
   });
+  it('HS2-J89JC7 offers Orchestration after Workers only in an orchestration project, never in the rail', () => {
+    const values = (markup: string) =>
+      [...markup.matchAll(/<button[^>]*data-segment-value="([^"]+)"/g)].map((match) => match[1]);
+    expect(values(String(WorkspaceControls({ mode: 'list' })))).toEqual([
+      'list',
+      'board',
+      'workers',
+      'notifications',
+      'settings',
+    ]);
+    const orchestration = String(WorkspaceControls({ mode: 'orchestration', orchestration: true }));
+    expect(values(orchestration)).toEqual(['list', 'board', 'workers', 'orchestration', 'notifications', 'settings']);
+    expect(orchestration).toContain('aria-label="Orchestration View"');
+    expect(orchestration).toContain('data-lucide="workflow"');
+    expect(orchestration).toMatch(
+      /data-segment-value="orchestration"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-segment-value="orchestration"/,
+    );
+    // The overflow menu names the same view; the rail offers none.
+    expect(orchestration).toContain('Show Orchestration View');
+    expect(
+      values(String(WorkspaceControls({ mode: 'list', orchestration: true, presentation: 'rail' }))),
+    ).not.toContain('orchestration');
+  });
   it('projects all modes, resets, and edits through canonical native segments', () => {
     const icons = {
       list: 'list',
       board: 'columns-3',
       workers: 'users-round',
+      orchestration: 'workflow',
       notifications: 'bell',
       settings: 'settings',
     };

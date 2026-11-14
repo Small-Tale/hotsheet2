@@ -2150,6 +2150,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/summary",
             get(routes::orchestration::read),
         )
+        // HS2-J89JC7: the plan as dependency waves, a long poll by version (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/timeline",
+            get(routes::orchestration::read),
+        )
         // HS2-AHG7HW: observed AI tool capacity (machine-local).
         .route(
             "/checkouts/{owner}/orchestration/tool-capacity",

@@ -9,6 +9,7 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confidence-calibration';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
+import { OrchestrationTimelineView, type OrchestrationTimelineViewProps } from './orchestration-timeline-view';
 import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from './project-sidebar';
 import { type CompactionPreviewState, RepositorySize, type RepositorySizeState } from './repository-size';
 import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
@@ -67,6 +68,7 @@ export type WorkspaceSurfaceProps =
   | { kind: 'errors'; list: TicketListProps }
   | { kind: 'board'; board: TicketBoardProps }
   | { kind: 'workers'; workers: WorkerColumnsProps }
+  | { kind: 'orchestration'; orchestration: OrchestrationTimelineViewProps }
   | { kind: 'list'; list: TicketListProps; more?: SafeHtml };
 
 export function WorkspaceSurface(props: WorkspaceSurfaceProps) {
@@ -75,6 +77,7 @@ export function WorkspaceSurface(props: WorkspaceSurfaceProps) {
   if (props.kind === 'errors') return <TicketList {...props.list} />;
   if (props.kind === 'board') return <TicketBoard {...props.board} />;
   if (props.kind === 'workers') return <WorkerColumns {...props.workers} />;
+  if (props.kind === 'orchestration') return <OrchestrationTimelineView {...props.orchestration} />;
   return (
     <>
       <TicketList {...props.list} />

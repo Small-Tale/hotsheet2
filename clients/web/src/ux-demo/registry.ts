@@ -34,7 +34,7 @@ import { demoModule as listItem } from './list-item-demo';
 import { demoModule as notWorkingDialog } from './not-working-dialog-demo';
 import { demoModule as notificationCard } from './notification-card-demo';
 import { demoModule as notificationSettings } from './notification-settings-demo';
-import { demoModule as orchestrationMock } from './orchestration-mock-demo';
+import { demoModule as orchestration } from './orchestration-demo';
 import { demoModule as permissionComponents } from './permission-components-demo';
 import { demoModule as projectDialog } from './project-dialog-demo';
 import { demoModule as projectLiveSection } from './project-live-section-demo';
@@ -142,7 +142,7 @@ export const demoModules: readonly DemoModule[] = [
   gridSidebar,
   standby,
   awayDigest,
-  orchestrationMock,
+  orchestration,
 ];
 
 const entries = new Map<string, DemoEntry>();

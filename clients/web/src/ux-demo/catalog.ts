@@ -131,6 +131,16 @@ export const demoCatalog: DemoCategory[] = [
         name: 'Workers',
         demos: [cataloged('worker-columns', ['column-track', 'ticket-row', 'state-banner'])],
       },
+      {
+        // HS2-J89JC7: the Orchestration view, its page header and its card inspector.
+        id: 'orchestration',
+        name: 'Orchestration',
+        demos: [
+          cataloged('orchestration-timeline-view', ['ticket-board', 'state-banner']),
+          cataloged('orchestration-toolbar', ['toolbar', 'state-banner']),
+          cataloged('orchestration-inspector', ['value-table']),
+        ],
+      },
     ],
   },
   {
@@ -366,36 +376,6 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('notification-rule-dialog'),
       cataloged('remote-devices-settings', ['list-action-row']),
       cataloged('permission-rules-settings'),
-    ],
-  },
-  {
-    // A design mock for review (HS2-HSMH2Q): production components with synthetic fixtures, not a shipped view.
-    id: 'concepts',
-    name: 'Concepts',
-    children: [
-      {
-        id: 'orchestration-mock',
-        name: 'Orchestration workspace (HS2-HSMH2Q mock)',
-        demos: [
-          demo(
-            'orchestration-mock-workspace',
-            'Orchestration view',
-            'Proposed Orchestration project view in the application shell: approvals, work grouped by orchestration ticket or flat, targets, scheduler, and summary, with the run or target inspector.',
-            ['app-shell', 'ticket-group', 'workspace-header'],
-          ),
-          demo(
-            'orchestration-mock-panels',
-            'Orchestration inspector',
-            'Proposed inspector states: a run in progress with its controls, work that waits for an approval or a resource, and a target with its binding, grants, capacity, tool capacity, and sessions.',
-          ),
-          demo(
-            'orchestration-mock-policy',
-            'Orchestration settings',
-            'Proposed Settings category for the checked-in throughput policy.',
-            ['app-shell'],
-          ),
-        ],
-      },
     ],
   },
 ];

@@ -81,6 +81,8 @@ import type { MarkdownEditorMode } from '../components/markdown-editor';
 import type { NoteMetadataDialogState, NoteMetadataMode } from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
+import { orchestrationInspectorPanel } from '../components/orchestration-inspector';
+import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
@@ -135,6 +137,11 @@ import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createNotificationSettings } from '../features/notification-settings';
+import {
+  createOrchestrationViewController,
+  createServerPlanner,
+  orchestrationPersonId,
+} from '../features/orchestration-view';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
@@ -3338,6 +3345,34 @@ export async function startHotSheetWebClient() {
     projectTabActionCompact = signal(false),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
+  // HS2-J89JC7: the Orchestration view's timeline stream, selection, kick-off and run controls.
+  const orchestrationView = createOrchestrationViewController({
+    project,
+    viewMode,
+    fallbackViewMode: () => ticketViewMode.value,
+    mobile: () => viewportMobile.value,
+    confirm: confirmation.request,
+    showToast,
+    openTicket: openTicketLinkMatch,
+    // HS2-W27N1D adds the Orchestration settings category; until then this opens Settings.
+    openOrchestrationSettings: () => {
+      viewMode.value = 'settings';
+      persistWorkspacePreferences();
+    },
+    persistWorkspacePreferences,
+    personId: () => orchestrationPersonId(localStorage),
+    // HS2-HCW7MD: Propose Plan runs the planner in the tool the person chose to drive with here.
+    planner: createServerPlanner({
+      choice: (current) => {
+        const selection = effectiveDriveSelection(current.id);
+        return aiTools.value.some((tool) => tool.id === selection.tool)
+          ? { tool: selection.tool, model: selection.model, effort: selection.effort }
+          : undefined;
+      },
+      client: (current) => new Api(current.apiPath),
+      personId: () => orchestrationPersonId(localStorage),
+    }),
+  });
   function setInspectorVisible(visible: boolean) {
     inspectorCollapsed.value = !visible;
     if (viewportMobile.value) return;
@@ -5588,6 +5623,15 @@ export async function startHotSheetWebClient() {
     workerSources,
     workerLoading,
     selectedTicketQualifiedId: () => selectedTicket.value?.qualified_id,
+    orchestrationView: () => ({
+      timeline: orchestrationView.timeline.value,
+      loading: orchestrationView.loading.value,
+      error: orchestrationView.error.value,
+      layout: viewportMobile.value ? 'paged' : 'grid',
+      selectedStep: orchestrationView.selectedStep.value,
+      collapsedGroups: orchestrationView.collapsedGroups(),
+      propose: orchestrationView.proposeAvailability(),
+    }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
     ticketGroups,
@@ -5657,6 +5701,28 @@ export async function startHotSheetWebClient() {
       permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
     workersLive: (projectId: string) =>
       workersLive(projectLiveSummary(liveStates.forProject(projectId), liveClock.value)),
+    orchestration: {
+      available: (projectId: string) => orchestrationView.isOrchestrationProject(projectId),
+      pageHeader: () => {
+        const timeline = orchestrationView.timeline.value;
+        // The first-run empty state says it all; no status header repeats it.
+        return timeline && timeline.phase !== 'no_projects' ? (
+          <OrchestrationToolbar
+            timeline={timeline}
+            propose={orchestrationView.proposeAvailability()}
+            busy={orchestrationView.busy.value}
+            planning={orchestrationView.planning.value}
+          />
+        ) : undefined;
+      },
+      inspector: () =>
+        orchestrationInspectorPanel({
+          item: orchestrationView.selected(),
+          timeline: orchestrationView.timeline.value,
+          details: orchestrationView.details.value,
+          busy: orchestrationView.busy.value,
+        }),
+    },
     permissionPopupSurface,
     project,
     projectRestoreFailures,
@@ -6071,6 +6137,27 @@ export async function startHotSheetWebClient() {
 
   const interactionBindingsPort: InteractionBindingsPort = {
     ticketGroups,
+    orchestrationView: {
+      select: (stepId) => {
+        orchestrationView.select(stepId);
+        // A phone shows the inspector over the board when a card is chosen, as the ticket views do.
+        if (viewportMobile.value) setInspectorVisible(true);
+      },
+      toggleGroup: (group) => {
+        orchestrationView.toggleGroup(group);
+      },
+      start: () => void orchestrationView.start(),
+      pause: () => void orchestrationView.pause(),
+      propose: () => void orchestrationView.propose(),
+      chooseProjects: () => {
+        orchestrationView.chooseProjects();
+      },
+      runControl: (control, state) => void orchestrationView.runControl(control, state),
+      showRequest: () => {
+        orchestrationView.showRequest();
+      },
+      openGoal: () => void orchestrationView.openGoal(),
+    },
     openProjectPicker,
     chooseLocalProject,
     chooseDesktopRemoteProject,
@@ -6954,6 +7041,7 @@ export async function startHotSheetWebClient() {
       disposeClaimClock();
       workerStreamStop?.();
       workerDetailRefresh?.dispose();
+      orchestrationView.dispose();
       disposeProjectChangeStreams();
       statsGlance.dispose();
       hostCpu.stop();

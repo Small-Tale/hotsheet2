@@ -415,6 +415,8 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id/correct",
             // HS2-S13719: the summary is computed from this machine's records.
             "/checkouts/owner/orchestration/summary",
+            // HS2-J89JC7: the timeline is computed from this machine's records.
+            "/checkouts/owner/orchestration/timeline",
             // HS2-AHG7HW: observed tool capacity is this machine's.
             "/checkouts/owner/orchestration/tool-capacity",
             "/checkouts/owner/orchestration/tool-capacity/signals",

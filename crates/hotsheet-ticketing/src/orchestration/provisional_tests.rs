@@ -64,6 +64,7 @@ fn seen(status: &str, opted_out: Option<bool>) -> TicketFacts {
             up_next: None,
             created_at_ms: None,
             opted_out,
+            slug: None,
         }),
         unreachable: None,
     }

@@ -162,6 +162,7 @@ ticket-selection	delegate	document.body	'drop'	'[data-not-working-dropzone="true
 ticket-selection	delegate	document.body	'submit'	'[data-action="submit-not-working"]'
 ticket-selection	delegate	document.body	'click'	'[data-action="cancel-not-working"]'
 ticket-selection	delegate	document.body	'wa-hide'	'[data-component="not-working-dialog"]'
+views-and-saved-views	wireOrchestrationTimeline	document.body
 views-and-saved-views	delegate	document.body	'click'	'[data-ticket-selection-root="true"]'
 views-and-saved-views	delegate	document.body	'click'	'[data-action="select-view"]'
 views-and-saved-views	delegateCapture	document.body	'click'	'[data-action="add-view"]'

@@ -34,6 +34,7 @@ mod session_executor;
 mod sessions;
 mod summary;
 mod tickets;
+mod timeline;
 mod tool_capacity;
 #[cfg(unix)]
 mod validation;
