@@ -436,6 +436,8 @@ pub fn watch_rollout(
     let sessions = home.join("sessions");
     let mut reader = RolloutReader::new(session, live_after);
     let session = session.to_owned();
+    // HS2-Y4PJFR: what the rollout already holds needs no subscription; read it first.
+    let existing = (home.clone(), session.clone());
     // Subscribe to the narrowest existing target, so a change that happens between this
     // subscription and the first read is still delivered. HS2-654VBY: the watcher starts
     // with its first target, and moving to the next one is one change (one event-stream
@@ -491,6 +493,19 @@ pub fn watch_rollout(
         let mut settle_at: Option<Instant> = None;
         #[cfg(target_os = "macos")]
         let mut _appends: Option<crate::vnode_watch::VnodeWatch> = None;
+        // Starting a native stream can take seconds under load, so signals already written
+        // are delivered before it starts rather than after. The reader keeps its offset, so
+        // the read after subscribing returns only what was appended since.
+        if let Ok(Some(path)) =
+            hotsheet_ticketing::metrics::codex_work::find_rollout(&existing.0, &existing.1)
+        {
+            match reader.read_appended(&path) {
+                Ok(_) if thread_stopped.load(Ordering::SeqCst) => return,
+                Ok(signals) if !signals.is_empty() => on_signals(signals),
+                Ok(_) => {}
+                Err(_) => return,
+            }
+        }
         loop {
             // A home that vanished or cannot be watched ends the watch; the terminal keeps
             // its last known state. A new subscription looks again at once, and once more

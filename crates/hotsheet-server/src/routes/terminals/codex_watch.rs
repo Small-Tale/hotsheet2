@@ -115,11 +115,20 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
     // The project store and claim snapshot of the current turn; a turn already running when
     // the session reported takes its snapshot at its first response (HS2-B4EQ87).
     let mut turn_target: Option<UsageTarget> = None;
+    // HS2-Y4PJFR: the watcher thread may read a rollout that already holds signals before
+    // this watch is registered below. Hold its first batch until registration, or the
+    // currency check drops that batch and the reader never offers it again.
+    let (registered, registration) = std::sync::mpsc::channel::<()>();
+    let mut registration = Some(registration);
     let watch = watch_rollout(
         &record.codex_home,
         &record.session_id,
         live_after,
         move |signals| {
+            // Sent once registered, or disconnected when the watch was never registered.
+            if let Some(registration) = registration.take() {
+                let _ = registration.recv();
+            }
             // A late batch from a replaced or ended session changes nothing.
             if !is_current(&signal_state, &signal_id, &signal_session) {
                 return;
@@ -217,6 +226,7 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
             _watch: watch,
         },
     );
+    let _ = registered.send(());
     true
 }
 
@@ -465,6 +475,9 @@ mod tests {
             serde_json::json!({"terminal":"tq","session_id":session,"codex_home":home,"reported_at":"2026-11-12T00:00:01Z"}),
         );
         resume_codex_session_watches(&state, &["tq".to_owned()]);
+        // HS2-Y4PJFR: the watch is registered when the resume returns, and the question
+        // already in the rollout follows from it without waiting on a native stream.
+        assert!(is_current(&state, "tq", session));
         let wait = |want: bool| {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
             while state
