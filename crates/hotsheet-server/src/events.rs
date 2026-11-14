@@ -177,6 +177,12 @@ pub(crate) const CHANGE_CURSOR_HEADER: &str = "x-hotsheet-change-cursor";
 /// (HS2-SQKJYG). A change after that cursor may be missing from the response, so a client that
 /// read tickets at cursor `n` and handshook its change stream at a later cursor replays
 /// `since=n` for exactly the changes its read may not include, instead of reading again.
+///
+/// The header is also named in `Access-Control-Expose-Headers` (HS2-M0EWHK), so a browser
+/// client that reaches the server cross-origin, where some layer grants that origin access,
+/// can read the stamp. Exposing a header grants no access by itself: without an
+/// `Access-Control-Allow-Origin` grant the browser still refuses the whole response. The
+/// value is appended so any exposure a route or later CORS layer sets is kept.
 pub(crate) async fn stamp_change_cursor(
     axum::extract::State(state): axum::extract::State<AppState>,
     request: axum::extract::Request,
@@ -184,9 +190,12 @@ pub(crate) async fn stamp_change_cursor(
 ) -> axum::response::Response {
     let cursor = state.event_cursor();
     let mut response = next.run(request).await;
-    response
-        .headers_mut()
-        .insert(CHANGE_CURSOR_HEADER, axum::http::HeaderValue::from(cursor));
+    let headers = response.headers_mut();
+    headers.insert(CHANGE_CURSOR_HEADER, axum::http::HeaderValue::from(cursor));
+    headers.append(
+        axum::http::header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        axum::http::HeaderValue::from_static(CHANGE_CURSOR_HEADER),
+    );
     response
 }
 

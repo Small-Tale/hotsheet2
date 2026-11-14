@@ -583,6 +583,11 @@ Responsibilities:
   cursor read before its handler ran (HS2-SQKJYG). A change after that cursor may be
   missing from the response, so a client whose read was stamped below its stream's
   handshake cursor replays `since=<stamp>` for exactly that gap instead of reading again.
+  The same responses list the header in `Access-Control-Expose-Headers` (HS2-M0EWHK), so
+  a browser client that reads the server cross-origin can see the stamp wherever a layer
+  grants that origin access. Exposure grants no access by itself: the server sends no
+  `Access-Control-Allow-Origin` and answers no preflight, and shipped web clients reach
+  it through the same-origin local bridge.
   The browser's development bridge proxies a credential-free project-scoped
   `/ws/sync` URL to this authenticated loopback endpoint, keeping the server secret
   outside browser JavaScript. The web client handshakes and closes the WebSocket
