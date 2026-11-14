@@ -1384,8 +1384,9 @@ audited as `gates_observe`, and runs and writes nothing on the target. It is
 `GET /checkouts/{checkout}/target-validation-profiles` on the hosting machine,
 `POST .../orchestration/validations/profiles` with `target_id` on the orchestrating
 one, and MCP `validation_profiles` (with `target_id`, or without it for the
-checkout's own file). Adding this file to the installed project setup guidance is
-HS2-28E486.
+checkout's own file). The Hot Sheet skill that setup installs into every project
+(version 73, HS2-28E486) tells a project's agents about the file and its check, so a
+target project learns to offer and keep its profiles.
 
 Defining a step again with the same definition changes nothing. A changed definition
 gets the next `revision`, and evidence produced for an earlier revision no longer

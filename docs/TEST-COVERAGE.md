@@ -3667,6 +3667,8 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   halts and resumes to a running router and reads the recorded capacity.
 - `remote_servers/tool_capacity.rs` uses the owned CLI process, the authenticated
   service and the stdio MCP tool on one machine-local registry.
+- HS2-28E486: the `hotsheet-plugins` skill test pins skill version 73 and the
+  validation-profiles section in the Claude and Codex skills setup installs.
 - HS2-TH53NN: `scheduler_tests.rs # hs2_th53nn` places a preferred tool and model
   first and never requires them (a limited preferred tool, a model no tool offers, a
   model alone, refill of a preferred session, a start before another tool's free

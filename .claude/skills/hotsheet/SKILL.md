@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 72 -->
+<!-- hotsheet-skill-version: 73 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -265,6 +265,19 @@ Notes:
   JSON-escaped `\\n` sequences in `--note`. The CLI rejects likely escaped line breaks
   outside inline/fenced backtick code; use `--allow-literal-backslash-n` only when prose
   containing literal `\\n` text is intentional.
+
+## Validation profiles (HS2-YYNW9F)
+
+A project can offer named test profiles that an orchestration project may run as
+extra validation steps. They live in the checked-in `.hotsheet2/validation-profiles.json`:
+`schema_version: 1` and `profiles`, each a unique `name`, a `program`, `args` and an
+optional `timeout_seconds` (1 to 3600). A program with a directory part is the checkout's
+own file; a bare name is looked up on `PATH`; it is started without a shell, in the
+checkout. The orchestration project names a profile and never supplies the command, so
+keep the file the authority for what may run here. After changing it, check it with
+`hotsheet-cli orchestration validation profiles --project <checkout>` (MCP
+`validation_profiles` without a `target_id`): it lists every profile and every problem
+by code and exits non-zero on a problem. An absent file is valid and offers nothing.
 
 ## Local verification (HS2-RS0FFT)
 

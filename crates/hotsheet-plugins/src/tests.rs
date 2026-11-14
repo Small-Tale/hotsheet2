@@ -991,7 +991,14 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 72 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 73 -->"));
+    // HS2-28E486: a project's agents learn to offer and check validation profiles.
+    assert!(skill_body.contains(".hotsheet2/validation-profiles.json"));
+    assert!(skill_body.contains("orchestration validation profiles --project <checkout>"));
+    let claude = find_in("claude", &[]).unwrap();
+    let (_, claude_body) = claude.skill().unwrap();
+    assert!(claude_body.contains("<!-- hotsheet-skill-version: 73 -->"));
+    assert!(claude_body.contains("## Validation profiles (HS2-YYNW9F)"));
     // HS2-F9062F: setup must install the strategy-aware generic workflow.
     assert!(skill_body.contains("development-strategy-resolve"));
     assert!(skill_body.contains("unconfigured-project"));
