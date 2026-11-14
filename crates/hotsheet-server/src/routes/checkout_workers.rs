@@ -226,12 +226,14 @@ pub(crate) async fn put_integration_strategies(
     RoutePath(reference): RoutePath<String>,
     Json(policy): Json<StrategyPolicy>,
 ) -> Result<Json<StrategyReport>, ApiError> {
-    let (_, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    let (checkout, settings) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    let checkout_id = checkout.id;
     policy
         .write(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     let policy = StrategyPolicy::read(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    note_strategy_change(&state, &checkout_id);
     Ok(Json(policy.report()))
 }
 
@@ -284,9 +286,32 @@ pub(crate) async fn put_development_strategy(
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     let integration = StrategyPolicy::read(&settings)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    note_strategy_change(&state, &checkout.id);
     Ok(Json(policy.report(&integration).map_err(|error| {
         ApiError::new(StatusCode::CONFLICT, error.to_string())
     })?))
+}
+
+/// HS2-A8HP69: the change-event kind a strategy write publishes. `id` is the checkout.
+pub(crate) const STRATEGY_CHANGE_KIND: &str = "development_strategy_changed";
+
+/// HS2-A8HP69: a strategy write changes the Workers view's cadence. A waiting Workers long
+/// poll wakes on this event and reads again, so the new cadence no longer waits for the
+/// platform file watcher to report the settings file, which a busy machine delivers late.
+/// Identifiers only; a client reads again.
+fn note_strategy_change(state: &AppState, checkout_id: &str) {
+    state.emit(crate::ChangeEvent {
+        live: None,
+        cursor: None,
+        store: checkout_id.to_owned(),
+        kind: STRATEGY_CHANGE_KIND.into(),
+        id: checkout_id.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
 }
 
 fn worker_error(error: anyhow::Error) -> ApiError {

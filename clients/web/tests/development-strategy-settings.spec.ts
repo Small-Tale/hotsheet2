@@ -82,14 +82,13 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
     await expect(settings.locator('[data-cadence-source]')).toContainText('Last green main promotion');
     await page.screenshot({ path: test.info().outputPath('development-strategy-light-wide.png') });
     await page.setViewportSize({ width: 390, height: 760 });
-    // HS2-WDWPBP: at phone width the inspector can sit over the settings sidebar, so the
-    // inspector is hidden first and each hide is confirmed before the next step; the
-    // cadence is then scrolled to rather than wheeled at a fixed point after a fixed delay.
-    for (const name of ['Hide Ticket Inspector', 'Hide Settings Sidebar']) {
-      const hide = page.getByRole('button', { name });
-      if (await hide.isVisible()) await hide.click();
-      await expect(hide).toBeHidden();
-    }
+    // HS2-A8HP69: entering phone width collapses both rails by itself, on the window's resize
+    // event, which can land after setViewportSize returns. A Hide button seen just before that
+    // then vanished under its click, which waited for it for the rest of the run. So the test
+    // waits for the collapsed phone layout instead of clicking (HS2-WDWPBP scrolls the cadence
+    // into view rather than wheeling at a fixed point after a fixed delay).
+    await expect(page.getByRole('button', { name: 'Show Ticket Inspector' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
     const cadence = settings.locator('[data-cadence-source]');
     await cadence.scrollIntoViewIfNeeded();
     await expect(cadence).toBeInViewport();
