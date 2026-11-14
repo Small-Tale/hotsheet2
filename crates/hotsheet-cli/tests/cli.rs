@@ -13309,6 +13309,96 @@ fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
     assert!(!none.status.success());
 }
 
+/// HS2-VG3E8N: a project store with no per-store host reaches the machine host anchored on
+/// `<home>/server-bootstrap.hs2`; store-default reads refuse that host instead of reporting
+/// the bootstrap store's data; with no host at all the error names the machine host.
+#[test]
+fn hs2_vg3e8n_cli_reaches_the_machine_host_from_a_project_store() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let cli = |args: &[&str]| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .args(["-C", store.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+
+    // Neither a per-store nor a machine host.
+    let none = cli(&["lifecycle", "status"]);
+    assert!(!none.status.success());
+    let message = String::from_utf8_lossy(&none.stderr);
+    assert!(message.contains("machine host"), "{message}");
+
+    let machine = home.join("server-bootstrap.hs2");
+    std::fs::create_dir_all(&machine).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &machine);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "machine-secret",
+            "store_path": machine.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert_eq!(line.trim_end(), "GET /lifecycle/quiescence HTTP/1.1");
+        let mut secret = None;
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                secret = Some(value.trim().to_string());
+            }
+        }
+        assert_eq!(secret.as_deref(), Some("machine-secret"));
+        let body = r#"{"quiescing":false,"report":{"quiescent":true,"blockers":[]}}"#;
+        write!(
+            reader.get_mut(),
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+    });
+
+    // The host-wide command reaches the bootstrap-only machine host.
+    let status = cli(&["lifecycle", "status"]);
+    assert!(
+        status.status.success(),
+        "{}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(String::from_utf8_lossy(&status.stdout).contains("\"quiescent\": true"));
+    server.join().unwrap();
+
+    // A store-default read refuses before sending any request to that host.
+    let flow = cli(&["ticket-flow"]);
+    assert!(!flow.status.success());
+    let message = String::from_utf8_lossy(&flow.stderr);
+    assert!(message.contains("machine host"), "{message}");
+    assert!(message.contains("analytics/tickets"), "{message}");
+}
+
 /// Headless parity for Ticket sources' "review its location" recovery (HS2-47AFBK): a Git
 /// source linked before identities were recorded is reviewed read-only, recorded only on
 /// --yes, idempotent afterwards, and a moved store relinks through the same command.

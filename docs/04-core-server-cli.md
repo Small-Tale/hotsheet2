@@ -679,6 +679,22 @@ the per-store instance records above point to the machine API server. External l
 can combine that client URL with the ticket deep-link route in [06-clients.md](06-clients.md)
 (HS2-RVSPQ9).
 
+**CLI host discovery (HS2-VG3E8N).** The desktop app and headless launches run one machine
+host anchored on `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`, so its instance
+record is keyed by that anchor, not by any project store. Every CLI command that talks to the
+local server resolves its host through one helper, `external_launch::discover_local_host`:
+
+- Host-wide commands (`remote sessions status|approve|reject|update|revoke|revoke-all`,
+  `lifecycle status|restart`) use the machine host first, then a host started on the
+  selected store with `hotsheet-cli serve`.
+- Project commands (`live-state`, `commands`, `terminal message`, `ci report`,
+  `notifications`, `ticket-flow`, `activity`) use a host anchored on the selected store
+  first, then the machine host. `ticket-flow` and `activity` read the host's own store, so
+  they refuse a host anchored on another store rather than report the bootstrap store's
+  data as the project's.
+- A stale record (its pid is gone) does not count as a host. With no live host the error
+  names the machine host and `hotsheet-cli serve`, and lists each record it looked for.
+
 **Shutdown is bounded (HS2-W1KJR4).** The first SIGTERM/Ctrl-C (or an accepted quiescent
 restart) enters a _stopping_ state. The listener stops accepting on both the plaintext
 and mTLS tiers, and long waits end at once:

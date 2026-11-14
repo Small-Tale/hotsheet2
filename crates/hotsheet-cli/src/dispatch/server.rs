@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::{Cmd, urlencoding_component};
+use hotsheet_cli::external_launch::HostScope;
 
 use super::{Ctx, misrouted};
 
@@ -22,10 +23,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Commands { cmd } => cmd_commands(path, cmd),
         Cmd::Terminal { cmd } => cmd_terminal(path, cmd),
         Cmd::Lifecycle { cmd } => match cmd {
-            LifecycleCmd::Status => print_local_server_json(path, "GET", "lifecycle/quiescence"),
-            LifecycleCmd::Restart => print_local_server_json(path, "POST", "lifecycle/restart"),
+            LifecycleCmd::Status => print_host_json(path, "GET", "lifecycle/quiescence"),
+            LifecycleCmd::Restart => print_host_json(path, "POST", "lifecycle/restart"),
         },
-        Cmd::TicketFlow => print_local_server_json(path, "GET", "analytics/tickets"),
+        Cmd::TicketFlow => print_anchored_server_json(path, "GET", "analytics/tickets"),
         Cmd::LiveState { all } => cmd_live_state(path, all),
         Cmd::Ci { cmd } => cmd_ci(path, cmd),
         Cmd::LiveHistory { hours } => cmd_live_history(path, hours),
@@ -262,7 +263,7 @@ pub(crate) fn cmd_activity(
     if let Some(value) = limit {
         filters.push(("limit", value.to_string()));
     }
-    print_local_server_json(store, "GET", &filtered_route("activity", &filters))
+    print_anchored_server_json(store, "GET", &filtered_route("activity", &filters))
 }
 
 pub(crate) fn cmd_notifications(store: &Path, cmd: NotificationsCmd) -> Result<()> {
@@ -868,17 +869,72 @@ pub(crate) fn local_server_json(
     local_server_json_with_body(store, method, route, None)
 }
 
+/// A project-scoped request: the host anchored on `store`, else the machine host, which
+/// serves every registered project (HS2-VG3E8N).
 pub(crate) fn local_server_json_with_body(
     store: &Path,
     method: &str,
     route: &str,
     body: Option<&serde_json::Value>,
 ) -> Result<serde_json::Value> {
-    let server = hotsheet_cli::external_launch::discover_running_server(
+    let server = local_host(store, HostScope::Project)?;
+    server_json_with_body(&server, method, route, body)
+}
+
+/// A host-wide request (browser sessions, lifecycle): the machine host, else a host started
+/// on `store` with `hotsheet-cli serve` (HS2-VG3E8N).
+pub(crate) fn host_json_with_body(
+    store: &Path,
+    method: &str,
+    route: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value> {
+    let server = local_host(store, HostScope::Machine)?;
+    server_json_with_body(&server, method, route, body)
+}
+
+fn print_host_json(store: &Path, method: &str, route: &str) -> Result<()> {
+    let body = host_json_with_body(store, method, route, None)?;
+    println!("{}", serde_json::to_string_pretty(&body)?);
+    Ok(())
+}
+
+/// Routes that read the host's own store (`analytics/tickets`, `activity`) answer only for
+/// the store the host is anchored on. The machine host is anchored on its bootstrap store,
+/// so refuse rather than print that store's data as the project's (HS2-VG3E8N).
+fn print_anchored_server_json(store: &Path, method: &str, route: &str) -> Result<()> {
+    let server = local_host(store, HostScope::Project)?;
+    ensure_host_anchors(&server, store, route)?;
+    let body = server_json_with_body(&server, method, route, None)?;
+    println!("{}", serde_json::to_string_pretty(&body)?);
+    Ok(())
+}
+
+fn ensure_host_anchors(
+    server: &hotsheet_cli::external_launch::ServerInstance,
+    store: &Path,
+    route: &str,
+) -> Result<()> {
+    if server.anchors(store) {
+        return Ok(());
+    }
+    bail!(
+        "the running Hot Sheet machine host answers `{route}` only for its own store ({}), not \
+         for {}; this command does not yet support per-project reads on the machine host",
+        server.store_path,
+        store.display()
+    )
+}
+
+fn local_host(
+    store: &Path,
+    scope: HostScope,
+) -> Result<hotsheet_cli::external_launch::ServerInstance> {
+    hotsheet_cli::external_launch::discover_local_host(
         store,
         &hotsheet_plugins::hotsheet_home(),
-    )?;
-    server_json_with_body(&server, method, route, body)
+        scope,
+    )
 }
 
 pub(crate) fn server_json_with_body(
@@ -920,6 +976,27 @@ pub(crate) fn server_json_with_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_vg3e8n_store_default_routes_refuse_a_host_anchored_elsewhere() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project.hs2");
+        let machine = root.path().join("server-bootstrap.hs2");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&machine).unwrap();
+        let host = |anchor: &Path| hotsheet_cli::external_launch::ServerInstance {
+            pid: std::process::id(),
+            url: "http://127.0.0.1:8787".into(),
+            secret: "secret".into(),
+            store_path: anchor.to_string_lossy().into_owned(),
+        };
+        ensure_host_anchors(&host(&project), &project, "activity").unwrap();
+        let message = ensure_host_anchors(&host(&machine), &project, "analytics/tickets")
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("machine host"), "{message}");
+        assert!(message.contains("analytics/tickets"), "{message}");
+    }
 
     #[test]
     fn sibling_server_wins_over_path_and_arguments_are_forwarded_exactly() {

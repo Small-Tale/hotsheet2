@@ -125,24 +125,21 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             serde_json::json!({"binding": binding, "credentials": credentials})
         }
         RemoteCmd::Sessions { command } => match command {
-            SessionCmd::Status => super::server::local_server_json_with_body(
-                &context.path,
-                "GET",
-                "remote-auth/owner",
-                None,
-            )?,
+            SessionCmd::Status => {
+                super::server::host_json_with_body(&context.path, "GET", "remote-auth/owner", None)?
+            }
             SessionCmd::Approve {
                 id,
                 role,
                 admin,
                 local,
-            } => super::server::local_server_json_with_body(
+            } => super::server::host_json_with_body(
                 &context.path,
                 "POST",
                 "remote-auth/owner/approve",
                 Some(&serde_json::json!({"id": id, "role": role, "admin": admin, "local": local})),
             )?,
-            SessionCmd::Reject { id } => super::server::local_server_json_with_body(
+            SessionCmd::Reject { id } => super::server::host_json_with_body(
                 &context.path,
                 "POST",
                 "remote-auth/owner/reject",
@@ -153,19 +150,19 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 role,
                 admin,
                 local,
-            } => super::server::local_server_json_with_body(
+            } => super::server::host_json_with_body(
                 &context.path,
                 "PATCH",
                 &format!("remote-auth/owner/devices/{id}"),
                 Some(&device_change(role, admin, local)?),
             )?,
-            SessionCmd::Revoke { id } => super::server::local_server_json_with_body(
+            SessionCmd::Revoke { id } => super::server::host_json_with_body(
                 &context.path,
                 "DELETE",
                 &format!("remote-auth/owner/devices/{id}"),
                 None,
             )?,
-            SessionCmd::RevokeAll => super::server::local_server_json_with_body(
+            SessionCmd::RevokeAll => super::server::host_json_with_body(
                 &context.path,
                 "POST",
                 "remote-auth/owner/revoke-all",

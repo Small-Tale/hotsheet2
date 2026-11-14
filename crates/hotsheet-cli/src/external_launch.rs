@@ -67,6 +67,61 @@ pub fn discover_running_server(store: &Path, home: &Path) -> Result<ServerInstan
     Ok(server)
 }
 
+impl ServerInstance {
+    /// Whether this host is anchored on `store`, so its store-default routes (ticket flow,
+    /// activity) answer for that store rather than for another one.
+    #[must_use]
+    pub fn anchors(&self, store: &Path) -> bool {
+        let canonical = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+        let recorded = PathBuf::from(&self.store_path);
+        recorded.canonicalize().unwrap_or(recorded) == canonical
+    }
+}
+
+/// The machine host's instance anchor, `<home>/server-bootstrap.hs2`.
+#[must_use]
+pub fn machine_host_store(home: &Path) -> PathBuf {
+    home.join(hotsheet_ticketing::store_git::MACHINE_ANCHOR_DIR)
+}
+
+/// Which host a CLI command addresses (HS2-VG3E8N).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostScope {
+    /// Host-wide routes (browser sessions, lifecycle): the machine host first, then a host a
+    /// developer started on the selected store with `hotsheet-cli serve`.
+    Machine,
+    /// Project routes: a host anchored on the selected store first, then the machine host,
+    /// which serves every registered project.
+    Project,
+}
+
+/// Find the running local host for a CLI command (HS2-VG3E8N). Under the single machine
+/// host model the desktop app and headless launches anchor one host on
+/// `<home>/server-bootstrap.hs2`, so its instance record is keyed by that anchor, never by
+/// the project store. A per-store record remains for a host started explicitly on a store.
+/// Every CLI command that talks to the local server resolves its host here.
+pub fn discover_local_host(store: &Path, home: &Path, scope: HostScope) -> Result<ServerInstance> {
+    let machine = machine_host_store(home);
+    let same = store.canonicalize().ok() == machine.canonicalize().ok() || store == machine;
+    let candidates: Vec<&Path> = match (same, scope) {
+        (true, _) => vec![machine.as_path()],
+        (false, HostScope::Machine) => vec![machine.as_path(), store],
+        (false, HostScope::Project) => vec![store, machine.as_path()],
+    };
+    let mut failures = Vec::new();
+    for candidate in candidates {
+        match discover_running_server(candidate, home) {
+            Ok(server) => return Ok(server),
+            Err(error) => failures.push(format!("{error:#}")),
+        }
+    }
+    bail!(
+        "no running Hot Sheet host found: open the Hot Sheet app, which runs the machine host, \
+         or start one with `hotsheet-cli serve` ({})",
+        failures.join("; ")
+    )
+}
+
 /// Headless project launch uses the same machine bootstrap host as the graphical client.
 /// The server owns all registered sources; this store is only its local instance anchor.
 pub fn ensure_running_server(store: &Path, home: &Path) -> Result<ServerInstance> {
@@ -342,5 +397,142 @@ mod tests {
         )
         .unwrap();
         assert!(discover_running_server(&store, &home).is_err());
+    }
+
+    fn write_record(home: &Path, anchor: &Path, pid: u32, secret: &str) {
+        std::fs::create_dir_all(anchor).unwrap();
+        let path = instance_path(home, anchor);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            path,
+            serde_json::json!({
+                "pid": pid,
+                "url": "http://127.0.0.1:8787",
+                "secret": secret,
+                "store_path": anchor.canonicalize().unwrap(),
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    /// A pid no live process holds, so the record reads as stale.
+    #[cfg(unix)]
+    const DEAD_PID: u32 = i32::MAX as u32;
+
+    #[test]
+    fn hs2_vg3e8n_per_store_host_wins_for_project_and_machine_host_for_host_wide() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let store = root.path().join("project.hs2");
+        write_record(&home, &store, std::process::id(), "per-store");
+
+        // Only a per-store host: both scopes reach it.
+        for scope in [HostScope::Project, HostScope::Machine] {
+            let server = discover_local_host(&store, &home, scope).unwrap();
+            assert_eq!(server.secret, "per-store");
+            assert!(server.anchors(&store));
+        }
+
+        // With the machine host also running, host-wide routes prefer it.
+        write_record(
+            &home,
+            &machine_host_store(&home),
+            std::process::id(),
+            "machine",
+        );
+        assert_eq!(
+            discover_local_host(&store, &home, HostScope::Project)
+                .unwrap()
+                .secret,
+            "per-store"
+        );
+        assert_eq!(
+            discover_local_host(&store, &home, HostScope::Machine)
+                .unwrap()
+                .secret,
+            "machine"
+        );
+    }
+
+    #[test]
+    fn hs2_vg3e8n_bootstrap_only_host_serves_a_project_store() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let store = root.path().join("project.hs2");
+        std::fs::create_dir_all(&store).unwrap();
+        let machine = machine_host_store(&home);
+        write_record(&home, &machine, std::process::id(), "machine");
+
+        for scope in [HostScope::Project, HostScope::Machine] {
+            let server = discover_local_host(&store, &home, scope).unwrap();
+            assert_eq!(server.secret, "machine");
+            assert!(server.anchors(&machine));
+            assert!(!server.anchors(&store));
+        }
+        // Selecting the anchor itself resolves to the same host.
+        assert_eq!(
+            discover_local_host(&machine, &home, HostScope::Project)
+                .unwrap()
+                .secret,
+            "machine"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hs2_vg3e8n_stale_bootstrap_record_is_not_a_host() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let store = root.path().join("project.hs2");
+        std::fs::create_dir_all(&store).unwrap();
+        write_record(&home, &machine_host_store(&home), DEAD_PID, "stale");
+
+        for scope in [HostScope::Project, HostScope::Machine] {
+            let message = format!(
+                "{:#}",
+                discover_local_host(&store, &home, scope).unwrap_err()
+            );
+            assert!(message.contains("machine host"), "{message}");
+            assert!(message.contains("stale"), "{message}");
+        }
+
+        // A live per-store host still answers past the stale machine record.
+        write_record(&home, &store, std::process::id(), "per-store");
+        assert_eq!(
+            discover_local_host(&store, &home, HostScope::Machine)
+                .unwrap()
+                .secret,
+            "per-store"
+        );
+    }
+
+    #[test]
+    fn hs2_vg3e8n_no_host_names_the_machine_host_and_both_records() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let store = root.path().join("project.hs2");
+        std::fs::create_dir_all(&store).unwrap();
+
+        let message = format!(
+            "{:#}",
+            discover_local_host(&store, &home, HostScope::Project).unwrap_err()
+        );
+        assert!(
+            message.contains("no running Hot Sheet host found"),
+            "{message}"
+        );
+        assert!(message.contains("machine host"), "{message}");
+        assert!(message.contains("hotsheet-cli serve"), "{message}");
+        let store_record = instance_path(&home, &store);
+        let machine_record = instance_path(&home, &machine_host_store(&home));
+        assert!(
+            message.contains(&store_record.display().to_string()),
+            "{message}"
+        );
+        assert!(
+            message.contains(&machine_record.display().to_string()),
+            "{message}"
+        );
     }
 }
